@@ -1,0 +1,98 @@
+# Runs api + web for a single VM (docs/CONTRACTS.md §12, ARCHITECTURE §14).
+# The agent is NOT run here — it deploys to LiveKit Cloud separately
+# (`lk agent create` / `lk agent deploy` from agent/; see deploy/README.md).
+#
+# Secrets are never committed. Copy the *.env.example templates next to this
+# file to real, human-created *.env files before running:
+#   cp deploy/api.env.example deploy/api.env    # fill in real values
+#   cp deploy/web.env.example deploy/web.env
+# Both are gitignored (see deploy/.gitignore) and read only at container
+# start — Claude never creates or reads these files.
+#
+# Build:   docker compose -f deploy/docker-compose.yml build
+# Migrate: docker compose -f deploy/docker-compose.yml run --rm api alembic upgrade head
+# Run:     docker compose -f deploy/docker-compose.yml up -d
+#
+# NEXT_PUBLIC_API_BASE_URL is baked into the web image at BUILD time (Next
+# inlines it into both the browser bundle and the server-side console proxy
+# — see web/Dockerfile) and must be one URL reachable from both the
+# visitor's browser and the web container. In real deployment that's the
+# api's public HTTPS origin (e.g. https://api.example.com) behind a reverse
+# proxy — set NEXT_PUBLIC_API_BASE_URL in your shell or a build-args file
+# before `compose build` and drop the `network_mode` line below.
+#
+# For a single-machine LOCAL smoke test only (no public hostname yet), `web`
+# shares `api`'s network namespace via `network_mode: "service:api"` so
+# "http://localhost:8080" resolves correctly from both the host browser and
+# the web container's server-side proxy. Because of that, `web`'s own
+# `ports:` entry is omitted and 3000 is published from `api` instead — this
+# is a Compose requirement when a service uses another service's network
+# namespace, not a design choice about api being the app server.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    image: lkap-api:local
+    ports:
+      - "8080:8080" # api
+      - "3000:3000" # web (published here — see network_mode note above)
+    env_file:
+      - path: ./api.env
+        required: false
+    environment:
+      LKAP_DATA_DIR: /data
+      LKAP_LOG_JSON: "true"
+      LKAP_CORS_ORIGINS: ${LKAP_CORS_ORIGINS:-http://localhost:3000}
+      PORT: "8080"
+    volumes:
+      - api-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+    image: lkap-web:local
+    network_mode: "service:api" # local-smoke-test only; see note above
+    env_file:
+      - path: ./web.env
+        required: false
+    environment:
+      PORT: "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # The agent worker normally runs on LiveKit Cloud (`lk agent deploy`), not here.
+  # If you ever self-host it next to the api, stop it the way the SDK expects
+  # (DECISIONS-W2 §D-W2-13): SIGINT (agent/Dockerfile sets STOPSIGNAL SIGINT)
+  # and a grace period >= the worker's drain_timeout (3600 s by default in
+  # livekit-agents 1.8.2) so running calls finish and post their summaries
+  # before SIGKILL. Never SIGKILL first — a killed worker leaves `active`
+  # session rows for the api's stale-session sweep to clean up. Also stop any
+  # other `lkap-agent` worker (local dev or LiveKit Cloud) first: two workers
+  # with one name split dispatch nondeterministically.
+  #
+  # agent:
+  #   build:
+  #     context: ../agent        # run scripts/vendor_agent_deps.sh first
+  #   image: lkap-agent:local
+  #   env_file:
+  #     - path: ./agent.env      # human-created; LIVEKIT_*, LKAP_API_BASE_URL, LKAP_SERVICE_TOKEN, LKAP_PACKS
+  #   stop_signal: SIGINT
+  #   stop_grace_period: 1h      # >= drain_timeout
+  #   restart: unless-stopped
+
+volumes:
+  api-data:

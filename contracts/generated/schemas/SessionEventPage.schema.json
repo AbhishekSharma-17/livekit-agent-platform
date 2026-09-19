@@ -1,0 +1,56 @@
+{
+  "$defs": {
+    "SessionEventOut": {
+      "description": "One row of the session event timeline.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "SessionEventOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/SessionEventPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/SessionEventOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "SessionEventPage",
+  "type": "object"
+}

@@ -1,0 +1,113 @@
+{
+  "$id": "lkap-contracts/SessionOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Session list row.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "pipeline_mode": {
+      "enum": [
+        "realtime",
+        "cascaded"
+      ],
+      "title": "Pipeline Mode",
+      "type": "string"
+    },
+    "room_name": {
+      "title": "Room Name",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "enum": [
+        "created",
+        "active",
+        "ended",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Usage"
+    }
+  },
+  "required": [
+    "id",
+    "agent_id",
+    "agent_name",
+    "config_version",
+    "room_name",
+    "status",
+    "pipeline_mode",
+    "created_at"
+  ],
+  "title": "SessionOut",
+  "type": "object"
+}

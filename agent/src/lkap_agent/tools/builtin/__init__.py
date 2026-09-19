@@ -1,0 +1,111 @@
+"""Built-in standard tools (docs/ARCHITECTURE.md §7.3) and their aggregator.
+
+Every built-in tool is a plain `@function_tool` closure over a
+`PackSessionContext`. `PlatformAgent` (W1-AGENT-CORE) is expected to call
+`build_builtin_tools` once per session and pass its result alongside
+declarative (`tools/declarative.py`) and pack tools to `Agent(tools=...)`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from livekit.agents import FunctionTool
+from packs.base import PackSessionContext
+
+from .current_time import build_current_time_tool
+from .describe_current_frame import build_describe_current_frame_tool
+from .end_call import build_end_call_tool
+from .escalate_to_human import build_escalate_to_human_tool
+from .http_request import build_http_request_tool
+from .pin_frame import build_pin_frame_tool
+from .push_note import build_push_note_tool
+from .search_knowledge import build_search_knowledge_tool
+from .set_status import build_set_status_tool
+
+__all__ = [
+    "BUILTIN_TOOL_NAMES",
+    "build_builtin_tools",
+    "build_current_time_tool",
+    "build_describe_current_frame_tool",
+    "build_end_call_tool",
+    "build_escalate_to_human_tool",
+    "build_http_request_tool",
+    "build_pin_frame_tool",
+    "build_push_note_tool",
+    "build_search_knowledge_tool",
+    "build_set_status_tool",
+]
+
+#: Every built-in tool name, in the order `build_builtin_tools` considers
+#: them — the same names `AgentConfig.tools.builtin_disabled` and the
+#: console's built-in-tool toggles refer to.
+BUILTIN_TOOL_NAMES: tuple[str, ...] = (
+    "end_call",
+    "search_knowledge",
+    "http_request",
+    "describe_current_frame",
+    "pin_frame",
+    "push_note",
+    "set_status",
+    "escalate_to_human",
+    "current_time",
+)
+
+
+def build_builtin_tools(
+    ctx: PackSessionContext,
+    disabled: list[str],
+    http_enabled: bool,
+    *,
+    platform_allowed_hosts: list[str] | None = None,
+    shutdown: Callable[[str], None] | None = None,
+) -> list[FunctionTool[..., Any]]:
+    """Build every enabled built-in tool for one session.
+
+    Args:
+        ctx: The session's `PackSessionContext`.
+        disabled: Tool names to skip (`AgentConfig.tools.builtin_disabled`).
+        http_enabled: Whether `http_request` may be registered at all
+            (`AgentConfig.tools.http_request_enabled`); it still needs a
+            non-empty `platform_allowed_hosts` to ever succeed at call time.
+        platform_allowed_hosts: `LKAP_HTTP_TOOL_ALLOWED_HOSTS`, threaded
+            through rather than read from `Settings` here so this module
+            stays test-friendly (docs/CONTRACTS.md §3).
+        shutdown: Injected for `end_call`; defaults to
+            `get_job_context().shutdown` when omitted.
+
+    Returns:
+        The enabled tools. `describe_current_frame` and `pin_frame` are
+        omitted unless the agent has `capabilities.camera` or
+        `capabilities.screen_share` (docs/ARCHITECTURE.md §8) — they have
+        nothing to encode otherwise.
+    """
+    skip = set(disabled)
+    has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
+
+    def _want(name: str) -> bool:
+        return name not in skip
+
+    tools: list[FunctionTool[..., Any]] = []
+    if _want("end_call"):
+        tools.append(build_end_call_tool(ctx, shutdown=shutdown))
+    if _want("search_knowledge"):
+        tools.append(build_search_knowledge_tool(ctx))
+    if http_enabled and _want("http_request"):
+        tools.append(build_http_request_tool(ctx, platform_allowed_hosts=platform_allowed_hosts))
+    if has_vision and _want("describe_current_frame"):
+        tools.append(build_describe_current_frame_tool(ctx))
+    if has_vision and _want("pin_frame"):
+        tools.append(build_pin_frame_tool(ctx))
+    if _want("push_note"):
+        tools.append(build_push_note_tool(ctx))
+    if _want("set_status"):
+        tools.append(build_set_status_tool(ctx))
+    if _want("escalate_to_human"):
+        tools.append(build_escalate_to_human_tool(ctx))
+    if _want("current_time"):
+        tools.append(build_current_time_tool(ctx))
+
+    return tools

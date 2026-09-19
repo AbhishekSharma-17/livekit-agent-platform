@@ -1,0 +1,15 @@
+{
+  "$id": "lkap-contracts/ToolDryRunRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tools/{id}/dry-run`` (http tools only).",
+  "properties": {
+    "arguments": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Arguments",
+      "type": "object"
+    }
+  },
+  "title": "ToolDryRunRequest",
+  "type": "object"
+}

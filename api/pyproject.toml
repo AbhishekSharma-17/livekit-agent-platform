@@ -1,0 +1,64 @@
+[project]
+name = "lkap-api"
+version = "0.1.0"
+description = "LKAP admin/config API, credential vault, KB, sessions"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.118,<1",
+  "uvicorn[standard]>=0.36,<1",
+  "sqlalchemy[asyncio]>=2.0.43,<3",
+  "aiosqlite>=0.21,<1",
+  "alembic>=1.16,<2",
+  "cryptography>=45,<46",
+  "livekit-api==1.2.1",
+  "lancedb>=0.24,<1",
+  "fastembed>=0.7,<1",
+  "pypdf>=6,<7",
+  "python-multipart>=0.0.20",
+  "httpx>=0.28,<1",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "structlog>=25.4,<26",
+  "lkap-contracts",
+  "lkap-packs",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "pytest-asyncio>=1.1",
+  "pytest-timeout>=2.4",
+  "ruff>=0.13",
+  "mypy>=1.18",
+]
+
+[tool.uv.sources]
+lkap-contracts = { path = "../contracts", editable = true }
+lkap-packs = { path = "../packs", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lkap_api"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+  "live: requires a live LiveKit Cloud connection",
+  "slow: slow test, skipped by default in fast loops",
+]
+testpaths = ["tests"]

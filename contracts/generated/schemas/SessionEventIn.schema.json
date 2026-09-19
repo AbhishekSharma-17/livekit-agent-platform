@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/SessionEventIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An event posted by the worker.",
+  "properties": {
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "type",
+    "payload"
+  ],
+  "title": "SessionEventIn",
+  "type": "object"
+}

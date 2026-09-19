@@ -1,0 +1,37 @@
+{
+  "$id": "lkap-contracts/DispatchMetadata.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Serialised as JSON into ``RoomAgentDispatch.metadata``.\n\nIDs ONLY. The browser can read this, so it must never contain secrets,\ninstructions or resolved provider configuration.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "participant_identity": {
+      "title": "Participant Identity",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "agent_id",
+    "config_version",
+    "participant_identity"
+  ],
+  "title": "DispatchMetadata",
+  "type": "object"
+}

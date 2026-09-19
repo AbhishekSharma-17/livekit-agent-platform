@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "UiPatchOp": {
+      "description": "A single JSON-pointer-style mutation of :class:`UiState`.",
+      "properties": {
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "op": {
+          "enum": [
+            "set",
+            "append",
+            "remove",
+            "upsert"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "op",
+        "path"
+      ],
+      "title": "UiPatchOp",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/UiPatch.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An ordered batch of ops applied to the UI's copy of :class:`UiState`.",
+  "properties": {
+    "ops": {
+      "items": {
+        "$ref": "#/$defs/UiPatchOp"
+      },
+      "title": "Ops",
+      "type": "array"
+    },
+    "seq": {
+      "title": "Seq",
+      "type": "integer"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "type": {
+      "const": "patch",
+      "default": "patch",
+      "title": "Type",
+      "type": "string"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "seq",
+    "session_id",
+    "ops"
+  ],
+  "title": "UiPatch",
+  "type": "object"
+}

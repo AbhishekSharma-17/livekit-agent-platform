@@ -1,0 +1,198 @@
+{
+  "session_id": "session-blank",
+  "live_model": null,
+  "transcript": [
+    {
+      "speaker": "Agent",
+      "text": "I can start the claim while we talk. First, are you and everyone else in a safe place?"
+    }
+  ],
+  "policy_number_looked_up": null,
+  "pin_photo": null,
+  "photo_id": "9a1c0000000000000000000000000001",
+  "captured_at": "14:07",
+  "frame_base64_source": "ffd8ffe066616b652d6a7065672d6672616d65",
+  "tool_activity": [],
+  "workflow": {
+    "normalized_claim": {
+      "policyholder_name": "not specified",
+      "policy_number": "not specified",
+      "contact_method": "not specified",
+      "date_of_loss": "not specified",
+      "reported_date": "not specified",
+      "loss_location": "not specified",
+      "loss_description": "not specified",
+      "estimated_loss_usd": null,
+      "injuries_or_safety_concerns": [],
+      "parties_involved": [],
+      "evidence_available": [],
+      "documents_mentioned": [],
+      "missing_or_uncertain_facts": [],
+      "raw_narrative_summary": "not specified",
+      "assumptions": []
+    },
+    "field_validation": {
+      "intake_status": "missing_info",
+      "missing_fields": [
+        "policyholder_name",
+        "policy_number",
+        "contact_method",
+        "date_of_loss",
+        "loss_location",
+        "loss_description"
+      ],
+      "warnings": [
+        "Estimated loss amount was not supplied."
+      ],
+      "ready_for_policy_review": false
+    },
+    "claim_classification": {
+      "claim_type": "other",
+      "severity": "medium",
+      "severity_rationale": "Waiting for claimant facts.",
+      "likely_policy_line": "unknown",
+      "loss_drivers": [],
+      "claimant_needs": [
+        "Provide initial loss facts."
+      ]
+    },
+    "coverage_evidence_decision": {
+      "routing_decision": "needs_docs",
+      "provisional_coverage_considerations": [
+        "Claim type is unclear; route for human triage after collecting minimum loss facts and proof of loss."
+      ],
+      "required_documents": [
+        "Photos or available proof of loss",
+        "Receipts, estimates, or invoices",
+        "Any third-party report or confirmation"
+      ],
+      "findings": [
+        {
+          "rule_id": "INTAKE-001",
+          "severity": "medium",
+          "message": "Required intake facts are missing before the claim can be fully assigned.",
+          "required_action": "collect_info"
+        },
+        {
+          "rule_id": "DOC-001",
+          "severity": "medium",
+          "message": "Missing or unconfirmed document: Photos or available proof of loss. Documents what happened.",
+          "required_action": "collect_document",
+          "document": "Photos or available proof of loss"
+        },
+        {
+          "rule_id": "DOC-001",
+          "severity": "medium",
+          "message": "Missing or unconfirmed document: Receipts, estimates, or invoices. Supports the claimed amount.",
+          "required_action": "collect_document",
+          "document": "Receipts, estimates, or invoices"
+        },
+        {
+          "rule_id": "DOC-001",
+          "severity": "medium",
+          "message": "Missing or unconfirmed document: Any third-party report or confirmation. Helps verify loss facts.",
+          "required_action": "collect_document",
+          "document": "Any third-party report or confirmation"
+        }
+      ],
+      "audit_trail": [
+        "Validated minimum claim intake fields.",
+        "Classified claim as other with medium severity.",
+        "Applied deterministic evidence, document, high-loss, injury, and safety routing gates.",
+        "Initial route selected: needs_docs."
+      ]
+    },
+    "document_checklist": {
+      "items": [
+        {
+          "item": "Photos or available proof of loss",
+          "reason": "Documents what happened.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Receipts, estimates, or invoices",
+          "reason": "Supports the claimed amount.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Any third-party report or confirmation",
+          "reason": "Helps verify loss facts.",
+          "priority": "required",
+          "already_provided": false
+        }
+      ],
+      "claimant_tip": "Upload clear copies when available. If a document is not available yet, explain why and provide the expected date."
+    },
+    "fraud_safety_gate": {
+      "final_routing_decision": "needs_docs",
+      "signals": [
+        {
+          "signal_id": "INTAKE-002",
+          "severity": "medium",
+          "message": "Core loss facts are missing, so routing should remain follow-up oriented.",
+          "route_to_siu": false,
+          "route_to_emergency": false
+        }
+      ],
+      "audit_trail": [
+        "Validated minimum claim intake fields.",
+        "Classified claim as other with medium severity.",
+        "Applied deterministic evidence, document, high-loss, injury, and safety routing gates.",
+        "Initial route selected: needs_docs.",
+        "Applied deterministic fraud, suspicious timing, vague facts, and safety gates.",
+        "Final route selected: needs_docs."
+      ]
+    },
+    "claim_intake_packet": {
+      "claim_type": "other",
+      "intake_status": "missing_info",
+      "severity": "medium",
+      "routing_decision": "needs_docs",
+      "missing_information": [
+        "policyholder_name",
+        "policy_number",
+        "contact_method",
+        "date_of_loss",
+        "loss_location",
+        "loss_description"
+      ],
+      "required_documents": [
+        {
+          "item": "Photos or available proof of loss",
+          "reason": "Documents what happened.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Receipts, estimates, or invoices",
+          "reason": "Supports the claimed amount.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Any third-party report or confirmation",
+          "reason": "Helps verify loss facts.",
+          "priority": "required",
+          "already_provided": false
+        }
+      ],
+      "coverage_considerations": [
+        "Claim type is unclear; route for human triage after collecting minimum loss facts and proof of loss."
+      ],
+      "adjuster_handoff_summary": "not specified reported a other loss at not specified on not specified. Summary: not specified. Estimated loss: not supplied.",
+      "claimant_next_message": "What is your full name as it appears on the policy?",
+      "audit_trail": [
+        "Validated minimum claim intake fields.",
+        "Classified claim as other with medium severity.",
+        "Applied deterministic evidence, document, high-loss, injury, and safety routing gates.",
+        "Initial route selected: needs_docs.",
+        "Applied deterministic fraud, suspicious timing, vague facts, and safety gates.",
+        "Final route selected: needs_docs."
+      ],
+      "markdown": "# Insurance Claim Intake Packet\n\n**Claim type:** Other  \n**Intake status:** Missing Info  \n**Severity:** Medium  \n**Routing decision:** Needs Docs\n\n## Missing Information\n- policyholder_name\n- policy_number\n- contact_method\n- date_of_loss\n- loss_location\n- loss_description\n\n## Required Documents Checklist\n- [required] **Photos or available proof of loss** - Documents what happened.\n- [required] **Receipts, estimates, or invoices** - Supports the claimed amount.\n- [required] **Any third-party report or confirmation** - Helps verify loss facts.\n\n## Coverage Considerations and Disclaimer\n- Claim type is unclear; route for human triage after collecting minimum loss facts and proof of loss.\n\nThis is an intake triage packet for demo and educational use. It does not confirm coverage, benefits, liability, payment, or legal rights. A licensed adjuster or qualified human reviewer must evaluate the applicable policy, endorsements, exclusions, deductibles, documentation, and governing law.\n\n## Adjuster Handoff Summary\nnot specified reported a other loss at not specified on not specified. Summary: not specified. Estimated loss: not supplied.\n\n## Claimant-Friendly Next Message\nWhat is your full name as it appears on the policy?\n\n## Deterministic Findings\n- `INTAKE-001` [medium] Required intake facts are missing before the claim can be fully assigned.\n- `DOC-001` [medium] Missing or unconfirmed document: Photos or available proof of loss. Documents what happened.\n- `DOC-001` [medium] Missing or unconfirmed document: Receipts, estimates, or invoices. Supports the claimed amount.\n- `DOC-001` [medium] Missing or unconfirmed document: Any third-party report or confirmation. Helps verify loss facts.\n\n## Fraud, Timing, and Safety Signals\n- `INTAKE-002` [medium] Core loss facts are missing, so routing should remain follow-up oriented.\n\n## Audit Trail\n1. Validated minimum claim intake fields.\n2. Classified claim as other with medium severity.\n3. Applied deterministic evidence, document, high-loss, injury, and safety routing gates.\n4. Initial route selected: needs_docs.\n5. Applied deterministic fraud, suspicious timing, vague facts, and safety gates.\n6. Final route selected: needs_docs.\n"
+    },
+    "final_markdown": "# Insurance Claim Intake Packet\n\n**Claim type:** Other  \n**Intake status:** Missing Info  \n**Severity:** Medium  \n**Routing decision:** Needs Docs\n\n## Missing Information\n- policyholder_name\n- policy_number\n- contact_method\n- date_of_loss\n- loss_location\n- loss_description\n\n## Required Documents Checklist\n- [required] **Photos or available proof of loss** - Documents what happened.\n- [required] **Receipts, estimates, or invoices** - Supports the claimed amount.\n- [required] **Any third-party report or confirmation** - Helps verify loss facts.\n\n## Coverage Considerations and Disclaimer\n- Claim type is unclear; route for human triage after collecting minimum loss facts and proof of loss.\n\nThis is an intake triage packet for demo and educational use. It does not confirm coverage, benefits, liability, payment, or legal rights. A licensed adjuster or qualified human reviewer must evaluate the applicable policy, endorsements, exclusions, deductibles, documentation, and governing law.\n\n## Adjuster Handoff Summary\nnot specified reported a other loss at not specified on not specified. Summary: not specified. Estimated loss: not supplied.\n\n## Claimant-Friendly Next Message\nWhat is your full name as it appears on the policy?\n\n## Deterministic Findings\n- `INTAKE-001` [medium] Required intake facts are missing before the claim can be fully assigned.\n- `DOC-001` [medium] Missing or unconfirmed document: Photos or available proof of loss. Documents what happened.\n- `DOC-001` [medium] Missing or unconfirmed document: Receipts, estimates, or invoices. Supports the claimed amount.\n- `DOC-001` [medium] Missing or unconfirmed document: Any third-party report or confirmation. Helps verify loss facts.\n\n## Fraud, Timing, and Safety Signals\n- `INTAKE-002` [medium] Core loss facts are missing, so routing should remain follow-up oriented.\n\n## Audit Trail\n1. Validated minimum claim intake fields.\n2. Classified claim as other with medium severity.\n3. Applied deterministic evidence, document, high-loss, injury, and safety routing gates.\n4. Initial route selected: needs_docs.\n5. Applied deterministic fraud, suspicious timing, vague facts, and safety gates.\n6. Final route selected: needs_docs.\n"
+  }
+}

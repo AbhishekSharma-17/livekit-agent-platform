@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/AgentAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).",
+  "properties": {
+    "action": {
+      "enum": [
+        "get_snapshot",
+        "set_video_source",
+        "ui_action"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Payload",
+      "type": "object"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "title": "AgentAction",
+  "type": "object"
+}

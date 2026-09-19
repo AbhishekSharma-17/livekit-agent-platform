@@ -1,0 +1,331 @@
+{
+  "$defs": {
+    "FieldSpec": {
+      "description": "One configurable constructor argument of a provider.",
+      "properties": {
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "env_fallback": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Env Fallback"
+        },
+        "help": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Help"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Placeholder"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "secret",
+            "number",
+            "boolean",
+            "enum",
+            "json",
+            "model"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "type"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+    },
+    "ModelSpec": {
+      "description": "A suggested model id for a provider (a suggestion list, never an allowlist).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "supports_video": {
+          "default": false,
+          "description": "Accepts visual input: video frames for realtime models, image content parts for LLMs. Set only after the platform has verified it.",
+          "title": "Supports Video",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ModelSpec",
+      "type": "object"
+    },
+    "ProviderCapabilities": {
+      "description": "What a provider can do, used to gate UI affordances and runtime behaviour.",
+      "properties": {
+        "silent_tool_reply": {
+          "default": false,
+          "title": "Silent Tool Reply",
+          "type": "boolean"
+        },
+        "tool_calling": {
+          "default": true,
+          "title": "Tool Calling",
+          "type": "boolean"
+        },
+        "video_input": {
+          "default": false,
+          "title": "Video Input",
+          "type": "boolean"
+        },
+        "voices": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Voices",
+          "type": "array"
+        }
+      },
+      "title": "ProviderCapabilities",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ProviderSpec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Everything the platform needs to offer, configure and construct a provider.",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/ProviderCapabilities",
+      "default": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      }
+    },
+    "default_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Model"
+    },
+    "docs_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Docs Url"
+    },
+    "fields": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FieldSpec"
+      },
+      "title": "Fields",
+      "type": "array"
+    },
+    "get_key_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Get Key Url"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "realtime",
+        "stt",
+        "llm",
+        "tts",
+        "avatar",
+        "image_gen",
+        "embedding",
+        "secret_bag"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "models": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ModelSpec"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "package": {
+      "title": "Package",
+      "type": "string"
+    },
+    "python_class": {
+      "title": "Python Class",
+      "type": "string"
+    },
+    "requires_credential": {
+      "default": true,
+      "title": "Requires Credential",
+      "type": "boolean"
+    },
+    "secret_fields": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FieldSpec"
+      },
+      "title": "Secret Fields",
+      "type": "array"
+    },
+    "status": {
+      "default": "mvp",
+      "enum": [
+        "mvp",
+        "deferred"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    },
+    "vendor": {
+      "title": "Vendor",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "label",
+    "vendor",
+    "package",
+    "python_class"
+  ],
+  "title": "ProviderSpec",
+  "type": "object"
+}

@@ -1,0 +1,452 @@
+"""Export the contracts to ``generated/``: providers.json, JSON Schemas and TypeScript.
+
+Run with ``uv run python -m lkap_contracts.export``. The outputs are committed and
+diff-tested, so every writer here must be deterministic: fixed model order, sorted
+keys, two-space indent, trailing newline.
+
+The TypeScript step shells out to ``pnpm dlx json-schema-to-typescript`` and is
+skipped automatically when pnpm is unavailable (the JSON outputs never need node).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, TypeAdapter
+
+from lkap_contracts import api_models, providers
+from lkap_contracts.agent_config import AgentConfig, ResolvedAgentConfig
+from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
+from lkap_contracts.providers import ProviderSpec
+from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
+from lkap_contracts.ui_protocol import (
+    ActivityEvent,
+    AgentAction,
+    AgentActionResult,
+    UiPatch,
+    UiRequest,
+    UiRequestResult,
+    UiSnapshot,
+    UiState,
+)
+
+logger = logging.getLogger(__name__)
+
+#: Pinned so regenerating on another machine produces a byte-identical .d.ts.
+JSON_SCHEMA_TO_TYPESCRIPT_VERSION = "15.0.4"
+
+#: Title of the combined schema document fed to json-schema-to-typescript.
+COMBINED_TITLE = "LkapContracts"
+
+#: Every model exported as ``generated/schemas/<name>.schema.json`` and to TypeScript.
+#: Order is fixed and meaningful — do not sort.
+EXPORTED_MODELS: dict[str, type[BaseModel]] = {
+    # core config + dispatch
+    "AgentConfig": AgentConfig,
+    "ResolvedAgentConfig": ResolvedAgentConfig,
+    "DispatchMetadata": DispatchMetadata,
+    # ui protocol
+    "UiState": UiState,
+    "UiSnapshot": UiSnapshot,
+    "UiPatch": UiPatch,
+    "ActivityEvent": ActivityEvent,
+    "UiRequest": UiRequest,
+    "UiRequestResult": UiRequestResult,
+    "AgentAction": AgentAction,
+    "AgentActionResult": AgentActionResult,
+    # packs
+    "PackManifest": PackManifest,
+    "KbSeed": KbSeed,
+    "ToolMeta": ToolMeta,
+    # providers
+    "ProviderSpec": ProviderSpec,
+    # tools
+    "HttpToolDefinition": HttpToolDefinition,
+    "McpServerDefinition": McpServerDefinition,
+    # api models
+    "Page": api_models.Page,
+    "ErrorBody": api_models.ErrorBody,
+    "ErrorResponse": api_models.ErrorResponse,
+    "ProvidersResponse": api_models.ProvidersResponse,
+    "CredentialCreate": api_models.CredentialCreate,
+    "CredentialUpdate": api_models.CredentialUpdate,
+    "CredentialOut": api_models.CredentialOut,
+    "CredentialTestResult": api_models.CredentialTestResult,
+    "AgentCreate": api_models.AgentCreate,
+    "AgentUpdate": api_models.AgentUpdate,
+    "AgentOut": api_models.AgentOut,
+    "AgentPublicOut": api_models.AgentPublicOut,
+    "ValidationResult": api_models.ValidationResult,
+    "ConnectRequest": api_models.ConnectRequest,
+    "ConnectResponse": api_models.ConnectResponse,
+    "ToolCreate": api_models.ToolCreate,
+    "ToolOut": api_models.ToolOut,
+    "ToolDryRunRequest": api_models.ToolDryRunRequest,
+    "ToolDryRunResult": api_models.ToolDryRunResult,
+    "KbCreate": api_models.KbCreate,
+    "KbOut": api_models.KbOut,
+    "KbDocumentOut": api_models.KbDocumentOut,
+    "KbSearchRequest": api_models.KbSearchRequest,
+    "KbHit": api_models.KbHit,
+    "KbSearchResponse": api_models.KbSearchResponse,
+    "PackOut": api_models.PackOut,
+    "PacksResponse": api_models.PacksResponse,
+    "TranscriptTurn": api_models.TranscriptTurn,
+    "SessionOut": api_models.SessionOut,
+    "SessionDetailOut": api_models.SessionDetailOut,
+    "SessionEventOut": api_models.SessionEventOut,
+    "SessionEventIn": api_models.SessionEventIn,
+    "SessionEventsIn": api_models.SessionEventsIn,
+    "SessionSummaryIn": api_models.SessionSummaryIn,
+    "InternalKbSearchRequest": api_models.InternalKbSearchRequest,
+    "HealthResponse": api_models.HealthResponse,
+    # concrete page parametrisations
+    "CredentialPage": api_models.CredentialPage,
+    "AgentPage": api_models.AgentPage,
+    "ToolPage": api_models.ToolPage,
+    "KbPage": api_models.KbPage,
+    "KbDocumentPage": api_models.KbDocumentPage,
+    "SessionPage": api_models.SessionPage,
+    "SessionEventPage": api_models.SessionEventPage,
+}
+
+#: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.
+EXPORTED_UNIONS: dict[str, Any] = {
+    "ToolDefinition": ToolDefinition,
+}
+
+
+def default_output_dir() -> Path:
+    """Return the repository's ``contracts/generated`` directory."""
+    return Path(__file__).resolve().parents[2] / "generated"
+
+
+def _dumps(payload: object) -> str:
+    """Serialise deterministically: sorted keys, two-space indent, trailing newline."""
+    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def build_providers_document() -> dict[str, Any]:
+    """Build the ``providers.json`` payload from :data:`lkap_contracts.providers.REGISTRY`.
+
+    The payload is exactly ``ProvidersResponse``: no extra keys, so a strict parse
+    of the file against the generated type succeeds. Topic constants live in
+    :mod:`lkap_contracts.ui_protocol`, not here.
+
+    Returns:
+        A mapping with the protocol version and every registry entry, in registry order.
+    """
+    return {
+        "v": 1,
+        "providers": [spec.model_dump(mode="json") for spec in providers.REGISTRY],
+    }
+
+
+def _schema_for(name: str) -> dict[str, Any]:
+    """Return a self-contained JSON Schema for one exported name."""
+    if name in EXPORTED_UNIONS:
+        schema: dict[str, Any] = TypeAdapter(EXPORTED_UNIONS[name]).json_schema(mode="validation")
+    else:
+        schema = EXPORTED_MODELS[name].model_json_schema(mode="validation")
+    schema["title"] = name
+    schema["$id"] = f"lkap-contracts/{name}.schema.json"
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    return schema
+
+
+def build_schema_documents() -> dict[str, dict[str, Any]]:
+    """Build one JSON Schema document per exported model and union.
+
+    Returns:
+        Mapping of exported name to its self-contained JSON Schema.
+    """
+    names = [*EXPORTED_MODELS, *EXPORTED_UNIONS]
+    return {name: _schema_for(name) for name in names}
+
+
+def build_combined_schema() -> dict[str, Any]:
+    """Build a single root schema that references every exported type.
+
+    json-schema-to-typescript emits one interface per ``$defs`` entry, so feeding it
+    one combined document avoids the duplicate declarations that per-file runs produce.
+
+    Returns:
+        A draft 2020-12 object schema whose properties reference every exported type.
+    """
+    defs: dict[str, Any] = {}
+    properties: dict[str, Any] = {}
+    for name in [*EXPORTED_MODELS, *EXPORTED_UNIONS]:
+        schema = _schema_for(name)
+        schema.pop("$id", None)
+        schema.pop("$schema", None)
+        for def_name, def_schema in schema.pop("$defs", {}).items():
+            defs.setdefault(def_name, def_schema)
+        defs[name] = schema
+        properties[name] = {"$ref": f"#/$defs/{name}"}
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "lkap-contracts/lkap-contracts.schema.json",
+        "title": COMBINED_TITLE,
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "$defs": defs,
+    }
+
+
+def _rewrite_refs(node: Any) -> Any:
+    """Rewrite ``#/$defs/...`` refs to ``#/definitions/...`` for json-schema-to-typescript."""
+    if isinstance(node, dict):
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            if key == "$ref" and isinstance(value, str):
+                out[key] = value.replace("#/$defs/", "#/definitions/")
+            elif key == "$defs":
+                out["definitions"] = _rewrite_refs(value)
+            else:
+                out[key] = _rewrite_refs(value)
+        return out
+    if isinstance(node, list):
+        return [_rewrite_refs(item) for item in node]
+    return node
+
+
+def _strip_titles(node: Any) -> Any:
+    """Drop every ``title`` key.
+
+    Pydantic titles each individual property (``"title": "Ok"``), and
+    json-schema-to-typescript turns any titled subschema into a standalone exported
+    alias. Stripping them keeps the ``.d.ts`` namespace to real models only, instead
+    of leaking names like ``Ok``, ``Id`` or ``Error`` that collide with globals.
+    """
+    if isinstance(node, dict):
+        return {key: _strip_titles(value) for key, value in node.items() if key != "title"}
+    if isinstance(node, list):
+        return [_strip_titles(item) for item in node]
+    return node
+
+
+def _pure_refs(node: Any) -> Any:
+    """Drop keys that sit next to a ``$ref``.
+
+    Pydantic emits ``{"$ref": ..., "default": {...}}`` for a field whose type is
+    another model. json-schema-to-typescript treats a ``$ref`` with siblings as a
+    fresh anonymous schema and emits a duplicate interface (``CapabilitiesConfig1``),
+    so the TypeScript document keeps the reference alone. Defaults stay intact in the
+    committed JSON Schemas.
+    """
+    if isinstance(node, dict):
+        if "$ref" in node and len(node) > 1:
+            return {"$ref": node["$ref"]}
+        return {key: _pure_refs(value) for key, value in node.items()}
+    if isinstance(node, list):
+        return [_pure_refs(item) for item in node]
+    return node
+
+
+#: Keys ignored when deciding whether a schema node is "empty" (D-W2-3).
+_UNKNOWN_SCHEMA_IGNORED_KEYS = {"default", "description", "title", "examples"}
+
+
+#: json-schema-to-typescript already renders a bare, unconstrained branch of one of
+#: these as TypeScript ``unknown`` on its own (an ``anyOf``/``oneOf``/``allOf`` member
+#: with no keys means "matches anything"); injecting ``tsType`` into that branch turns
+#: the otherwise-collapsed union back into a literal ``unknown | null``, which is worse.
+#: So those arrays are copied through unchanged rather than recursed into for marking.
+_UNION_KEYS = ("anyOf", "oneOf", "allOf")
+
+
+def _mark_untyped_as_unknown(node: Any) -> Any:
+    """Inject ``tsType: "unknown"`` into every property schema that carries no type info.
+
+    Pydantic emits an empty object (``{}``, plus maybe ``default``/``title``) for an
+    ``Any`` field (``UiPatchOp.value``). Left alone, json-schema-to-typescript renders a
+    bare ``{}`` as an indexed object type (``{ [k: string]: unknown }``) instead of
+    ``unknown``. ``json-schema-to-typescript`` honours an explicit ``tsType`` verbatim,
+    so setting it here makes the contract's ``Any`` mean TypeScript's ``unknown``.
+
+    A schema counts as empty when, after ignoring ``default``/``description``/``title``/
+    ``examples``, it has none of ``type``, ``$ref``, ``anyOf``, ``oneOf``, ``allOf``,
+    ``properties``, ``items``, ``enum``, ``const`` (equivalently: no keys remain at all,
+    since those are the only other keys Pydantic's exporter emits). An
+    ``Optional[Any]``-shaped field (``ErrorBody.details``) already reaches ``unknown``
+    through the ``anyOf`` short-circuit above and needs no marking.
+
+    Args:
+        node: A (sub)tree of the combined schema, processed bottom-up.
+
+    Returns:
+        The same structure with ``tsType: "unknown"`` added to every empty schema node
+        outside of ``anyOf``/``oneOf``/``allOf`` branches.
+    """
+    if isinstance(node, dict):
+        walked = {
+            key: (value if key in _UNION_KEYS else _mark_untyped_as_unknown(value))
+            for key, value in node.items()
+        }
+        remaining = {key for key in walked if key not in _UNKNOWN_SCHEMA_IGNORED_KEYS}
+        if not remaining:
+            walked["tsType"] = "unknown"
+        return walked
+    if isinstance(node, list):
+        return [_mark_untyped_as_unknown(item) for item in node]
+    return node
+
+
+def prepare_for_typescript(combined: dict[str, Any]) -> dict[str, Any]:
+    """Turn the combined schema into the exact document json-schema-to-typescript reads.
+
+    Args:
+        combined: The combined root schema from :func:`build_combined_schema`.
+
+    Returns:
+        A ``definitions``-keyed copy whose only titles are the exported model names.
+    """
+    prepared: dict[str, Any] = _rewrite_refs(_mark_untyped_as_unknown(_pure_refs(_strip_titles(combined))))
+    prepared["title"] = COMBINED_TITLE
+    definitions: dict[str, Any] = prepared.get("definitions", {})
+    for name, schema in definitions.items():
+        if isinstance(schema, dict):
+            schema["title"] = name
+    return prepared
+
+
+def typescript_available() -> bool:
+    """Return True when ``pnpm`` is on PATH and can therefore run the TS codegen."""
+    return shutil.which("pnpm") is not None
+
+
+def generate_typescript(combined: dict[str, Any], out_file: Path) -> bool:
+    """Generate ``lkap-contracts.d.ts`` from the combined schema.
+
+    Args:
+        combined: The combined root schema from :func:`build_combined_schema`.
+        out_file: Destination ``.d.ts`` path; parent directories are created.
+
+    Returns:
+        True when the file was written, False when pnpm is unavailable or the
+        codegen failed (the caller keeps the committed file in that case).
+    """
+    if not typescript_available():
+        logger.warning("pnpm not found; skipping TypeScript generation for %s", out_file)
+        return False
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        schema_path = Path(tmp) / "lkap-contracts.schema.json"
+        schema_path.write_text(_dumps(prepare_for_typescript(combined)), encoding="utf-8")
+        # Generate into the temp dir first: a failed or partial run must never clobber
+        # the committed .d.ts that the diff test and the web build depend on.
+        staged = Path(tmp) / "lkap-contracts.d.ts"
+        cmd = [
+            "pnpm",
+            "dlx",
+            f"json-schema-to-typescript@{JSON_SCHEMA_TO_TYPESCRIPT_VERSION}",
+            "--input",
+            str(schema_path),
+            "--output",
+            str(staged),
+            "--bannerComment",
+            "",
+            "--additionalProperties",
+            "false",
+            "--unreachableDefinitions",
+        ]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+            logger.warning("json-schema-to-typescript failed: %s", exc)
+            return False
+        if not staged.is_file():
+            logger.warning("json-schema-to-typescript produced no output")
+            return False
+        text = staged.read_text(encoding="utf-8").lstrip("\n")
+    out_file.write_text(_TS_BANNER + text, encoding="utf-8")
+    return True
+
+
+_TS_BANNER = (
+    "/* eslint-disable */\n"
+    "/**\n"
+    " * GENERATED by `python -m lkap_contracts.export` from docs/CONTRACTS.md models.\n"
+    " * Do not edit by hand. Copied into web/src/contracts/ by scripts/export_contracts.sh.\n"
+    " */\n\n"
+)
+
+
+def write_json_outputs(out_dir: Path) -> list[Path]:
+    """Write ``providers.json`` and ``schemas/*.schema.json`` (no node required).
+
+    Args:
+        out_dir: The ``generated/`` directory to write into.
+
+    Returns:
+        Every path written, sorted.
+    """
+    written: list[Path] = []
+    out_dir.mkdir(parents=True, exist_ok=True)
+    providers_path = out_dir / "providers.json"
+    providers_path.write_text(_dumps(build_providers_document()), encoding="utf-8")
+    written.append(providers_path)
+
+    schemas_dir = out_dir / "schemas"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
+    for name, schema in build_schema_documents().items():
+        path = schemas_dir / f"{name}.schema.json"
+        path.write_text(_dumps(schema), encoding="utf-8")
+        written.append(path)
+    return sorted(written)
+
+
+def write_all(out_dir: Path, *, skip_ts: bool = False) -> list[Path]:
+    """Write every generated artefact.
+
+    Args:
+        out_dir: The ``generated/`` directory to write into.
+        skip_ts: Skip the TypeScript step (used by the offline diff test).
+
+    Returns:
+        Every path written, sorted.
+    """
+    written = write_json_outputs(out_dir)
+    if not skip_ts:
+        ts_path = out_dir / "ts" / "lkap-contracts.d.ts"
+        if generate_typescript(build_combined_schema(), ts_path):
+            written.append(ts_path)
+    return sorted(written)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for ``python -m lkap_contracts.export``.
+
+    Args:
+        argv: Optional argument vector (defaults to ``sys.argv[1:]``).
+
+    Returns:
+        Process exit code.
+    """
+    parser = argparse.ArgumentParser(description="Export lkap_contracts to generated/.")
+    parser.add_argument(
+        "--out", type=Path, default=None, help="output directory (default: contracts/generated)"
+    )
+    parser.add_argument("--skip-ts", action="store_true", help="skip TypeScript generation")
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+
+    out_dir = args.out or default_output_dir()
+    written = write_all(out_dir, skip_ts=args.skip_ts)
+    for path in written:
+        logger.info("wrote %s", path)
+    logger.info("exported %d files to %s", len(written), out_dir)
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

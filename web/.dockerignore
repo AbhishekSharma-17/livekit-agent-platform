@@ -1,0 +1,15 @@
+# Build context for this Dockerfile is web/ itself (self-contained — the
+# web app has no path deps outside this directory; the generated contracts
+# type file is already committed at src/contracts/lkap-contracts.d.ts).
+node_modules
+.next
+.git
+.env
+.env.*
+*.pem
+coverage
+e2e
+tests
+playwright-report
+test-results
+*.tsbuildinfo

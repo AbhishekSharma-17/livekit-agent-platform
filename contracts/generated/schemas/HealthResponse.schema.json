@@ -1,0 +1,43 @@
+{
+  "$id": "lkap-contracts/HealthResponse.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/health``.",
+  "properties": {
+    "db": {
+      "enum": [
+        "ok",
+        "error"
+      ],
+      "title": "Db",
+      "type": "string"
+    },
+    "livekit_url": {
+      "title": "Livekit Url",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "packs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Packs",
+      "type": "array"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "version",
+    "livekit_url",
+    "packs",
+    "db"
+  ],
+  "title": "HealthResponse",
+  "type": "object"
+}

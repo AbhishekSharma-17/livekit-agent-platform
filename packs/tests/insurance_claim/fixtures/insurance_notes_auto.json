@@ -1,0 +1,68 @@
+[
+  {
+    "key": "title:Chris Park|AUTO-11111",
+    "cls": "title",
+    "text": "Chris Park  ·  AUTO-11111",
+    "blank": false
+  },
+  {
+    "key": "policy:AUTO-11111:lapsed",
+    "cls": "flag urgent",
+    "text": "Personal auto, lapsed. Human review before anything else.",
+    "blank": false
+  },
+  {
+    "key": "whenwhere:|SE 12th and Hawthorne, Portland",
+    "cls": "",
+    "text": "SE 12th and Hawthorne, Portland",
+    "blank": false
+  },
+  {
+    "key": "desc:Another car ran a red light and hit the driver's side of the claimant's car.",
+    "cls": "",
+    "text": "Another car ran a red light and hit the driver's side of the claimant's car.",
+    "blank": false
+  },
+  {
+    "key": "inj:Passenger has neck pain and went to urgent care",
+    "cls": "flag urgent",
+    "text": "Injury: Passenger has neck pain and went to urgent care",
+    "blank": false
+  },
+  {
+    "key": "contact:Text 503-555-0101",
+    "cls": "aside",
+    "text": "Reach at Text 503-555-0101",
+    "blank": false
+  },
+  {
+    "key": "ev:police report number PDX-24-8811, tow receipt, other driver's plate",
+    "cls": "aside",
+    "text": "Has: police report number PDX-24-8811, tow receipt, other driver's plate",
+    "blank": false
+  },
+  {
+    "key": "rep:police report number PDX-24-8811 | tow receipt | other driver's plate | police report | Another car ran a red light and hit the driver's side of the claimant's car.",
+    "cls": "aside",
+    "text": "Report: police report number PDX-24-8811 | tow receipt | other driver's plate | police report | Another car ran a red light and hit the driver's side of the claimant's car.",
+    "blank": false
+  },
+  {
+    "key": "blank:date_of_loss",
+    "cls": "blank",
+    "text": "When did it happen?",
+    "blank": true
+  },
+  {
+    "key": "blank:Date of loss",
+    "cls": "blank",
+    "text": "Date of loss?",
+    "blank": true
+  },
+  {
+    "key": "blank:Repair estimate amount",
+    "cls": "blank",
+    "text": "Repair estimate amount?",
+    "blank": true
+  }
+]

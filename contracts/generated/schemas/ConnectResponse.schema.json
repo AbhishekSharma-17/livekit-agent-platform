@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "AgentPublicOut": {
+      "description": "What an unauthenticated browser may see about a published agent.",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/CapabilitiesConfig"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "pipeline_mode": {
+          "enum": [
+            "realtime",
+            "cascaded"
+          ],
+          "title": "Pipeline Mode",
+          "type": "string"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "ui_panel_id": {
+          "title": "Ui Panel Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "description",
+        "ui_panel_id",
+        "capabilities",
+        "pipeline_mode"
+      ],
+      "title": "AgentPublicOut",
+      "type": "object"
+    },
+    "CapabilitiesConfig": {
+      "description": "Which input affordances the session page offers.",
+      "properties": {
+        "camera": {
+          "default": false,
+          "title": "Camera",
+          "type": "boolean"
+        },
+        "chat_input": {
+          "default": true,
+          "title": "Chat Input",
+          "type": "boolean"
+        },
+        "screen_share": {
+          "default": false,
+          "title": "Screen Share",
+          "type": "boolean"
+        },
+        "vision_inject_per_turn": {
+          "default": true,
+          "title": "Vision Inject Per Turn",
+          "type": "boolean"
+        }
+      },
+      "title": "CapabilitiesConfig",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ConnectResponse.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "LiveKit ``TokenSourceResponse``-compatible connection details (camelCase).",
+  "properties": {
+    "agent": {
+      "$ref": "#/$defs/AgentPublicOut"
+    },
+    "participantName": {
+      "title": "Participantname",
+      "type": "string"
+    },
+    "participantToken": {
+      "title": "Participanttoken",
+      "type": "string"
+    },
+    "protocolVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Protocolversion",
+      "type": "integer"
+    },
+    "roomName": {
+      "title": "Roomname",
+      "type": "string"
+    },
+    "serverUrl": {
+      "title": "Serverurl",
+      "type": "string"
+    },
+    "sessionId": {
+      "title": "Sessionid",
+      "type": "string"
+    },
+    "uiPanelId": {
+      "title": "Uipanelid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "serverUrl",
+    "participantToken",
+    "roomName",
+    "participantName",
+    "sessionId",
+    "agent",
+    "uiPanelId"
+  ],
+  "title": "ConnectResponse",
+  "type": "object"
+}

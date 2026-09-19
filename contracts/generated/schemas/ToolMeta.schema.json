@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/ToolMeta.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Runtime metadata for a pack code tool, used for reply control and UI labels.",
+  "properties": {
+    "activity_label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Activity Label"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "silent_reply": {
+      "default": false,
+      "title": "Silent Reply",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "ToolMeta",
+  "type": "object"
+}

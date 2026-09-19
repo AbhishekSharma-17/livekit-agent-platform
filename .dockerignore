@@ -1,0 +1,46 @@
+# Root .dockerignore — applies to any build whose context is the platform
+# root (currently: api/Dockerfile via deploy/docker-compose.yml). Keeps the
+# "sending build context to daemon" step fast; the final images only ever
+# COPY the specific paths they need (see api/Dockerfile), so this is a speed
+# and hygiene measure, not a security boundary on its own — never rely on it
+# to keep secrets out of an image, keep those out of the tree entirely.
+
+# secrets — never sent to the daemon, never baked into a layer
+.env
+.env.*
+secrets.env
+**/secrets.env
+*.pem
+*.key
+
+# per-package virtualenvs and caches (rebuilt inside the image)
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.mypy_cache/
+**/.ruff_cache/
+**/.pytest_cache/
+
+# node / web (irrelevant to the api image; web/Dockerfile uses web/ as its
+# own build context with its own .dockerignore)
+**/node_modules/
+**/.next/
+web/e2e/
+web/tests/
+
+# test suites and dev data — not needed at runtime
+**/tests/
+**/data/
+**/*.db
+**/*.db-journal
+
+# vcs / editor / docs
+.git/
+.gitignore
+docs/
+
+# NOTE: do NOT ignore README.md / **/README.md here — contracts/pyproject.toml
+# declares `readme = "README.md"` and hatchling reads that file when
+# `uv sync --no-editable` builds the lkap-contracts wheel inside
+# api/Dockerfile's builder stage; excluding it breaks that build with
+# "Readme file does not exist".

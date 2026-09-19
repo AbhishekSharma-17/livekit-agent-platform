@@ -1,0 +1,215 @@
+{
+  "route": "needs_docs",
+  "progress": 12,
+  "fields": {
+    "claimant": {
+      "label": "Claimant name",
+      "value": "Missing: claimant name",
+      "status": "missing",
+      "source": "-"
+    },
+    "policy": {
+      "label": "Policy number",
+      "value": "Missing: policy number",
+      "status": "missing",
+      "source": "-"
+    },
+    "contact": {
+      "label": "Contact method",
+      "value": "Missing: contact method",
+      "status": "missing",
+      "source": "-"
+    },
+    "type": {
+      "label": "Claim type",
+      "value": "other",
+      "status": "complete",
+      "source": "Gemini extraction"
+    },
+    "date": {
+      "label": "Date of loss",
+      "value": "Missing: date of loss",
+      "status": "missing",
+      "source": "-"
+    },
+    "time": {
+      "label": "Reported date",
+      "value": "Missing: reported date",
+      "status": "missing",
+      "source": "-"
+    },
+    "location": {
+      "label": "Location",
+      "value": "Missing: location",
+      "status": "missing",
+      "source": "-"
+    },
+    "description": {
+      "label": "Loss description",
+      "value": "Missing: loss description",
+      "status": "missing",
+      "source": "-"
+    },
+    "injuries": {
+      "label": "Injuries",
+      "value": "Missing: injuries",
+      "status": "missing",
+      "source": "-"
+    },
+    "hazards": {
+      "label": "Hazards present",
+      "value": "Missing: hazards present",
+      "status": "missing",
+      "source": "-"
+    },
+    "medical": {
+      "label": "Medical attention",
+      "value": "Missing: medical attention",
+      "status": "missing",
+      "source": "-"
+    },
+    "police": {
+      "label": "Report number",
+      "value": "Missing: report number",
+      "status": "missing",
+      "source": "-"
+    },
+    "photos": {
+      "label": "Evidence available",
+      "value": "Not captured yet",
+      "status": "complete",
+      "source": "Gemini extraction"
+    },
+    "tow": {
+      "label": "Tow info",
+      "value": "Missing: tow info",
+      "status": "missing",
+      "source": "-"
+    },
+    "otherDriver": {
+      "label": "Other driver info",
+      "value": "Missing: other driver info",
+      "status": "missing",
+      "source": "-"
+    },
+    "policyStatus": {
+      "label": "Policy status",
+      "value": "Missing: policy status",
+      "status": "missing",
+      "source": "-"
+    },
+    "policyLine": {
+      "label": "Policy line",
+      "value": "Missing: policy line",
+      "status": "missing",
+      "source": "-"
+    },
+    "deductible": {
+      "label": "Deductibles",
+      "value": "Missing: deductibles",
+      "status": "missing",
+      "source": "-"
+    },
+    "coverages": {
+      "label": "Coverages on file",
+      "value": "Missing: coverages on file",
+      "status": "missing",
+      "source": "-"
+    }
+  },
+  "transcript": [
+    {
+      "speaker": "Agent",
+      "text": "I can start the claim while we talk. First, are you and everyone else in a safe place?"
+    }
+  ],
+  "events": [
+    {
+      "tone": "success",
+      "title": "Gemini extraction complete",
+      "detail": "Updated structured claim facts using gemini-3.8-flash.",
+      "rule": "LLM-001"
+    },
+    {
+      "tone": "warning",
+      "title": "Missing intake facts",
+      "detail": "policyholder_name, policy_number, contact_method, date_of_loss, loss_location, loss_description",
+      "rule": "INTAKE-001"
+    },
+    {
+      "tone": "warning",
+      "title": "Required intake facts are missing before the claim can be fully assigned.",
+      "detail": "Required action: collect_info.",
+      "rule": "INTAKE-001"
+    },
+    {
+      "tone": "warning",
+      "title": "Missing or unconfirmed document: Photos or available proof of loss. Documents what happened.",
+      "detail": "Required action: collect_document.",
+      "rule": "DOC-001"
+    },
+    {
+      "tone": "warning",
+      "title": "Missing or unconfirmed document: Receipts, estimates, or invoices. Supports the claimed amount.",
+      "detail": "Required action: collect_document.",
+      "rule": "DOC-001"
+    },
+    {
+      "tone": "warning",
+      "title": "Missing or unconfirmed document: Any third-party report or confirmation. Helps verify loss facts.",
+      "detail": "Required action: collect_document.",
+      "rule": "DOC-001"
+    },
+    {
+      "tone": "warning",
+      "title": "Core loss facts are missing, so routing should remain follow-up oriented.",
+      "detail": "Deterministic fraud/safety gate signal.",
+      "rule": "INTAKE-002"
+    }
+  ],
+  "policy": null,
+  "tool_activity": [],
+  "live_model": null,
+  "missing_blockers": [
+    "policyholder_name",
+    "policy_number",
+    "contact_method",
+    "date_of_loss",
+    "loss_location",
+    "loss_description"
+  ],
+  "documents": [
+    {
+      "item": "Photos or available proof of loss",
+      "reason": "Documents what happened.",
+      "priority": "required",
+      "already_provided": false
+    },
+    {
+      "item": "Receipts, estimates, or invoices",
+      "reason": "Supports the claimed amount.",
+      "priority": "required",
+      "already_provided": false
+    },
+    {
+      "item": "Any third-party report or confirmation",
+      "reason": "Helps verify loss facts.",
+      "priority": "required",
+      "already_provided": false
+    }
+  ],
+  "evidence_photos": [],
+  "camera_notes": [],
+  "sketch": null,
+  "severity": "medium",
+  "claim_type": "other",
+  "handoff": {
+    "Summary": "not specified reported a other loss at not specified on not specified. Summary: not specified. Estimated loss: not supplied.",
+    "Priority": "Medium - Waiting for claimant facts.",
+    "Required actions": "Photos or available proof of loss, Receipts, estimates, or invoices, Any third-party report or confirmation",
+    "Attachments": "Not captured yet",
+    "Next best action": "What is your full name as it appears on the policy?"
+  },
+  "packet_markdown": "# Insurance Claim Intake Packet\n\n**Claim type:** Other  \n**Intake status:** Missing Info  \n**Severity:** Medium  \n**Routing decision:** Needs Docs\n\n## Missing Information\n- policyholder_name\n- policy_number\n- contact_method\n- date_of_loss\n- loss_location\n- loss_description\n\n## Required Documents Checklist\n- [required] **Photos or available proof of loss** - Documents what happened.\n- [required] **Receipts, estimates, or invoices** - Supports the claimed amount.\n- [required] **Any third-party report or confirmation** - Helps verify loss facts.\n\n## Coverage Considerations and Disclaimer\n- Claim type is unclear; route for human triage after collecting minimum loss facts and proof of loss.\n\nThis is an intake triage packet for demo and educational use. It does not confirm coverage, benefits, liability, payment, or legal rights. A licensed adjuster or qualified human reviewer must evaluate the applicable policy, endorsements, exclusions, deductibles, documentation, and governing law.\n\n## Adjuster Handoff Summary\nnot specified reported a other loss at not specified on not specified. Summary: not specified. Estimated loss: not supplied.\n\n## Claimant-Friendly Next Message\nWhat is your full name as it appears on the policy?\n\n## Deterministic Findings\n- `INTAKE-001` [medium] Required intake facts are missing before the claim can be fully assigned.\n- `DOC-001` [medium] Missing or unconfirmed document: Photos or available proof of loss. Documents what happened.\n- `DOC-001` [medium] Missing or unconfirmed document: Receipts, estimates, or invoices. Supports the claimed amount.\n- `DOC-001` [medium] Missing or unconfirmed document: Any third-party report or confirmation. Helps verify loss facts.\n\n## Fraud, Timing, and Safety Signals\n- `INTAKE-002` [medium] Core loss facts are missing, so routing should remain follow-up oriented.\n\n## Audit Trail\n1. Validated minimum claim intake fields.\n2. Classified claim as other with medium severity.\n3. Applied deterministic evidence, document, high-loss, injury, and safety routing gates.\n4. Initial route selected: needs_docs.\n5. Applied deterministic fraud, suspicious timing, vague facts, and safety gates.\n6. Final route selected: needs_docs.\n",
+  "model": "gemini-3.8-flash"
+}

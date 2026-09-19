@@ -1,0 +1,77 @@
+import * as React from "react";
+
+import type { Metadata } from "next";
+
+import type { AgentPublicOut } from "@/contracts/lkap-contracts";
+import { SessionExperience } from "@/components/session/session-experience";
+import { describeConnectError, fetchPublicAgent } from "@/lib/livekit";
+import { fetchAdminAgentServerSide } from "@/lib/livekit-server";
+
+/**
+ * Public session page (docs/ARCHITECTURE.md §12, CONTRACTS §7).
+ *
+ * The agent card is fetched server-side from the **public** endpoint
+ * `GET /v1/agents/{slug}` (published agents only, no token). Everything else
+ * — the connect call and the LiveKit room — happens in the browser against the
+ * same public API. No admin token is ever involved on this surface.
+ *
+ * DECISIONS-W2 D-W2-1: `?mode=test` is the one exception. It fetches the
+ * agent card via the server-only admin proxy helper (`fetchAdminAgentServerSide`,
+ * `import "server-only"`), so a draft/unpublished agent can be previewed from
+ * the console — and threads `testMode` down so the browser's connect call
+ * also goes through `/api/console/*` instead of the public API. The admin
+ * token itself never leaves the server: it is read from `LKAP_ADMIN_TOKEN` in
+ * `livekit-server.ts` / the console proxy route, never passed as a prop.
+ */
+export const dynamic = "force-dynamic";
+
+interface SessionPageProps {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ mode?: string }>;
+}
+
+async function loadAgent(
+  slug: string,
+  testMode: boolean,
+): Promise<{ agent: AgentPublicOut | null; loadError: string | null }> {
+  try {
+    const agent = testMode
+      ? await fetchAdminAgentServerSide(slug)
+      : await fetchPublicAgent(slug);
+    return { agent, loadError: null };
+  } catch (cause) {
+    return { agent: null, loadError: describeConnectError(cause) };
+  }
+}
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: SessionPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const { mode } = await searchParams;
+  const { agent } = await loadAgent(slug, mode === "test");
+  return {
+    title: agent ? `${agent.name} — live session` : "Live session",
+    description: agent?.description || undefined,
+  };
+}
+
+export default async function SessionPage({
+  params,
+  searchParams,
+}: SessionPageProps) {
+  const { slug } = await params;
+  const { mode } = await searchParams;
+  const testMode = mode === "test";
+  const { agent, loadError } = await loadAgent(slug, testMode);
+
+  return (
+    <SessionExperience
+      slug={slug}
+      agent={agent}
+      loadError={loadError}
+      testMode={testMode}
+    />
+  );
+}

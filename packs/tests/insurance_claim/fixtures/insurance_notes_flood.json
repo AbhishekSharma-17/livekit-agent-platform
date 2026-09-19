@@ -1,0 +1,56 @@
+[
+  {
+    "key": "title:Maya Singh|H0-44721",
+    "cls": "title",
+    "text": "Maya Singh  ·  H0-44721",
+    "blank": false
+  },
+  {
+    "key": "policy:H0-44721:active",
+    "cls": "check",
+    "text": "Homeowners (HO-3), active. Dwelling $620,000",
+    "blank": false
+  },
+  {
+    "key": "whenwhere:last night|Denver",
+    "cls": "",
+    "text": "Denver, last night",
+    "blank": false
+  },
+  {
+    "key": "desc:Finished basement flooded when the sump pump failed during heavy rain.",
+    "cls": "",
+    "text": "Finished basement flooded when the sump pump failed during heavy rain.",
+    "blank": false
+  },
+  {
+    "key": "inj:No injuries reported",
+    "cls": "",
+    "text": "No injuries reported",
+    "blank": false
+  },
+  {
+    "key": "ev:photos, short video",
+    "cls": "aside",
+    "text": "Has: photos, short video",
+    "blank": false
+  },
+  {
+    "key": "blank:contact_method",
+    "cls": "blank",
+    "text": "Best contact?",
+    "blank": true
+  },
+  {
+    "key": "blank:Exact date of loss (claimant said last night, calendar date not confirmed)",
+    "cls": "blank",
+    "text": "Exact date of loss?",
+    "blank": true
+  },
+  {
+    "key": "blank:Whether a plumber or mitigation company has already inspected the sump pump and basement walls",
+    "cls": "blank",
+    "text": "Whether a plumber or mitigation company...?",
+    "blank": true
+  }
+]

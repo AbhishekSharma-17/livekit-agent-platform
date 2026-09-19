@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "KbHit": {
+      "description": "One retrieved chunk.",
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "filename",
+        "score",
+        "text"
+      ],
+      "title": "KbHit",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbSearchResponse.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Search results, best first.",
+  "properties": {
+    "hits": {
+      "items": {
+        "$ref": "#/$defs/KbHit"
+      },
+      "title": "Hits",
+      "type": "array"
+    }
+  },
+  "required": [
+    "hits"
+  ],
+  "title": "KbSearchResponse",
+  "type": "object"
+}

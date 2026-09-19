@@ -1,0 +1,67 @@
+# Insurance Claim pack — feature parity mapping (old Gemini Live demo → LKAP pack)
+
+> **Amended (2026-09-18):** per `docs/DECISIONS-W2.md`: #3 greeting is `say()` only when the pipeline has a TTS, else `generate_reply` (D-W2-9d); #4 typed turns go through `platform_text_input_cb` → `on_user_turn_completed` → `generate_reply`, not the SDK's default `TextInputOptions` handler (D-W2-9p); #6 cascaded vision attaches a ≤ 512 px JPEG data URL, one image per LLM call, with auto-degrade (D-W2-8); frame source follows the UI's `set_video_source` selection (D-W2-4); #1/#6 the cascaded LLM slot is `google/gemini-3.5-flash`, the registry's first `supports_video` model, because the camera is on and `google/gemma-4-31b-it` silently ignores images on Inference (D-W2-10).
+
+Source of truth for "old": `../` (`live_demo/server.py`, `live_demo/live_tools.py`, `agent.py`, `policies.py`, `schemas.py`, `policy_directory.py`, `live_demo/app.js`, `index.html`, `styles.css`). Target: `packs/src/packs/insurance_claim/` + `web/src/panels/insurance_notebook/`.
+
+Parity bar: a claimant can do everything they could do before, on both pipeline modes, with these documented differences: (1) in cascaded mode the agent voices a one-clause acknowledgement when it starts a background tool; (2) frame cadence is LiveKit's sampler (1 fps speaking / 0.3 fps idle) instead of the browser's fixed 1 fps JPEG post.
+
+## 1. Feature table
+
+| # | Old feature | Old mechanism | New component | New mechanism (LiveKit) |
+|---|---|---|---|---|
+| 1 | Voice conversation with Gemini 3.8 Live, voice `Kore` | Browser PCM over app WebSocket → `genai.aio.live.connect` | Pack `recommended_pipeline` = cascaded LiveKit Inference (`deepgram/nova-3` → `google/gemini-3.5-flash` (D-W2-10) → `inworld/inworld-tts-2`) so it seeds without vendor keys; admin switches to `mode="realtime"`, `google-realtime`, model `gemini-3.8-live`, `default_voice["google-realtime"]="Kore"` once a Google credential exists | LiveKit room audio → `AgentSession(llm=google.realtime.RealtimeModel(...))` or the cascaded stack. |
+| 2 | System instruction | `SYSTEM_INSTRUCTION` in `live_tools.py` | `instructions.py` (verbatim text, loaded from `packs/tests/insurance_claim/fixtures/insurance_system_instruction.txt` golden) + `instructions_by_mode["cascaded"]` addendum ("acknowledge background tools in one short clause; never read lists") | `Agent(instructions=...)`; platform appends the mode addendum. |
+| 3 | Greeting "I can start the claim while we talk. First, are you and everyone else in a safe place?" | First transcript entry pushed by server | `manifest.default_greeting`, `voice.greeting_mode="say"` | `session.say(greeting)` in `on_session_start` (after avatar join if any). |
+| 4 | Typed turns through the live session | ws `{"type":"text"}` → `send_client_content` | Platform chat input | `lk.chat` text stream → default `TextInputOptions` → `generate_reply(user_input=...)`. |
+| 5 | Live transcripts (claimant + agent, streaming) | Gemini input/output transcription over ws | Platform transcript component | `lk.transcription` (`useSessionMessages`); `input_audio_transcription`/`output_audio_transcription` default-enabled in the plugin. |
+| 6 | Camera frames seen by the model (1 fps JPEG) | ws `{"type":"video"}` → `send_realtime_input(video=...)` | `capabilities.camera=true` | Realtime: `RoomOptions(video_input=True)` + `VoiceActivityVideoSampler`. Cascaded (LLM `google/gemini-3.5-flash`, D-W2-10): `PlatformAgent.on_user_turn_completed` injects latest frame as a ≤ 512 px JPEG `ImageContent` (≤8 s old, D-W2-8). |
+| 7 | `lookup_policy` (NON_BLOCKING; INTERRUPT when lapsed) | Background task → `send_tool_response(scheduling=...)` | `tools.py: lookup_policy` (pack code tool, inline, fast) with `policy_directory.py` copied verbatim; `ToolMeta(silent_reply=False, activity_label="Policy desk")` | Runs inline (<10 ms) and returns the record → model replies (equivalent to WHEN_IDLE-then-speak). Urgent (lapsed/not found): additionally `ctx.ui.set_status("Policy needs review","danger")` and note; realtime: reply kept; cascaded: same. |
+| 8 | `sync_claim_packet` (NON_BLOCKING; INTERRUPT on emergency) | Background ADK graph run, result → Gemini | `tools.py: sync_claim_packet` → `ctx.background.submit(name="claim_workflow", coro=workflow.run(...), urgent=lambda r: r.routing=="emergency_escalation", urgent_instructions=..., routine_note=summarize_workflow_for_voice)`; realtime returns `None` (silent), cascaded returns "Got it, updating the claim notes." | Result → UI patches (fields, checklist, stamp, packet) always; conversation: routine → `update_chat_ctx` note, urgent → `generate_reply(instructions="Tell the claimant to contact emergency services if anyone is in danger and that a human representative will take over.")`. `function_tools_executed` handler cancels the tool reply in realtime mode. |
+| 9 | `pin_evidence_photo` (observation, claimant_description, confirmed, evidence_type) | Latest ws frame (≤12 s) → data URL in state | `tools.py: pin_evidence_photo` → `ctx.frames.latest_jpeg(max_age_s=12)` → `ctx.ui.push_asset(kind="evidence", caption=observation, meta={confirmed, claimant_description, evidence_type, captured_at})` + `custom.camera_notes.append(...)` | Byte stream `lkap.ui.asset` + `AssetRef` in state; built-in tools that overlap pack tools are disabled (`builtin_tools_disabled=["pin_frame","push_note","set_status","escalate_to_human","http_request"]`), so the model sees the old four pack tools plus the platform's `end_call`, `search_knowledge`, `describe_current_frame`, `current_time`. The manifest value seeds `AgentConfig.tools.builtin_disabled` (authoritative at runtime). |
+| 10 | `draw_incident_sketch` (image model `gemini-3.1-flash-image`, versioned, "does this look right?") | Background `generate_content(response_modalities=["IMAGE"])` | `tools.py: draw_incident_sketch` → `ctx.background.submit(coro=ctx.image_gen.generate(sketch_prompt(brief)))` → `push_asset(kind="sketch", caption="Does this look right?", meta={version, brief})`; `custom.sketch = {asset_id, version, brief, confirmed}` | `pipeline.image_gen = google-image-gen` (or `openai-image-gen`); routine note "Sketch v{n} is in the notebook; ask if it looks right." Realtime: tool returns `None`; cascaded: "Sketching that now." |
+| 11 | Tool result scheduling WHEN_IDLE vs INTERRUPT | `FunctionResponseScheduling` | `BackgroundRunner` urgency callbacks | See ARCHITECTURE §7.2. Only realtime models honour `reply_required`; cascaded fallback documented. |
+| 12 | Tool cancellation by the model | `tool_call_cancellation` ids → task.cancel | `ToolFlag.CANCELLABLE` on all four tools; background jobs are *not* cancelled (UI still updates) | LiveKit cancels the reply on interruption; `tool_call_ended(status="cancelled")` → activity feed. |
+| 13 | Claim graph (ADK `SequentialAgent`: normalizer LLM → validate → classifier LLM → coverage rules → checklist → fraud/safety gate → packet) | `agent.py` + `policies.py` | `workflow.py: ClaimWorkflow.run(intake_text) -> WorkflowResult` = `StructuredLLM.extract(ClaimNarrative)` → `rules.validate_required_claim_fields` → `StructuredLLM.extract(ClaimClassification)` → `rules.apply_coverage_and_evidence_rules` → `rules.generate_document_checklist` → `rules.fraud_signal_and_safety_gate` → `rules.build_claim_intake_packet`; `rules.py` = `policies.py` verbatim (only import paths change); `schemas.py` verbatim (`Optional` → `X | None`) | No ADK. Two LLM calls on `ctx.workflow_llm` (defaults to the session LLM; realtime sessions default to `livekit-inference-llm google/gemma-4-31b-it`). Prompts = the two ADK `instruction` strings + "Return only JSON matching this schema". Cached by intake-text hash like `_run_workflow_cached`. |
+| 14 | Graph runs triggered on every final claimant transcript (`schedule_state_update`) | ws transcript finalisation | `Pack.on_user_turn_completed`: debounced (2 s) run every 2nd user turn when text changed; plus the tool-triggered run | Bounded LLM usage; result path identical to #8 but never urgent-speaks (safety escalation from a passive run only updates UI + adds a routine note). |
+| 15 | Policy auto-attach from extracted policy number (`_attach_policy_from_claim`) | after graph | `workflow.py` post-step calling `policy_directory.lookup_policy` when no verified record yet | Same. |
+| 16 | UI state builder (`_ui_state`, `_policy_fields`, `_events`, progress %) | `server.py` | `ui_state.py: build_custom_state(session_state) -> InsuranceState` (Pydantic, = `manifest.state_schema`), plus envelope mapping: `status` ← route stamp, `progress` ← %, `checklist` ← missing blockers + documents, `notes` ← handwritten notes list (the old `buildNotes()` logic moves server-side so the panel is a renderer) | Golden tests against `fixtures/insurance_ui_state_*.json` (adapted to the new envelope; keep field keys `fields.*`, `route`, `missing_blockers`, `documents`, `handoff`, `packet_markdown`, `events`, `policy`, `camera_notes`, `sketch`). |
+| 17 | Notebook UI: handwritten notes (`ink-in` animation), red blanks | `app.js buildNotes/renderNotes` | `panels/insurance_notebook/Notes.tsx` renders `state.notes` (kinds `title|check|flag|aside|blank`) with the same CSS classes ported from `styles.css` | Notes come pre-composed from the pack (`key` for stable identity → animate only new keys). |
+| 18 | Polaroids with captions, "Claimant says: … confirmed / not confirmed on camera" | `renderPinboard` | `Pinboard.tsx` renders `state.assets` where `kind in {evidence, sketch}` with `meta.confirmed` | Images via object URLs from the byte stream. |
+| 19 | Rubber stamp (route → label/tone, re-animates on change) | `renderStamp` | `Stamp.tsx` from `state.status` (`key` = route) | `routeLabels` map moves to `ui_state.py`. |
+| 20 | Still needed list + `% ready` pill | `renderNeeded` | `StillNeeded.tsx` from `state.checklist` + `state.progress` | Blockers `blocking=true`, documents `done=already_provided`. |
+| 21 | Claim team activity feed (Policy desk / Claim writer / Evidence / Sketch artist; running dot, ms, "interrupted the agent") | `tool` ws messages | `TeamFeed.tsx` from `state.activity` (`label` from `ToolMeta.activity_label`, `urgent` flag) | `ActivityEvent` emitted by `BackgroundToolRunner` + tool event hooks. |
+| 22 | "writing" pen indicator while tools run | `setWriting` | `Pen.tsx`: visible when any activity `phase=running` and source != `lookup_policy` | Same rule. |
+| 23 | Adjuster packet dialog (markdown) | `packetDialog` | `PacketDialog.tsx` from `custom.packet_markdown` | Same. |
+| 24 | New intake button | new ws session | Platform "End call" + reconnect creates a new session (new `session_id`) | `AgentAction ui_action new_intake` deferred; reconnect is sufficient. |
+| 25 | Camera preview "Agent is watching" | local `<video>` | Platform `VideoStage` (local camera/screen preview + `useVoiceAssistant` avatar tile) | Same visual affordance. |
+| 26 | Safety: injury/unsafe → emergency escalation route + urgent interrupt | rules + INTERRUPT | `rules.fraud_signal_and_safety_gate` verbatim + urgency callback + `escalate_to_human` **not** used (pack keeps its own routing) | Parity via #8. |
+| 27 | Mock policy directory (6 records incl. lapsed `AUTO-11111`) | `policy_directory.py` | `policy_directory.py` verbatim | Same; also seeded as a KB doc (`seeds/policy_lines.md`) to demo KB search (optional, `search_knowledge` stays enabled). |
+| 28 | Demo prompts | `examples.py` | `packs/tests/insurance_claim/scenarios.py` (used by live tests + a console "sample claims" hint) | — |
+| 29 | Tests (`tests/test_*.py`, fixtures) | pytest | `packs/tests/insurance_claim/` with copied fixtures: rules parity (`test_policies` → `test_rules`), directory, schemas, `test_workflow` with `FakeStructuredLLM` returning the fixture narratives, `test_ui_state` golden, `test_tools` with fake ctx | No network. |
+
+## 2. Old server responsibilities → new owners
+
+| `server.py` piece | New owner |
+|---|---|
+| ws transport, audio/video relay, PCM playback | LiveKit (room, `AgentSession`, web `LiveKitRoom`) — deleted |
+| `IntakeSession` dataclass | `ctx.userdata["intake"]: IntakeState` (Pydantic) in the pack |
+| `execute_tool` / `launch_tool` / scheduling | `BackgroundToolRunner` + tool functions |
+| `_pin_evidence_photo` | `tools.py` + `FrameBuffer` + `UiChannel.push_asset` |
+| `_draw_incident_sketch` | `tools.py` + `ImageGen` provider |
+| `_run_workflow_cached` / `_process_with_adk_graph` | `workflow.py` |
+| `_ui_state` & friends | `ui_state.py` |
+| `/api/sessions`, `/api/message` REST (text-only mode) | dropped; typed chat goes through `lk.chat` |
+| `/api/health` | api `/v1/health` |
+| CORS/static serving | web app |
+
+## 3. Dropped or changed on purpose
+
+- Gemini "thought" parts forwarded to the UI (`{"type":"thought"}`) — dropped (not exposed by the LiveKit plugin in a stable way).
+- Base64 `data_url` images inside state — replaced by byte-stream assets referenced by `asset_id`.
+- Browser fixed 1 fps frame posting — replaced by WebRTC camera track + LiveKit sampling.
+- `google-adk` dependency — removed (D9).
+
+## 4. Pack file inventory (`packs/src/packs/insurance_claim/`)
+
+`pack.py` (PACK, manifest, hooks), `instructions.py`, `schemas.py`, `rules.py`, `policy_directory.py`, `workflow.py`, `tools.py`, `ui_state.py`, `prompts.py` (extraction/classification/sketch prompts), `seeds/policy_lines.md`, `seeds/intake_playbook.md`.

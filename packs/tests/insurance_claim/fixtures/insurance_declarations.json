@@ -1,0 +1,82 @@
+{
+  "function_declarations": [
+    {
+      "description": "Verify an insurance policy number against the carrier policy directory. Runs in the background. Returns policyholder name, policy line, status, deductibles, and coverages when found.",
+      "name": "lookup_policy",
+      "parameters": {
+        "properties": {
+          "policy_number": {
+            "description": "Policy number exactly as the claimant said it, for example H0-44721 or AUTO 90210.",
+            "type": "STRING"
+          }
+        },
+        "required": [
+          "policy_number"
+        ],
+        "type": "OBJECT"
+      },
+      "behavior": "NON_BLOCKING"
+    },
+    {
+      "description": "Send the full claimant conversation and camera observations so far to the background claim team. Returns the routing decision, severity, blocking intake items, required documents, and the next best question to ask.",
+      "name": "sync_claim_packet",
+      "parameters": {
+        "properties": {
+          "reason": {
+            "description": "One short phrase on why you are syncing now, for example 'new loss facts' or 'injury mentioned'.",
+            "type": "STRING"
+          }
+        },
+        "type": "OBJECT"
+      },
+      "behavior": "NON_BLOCKING"
+    },
+    {
+      "description": "Tape the current camera frame into the claim notebook as evidence, with your own observation as the caption and whether it confirms what the claimant described. Call it only after you have looked at the camera and can describe what is in the frame.",
+      "name": "pin_evidence_photo",
+      "parameters": {
+        "properties": {
+          "observation": {
+            "description": "One or two concrete sentences describing only what you can actually see in the frame, for example 'Water line about two inches up the drywall next to the stairs.' Never restate the claimant's description as your own.",
+            "type": "STRING"
+          },
+          "claimant_description": {
+            "description": "What the claimant says this shows, in their words, for example 'a crack in the wall'. Leave empty if they did not describe it.",
+            "type": "STRING"
+          },
+          "confirmed": {
+            "description": "True only if the frame clearly shows what the claimant described. False if you cannot make it out, the frame is blurry or dark, or you see something different.",
+            "type": "BOOLEAN"
+          },
+          "evidence_type": {
+            "description": "Short category such as 'damage', 'receipt', 'document', 'serial number', or 'scene'.",
+            "type": "STRING"
+          }
+        },
+        "required": [
+          "observation",
+          "confirmed"
+        ],
+        "type": "OBJECT"
+      },
+      "behavior": "NON_BLOCKING"
+    },
+    {
+      "description": "Ask the claim team to draw a rough hand-drawn pen sketch of the incident scene into the notebook. Runs in the background for several seconds. Call it once you know the location, the layout, and what happened. Call it again with corrections.",
+      "name": "draw_incident_sketch",
+      "parameters": {
+        "properties": {
+          "scene_description": {
+            "description": "Illustrator brief in plain words: the space or intersection, where things are, what got damaged, and the direction of impact or water flow. Include labels to write on the sketch. Fold in any corrections the claimant gave.",
+            "type": "STRING"
+          }
+        },
+        "required": [
+          "scene_description"
+        ],
+        "type": "OBJECT"
+      },
+      "behavior": "NON_BLOCKING"
+    }
+  ]
+}

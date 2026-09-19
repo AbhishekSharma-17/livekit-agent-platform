@@ -1,0 +1,403 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens — docs/UI_UX_SPEC.md §2.2 / §2.7 (WP-0 owns this file).
+ * Contrast is verified by `pnpm check:contrast` (scripts/check-contrast.mjs);
+ * if a pair fails, adjust the token's lightness, never the target.
+ */
+
+@theme inline {
+  /* shadcn + agents-ui mappings */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* brand + semantic tones */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-text: var(--brand-text);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-line: var(--brand-line);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-text: var(--info-text);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-text: var(--warning-text);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-text: var(--danger-text);
+  --color-stage: var(--stage);
+  --color-stage-foreground: var(--stage-foreground);
+
+  /* radius, elevation, easing, hand fonts */
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+  --ease-drawer: var(--ease-drawer);
+  --font-hand: var(--font-hand);
+  --font-hand-label: var(--font-hand-label);
+}
+
+:root {
+  /* surfaces */
+  --background: oklch(0.985 0.003 250);
+  --foreground: oklch(0.17 0.012 250);
+  --card: oklch(0.995 0.002 250);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.995 0.002 250);
+  --popover-foreground: var(--foreground);
+  --muted: oklch(0.955 0.005 250);
+  --muted-foreground: oklch(0.47 0.015 250);
+  --accent: oklch(0.95 0.006 250); /* shadcn "accent" = subtle hover surface; keep the name for agents-ui */
+  --accent-foreground: var(--foreground);
+  --secondary: oklch(0.94 0.006 250);
+  --secondary-foreground: oklch(0.25 0.015 250);
+  --primary: oklch(0.2 0.015 250); /* neutral ink; primary buttons are NOT green */
+  --primary-foreground: oklch(0.985 0.003 250);
+  --border: oklch(0.85 0.008 250); /* spec 0.90 → 0.85: 1.5:1 decorative floor */
+  --input: oklch(0.64 0.01 250); /* spec 0.85 → 0.64: 3:1 field edge (WCAG 1.4.11) */
+  --ring: var(--brand);
+  --destructive: oklch(0.55 0.2 27);
+  --destructive-foreground: oklch(0.99 0.01 27);
+
+  /* brand = signal green; the only accent */
+  --brand: oklch(0.54 0.14 152); /* spec 0.55 → 0.54: brand-foreground ≥ 4.5:1 */
+  --brand-foreground: oklch(0.99 0.01 152);
+  --brand-text: oklch(0.42 0.12 152);
+  --brand-soft: oklch(0.94 0.04 152);
+  --brand-line: oklch(0.78 0.1 152);
+
+  /* semantic tones (solid / soft / text) */
+  --info: oklch(0.55 0.12 250);
+  --info-soft: oklch(0.94 0.03 250);
+  --info-text: oklch(0.42 0.11 250);
+  --success: var(--brand);
+  --success-soft: var(--brand-soft);
+  --success-text: var(--brand-text);
+  --warning: oklch(0.72 0.15 75);
+  --warning-soft: oklch(0.96 0.06 85);
+  --warning-text: oklch(0.48 0.12 70);
+  --danger: oklch(0.58 0.2 27);
+  --danger-soft: oklch(0.95 0.03 27);
+  --danger-text: oklch(0.47 0.18 27);
+
+  /* sidebar (shadcn sidebar component reads these) */
+  --sidebar: oklch(0.97 0.004 250);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.93 0.006 250);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: oklch(0.905 0.008 250);
+  --sidebar-ring: var(--brand);
+
+  /* session-only surfaces (defined in both themes; used under [data-surface=session]) */
+  --stage: oklch(0.93 0.006 250);
+  --stage-foreground: var(--foreground);
+
+  /* elevation: shadows tinted with the surface hue */
+  --shadow-color: oklch(0.2 0.02 250);
+  --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-color) 6%, transparent);
+  --shadow-md:
+    0 4px 12px -2px color-mix(in oklch, var(--shadow-color) 10%, transparent),
+    0 1px 2px color-mix(in oklch, var(--shadow-color) 6%, transparent);
+  --shadow-lg:
+    0 12px 32px -8px color-mix(in oklch, var(--shadow-color) 18%, transparent),
+    0 2px 6px color-mix(in oklch, var(--shadow-color) 8%, transparent);
+
+  /* radius scale (explicit; do not derive from one base) */
+  --radius-xs: 4px; /* chips, kbd */
+  --radius-sm: 6px; /* inputs, buttons, menu items */
+  --radius-md: 8px; /* rows, tiles */
+  --radius-lg: 12px; /* cards, sections */
+  --radius-xl: 16px; /* dialogs, sheets, session columns */
+  --radius-2xl: 20px; /* pre-call / end-of-call card */
+  --radius: var(--radius-sm); /* shadcn base; keep for vendored components */
+
+  /* motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-1: 120ms; /* press feedback, tooltips */
+  --dur-2: 180ms; /* hover, chips, menus */
+  --dur-3: 240ms; /* dialogs, popovers, section switches */
+  --dur-4: 320ms; /* sheets/drawers only */
+}
+
+.dark {
+  --background: oklch(0.17 0.012 250);
+  --foreground: oklch(0.96 0.005 250);
+  --card: oklch(0.21 0.012 250);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.23 0.012 250);
+  --popover-foreground: var(--foreground);
+  --muted: oklch(0.26 0.012 250);
+  --muted-foreground: oklch(0.72 0.012 250);
+  --accent: oklch(0.27 0.012 250);
+  --accent-foreground: var(--foreground);
+  --secondary: oklch(0.28 0.012 250);
+  --secondary-foreground: var(--foreground);
+  --primary: oklch(0.94 0.005 250);
+  --primary-foreground: oklch(0.2 0.012 250);
+  --border: oklch(1 0 0 / 16%); /* spec 10% → 16%: 1.5:1 decorative floor */
+  --input: oklch(1 0 0 / 35%); /* spec 16% → 35%: 3:1 over background and card */
+  --ring: var(--brand);
+  --destructive: oklch(0.66 0.19 25);
+  --destructive-foreground: oklch(0.15 0.03 25);
+
+  --brand: oklch(0.74 0.15 152);
+  --brand-foreground: oklch(0.18 0.03 152);
+  --brand-text: oklch(0.8 0.14 152);
+  --brand-soft: oklch(0.74 0.15 152 / 14%);
+  --brand-line: oklch(0.74 0.15 152 / 40%);
+
+  --info: oklch(0.72 0.11 250);
+  --info-soft: oklch(0.72 0.11 250 / 14%);
+  --info-text: oklch(0.8 0.1 250);
+  --success: var(--brand);
+  --success-soft: var(--brand-soft);
+  --success-text: var(--brand-text);
+  --warning: oklch(0.8 0.14 80);
+  --warning-soft: oklch(0.8 0.14 80 / 14%);
+  --warning-text: oklch(0.85 0.13 85);
+  --danger: oklch(0.7 0.17 25);
+  --danger-soft: oklch(0.7 0.17 25 / 14%);
+  --danger-text: oklch(0.8 0.14 25);
+
+  --sidebar: oklch(0.19 0.012 250);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.25 0.012 250);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: var(--brand);
+
+  --stage: oklch(0.13 0.012 250);
+  --stage-foreground: var(--foreground);
+
+  --shadow-color: oklch(0.05 0.01 250);
+  --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-color) 40%, transparent);
+  --shadow-md:
+    0 4px 14px -2px color-mix(in oklch, var(--shadow-color) 50%, transparent),
+    0 1px 2px color-mix(in oklch, var(--shadow-color) 40%, transparent);
+  --shadow-lg:
+    0 16px 40px -8px color-mix(in oklch, var(--shadow-color) 65%, transparent),
+    0 2px 6px color-mix(in oklch, var(--shadow-color) 40%, transparent);
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  /* Session surface: dark, fixed (§2.2). Tokens come from the `.dark` wrapper. */
+  [data-surface="session"] {
+    color-scheme: dark;
+  }
+  /* Focus: 2 px brand ring, 2 px offset (§2.4). Components that draw their
+     own `focus-visible:ring-*` override this with `outline-none`. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* Reduced motion: drop transforms, keep colour/opacity (§2.5). */
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-transform,
+  [data-slot="state-meter"] [data-bar] {
+    animation: none !important;
+    transition-property: color, background-color, border-color, opacity !important;
+  }
+}
+
+/*
+ * State meter — the signature primitive (§2.1). CSS-only; GPU-only
+ * properties (transform, opacity). Markup: components/shared/state-meter.tsx.
+ *   [data-slot=state-meter][data-state][data-size] > [data-bar] (style --i, --rest)
+ */
+@layer components {
+  [data-slot="state-meter"] {
+    --meter-bar-w: 3px;
+    --meter-gap: 2px;
+    --meter-h: 12px;
+    --meter-color: var(--muted-foreground);
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--meter-gap);
+    height: var(--meter-h);
+  }
+  [data-slot="state-meter"][data-size="xs"] {
+    --meter-bar-w: 3px;
+    --meter-gap: 2px;
+    --meter-h: 8px;
+  }
+  [data-slot="state-meter"][data-size="md"] {
+    --meter-bar-w: 4px;
+    --meter-gap: 3px;
+    --meter-h: 18px;
+  }
+  [data-slot="state-meter"][data-size="lg"] {
+    --meter-bar-w: 10px;
+    --meter-gap: 8px;
+    --meter-h: 64px;
+  }
+  [data-slot="state-meter"] [data-bar] {
+    display: block;
+    width: var(--meter-bar-w);
+    height: 100%;
+    border-radius: 999px;
+    background: var(--meter-color);
+    transform: scaleY(var(--rest, 0.3));
+    transform-origin: center;
+    transition:
+      transform var(--dur-2) var(--ease-out),
+      background-color var(--dur-2) ease,
+      opacity var(--dur-2) ease;
+    will-change: transform;
+  }
+  [data-slot="state-meter"][data-state="idle"],
+  [data-slot="state-meter"][data-state="ended"] {
+    --meter-color: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+  }
+  [data-slot="state-meter"][data-state="idle"] [data-bar],
+  [data-slot="state-meter"][data-state="ended"] [data-bar],
+  [data-slot="state-meter"][data-state="failed"] [data-bar] {
+    transform: scaleY(0.3);
+  }
+  [data-slot="state-meter"][data-state="connecting"],
+  [data-slot="state-meter"][data-state="listening"],
+  [data-slot="state-meter"][data-state="thinking"],
+  [data-slot="state-meter"][data-state="speaking"] {
+    --meter-color: var(--brand);
+  }
+  [data-slot="state-meter"][data-state="failed"] {
+    --meter-color: var(--danger);
+  }
+  /* connecting: slow sequential pulse */
+  [data-slot="state-meter"][data-state="connecting"] [data-bar] {
+    animation: lkap-meter-pulse 1.4s var(--ease-in-out) infinite;
+    animation-delay: calc(var(--i, 0) * 180ms);
+  }
+  /* listening: gentle breathing on the outer bars */
+  [data-slot="state-meter"][data-state="listening"] [data-bar][data-edge] {
+    animation: lkap-meter-breathe 2.4s var(--ease-in-out) infinite;
+  }
+  /* thinking: left-to-right sweep */
+  [data-slot="state-meter"][data-state="thinking"] [data-bar] {
+    animation: lkap-meter-sweep 1.1s var(--ease-in-out) infinite;
+    animation-delay: calc(var(--i, 0) * 110ms);
+  }
+  /* speaking: bounce (level-driven bars opt out via [data-level]) */
+  [data-slot="state-meter"][data-state="speaking"] [data-bar] {
+    animation: lkap-meter-bounce 0.9s var(--ease-in-out) infinite alternate;
+    animation-delay: calc(var(--i, 0) * -230ms);
+  }
+  [data-slot="state-meter"][data-level] [data-bar] {
+    animation: none;
+    transform: scaleY(var(--level-scale, 0.3));
+    transition-duration: 80ms;
+  }
+
+  @keyframes lkap-meter-pulse {
+    0%,
+    100% {
+      transform: scaleY(0.3);
+      opacity: 0.45;
+    }
+    40% {
+      transform: scaleY(0.65);
+      opacity: 1;
+    }
+  }
+  @keyframes lkap-meter-breathe {
+    0%,
+    100% {
+      transform: scaleY(var(--rest, 0.4));
+    }
+    50% {
+      transform: scaleY(calc(var(--rest, 0.4) + 0.3));
+    }
+  }
+  @keyframes lkap-meter-sweep {
+    0%,
+    100% {
+      transform: scaleY(0.3);
+    }
+    35% {
+      transform: scaleY(0.95);
+    }
+    70% {
+      transform: scaleY(0.3);
+    }
+  }
+  @keyframes lkap-meter-bounce {
+    0% {
+      transform: scaleY(0.3);
+    }
+    100% {
+      transform: scaleY(1);
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$id": "lkap-contracts/KbSeed.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A knowledge base the api creates when seeding an agent from this pack.",
+  "properties": {
+    "files": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "kb_name": {
+      "title": "Kb Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kb_name",
+    "files"
+  ],
+  "title": "KbSeed",
+  "type": "object"
+}

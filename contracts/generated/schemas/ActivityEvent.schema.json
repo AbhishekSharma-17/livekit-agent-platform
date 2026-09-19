@@ -1,0 +1,83 @@
+{
+  "$id": "lkap-contracts/ActivityEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A tool call, workflow run or escalation rendered as a \"team feed\" entry.",
+  "properties": {
+    "detail": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
+    "duration_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Duration Ms"
+    },
+    "headline": {
+      "title": "Headline",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "running",
+        "done",
+        "error",
+        "cancelled"
+      ],
+      "title": "Phase",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    },
+    "urgent": {
+      "default": false,
+      "title": "Urgent",
+      "type": "boolean"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "ts",
+    "source",
+    "label",
+    "phase",
+    "headline"
+  ],
+  "title": "ActivityEvent",
+  "type": "object"
+}

@@ -1,0 +1,2062 @@
+{
+  "providers": [
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "deepgram/nova-3",
+      "docs_url": "https://docs.livekit.io/agents/models/stt/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "en",
+          "env_fallback": null,
+          "help": "BCP-47 language code passed to the transcriber.",
+          "label": "Language",
+          "name": "language",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": null,
+      "id": "livekit-inference-stt",
+      "kind": "stt",
+      "label": "LiveKit Inference (STT)",
+      "models": [
+        {
+          "id": "deepgram/nova-3",
+          "label": "Deepgram Nova 3",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "deepgram/flux-general-en",
+          "label": "Deepgram Flux (general, en)",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "assemblyai/universal-streaming",
+          "label": "AssemblyAI Universal Streaming",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "cartesia/ink-whisper",
+          "label": "Cartesia Ink Whisper",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "google/gemini-3.5-transcribe-live",
+          "label": "Gemini 3.5 Transcribe Live",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-agents",
+      "python_class": "livekit.agents.inference.STT",
+      "requires_credential": false,
+      "secret_fields": [],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "LiveKit"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "google/gemma-4-31b-it",
+      "docs_url": "https://docs.livekit.io/agents/models/llm/",
+      "fields": [
+        {
+          "condition": null,
+          "default": 0.7,
+          "env_fallback": null,
+          "help": "Sampling temperature (0 = deterministic).",
+          "label": "Temperature",
+          "name": "temperature",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "number"
+        }
+      ],
+      "get_key_url": null,
+      "id": "livekit-inference-llm",
+      "kind": "llm",
+      "label": "LiveKit Inference (LLM)",
+      "models": [
+        {
+          "id": "google/gemma-4-31b-it",
+          "label": "Gemma 4 31B Instruct",
+          "note": "text-only on LiveKit Inference: ignores image parts silently",
+          "supports_video": false
+        },
+        {
+          "id": "google/gemini-3.5-flash",
+          "label": "Gemini 3.5 Flash",
+          "note": null,
+          "supports_video": true
+        },
+        {
+          "id": "openai/gpt-4.1",
+          "label": "GPT-4.1",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "openai/gpt-4o-mini",
+          "label": "GPT-4o mini",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "openai/gpt-oss-120b",
+          "label": "GPT-OSS 120B",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-agents",
+      "python_class": "livekit.agents.inference.LLM",
+      "requires_credential": false,
+      "secret_fields": [],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "LiveKit"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": [
+          "Ashley",
+          "Brooke",
+          "Cole",
+          "Hana"
+        ]
+      },
+      "default_model": "inworld/inworld-tts-2",
+      "docs_url": "https://docs.livekit.io/agents/models/tts/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "Ashley",
+          "env_fallback": null,
+          "help": null,
+          "label": "Voice",
+          "name": "voice",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "condition": null,
+          "default": "en",
+          "env_fallback": null,
+          "help": null,
+          "label": "Language",
+          "name": "language",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": null,
+      "id": "livekit-inference-tts",
+      "kind": "tts",
+      "label": "LiveKit Inference (TTS)",
+      "models": [
+        {
+          "id": "inworld/inworld-tts-2",
+          "label": "Inworld TTS 2",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "cartesia/sonic-3",
+          "label": "Cartesia Sonic 3",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "deepgram/aura-2",
+          "label": "Deepgram Aura 2",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "rime/mistv3",
+          "label": "Rime Mist v3",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-agents",
+      "python_class": "livekit.agents.inference.TTS",
+      "requires_credential": false,
+      "secret_fields": [],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "LiveKit"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": true,
+        "tool_calling": true,
+        "video_input": true,
+        "voices": [
+          "Kore",
+          "Puck",
+          "Charon",
+          "Aoede",
+          "Fenrir",
+          "Leda",
+          "Orus",
+          "Zephyr"
+        ]
+      },
+      "default_model": "gemini-3.8-live",
+      "docs_url": "https://docs.livekit.io/agents/models/realtime/gemini/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "Kore",
+          "env_fallback": null,
+          "help": null,
+          "label": "Voice",
+          "name": "voice",
+          "options": [
+            "Kore",
+            "Puck",
+            "Charon",
+            "Aoede",
+            "Fenrir",
+            "Leda",
+            "Orus",
+            "Zephyr"
+          ],
+          "placeholder": null,
+          "required": false,
+          "type": "enum"
+        },
+        {
+          "condition": null,
+          "default": 0.8,
+          "env_fallback": null,
+          "help": null,
+          "label": "Temperature",
+          "name": "temperature",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "condition": null,
+          "default": "NON_BLOCKING",
+          "env_fallback": null,
+          "help": "Silent tool replies require NON_BLOCKING.",
+          "label": "Tool behaviour",
+          "name": "tool_behavior",
+          "options": [
+            "BLOCKING",
+            "NON_BLOCKING"
+          ],
+          "placeholder": null,
+          "required": false,
+          "type": "enum"
+        },
+        {
+          "condition": null,
+          "default": "WHEN_IDLE",
+          "env_fallback": null,
+          "help": "When a non-blocking tool result is spoken.",
+          "label": "Tool response scheduling",
+          "name": "tool_response_scheduling",
+          "options": [
+            "WHEN_IDLE",
+            "INTERRUPT",
+            "SILENT"
+          ],
+          "placeholder": null,
+          "required": false,
+          "type": "enum"
+        },
+        {
+          "condition": null,
+          "default": false,
+          "env_fallback": null,
+          "help": null,
+          "label": "Affective dialog",
+          "name": "enable_affective_dialog",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "get_key_url": "https://aistudio.google.com/apikey",
+      "id": "google-realtime",
+      "kind": "realtime",
+      "label": "Gemini Live",
+      "models": [
+        {
+          "id": "gemini-3.8-live",
+          "label": "Gemini 3.8 Live",
+          "note": null,
+          "supports_video": true
+        },
+        {
+          "id": "gemini-3.1-flash-live-preview",
+          "label": "Gemini 3.1 Flash Live (preview)",
+          "note": null,
+          "supports_video": true
+        },
+        {
+          "id": "gemini-2.5-flash-native-audio-preview-12-2025",
+          "label": "Gemini 2.5 Flash native audio (preview)",
+          "note": null,
+          "supports_video": true
+        }
+      ],
+      "package": "livekit-plugins-google",
+      "python_class": "livekit.plugins.google.realtime.RealtimeModel",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "GOOGLE_API_KEY",
+          "help": null,
+          "label": "Google API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Google"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": true,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": [
+          "marin",
+          "cedar",
+          "alloy",
+          "ash",
+          "ballad",
+          "coral",
+          "sage",
+          "verse"
+        ]
+      },
+      "default_model": "gpt-realtime",
+      "docs_url": "https://docs.livekit.io/agents/models/realtime/openai/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "marin",
+          "env_fallback": null,
+          "help": null,
+          "label": "Voice",
+          "name": "voice",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Override for OpenAI-compatible realtime endpoints.",
+          "label": "Base URL",
+          "name": "base_url",
+          "options": null,
+          "placeholder": "https://api.openai.com/v1",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://platform.openai.com/api-keys",
+      "id": "openai-realtime",
+      "kind": "realtime",
+      "label": "OpenAI Realtime",
+      "models": [
+        {
+          "id": "gpt-realtime",
+          "label": "GPT Realtime",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.realtime.RealtimeModel",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "OPENAI_API_KEY",
+          "help": null,
+          "label": "OpenAI API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "OpenAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "nova-3",
+      "docs_url": "https://docs.livekit.io/agents/models/stt/deepgram/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "en-US",
+          "env_fallback": null,
+          "help": null,
+          "label": "Language",
+          "name": "language",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://console.deepgram.com/",
+      "id": "deepgram-stt",
+      "kind": "stt",
+      "label": "Deepgram",
+      "models": [
+        {
+          "id": "nova-3",
+          "label": "Nova 3",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "nova-2",
+          "label": "Nova 2",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "flux-general-en",
+          "label": "Flux (general, en)",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-deepgram",
+      "python_class": "livekit.plugins.deepgram.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "DEEPGRAM_API_KEY",
+          "help": null,
+          "label": "Deepgram API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Deepgram"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "gpt-4.1",
+      "docs_url": "https://docs.livekit.io/agents/models/llm/openai/",
+      "fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Base URL",
+          "name": "base_url",
+          "options": null,
+          "placeholder": "https://api.openai.com/v1",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "condition": null,
+          "default": 0.7,
+          "env_fallback": null,
+          "help": null,
+          "label": "Temperature",
+          "name": "temperature",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "number"
+        }
+      ],
+      "get_key_url": "https://platform.openai.com/api-keys",
+      "id": "openai-llm",
+      "kind": "llm",
+      "label": "OpenAI",
+      "models": [
+        {
+          "id": "gpt-4.1",
+          "label": "GPT-4.1",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "gpt-4o",
+          "label": "GPT-4o",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "gpt-4.1-mini",
+          "label": "GPT-4.1 mini",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.LLM",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "OPENAI_API_KEY",
+          "help": null,
+          "label": "OpenAI API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "OpenAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "gemini-2.5-flash",
+      "docs_url": "https://docs.livekit.io/agents/models/llm/gemini/",
+      "fields": [
+        {
+          "condition": null,
+          "default": 0.7,
+          "env_fallback": null,
+          "help": null,
+          "label": "Temperature",
+          "name": "temperature",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "number"
+        }
+      ],
+      "get_key_url": "https://aistudio.google.com/apikey",
+      "id": "google-llm",
+      "kind": "llm",
+      "label": "Google Gemini",
+      "models": [
+        {
+          "id": "gemini-2.5-flash",
+          "label": "Gemini 2.5 Flash",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "gemini-3.5-flash",
+          "label": "Gemini 3.5 Flash",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-google",
+      "python_class": "livekit.plugins.google.LLM",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "GOOGLE_API_KEY",
+          "help": null,
+          "label": "Google API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Google"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "sonic-3",
+      "docs_url": "https://docs.livekit.io/agents/models/tts/cartesia/",
+      "fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Voice id",
+          "name": "voice",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "condition": null,
+          "default": "en",
+          "env_fallback": null,
+          "help": null,
+          "label": "Language",
+          "name": "language",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://play.cartesia.ai/keys",
+      "id": "cartesia-tts",
+      "kind": "tts",
+      "label": "Cartesia",
+      "models": [
+        {
+          "id": "sonic-3",
+          "label": "Sonic 3",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-cartesia",
+      "python_class": "livekit.plugins.cartesia.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "CARTESIA_API_KEY",
+          "help": null,
+          "label": "Cartesia API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Cartesia"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "eleven_turbo_v2_5",
+      "docs_url": "https://docs.livekit.io/agents/models/tts/elevenlabs/",
+      "fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Voice id",
+          "name": "voice_id",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://elevenlabs.io/app/settings/api-keys",
+      "id": "elevenlabs-tts",
+      "kind": "tts",
+      "label": "ElevenLabs",
+      "models": [
+        {
+          "id": "eleven_turbo_v2_5",
+          "label": "Eleven Turbo v2.5",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "id": "eleven_flash_v2_5",
+          "label": "Eleven Flash v2.5",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-elevenlabs",
+      "python_class": "livekit.plugins.elevenlabs.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "ELEVEN_API_KEY",
+          "help": null,
+          "label": "ElevenLabs API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "ElevenLabs"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "gpt-4o-mini-tts",
+      "docs_url": "https://docs.livekit.io/agents/models/tts/openai/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "ash",
+          "env_fallback": null,
+          "help": null,
+          "label": "Voice",
+          "name": "voice",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://platform.openai.com/api-keys",
+      "id": "openai-tts",
+      "kind": "tts",
+      "label": "OpenAI TTS",
+      "models": [
+        {
+          "id": "gpt-4o-mini-tts",
+          "label": "GPT-4o mini TTS",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "OPENAI_API_KEY",
+          "help": null,
+          "label": "OpenAI API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "OpenAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": "https://docs.livekit.io/agents/integrations/avatar/bey/",
+      "fields": [
+        {
+          "condition": null,
+          "default": "b9be11b8-89fb-4227-8f86-4a881393cbdb",
+          "env_fallback": null,
+          "help": "Defaults to the public Beyond Presence stock avatar.",
+          "label": "Avatar id",
+          "name": "avatar_id",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://bey.chat/",
+      "id": "bey-avatar",
+      "kind": "avatar",
+      "label": "Beyond Presence",
+      "models": [],
+      "package": "livekit-plugins-bey",
+      "python_class": "livekit.plugins.bey.AvatarSession",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "BEY_API_KEY",
+          "help": null,
+          "label": "Beyond Presence API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Beyond Presence"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": "https://docs.livekit.io/agents/integrations/avatar/tavus/",
+      "fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Replica (face) id",
+          "name": "face_id",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Persona (pal) id",
+          "name": "pal_id",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://platform.tavus.io/api-keys",
+      "id": "tavus-avatar",
+      "kind": "avatar",
+      "label": "Tavus",
+      "models": [],
+      "package": "livekit-plugins-tavus",
+      "python_class": "livekit.plugins.tavus.AvatarSession",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "TAVUS_API_KEY",
+          "help": null,
+          "label": "Tavus API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Tavus"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "gemini-3.1-flash-image",
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": "https://aistudio.google.com/apikey",
+      "id": "google-image-gen",
+      "kind": "image_gen",
+      "label": "Gemini image generation",
+      "models": [
+        {
+          "id": "gemini-3.1-flash-image",
+          "label": "Gemini 3.1 Flash Image",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "google-genai",
+      "python_class": "lkap_agent.providers.image_gen.GoogleImageGen",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "GOOGLE_API_KEY",
+          "help": null,
+          "label": "Google API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Google"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "gpt-image-1",
+      "docs_url": null,
+      "fields": [
+        {
+          "condition": null,
+          "default": "1024x1024",
+          "env_fallback": null,
+          "help": null,
+          "label": "Image size",
+          "name": "size",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": "https://platform.openai.com/api-keys",
+      "id": "openai-image-gen",
+      "kind": "image_gen",
+      "label": "OpenAI image generation",
+      "models": [
+        {
+          "id": "gpt-image-1",
+          "label": "GPT Image 1",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "openai",
+      "python_class": "lkap_agent.providers.image_gen.OpenAIImageGen",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "OPENAI_API_KEY",
+          "help": null,
+          "label": "OpenAI API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "OpenAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "BAAI/bge-small-en-v1.5",
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "fastembed-embedding",
+      "kind": "embedding",
+      "label": "FastEmbed (local)",
+      "models": [
+        {
+          "id": "BAAI/bge-small-en-v1.5",
+          "label": "BGE small en v1.5",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "fastembed",
+      "python_class": "lkap_api.kb.embed.FastEmbedEmbedder",
+      "requires_credential": false,
+      "secret_fields": [],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "Qdrant"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": "text-embedding-3-small",
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": "https://platform.openai.com/api-keys",
+      "id": "openai-embedding",
+      "kind": "embedding",
+      "label": "OpenAI embeddings",
+      "models": [
+        {
+          "id": "text-embedding-3-small",
+          "label": "text-embedding-3-small",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "package": "openai",
+      "python_class": "lkap_api.kb.embed.OpenAIEmbedder",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": "OPENAI_API_KEY",
+          "help": null,
+          "label": "OpenAI API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "OpenAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": false,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "http-tool-secret",
+      "kind": "secret_bag",
+      "label": "Tool secrets",
+      "models": [],
+      "package": "",
+      "python_class": "",
+      "requires_credential": true,
+      "secret_fields": [],
+      "status": "mvp",
+      "v": 1,
+      "vendor": "LKAP"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "azure-openai-realtime",
+      "kind": "realtime",
+      "label": "Azure OpenAI Realtime",
+      "models": [],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.realtime.RealtimeModel.with_azure",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Microsoft"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "xai-realtime",
+      "kind": "realtime",
+      "label": "xAI Realtime",
+      "models": [],
+      "package": "livekit-plugins-xai",
+      "python_class": "livekit.plugins.xai.realtime.RealtimeModel",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "xAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "assemblyai-stt",
+      "kind": "stt",
+      "label": "AssemblyAI",
+      "models": [],
+      "package": "livekit-plugins-assemblyai",
+      "python_class": "livekit.plugins.assemblyai.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "AssemblyAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "google-stt",
+      "kind": "stt",
+      "label": "Google Speech-to-Text",
+      "models": [],
+      "package": "livekit-plugins-google",
+      "python_class": "livekit.plugins.google.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Google"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "openai-stt",
+      "kind": "stt",
+      "label": "OpenAI Whisper",
+      "models": [],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "OpenAI"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "speechmatics-stt",
+      "kind": "stt",
+      "label": "Speechmatics",
+      "models": [],
+      "package": "livekit-plugins-speechmatics",
+      "python_class": "livekit.plugins.speechmatics.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Speechmatics"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "elevenlabs-stt",
+      "kind": "stt",
+      "label": "ElevenLabs Scribe",
+      "models": [],
+      "package": "livekit-plugins-elevenlabs",
+      "python_class": "livekit.plugins.elevenlabs.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "ElevenLabs"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "cartesia-stt",
+      "kind": "stt",
+      "label": "Cartesia Ink",
+      "models": [],
+      "package": "livekit-plugins-cartesia",
+      "python_class": "livekit.plugins.cartesia.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Cartesia"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "groq-stt",
+      "kind": "stt",
+      "label": "Groq Whisper",
+      "models": [],
+      "package": "livekit-plugins-groq",
+      "python_class": "livekit.plugins.groq.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Groq"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "azure-stt",
+      "kind": "stt",
+      "label": "Azure Speech",
+      "models": [],
+      "package": "livekit-plugins-azure",
+      "python_class": "livekit.plugins.azure.STT",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Microsoft"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "anthropic-llm",
+      "kind": "llm",
+      "label": "Anthropic Claude",
+      "models": [],
+      "package": "livekit-plugins-anthropic",
+      "python_class": "livekit.plugins.anthropic.LLM",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Anthropic"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "groq-llm",
+      "kind": "llm",
+      "label": "Groq",
+      "models": [],
+      "package": "livekit-plugins-groq",
+      "python_class": "livekit.plugins.groq.LLM",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Groq"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "cerebras-llm",
+      "kind": "llm",
+      "label": "Cerebras",
+      "models": [],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.LLM.with_cerebras",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Cerebras"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Base URL",
+          "name": "base_url",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "get_key_url": null,
+      "id": "openai-compatible-llm",
+      "kind": "llm",
+      "label": "OpenAI-compatible endpoint",
+      "models": [],
+      "package": "livekit-plugins-openai",
+      "python_class": "livekit.plugins.openai.LLM",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Various"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "aws-bedrock-llm",
+      "kind": "llm",
+      "label": "AWS Bedrock",
+      "models": [],
+      "package": "livekit-plugins-aws",
+      "python_class": "livekit.plugins.aws.LLM",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Amazon"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "google-tts",
+      "kind": "tts",
+      "label": "Google Cloud TTS",
+      "models": [],
+      "package": "livekit-plugins-google",
+      "python_class": "livekit.plugins.google.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Google"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "deepgram-tts",
+      "kind": "tts",
+      "label": "Deepgram Aura",
+      "models": [],
+      "package": "livekit-plugins-deepgram",
+      "python_class": "livekit.plugins.deepgram.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Deepgram"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "rime-tts",
+      "kind": "tts",
+      "label": "Rime",
+      "models": [],
+      "package": "livekit-plugins-rime",
+      "python_class": "livekit.plugins.rime.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Rime"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "inworld-tts",
+      "kind": "tts",
+      "label": "Inworld",
+      "models": [],
+      "package": "livekit-plugins-inworld",
+      "python_class": "livekit.plugins.inworld.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Inworld"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "hume-tts",
+      "kind": "tts",
+      "label": "Hume Octave",
+      "models": [],
+      "package": "livekit-plugins-hume",
+      "python_class": "livekit.plugins.hume.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Hume"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "azure-tts",
+      "kind": "tts",
+      "label": "Azure Speech TTS",
+      "models": [],
+      "package": "livekit-plugins-azure",
+      "python_class": "livekit.plugins.azure.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Microsoft"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "Face id",
+          "name": "simli_config.face_id",
+          "options": null,
+          "placeholder": null,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "get_key_url": null,
+      "id": "simli-avatar",
+      "kind": "avatar",
+      "label": "Simli",
+      "models": [],
+      "package": "livekit-plugins-simli",
+      "python_class": "livekit.plugins.simli.AvatarSession",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Simli"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "anam-avatar",
+      "kind": "avatar",
+      "label": "Anam",
+      "models": [],
+      "package": "livekit-plugins-anam",
+      "python_class": "livekit.plugins.anam.AvatarSession",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "Anam"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "bithuman-avatar",
+      "kind": "avatar",
+      "label": "bitHuman",
+      "models": [],
+      "package": "livekit-plugins-bithuman",
+      "python_class": "livekit.plugins.bithuman.AvatarSession",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "bitHuman"
+    },
+    {
+      "capabilities": {
+        "silent_tool_reply": false,
+        "tool_calling": true,
+        "video_input": false,
+        "voices": []
+      },
+      "default_model": null,
+      "docs_url": null,
+      "fields": [],
+      "get_key_url": null,
+      "id": "liveavatar-avatar",
+      "kind": "avatar",
+      "label": "LiveAvatar",
+      "models": [],
+      "package": "livekit-plugins-liveavatar",
+      "python_class": "livekit.plugins.liveavatar.AvatarSession",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": null,
+          "label": "API key",
+          "name": "api_key",
+          "options": null,
+          "placeholder": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "v": 1,
+      "vendor": "LiveAvatar"
+    }
+  ],
+  "v": 1
+}

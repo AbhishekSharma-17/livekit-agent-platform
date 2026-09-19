@@ -1,0 +1,361 @@
+{
+  "$defs": {
+    "CapabilitiesConfig": {
+      "description": "Which input affordances the session page offers.",
+      "properties": {
+        "camera": {
+          "default": false,
+          "title": "Camera",
+          "type": "boolean"
+        },
+        "chat_input": {
+          "default": true,
+          "title": "Chat Input",
+          "type": "boolean"
+        },
+        "screen_share": {
+          "default": false,
+          "title": "Screen Share",
+          "type": "boolean"
+        },
+        "vision_inject_per_turn": {
+          "default": true,
+          "title": "Vision Inject Per Turn",
+          "type": "boolean"
+        }
+      },
+      "title": "CapabilitiesConfig",
+      "type": "object"
+    },
+    "KnowledgeConfig": {
+      "description": "Knowledge bases attached to the agent and how they are injected.",
+      "properties": {
+        "auto_inject": {
+          "default": true,
+          "title": "Auto Inject",
+          "type": "boolean"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "top_k": {
+          "default": 4,
+          "title": "Top K",
+          "type": "integer"
+        }
+      },
+      "title": "KnowledgeConfig",
+      "type": "object"
+    },
+    "PipelineConfig": {
+      "description": "Which providers fill which slot, and how turns are handled.",
+      "properties": {
+        "avatar": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "image_gen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mode": {
+          "default": "cascaded",
+          "enum": [
+            "realtime",
+            "cascaded"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "realtime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "turn_handling": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Turn Handling",
+          "type": "object"
+        },
+        "workflow_llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PipelineConfig",
+      "type": "object"
+    },
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    },
+    "ToolsConfig": {
+      "description": "Built-in tool gating plus references to admin-authored tool rows.",
+      "properties": {
+        "builtin_disabled": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Builtin Disabled",
+          "type": "array"
+        },
+        "http_request_enabled": {
+          "default": false,
+          "title": "Http Request Enabled",
+          "type": "boolean"
+        },
+        "max_tool_steps": {
+          "default": 3,
+          "title": "Max Tool Steps",
+          "type": "integer"
+        },
+        "tool_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tool Ids",
+          "type": "array"
+        }
+      },
+      "title": "ToolsConfig",
+      "type": "object"
+    },
+    "VoiceConfig": {
+      "description": "Greeting and conversational behaviour.",
+      "properties": {
+        "allow_interruptions": {
+          "default": true,
+          "title": "Allow Interruptions",
+          "type": "boolean"
+        },
+        "greeting": {
+          "default": "Hello! How can I help you today?",
+          "title": "Greeting",
+          "type": "string"
+        },
+        "greeting_mode": {
+          "default": "say",
+          "enum": [
+            "say",
+            "generate"
+          ],
+          "title": "Greeting Mode",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "title": "Language",
+          "type": "string"
+        },
+        "user_away_timeout_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 15.0,
+          "title": "User Away Timeout S"
+        }
+      },
+      "title": "VoiceConfig",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AgentConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The full, admin-editable configuration of one agent (stored as JSON).",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/CapabilitiesConfig",
+      "default": {
+        "camera": false,
+        "chat_input": true,
+        "screen_share": false,
+        "vision_inject_per_turn": true
+      }
+    },
+    "instructions": {
+      "title": "Instructions",
+      "type": "string"
+    },
+    "knowledge": {
+      "$ref": "#/$defs/KnowledgeConfig",
+      "default": {
+        "auto_inject": true,
+        "kb_ids": [],
+        "top_k": 4
+      }
+    },
+    "pack_settings": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Pack Settings",
+      "type": "object"
+    },
+    "pipeline": {
+      "$ref": "#/$defs/PipelineConfig"
+    },
+    "timezone": {
+      "default": "UTC",
+      "title": "Timezone",
+      "type": "string"
+    },
+    "tools": {
+      "$ref": "#/$defs/ToolsConfig",
+      "default": {
+        "builtin_disabled": [],
+        "http_request_enabled": false,
+        "max_tool_steps": 3,
+        "tool_ids": []
+      }
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    },
+    "voice": {
+      "$ref": "#/$defs/VoiceConfig",
+      "default": {
+        "allow_interruptions": true,
+        "greeting": "Hello! How can I help you today?",
+        "greeting_mode": "say",
+        "language": "en",
+        "user_away_timeout_s": 15.0
+      }
+    }
+  },
+  "required": [
+    "instructions",
+    "pipeline"
+  ],
+  "title": "AgentConfig",
+  "type": "object"
+}

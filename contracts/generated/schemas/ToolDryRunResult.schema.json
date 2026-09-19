@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/ToolDryRunResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Outcome of a dry run, shown in the console tool editor.",
+  "properties": {
+    "duration_ms": {
+      "title": "Duration Ms",
+      "type": "integer"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "result": {
+      "title": "Result",
+      "type": "string"
+    },
+    "status_code": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status Code"
+    }
+  },
+  "required": [
+    "ok",
+    "result",
+    "duration_ms"
+  ],
+  "title": "ToolDryRunResult",
+  "type": "object"
+}

@@ -1,0 +1,3 @@
+# Committed minimal config; `lk agent create` fills in the project/agent ids. Keep the name.
+[agent]
+  name = "lkap-agent"

@@ -1,0 +1,34 @@
+{
+  "$id": "lkap-contracts/ConnectRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.",
+  "properties": {
+    "participant_identity": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Participant Identity"
+    },
+    "participant_metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Participant Metadata",
+      "type": "object"
+    },
+    "participant_name": {
+      "default": "Guest",
+      "title": "Participant Name",
+      "type": "string"
+    }
+  },
+  "title": "ConnectRequest",
+  "type": "object"
+}

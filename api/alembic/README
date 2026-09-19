@@ -1,0 +1,3 @@
+Alembic migrations for lkap_api. Run `uv run alembic upgrade head` from api/.
+The url comes from `-x url=...`, `LKAP_DATABASE_URL`, or the SQLite default
+under `LKAP_DATA_DIR` — no settings object and no vendor keys are required.

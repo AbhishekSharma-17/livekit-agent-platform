@@ -1,0 +1,232 @@
+{
+  "session_id": "session-flood",
+  "live_model": "gemini-3.8-live",
+  "transcript": [
+    {
+      "speaker": "Agent",
+      "text": "I can start the claim while we talk. First, are you and everyone else in a safe place?"
+    },
+    {
+      "speaker": "Claimant",
+      "text": "Hi, this is Maya Singh, policy H0-44721. Last night our finished basement in Denver flooded when the sump pump failed during heavy rain. Soaked carpet and damaged drywall. We took photos and a short video before moving anything. No one was hurt."
+    }
+  ],
+  "policy_number_looked_up": "H0-44721",
+  "pin_photo": {
+    "observation": "Water line about two inches up the drywall next to the stairs.",
+    "claimant_description": "the flooded corner",
+    "confirmed": true,
+    "evidence_type": "damage"
+  },
+  "photo_id": "9a1c0000000000000000000000000001",
+  "captured_at": "14:07",
+  "frame_base64_source": "ffd8ffe066616b652d6a7065672d6672616d65",
+  "tool_activity": [
+    {
+      "id": "call-1",
+      "name": "lookup_policy",
+      "args": {
+        "policy_number": "H0-44721"
+      },
+      "phase": "done",
+      "headline": "Maya Singh - Homeowners (HO-3) (active)",
+      "model": "gemini-3.8-live",
+      "scheduling": "WHEN_IDLE",
+      "urgent": false,
+      "duration_ms": 3,
+      "result": {
+        "found": true,
+        "status": "active"
+      }
+    }
+  ],
+  "workflow": {
+    "normalized_claim": {
+      "policyholder_name": "Maya Singh",
+      "policy_number": "H0-44721",
+      "contact_method": "not specified",
+      "date_of_loss": "last night",
+      "reported_date": "not specified",
+      "loss_location": "Denver",
+      "loss_description": "Finished basement flooded when the sump pump failed during heavy rain.",
+      "estimated_loss_usd": 18000.0,
+      "injuries_or_safety_concerns": [],
+      "parties_involved": [],
+      "evidence_available": [
+        "photos",
+        "short video"
+      ],
+      "documents_mentioned": [],
+      "missing_or_uncertain_facts": [
+        "Exact date of loss (claimant said last night, calendar date not confirmed)",
+        "Whether a plumber or mitigation company has already inspected the sump pump and basement walls"
+      ],
+      "raw_narrative_summary": "Basement flood after sump pump failure; photos and video available.",
+      "assumptions": []
+    },
+    "field_validation": {
+      "intake_status": "missing_info",
+      "missing_fields": [
+        "contact_method",
+        "Exact date of loss (claimant said last night, calendar date not confirmed)",
+        "Whether a plumber or mitigation company has already inspected the sump pump and basement walls"
+      ],
+      "warnings": [],
+      "ready_for_policy_review": false
+    },
+    "claim_classification": {
+      "claim_type": "home_water_damage",
+      "severity": "medium",
+      "severity_rationale": "Water damage with documentation still missing.",
+      "likely_policy_line": "Homeowners",
+      "loss_drivers": [
+        "sump pump failure",
+        "heavy rain"
+      ],
+      "claimant_needs": [
+        "Mitigation guidance"
+      ]
+    },
+    "coverage_evidence_decision": {
+      "routing_decision": "needs_docs",
+      "provisional_coverage_considerations": [
+        "Water damage review usually turns on source of water, suddenness, mitigation, exclusions, and whether flood coverage is separate.",
+        "Do not promise coverage until policy forms, endorsements, cause of loss, and mitigation facts are reviewed."
+      ],
+      "required_documents": [
+        "Mitigation or drying invoice",
+        "Repair estimate or contractor assessment",
+        "Receipts for damaged personal property"
+      ],
+      "findings": [
+        {
+          "rule_id": "INTAKE-001",
+          "severity": "medium",
+          "message": "Required intake facts are missing before the claim can be fully assigned.",
+          "required_action": "collect_info"
+        },
+        {
+          "rule_id": "DOC-001",
+          "severity": "medium",
+          "message": "Missing or unconfirmed document: Mitigation or drying invoice. Shows steps taken to prevent additional damage.",
+          "required_action": "collect_document",
+          "document": "Mitigation or drying invoice"
+        },
+        {
+          "rule_id": "DOC-001",
+          "severity": "medium",
+          "message": "Missing or unconfirmed document: Repair estimate or contractor assessment. Supports the estimated repair cost.",
+          "required_action": "collect_document",
+          "document": "Repair estimate or contractor assessment"
+        },
+        {
+          "rule_id": "DOC-001",
+          "severity": "medium",
+          "message": "Missing or unconfirmed document: Receipts for damaged personal property. Supports contents reimbursement.",
+          "required_action": "collect_document",
+          "document": "Receipts for damaged personal property"
+        }
+      ],
+      "audit_trail": [
+        "Validated minimum claim intake fields.",
+        "Classified claim as home_water_damage with medium severity.",
+        "Applied deterministic evidence, document, high-loss, injury, and safety routing gates.",
+        "Initial route selected: needs_docs."
+      ]
+    },
+    "document_checklist": {
+      "items": [
+        {
+          "item": "Photos or video of damaged areas before cleanup",
+          "reason": "Documents the loss condition.",
+          "priority": "recommended",
+          "already_provided": true
+        },
+        {
+          "item": "Mitigation or drying invoice",
+          "reason": "Shows steps taken to prevent additional damage.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Repair estimate or contractor assessment",
+          "reason": "Supports the estimated repair cost.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Receipts for damaged personal property",
+          "reason": "Supports contents reimbursement.",
+          "priority": "required",
+          "already_provided": false
+        }
+      ],
+      "claimant_tip": "Upload clear copies when available. If a document is not available yet, explain why and provide the expected date."
+    },
+    "fraud_safety_gate": {
+      "final_routing_decision": "needs_docs",
+      "signals": [],
+      "audit_trail": [
+        "Validated minimum claim intake fields.",
+        "Classified claim as home_water_damage with medium severity.",
+        "Applied deterministic evidence, document, high-loss, injury, and safety routing gates.",
+        "Initial route selected: needs_docs.",
+        "Applied deterministic fraud, suspicious timing, vague facts, and safety gates.",
+        "Final route selected: needs_docs."
+      ]
+    },
+    "claim_intake_packet": {
+      "claim_type": "home_water_damage",
+      "intake_status": "missing_info",
+      "severity": "medium",
+      "routing_decision": "needs_docs",
+      "missing_information": [
+        "contact_method",
+        "Exact date of loss (claimant said last night, calendar date not confirmed)",
+        "Whether a plumber or mitigation company has already inspected the sump pump and basement walls"
+      ],
+      "required_documents": [
+        {
+          "item": "Photos or video of damaged areas before cleanup",
+          "reason": "Documents the loss condition.",
+          "priority": "recommended",
+          "already_provided": true
+        },
+        {
+          "item": "Mitigation or drying invoice",
+          "reason": "Shows steps taken to prevent additional damage.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Repair estimate or contractor assessment",
+          "reason": "Supports the estimated repair cost.",
+          "priority": "required",
+          "already_provided": false
+        },
+        {
+          "item": "Receipts for damaged personal property",
+          "reason": "Supports contents reimbursement.",
+          "priority": "required",
+          "already_provided": false
+        }
+      ],
+      "coverage_considerations": [
+        "Water damage review usually turns on source of water, suddenness, mitigation, exclusions, and whether flood coverage is separate.",
+        "Do not promise coverage until policy forms, endorsements, cause of loss, and mitigation facts are reviewed."
+      ],
+      "adjuster_handoff_summary": "Maya Singh reported a home water damage loss at Denver on last night. Summary: Basement flood after sump pump failure; photos and video available.. Estimated loss: 18000.0.",
+      "claimant_next_message": "What is the best phone number or email for the adjuster to reach you?",
+      "audit_trail": [
+        "Validated minimum claim intake fields.",
+        "Classified claim as home_water_damage with medium severity.",
+        "Applied deterministic evidence, document, high-loss, injury, and safety routing gates.",
+        "Initial route selected: needs_docs.",
+        "Applied deterministic fraud, suspicious timing, vague facts, and safety gates.",
+        "Final route selected: needs_docs."
+      ],
+      "markdown": "# Insurance Claim Intake Packet\n\n**Claim type:** Home Water Damage  \n**Intake status:** Missing Info  \n**Severity:** Medium  \n**Routing decision:** Needs Docs\n\n## Missing Information\n- contact_method\n- Exact date of loss (claimant said last night, calendar date not confirmed)\n- Whether a plumber or mitigation company has already inspected the sump pump and basement walls\n\n## Required Documents Checklist\n- [already provided] **Photos or video of damaged areas before cleanup** - Documents the loss condition.\n- [required] **Mitigation or drying invoice** - Shows steps taken to prevent additional damage.\n- [required] **Repair estimate or contractor assessment** - Supports the estimated repair cost.\n- [required] **Receipts for damaged personal property** - Supports contents reimbursement.\n\n## Coverage Considerations and Disclaimer\n- Water damage review usually turns on source of water, suddenness, mitigation, exclusions, and whether flood coverage is separate.\n- Do not promise coverage until policy forms, endorsements, cause of loss, and mitigation facts are reviewed.\n\nThis is an intake triage packet for demo and educational use. It does not confirm coverage, benefits, liability, payment, or legal rights. A licensed adjuster or qualified human reviewer must evaluate the applicable policy, endorsements, exclusions, deductibles, documentation, and governing law.\n\n## Adjuster Handoff Summary\nMaya Singh reported a home water damage loss at Denver on last night. Summary: Basement flood after sump pump failure; photos and video available.. Estimated loss: 18000.0.\n\n## Claimant-Friendly Next Message\nWhat is the best phone number or email for the adjuster to reach you?\n\n## Deterministic Findings\n- `INTAKE-001` [medium] Required intake facts are missing before the claim can be fully assigned.\n- `DOC-001` [medium] Missing or unconfirmed document: Mitigation or drying invoice. Shows steps taken to prevent additional damage.\n- `DOC-001` [medium] Missing or unconfirmed document: Repair estimate or contractor assessment. Supports the estimated repair cost.\n- `DOC-001` [medium] Missing or unconfirmed document: Receipts for damaged personal property. Supports contents reimbursement.\n\n## Fraud, Timing, and Safety Signals\n- No deterministic fraud or emergency signal was triggered.\n\n## Audit Trail\n1. Validated minimum claim intake fields.\n2. Classified claim as home_water_damage with medium severity.\n3. Applied deterministic evidence, document, high-loss, injury, and safety routing gates.\n4. Initial route selected: needs_docs.\n5. Applied deterministic fraud, suspicious timing, vague facts, and safety gates.\n6. Final route selected: needs_docs.\n"
+    },
+    "final_markdown": "# Insurance Claim Intake Packet\n\n**Claim type:** Home Water Damage  \n**Intake status:** Missing Info  \n**Severity:** Medium  \n**Routing decision:** Needs Docs\n\n## Missing Information\n- contact_method\n- Exact date of loss (claimant said last night, calendar date not confirmed)\n- Whether a plumber or mitigation company has already inspected the sump pump and basement walls\n\n## Required Documents Checklist\n- [already provided] **Photos or video of damaged areas before cleanup** - Documents the loss condition.\n- [required] **Mitigation or drying invoice** - Shows steps taken to prevent additional damage.\n- [required] **Repair estimate or contractor assessment** - Supports the estimated repair cost.\n- [required] **Receipts for damaged personal property** - Supports contents reimbursement.\n\n## Coverage Considerations and Disclaimer\n- Water damage review usually turns on source of water, suddenness, mitigation, exclusions, and whether flood coverage is separate.\n- Do not promise coverage until policy forms, endorsements, cause of loss, and mitigation facts are reviewed.\n\nThis is an intake triage packet for demo and educational use. It does not confirm coverage, benefits, liability, payment, or legal rights. A licensed adjuster or qualified human reviewer must evaluate the applicable policy, endorsements, exclusions, deductibles, documentation, and governing law.\n\n## Adjuster Handoff Summary\nMaya Singh reported a home water damage loss at Denver on last night. Summary: Basement flood after sump pump failure; photos and video available.. Estimated loss: 18000.0.\n\n## Claimant-Friendly Next Message\nWhat is the best phone number or email for the adjuster to reach you?\n\n## Deterministic Findings\n- `INTAKE-001` [medium] Required intake facts are missing before the claim can be fully assigned.\n- `DOC-001` [medium] Missing or unconfirmed document: Mitigation or drying invoice. Shows steps taken to prevent additional damage.\n- `DOC-001` [medium] Missing or unconfirmed document: Repair estimate or contractor assessment. Supports the estimated repair cost.\n- `DOC-001` [medium] Missing or unconfirmed document: Receipts for damaged personal property. Supports contents reimbursement.\n\n## Fraud, Timing, and Safety Signals\n- No deterministic fraud or emergency signal was triggered.\n\n## Audit Trail\n1. Validated minimum claim intake fields.\n2. Classified claim as home_water_damage with medium severity.\n3. Applied deterministic evidence, document, high-loss, injury, and safety routing gates.\n4. Initial route selected: needs_docs.\n5. Applied deterministic fraud, suspicious timing, vague facts, and safety gates.\n6. Final route selected: needs_docs.\n"
+  }
+}

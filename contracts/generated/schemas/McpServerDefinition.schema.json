@@ -1,0 +1,72 @@
+{
+  "$id": "lkap-contracts/McpServerDefinition.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A streamable-HTTP MCP server attached to the agent.",
+  "properties": {
+    "allowed_tools": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Allowed Tools"
+    },
+    "credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "headers": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Headers",
+      "type": "object"
+    },
+    "kind": {
+      "const": "mcp",
+      "default": "mcp",
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "sse_read_timeout_s": {
+      "default": 300,
+      "title": "Sse Read Timeout S",
+      "type": "number"
+    },
+    "timeout_s": {
+      "default": 5,
+      "title": "Timeout S",
+      "type": "number"
+    },
+    "url": {
+      "title": "Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "url"
+  ],
+  "title": "McpServerDefinition",
+  "type": "object"
+}

@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "KbDocumentOut": {
+      "description": "An uploaded document and its ingestion status.",
+      "properties": {
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "chunk_count": {
+          "title": "Chunk Count",
+          "type": "integer"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kb_id": {
+          "title": "Kb Id",
+          "type": "string"
+        },
+        "mime": {
+          "title": "Mime",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kb_id",
+        "filename",
+        "mime",
+        "bytes",
+        "status",
+        "chunk_count",
+        "created_at"
+      ],
+      "title": "KbDocumentOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbDocumentPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/KbDocumentOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "KbDocumentPage",
+  "type": "object"
+}

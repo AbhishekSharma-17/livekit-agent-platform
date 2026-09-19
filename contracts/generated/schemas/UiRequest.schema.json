@@ -1,0 +1,34 @@
+{
+  "$id": "lkap-contracts/UiRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "RPC payload for ``lkap.ui.request`` (agent asks the browser to do something).",
+  "properties": {
+    "method": {
+      "enum": [
+        "open_dialog",
+        "focus",
+        "request_video_source",
+        "toast"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Payload",
+      "type": "object"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "method"
+  ],
+  "title": "UiRequest",
+  "type": "object"
+}

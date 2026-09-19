@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lkap-contracts"
+version = "0.1.0"
+description = "Pure-Pydantic cross-service contracts for the LiveKit Agent Platform."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = ["pydantic>=2.11,<3"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "pytest-asyncio>=1.1",
+  "pytest-timeout>=2.4",
+  "ruff>=0.13",
+  "mypy>=1.18",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lkap_contracts"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "live: tests that need live vendor/LiveKit credentials (opt-in)",
+  "slow: slow tests (model downloads, heavy fixtures)",
+]

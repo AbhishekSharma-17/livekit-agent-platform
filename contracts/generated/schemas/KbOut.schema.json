@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/KbOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A knowledge base with its current counts.",
+  "properties": {
+    "chunk_count": {
+      "title": "Chunk Count",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "document_count": {
+      "title": "Document Count",
+      "type": "integer"
+    },
+    "embedder_id": {
+      "title": "Embedder Id",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "description",
+    "embedder_id",
+    "chunk_count",
+    "document_count",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "KbOut",
+  "type": "object"
+}

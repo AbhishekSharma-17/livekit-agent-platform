@@ -1,0 +1,510 @@
+{
+  "$defs": {
+    "ActivityEvent": {
+      "description": "A tool call, workflow run or escalation rendered as a \"team feed\" entry.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ms"
+        },
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "running",
+            "done",
+            "error",
+            "cancelled"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "urgent": {
+          "default": false,
+          "title": "Urgent",
+          "type": "boolean"
+        },
+        "v": {
+          "const": 1,
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "source",
+        "label",
+        "phase",
+        "headline"
+      ],
+      "title": "ActivityEvent",
+      "type": "object"
+    },
+    "AssetRef": {
+      "description": "Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.",
+      "properties": {
+        "asset_id": {
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "meta": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Meta",
+          "type": "object"
+        },
+        "mime": {
+          "title": "Mime",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "asset_id",
+        "kind",
+        "mime",
+        "ts"
+      ],
+      "title": "AssetRef",
+      "type": "object"
+    },
+    "ChecklistItem": {
+      "description": "One \"still needed\" item.",
+      "properties": {
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChecklistItem",
+      "type": "object"
+    },
+    "Note": {
+      "description": "A line in the panel's notes list. A repeated ``key`` upserts in place.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "kind": {
+          "default": "note",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "tone": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "ts"
+      ],
+      "title": "Note",
+      "type": "object"
+    },
+    "StatusStamp": {
+      "description": "The big \"stamp\" shown by a panel; ``key`` changes re-trigger the animation.",
+      "properties": {
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "StatusStamp",
+      "type": "object"
+    },
+    "TranscriptTurn": {
+      "description": "One turn of the final transcript (images stripped).",
+      "properties": {
+        "interrupted": {
+          "default": false,
+          "title": "Interrupted",
+          "type": "boolean"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "role",
+        "text",
+        "ts"
+      ],
+      "title": "TranscriptTurn",
+      "type": "object"
+    },
+    "UiState": {
+      "description": "The platform envelope every panel renders; ``custom`` is pack-defined.",
+      "properties": {
+        "activity": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ActivityEvent"
+          },
+          "title": "Activity",
+          "type": "array"
+        },
+        "assets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AssetRef"
+          },
+          "title": "Assets",
+          "type": "array"
+        },
+        "checklist": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ChecklistItem"
+          },
+          "title": "Checklist",
+          "type": "array"
+        },
+        "custom": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Custom",
+          "type": "object"
+        },
+        "notes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Note"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Progress"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusStamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "v": {
+          "const": 1,
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "title": "UiState",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/SessionDetailOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Session detail, including the transcript and the final UI state.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "final_ui_state": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "pipeline_mode": {
+      "enum": [
+        "realtime",
+        "cascaded"
+      ],
+      "title": "Pipeline Mode",
+      "type": "string"
+    },
+    "room_name": {
+      "title": "Room Name",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "enum": [
+        "created",
+        "active",
+        "ended",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "transcript": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/TranscriptTurn"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transcript"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Usage"
+    }
+  },
+  "required": [
+    "id",
+    "agent_id",
+    "agent_name",
+    "config_version",
+    "room_name",
+    "status",
+    "pipeline_mode",
+    "created_at"
+  ],
+  "title": "SessionDetailOut",
+  "type": "object"
+}

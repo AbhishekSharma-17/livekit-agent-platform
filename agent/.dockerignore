@@ -1,0 +1,19 @@
+# Build context for agent/Dockerfile is this directory (agent/) — matching
+# what `lk agent create`/`lk agent deploy` actually uses (the directory
+# containing livekit.toml). `agent/vendor/*.whl` (built by
+# scripts/vendor_agent_deps.sh) is NOT ignored — the Dockerfile needs it.
+
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+tests/
+
+# secrets — never sent to the daemon, never baked into a layer
+.env
+.env.*
+secrets.env
+*.pem
+*.key

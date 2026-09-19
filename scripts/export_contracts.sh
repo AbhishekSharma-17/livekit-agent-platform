@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Fallback TS generation + copy step for lkap_contracts (docs/CONTRACTS.md §2, §12).
+#
+# `contracts/src/lkap_contracts/export.py` (owner: W0-CONTRACTS) is the
+# primary generator: it writes `generated/providers.json` and
+# `generated/schemas/*.schema.json` (pure Python/Pydantic, no Node needed),
+# and itself tries `pnpm dlx json-schema-to-typescript` to produce
+# `generated/ts/lkap-contracts.d.ts`. This script is the checked-in fallback
+# for that last step (per docs/CONTRACTS.md §1), and always performs the
+# final copy into `web/src/contracts/` — the only place the web app reads
+# generated types from. TS types are generated, never hand-written.
+#
+# Usage:
+#   scripts/export_contracts.sh              # just copy the existing .d.ts into web/
+#   scripts/export_contracts.sh --generate    # also (re)run the Python export first
+#   scripts/export_contracts.sh --force-ts    # rebuild the .d.ts from schemas/*.schema.json
+#                                              # via `pnpm --dir web exec json2ts`, even if one
+#                                              # already exists (the actual fallback path)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONTRACTS_DIR="${ROOT_DIR}/contracts"
+WEB_DIR="${ROOT_DIR}/web"
+SCHEMAS_DIR="${CONTRACTS_DIR}/generated/schemas"
+TS_DIR="${CONTRACTS_DIR}/generated/ts"
+GENERATED_TS="${TS_DIR}/lkap-contracts.d.ts"
+WEB_CONTRACTS_DIR="${WEB_DIR}/src/contracts"
+
+generate=false
+force_ts=false
+for arg in "$@"; do
+  case "${arg}" in
+    --generate) generate=true ;;
+    --force-ts) force_ts=true ;;
+    *)
+      echo "export_contracts: unknown argument: ${arg}" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "${generate}" == true ]]; then
+  echo "export_contracts: running python -m lkap_contracts.export ..." >&2
+  (cd "${CONTRACTS_DIR}" && uv run python -m lkap_contracts.export)
+fi
+
+if [[ "${force_ts}" == true || ! -f "${GENERATED_TS}" ]]; then
+  shopt -s nullglob
+  schema_files=("${SCHEMAS_DIR}"/*.schema.json)
+  shopt -u nullglob
+  if [[ ${#schema_files[@]} -eq 0 ]]; then
+    echo "export_contracts: no schemas in ${SCHEMAS_DIR}; run with --generate first" >&2
+    exit 1
+  fi
+
+  echo "export_contracts: building lkap-contracts.d.ts from ${#schema_files[@]} schema(s) via json2ts (fallback path) ..." >&2
+  mkdir -p "${TS_DIR}"
+  tmp_file="${GENERATED_TS}.tmp"
+  : > "${tmp_file}"
+  for schema_file in "${schema_files[@]}"; do
+    pnpm --dir "${WEB_DIR}" exec json2ts --input "${schema_file}" --cwd "${SCHEMAS_DIR}" >> "${tmp_file}"
+    printf '\n' >> "${tmp_file}"
+  done
+  mv "${tmp_file}" "${GENERATED_TS}"
+fi
+
+if [[ ! -f "${GENERATED_TS}" ]]; then
+  echo "export_contracts: ${GENERATED_TS} missing; nothing to copy" >&2
+  exit 1
+fi
+
+mkdir -p "${WEB_CONTRACTS_DIR}"
+cp "${GENERATED_TS}" "${WEB_CONTRACTS_DIR}/lkap-contracts.d.ts"
+echo "export_contracts: copied generated/ts/lkap-contracts.d.ts -> web/src/contracts/" >&2

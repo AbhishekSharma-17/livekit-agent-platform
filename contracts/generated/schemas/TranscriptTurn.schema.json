@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/TranscriptTurn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One turn of the final transcript (images stripped).",
+  "properties": {
+    "interrupted": {
+      "default": false,
+      "title": "Interrupted",
+      "type": "boolean"
+    },
+    "role": {
+      "enum": [
+        "user",
+        "assistant"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    }
+  },
+  "required": [
+    "role",
+    "text",
+    "ts"
+  ],
+  "title": "TranscriptTurn",
+  "type": "object"
+}

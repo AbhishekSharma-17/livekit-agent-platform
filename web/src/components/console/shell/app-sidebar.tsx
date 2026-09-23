@@ -29,7 +29,7 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 /**
  * docs/UI_UX_SPEC.md §3.2 (wordmark, footer) + §7.2 item 2; nav groups per
  * docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1. Rendered both as the ≥1024px rail
- * and, via shadcn `Sidebar`'s own mobile mode, inside the < 1024px sheet —
+ * and, via shadcn `Sidebar`'s own mobile mode, inside the phone-width menu dialog —
  * one component, so the footer (workspace switcher, theme, docs link)
  * never has to be built twice.
  */

@@ -9,7 +9,7 @@ import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { CatalogDialog } from "@/components/console/providers/catalog-dialog";
-import { CredentialSheet } from "@/components/console/registry/credential-sheet";
+import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { useCredentials } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useUpdateProviderSettings } from "@/hooks/useProviders";
@@ -18,7 +18,7 @@ import type { ConnectionOut, ProviderOut } from "@/contracts/lkap-contracts";
 
 /** A one-sentence badge for capabilities `CapabilityBadge` (WP-0's `shared/capability-badge.tsx`) doesn't have a kind for yet — `text_modality`/`cloud_only` (UI_UX_SPEC-V2-AMENDMENTS §2.2). Flagged in the V2-13 report as a follow-up ask to extend `CAPABILITY_BADGE_META` instead of duplicating this locally. */
 export function ProviderRow({ provider, connections }: { provider: ProviderOut; connections: ConnectionOut[] }) {
-  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
   const updateSettings = useUpdateProviderSettings();
   const { data: credentials } = useCredentials(provider.id);
   const caps = provider.capabilities ?? {};
@@ -95,7 +95,7 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
         {needsKey ? (
           <button
             type="button"
-            onClick={() => canWrite && setSheetOpen(true)}
+            onClick={() => canWrite && setDialogOpen(true)}
             disabled={!canWrite}
             title={canWrite ? undefined : writeReason}
             className="rounded-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -106,7 +106,7 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
         {provider.catalog ? <CatalogDialog provider={provider} /> : null}
       </div>
 
-      <CredentialSheet open={sheetOpen} onOpenChange={setSheetOpen} spec={provider} />
+      <CredentialDialog open={dialogOpen} onOpenChange={setDialogOpen} spec={provider} />
     </div>
   );
 }

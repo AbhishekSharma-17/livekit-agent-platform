@@ -64,7 +64,7 @@ export function panelLabel(panelId: string, blockCount: number): string {
   return panelMeta(panelId).label;
 }
 
-/** Called after a rail row switches section (the Summary sheet closes itself). */
+/** Called after a rail row switches section (the Summary dialog closes itself). */
 const RailNavigateContext = React.createContext<(() => void) | undefined>(undefined);
 
 interface RailRowProps {
@@ -144,7 +144,7 @@ export interface SummaryRailProps {
  * the form), version + history slot, last saved. Rows link to their section.
  */
 export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRailProps) {
-  // Controlled: the rail renders twice on small screens (hidden column + the Summary sheet).
+  // Controlled: the rail renders twice on small screens (hidden column + the Summary dialog).
   const description = useController<AgentEditorForm, "description">({ name: "description" });
   const config = useWatch<AgentEditorForm, "config">({ name: "config" });
   const mode = useWatch<AgentEditorForm, "mode">({ name: "mode" });

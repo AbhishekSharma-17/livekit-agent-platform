@@ -19,7 +19,7 @@ import { ThemeMenu } from "./theme-menu";
 
 /**
  * < 1024 px top bar (docs/UI_UX_SPEC.md §3.1): 56 px, menu button opening
- * the sidebar as a sheet, current page title. On ≥ 1024 px the sidebar rail
+ * the sidebar as a modal menu, current page title. On ≥ 1024 px the sidebar rail
  * is always visible, so this bar collapses to just the breadcrumb trail
  * (each page's own `PageHeader` still owns its title/actions inline, per
  * §3.2 "the page's primary action lives in the PageHeader on desktop and in

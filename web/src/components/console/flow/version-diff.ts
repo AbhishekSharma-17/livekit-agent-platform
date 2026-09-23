@@ -1,6 +1,6 @@
 /**
- * Flattens a `jsondiffpatch` delta into rows the version history sheet lists
- * (V2-16). Pure: the history sheet imports `jsondiffpatch` itself, lazily, so
+ * Flattens a `jsondiffpatch` delta into rows the version history dialog lists
+ * (V2-16). Pure: the history dialog imports `jsondiffpatch` itself, lazily, so
  * the library stays out of the editor's main chunk.
  *
  * Delta format (jsondiffpatch ≥ 0.5): `[new]` added, `[old, new]` changed,

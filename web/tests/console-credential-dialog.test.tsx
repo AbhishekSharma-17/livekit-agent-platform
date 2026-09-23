@@ -4,13 +4,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { CredentialSheet } from "@/components/console/registry/credential-sheet";
+import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { classifyTestResult } from "@/components/console/registry/credential-test";
 import { suggestedCredentialLabel } from "@/components/console/registry/provider-meta";
 import type { CredentialOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
- * The credential sheet (docs/UI_UX_SPEC.md §4.5, §7.5 item 5; v2
+ * The credential dialog (docs/UI_UX_SPEC.md §4.5, §7.5 item 5; v2
  * amendments: "Test result + last tested"). Replaces the v1
  * `CreateCredentialDialog`; the secret-leak and nested-form guarantees are
  * kept from that dialog's tests.
@@ -113,10 +113,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("CredentialSheet — create", () => {
+describe("CredentialDialog — create", () => {
   it("pre-fills a suggested name and locks the provider when opened from a slot", async () => {
     stubApi(() => ({ body: stored }));
-    renderWithClient(<CredentialSheet spec={openaiSpec} trigger={<button type="button">Open</button>} />);
+    renderWithClient(<CredentialDialog spec={openaiSpec} trigger={<button type="button">Open</button>} />);
     fireEvent.click(screen.getByText("Open"));
 
     const name = (await screen.findByLabelText(/^Name/)) as HTMLInputElement;
@@ -131,7 +131,7 @@ describe("CredentialSheet — create", () => {
     const onSaved = vi.fn();
     const calls = stubApi(() => ({ status: 201, body: stored }));
     renderWithClient(
-      <CredentialSheet spec={openaiSpec} onSaved={onSaved} trigger={<button type="button">Open</button>} />,
+      <CredentialDialog spec={openaiSpec} onSaved={onSaved} trigger={<button type="button">Open</button>} />,
     );
     fireEvent.click(screen.getByText("Open"));
 
@@ -160,7 +160,7 @@ describe("CredentialSheet — create", () => {
 
   it("toggles a secret between masked and visible", async () => {
     stubApi(() => ({ body: stored }));
-    renderWithClient(<CredentialSheet spec={openaiSpec} trigger={<button type="button">Open</button>} />);
+    renderWithClient(<CredentialDialog spec={openaiSpec} trigger={<button type="button">Open</button>} />);
     fireEvent.click(screen.getByText("Open"));
     const secretInput = (await screen.findByLabelText(/API key/)) as HTMLInputElement;
     expect(secretInput.type).toBe("password");
@@ -172,7 +172,7 @@ describe("CredentialSheet — create", () => {
 
   it("validates inline (no toast, no request) when the name or a required secret is missing", async () => {
     const calls = stubApi(() => ({ body: stored }));
-    renderWithClient(<CredentialSheet spec={openaiSpec} trigger={<button type="button">Open</button>} />);
+    renderWithClient(<CredentialDialog spec={openaiSpec} trigger={<button type="button">Open</button>} />);
     fireEvent.click(screen.getByText("Open"));
     const name = await screen.findByLabelText(/^Name/);
     fireEvent.change(name, { target: { value: "  " } });
@@ -190,7 +190,7 @@ describe("CredentialSheet — create", () => {
     stubApi(() => ({ status: 201, body: stored }));
     renderWithClient(
       <form onSubmit={outerSubmit}>
-        <CredentialSheet spec={openaiSpec} onSaved={onSaved} trigger={<button type="button">Open</button>} />
+        <CredentialDialog spec={openaiSpec} onSaved={onSaved} trigger={<button type="button">Open</button>} />
       </form>,
     );
     fireEvent.click(screen.getByText("Open"));
@@ -203,7 +203,7 @@ describe("CredentialSheet — create", () => {
 
   it("renders a free-form NAME/value editor for secret_bag providers (http-tool-secret)", async () => {
     const calls = stubApi(() => ({ status: 201, body: { ...stored, provider_id: "http-tool-secret" } }));
-    renderWithClient(<CredentialSheet spec={secretBagSpec} trigger={<button type="button">Open bag</button>} />);
+    renderWithClient(<CredentialDialog spec={secretBagSpec} trigger={<button type="button">Open bag</button>} />);
     fireEvent.click(screen.getByText("Open bag"));
 
     fireEvent.change(await screen.findByLabelText("Secret 1 name"), { target: { value: "crm_token" } });
@@ -218,14 +218,14 @@ describe("CredentialSheet — create", () => {
   });
 });
 
-describe("CredentialSheet — test result and last tested", () => {
+describe("CredentialDialog — test result and last tested", () => {
   it("offers Test key after saving and shows the result with a last-tested time", async () => {
     stubApi(({ url }) =>
       url.endsWith("/credentials/cred_1/test")
         ? { body: { ok: true, message: "Listed 42 models", checked_at: new Date().toISOString() } }
         : { status: 201, body: stored },
     );
-    renderWithClient(<CredentialSheet spec={openaiSpec} trigger={<button type="button">Open</button>} />);
+    renderWithClient(<CredentialDialog spec={openaiSpec} trigger={<button type="button">Open</button>} />);
     fireEvent.click(screen.getByText("Open"));
     fireEvent.change(await screen.findByLabelText(/API key/), { target: { value: SECRET_VALUE } });
     fireEvent.click(screen.getByRole("button", { name: "Save key" }));
@@ -242,7 +242,7 @@ describe("CredentialSheet — test result and last tested", () => {
       url.endsWith("/test") ? { body: { ok: false, message: "401 Unauthorized" } } : { body: { ...stored, label: "Renamed key" } },
     );
     renderWithClient(
-      <CredentialSheet mode="rotate" spec={openaiSpec} credential={stored} trigger={<button type="button">Open</button>} />,
+      <CredentialDialog mode="rotate" spec={openaiSpec} credential={stored} trigger={<button type="button">Open</button>} />,
     );
     fireEvent.click(screen.getByText("Open"));
 
@@ -267,7 +267,7 @@ describe("CredentialSheet — test result and last tested", () => {
   it("rename mode shows only the name", async () => {
     const calls = stubApi(() => ({ body: { ...stored, label: "New" } }));
     renderWithClient(
-      <CredentialSheet mode="rename" spec={openaiSpec} credential={stored} trigger={<button type="button">Open</button>} />,
+      <CredentialDialog mode="rename" spec={openaiSpec} credential={stored} trigger={<button type="button">Open</button>} />,
     );
     fireEvent.click(screen.getByText("Open"));
     expect(await screen.findByRole("heading", { name: "Rename Test key" })).toBeTruthy();

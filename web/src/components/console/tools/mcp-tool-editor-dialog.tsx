@@ -9,14 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
@@ -55,7 +56,7 @@ interface DraftErrors {
 
 /**
  * "MCP editor" (IMPLEMENTATION_PLAN W1-WEB-CONSOLE) — a streamable-HTTP MCP
- * server (docs/CONTRACTS.md §9), now a `Sheet` (docs/UI_UX_SPEC.md §7.6 item
+ * server (docs/CONTRACTS.md §9), now a `Dialog` (a modal: no side drawers, UI_UX_SPEC-V2-AMENDMENTS §5) (docs/UI_UX_SPEC.md §7.6 item
  * 4) with inline validation instead of toasts. `agentId: null` attaches
  * nothing — used by the shared `/console/tools` list.
  */
@@ -144,24 +145,20 @@ export function McpToolEditorDialog({
   const pending = createTool.isPending || updateTool.isPending;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{trigger}</SheetTrigger>
-      <SheetContent
-        side="right"
-        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg"
-        aria-describedby={`${uid}-description`}
-      >
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent size="md" aria-describedby={`${uid}-description`}>
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <SheetHeader className="border-b border-border px-5 py-4 pr-12">
-            <SheetTitle className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">
+          <DialogHeader>
+            <DialogTitle>
               {tool ? "Edit MCP server" : "New MCP server"}
-            </SheetTitle>
-            <SheetDescription id={`${uid}-description`}>
+            </DialogTitle>
+            <DialogDescription id={`${uid}-description`}>
               A streamable-HTTP MCP endpoint whose tools become available to the model.
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+          <DialogBody>
             <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
               <Input id={`${uid}-name`} value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
             </Field>
@@ -233,18 +230,18 @@ export function McpToolEditorDialog({
                 onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
               />
             </Field>
-          </div>
+          </DialogBody>
 
-          <SheetFooter className="flex-row justify-end border-t border-border px-5 py-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save server"}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

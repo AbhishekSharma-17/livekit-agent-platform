@@ -10,7 +10,7 @@ import { diffRows, objectHash } from "@/components/console/flow/version-diff";
 import type { AgentConfig, AgentOut } from "@/contracts/lkap-contracts";
 
 /**
- * V2-16: the version history sheet — list, diff (jsondiffpatch) and
+ * V2-16: the version history dialog — list, diff (jsondiffpatch) and
  * "restore creates a new version" (the api's `POST …/versions/{n}/restore`
  * answers with the agent at `config_version + 1`; the network is stubbed).
  */

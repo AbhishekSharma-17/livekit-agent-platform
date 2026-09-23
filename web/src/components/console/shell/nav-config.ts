@@ -15,7 +15,7 @@ import {
 
 /**
  * Console IA (docs/UI_UX_SPEC.md §3.2, docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1).
- * Single source of truth for the sidebar, the mobile sheet nav and the
+ * Single source of truth for the sidebar, the mobile menu dialog and the
  * breadcrumb fallback label — tests assert against this list rather than a
  * hard-coded count.
  *

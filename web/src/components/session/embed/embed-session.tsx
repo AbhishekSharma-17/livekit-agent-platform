@@ -29,7 +29,7 @@ export interface EmbedSessionProps {
   agent: AgentPublicOut | null;
   loadError: string | null;
   loadErrorKind: ConnectErrorKind | null;
-  /** `?channel=text`: the widget's text mode, or the console drawer's own iframe (unused there — see `test-chat/`). */
+  /** `?channel=text`: the widget's text mode, or the console Test chat dialog's own iframe (unused there — see `test-chat/`). */
   channel: "text" | "voice";
   testMode: boolean;
 }
@@ -56,7 +56,7 @@ export default function EmbedSession({
     return (
       <div data-embed="1" className="flex h-dvh w-full flex-col overflow-hidden">
         {/* `editable` is omitted (defaults false): §2.6 gives the widget a plain
-            composer, no per-turn Edit/Replay (that is the console drawer's job). */}
+            composer, no per-turn Edit/Replay (that is the console Test chat dialog's job). */}
         <TextSessionView
           slug={slug}
           viaConsole={testMode}

@@ -26,7 +26,7 @@ export function initialsFor(name: string | undefined, email: string): string {
 /**
  * The signed-in user's menu in the sidebar footer (ask V2-14-1): who you are,
  * a link to the Account settings and **Sign out**, reachable from every
- * console screen (the rail on desktop, the sheet on phones). Hidden while
+ * console screen (the rail on desktop, the menu dialog on phones). Hidden while
  * `/v1/auth/me` is unavailable. The break-glass admin token has no session to
  * end, so its menu says so instead of offering a sign-out that does nothing.
  */

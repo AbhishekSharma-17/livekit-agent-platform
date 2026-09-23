@@ -20,6 +20,7 @@ import { StatusChip } from "@/components/shared/status-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -33,7 +34,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { GatedButton } from "@/components/shared/gated-button";
@@ -90,7 +90,7 @@ export interface EditorShellProps {
  * The agent editor frame (docs/UI_UX_SPEC.md §4.3): sticky header, then
  * section nav (200 px) · content (≤ 720 px) · summary rail (280 px) at
  * ≥ 1024 px; below that the nav becomes a scrollable segmented control
- * pinned under the header and the rail a "Summary" sheet.
+ * pinned under the header and the rail a "Summary" dialog.
  */
 export function EditorShell({
   agent,
@@ -282,17 +282,17 @@ export function EditorShell({
         )}
       </div>
 
-      <Sheet open={summaryOpen} onOpenChange={setSummaryOpen}>
-        <SheetContent side="right" className="w-full gap-0 overflow-y-auto p-0 sm:max-w-sm">
-          <SheetHeader className="border-b border-border">
-            <SheetTitle>Summary</SheetTitle>
-            <SheetDescription>What {agent.name} does, at a glance.</SheetDescription>
-          </SheetHeader>
-          <div className="p-4">
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>Summary</DialogTitle>
+            <DialogDescription>What {agent.name} does, at a glance.</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="p-4">
             <SummaryRail agent={agent} slots={slots} onNavigate={() => setSummaryOpen(false)} />
-          </div>
-        </SheetContent>
-      </Sheet>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={(open) => !deleting && setConfirmDelete(open)}>
         <DialogContent>

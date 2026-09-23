@@ -38,7 +38,7 @@ const EMBED_POLICY_TIMEOUT_MS = 2000;
 
 /** `frame-ancestors` value for `origins` (CONTRACTS-V2 §3.3: empty = console/test
  * only, `["*"]` = any). `'self'` always applies — the console's own **Test
- * chat** drawer (V2-18) embeds `/s/[slug]?embed=1` from the same origin, the
+ * chat** dialog (V2-18) embeds `/s/[slug]?embed=1` from the same origin, the
  * same way "empty `allowed_origins`" already means "the platform's own web
  * origins" for `connect`'s server-side origin check (`routers/connect.py`). */
 function frameAncestors(origins: string[]): string {

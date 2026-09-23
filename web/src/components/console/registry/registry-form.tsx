@@ -68,7 +68,7 @@ export interface RegistryFormProps {
   voices?: string[];
   /** Per-field error messages (field name → message). */
   errors?: Record<string, string | undefined>;
-  /** One column instead of two on desktop (the credential sheet). */
+  /** One column instead of two on desktop (the credential dialog). */
   singleColumn?: boolean;
   /** Enables the catalog combobox for the fields it matches (see `CatalogFieldContext`). */
   catalogContext?: CatalogFieldContext;
@@ -112,7 +112,7 @@ const VOICE_FIELD_NAMES = new Set(["voice", "voice_id"]);
  * "Required"/help hint, inline error).
  *
  * Controlled: the caller owns the values (`ProviderRef.fields`, or the
- * credential sheet's `useState` draft — secrets are never put into the big
+ * credential dialog's `useState` draft — secrets are never put into the big
  * react-hook-form state). `secret` fields are masked, write-only inputs with
  * show/hide; the api never sends secret values back, so `secretsMasked` only
  * changes the placeholder ("Leave blank to keep").
@@ -704,7 +704,7 @@ function CatalogPickerField({
 
 /**
  * Default `fields` values for a provider, used when switching to a new
- * provider (or opening the credential sheet) so controlled inputs always
+ * provider (or opening the credential dialog) so controlled inputs always
  * have a defined value.
  */
 export function defaultFieldValues(fields: FieldSpec[]): FieldValues {

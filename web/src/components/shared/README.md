@@ -52,7 +52,7 @@ Tests: `web/tests/shared-primitives.test.tsx`.
 - `Alert`: new variants `info\|success\|warning\|danger` (soft surfaces).
 - `TooltipProvider`: defaults `delayDuration=400`, `skipDelayDuration=300`. The shadcn `Sidebar` does **not** include a `TooltipProvider`; wrap the shell in one.
 - `Sidebar`: width 232 px (`14.5rem`), rail 56 px (`3.5rem`); mobile breakpoint from `@/hooks/use-mobile` (768 px).
-- Added: `sidebar`, `sheet`, `tooltip`, `dropdown-menu`, `popover`, `command` (+ `cmdk`), `separator`, `progress`, `alert`, `label`, `checkbox`, `radio-group`, `scroll-area`, `collapsible`, `breadcrumb`, `kbd`, `input-group`.
+- Added: `sidebar`, `tooltip`, `dropdown-menu`, `popover`, `command` (+ `cmdk`), `separator`, `progress`, `alert`, `label`, `checkbox`, `radio-group`, `scroll-area`, `collapsible`, `breadcrumb`, `kbd`, `input-group`. (`sheet` was added here and later deleted: side drawers are not allowed — docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §5.)
 
 ## Tokens (utilities)
 

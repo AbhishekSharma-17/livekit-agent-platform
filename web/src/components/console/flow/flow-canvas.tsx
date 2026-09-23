@@ -32,6 +32,7 @@ import {
   PlusIcon,
   StarIcon,
   Trash2Icon,
+  XIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,14 +47,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { AgentOut, FlowEdge } from "@/contracts/lkap-contracts";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import type { JsonSchema } from "@/lib/schema-form";
 import { useThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -95,7 +99,16 @@ import { SkeletonRows } from "@/components/shared/loading-state";
  * with it `@xyflow/react`, its CSS and dagre — is loaded only through
  * `next/dynamic` from `flow-section.tsx`, so it is never in the editor's main
  * chunk nor anywhere near the `/s/[slug]` session bundle.
+ *
+ * The node/edge inspector is a docked column inside the canvas frame at `xl`
+ * and up (layout, like the editor's rail — the canvas stays interactive so
+ * you can click from node to node), and a modal below `xl`, where a column
+ * would leave the canvas too narrow. Never a slide-over: side drawers are not
+ * allowed (UI_UX_SPEC-V2-AMENDMENTS §5).
  */
+
+/** Wide enough for a 380 px inspector column beside a usable canvas. */
+const DOCKED_INSPECTOR_QUERY = "(min-width: 1280px)";
 
 const KIND_ICON: Record<FlowNodeKind, LucideIcon> = {
   start: PlayIcon,
@@ -237,6 +250,7 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
   const [selection, setSelection] = React.useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [variablesOpen, setVariablesOpen] = React.useState(false);
+  const docked = useMediaQuery(DOCKED_INSPECTOR_QUERY);
 
   // ---- issues: instant client checks, then the api's reference checks on the draft ----
   const clientIssues = React.useMemo(() => flowDraftIssues(draft), [draft]);
@@ -345,134 +359,168 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
   const selectedEdge = selection?.kind === "edge" ? draft.edges.find((edge) => edge.id === selection.id) : undefined;
   const hasStart = draft.nodes.some((node) => kindOf(node) === "start");
 
+  const inspectorVisible = inspectorOpen && Boolean(selectedNode || selectedEdge);
+  const paneRef = React.useRef<HTMLDivElement>(null);
+
+  // The docked column narrows the canvas; if that (or a new selection) leaves
+  // the selected node clipped, pan it into view — same zoom, no refit.
+  const dockedNodeId = docked && inspectorVisible && selection?.kind === "node" ? selection.id : null;
+  React.useEffect(() => {
+    if (!dockedNodeId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const pane = paneRef.current?.getBoundingClientRect();
+      const nodeEl = Array.from(paneRef.current?.querySelectorAll<HTMLElement>(".react-flow__node") ?? []).find(
+        (el) => el.dataset.id === dockedNodeId,
+      );
+      const box = nodeEl?.getBoundingClientRect();
+      if (!pane || !box) return;
+      const inside = box.left >= pane.left && box.right <= pane.right && box.top >= pane.top && box.bottom <= pane.bottom;
+      if (inside) return;
+      const zoom = reactFlow.getZoom();
+      void reactFlow.fitView({ nodes: [{ id: dockedNodeId }], minZoom: zoom, maxZoom: zoom, duration: 200 });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dockedNodeId, reactFlow]);
+  const inspector = (
+    <>
+      {selectedNode ? (
+        <NodeInspector
+          key={selectedNode.id}
+          agent={agent}
+          node={selectedNode}
+          draft={draft}
+          issues={grouped.nodes.get(selectedNode.id)}
+          onChange={(next) => update((current) => updateNode(current, selectedNode.id, next))}
+          onDelete={() => {
+            update((current) => removeNode(current, selectedNode.id));
+            select(null);
+          }}
+          onManageVariables={() => setVariablesOpen(true)}
+        />
+      ) : selectedEdge ? (
+        <EdgeInspector
+          key={selectedEdge.id}
+          edge={selectedEdge}
+          draft={draft}
+          issues={grouped.edges.get(selectedEdge.id)}
+          onChange={(next) => update((current) => updateEdge(current, selectedEdge.id, next))}
+          onDelete={() => {
+            update((current) => ({ ...current, edges: current.edges.filter((edge) => edge.id !== selectedEdge.id) }));
+            select(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+
   return (
     <div
       data-slot="flow-canvas"
-      className="relative h-[calc(100dvh-var(--console-topbar-height,3rem)-var(--editor-header-height,0px)-7rem)] min-h-[520px] overflow-hidden rounded-lg border border-border bg-background"
+      className="relative flex h-[calc(100dvh-var(--console-topbar-height,3rem)-var(--editor-header-height,0px)-7rem)] min-h-[520px] overflow-hidden rounded-lg border border-border bg-background"
     >
-      <ReactFlow<FlowRfNode, Edge>
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={NODE_TYPES}
-        onNodesChange={onNodesChange}
-        onNodeDragStop={(_event, _node, moved) => {
-          const positions = new Map(moved.map((node) => [node.id, node.position]));
-          update((current) => ({
-            ...current,
-            nodes: current.nodes.map((node) => {
-              const position = positions.get(node.id);
-              return position ? { ...node, position: [Math.round(position.x), Math.round(position.y)] } : node;
-            }),
-          }));
-        }}
-        onNodesDelete={(deleted) => {
-          update((current) => deleted.reduce((acc, node) => removeNode(acc, node.id), current));
-          select(null);
-        }}
-        onEdgesDelete={(deleted) => {
-          const ids = new Set(deleted.map((edge) => edge.id));
-          update((current) => ({ ...current, edges: current.edges.filter((edge) => !ids.has(edge.id)) }));
-          select(null);
-        }}
-        onConnect={onConnect}
-        isValidConnection={connectable}
-        onNodeClick={(_event, node) => select({ kind: "node", id: node.id })}
-        onEdgeClick={(_event, edge) => select({ kind: "edge", id: edge.id })}
-        onPaneClick={() => select(null)}
-        colorMode={resolvedTheme ?? "light"}
-        fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
-        minZoom={0.2}
-        proOptions={{ hideAttribution: true }}
-        aria-label="Flow canvas"
-      >
-        <Background gap={20} size={1} />
-        <Controls showInteractive={false} position="bottom-right" />
-        <Panel position="top-left" className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" size="sm" variant="outline">
-                <Icon as={PlusIcon} />
-                Add node
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {!hasStart ? (
-                <DropdownMenuItem onSelect={() => addNode("start")}>
-                  <Icon as={KIND_ICON.start} />
-                  {NODE_KIND_LABEL.start}
-                </DropdownMenuItem>
-              ) : null}
-              {ADDABLE.map((kind) => (
-                <DropdownMenuItem key={kind} onSelect={() => addNode(kind)}>
-                  <Icon as={KIND_ICON[kind]} />
-                  {NODE_KIND_LABEL[kind]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button type="button" size="sm" variant="outline" onClick={tidy}>
-            <Icon as={LayoutGridIcon} />
-            Tidy layout
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => setVariablesOpen(true)}>
-            <Icon as={BracesIcon} />
-            Variables ({draft.variables.length})
-          </Button>
-          <VersionHistory agent={agent} variant="button" />
-          <IssuesButton
-            issues={issues}
-            errorCount={errorCount}
-            warningCount={warningCount}
-            checking={live.isFetching}
-            draft={draft}
-            onPick={(issue) => {
-              const target = issueTarget(issue.path, draft);
-              if (target?.id && (target.kind === "node" || target.kind === "edge")) {
-                select({ kind: target.kind, id: target.id });
-              } else if (target?.kind === "variable") {
-                setVariablesOpen(true);
-              }
-            }}
-          />
-        </Panel>
-      </ReactFlow>
-
-      <Sheet open={inspectorOpen && Boolean(selectedNode || selectedEdge)} onOpenChange={setInspectorOpen} modal={false}>
-        <SheetContent
-          side="right"
-          className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[400px]"
-          onInteractOutside={(event) => event.preventDefault()}
+      <div ref={paneRef} className="relative min-w-0 flex-1">
+        <ReactFlow<FlowRfNode, Edge>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={NODE_TYPES}
+          onNodesChange={onNodesChange}
+          onNodeDragStop={(_event, _node, moved) => {
+            const positions = new Map(moved.map((node) => [node.id, node.position]));
+            update((current) => ({
+              ...current,
+              nodes: current.nodes.map((node) => {
+                const position = positions.get(node.id);
+                return position ? { ...node, position: [Math.round(position.x), Math.round(position.y)] } : node;
+              }),
+            }));
+          }}
+          onNodesDelete={(deleted) => {
+            update((current) => deleted.reduce((acc, node) => removeNode(acc, node.id), current));
+            select(null);
+          }}
+          onEdgesDelete={(deleted) => {
+            const ids = new Set(deleted.map((edge) => edge.id));
+            update((current) => ({ ...current, edges: current.edges.filter((edge) => !ids.has(edge.id)) }));
+            select(null);
+          }}
+          onConnect={onConnect}
+          isValidConnection={connectable}
+          onNodeClick={(_event, node) => select({ kind: "node", id: node.id })}
+          onEdgeClick={(_event, edge) => select({ kind: "edge", id: edge.id })}
+          onPaneClick={() => select(null)}
+          colorMode={resolvedTheme ?? "light"}
+          fitView
+          fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+          minZoom={0.2}
+          proOptions={{ hideAttribution: true }}
+          aria-label="Flow canvas"
         >
-          {selectedNode ? (
-            <NodeInspector
-              key={selectedNode.id}
-              agent={agent}
-              node={selectedNode}
+          <Background gap={20} size={1} />
+          <Controls showInteractive={false} position="bottom-right" />
+          <Panel position="top-left" className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" size="sm" variant="outline">
+                  <Icon as={PlusIcon} />
+                  Add node
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {!hasStart ? (
+                  <DropdownMenuItem onSelect={() => addNode("start")}>
+                    <Icon as={KIND_ICON.start} />
+                    {NODE_KIND_LABEL.start}
+                  </DropdownMenuItem>
+                ) : null}
+                {ADDABLE.map((kind) => (
+                  <DropdownMenuItem key={kind} onSelect={() => addNode(kind)}>
+                    <Icon as={KIND_ICON[kind]} />
+                    {NODE_KIND_LABEL[kind]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button type="button" size="sm" variant="outline" onClick={tidy}>
+              <Icon as={LayoutGridIcon} />
+              Tidy layout
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setVariablesOpen(true)}>
+              <Icon as={BracesIcon} />
+              Variables ({draft.variables.length})
+            </Button>
+            <VersionHistory agent={agent} variant="button" />
+            <IssuesButton
+              issues={issues}
+              errorCount={errorCount}
+              warningCount={warningCount}
+              checking={live.isFetching}
               draft={draft}
-              issues={grouped.nodes.get(selectedNode.id)}
-              onChange={(next) => update((current) => updateNode(current, selectedNode.id, next))}
-              onDelete={() => {
-                update((current) => removeNode(current, selectedNode.id));
-                select(null);
-              }}
-              onManageVariables={() => setVariablesOpen(true)}
-            />
-          ) : selectedEdge ? (
-            <EdgeInspector
-              key={selectedEdge.id}
-              edge={selectedEdge}
-              draft={draft}
-              issues={grouped.edges.get(selectedEdge.id)}
-              onChange={(next) => update((current) => updateEdge(current, selectedEdge.id, next))}
-              onDelete={() => {
-                update((current) => ({ ...current, edges: current.edges.filter((edge) => edge.id !== selectedEdge.id) }));
-                select(null);
+              onPick={(issue) => {
+                const target = issueTarget(issue.path, draft);
+                if (target?.id && (target.kind === "node" || target.kind === "edge")) {
+                  select({ kind: target.kind, id: target.id });
+                } else if (target?.kind === "variable") {
+                  setVariablesOpen(true);
+                }
               }}
             />
-          ) : null}
-        </SheetContent>
-      </Sheet>
+          </Panel>
+        </ReactFlow>
+      </div>
+
+      <InspectorContext.Provider value={{ docked, onClose: () => setInspectorOpen(false) }}>
+        {docked ? (
+          inspectorVisible ? (
+            inspector
+          ) : null
+        ) : (
+          <Dialog open={inspectorVisible} onOpenChange={setInspectorOpen}>
+            <DialogContent size="md" className="sm:h-[min(85dvh,48rem)]">
+              {inspector}
+            </DialogContent>
+          </Dialog>
+        )}
+      </InspectorContext.Provider>
 
       <VariablesDialog
         open={variablesOpen}
@@ -563,6 +611,106 @@ function IssuesButton({
   );
 }
 
+/** Where the inspector renders: the docked column (`xl`+) or the modal. */
+const InspectorContext = React.createContext<{ docked: boolean; onClose: () => void }>({
+  docked: false,
+  onClose: () => {},
+});
+
+/**
+ * The inspector's chrome. Docked: a labelled `<aside>` column with its own
+ * scroll and a close button (Escape closes it too). Otherwise: the modal's
+ * sticky header/footer (the surrounding `Dialog` handles focus and Escape).
+ */
+function InspectorFrame({
+  title,
+  description,
+  onDelete,
+  deleteLabel,
+  children,
+}: {
+  title: string;
+  description: string;
+  onDelete?: () => void;
+  deleteLabel: string;
+  children: React.ReactNode;
+}) {
+  const { docked, onClose } = React.useContext(InspectorContext);
+  const uid = React.useId();
+  const asideRef = React.useRef<HTMLElement>(null);
+  // Like the modal, the docked column takes focus when it opens or switches
+  // target (the container, not the first field, so typing isn't hijacked):
+  // Escape then closes it, and Backspace edits here instead of deleting the
+  // node that was clicked on the canvas.
+  React.useEffect(() => {
+    if (docked) asideRef.current?.focus({ preventScroll: true });
+  }, [docked, title]);
+  const deleteButton = onDelete ? (
+    <Button type="button" variant="destructive" onClick={onDelete} className="text-danger-text sm:mr-auto">
+      <Icon as={Trash2Icon} />
+      {deleteLabel}
+    </Button>
+  ) : null;
+
+  if (!docked) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle className="truncate">{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="p-4">{children}</DialogBody>
+        <DialogFooter>
+          {deleteButton}
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Done
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </>
+    );
+  }
+
+  return (
+    <aside
+      ref={asideRef}
+      tabIndex={-1}
+      data-slot="flow-inspector"
+      aria-labelledby={`${uid}-title`}
+      aria-describedby={`${uid}-description`}
+      className="flex w-[380px] shrink-0 flex-col border-l border-border bg-popover text-sm text-popover-foreground outline-none"
+      onKeyDown={(event) => {
+        // Radix popovers/selects inside the form handle (and prevent) their own Escape first.
+        if (event.key === "Escape" && !event.defaultPrevented) onClose();
+      }}
+    >
+      <header className="relative flex shrink-0 flex-col gap-1 border-b border-border px-4 py-3 pr-12">
+        <h2 id={`${uid}-title`} className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">
+          {title}
+        </h2>
+        <p id={`${uid}-description`} className="text-muted-foreground">
+          {description}
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-3 right-3"
+          onClick={onClose}
+          aria-label="Close inspector"
+        >
+          <Icon as={XIcon} />
+        </Button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
+      {deleteButton ? (
+        <footer className="flex shrink-0 border-t border-border bg-muted/50 px-4 py-3">{deleteButton}</footer>
+      ) : null}
+    </aside>
+  );
+}
+
 function NodeInspector({
   agent,
   node,
@@ -585,39 +733,30 @@ function NodeInspector({
   const kind = kindOf(node);
   const spec = specs.data?.nodes?.find((item) => item.kind === kind);
   return (
-    <>
-      <SheetHeader className="border-b border-border">
-        <SheetTitle>{node.label || node.id}</SheetTitle>
-        <SheetDescription>{NODE_KIND_LABEL[kind]}</SheetDescription>
-      </SheetHeader>
-      <div className="flex-1 p-4">
-        {spec?.json_schema ? (
-          <NodeForm
-            node={node}
-            schema={spec.json_schema as JsonSchema}
-            onChange={onChange}
-            variables={draft.variables}
-            toolOptions={options.toolOptions}
-            kbOptions={options.kbOptions}
-            providerOptions={options.providerOptions}
-            {...fieldMessages(issues, draft)}
-            onManageVariables={onManageVariables}
-          />
-        ) : specs.isError ? (
-          <p className="text-sm text-danger-text">Couldn&apos;t load the node form. Reload to try again.</p>
-        ) : (
-          <SkeletonRows label="Loading the node form" rows={4} rowClassName="h-9" />
-        )}
-      </div>
-      {kind !== "start" ? (
-        <SheetFooter className="border-t border-border">
-          <Button type="button" variant="destructive" onClick={onDelete}>
-            <Icon as={Trash2Icon} />
-            Delete node
-          </Button>
-        </SheetFooter>
-      ) : null}
-    </>
+    <InspectorFrame
+      title={node.label || node.id}
+      description={NODE_KIND_LABEL[kind]}
+      deleteLabel="Delete node"
+      onDelete={kind !== "start" ? onDelete : undefined}
+    >
+      {spec?.json_schema ? (
+        <NodeForm
+          node={node}
+          schema={spec.json_schema as JsonSchema}
+          onChange={onChange}
+          variables={draft.variables}
+          toolOptions={options.toolOptions}
+          kbOptions={options.kbOptions}
+          providerOptions={options.providerOptions}
+          {...fieldMessages(issues, draft)}
+          onManageVariables={onManageVariables}
+        />
+      ) : specs.isError ? (
+        <p className="text-sm text-danger-text">Couldn&apos;t load the node form. Reload to try again.</p>
+      ) : (
+        <SkeletonRows label="Loading the node form" rows={4} rowClassName="h-9" />
+      )}
+    </InspectorFrame>
   );
 }
 
@@ -639,27 +778,15 @@ function EdgeInspector({
     return node?.label || id;
   };
   return (
-    <>
-      <SheetHeader className="border-b border-border">
-        <SheetTitle>Path</SheetTitle>
-        <SheetDescription>When the model moves on, and what it says.</SheetDescription>
-      </SheetHeader>
-      <div className="flex-1 p-4">
-        <EdgeForm
-          edge={edge}
-          sourceLabel={label(edge.source)}
-          targetLabel={label(edge.target)}
-          variables={draft.variables}
-          onChange={onChange}
-          {...fieldMessages(issues, draft)}
-        />
-      </div>
-      <SheetFooter className="border-t border-border">
-        <Button type="button" variant="destructive" onClick={onDelete}>
-          <Icon as={Trash2Icon} />
-          Delete path
-        </Button>
-      </SheetFooter>
-    </>
+    <InspectorFrame title="Path" description="When the model moves on, and what it says." deleteLabel="Delete path" onDelete={onDelete}>
+      <EdgeForm
+        edge={edge}
+        sourceLabel={label(edge.source)}
+        targetLabel={label(edge.target)}
+        variables={draft.variables}
+        onChange={onChange}
+        {...fieldMessages(issues, draft)}
+      />
+    </InspectorFrame>
   );
 }

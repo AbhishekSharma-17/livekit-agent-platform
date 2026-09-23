@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 
@@ -148,5 +148,46 @@ describe("FlowCanvas", () => {
     expect(card("done")?.getAttribute("data-issue")).toBeNull();
     const validate = calls.find((url) => url.includes("/flow/validate"));
     expect(validate).toContain("/api/console/agents/a-1/flow/validate");
+  });
+
+  it("opens the inspector as a modal dialog below xl, never a slide-over", async () => {
+    stubApi({ ok: true, issues: [] });
+    renderCanvas(agentWith(VALID));
+    await waitFor(() => expect(card("collect")).not.toBeNull());
+
+    fireEvent.click(card("collect")!);
+
+    const dialog = await screen.findByRole("dialog", { name: "Collect" });
+    expect(dialog.getAttribute("data-layout")).toBe("panel");
+    expect(within(dialog).getByRole("button", { name: "Delete node" })).toBeTruthy();
+    expect(document.querySelector('[data-slot="flow-inspector"]')).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("docks the inspector as a column at xl so the canvas stays usable", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 1280px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      stubApi({ ok: true, issues: [] });
+      renderCanvas(agentWith(VALID));
+      await waitFor(() => expect(card("done")).not.toBeNull());
+
+      fireEvent.click(card("done")!);
+
+      const aside = await screen.findByRole("complementary", { name: "Done" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(within(aside).getByRole("button", { name: "Close inspector" })).toBeTruthy();
+      await waitFor(() => expect(document.activeElement).toBe(aside));
+      fireEvent.keyDown(aside, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Done" })).toBeNull());
+    } finally {
+      vi.stubGlobal("matchMedia", undefined);
+    }
   });
 });

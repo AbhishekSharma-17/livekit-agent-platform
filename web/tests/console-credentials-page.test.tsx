@@ -209,7 +209,7 @@ describe("CredentialList", () => {
     );
   });
 
-  it("opens the sheet in rotate mode from the row menu", async () => {
+  it("opens the dialog in rotate mode from the row menu", async () => {
     stubApi();
     renderPage();
     const table = await screen.findByRole("table", { name: "Credentials" });

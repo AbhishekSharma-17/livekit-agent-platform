@@ -7,7 +7,7 @@
  * `lib/livekit.ts`, which V2-18 does not own.
  *
  * One token source == one attempt == one `sessionId`, exactly as the voice
- * session page's token source works: the console **Test chat** drawer and the
+ * session page's token source works: the console **Test chat** dialog and the
  * embed's text-mode layout each create a fresh one per attempt.
  */
 import { TokenSource } from "livekit-client";

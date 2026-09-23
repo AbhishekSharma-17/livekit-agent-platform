@@ -42,14 +42,14 @@ Workspace switcher: a compact popover in the sidebar footer (name + role chip), 
 - Panel section: the composer (blocks list with drag handles, add-block palette by type with one-line descriptions, per-block config form, live preview pane using the preview route scenes). Custom pack panels show "Custom panel: insurance_notebook — blocks the panel exposes: …".
 - Recording section: switch, audio-only (fixed on in Phase 1), storage config, retention. Limits section: concurrency, max duration, rate limits, allowed origins (chips).
 - Summary rail adds: connection, mode, recording on/off, version number with "History" link.
-- Flow section (stretch): full-width canvas replaces the three-column layout for that section only; node inspector as a right sheet (400 px); validation dots on nodes; version history sheet with diff.
+- Flow section (stretch): full-width canvas replaces the three-column layout for that section only; node inspector as a docked 380 px column at ≥ 1280 px and a modal below (§5); validation dots on nodes; version history modal with diff (§5).
 
 ### 2.4 Sessions detail v2
 - Header adds channel chip (`web/test/text/sip/widget/api`), connection, cost total, QA score chip (tone by score), recording state.
 - Tabs: Timeline (adds `handoff`, `block_update`, `form_submitted`, `dtmf`, `transfer` rows), Transcript, Recording (audio player with a waveform-less simple scrubber, download), Cost (lines table + note rows for unknown prices), QA (score, sentiment, tags, summary, "Re-score"), Panel at end of call (composite or custom), Raw.
 
 ### 2.5 Settings tabs
-- Workspace (name, slug, timezone, default connection), Team (`ResponsiveTable` members with role select, invite dialog with copyable link), API keys (create → one-time reveal dialog with `CopyButton`, scopes checkboxes, revoke), Webhooks (endpoint list, events multiselect, secret reveal once, test, deliveries drawer with redeliver), Storage (configs), Danger zone (delete workspace, owner only).
+- Workspace (name, slug, timezone, default connection), Team (`ResponsiveTable` members with role select, invite dialog with copyable link), API keys (create → one-time reveal dialog with `CopyButton`, scopes checkboxes, revoke), Webhooks (endpoint list, events multiselect, secret reveal once, test, deliveries modal with redeliver — §5), Storage (configs), Danger zone (delete workspace, owner only).
 
 ### 2.6 Session surface
 - `embed=1` (stretch): no top strip, compact control bar, 100% height inside the iframe, `postMessage` state events. Text mode: transcript-first layout, composer pinned, no mic controls.
@@ -63,7 +63,7 @@ Workspace switcher: a compact popover in the sidebar footer (name + role chip), 
 | WP-1 Console shell | **Change** | Nav groups per §1; workspace switcher; `/login` redirect handling; Settings becomes tabbed (tabs themselves come from V2-14). |
 | WP-2 Agents list | Unchanged | Add columns Connection and Mode (small). |
 | WP-3 Editor shell | **Change** | Connection chip + mode chip in the header; new sections `recording`, `limits`, `flow` in the section nav (flow hidden unless mode=flow); versions link in the rail. |
-| WP-4 Providers/credentials | **Change** | Build on the v2 registry types (`availability/verification`, `status` alias ok for now); credential sheet gains Test result + last tested; `/console/credentials` stays as the flat list. V2-13 extends the slot editor afterwards — WP-4 must keep `provider-slot-editor` composable (one slot = one component taking `kind`, `value`, `onChange`, `constraints`). |
+| WP-4 Providers/credentials | **Change** | Build on the v2 registry types (`availability/verification`, `status` alias ok for now); credential dialog (was the credential sheet, §5) gains Test result + last tested; `/console/credentials` stays as the flat list. V2-13 extends the slot editor afterwards — WP-4 must keep `provider-slot-editor` composable (one slot = one component taking `kind`, `value`, `onChange`, `constraints`). |
 | WP-5 Sections | **Change** | Panel tab is replaced by the V2-11 composer (WP-5 ships a stub that renders `PanelLayout` read-only); adds `/console/tools` shared list. Instructions/Tools/Knowledge unchanged. |
 | WP-6 Knowledge | Unchanged | Upload cap error copy (25 MB). |
 | WP-7 Sessions | **Change** | List filters add channel/connection; detail tabs extended by V2-14 — WP-7 must expose a tab registry so V2-14 adds tabs without editing WP-7 files. |
@@ -78,3 +78,30 @@ Workspace switcher: a compact popover in the sidebar footer (name + role chip), 
 - "Half-cascade: realtime model thinks, a separate voice speaks".
 - Capability reasons are always sentences with a fix ("Not available on self-hosted connections — LiveKit Inference needs LiveKit Cloud. Use your own STT/LLM/TTS keys.").
 - Verification chip help: "Verified: passed a live call on this platform. Available: installed and configurable, not yet live-tested."
+
+## 5. No side drawers (user UI rule, 2026-09-24)
+
+The user's rule: **no side drawers anywhere in the web app; use modals.** This supersedes every "sheet", "slide-over" and "drawer" in `../UI_UX_SPEC.md` (§3.1 mobile nav, §4.3 Summary, §4.5 credential sheet, §4.7 tool sheets, §4.8 test drawer, §7.1–§7.6 work packages) and in §2.3, §2.5 and §3 above.
+
+- **Primitive.** `web/src/components/ui/sheet.tsx` is deleted. ESLint `no-restricted-imports` rejects `ui/sheet`, `ui/drawer` and `vaul` with "Use Dialog — side drawers are not allowed (user UI rule)".
+- **Dialog sizes.** Use `DialogContent size="sm|md|lg|xl"` (widths 28/32/48/64 rem) for the panel layout: sticky `DialogHeader` and `DialogFooter`, a scrolling `DialogBody`, height capped at 85 dvh, and full-screen below `sm`. Without `size` it stays the compact confirm/short-form dialog.
+- **Focus.** On close, `DialogContent` returns focus to whatever opened it. For a dropdown menu item that means the menu's trigger. This works even without a `DialogTrigger`.
+- **Forms** use `md`. **Rich content** (test chat, version history, deliveries) uses `lg`/`xl`, with a fixed height where content streams in.
+
+| Surface | Was | Now |
+|---|---|---|
+| Credential add / rotate / rename (`/console/keys`, slot picker, Providers "key-required", tool editors) | right sheet 480 px | `CredentialDialog` (`registry/credential-dialog.tsx`), `md` |
+| HTTP tool editor | right sheet, 2xl | `HttpToolEditorDialog`, `lg` |
+| MCP server editor | right sheet, lg | `McpToolEditorDialog`, `md` |
+| Test chat (agent editor → Test call → Test chat…) | right drawer, md | `TestChatDialog` (`test-chat/test-chat-dialog.tsx`), `lg`, fixed height |
+| Version history with diff (rail "History", flow toolbar) | right sheet, lg | `xl` dialog; version list and diff side by side from `md` |
+| Webhook deliveries (Settings → Webhooks) | right sheet | `DeliveriesDialog`, `lg` |
+| Editor "Summary" (rail below 1024 px) | right sheet | `sm` dialog |
+| Flow node / path inspector | non-modal right sheet over the canvas | docked `<aside>` column inside the canvas frame at ≥ 1280 px (layout, not a drawer); `md` modal below that |
+| Console navigation on phones (< 768 px) | left sheet | full-screen "Menu" dialog; the desktop rail is unchanged |
+
+**Unchanged.** These are not side drawers:
+- the desktop sidebar rail and the session page's columns (layout);
+- the `/s/[slug]` mobile transcript bottom sheet (§5.3; a bottom sheet on the session surface);
+- the vendored `agent-popup-01` corner popup;
+- popovers, dropdowns and tooltips, which use `data-side` for positioning only.

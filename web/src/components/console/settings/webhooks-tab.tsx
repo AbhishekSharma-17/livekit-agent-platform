@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -18,13 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -179,7 +173,7 @@ function WebhooksTabInner() {
       ) : null}
 
       {deliveriesFor ? (
-        <DeliveriesSheet endpoint={deliveriesFor} onClose={() => setDeliveriesFor(null)} />
+        <DeliveriesDialog endpoint={deliveriesFor} onClose={() => setDeliveriesFor(null)} />
       ) : null}
     </Section>
   );
@@ -428,7 +422,8 @@ function DeleteButton({ endpoint, onDeleted }: { endpoint: WebhookEndpointOut; o
   );
 }
 
-function DeliveriesSheet({ endpoint, onClose }: { endpoint: WebhookEndpointOut; onClose: () => void }) {
+/** Delivery attempts for one endpoint, in a modal (no side drawers — UI_UX_SPEC-V2-AMENDMENTS §5). */
+function DeliveriesDialog({ endpoint, onClose }: { endpoint: WebhookEndpointOut; onClose: () => void }) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["settings", "webhooks", endpoint.id, "deliveries"] as const,
@@ -447,13 +442,18 @@ function DeliveriesSheet({ endpoint, onClose }: { endpoint: WebhookEndpointOut; 
   }
 
   return (
-    <Sheet open onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle className="truncate font-mono text-sm">{endpoint.url}</SheetTitle>
-          <SheetDescription>Delivery attempts, newest first.</SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 space-y-2 overflow-auto px-4 pb-4">
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>Deliveries</DialogTitle>
+          <DialogDescription>
+            <span className="block truncate font-mono text-xs text-foreground" title={endpoint.url}>
+              {endpoint.url}
+            </span>
+            Delivery attempts, newest first.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="gap-2">
           {query.isLoading ? (
             <SkeletonRows label="Loading deliveries" rowClassName="h-14" />
           ) : deliveries.length === 0 ? (
@@ -478,7 +478,11 @@ function DeliveriesSheet({ endpoint, onClose }: { endpoint: WebhookEndpointOut; 
                       </>
                     ) : null}
                   </div>
-                  {delivery.last_error ? <div className="truncate text-xs text-danger-text">{delivery.last_error}</div> : null}
+                  {delivery.last_error ? (
+                    <div className="line-clamp-2 text-xs break-words text-danger-text" title={delivery.last_error}>
+                      {delivery.last_error}
+                    </div>
+                  ) : null}
                 </div>
                 {delivery.status === "failed" || delivery.status === "dead" ? (
                   <Button type="button" variant="outline" size="sm" onClick={() => redeliver(delivery)}>
@@ -488,8 +492,9 @@ function DeliveriesSheet({ endpoint, onClose }: { endpoint: WebhookEndpointOut; 
               </div>
             ))
           )}
-        </div>
-      </SheetContent>
-    </Sheet>
+        </DialogBody>
+        <DialogFooter showCloseButton />
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field, fieldIds } from "@/components/shared/field";
 import { useCredentials } from "@/components/console/lib/api-hooks";
-import { CredentialSheet } from "@/components/console/registry/credential-sheet";
+import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { CredentialTestResultView, useCredentialTest } from "@/components/console/registry/credential-test";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import type { ProviderSpec } from "@/contracts/lkap-contracts";
@@ -31,7 +31,7 @@ export interface CredentialPickerProps {
 /**
  * Credential step of a provider slot (docs/UI_UX_SPEC.md §4.4 step 3
  * "Credential"): a `Select` of this provider's stored keys (label ·
- * fingerprint) and "Add key", which opens the credential sheet with the
+ * fingerprint) and "Add key", which opens the credential dialog with the
  * provider locked. A key saved there is selected here. The selected key has
  * a "Test key" action with the result inline.
  *
@@ -49,7 +49,7 @@ export function CredentialPicker({
 }: CredentialPickerProps) {
   const autoId = React.useId();
   const selectId = id ?? `credential-${autoId}`;
-  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
   const { data, isLoading, isError, error: loadError, refetch } = useCredentials(spec.id);
   const items = data?.items ?? [];
   const selected = items.find((item) => item.id === value);
@@ -98,16 +98,16 @@ export function CredentialPicker({
               ))}
             </SelectContent>
           </Select>
-          <Button type="button" variant="outline" onClick={() => setSheetOpen(true)} className="shrink-0">
+          <Button type="button" variant="outline" onClick={() => setDialogOpen(true)} className="shrink-0">
             <PlusIcon aria-hidden="true" />
             Add key
           </Button>
         </div>
       </Field>
       {selected ? <SelectedKeyTest credentialId={selected.id} /> : null}
-      <CredentialSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+      <CredentialDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
         spec={spec}
         onSaved={(credential) => onChange(credential.id)}
       />

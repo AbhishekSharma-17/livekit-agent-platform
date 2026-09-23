@@ -5,7 +5,7 @@
  * the provider it needs (see `use-text-session.ts`'s module docstring for why
  * session-creation and `useTextSessionActions`/`TextChat` are split into two
  * components). Shared by the widget's embed text mode (`editable={false}`,
- * UI_UX_SPEC-V2-AMENDMENTS §2.6) and the console's **Test chat** drawer
+ * UI_UX_SPEC-V2-AMENDMENTS §2.6) and the console's **Test chat** dialog
  * (`editable`, per-turn Edit/Replay — `components/console/agents/test-chat/`).
  */
 import { useEffect } from "react";
@@ -19,11 +19,11 @@ import { useCreateTextSession, useTextSessionActions } from "./use-text-session"
 
 export interface TextSessionViewProps {
   slug: string;
-  /** `?mode=test` / the console drawer: route through the admin proxy (DECISIONS-W2 D-W2-1). */
+  /** `?mode=test` / the console Test chat dialog: route through the admin proxy (DECISIONS-W2 D-W2-1). */
   viaConsole?: boolean;
   /** Shown until the session's own `ConnectResponse.agent.name` arrives. */
   fallbackAgentName: string;
-  /** Per-turn Edit/Replay controls (console drawer only). */
+  /** Per-turn Edit/Replay controls (console Test chat dialog only). */
   editable?: boolean;
   className?: string;
   /** Fires once, the first time the text-session `connect` call resolves (the embed bridge). */

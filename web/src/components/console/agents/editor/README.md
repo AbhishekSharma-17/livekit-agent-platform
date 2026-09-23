@@ -12,7 +12,7 @@ Entry point: `../agent-editor.tsx` (`<AgentEditor agentId sections? />`), render
 | `extensions.ts` | `EDITOR_EXTENSIONS` — the **shared, append-only** plug-in list. |
 | `sections.ts` | `EDITOR_SECTIONS`, `EDITOR_SLOTS` (built-ins + extensions, resolved once), `DEFAULT_SECTION_ID`. |
 | `registry.ts` | Pure `resolveEditorSections`, `visibleSections`, `resolveEditorSlots`. |
-| `editor-shell.tsx` | Sticky header (back link, `h1` name + pencil, slug + copy, Draft/Live, connection chip, mode chip, unsaved indicator, Test call, Publish/Unpublish, Save, overflow → Delete), three-column layout, Summary sheet. |
+| `editor-shell.tsx` | Sticky header (back link, `h1` name + pencil, slug + copy, Draft/Live, connection chip, mode chip, unsaved indicator, Test call, Publish/Unpublish, Save, overflow → Delete), three-column layout, Summary dialog. |
 | `section-nav.tsx` | Vertical list (≥ 1024 px) / scrollable segmented bar (< 1024 px) with validation dots and roving focus. |
 | `summary-rail.tsx` | "What this agent does". |
 | `publish-popover.tsx` | Publish / Unpublish (§4.9). Also exports `publicUrl`, `SaveOutcome`. |

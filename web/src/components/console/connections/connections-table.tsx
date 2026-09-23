@@ -50,7 +50,7 @@ import { LoadingRegion } from "@/components/shared/loading-state";
  * URL host, Status, Capabilities, Fleet, Default star, and a row menu (Test,
  * Make default, Rotate keys, Delete). Rotate opens the connection's own
  * detail page (a modal here would need the secret fields WP-4's credential
- * sheet already builds for provider keys — connections keep the same two
+ * dialog already builds for provider keys — connections keep the same two
  * secret fields inline on their own page instead of duplicating that UI).
  */
 export function ConnectionsTable() {

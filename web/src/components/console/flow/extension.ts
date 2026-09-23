@@ -14,7 +14,7 @@ import { VersionHistory } from "./version-history";
  *   visibility and issue routing; `layout: "full"`); the canvas inside is a
  *   lazily loaded chunk (`flow-section.tsx`);
  * - fills the `modeChip` slot with the prompt ↔ flow switch dialog and the
- *   `versionHistory` slot with the history sheet (diff + restore);
+ *   `versionHistory` slot with the history dialog (diff + restore);
  * - introduces the Instructions section as the base instructions in flow
  *   mode (R-V2-13) without changing WP-5's editor.
  */

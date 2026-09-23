@@ -77,7 +77,7 @@ const IDLE: CredentialTestState = { last: null, pending: false };
  * `CredentialOut` has no "last tested" field, so the state is kept in the
  * react-query cache under `["credential-test", id]` for this browser
  * session: every component showing the same key (the credentials page's
- * row menu and result cell, the sheet, the slot's picker) sees the same
+ * row menu and result cell, the dialog, the slot's picker) sees the same
  * pending flag and result. When the api persists a last-tested time
  * (V2-06), read it here.
  */
@@ -123,7 +123,7 @@ export function useCredentialTest(id: string | null | undefined) {
   return { last: state.last, pending: state.pending, run };
 }
 
-/** Result chip + vendor message + "Last tested …" (the sheet's persistent view). */
+/** Result chip + vendor message + "Last tested …" (the dialog's persistent view). */
 export function CredentialTestResultView({
   record,
   pending,

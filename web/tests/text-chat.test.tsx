@@ -1,7 +1,7 @@
 /**
  * `components/session/embed/text-chat.tsx` (V2-18): renders a fixture
  * transcript and exercises the edit/replay affordances that only appear when
- * `actions` is supplied (the console drawer; the embed layout omits it,
+ * `actions` is supplied (the console Test chat dialog; the embed layout omits it,
  * UI_UX_SPEC-V2-AMENDMENTS §2.6).
  */
 import * as React from "react";

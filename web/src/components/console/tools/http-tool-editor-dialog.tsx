@@ -16,14 +16,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
@@ -93,7 +94,7 @@ interface DraftErrors {
 
 /**
  * "HTTP tool editor with JSON Schema textarea + dry-run" (IMPLEMENTATION_PLAN
- * W1-WEB-CONSOLE), now a `Sheet` with sections (docs/UI_UX_SPEC.md §7.6 item
+ * W1-WEB-CONSOLE), now a `Dialog` (a modal: no side drawers, UI_UX_SPEC-V2-AMENDMENTS §5) with sections (docs/UI_UX_SPEC.md §7.6 item
  * 4: Basics, Request, Auth, Response, Safety) and inline validation instead
  * of toasts. Builds an `HttpToolDefinition` (docs/CONTRACTS.md §9) and
  * posts/updates the `tools` row; the caller attaches the returned id to
@@ -207,24 +208,20 @@ export function HttpToolEditorDialog({
   const pending = createTool.isPending || updateTool.isPending;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{trigger}</SheetTrigger>
-      <SheetContent
-        side="right"
-        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
-        aria-describedby={`${uid}-description`}
-      >
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent size="lg" aria-describedby={`${uid}-description`}>
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <SheetHeader className="border-b border-border px-5 py-4 pr-12">
-            <SheetTitle className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">
+          <DialogHeader>
+            <DialogTitle>
               {tool ? "Edit HTTP tool" : "New HTTP tool"}
-            </SheetTitle>
-            <SheetDescription id={`${uid}-description`}>
+            </DialogTitle>
+            <DialogDescription id={`${uid}-description`}>
               Exposed to the model as a function tool. Arguments are validated against the JSON Schema below.
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-5">
+          <DialogBody className="gap-6">
             <section className="flex flex-col gap-4">
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -408,18 +405,18 @@ export function HttpToolEditorDialog({
                 </Field>
               </div>
             </section>
-          </div>
+          </DialogBody>
 
-          <SheetFooter className="flex-row justify-end border-t border-border px-5 py-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save tool"}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

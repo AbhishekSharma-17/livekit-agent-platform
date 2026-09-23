@@ -10,12 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -179,28 +178,29 @@ function Sidebar({
   }
 
   if (isMobile) {
+    // Phones: the navigation opens as a modal menu (full-screen below `sm`),
+    // not a slide-over — side drawers are not allowed
+    // (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §5).
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-        <SheetContent
+      <Dialog open={openMobile} onOpenChange={setOpenMobile} {...props}>
+        <DialogContent
+          size="sm"
           dir={dir}
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className="bg-sidebar text-sidebar-foreground sm:h-[min(85dvh,40rem)]"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
             } as React.CSSProperties
           }
-          side={side}
         >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-          </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
-        </SheetContent>
-      </Sheet>
+          <DialogTitle className="sr-only">Menu</DialogTitle>
+          <DialogDescription className="sr-only">Console navigation.</DialogDescription>
+          <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
+        </DialogContent>
+      </Dialog>
     )
   }
 

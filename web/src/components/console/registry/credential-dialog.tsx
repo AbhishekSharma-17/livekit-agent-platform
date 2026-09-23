@@ -8,14 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { CopyButton } from "@/components/shared/copy-button";
 import { DescriptionList } from "@/components/shared/description-list";
 import { Field } from "@/components/shared/field";
@@ -32,15 +33,15 @@ import {
 import { defaultFieldValues, RegistryForm, type FieldValues } from "@/components/console/registry/registry-form";
 import type { CredentialOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
-export type CredentialSheetMode = "create" | "rotate" | "rename";
+export type CredentialDialogMode = "create" | "rotate" | "rename";
 
-export interface CredentialSheetProps {
-  /** Controlled open state; omit both and pass `trigger` for an uncontrolled sheet. */
+export interface CredentialDialogProps {
+  /** Controlled open state; omit both and pass `trigger` for an uncontrolled dialog. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   trigger?: React.ReactNode;
   /** `create` (default): a new key. `rotate`: new secrets for `credential`. `rename`: label only. */
-  mode?: CredentialSheetMode;
+  mode?: CredentialDialogMode;
   /**
    * The provider. In `create` mode it is pre-filled and locked (opened from a
    * slot); omit it for a vendor picker (the credentials page).
@@ -48,7 +49,7 @@ export interface CredentialSheetProps {
   spec?: ProviderSpec;
   /** The stored credential (`rotate` / `rename`). */
   credential?: CredentialOut;
-  /** Called once the api has stored the key (before the sheet shows the saved state). */
+  /** Called once the api has stored the key (before the dialog shows the saved state). */
   onSaved?: (credential: CredentialOut) => void;
 }
 
@@ -60,23 +61,24 @@ interface KeyValuePair {
 const EMPTY_PAIRS: KeyValuePair[] = [{ name: "", value: "" }];
 
 /**
- * Credential slide-over (docs/UI_UX_SPEC.md §4.5, §7.5 item 5;
+ * Credential dialog (docs/UI_UX_SPEC.md §4.5, §7.5 item 5 — a modal since
+ * UI_UX_SPEC-V2-AMENDMENTS §5: no side drawers;
  * UI_UX_SPEC-V2-AMENDMENTS §3 WP-4: "Test result + last tested"). Used from
  * the slot editor's credential picker, the tool editors (through
  * `CredentialPicker`) and the credentials page.
  *
  * Secrets live in local `useState` only — never in the agent editor's
  * react-hook-form state — and are cleared the moment the api accepts them;
- * after saving the sheet shows the fingerprint and a "Test key" action, never
+ * after saving the dialog shows the fingerprint and a "Test key" action, never
  * the secret. Posts `CredentialCreate` (create) or `CredentialUpdate` (rotate:
  * blank secret inputs keep the stored values, so an all-blank rotate sends
  * the label only; rename: label only).
  *
- * The submit handler stops propagation: the sheet is portalled, but React
+ * The submit handler stops propagation: the dialog is portalled, but React
  * events still bubble through the component tree into the agent editor's
  * `<form>`.
  */
-export function CredentialSheet({
+export function CredentialDialog({
   open: openProp,
   onOpenChange,
   trigger,
@@ -84,7 +86,7 @@ export function CredentialSheet({
   spec: specProp,
   credential,
   onSaved,
-}: CredentialSheetProps) {
+}: CredentialDialogProps) {
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
   const needsRegistry = !specProp;
@@ -116,7 +118,7 @@ export function CredentialSheet({
     setSaved(null);
   }, [credential, mode, specProp]);
 
-  // Fresh state every time the sheet opens.
+  // Fresh state every time the dialog opens.
   React.useEffect(() => {
     if (open) reset();
   }, [open, reset]);
@@ -184,12 +186,12 @@ export function CredentialSheet({
     if (firstInvalid) {
       const targetId =
         firstInvalid === "label"
-          ? "credential-sheet-label"
+          ? "credential-dialog-label"
           : firstInvalid === "provider"
-            ? "credential-sheet-provider"
+            ? "credential-dialog-provider"
             : firstInvalid === "pairs"
-              ? "credential-sheet-pair-0-name"
-              : `credential-sheet-${firstInvalid}`;
+              ? "credential-dialog-pair-0-name"
+              : `credential-dialog-${firstInvalid}`;
       document.getElementById(targetId)?.focus();
       return;
     }
@@ -240,28 +242,24 @@ export function CredentialSheet({
   );
 
   const content = (
-    <SheetContent
-      side="right"
-      className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[480px]"
-      aria-describedby="credential-sheet-description"
-    >
+    <DialogContent size="md" aria-describedby="credential-dialog-description">
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-        <SheetHeader className="border-b border-border px-5 py-4 pr-12">
-          <SheetTitle className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{title}</SheetTitle>
-          <SheetDescription id="credential-sheet-description">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription id="credential-dialog-description">
             Encrypted at rest. Only a fingerprint is shown after saving.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+        <DialogBody>
           {saved ? (
             <SavedView credential={saved} spec={spec} />
           ) : (
             <>
               {mode === "create" && !specProp ? (
-                <Field label="Provider" htmlFor="credential-sheet-provider" required error={errors.provider}>
+                <Field label="Provider" htmlFor="credential-dialog-provider" required error={errors.provider}>
                   <Select value={providerId || undefined} onValueChange={chooseProvider}>
-                    <SelectTrigger id="credential-sheet-provider" className="w-full">
+                    <SelectTrigger id="credential-dialog-provider" className="w-full">
                       <SelectValue placeholder={providersQuery.isLoading ? "Loading providers…" : "Choose a provider"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -292,9 +290,9 @@ export function CredentialSheet({
                 </div>
               ) : null}
 
-              <Field label="Name" htmlFor="credential-sheet-label" required error={errors.label} hint="Shown in pickers next to the fingerprint.">
+              <Field label="Name" htmlFor="credential-dialog-label" required error={errors.label} hint="Shown in pickers next to the fingerprint.">
                 <Input
-                  id="credential-sheet-label"
+                  id="credential-dialog-label"
                   autoComplete="off"
                   value={label}
                   onChange={(event) => {
@@ -314,7 +312,7 @@ export function CredentialSheet({
                     values={fieldValues}
                     onChange={(name, value) => setFieldValues((prev) => ({ ...prev, [name]: value }))}
                     secretsMasked={mode === "rotate"}
-                    idPrefix="credential-sheet"
+                    idPrefix="credential-dialog"
                     errors={errors}
                     singleColumn
                   />
@@ -338,9 +336,9 @@ export function CredentialSheet({
               {mode !== "create" && credential ? <CurrentKey credential={credential} /> : null}
             </>
           )}
-        </div>
+        </DialogBody>
 
-        <SheetFooter className="flex-row justify-end border-t border-border px-5 py-4">
+        <DialogFooter>
           {saved ? (
             <Button type="submit">Done</Button>
           ) : (
@@ -353,16 +351,16 @@ export function CredentialSheet({
               </Button>
             </>
           )}
-        </SheetFooter>
+        </DialogFooter>
       </form>
-    </SheetContent>
+    </DialogContent>
   );
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      {trigger ? <SheetTrigger asChild>{trigger}</SheetTrigger> : null}
+    <Dialog open={open} onOpenChange={setOpen}>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       {content}
-    </Sheet>
+    </Dialog>
   );
 }
 
@@ -433,9 +431,9 @@ function SecretPairs({
   masked: boolean;
 }) {
   return (
-    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" aria-describedby="credential-sheet-pairs-hint">
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" aria-describedby="credential-dialog-pairs-hint">
       <legend className="mb-1.5 text-sm font-medium text-foreground">Secrets</legend>
-      <p id="credential-sheet-pairs-hint" className="-mt-1 text-[0.8125rem] text-muted-foreground">
+      <p id="credential-dialog-pairs-hint" className="-mt-1 text-[0.8125rem] text-muted-foreground">
         {masked
           ? "Pairs you add replace the stored ones. Leave empty to keep them."
           : "Reference them in tool headers, URLs and bodies as {{ secret.NAME }}."}
@@ -443,7 +441,7 @@ function SecretPairs({
       {pairs.map((pair, index) => (
         <div key={index} className="flex items-center gap-2">
           <Input
-            id={`credential-sheet-pair-${index}-name`}
+            id={`credential-dialog-pair-${index}-name`}
             aria-label={`Secret ${index + 1} name`}
             placeholder="NAME"
             value={pair.name}

@@ -31,7 +31,7 @@ import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import { useAgents, useCredentials, useDeleteCredential, useProviders, useTools } from "@/components/console/lib/api-hooks";
-import { CredentialSheet, type CredentialSheetMode } from "@/components/console/registry/credential-sheet";
+import { CredentialDialog, type CredentialDialogMode } from "@/components/console/registry/credential-dialog";
 import { OUTCOME_LABEL, OUTCOME_TONE, useCredentialTest } from "@/components/console/registry/credential-test";
 import { KIND_LABEL, kindRank } from "@/components/console/registry/provider-meta";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
@@ -93,8 +93,8 @@ function usageText(usage: CredentialUsage): string {
   return parts.length > 0 ? `Used by ${parts.join(" · ")}` : "Not used";
 }
 
-interface SheetState {
-  mode: CredentialSheetMode;
+interface DialogState {
+  mode: CredentialDialogMode;
   credential?: CredentialOut;
 }
 
@@ -112,7 +112,7 @@ export function CredentialList() {
   const providersQuery = useProviders();
   const agentsQuery = useAgents();
   const toolsQuery = useTools();
-  const [sheet, setSheet] = React.useState<SheetState | null>(null);
+  const [dialog, setDialog] = React.useState<DialogState | null>(null);
   const [deleting, setDeleting] = React.useState<CredentialOut | null>(null);
   // Credentials need `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
   const { canWrite } = useWriteAccess("admin");
@@ -146,13 +146,13 @@ export function CredentialList() {
       type="button"
       disabled={!canWrite}
       title={canWrite ? undefined : writeReason}
-      onClick={() => setSheet({ mode: "create" })}
+      onClick={() => setDialog({ mode: "create" })}
     >
       Add credential
     </Button>
   );
 
-  const openSheet = (mode: CredentialSheetMode, credential: CredentialOut) => setSheet({ mode, credential });
+  const openDialog = (mode: CredentialDialogMode, credential: CredentialOut) => setDialog({ mode, credential });
 
   let body: React.ReactNode;
   if (credentialsQuery.isLoading) {
@@ -221,7 +221,7 @@ export function CredentialList() {
         header: <span className="sr-only">Actions</span>,
         align: "end",
         interactive: true,
-        cell: (row) => <RowActions credential={row} onOpenSheet={openSheet} onDelete={setDeleting} />,
+        cell: (row) => <RowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />,
       },
     ];
 
@@ -235,7 +235,7 @@ export function CredentialList() {
           <div className="flex flex-col gap-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} />
-              <RowActions credential={row} onOpenSheet={openSheet} onDelete={setDeleting} />
+              <RowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-[0.8125rem] text-muted-foreground">
               <Fingerprint value={row.fingerprint} />
@@ -258,14 +258,14 @@ export function CredentialList() {
         actions={rows.length > 0 ? addButton : undefined}
       />
       {body}
-      <CredentialSheet
-        open={sheet !== null}
+      <CredentialDialog
+        open={dialog !== null}
         onOpenChange={(open) => {
-          if (!open) setSheet(null);
+          if (!open) setDialog(null);
         }}
-        mode={sheet?.mode ?? "create"}
-        credential={sheet?.credential}
-        spec={sheet?.credential ? specs.get(sheet.credential.provider_id) : undefined}
+        mode={dialog?.mode ?? "create"}
+        credential={dialog?.credential}
+        spec={dialog?.credential ? specs.get(dialog.credential.provider_id) : undefined}
       />
       <DeleteCredentialDialog
         credential={deleting}
@@ -355,11 +355,11 @@ function TestStatus({ credentialId }: { credentialId: string }) {
 
 function RowActions({
   credential,
-  onOpenSheet,
+  onOpenDialog,
   onDelete,
 }: {
   credential: CredentialOut;
-  onOpenSheet: (mode: CredentialSheetMode, credential: CredentialOut) => void;
+  onOpenDialog: (mode: CredentialDialogMode, credential: CredentialOut) => void;
   onDelete: (credential: CredentialOut) => void;
 }) {
   const { run, pending } = useCredentialTest(credential.id);
@@ -376,11 +376,11 @@ function RowActions({
           <FlaskConicalIcon aria-hidden="true" />
           Test
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenSheet("rotate", credential)}>
+        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenDialog("rotate", credential)}>
           <RefreshCwIcon aria-hidden="true" />
           Rotate
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenSheet("rename", credential)}>
+        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenDialog("rename", credential)}>
           <PencilIcon aria-hidden="true" />
           Rename
         </DropdownMenuItem>

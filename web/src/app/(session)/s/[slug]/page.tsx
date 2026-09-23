@@ -85,7 +85,7 @@ export default async function SessionPage({
   const { agent, loadError, loadErrorKind } = await loadAgent(slug, testMode);
 
   // `?embed=1` (V2-18, UI_UX_SPEC-V2-AMENDMENTS §2.6): the widget's iframe and
-  // the console's Test chat drawer preview. `middleware.ts` sets this route's
+  // the console's Test chat dialog preview. `middleware.ts` sets this route's
   // `Content-Security-Policy: frame-ancestors` header for the same request —
   // that is the actual origin enforcement; this branch only picks the layout.
   if (embed === "1") {

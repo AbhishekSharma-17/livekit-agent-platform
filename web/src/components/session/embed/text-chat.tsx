@@ -3,7 +3,7 @@
 /**
  * Transcript-first text session UI (UI_UX_SPEC-V2-AMENDMENTS §2.6: "Text
  * mode: transcript-first layout, composer pinned, no mic controls"). Reused
- * by both the console **Test chat** drawer (`actions` supplied → per-turn
+ * by both the console **Test chat** dialog (`actions` supplied → per-turn
  * Edit/Replay) and the widget's embed text mode (`actions` omitted → plain
  * transcript + composer, exactly §2.6's row).
  *
@@ -26,7 +26,7 @@ import type { UseTextSessionActions } from "./use-text-session";
 export interface TextChatProps {
   session: UseSessionReturn;
   agentName: string;
-  /** Present only in the console drawer: enables per-turn Edit/Replay. */
+  /** Present only in the console Test chat dialog: enables per-turn Edit/Replay. */
   actions?: UseTextSessionActions;
   className?: string;
 }

@@ -172,11 +172,11 @@ describe("ConsoleShell", () => {
     }
   });
 
-  it("has a mobile sidebar trigger that opens the sheet nav", async () => {
+  it("has a mobile sidebar trigger that opens the menu dialog", async () => {
     // `use-mobile.ts` reads `window.innerWidth` on mount; force a phone width
-    // so the shadcn `Sidebar` renders its Sheet branch instead of the
-    // desktop rail (docs/UI_UX_SPEC.md §3.1: "< 768 px: no sidebar; ... a
-    // menu button [opens] the sidebar as a sheet from the left").
+    // so the shadcn `Sidebar` renders its mobile branch instead of the
+    // desktop rail. Since UI_UX_SPEC-V2-AMENDMENTS §5 (no side drawers) that
+    // branch is a modal "Menu" dialog, not a sheet from the left.
     const original = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
     try {
@@ -184,7 +184,7 @@ describe("ConsoleShell", () => {
       const trigger = screen.getByRole("button", { name: /toggle sidebar/i });
       fireEvent.click(trigger);
       await waitFor(() => {
-        expect(within(screen.getByRole("dialog")).getAllByRole("link", { name: "Overview" }).length).toBeGreaterThan(
+        expect(within(screen.getByRole("dialog", { name: "Menu" })).getAllByRole("link", { name: "Overview" }).length).toBeGreaterThan(
           0,
         );
       });

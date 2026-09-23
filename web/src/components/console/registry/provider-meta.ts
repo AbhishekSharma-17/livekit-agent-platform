@@ -1,7 +1,7 @@
 import type { ConnectionOut, ModelSpec, ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
- * Registry helpers shared by the provider slot editor, the credential sheet,
+ * Registry helpers shared by the provider slot editor, the credential dialog,
  * the connections/providers pages and the agent editor's providers section
  * (docs/UI_UX_SPEC.md §4.4/§4.5, WP-4; UI_UX_SPEC-V2-AMENDMENTS §2.2/§2.3).
  *
@@ -37,7 +37,7 @@ export type SlotAvailability =
   /** `availability: "removed"` — hidden everywhere. */
   | "removed";
 
-/** The connection a slot picker is scoped to, when one is bound. Omit for a connection-agnostic listing (credential sheet, the Providers catalog's "all providers" view). */
+/** The connection a slot picker is scoped to, when one is bound. Omit for a connection-agnostic listing (credential dialog, the Providers catalog's "all providers" view). */
 export interface SlotConnectionContext {
   connection?: Pick<ConnectionOut, "id" | "name" | "deployment_type"> | null;
 }
@@ -69,7 +69,7 @@ export function isMvp(spec: ProviderSpec): boolean {
 }
 
 /**
- * R-V2-2 gate. **Without `ctx.connection`** (the credential sheet, the
+ * R-V2-2 gate. **Without `ctx.connection`** (the credential dialog, the
  * Providers catalog's kind list, and every existing WP-4 caller that has no
  * single connection to test against) this falls back to R-V2-1's alias
  * exactly (`isMvp`) rather than consulting `installed_on` at all: the static
@@ -152,7 +152,7 @@ export function connectionDisabledReason(
   return unavailableCopy(spec, { connection }).reason;
 }
 
-/** Available and enabled for the workspace, ignoring per-connection install state (credential sheet: "which vendors take a key"). */
+/** Available and enabled for the workspace, ignoring per-connection install state (credential dialog: "which vendors take a key"). */
 export function isSelectableForCredentials(spec: ProviderSpec): boolean {
   return (spec.availability ?? "available") === "available" && enabledFor(spec);
 }

@@ -5,18 +5,18 @@ import { MessageSquareIcon } from "lucide-react";
 import { Icon } from "@/components/shared/icon";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TextSessionView } from "@/components/session/embed/text-session-view";
 import type { AgentOut } from "@/contracts/lkap-contracts";
 
 import { setTestChatOpenAgent, useTestChatOpenAgent } from "./store";
 
-/** Test call menu item: opens the drawer for `agent`. */
+/** Test call menu item: opens the Test chat dialog for `agent`. */
 export function TestChatMenuItem({ agent }: { agent: AgentOut; dirty: boolean }) {
   return (
     <DropdownMenuItem onSelect={() => setTestChatOpenAgent(agent.id)}>
@@ -27,14 +27,20 @@ export function TestChatMenuItem({ agent }: { agent: AgentOut; dirty: boolean })
 }
 
 /** Renders nothing until the menu item opens it (mirrors `CallNumberDialogHost`). */
-export function TestChatDrawerHost({ agent }: { agent: AgentOut }) {
+export function TestChatDialogHost({ agent }: { agent: AgentOut }) {
   const open = useTestChatOpenAgent() === agent.id;
   return (
-    <TestChatDrawer agent={agent} open={open} onOpenChange={(next) => setTestChatOpenAgent(next ? agent.id : null)} />
+    <TestChatDialog agent={agent} open={open} onOpenChange={(next) => setTestChatOpenAgent(next ? agent.id : null)} />
   );
 }
 
-export function TestChatDrawer({
+/**
+ * The console's Test chat: a large modal (side drawers are not allowed —
+ * UI_UX_SPEC-V2-AMENDMENTS §5). A fixed height, not just a cap, so the
+ * transcript scrolls inside a stable frame and the composer stays put while
+ * replies stream in; full-screen on phones.
+ */
+export function TestChatDialog({
   agent,
   open,
   onOpenChange,
@@ -44,18 +50,18 @@ export function TestChatDrawer({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-        <SheetHeader className="border-border border-b">
-          <SheetTitle>Test chat</SheetTitle>
-          <SheetDescription>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg" className="sm:h-[min(85dvh,56rem)]">
+        <DialogHeader>
+          <DialogTitle>Test chat</DialogTitle>
+          <DialogDescription>
             {agent.name} — text only, no audio. Edit a past message or replay a reply, using its saved
             configuration.
-          </SheetDescription>
-        </SheetHeader>
-        {/* Mounted only while `open` (Radix unmounts `SheetContent`'s children when
+          </DialogDescription>
+        </DialogHeader>
+        {/* Mounted only while `open` (Radix unmounts `DialogContent`'s children when
             closed, but this is explicit so the text session never connects — and never
-            starts a `POST .../text-sessions`, per-open session row — while the drawer
+            starts a `POST .../text-sessions`, per-open session row — while the dialog
             is hidden): the room connects on mount and ends on unmount, exactly like
             `LiveSession`'s own effect. */}
         {open ? (
@@ -67,7 +73,7 @@ export function TestChatDrawer({
             className="min-h-0"
           />
         ) : null}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

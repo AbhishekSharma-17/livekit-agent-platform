@@ -18,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AgentOut, ConfigVersionOut } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +33,9 @@ import { SkeletonRows } from "@/components/shared/loading-state";
  * lazily so it never reaches the editor's main chunk), and Restore — which
  * saves that config as a **new** version (the api never rewrites history).
  * Fills the editor's `versionHistory` slot (the rail's "History" link) and
- * sits in the flow canvas toolbar.
+ * sits in the flow canvas toolbar. A large modal (side drawers are not
+ * allowed — UI_UX_SPEC-V2-AMENDMENTS §5): the version list and the diff sit
+ * side by side from `md`, each scrolling on its own; stacked on phones.
  */
 export function VersionHistory({ agent, variant = "link" }: { agent: AgentOut; variant?: "link" | "button" }) {
   const [open, setOpen] = React.useState(false);
@@ -54,11 +55,11 @@ export function VersionHistory({ agent, variant = "link" }: { agent: AgentOut; v
           History
         </Button>
       )}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full gap-0 overflow-y-auto p-0 sm:max-w-lg">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent size="xl" className="sm:h-[min(85dvh,52rem)]">
           {open ? <VersionHistoryBody agent={agent} onDone={() => setOpen(false)} /> : null}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -93,81 +94,91 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
 
   return (
     <>
-      <SheetHeader className="border-b border-border">
-        <SheetTitle>Version history</SheetTitle>
-        <SheetDescription>
+      <DialogHeader>
+        <DialogTitle>Version history</DialogTitle>
+        <DialogDescription>
           Every save is a version. Restoring saves the old configuration as a new version.
-        </SheetDescription>
-      </SheetHeader>
-      <div className="flex flex-col gap-4 p-4">
-        {versions.isLoading ? (
-          <SkeletonRows label="Loading versions" rows={4} rowClassName="h-12" />
-        ) : versions.isError ? (
-          <p className="text-sm text-danger-text">Couldn&apos;t load versions — {errorMessage(versions.error)}</p>
-        ) : (
-          <ol aria-label="Versions" className="flex flex-col divide-y divide-border rounded-md border border-border">
-            {items.map((item) => {
-              const current = item.config_version === agent.config_version;
-              const active = item.config_version === selected;
-              return (
-                <li key={item.config_version}>
-                  <button
-                    type="button"
-                    aria-pressed={active}
-                    disabled={current}
-                    onClick={() => setSelected(item.config_version)}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm disabled:cursor-default",
-                      active ? "bg-muted" : "hover:bg-muted/60",
-                    )}
-                  >
-                    <span className="flex min-w-0 flex-col">
-                      <span className="font-medium">Version {item.config_version}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        <RelativeTime iso={item.created_at} />
-                        {item.note ? ` · ${item.note}` : ""}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
+        <div className="shrink-0 p-4 md:w-72 md:overflow-y-auto md:overscroll-contain md:border-r md:border-border">
+          {versions.isLoading ? (
+            <SkeletonRows label="Loading versions" rows={4} rowClassName="h-12" />
+          ) : versions.isError ? (
+            <p className="text-sm text-danger-text">Couldn&apos;t load versions — {errorMessage(versions.error)}</p>
+          ) : (
+            <ol aria-label="Versions" className="flex flex-col divide-y divide-border rounded-md border border-border">
+              {items.map((item) => {
+                const current = item.config_version === agent.config_version;
+                const active = item.config_version === selected;
+                return (
+                  <li key={item.config_version}>
+                    <button
+                      type="button"
+                      aria-pressed={active}
+                      disabled={current}
+                      onClick={() => setSelected(item.config_version)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default",
+                        active ? "bg-muted" : "hover:bg-muted/60",
+                      )}
+                    >
+                      <span className="flex min-w-0 flex-col">
+                        <span className="font-medium">Version {item.config_version}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          <RelativeTime iso={item.created_at} />
+                          {item.note ? ` · ${item.note}` : ""}
+                        </span>
                       </span>
-                    </span>
-                    {current ? (
-                      <StatusChip tone="success" size="sm">
-                        Current
-                      </StatusChip>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+                      {current ? (
+                        <StatusChip tone="success" size="sm">
+                          Current
+                        </StatusChip>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
 
-        {selected !== null ? (
-          <section aria-labelledby="version-diff-title" className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 id="version-diff-title" className="text-sm font-medium">
-                Version {selected} → current (version {agent.config_version})
-              </h3>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setConfirming(true)}
-                disabled={!canWrite || !version.data}
-                title={canWrite ? undefined : writeReason}
-              >
-                <Icon as={RotateCcwIcon} />
-                Restore
-              </Button>
-            </div>
-            {version.data ? (
-              <VersionDiff before={version.data} after={agent} />
-            ) : version.isError ? (
-              <p className="text-sm text-danger-text">Couldn&apos;t load version {selected}.</p>
-            ) : (
-              <SkeletonRows label="Loading this version" rows={4} rowClassName="h-6" />
-            )}
-          </section>
-        ) : items.length > 1 ? (
-          <p className="text-sm text-muted-foreground">Pick a version to see what changed since then.</p>
-        ) : null}
+        <div className="min-w-0 flex-1 border-t border-border p-4 md:overflow-y-auto md:overscroll-contain md:border-t-0">
+          {selected !== null ? (
+            <section aria-labelledby="version-diff-title" className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 id="version-diff-title" className="text-sm font-medium">
+                  Version {selected} → current (version {agent.config_version})
+                </h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setConfirming(true)}
+                  disabled={!canWrite || !version.data}
+                  title={canWrite ? undefined : writeReason}
+                >
+                  <Icon as={RotateCcwIcon} />
+                  Restore
+                </Button>
+              </div>
+              {version.data ? (
+                <VersionDiff before={version.data} after={agent} />
+              ) : version.isError ? (
+                <p className="text-sm text-danger-text">Couldn&apos;t load version {selected}.</p>
+              ) : (
+                <SkeletonRows label="Loading this version" rows={4} rowClassName="h-6" />
+              )}
+            </section>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {items.length > 1
+                ? "Pick a version to see what changed since then."
+                : versions.isLoading
+                  ? ""
+                  : "Only the current version exists so far. Every save adds one."}
+            </p>
+          )}
+        </div>
       </div>
 
       <Dialog open={confirming} onOpenChange={(next) => !restore.isPending && setConfirming(next)}>

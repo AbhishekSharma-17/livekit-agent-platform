@@ -27,7 +27,7 @@ import { createTextSessionTokenSource } from "./text-token-source";
 export interface UseCreateTextSessionOptions {
   slug: string;
   participantName?: string;
-  /** `?mode=test` / the console drawer: route through the admin proxy (DECISIONS-W2 D-W2-1). */
+  /** `?mode=test` / the console Test chat dialog: route through the admin proxy (DECISIONS-W2 D-W2-1). */
   viaConsole?: boolean;
 }
 

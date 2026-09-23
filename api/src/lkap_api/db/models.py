@@ -296,7 +296,7 @@ class LiveKitConnection(Base):
         ),
         CheckConstraint("worker_image IN ('slim','full')", name="worker_image_valid"),
         CheckConstraint("status IN ('unverified','ok','error')", name="status_valid"),
-        UniqueConstraint("workspace_id", "slug", name="workspace_slug"),
+        UniqueConstraint("workspace_id", "slug", name="uq_livekit_connections_workspace_slug"),
         Index(
             "ix_livekit_connections_default",
             "workspace_id",
@@ -366,7 +366,7 @@ class AgentConfigVersion(Base):
     note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
     __table_args__ = (
-        UniqueConstraint("agent_id", "config_version", name="agent_version"),
+        UniqueConstraint("agent_id", "config_version", name="uq_agent_config_versions_agent_version"),
         Index("ix_agent_config_versions_agent", "agent_id", "config_version"),
     )
 

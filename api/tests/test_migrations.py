@@ -6,7 +6,9 @@ Synchronous on purpose: `alembic/env.py` drives the async engine with
 
 from __future__ import annotations
 
+import os
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -30,21 +32,24 @@ def _no_livekit_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def _upgrade_head(data_dir: Path) -> Path:
+def _run(data_dir: Path, action: Callable[[Config], None]) -> Path:
+    """Run an alembic command against `data_dir/lkap.db` only."""
     config = Config(str(API_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(API_ROOT / "alembic"))
     config.cmd_opts = None  # type: ignore[assignment]
     url = f"sqlite+aiosqlite:///{data_dir}/lkap.db"
     config.set_main_option("sqlalchemy.url", url)
     config.attributes["configure_logger"] = False
-    import os
-
     os.environ["LKAP_DATABASE_URL"] = url
     try:
-        command.upgrade(config, "head")
+        action(config)
     finally:
         os.environ.pop("LKAP_DATABASE_URL", None)
     return data_dir / "lkap.db"
+
+
+def _upgrade_head(data_dir: Path) -> Path:
+    return _run(data_dir, lambda config: command.upgrade(config, "head"))
 
 
 def test_upgrade_head_on_an_empty_directory_creates_the_model_schema(tmp_path: Path) -> None:
@@ -82,3 +87,12 @@ def test_upgrade_head_is_idempotent(tmp_path: Path) -> None:
     finally:
         connection.close()
     assert len(revisions) == 1
+
+
+def test_upgrade_head_matches_the_models_exactly(tmp_path: Path) -> None:
+    """Autogenerate against head must find nothing: no column, type or constraint drift."""
+    data_dir = tmp_path / "drift"
+    data_dir.mkdir()
+    _upgrade_head(data_dir)
+
+    _run(data_dir, command.check)

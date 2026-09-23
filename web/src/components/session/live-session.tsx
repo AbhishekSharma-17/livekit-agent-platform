@@ -7,10 +7,27 @@
  * token source (→ `POST /connect`, which creates a session row) from
  * `prepareConnection()` as soon as it mounts. The parent remounts this with a
  * fresh `key` to retry, so every attempt gets its own `TokenSource` and room.
+ *
+ * Audio priming (docs/UI_UX_SPEC.md §5.2): the Start click — the browser's
+ * user gesture — created and resumed an `AudioContext`, which is handed to
+ * this attempt's `Room` as `webAudioMix.audioContext`. LiveKit then mixes
+ * playback through that already-unblocked context instead of hoping a fresh
+ * one may start. The same `Room` carries the microphone the visitor picked in
+ * the device check (`audioCaptureDefaults.deviceId`), which is how the choice
+ * reaches the published track without touching the vendored control bar's
+ * persisted user choices.
+ *
+ * Because `webAudioMix` is given as an object, `livekit-client` deliberately
+ * does *not* close the context on disconnect. `SessionExperience` owns it and
+ * closes it when the call is over: closing it here (from a mount-scoped
+ * effect) would kill the context under React StrictMode and hand the next
+ * attempt a closed one, which `Room` accepts without complaint — a silent
+ * call.
  */
 import * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "@livekit/components-react";
+import { Room } from "livekit-client";
 
 import type { AgentPublicOut, ConnectResponse } from "@/contracts/lkap-contracts";
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
@@ -31,8 +48,13 @@ export interface LiveSessionProps {
    * console's admin proxy instead of the public API.
    */
   testMode: boolean;
+  /** Primed in the Start click (§5.2) and owned by `SessionExperience`. */
+  audioContext?: AudioContext | null;
+  /** The microphone chosen in the pre-call device check, if any. */
+  audioDeviceId?: string;
   onRetry: () => void;
-  onEnded: () => void;
+  onLeave: (reason?: string | null) => void;
+  onEnded: (durationMs: number) => void;
 }
 
 export function LiveSession({
@@ -40,11 +62,26 @@ export function LiveSession({
   agent,
   participantName,
   testMode,
+  audioContext,
+  audioDeviceId,
   onRetry,
+  onLeave,
   onEnded,
 }: LiveSessionProps) {
   const [details, setDetails] = useState<ConnectResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // One room per attempt, built lazily so the primed context is attached
+  // before `useSession` ever connects.
+  const [room] = useState(
+    () =>
+      new Room({
+        ...(audioContext ? { webAudioMix: { audioContext } } : {}),
+        ...(audioDeviceId
+          ? { audioCaptureDefaults: { deviceId: audioDeviceId } }
+          : {}),
+      }),
+  );
 
   const { tokenSource, freeze } = useMemo(
     () =>
@@ -77,7 +114,7 @@ export function LiveSession({
     [slug, testMode],
   );
 
-  const session = useSession(tokenSource, { participantName });
+  const session = useSession(tokenSource, { participantName, room });
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const freezeRef = useRef(freeze);
@@ -119,7 +156,9 @@ export function LiveSession({
         sessionId={details?.sessionId ?? null}
         uiPanelId={details?.uiPanelId ?? null}
         error={error}
+        testMode={testMode}
         onRetry={onRetry}
+        onLeave={onLeave}
         onEnded={onEnded}
       />
     </AgentSessionProvider>

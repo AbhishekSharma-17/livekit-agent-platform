@@ -3,6 +3,7 @@ import * as React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { sessionLayoutModel } from "@/components/session/session-layout";
 import { SessionShell } from "@/components/session/session-shell";
 import {
   GENERIC_PANEL_ID,
@@ -40,6 +41,20 @@ describe("panel registry", () => {
     }
   });
 
+  it("carries the optional ui.request handler per panel", () => {
+    // UI_UX_SPEC §5.4 / CONTRACTS-V2 §4.4: the notebook answers `open_dialog`;
+    // the generic panel has no panel-specific affordance, so the room declines.
+    expect(PANELS[GENERIC_PANEL_ID].handleRequest).toBeUndefined();
+    expect(typeof PANELS["insurance_notebook"].handleRequest).toBe("function");
+
+    const handled: PanelDefinition = {
+      ...PANELS[GENERIC_PANEL_ID],
+      handleRequest: (request) => ({ ok: request.method === "open_dialog" }),
+    };
+    expect(handled.handleRequest?.({ method: "open_dialog" })).toEqual({ ok: true });
+    expect(handled.handleRequest?.({ method: "focus" })).toEqual({ ok: false });
+  });
+
   it("resolves a known panel id", () => {
     expect(resolvePanel(GENERIC_PANEL_ID).id).toBe(GENERIC_PANEL_ID);
   });
@@ -58,6 +73,8 @@ describe("SessionShell layout seam", () => {
       <SessionShell
         layout={layout}
         panelTitle="Claim notebook"
+        agentName="Claims assistant"
+        agentState="listening"
         stage={<div>stage</div>}
         transcript={<div>transcript</div>}
         panel={<div>panel body</div>}
@@ -78,9 +95,11 @@ describe("SessionShell layout seam", () => {
     const { container } = renderShell(WIDE_PANEL.layout ?? "side");
     const shell = container.querySelector('[data-testid="session-shell"]');
     expect(shell?.getAttribute("data-layout")).toBe("wide");
+    expect(screen.getByText("panel body")).toBeTruthy();
 
-    const grid = shell?.querySelector(".grid");
-    expect(grid?.className).toContain("lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]");
+    // The column widths are WP-8's to choose; the seam is that the two
+    // layouts differ and that `wide` demotes the stage to a rail.
+    expect(sessionLayoutModel("wide").grid).not.toBe(sessionLayoutModel("side").grid);
   });
 
   it("labels the panel column with the panel title", () => {

@@ -9,12 +9,25 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 
 from alembic import command
 from lkap_api.db.models import Base
 
 API_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def _no_livekit_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's real credentials out of these runs.
+
+    `v2_002_connections` reads `LIVEKIT_*` and `LKAP_MASTER_KEY` straight from the
+    environment, so a shell that exports them would otherwise make this test
+    encrypt the live key into its throwaway database.
+    """
+    for name in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LKAP_MASTER_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _upgrade_head(data_dir: Path) -> Path:

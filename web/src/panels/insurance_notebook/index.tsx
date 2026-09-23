@@ -17,11 +17,12 @@
 import * as React from "react";
 import { useMemo } from "react";
 
+import type { UiRequest, UiRequestResult } from "@/contracts/lkap-contracts";
 import type { PanelDefinition, PanelProps } from "@/panels/registry";
 
 import { NOTEBOOK_CSS } from "./notebook-styles";
 import { Notes, Pen, Pinboard, Stamp, isWriting } from "./paper";
-import { PacketDialog } from "./packet-dialog";
+import { PacketDialog, openPacketDialog } from "./packet-dialog";
 import { SketchCard } from "./sketch-card";
 import { headerLine, parseNotebookCustom } from "./state";
 import { StillNeeded, TeamFeed } from "./studio";
@@ -120,6 +121,52 @@ export function InsuranceNotebookPanel({ state, assets, perform }: PanelProps) {
   );
 }
 
+/** The dialogs this panel can open for the agent (`open_dialog.payload.dialog`). */
+export const NOTEBOOK_DIALOGS = ["packet"] as const;
+
+/**
+ * `lkap.ui.request` handler (UI_UX_SPEC §5.4, CONTRACTS-V2 §4.4 / R-V2-3b).
+ *
+ * The only method the notebook answers is `open_dialog` with
+ * `{dialog: "packet"}` — the adjuster packet. `payload.params` is accepted and
+ * ignored (the packet has no parameters). Everything else is declined with a
+ * reason the agent can read back to the claimant.
+ */
+export function handleNotebookRequest(request: UiRequest): UiRequestResult {
+  if (request.method !== "open_dialog") {
+    return {
+      ok: false,
+      payload: { error: `the claim notebook does not handle "${request.method}"` },
+    };
+  }
+
+  const dialog = request.payload?.dialog;
+  if (typeof dialog !== "string" || dialog.length === 0) {
+    return { ok: false, payload: { error: "open_dialog needs a `dialog` name" } };
+  }
+  if (dialog !== "packet") {
+    return {
+      ok: false,
+      payload: {
+        error: `the claim notebook has no "${dialog}" dialog`,
+        dialogs: [...NOTEBOOK_DIALOGS],
+      },
+    };
+  }
+
+  switch (openPacketDialog()) {
+    case "opened":
+      return { ok: true, payload: { dialog: "packet" } };
+    case "empty":
+      return {
+        ok: false,
+        payload: { error: "the adjuster packet has not been written yet" },
+      };
+    default:
+      return { ok: false, payload: { error: "the claim notebook is not open" } };
+  }
+}
+
 export const INSURANCE_NOTEBOOK_PANEL_ID = "insurance_notebook";
 
 export const INSURANCE_NOTEBOOK_PANEL: PanelDefinition = {
@@ -127,4 +174,5 @@ export const INSURANCE_NOTEBOOK_PANEL: PanelDefinition = {
   title: "Claim notebook",
   Component: InsuranceNotebookPanel,
   layout: "wide",
+  handleRequest: handleNotebookRequest,
 };

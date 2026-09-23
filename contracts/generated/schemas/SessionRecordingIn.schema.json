@@ -1,0 +1,40 @@
+{
+  "$id": "lkap-contracts/SessionRecordingIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.",
+  "properties": {
+    "duration_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Duration S"
+    },
+    "egress_id": {
+      "title": "Egress Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "none",
+        "requested",
+        "active",
+        "ready",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "egress_id",
+    "status"
+  ],
+  "title": "SessionRecordingIn",
+  "type": "object"
+}

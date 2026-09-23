@@ -1,0 +1,144 @@
+{
+  "v": 1,
+  "status": {
+    "label": "In progress",
+    "tone": "info",
+    "key": "in_progress"
+  },
+  "progress": 45,
+  "notes": [
+    {
+      "id": "note:intro",
+      "key": "intro",
+      "kind": "note",
+      "text": "Booking a service visit for a leaking dishwasher.",
+      "tone": "neutral",
+      "ts": 1777000000.0
+    },
+    {
+      "id": "note:account",
+      "key": "account",
+      "kind": "account",
+      "text": "Account 88-3120 verified.",
+      "tone": "success",
+      "ts": 1777000060.0
+    },
+    {
+      "id": "note:window",
+      "key": "window",
+      "kind": "warning",
+      "text": "No engineer free before Thursday.",
+      "tone": "warning",
+      "ts": 1777000140.0
+    }
+  ],
+  "checklist": [
+    {
+      "id": "c:address",
+      "label": "Service address",
+      "done": true,
+      "blocking": false
+    },
+    {
+      "id": "c:model",
+      "label": "Appliance model number",
+      "done": false,
+      "blocking": true,
+      "hint": "It is on the sticker inside the door."
+    },
+    {
+      "id": "c:access",
+      "label": "Who will be home",
+      "done": false,
+      "blocking": false,
+      "hint": "Anyone over 18 can let the engineer in."
+    },
+    {
+      "id": "c:photo",
+      "label": "Photo of the leak",
+      "done": false,
+      "blocking": false
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "asset-leak-photo",
+      "kind": "photo",
+      "mime": "image/jpeg",
+      "caption": "Water pooling under the door seal",
+      "meta": {
+        "captured_at": "14:07"
+      },
+      "ts": 1777000180.0
+    },
+    {
+      "asset_id": "asset-warranty-pdf",
+      "kind": "document",
+      "mime": "application/pdf",
+      "caption": "Warranty certificate",
+      "meta": {},
+      "ts": 1777000200.0
+    }
+  ],
+  "activity": [
+    {
+      "v": 1,
+      "id": "call-lookup-account",
+      "ts": 1777000040.0,
+      "source": "lookup_account",
+      "label": "Account desk",
+      "phase": "done",
+      "headline": "Found account 88-3120",
+      "urgent": false,
+      "duration_ms": 214
+    },
+    {
+      "v": 1,
+      "id": "call-check-warranty",
+      "ts": 1777000090.0,
+      "source": "check_warranty",
+      "label": "Warranty desk",
+      "phase": "done",
+      "headline": "Warranty runs to March 2027",
+      "urgent": false,
+      "duration_ms": 118
+    },
+    {
+      "v": 1,
+      "id": "call-order-part",
+      "ts": 1777000120.0,
+      "source": "order_part",
+      "label": "Parts desk",
+      "phase": "error",
+      "headline": "Could not reach the parts catalogue",
+      "urgent": true,
+      "duration_ms": 3021
+    },
+    {
+      "v": 1,
+      "id": "call-stale-slots",
+      "ts": 1777000150.0,
+      "source": "find_slots",
+      "label": "Scheduler",
+      "phase": "cancelled",
+      "headline": "Dropped an out-of-date slot search",
+      "urgent": false
+    },
+    {
+      "v": 1,
+      "id": "call-book-visit",
+      "ts": 1777000210.0,
+      "source": "book_visit",
+      "label": "Scheduler",
+      "phase": "running",
+      "headline": "Holding Thursday morning",
+      "urgent": false
+    }
+  ],
+  "custom": {
+    "reference": "SRV-40218",
+    "appliance": "dishwasher",
+    "preferred_window": "Thursday morning",
+    "engineer": null
+  }
+}

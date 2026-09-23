@@ -1,0 +1,29 @@
+{
+  "$id": "lkap-contracts/AgentLimits.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Per-agent guard rails enforced by ``connect`` (CONTRACTS-V2 §3.3).",
+  "properties": {
+    "max_concurrent_sessions": {
+      "default": 5,
+      "title": "Max Concurrent Sessions",
+      "type": "integer"
+    },
+    "max_session_duration_s": {
+      "default": 1800,
+      "title": "Max Session Duration S",
+      "type": "integer"
+    },
+    "rate_per_agent_per_min": {
+      "default": 60,
+      "title": "Rate Per Agent Per Min",
+      "type": "integer"
+    },
+    "rate_per_ip_per_min": {
+      "default": 6,
+      "title": "Rate Per Ip Per Min",
+      "type": "integer"
+    }
+  },
+  "title": "AgentLimits",
+  "type": "object"
+}

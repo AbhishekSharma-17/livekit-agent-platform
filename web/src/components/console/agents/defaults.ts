@@ -12,6 +12,7 @@ export const DEFAULT_VOICE: Required<VoiceConfig> = {
   language: "en",
   allow_interruptions: true,
   user_away_timeout_s: 15.0,
+  first_speaker: "agent",
 };
 
 export const DEFAULT_CAPABILITIES: Required<CapabilitiesConfig> = {
@@ -19,6 +20,7 @@ export const DEFAULT_CAPABILITIES: Required<CapabilitiesConfig> = {
   screen_share: false,
   chat_input: true,
   vision_inject_per_turn: true,
+  dtmf: false,
 };
 
 export const DEFAULT_TOOLS: Required<ToolsConfig> = {

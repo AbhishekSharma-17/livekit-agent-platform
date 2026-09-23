@@ -1,0 +1,21 @@
+{
+  "$id": "lkap-contracts/ConnectionRotateIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/connections/{id}/rotate`` — bumps ``credentials_version``.",
+  "properties": {
+    "api_key": {
+      "title": "Api Key",
+      "type": "string"
+    },
+    "api_secret": {
+      "title": "Api Secret",
+      "type": "string"
+    }
+  },
+  "required": [
+    "api_key",
+    "api_secret"
+  ],
+  "title": "ConnectionRotateIn",
+  "type": "object"
+}

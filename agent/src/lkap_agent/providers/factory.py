@@ -52,6 +52,9 @@ SLOT_KINDS: Final[dict[ProviderSlot, ProviderKind]] = {
     "avatar": "avatar",
     "image_gen": "image_gen",
     "workflow_llm": "llm",
+    "vad": "vad",
+    "turn_detection": "turn_detection",
+    "noise_cancellation": "noise_cancellation",
 }
 
 #: Providers whose `model` is not a constructor kwarg (avatar sessions take an

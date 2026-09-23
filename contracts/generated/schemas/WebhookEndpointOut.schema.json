@@ -1,0 +1,70 @@
+{
+  "$id": "lkap-contracts/WebhookEndpointOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A webhook endpoint; the signing secret is shown only by its prefix.",
+  "properties": {
+    "created_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "events": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "secret_prefix": {
+      "default": "",
+      "title": "Secret Prefix",
+      "type": "string"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "url": {
+      "title": "Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "url"
+  ],
+  "title": "WebhookEndpointOut",
+  "type": "object"
+}

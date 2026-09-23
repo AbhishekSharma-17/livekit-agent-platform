@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from lkap_api.db.constants import DEFAULT_OWNER_EMAIL
 
 
 class Settings(BaseSettings):
@@ -36,6 +39,7 @@ class Settings(BaseSettings):
     port: int = Field(default=8080, validation_alias="PORT")
 
     # --- LKAP_-prefixed ---
+    env: Literal["dev", "prod"] = "dev"
     master_key: str
     agent_name: str = "lkap-agent"
     admin_token: str
@@ -49,6 +53,8 @@ class Settings(BaseSettings):
     log_json: bool = False
     embedder: str = "fastembed"
     bootstrap_credentials_json: str | None = None
+    bootstrap_owner_email: str = DEFAULT_OWNER_EMAIL
+    bootstrap_owner_password: str | None = None
     session_sweep_interval_s: int = 60
     session_stale_created_s: int = 600
     session_stale_active_s: int = 21600

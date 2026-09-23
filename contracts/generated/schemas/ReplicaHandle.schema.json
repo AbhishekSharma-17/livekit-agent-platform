@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/ReplicaHandle.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A replica a supervisor backend is responsible for.",
+  "properties": {
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "desired_hash": {
+      "title": "Desired Hash",
+      "type": "string"
+    },
+    "instance_key": {
+      "title": "Instance Key",
+      "type": "string"
+    },
+    "pid_or_container": {
+      "default": "",
+      "title": "Pid Or Container",
+      "type": "string"
+    },
+    "replica_index": {
+      "title": "Replica Index",
+      "type": "integer"
+    },
+    "started_at": {
+      "default": 0.0,
+      "title": "Started At",
+      "type": "number"
+    },
+    "state": {
+      "default": "starting",
+      "enum": [
+        "starting",
+        "running",
+        "draining",
+        "stopped",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection_id",
+    "replica_index",
+    "instance_key",
+    "desired_hash"
+  ],
+  "title": "ReplicaHandle",
+  "type": "object"
+}

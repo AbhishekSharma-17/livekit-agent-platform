@@ -1,15 +1,34 @@
 {
   "$id": "lkap-contracts/DispatchMetadata.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Serialised as JSON into ``RoomAgentDispatch.metadata``.\n\nIDs ONLY. The browser can read this, so it must never contain secrets,\ninstructions or resolved provider configuration.",
+  "description": "Serialised as JSON into ``RoomAgentDispatch.metadata``.\n\nIDs ONLY. The browser can read this, so it must never contain secrets,\ninstructions or resolved provider configuration.\n\nRooms the platform did not create (inbound SIP) have no session row yet, so\nv2 adds ``channel`` and ``connection_id`` and the worker calls\n``POST /internal/v1/sessions/start`` when ``session_id`` is empty. The field\nstays a ``str`` (empty means \"no session yet\") rather than ``str | None``\nwhile the v1 worker still passes it straight to ``resolve()``; V2-07 widens\nit once the worker branches on it.",
   "properties": {
     "agent_id": {
       "title": "Agent Id",
       "type": "string"
     },
+    "channel": {
+      "default": "web",
+      "enum": [
+        "web",
+        "test",
+        "text",
+        "sip_in",
+        "sip_out",
+        "widget",
+        "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
     "config_version": {
       "title": "Config Version",
       "type": "integer"
+    },
+    "connection_id": {
+      "default": "",
+      "title": "Connection Id",
+      "type": "string"
     },
     "participant_identity": {
       "title": "Participant Identity",
@@ -20,8 +39,8 @@
       "type": "string"
     },
     "v": {
-      "const": 1,
-      "default": 1,
+      "const": 2,
+      "default": 2,
       "title": "V",
       "type": "integer"
     }

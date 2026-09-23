@@ -1,0 +1,537 @@
+{
+  "$defs": {
+    "AgentNode": {
+      "description": "One conversational step with its own instructions, tools and extractions.",
+      "properties": {
+        "allow_interruptions": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Interruptions"
+        },
+        "extract": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Extract",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "agent",
+          "default": "agent",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "max_turns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Turns"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "providers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderRef"
+          },
+          "default": {},
+          "propertyNames": {
+            "enum": [
+              "llm",
+              "tts"
+            ]
+          },
+          "title": "Providers",
+          "type": "object"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "AgentNode",
+      "type": "object"
+    },
+    "EndNode": {
+      "description": "Terminal node: says farewell, records a disposition and ends the session.",
+      "properties": {
+        "disposition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disposition"
+        },
+        "farewell": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Farewell"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "end",
+          "default": "end",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "webhook_event": {
+          "default": true,
+          "title": "Webhook Event",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "EndNode",
+      "type": "object"
+    },
+    "GlobalNode": {
+      "description": "Instructions, tools and knowledge merged into every agent node.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "global",
+          "default": "global",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "GlobalNode",
+      "type": "object"
+    },
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    },
+    "QaNode": {
+      "description": "Post-call scoring step; never part of the conversational graph.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "qa",
+          "default": "qa",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "rubric_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rubric Prompt"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "QaNode",
+      "type": "object"
+    },
+    "StartNode": {
+      "description": "Entry point: greets the caller and hands off along its first matching edge.",
+      "properties": {
+        "greeting": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Greeting"
+        },
+        "greeting_mode": {
+          "default": "say",
+          "enum": [
+            "say",
+            "generate"
+          ],
+          "title": "Greeting Mode",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "start",
+          "default": "start",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "StartNode",
+      "type": "object"
+    },
+    "TransferNode": {
+      "description": "Hands the call to a human or another number.",
+      "properties": {
+        "announce": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Announce"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "transfer",
+          "default": "transfer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "mode": {
+          "default": "cold",
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "to"
+      ],
+      "title": "TransferNode",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/FlowNode.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "mapping": {
+      "agent": "#/$defs/AgentNode",
+      "end": "#/$defs/EndNode",
+      "global": "#/$defs/GlobalNode",
+      "qa": "#/$defs/QaNode",
+      "start": "#/$defs/StartNode",
+      "transfer": "#/$defs/TransferNode"
+    },
+    "propertyName": "kind"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/StartNode"
+    },
+    {
+      "$ref": "#/$defs/AgentNode"
+    },
+    {
+      "$ref": "#/$defs/EndNode"
+    },
+    {
+      "$ref": "#/$defs/GlobalNode"
+    },
+    {
+      "$ref": "#/$defs/TransferNode"
+    },
+    {
+      "$ref": "#/$defs/QaNode"
+    }
+  ],
+  "title": "FlowNode"
+}

@@ -6,6 +6,11 @@
 
 /**
  * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FlowNode".
+ */
+export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode;
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ToolDefinition".
  */
 export type ToolDefinition = HttpToolDefinition | McpServerDefinition;
@@ -16,23 +21,60 @@ export interface LkapContracts {
   AgentActionResult?: AgentActionResult;
   AgentConfig?: AgentConfig;
   AgentCreate?: AgentCreate;
+  AgentLimits?: AgentLimits;
+  AgentNode?: AgentNode;
   AgentOut?: AgentOut;
   AgentPage?: AgentPage;
   AgentPublicOut?: AgentPublicOut;
   AgentUpdate?: AgentUpdate;
+  AnalyticsBucket?: AnalyticsBucket;
+  AnalyticsSummary?: AnalyticsSummary;
+  AvatarOptions?: AvatarOptions;
+  BlockSpec?: BlockSpec;
+  CallCreate?: CallCreate;
+  CallOut?: CallOut;
+  CallPage?: CallPage;
+  CatalogItem?: CatalogItem;
+  CatalogResponse?: CatalogResponse;
+  ConfigVersionOut?: ConfigVersionOut;
+  ConfigVersionPage?: ConfigVersionPage;
   ConnectRequest?: ConnectRequest;
   ConnectResponse?: ConnectResponse;
+  ConnectionCapabilities?: ConnectionCapabilities;
+  ConnectionCreate?: ConnectionCreate;
+  ConnectionInfo?: ConnectionInfo;
+  ConnectionOut?: ConnectionOut;
+  ConnectionPage?: ConnectionPage;
+  ConnectionRotateIn?: ConnectionRotateIn;
+  ConnectionTestResult?: ConnectionTestResult;
+  ConnectionUpdate?: ConnectionUpdate;
+  CostLine?: CostLine;
   CredentialCreate?: CredentialCreate;
   CredentialOut?: CredentialOut;
   CredentialPage?: CredentialPage;
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
   DispatchMetadata?: DispatchMetadata;
+  DocumentBlockState?: DocumentBlockState;
+  EndNode?: EndNode;
   ErrorBody?: ErrorBody;
   ErrorResponse?: ErrorResponse;
+  FleetActionIn?: FleetActionIn;
+  FleetDesired?: FleetDesired;
+  FleetStatus?: FleetStatus;
+  FlowEdge?: FlowEdge;
+  FlowNode?: FlowNode;
+  FlowSpec?: FlowSpec;
+  FlowState?: FlowState;
+  FlowValidateRequest?: FlowValidateRequest;
+  FormBlockState?: FormBlockState;
+  GalleryBlockState?: GalleryBlockState;
+  GlobalNode?: GlobalNode;
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
   InternalKbSearchRequest?: InternalKbSearchRequest;
+  Issue?: Issue;
+  KbCitationsBlockState?: KbCitationsBlockState;
   KbCreate?: KbCreate;
   KbDocumentOut?: KbDocumentOut;
   KbDocumentPage?: KbDocumentPage;
@@ -43,21 +85,42 @@ export interface LkapContracts {
   KbSearchResponse?: KbSearchResponse;
   KbSeed?: KbSeed;
   McpServerDefinition?: McpServerDefinition;
+  Me?: Me;
+  NodeSpecSchema?: NodeSpecSchema;
+  NodeSpecsResponse?: NodeSpecsResponse;
   PackManifest?: PackManifest;
   PackOut?: PackOut;
   PacksResponse?: PacksResponse;
   Page?: Page;
+  PanelLayout?: PanelLayout;
+  Price?: Price;
+  ProviderOut?: ProviderOut;
+  ProviderSettingsIn?: ProviderSettingsIn;
   ProviderSpec?: ProviderSpec;
   ProvidersResponse?: ProvidersResponse;
+  QaConfig?: QaConfig;
+  QaNode?: QaNode;
+  QaOut?: QaOut;
+  RecordingConfig?: RecordingConfig;
+  RecordingOut?: RecordingOut;
+  RecordingStartOut?: RecordingStartOut;
+  ReplicaHandle?: ReplicaHandle;
   ResolvedAgentConfig?: ResolvedAgentConfig;
+  SessionCost?: SessionCost;
   SessionDetailOut?: SessionDetailOut;
   SessionEventIn?: SessionEventIn;
   SessionEventOut?: SessionEventOut;
   SessionEventPage?: SessionEventPage;
   SessionEventsIn?: SessionEventsIn;
+  SessionLatency?: SessionLatency;
+  SessionMetricsIn?: SessionMetricsIn;
   SessionOut?: SessionOut;
   SessionPage?: SessionPage;
+  SessionRecordingIn?: SessionRecordingIn;
+  SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
+  StartNode?: StartNode;
+  TableBlockState?: TableBlockState;
   ToolCreate?: ToolCreate;
   ToolDefinition?: ToolDefinition;
   ToolDryRunRequest?: ToolDryRunRequest;
@@ -65,13 +128,30 @@ export interface LkapContracts {
   ToolMeta?: ToolMeta;
   ToolOut?: ToolOut;
   ToolPage?: ToolPage;
+  TranscriptBlockState?: TranscriptBlockState;
   TranscriptTurn?: TranscriptTurn;
+  TransferNode?: TransferNode;
   UiPatch?: UiPatch;
   UiRequest?: UiRequest;
   UiRequestResult?: UiRequestResult;
   UiSnapshot?: UiSnapshot;
   UiState?: UiState;
+  UserOut?: UserOut;
   ValidationResult?: ValidationResult;
+  VariableSpec?: VariableSpec;
+  VideoBlockState?: VideoBlockState;
+  WebhookDeliveryOut?: WebhookDeliveryOut;
+  WebhookDeliveryPage?: WebhookDeliveryPage;
+  WebhookEndpointCreate?: WebhookEndpointCreate;
+  WebhookEndpointOut?: WebhookEndpointOut;
+  WebhookEndpointPage?: WebhookEndpointPage;
+  WebhookEvent?: WebhookEvent;
+  WorkerEnv?: WorkerEnv;
+  WorkerHeartbeatIn?: WorkerHeartbeatIn;
+  WorkerInstanceOut?: WorkerInstanceOut;
+  WorkerRegisterIn?: WorkerRegisterIn;
+  WorkerRegisterOut?: WorkerRegisterOut;
+  WorkspaceMembership?: WorkspaceMembership;
 }
 /**
  * A tool call, workflow run or escalation rendered as a "team feed" entry.
@@ -100,7 +180,8 @@ export interface ActivityEvent {
  * via the `definition` "AgentAction".
  */
 export interface AgentAction {
-  action: "get_snapshot" | "set_video_source" | "ui_action";
+  action:
+    "get_snapshot" | "set_video_source" | "ui_action" | "form_submit" | "block_action" | "rewind" | "inject_user_text";
   payload?: {
     [k: string]: unknown;
   };
@@ -122,20 +203,28 @@ export interface AgentActionResult {
 /**
  * The full, admin-editable configuration of one agent (stored as JSON).
  *
+ * ``v`` accepts ``1`` for one release: v1 rows are rewritten to v2 by the
+ * ``v2_008_agentconfig_v2`` migration, and the console still posts ``v: 1``
+ * until WP-3 lands.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AgentConfig".
  */
 export interface AgentConfig {
   capabilities?: CapabilitiesConfig;
+  flow?: FlowSpec | null;
   instructions: string;
   knowledge?: KnowledgeConfig;
   pack_settings?: {
     [k: string]: unknown;
   };
+  panel?: PanelLayout;
   pipeline: PipelineConfig;
+  qa?: QaConfig;
+  recording?: RecordingConfig;
   timezone?: string;
   tools?: ToolsConfig;
-  v?: 1;
+  v?: 1 | 2;
   voice?: VoiceConfig;
 }
 /**
@@ -147,38 +236,79 @@ export interface AgentConfig {
 export interface CapabilitiesConfig {
   camera?: boolean;
   chat_input?: boolean;
+  dtmf?: boolean;
   screen_share?: boolean;
   vision_inject_per_turn?: boolean;
 }
 /**
- * Knowledge bases attached to the agent and how they are injected.
+ * The whole graph, validated structurally on construction.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "KnowledgeConfig".
+ * via the `definition` "FlowSpec".
  */
-export interface KnowledgeConfig {
-  auto_inject?: boolean;
-  kb_ids?: string[];
-  top_k?: number;
+export interface FlowSpec {
+  edges?: FlowEdge[];
+  nodes?: (StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode)[];
+  v?: 1;
+  variables?: VariableSpec[];
 }
 /**
- * Which providers fill which slot, and how turns are handled.
+ * A conditional transition; ``condition`` becomes the handoff tool description.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "PipelineConfig".
+ * via the `definition` "FlowEdge".
  */
-export interface PipelineConfig {
-  avatar?: ProviderRef | null;
-  image_gen?: ProviderRef | null;
-  llm?: ProviderRef | null;
-  mode?: "realtime" | "cascaded";
-  realtime?: ProviderRef | null;
-  stt?: ProviderRef | null;
-  tts?: ProviderRef | null;
-  turn_handling?: {
-    [k: string]: unknown;
+export interface FlowEdge {
+  condition?: string;
+  id: string;
+  label?: string | null;
+  priority?: number;
+  source: string;
+  target: string;
+  transition_speech?: string | null;
+}
+/**
+ * Entry point: greets the caller and hands off along its first matching edge.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StartNode".
+ */
+export interface StartNode {
+  greeting?: string | null;
+  greeting_mode?: "say" | "generate";
+  id: string;
+  kind?: "start";
+  label?: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+}
+/**
+ * One conversational step with its own instructions, tools and extractions.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentNode".
+ */
+export interface AgentNode {
+  allow_interruptions?: boolean | null;
+  extract?: string[];
+  id: string;
+  instructions?: string;
+  kb_ids?: string[];
+  kind?: "agent";
+  label?: string;
+  max_turns?: number | null;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  providers?: {
+    [k: string]: ProviderRef;
   };
-  workflow_llm?: ProviderRef | null;
+  tools?: string[];
 }
 /**
  * Points at a registry provider plus the credential and options to use.
@@ -193,6 +323,206 @@ export interface ProviderRef {
   };
   model?: string | null;
   provider_id: string;
+}
+/**
+ * Terminal node: says farewell, records a disposition and ends the session.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EndNode".
+ */
+export interface EndNode {
+  disposition?: string | null;
+  farewell?: string | null;
+  id: string;
+  kind?: "end";
+  label?: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  webhook_event?: boolean;
+}
+/**
+ * Instructions, tools and knowledge merged into every agent node.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "GlobalNode".
+ */
+export interface GlobalNode {
+  id: string;
+  instructions?: string;
+  kb_ids?: string[];
+  kind?: "global";
+  label?: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  tools?: string[];
+}
+/**
+ * Hands the call to a human or another number.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TransferNode".
+ */
+export interface TransferNode {
+  announce?: string | null;
+  id: string;
+  kind?: "transfer";
+  label?: string;
+  mode?: "cold" | "warm";
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  to: string;
+}
+/**
+ * Post-call scoring step; never part of the conversational graph.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "QaNode".
+ */
+export interface QaNode {
+  id: string;
+  kind?: "qa";
+  label?: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  rubric_prompt?: string | null;
+}
+/**
+ * One variable a flow extracts from the conversation.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "VariableSpec".
+ */
+export interface VariableSpec {
+  description?: string;
+  name: string;
+  options?: string[] | null;
+  required?: boolean;
+  type?: "string" | "number" | "boolean" | "enum" | "date" | "phone" | "email";
+}
+/**
+ * Knowledge bases attached to the agent and how they are injected.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConfig".
+ */
+export interface KnowledgeConfig {
+  auto_inject?: boolean;
+  kb_ids?: string[];
+  top_k?: number;
+}
+/**
+ * Which panel renders the session, and (for ``composite``) its blocks.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PanelLayout".
+ */
+export interface PanelLayout {
+  blocks?: BlockSpec[];
+  layout?: "side" | "wide";
+  panel_id?: string;
+}
+/**
+ * One block of a composite panel (CONTRACTS-V2 §4.4).
+ *
+ * ``id`` keys the block's state in :attr:`UiState.blocks`; ``config`` is
+ * block-type specific and rendered by the matching React component.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "BlockSpec".
+ */
+export interface BlockSpec {
+  config?: {
+    [k: string]: unknown;
+  };
+  id: string;
+  order?: number;
+  type:
+    | "status"
+    | "notes"
+    | "checklist"
+    | "activity"
+    | "form"
+    | "document"
+    | "gallery"
+    | "table"
+    | "transcript"
+    | "video"
+    | "kb_citations"
+    | "custom";
+}
+/**
+ * Which providers fill which slot, and how turns are handled.
+ *
+ * Slot requirements per mode are reported by :func:`pipeline_issues` rather
+ * than raised here: the api returns them as a ``ValidationResult`` so a
+ * half-finished pipeline can still be saved as a draft.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PipelineConfig".
+ */
+export interface PipelineConfig {
+  avatar?: ProviderRef | null;
+  avatar_options?: AvatarOptions;
+  image_gen?: ProviderRef | null;
+  llm?: ProviderRef | null;
+  mode?: "realtime" | "cascaded" | "half_cascade";
+  noise_cancellation?: ProviderRef | null;
+  realtime?: ProviderRef | null;
+  stt?: ProviderRef | null;
+  tts?: ProviderRef | null;
+  turn_detection?: ProviderRef | null;
+  turn_handling?: {
+    [k: string]: unknown;
+  };
+  vad?: ProviderRef | null;
+  workflow_llm?: ProviderRef | null;
+}
+/**
+ * Publisher-side options applied to whichever avatar plugin is selected.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AvatarOptions".
+ */
+export interface AvatarOptions {
+  idle_timeout_s?: number | null;
+  max_duration_s?: number | null;
+  participant_name?: string;
+  video_quality?: ("low" | "medium" | "high" | "very_high") | null;
+}
+/**
+ * Post-call scoring of the session by an LLM judge.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "QaConfig".
+ */
+export interface QaConfig {
+  enabled?: boolean;
+  model?: ProviderRef | null;
+  rubric_prompt?: string | null;
+}
+/**
+ * Whether and where the session is recorded through Egress.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RecordingConfig".
+ */
+export interface RecordingConfig {
+  audio_only?: boolean;
+  enabled?: boolean;
+  retention_days?: number | null;
+  storage_config_id?: string | null;
 }
 /**
  * Built-in tool gating plus references to admin-authored tool rows.
@@ -214,6 +544,7 @@ export interface ToolsConfig {
  */
 export interface VoiceConfig {
   allow_interruptions?: boolean;
+  first_speaker?: "agent" | "user";
   greeting?: string;
   greeting_mode?: "say" | "generate";
   language?: string;
@@ -227,10 +558,24 @@ export interface VoiceConfig {
  */
 export interface AgentCreate {
   config?: AgentConfig | null;
+  connection_id?: string | null;
   description?: string;
+  mode?: "prompt" | "flow";
   name: string;
   pack_id?: string;
   ui_panel_id?: string | null;
+}
+/**
+ * Per-agent guard rails enforced by ``connect`` (CONTRACTS-V2 §3.3).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentLimits".
+ */
+export interface AgentLimits {
+  max_concurrent_sessions?: number;
+  max_session_duration_s?: number;
+  rate_per_agent_per_min?: number;
+  rate_per_ip_per_min?: number;
 }
 /**
  * Full agent record (admin only — ``config`` may reference credential ids).
@@ -239,17 +584,25 @@ export interface AgentCreate {
  * via the `definition` "AgentOut".
  */
 export interface AgentOut {
+  allowed_origins?: string[];
+  archived_at?: string | null;
   config: AgentConfig;
   config_version: number;
+  connection_id?: string | null;
   created_at: string;
   description: string;
   id: string;
+  last_session_at?: string | null;
+  limits?: AgentLimits;
+  mode?: "prompt" | "flow";
   name: string;
   pack_id: string;
   published: boolean;
+  session_count?: number | null;
   slug: string;
   ui_panel_id: string;
   updated_at: string;
+  workspace_id?: string;
 }
 /**
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -270,7 +623,7 @@ export interface AgentPublicOut {
   description: string;
   id: string;
   name: string;
-  pipeline_mode: "realtime" | "cascaded";
+  pipeline_mode: "realtime" | "cascaded" | "half_cascade";
   slug: string;
   ui_panel_id: string;
 }
@@ -281,11 +634,134 @@ export interface AgentPublicOut {
  * via the `definition` "AgentUpdate".
  */
 export interface AgentUpdate {
+  allowed_origins?: string[] | null;
   config?: AgentConfig | null;
+  connection_id?: string | null;
   description?: string | null;
+  limits?: AgentLimits | null;
+  mode?: ("prompt" | "flow") | null;
   name?: string | null;
   published?: boolean | null;
   ui_panel_id?: string | null;
+}
+/**
+ * One day or one agent in ``AnalyticsSummary``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AnalyticsBucket".
+ */
+export interface AnalyticsBucket {
+  cost_usd?: number | string | null;
+  failed?: number;
+  key: string;
+  minutes?: number;
+  sessions?: number;
+}
+/**
+ * ``GET /v1/analytics/summary``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AnalyticsSummary".
+ */
+export interface AnalyticsSummary {
+  by_agent?: AnalyticsBucket[];
+  by_day?: AnalyticsBucket[];
+  cost_usd?: number | string | null;
+  failed?: number;
+  minutes?: number;
+  sessions?: number;
+}
+/**
+ * ``POST /v1/calls`` — place one outbound call.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallCreate".
+ */
+export interface CallCreate {
+  agent_id: string;
+  timeout_s?: number;
+  to_e164: string;
+  trunk_id?: string | null;
+  variables?: {
+    [k: string]: unknown;
+  };
+}
+/**
+ * One inbound or outbound call.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallOut".
+ */
+export interface CallOut {
+  answered_at?: string | null;
+  connection_id?: string;
+  direction: "inbound" | "outbound";
+  ended_at?: string | null;
+  from_e164?: string;
+  hangup_reason?: string | null;
+  id: string;
+  lk_participant_identity?: string | null;
+  session_id?: string | null;
+  sip_call_id?: string | null;
+  started_at?: string | null;
+  status?: "dialing" | "ringing" | "answered" | "no_answer" | "busy" | "failed" | "completed" | "transferred";
+  to_e164?: string;
+  transfer_to?: string | null;
+  workspace_id?: string;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallPage".
+ */
+export interface CallPage {
+  items: CallOut[];
+  total: number;
+}
+/**
+ * One model, voice, avatar or persona listed by a vendor catalog adapter.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CatalogItem".
+ */
+export interface CatalogItem {
+  id: string;
+  label: string;
+  meta?: {
+    [k: string]: unknown;
+  };
+}
+/**
+ * ``GET /v1/providers/{id}/catalog``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CatalogResponse".
+ */
+export interface CatalogResponse {
+  fetched_at?: string | null;
+  items?: CatalogItem[];
+  kind: "models" | "voices" | "avatars" | "personas";
+  source?: "vendor" | "static";
+}
+/**
+ * One row of ``GET /v1/agents/{id}/versions``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConfigVersionOut".
+ */
+export interface ConfigVersionOut {
+  config?: AgentConfig | null;
+  config_version: number;
+  created_at: string;
+  created_by?: string | null;
+  note?: string | null;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConfigVersionPage".
+ */
+export interface ConfigVersionPage {
+  items: ConfigVersionOut[];
+  total: number;
 }
 /**
  * ``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.
@@ -315,6 +791,153 @@ export interface ConnectResponse {
   serverUrl: string;
   sessionId: string;
   uiPanelId: string;
+}
+/**
+ * What a probed LiveKit deployment supports (CONTRACTS-V2 §4.3).
+ *
+ * Defaults describe the most restrictive target (a bare self-hosted server), so
+ * an unprobed connection never advertises a feature it may not have.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionCapabilities".
+ */
+export interface ConnectionCapabilities {
+  cloud_hosting?: boolean;
+  egress_enabled?: boolean;
+  inference_available?: boolean;
+  ingress_enabled?: boolean;
+  noise_cancellation_tier?: "none" | "ai_coustics" | "krisp";
+  observability_dashboard?: boolean;
+  sip_enabled?: boolean;
+  turn_detector_mode?: "hosted" | "local";
+}
+/**
+ * ``POST /v1/connections`` — secrets are write-only.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionCreate".
+ */
+export interface ConnectionCreate {
+  agent_name?: string;
+  api_key: string;
+  api_secret: string;
+  deployment_mode?: "external" | "supervised" | "cloud_hosted";
+  deployment_type?: "cloud" | "self_hosted";
+  is_default?: boolean;
+  name: string;
+  region?: string | null;
+  replicas?: number;
+  slug: string;
+  storage_config_id?: string | null;
+  url: string;
+  use_inference?: boolean;
+  worker_image?: "slim" | "full";
+}
+/**
+ * The connection facts the worker needs, attached to the resolved config.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionInfo".
+ */
+export interface ConnectionInfo {
+  capabilities?: ConnectionCapabilities;
+  connection_id?: string;
+  deployment_type?: "cloud" | "self_hosted";
+}
+/**
+ * A LiveKit deployment the workspace can run agents on (secrets redacted).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionOut".
+ */
+export interface ConnectionOut {
+  agent_name?: string;
+  capabilities?: ConnectionCapabilities;
+  created_at?: string | null;
+  credentials_version?: number;
+  deployment_mode?: "external" | "supervised" | "cloud_hosted";
+  deployment_type?: "cloud" | "self_hosted";
+  fingerprint?: string;
+  id: string;
+  is_default?: boolean;
+  last_checked_at?: string | null;
+  last_error?: string | null;
+  name: string;
+  region?: string | null;
+  replicas?: number;
+  slug: string;
+  status?: "unverified" | "ok" | "error";
+  storage_config_id?: string | null;
+  updated_at?: string | null;
+  url: string;
+  use_inference?: boolean;
+  worker_image?: "slim" | "full";
+  workspace_id?: string;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionPage".
+ */
+export interface ConnectionPage {
+  items: ConnectionOut[];
+  total: number;
+}
+/**
+ * ``POST /v1/connections/{id}/rotate`` — bumps ``credentials_version``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionRotateIn".
+ */
+export interface ConnectionRotateIn {
+  api_key: string;
+  api_secret: string;
+}
+/**
+ * ``POST /v1/connections/{id}/test``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionTestResult".
+ */
+export interface ConnectionTestResult {
+  capabilities?: ConnectionCapabilities;
+  latency_ms?: number | null;
+  message: string;
+  ok: boolean;
+}
+/**
+ * ``PUT /v1/connections/{id}`` — a partial update; secrets go through rotate.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionUpdate".
+ */
+export interface ConnectionUpdate {
+  agent_name?: string | null;
+  deployment_mode?: ("external" | "supervised" | "cloud_hosted") | null;
+  name?: string | null;
+  region?: string | null;
+  replicas?: number | null;
+  storage_config_id?: string | null;
+  url?: string | null;
+  use_inference?: boolean | null;
+  worker_image?: ("slim" | "full") | null;
+}
+/**
+ * One priced usage line of a session.
+ *
+ * ``cost_usd`` is ``None`` with ``note="no price"`` when the price table has
+ * no entry — an unknown price is never reported as zero.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CostLine".
+ */
+export interface CostLine {
+  cost_usd?: number | string | null;
+  model?: string | null;
+  note?: string | null;
+  provider_id: string;
+  quantity: number | string;
+  unit: "tokens_in" | "tokens_out" | "audio_s_in" | "audio_s_out" | "chars" | "minutes" | "images";
+  unit_price_usd?: number | string | null;
 }
 /**
  * ``POST /v1/credentials`` — secret values are write-only and never returned.
@@ -358,6 +981,8 @@ export interface CredentialPage {
  * via the `definition` "CredentialTestResult".
  */
 export interface CredentialTestResult {
+  catalog_preview?: CatalogItem[] | null;
+  checked_at?: string | null;
   message: string;
   ok: boolean;
 }
@@ -380,15 +1005,51 @@ export interface CredentialUpdate {
  * IDs ONLY. The browser can read this, so it must never contain secrets,
  * instructions or resolved provider configuration.
  *
+ * Rooms the platform did not create (inbound SIP) have no session row yet, so
+ * v2 adds ``channel`` and ``connection_id`` and the worker calls
+ * ``POST /internal/v1/sessions/start`` when ``session_id`` is empty. The field
+ * stays a ``str`` (empty means "no session yet") rather than ``str | None``
+ * while the v1 worker still passes it straight to ``resolve()``; V2-07 widens
+ * it once the worker branches on it.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "DispatchMetadata".
  */
 export interface DispatchMetadata {
   agent_id: string;
+  channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config_version: number;
+  connection_id?: string;
   participant_identity: string;
   session_id: string;
-  v?: 1;
+  v?: 2;
+}
+/**
+ * A document shown page by page, optionally with highlights.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DocumentBlockState".
+ */
+export interface DocumentBlockState {
+  asset_id?: string | null;
+  highlights?: DocumentHighlight[];
+  page?: number;
+  url?: string | null;
+}
+/**
+ * A rectangle called out on a document page; ``bbox`` is ``[x0, y0, x1, y1]``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DocumentHighlight".
+ */
+export interface DocumentHighlight {
+  /**
+   * @minItems 4
+   * @maxItems 4
+   */
+  bbox: [unknown, unknown, unknown, unknown];
+  note?: string | null;
+  page: number;
 }
 /**
  * The body of an LKAP error response.
@@ -409,6 +1070,109 @@ export interface ErrorBody {
  */
 export interface ErrorResponse {
   error: ErrorBody;
+}
+/**
+ * ``POST /v1/connections/{id}/fleet`` (supervised connections only).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FleetActionIn".
+ */
+export interface FleetActionIn {
+  action: "start" | "stop" | "restart";
+  replicas?: number | null;
+}
+/**
+ * One row of ``GET /internal/v1/fleet/desired`` (supervised connections only).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FleetDesired".
+ */
+export interface FleetDesired {
+  agent_name?: string;
+  connection_id: string;
+  deployment_mode?: "supervised";
+  desired_hash: string;
+  desired_replicas?: number;
+  image?: "slim" | "full";
+  packs?: string[];
+}
+/**
+ * ``GET /v1/connections/{id}/fleet``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FleetStatus".
+ */
+export interface FleetStatus {
+  desired_replicas?: number;
+  image?: "slim" | "full";
+  installed_provider_ids?: string[];
+  instances?: WorkerInstanceOut[];
+}
+/**
+ * One registered worker process of a connection's pool.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkerInstanceOut".
+ */
+export interface WorkerInstanceOut {
+  image?: "slim" | "full";
+  installed_provider_ids?: string[];
+  instance_key: string;
+  last_heartbeat_at?: string | null;
+  managed_by?: "external" | "supervisor" | "cloud";
+  pack_ids?: string[];
+  registered_at?: string | null;
+  sdk_version?: string;
+  status?: "starting" | "ready" | "draining" | "gone";
+}
+/**
+ * Runtime position in a flow, stored on ``session.userdata.flow``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FlowState".
+ */
+export interface FlowState {
+  current_node: string;
+  disposition?: string | null;
+  path?: string[];
+  variables?: {
+    [k: string]: string | number | boolean | null;
+  };
+}
+/**
+ * ``POST /v1/agents/{id}/flow/validate``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FlowValidateRequest".
+ */
+export interface FlowValidateRequest {
+  flow: FlowSpec;
+}
+/**
+ * A JSON-schema form the agent asked the user to fill in.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FormBlockState".
+ */
+export interface FormBlockState {
+  schema?: {
+    [k: string]: unknown;
+  };
+  status?: "idle" | "requested" | "submitted";
+  submitted_at?: number | null;
+  values?: {
+    [k: string]: unknown;
+  };
+}
+/**
+ * Images delivered on the asset stream, with one optionally selected.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "GalleryBlockState".
+ */
+export interface GalleryBlockState {
+  asset_ids?: string[];
+  selected?: string | null;
 }
 /**
  * ``GET /v1/health``.
@@ -459,6 +1223,42 @@ export interface InternalKbSearchRequest {
   k?: number;
   kb_ids: string[];
   query: string;
+}
+/**
+ * One addressable validation finding (UI_UX_SPEC §7.14).
+ *
+ * ``path`` is a dotted path into the validated document, for example
+ * ``"pipeline.tts"`` or ``"flow.nodes[2].instructions"``, so the console can
+ * focus the offending field.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "Issue".
+ */
+export interface Issue {
+  message: string;
+  path: string;
+  severity?: "error" | "warning";
+}
+/**
+ * Knowledge-base hits backing the agent's last answer.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbCitationsBlockState".
+ */
+export interface KbCitationsBlockState {
+  items?: KbCitation[];
+}
+/**
+ * One retrieved chunk cited to the user.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbCitation".
+ */
+export interface KbCitation {
+  chunk_id: string;
+  filename: string;
+  score: number;
+  text: string;
 }
 /**
  * ``POST /v1/knowledge-bases``.
@@ -581,16 +1381,75 @@ export interface McpServerDefinition {
   url: string;
 }
 /**
+ * ``GET /v1/auth/me``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "Me".
+ */
+export interface Me {
+  user: UserOut;
+  workspaces?: WorkspaceMembership[];
+}
+/**
+ * A platform user, without any credential material.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UserOut".
+ */
+export interface UserOut {
+  email: string;
+  id: string;
+  is_platform_admin?: boolean;
+  name?: string;
+}
+/**
+ * One workspace the signed-in user belongs to, and their role in it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkspaceMembership".
+ */
+export interface WorkspaceMembership {
+  id: string;
+  name: string;
+  role: "owner" | "admin" | "builder" | "viewer";
+  slug: string;
+}
+/**
+ * The JSON schema of one flow node kind, for the flow builder's forms.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NodeSpecSchema".
+ */
+export interface NodeSpecSchema {
+  json_schema?: {
+    [k: string]: unknown;
+  };
+  kind: string;
+  label: string;
+}
+/**
+ * ``GET /v1/flows/node-specs``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NodeSpecsResponse".
+ */
+export interface NodeSpecsResponse {
+  nodes?: NodeSpecSchema[];
+  v?: 1;
+}
+/**
  * Everything the api and console need to know about a pack.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "PackManifest".
  */
 export interface PackManifest {
+  blocks?: BlockSpec[];
   builtin_tools_disabled?: string[];
   capabilities: CapabilitiesConfig;
   default_greeting: string;
   default_instructions: string;
+  default_panel?: PanelLayout | null;
   default_voice?: {
     [k: string]: string;
   };
@@ -642,28 +1501,68 @@ export interface Page {
   total: number;
 }
 /**
- * Everything the platform needs to offer, configure and construct a provider.
+ * One vendor price point.
+ *
+ * ``model`` is ``None`` for providers that price per unit regardless of model
+ * (most TTS and avatar vendors).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ProviderSpec".
+ * via the `definition` "Price".
  */
-export interface ProviderSpec {
+export interface Price {
+  as_of: string;
+  model?: string | null;
+  provider_id: string;
+  source_url: string;
+  unit: "tokens_in" | "tokens_out" | "audio_s_in" | "audio_s_out" | "chars" | "minutes" | "images";
+  usd_per_unit: number | string;
+}
+/**
+ * A registry entry plus this workspace's settings (``GET /v1/providers``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderOut".
+ */
+export interface ProviderOut {
+  availability?: "available" | "deferred" | "incompatible" | "removed";
   capabilities?: ProviderCapabilities;
+  catalog?: CatalogSpec | null;
+  default_credential_id?: string | null;
   default_model?: string | null;
   docs_url?: string | null;
+  enabled?: boolean;
   fields?: FieldSpec[];
   get_key_url?: string | null;
   id: string;
-  kind: "realtime" | "stt" | "llm" | "tts" | "avatar" | "image_gen" | "embedding" | "secret_bag";
+  installed_on?: string[];
+  kind:
+    | "realtime"
+    | "stt"
+    | "llm"
+    | "tts"
+    | "avatar"
+    | "vad"
+    | "turn_detection"
+    | "noise_cancellation"
+    | "image_gen"
+    | "embedding"
+    | "secret_bag";
   label: string;
   models?: ModelSpec[];
+  notes?: string | null;
   package: string;
+  price_ref?: string | null;
   python_class: string;
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
   status?: "mvp" | "deferred";
-  v?: 1;
+  test?: string | null;
+  v?: 1 | 2;
   vendor: string;
+  verification?: "verified" | "unverified";
+  verified_at?: string | null;
+  verified_note?: string | null;
+  worker_image?: "slim" | "full" | "isolated";
 }
 /**
  * What a provider can do, used to gate UI affordances and runtime behaviour.
@@ -672,10 +1571,28 @@ export interface ProviderSpec {
  * via the `definition` "ProviderCapabilities".
  */
 export interface ProviderCapabilities {
+  audio_input?: boolean;
+  cloud_only?: boolean;
+  languages?: string[];
+  platforms?: string[];
   silent_tool_reply?: boolean;
+  text_modality?: boolean;
   tool_calling?: boolean;
   video_input?: boolean;
+  vision?: boolean | null;
   voices?: string[];
+  voices_dynamic?: boolean;
+}
+/**
+ * How to list a provider's models, voices, avatars or personas from the vendor.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CatalogSpec".
+ */
+export interface CatalogSpec {
+  adapter: string;
+  kinds?: ("models" | "voices" | "avatars" | "personas")[];
+  ttl_s?: number;
 }
 /**
  * One configurable constructor argument of a provider.
@@ -684,16 +1601,20 @@ export interface ProviderCapabilities {
  * via the `definition` "FieldSpec".
  */
 export interface FieldSpec {
+  accept?: string | null;
+  catalog_kind?: ("models" | "voices" | "avatars" | "personas") | null;
   condition?: string | null;
   default?: string | number | boolean | null;
   env_fallback?: string | null;
   help?: string | null;
   label: string;
   name: string;
+  nested_model?: string | null;
   options?: string[] | null;
   placeholder?: string | null;
+  positional?: boolean;
   required?: boolean;
-  type: "string" | "secret" | "number" | "boolean" | "enum" | "json" | "model";
+  type: "string" | "secret" | "number" | "boolean" | "enum" | "json" | "model" | "file" | "catalog";
 }
 /**
  * A suggested model id for a provider (a suggestion list, never an allowlist).
@@ -711,14 +1632,128 @@ export interface ModelSpec {
   supports_video?: boolean;
 }
 /**
+ * ``PUT /v1/providers/{id}/settings``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderSettingsIn".
+ */
+export interface ProviderSettingsIn {
+  default_credential_id?: string | null;
+  enabled?: boolean;
+}
+/**
+ * Everything the platform needs to offer, configure and construct a provider.
+ *
+ * ``v`` accepts ``1`` for one release so v1 documents (a stored
+ * ``providers.json`` snapshot, console test fixtures) keep validating; the
+ * registry itself always emits ``2``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderSpec".
+ */
+export interface ProviderSpec {
+  availability?: "available" | "deferred" | "incompatible" | "removed";
+  capabilities?: ProviderCapabilities;
+  catalog?: CatalogSpec | null;
+  default_model?: string | null;
+  docs_url?: string | null;
+  fields?: FieldSpec[];
+  get_key_url?: string | null;
+  id: string;
+  kind:
+    | "realtime"
+    | "stt"
+    | "llm"
+    | "tts"
+    | "avatar"
+    | "vad"
+    | "turn_detection"
+    | "noise_cancellation"
+    | "image_gen"
+    | "embedding"
+    | "secret_bag";
+  label: string;
+  models?: ModelSpec[];
+  notes?: string | null;
+  package: string;
+  price_ref?: string | null;
+  python_class: string;
+  requires_credential?: boolean;
+  secret_fields?: FieldSpec[];
+  status?: "mvp" | "deferred";
+  test?: string | null;
+  v?: 1 | 2;
+  vendor: string;
+  verification?: "verified" | "unverified";
+  verified_at?: string | null;
+  verified_note?: string | null;
+  worker_image?: "slim" | "full" | "isolated";
+}
+/**
  * ``GET /v1/providers``.
+ *
+ * ``providers`` stays ``list[ProviderSpec]``; V2-06 serves the enriched
+ * :class:`ProviderOut` (a superset) through the same field and bumps ``v`` to
+ * ``2`` then — the payload is still v1-shaped, so ``2`` is accepted but not
+ * yet emitted.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ProvidersResponse".
  */
 export interface ProvidersResponse {
   providers: ProviderSpec[];
-  v?: 1;
+  v?: 1 | 2;
+}
+/**
+ * LLM-judge scoring of a finished session.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "QaOut".
+ */
+export interface QaOut {
+  model?: string | null;
+  score?: number | null;
+  scored_at?: string | null;
+  sentiment?: ("positive" | "neutral" | "negative") | null;
+  status?: "pending" | "done" | "failed";
+  summary?: string | null;
+  tags?: string[];
+}
+/**
+ * The recording block of ``SessionDetailOut`` (``url`` is a signed URL).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RecordingOut".
+ */
+export interface RecordingOut {
+  duration_s?: number | null;
+  expires_at?: string | null;
+  status?: "none" | "requested" | "active" | "ready" | "failed";
+  url?: string | null;
+}
+/**
+ * ``POST /internal/v1/sessions/{id}/recording/start``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RecordingStartOut".
+ */
+export interface RecordingStartOut {
+  egress_id: string;
+}
+/**
+ * A replica a supervisor backend is responsible for.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ReplicaHandle".
+ */
+export interface ReplicaHandle {
+  connection_id: string;
+  desired_hash: string;
+  instance_key: string;
+  pid_or_container?: string;
+  replica_index: number;
+  started_at?: number;
+  state?: "starting" | "running" | "draining" | "stopped" | "failed";
 }
 /**
  * What the worker receives from ``/internal/v1/sessions/{id}/resolved``.
@@ -726,24 +1761,33 @@ export interface ProvidersResponse {
  * Contains decrypted credentials in ``resolved[*].kwargs`` and substituted tool
  * secrets in ``tools``. Never log this object.
  *
+ * The v2 additions all carry defaults so a v1 api (before V2-01/V2-03 land)
+ * still produces a valid document.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ResolvedAgentConfig".
  */
 export interface ResolvedAgentConfig {
   agent_id: string;
   agent_slug: string;
+  channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config: AgentConfig;
   config_version: number;
+  connection?: ConnectionInfo;
+  installed_provider_ids?: string[] | null;
   kb_ids: string[];
   pack_id: string;
+  panel?: PanelLayout;
   participant_identity: string;
+  recording?: RecordingConfig;
   resolved: {
     [k: string]: ResolvedProvider;
   };
   session_id: string;
   tools: (HttpToolDefinition | McpServerDefinition)[];
   ui_panel_id: string;
-  v?: 1;
+  v?: 2;
+  workspace_id?: string;
 }
 /**
  * A provider ready to construct: class path plus complete constructor kwargs.
@@ -760,6 +1804,16 @@ export interface ResolvedProvider {
   python_class: string;
 }
 /**
+ * The cost block of ``SessionDetailOut``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionCost".
+ */
+export interface SessionCost {
+  lines?: CostLine[];
+  total_usd?: number | string | null;
+}
+/**
  * Session detail, including the transcript and the final UI state.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -768,13 +1822,24 @@ export interface ResolvedProvider {
 export interface SessionDetailOut {
   agent_id: string;
   agent_name: string;
+  caller?: {
+    [k: string]: unknown;
+  } | null;
+  channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config_version: number;
+  connection_id?: string | null;
+  cost?: SessionCost;
+  cost_usd?: number | string | null;
   created_at: string;
+  disposition?: string | null;
   ended_at?: string | null;
   error?: string | null;
   final_ui_state?: UiState | null;
   id: string;
-  pipeline_mode: "realtime" | "cascaded";
+  latency?: SessionLatency;
+  pipeline_mode: "realtime" | "cascaded" | "half_cascade";
+  qa?: QaOut | null;
+  recording?: RecordingOut;
   room_name: string;
   started_at?: string | null;
   status: "created" | "active" | "ended" | "failed";
@@ -782,9 +1847,15 @@ export interface SessionDetailOut {
   usage?: {
     [k: string]: unknown;
   } | null;
+  variables?: {
+    [k: string]: unknown;
+  };
 }
 /**
  * The platform envelope every panel renders; ``custom`` is pack-defined.
+ *
+ * ``v`` accepts ``1`` for one release so v1 producers (and the web reducer's
+ * own literals) keep validating while panels migrate to blocks.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "UiState".
@@ -792,6 +1863,9 @@ export interface SessionDetailOut {
 export interface UiState {
   activity?: ActivityEvent[];
   assets?: AssetRef[];
+  blocks?: {
+    [k: string]: unknown;
+  };
   checklist?: ChecklistItem[];
   custom?: {
     [k: string]: unknown;
@@ -799,7 +1873,7 @@ export interface UiState {
   notes?: Note[];
   progress?: number | null;
   status?: StatusStamp | null;
-  v?: 1;
+  v?: 1 | 2;
 }
 /**
  * Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.
@@ -854,6 +1928,21 @@ export interface StatusStamp {
   key?: string | null;
   label: string;
   tone?: "neutral" | "info" | "success" | "warning" | "danger";
+}
+/**
+ * Per-session latency percentiles collected from ``metrics_collected``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionLatency".
+ */
+export interface SessionLatency {
+  eou_to_first_audio_ms_p50?: number | null;
+  eou_to_first_audio_ms_p95?: number | null;
+  llm_ttft_ms_p50?: number | null;
+  llm_ttft_ms_p95?: number | null;
+  tts_ttfb_ms_p50?: number | null;
+  tts_ttfb_ms_p95?: number | null;
+  turns?: number;
 }
 /**
  * One turn of the final transcript (images stripped).
@@ -912,6 +2001,16 @@ export interface SessionEventsIn {
   events: SessionEventIn[];
 }
 /**
+ * ``POST /internal/v1/sessions/{id}/metrics``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionMetricsIn".
+ */
+export interface SessionMetricsIn {
+  latency?: SessionLatency;
+  usage_lines?: CostLine[];
+}
+/**
  * Session list row.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -920,12 +2019,16 @@ export interface SessionEventsIn {
 export interface SessionOut {
   agent_id: string;
   agent_name: string;
+  channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config_version: number;
+  connection_id?: string | null;
+  cost_usd?: number | string | null;
   created_at: string;
+  disposition?: string | null;
   ended_at?: string | null;
   error?: string | null;
   id: string;
-  pipeline_mode: "realtime" | "cascaded";
+  pipeline_mode: "realtime" | "cascaded" | "half_cascade";
   room_name: string;
   started_at?: string | null;
   status: "created" | "active" | "ended" | "failed";
@@ -942,6 +2045,38 @@ export interface SessionPage {
   total: number;
 }
 /**
+ * ``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionRecordingIn".
+ */
+export interface SessionRecordingIn {
+  duration_s?: number | null;
+  egress_id: string;
+  status: "none" | "requested" | "active" | "ready" | "failed";
+}
+/**
+ * ``POST /internal/v1/sessions/start`` — the worker creates the session row.
+ *
+ * Used for rooms the platform did not create (inbound SIP), where the
+ * dispatch metadata carries no ``session_id``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionStartIn".
+ */
+export interface SessionStartIn {
+  agent_id: string;
+  caller?: {
+    [k: string]: unknown;
+  } | null;
+  channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
+  dispatch_metadata?: {
+    [k: string]: unknown;
+  };
+  participant_identity?: string;
+  room_name: string;
+}
+/**
  * ``PUT /internal/v1/sessions/{id}/summary`` — posted from a shutdown callback.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -955,6 +2090,30 @@ export interface SessionSummaryIn {
   usage: {
     [k: string]: unknown;
   };
+}
+/**
+ * Tabular data the agent appends rows to.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TableBlockState".
+ */
+export interface TableBlockState {
+  columns?: TableColumn[];
+  rows?: {
+    [k: string]: unknown;
+  }[];
+  selected_row?: string | null;
+}
+/**
+ * One column of a table block.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TableColumn".
+ */
+export interface TableColumn {
+  key: string;
+  label: string;
+  type?: "string" | "number" | "boolean" | "date";
 }
 /**
  * ``POST /v1/tools``. ``agent_id=None`` makes the tool shared.
@@ -1028,6 +2187,15 @@ export interface ToolPage {
   total: number;
 }
 /**
+ * Transcript rendering options (the turns come from the LiveKit room).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TranscriptBlockState".
+ */
+export interface TranscriptBlockState {
+  show_tools?: boolean;
+}
+/**
  * An ordered batch of ops applied to the UI's copy of :class:`UiState`.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1055,11 +2223,21 @@ export interface UiPatchOp {
 /**
  * RPC payload for ``lkap.ui.request`` (agent asks the browser to do something).
  *
+ * Payload keys per method are fixed (ruling R-V2-3b, PLAN-V2 §8):
+ *
+ * * ``open_dialog`` — ``{dialog: str, params?: dict}`` (never ``{id: ...}``)
+ * * ``focus`` — ``{target: str}``
+ * * ``request_video_source`` — ``{source: "camera" | "screen"}``
+ * * ``toast`` — ``{message: str, tone?: Tone}``
+ * * ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``
+ * * ``show_block`` — ``{block_id}``
+ * * ``navigate`` — ``{url}`` (new tab; the UI confirms first)
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "UiRequest".
  */
 export interface UiRequest {
-  method: "open_dialog" | "focus" | "request_video_source" | "toast";
+  method: "open_dialog" | "focus" | "request_video_source" | "toast" | "form" | "show_block" | "navigate";
   payload?: {
     [k: string]: unknown;
   };
@@ -1093,11 +2271,157 @@ export interface UiSnapshot {
 /**
  * ``POST /v1/agents/{id}/validate``.
  *
+ * ``errors``/``warnings`` are the flat v1 lists; ``issues`` carries the same
+ * findings with a ``path`` so the console can focus the offending field
+ * (UI_UX_SPEC §7.14).
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ValidationResult".
  */
 export interface ValidationResult {
   errors?: string[];
+  issues?: Issue[];
   ok: boolean;
   warnings?: string[];
+}
+/**
+ * Which video track the block renders.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "VideoBlockState".
+ */
+export interface VideoBlockState {
+  muted?: boolean;
+  source?: string;
+}
+/**
+ * One delivery attempt of one event to one endpoint.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WebhookDeliveryOut".
+ */
+export interface WebhookDeliveryOut {
+  attempt?: number;
+  created_at?: string | null;
+  delivered_at?: string | null;
+  endpoint_id: string;
+  event_id: string;
+  event_type: string;
+  id: string;
+  last_error?: string | null;
+  last_status_code?: number | null;
+  next_attempt_at?: string | null;
+  status?: "pending" | "delivered" | "failed" | "dead";
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WebhookDeliveryPage".
+ */
+export interface WebhookDeliveryPage {
+  items: WebhookDeliveryOut[];
+  total: number;
+}
+/**
+ * ``POST /v1/webhooks`` (https only outside dev).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WebhookEndpointCreate".
+ */
+export interface WebhookEndpointCreate {
+  description?: string;
+  enabled?: boolean;
+  events?: string[];
+  url: string;
+}
+/**
+ * A webhook endpoint; the signing secret is shown only by its prefix.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WebhookEndpointOut".
+ */
+export interface WebhookEndpointOut {
+  created_at?: string | null;
+  description?: string;
+  enabled?: boolean;
+  events?: string[];
+  id: string;
+  secret_prefix?: string;
+  updated_at?: string | null;
+  url: string;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WebhookEndpointPage".
+ */
+export interface WebhookEndpointPage {
+  items: WebhookEndpointOut[];
+  total: number;
+}
+/**
+ * The signed envelope posted to a webhook endpoint.
+ *
+ * Signature header: ``X-LKAP-Signature: t=<unix>,v1=<hmac_sha256(secret, f"{t}.{body}")>``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WebhookEvent".
+ */
+export interface WebhookEvent {
+  created_at: string;
+  data?: {
+    [k: string]: unknown;
+  };
+  id: string;
+  type: string;
+  workspace_id: string;
+}
+/**
+ * ``GET /internal/v1/connections/{id}/worker-env`` — decrypted, supervisor only.
+ *
+ * ``env`` holds the complete child environment (``LIVEKIT_*``, ``LKAP_*``,
+ * ``OTEL_*``). Never log it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkerEnv".
+ */
+export interface WorkerEnv {
+  agent_name?: string;
+  env?: {
+    [k: string]: string;
+  };
+  image?: string;
+}
+/**
+ * ``POST /internal/v1/workers/{instance_key}/heartbeat``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkerHeartbeatIn".
+ */
+export interface WorkerHeartbeatIn {
+  active_jobs?: number;
+  status?: "starting" | "ready" | "draining" | "gone";
+}
+/**
+ * ``POST /internal/v1/workers/register`` — sent once per worker process.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkerRegisterIn".
+ */
+export interface WorkerRegisterIn {
+  connection_id?: string | null;
+  image?: "slim" | "full";
+  installed_provider_ids?: string[];
+  instance_key: string;
+  managed_by?: "external" | "supervisor" | "cloud";
+  pack_ids?: string[];
+  sdk_version?: string;
+}
+/**
+ * What the api tells a freshly registered worker about itself.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkerRegisterOut".
+ */
+export interface WorkerRegisterOut {
+  agent_name?: string;
+  connection_id: string;
 }

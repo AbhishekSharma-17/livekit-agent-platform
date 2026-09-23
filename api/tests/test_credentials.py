@@ -220,7 +220,11 @@ async def test_credential_test_reports_not_implemented_providers(
 
     response = await admin_client.post(f"/v1/credentials/{created['id']}/test")
 
-    assert response.json() == {"ok": True, "message": "no automated test implemented for 'bey-avatar'"}
+    body = response.json()
+    # Subset comparison: `CredentialTestResult` keeps gaining optional fields
+    # (v2 added `checked_at`/`catalog_preview`), and this test is about the message.
+    assert body["ok"] is True
+    assert body["message"] == "no automated test implemented for 'bey-avatar'"
     assert mock_http == []
 
 

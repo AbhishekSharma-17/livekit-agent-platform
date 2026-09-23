@@ -1,0 +1,86 @@
+{
+  "$id": "lkap-contracts/SessionLatency.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Per-session latency percentiles collected from ``metrics_collected``.",
+  "properties": {
+    "eou_to_first_audio_ms_p50": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Eou To First Audio Ms P50"
+    },
+    "eou_to_first_audio_ms_p95": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Eou To First Audio Ms P95"
+    },
+    "llm_ttft_ms_p50": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Ttft Ms P50"
+    },
+    "llm_ttft_ms_p95": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Ttft Ms P95"
+    },
+    "tts_ttfb_ms_p50": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tts Ttfb Ms P50"
+    },
+    "tts_ttfb_ms_p95": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tts Ttfb Ms P95"
+    },
+    "turns": {
+      "default": 0,
+      "title": "Turns",
+      "type": "integer"
+    }
+  },
+  "title": "SessionLatency",
+  "type": "object"
+}

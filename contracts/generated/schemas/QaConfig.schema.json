@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/QaConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Post-call scoring of the session by an LLM judge.",
+  "properties": {
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rubric_prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rubric Prompt"
+    }
+  },
+  "title": "QaConfig",
+  "type": "object"
+}

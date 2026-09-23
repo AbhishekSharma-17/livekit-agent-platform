@@ -1,5 +1,5 @@
 {
-  "v": 1,
+  "v": 2,
   "status": {
     "label": "Escalate to human",
     "tone": "danger",
@@ -177,6 +177,7 @@
   ],
   "assets": [],
   "activity": [],
+  "blocks": {},
   "custom": {
     "fields": {
       "claimant": {

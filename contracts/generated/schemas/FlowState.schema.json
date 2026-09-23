@@ -1,0 +1,60 @@
+{
+  "$id": "lkap-contracts/FlowState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Runtime position in a flow, stored on ``session.userdata.flow``.",
+  "properties": {
+    "current_node": {
+      "title": "Current Node",
+      "type": "string"
+    },
+    "disposition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Disposition"
+    },
+    "path": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Path",
+      "type": "array"
+    },
+    "variables": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "default": {},
+      "title": "Variables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "current_node"
+  ],
+  "title": "FlowState",
+  "type": "object"
+}

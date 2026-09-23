@@ -4,7 +4,12 @@ import type { Metadata } from "next";
 
 import type { AgentPublicOut } from "@/contracts/lkap-contracts";
 import { SessionExperience } from "@/components/session/session-experience";
-import { describeConnectError, fetchPublicAgent } from "@/lib/livekit";
+import {
+  classifyConnectError,
+  describeConnectError,
+  fetchPublicAgent,
+  type ConnectErrorKind,
+} from "@/lib/livekit";
 import { fetchAdminAgentServerSide } from "@/lib/livekit-server";
 
 /**
@@ -33,14 +38,25 @@ interface SessionPageProps {
 async function loadAgent(
   slug: string,
   testMode: boolean,
-): Promise<{ agent: AgentPublicOut | null; loadError: string | null }> {
+): Promise<{
+  agent: AgentPublicOut | null;
+  loadError: string | null;
+  loadErrorKind: ConnectErrorKind | null;
+}> {
   try {
     const agent = testMode
       ? await fetchAdminAgentServerSide(slug)
       : await fetchPublicAgent(slug);
-    return { agent, loadError: null };
+    return { agent, loadError: null, loadErrorKind: null };
   } catch (cause) {
-    return { agent: null, loadError: describeConnectError(cause) };
+    // UI_UX_SPEC §5.7: the kind picks the "unavailable" page. In test mode the
+    // lookup goes through the admin proxy, so a 403 is a token problem rather
+    // than "this agent is a draft".
+    return {
+      agent: null,
+      loadError: describeConnectError(cause),
+      loadErrorKind: classifyConnectError(cause, { viaConsole: testMode }),
+    };
   }
 }
 
@@ -64,14 +80,16 @@ export default async function SessionPage({
   const { slug } = await params;
   const { mode } = await searchParams;
   const testMode = mode === "test";
-  const { agent, loadError } = await loadAgent(slug, testMode);
+  const { agent, loadError, loadErrorKind } = await loadAgent(slug, testMode);
 
   return (
     <SessionExperience
       slug={slug}
       agent={agent}
       loadError={loadError}
+      loadErrorKind={loadErrorKind}
       testMode={testMode}
+      privacyUrl={process.env.NEXT_PUBLIC_LKAP_PRIVACY_URL || undefined}
     />
   );
 }

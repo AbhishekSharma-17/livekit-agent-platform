@@ -1,0 +1,56 @@
+{
+  "$id": "lkap-contracts/VariableSpec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One variable a flow extracts from the conversation.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "name": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "options": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Options"
+    },
+    "required": {
+      "default": false,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "type": {
+      "default": "string",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "enum",
+        "date",
+        "phone",
+        "email"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "VariableSpec",
+  "type": "object"
+}

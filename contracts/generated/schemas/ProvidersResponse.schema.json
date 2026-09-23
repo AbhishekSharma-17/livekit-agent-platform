@@ -1,8 +1,71 @@
 {
   "$defs": {
+    "CatalogSpec": {
+      "description": "How to list a provider's models, voices, avatars or personas from the vendor.",
+      "properties": {
+        "adapter": {
+          "title": "Adapter",
+          "type": "string"
+        },
+        "kinds": {
+          "default": [],
+          "items": {
+            "enum": [
+              "models",
+              "voices",
+              "avatars",
+              "personas"
+            ],
+            "type": "string"
+          },
+          "title": "Kinds",
+          "type": "array"
+        },
+        "ttl_s": {
+          "default": 3600,
+          "title": "Ttl S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "adapter"
+      ],
+      "title": "CatalogSpec",
+      "type": "object"
+    },
     "FieldSpec": {
       "description": "One configurable constructor argument of a provider.",
       "properties": {
+        "accept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accept"
+        },
+        "catalog_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "models",
+                "voices",
+                "avatars",
+                "personas"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Kind"
+        },
         "condition": {
           "anyOf": [
             {
@@ -68,6 +131,18 @@
           "title": "Name",
           "type": "string"
         },
+        "nested_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nested Model"
+        },
         "options": {
           "anyOf": [
             {
@@ -95,6 +170,11 @@
           "default": null,
           "title": "Placeholder"
         },
+        "positional": {
+          "default": false,
+          "title": "Positional",
+          "type": "boolean"
+        },
         "required": {
           "default": false,
           "title": "Required",
@@ -108,7 +188,9 @@
             "boolean",
             "enum",
             "json",
-            "model"
+            "model",
+            "file",
+            "catalog"
           ],
           "title": "Type",
           "type": "string"
@@ -162,9 +244,40 @@
     "ProviderCapabilities": {
       "description": "What a provider can do, used to gate UI affordances and runtime behaviour.",
       "properties": {
+        "audio_input": {
+          "default": true,
+          "title": "Audio Input",
+          "type": "boolean"
+        },
+        "cloud_only": {
+          "default": false,
+          "title": "Cloud Only",
+          "type": "boolean"
+        },
+        "languages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        },
+        "platforms": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Platforms",
+          "type": "array"
+        },
         "silent_tool_reply": {
           "default": false,
           "title": "Silent Tool Reply",
+          "type": "boolean"
+        },
+        "text_modality": {
+          "default": false,
+          "title": "Text Modality",
           "type": "boolean"
         },
         "tool_calling": {
@@ -177,6 +290,18 @@
           "title": "Video Input",
           "type": "boolean"
         },
+        "vision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        },
         "voices": {
           "default": [],
           "items": {
@@ -184,22 +309,56 @@
           },
           "title": "Voices",
           "type": "array"
+        },
+        "voices_dynamic": {
+          "default": false,
+          "title": "Voices Dynamic",
+          "type": "boolean"
         }
       },
       "title": "ProviderCapabilities",
       "type": "object"
     },
     "ProviderSpec": {
-      "description": "Everything the platform needs to offer, configure and construct a provider.",
+      "description": "Everything the platform needs to offer, configure and construct a provider.\n\n``v`` accepts ``1`` for one release so v1 documents (a stored\n``providers.json`` snapshot, console test fixtures) keep validating; the\nregistry itself always emits ``2``.",
       "properties": {
+        "availability": {
+          "default": "available",
+          "enum": [
+            "available",
+            "deferred",
+            "incompatible",
+            "removed"
+          ],
+          "title": "Availability",
+          "type": "string"
+        },
         "capabilities": {
           "$ref": "#/$defs/ProviderCapabilities",
           "default": {
+            "audio_input": true,
+            "cloud_only": false,
+            "languages": [],
+            "platforms": [],
             "silent_tool_reply": false,
+            "text_modality": false,
             "tool_calling": true,
             "video_input": false,
-            "voices": []
+            "vision": null,
+            "voices": [],
+            "voices_dynamic": false
           }
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "default_model": {
           "anyOf": [
@@ -256,6 +415,9 @@
             "llm",
             "tts",
             "avatar",
+            "vad",
+            "turn_detection",
+            "noise_cancellation",
             "image_gen",
             "embedding",
             "secret_bag"
@@ -275,9 +437,33 @@
           "title": "Models",
           "type": "array"
         },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
         "package": {
           "title": "Package",
           "type": "string"
+        },
+        "price_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Price Ref"
         },
         "python_class": {
           "title": "Python Class",
@@ -305,14 +491,72 @@
           "title": "Status",
           "type": "string"
         },
+        "test": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Test"
+        },
         "v": {
-          "const": 1,
-          "default": 1,
+          "default": 2,
+          "enum": [
+            1,
+            2
+          ],
           "title": "V",
           "type": "integer"
         },
         "vendor": {
           "title": "Vendor",
+          "type": "string"
+        },
+        "verification": {
+          "default": "unverified",
+          "enum": [
+            "verified",
+            "unverified"
+          ],
+          "title": "Verification",
+          "type": "string"
+        },
+        "verified_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verified At"
+        },
+        "verified_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verified Note"
+        },
+        "worker_image": {
+          "default": "full",
+          "enum": [
+            "slim",
+            "full",
+            "isolated"
+          ],
+          "title": "Worker Image",
           "type": "string"
         }
       },
@@ -330,7 +574,7 @@
   },
   "$id": "lkap-contracts/ProvidersResponse.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``GET /v1/providers``.",
+  "description": "``GET /v1/providers``.\n\n``providers`` stays ``list[ProviderSpec]``; V2-06 serves the enriched\n:class:`ProviderOut` (a superset) through the same field and bumps ``v`` to\n``2`` then — the payload is still v1-shaped, so ``2`` is accepted but not\nyet emitted.",
   "properties": {
     "providers": {
       "items": {
@@ -340,8 +584,11 @@
       "type": "array"
     },
     "v": {
-      "const": 1,
       "default": 1,
+      "enum": [
+        1,
+        2
+      ],
       "title": "V",
       "type": "integer"
     }

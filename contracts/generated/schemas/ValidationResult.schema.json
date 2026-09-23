@@ -1,7 +1,37 @@
 {
+  "$defs": {
+    "Issue": {
+      "description": "One addressable validation finding (UI_UX_SPEC §7.14).\n\n``path`` is a dotted path into the validated document, for example\n``\"pipeline.tts\"`` or ``\"flow.nodes[2].instructions\"``, so the console can\nfocus the offending field.",
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "severity": {
+          "default": "error",
+          "enum": [
+            "error",
+            "warning"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "message"
+      ],
+      "title": "Issue",
+      "type": "object"
+    }
+  },
   "$id": "lkap-contracts/ValidationResult.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /v1/agents/{id}/validate``.",
+  "description": "``POST /v1/agents/{id}/validate``.\n\n``errors``/``warnings`` are the flat v1 lists; ``issues`` carries the same\nfindings with a ``path`` so the console can focus the offending field\n(UI_UX_SPEC §7.14).",
   "properties": {
     "errors": {
       "default": [],
@@ -9,6 +39,14 @@
         "type": "string"
       },
       "title": "Errors",
+      "type": "array"
+    },
+    "issues": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Issue"
+      },
+      "title": "Issues",
       "type": "array"
     },
     "ok": {

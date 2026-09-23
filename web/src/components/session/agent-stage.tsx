@@ -1,23 +1,26 @@
 "use client";
 
 /**
- * The session stage: the agent's avatar video when one is published
- * (`useVoiceAssistant().videoTrack` resolves the `lk.publish_on_behalf`
- * participant), otherwise an audio visualizer, plus a picture-in-picture tile
- * for whichever local video source is live.
+ * Hook-wired container for the stage seam: resolves the agent's avatar video,
+ * the agent audio level and the local self-view from LiveKit, then renders the
+ * pure `StageView` (docs/UI_UX_SPEC.md §5.3, WP-8 card item 1).
+ *
+ * Everything that is *not* room state (the §5.4 `agentState`, the elapsed
+ * timer, the audio-blocked flag, the retry/leave callbacks) is passed in by
+ * `session-room.tsx`, so the stage stays renderable without a room.
  */
 import * as React from "react";
 import { useMemo } from "react";
 import {
   useLocalParticipant,
+  useTrackVolume,
   useVoiceAssistant,
-  VideoTrack,
   type TrackReference,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 
-import { AgentAudioVisualizerBar } from "@/components/agents-ui/agent-audio-visualizer-bar";
-import { cn } from "@/lib/utils";
+import type { AgentUiState } from "@/components/shared/agent-state";
+import { StageView } from "@/components/session/stage-view";
 
 /** Track reference for a local source, or `undefined` when not publishing. */
 export function useLocalTrackRef(
@@ -34,75 +37,56 @@ export function useLocalTrackRef(
   );
 }
 
-const STATE_CAPTION: Record<string, string> = {
-  connecting: "Connecting…",
-  "pre-connect-buffering": "Listening…",
-  initializing: "Getting ready…",
-  listening: "Listening",
-  thinking: "Thinking…",
-  speaking: "Speaking",
-  failed: "Agent unavailable",
-  disconnected: "Call ended",
-};
-
 export interface AgentStageProps {
-  /** Agent display name, used as the caption when idle. */
   agentName: string;
+  agentState: AgentUiState;
   compact?: boolean;
+  elapsedMs?: number;
+  audioBlocked?: boolean;
+  onEnableAudio?: () => void;
+  failureReasons?: string[] | null;
+  onRetry?: () => void;
+  onLeave?: () => void;
 }
 
-export function AgentStage({ agentName, compact = false }: AgentStageProps) {
-  const { state, audioTrack, videoTrack } = useVoiceAssistant();
+export function AgentStage({
+  agentName,
+  agentState,
+  compact = false,
+  elapsedMs,
+  audioBlocked,
+  onEnableAudio,
+  failureReasons,
+  onRetry,
+  onLeave,
+}: AgentStageProps) {
+  const { audioTrack, videoTrack } = useVoiceAssistant();
   const cameraTrack = useLocalTrackRef(Track.Source.Camera);
   const screenTrack = useLocalTrackRef(Track.Source.ScreenShare);
   const localTrack = screenTrack ?? cameraTrack;
 
-  return (
-    <div
-      data-testid="agent-stage"
-      className="relative flex h-full w-full items-center justify-center overflow-hidden"
-    >
-      {videoTrack ? (
-        <VideoTrack
-          trackRef={videoTrack}
-          className="h-full w-full bg-black object-cover"
-        />
-      ) : (
-        <div className="flex flex-col items-center gap-4 px-6 py-8">
-          <AgentAudioVisualizerBar
-            state={state}
-            audioTrack={audioTrack}
-            barCount={5}
-            size={compact ? "md" : "lg"}
-            className={cn(
-              "text-foreground",
-              compact ? "h-16 gap-1.5" : "h-24 gap-2",
-            )}
-          >
-            <span className="min-h-1.5 w-2 rounded-full bg-current/15 transition-colors duration-200 ease-linear data-[lk-highlighted=true]:bg-current" />
-          </AgentAudioVisualizerBar>
-          <p className="text-muted-foreground text-center text-xs">
-            <span className="text-foreground font-medium">{agentName}</span>
-            {" · "}
-            {STATE_CAPTION[state] ?? state}
-          </p>
-        </div>
-      )}
+  // §5.4: while the agent speaks the meter is driven by the audio level and
+  // keeps the same geometry as its keyframed states.
+  const volume = useTrackVolume(
+    agentState === "speaking" ? audioTrack : undefined,
+  );
 
-      {localTrack && (
-        <div
-          data-testid="local-preview"
-          className="border-border/70 absolute right-3 bottom-3 w-28 overflow-hidden rounded-lg border bg-black shadow-lg sm:w-36"
-        >
-          <VideoTrack
-            trackRef={localTrack}
-            className="aspect-video w-full object-cover"
-          />
-          <span className="bg-background/80 text-muted-foreground absolute top-1 left-1 rounded px-1 py-px text-[0.6rem] font-medium">
-            {screenTrack ? "Screen" : "You"}
-          </span>
-        </div>
-      )}
-    </div>
+  return (
+    <StageView
+      agentState={agentState}
+      agentName={agentName}
+      videoTrack={videoTrack}
+      audioTrack={audioTrack}
+      localTrack={localTrack}
+      localLabel={screenTrack ? "Screen" : "You"}
+      compact={compact}
+      elapsedMs={elapsedMs}
+      audioBlocked={audioBlocked}
+      onEnableAudio={onEnableAudio}
+      level={agentState === "speaking" ? volume : undefined}
+      failureReasons={failureReasons}
+      onRetry={onRetry}
+      onLeave={onLeave}
+    />
   );
 }

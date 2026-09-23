@@ -10,6 +10,7 @@
 import * as React from "react";
 import { useState } from "react";
 
+import { StatusChip } from "@/components/shared/status-chip";
 import { Button } from "@/components/ui/button";
 import type { PanelUiAction } from "@/panels/registry";
 
@@ -29,9 +30,14 @@ export function SketchCard({
   if (sketch.confirmed) {
     return (
       <Card title="Incident sketch">
-        <p className="text-sm text-emerald-300" data-testid="notebook-sketch-confirmed">
-          Sketch v{sketch.version} confirmed. Thanks — it goes in the packet.
-        </p>
+        <div className="flex flex-col gap-2" data-testid="notebook-sketch-confirmed">
+          <StatusChip tone="success" dot>
+            Confirmed
+          </StatusChip>
+          <p className="text-sm leading-snug">
+            Sketch v{sketch.version} confirmed. Thanks — it goes in the packet.
+          </p>
+        </div>
       </Card>
     );
   }
@@ -60,11 +66,12 @@ export function SketchCard({
         Does this look right? Sketch v{sketch.version} is pinned to the notebook.
       </p>
       {sketch.brief && (
-        <p className="text-muted-foreground/80 mb-2.5 text-[0.7rem] leading-snug">
+        <p className="text-muted-foreground mb-2.5 text-xs leading-snug">
           Drawn from: {sketch.brief}
         </p>
       )}
       <Button
+        variant="brand"
         size="sm"
         className="w-full"
         onClick={confirm}
@@ -74,7 +81,7 @@ export function SketchCard({
         {pending ? "Sending…" : "Yes, that's right"}
       </Button>
       {error && (
-        <p role="status" className="mt-2 text-[0.7rem] text-red-300">
+        <p role="status" className="text-danger-text mt-2 text-xs">
           {error}
         </p>
       )}

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import types
 from collections.abc import AsyncIterator, Iterator
@@ -25,6 +26,8 @@ from lkap_contracts.agent_config import (
 )
 from lkap_contracts.packs import PackManifest
 
+from lkap_api.bootstrap import bootstrap
+from lkap_api.db.guard import tenant_scope_guard
 from lkap_api.db.session import Database
 from lkap_api.packs import clear_manifest_cache
 from lkap_api.settings import Settings, get_settings
@@ -37,6 +40,15 @@ REQUIRED_ENV: dict[str, str] = {
     "LKAP_ADMIN_TOKEN": "test-admin",
     "LKAP_SERVICE_TOKEN": "test-service",
 }
+
+
+def postgres_url() -> str | None:
+    """Return `LKAP_TEST_DATABASE_URL` when the suite should run against Postgres.
+
+    CI sets it to an `asyncpg` url (`.github/workflows/api-postgres.yml`); locally
+    it is unset and every test runs on SQLite.
+    """
+    return os.environ.get("LKAP_TEST_DATABASE_URL") or None
 
 
 @pytest.fixture
@@ -120,11 +132,38 @@ def fake_packs(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, PackManife
 
 @pytest.fixture
 async def database(settings: Settings) -> AsyncIterator[Database]:
-    """A fresh SQLite database with the full schema, in this test's data dir."""
-    db = Database(settings.resolved_database_url)
+    """A fresh database with the full schema and the bootstrapped default workspace.
+
+    Every tenant table carries a `workspace_id` foreign key whose Python-side
+    default is `DEFAULT_WORKSPACE_ID`, so the row it points at has to exist
+    before any test inserts an agent. `bootstrap` also creates the default
+    connection from the test `LIVEKIT_*` values, which is what the v1 routes
+    keep resolving against.
+
+    Set `LKAP_TEST_DATABASE_URL` to run the suite against Postgres instead; the
+    schema is created and dropped per test, so point it at a scratch database.
+    """
+    db = Database(postgres_url() or settings.resolved_database_url)
     await db.create_all()
-    yield db
-    await db.dispose()
+    await bootstrap(db, settings)
+    try:
+        yield db
+    finally:
+        if postgres_url():
+            await db.drop_all()
+        await db.dispose()
+
+
+@pytest.fixture
+def tenant_guard() -> Iterator[None]:
+    """Fail any ORM query on a tenant table that carries no `workspace_id` predicate.
+
+    Opt-in for now: every v1 router still queries unscoped, so V2-02 flips this
+    to `autouse=True` once `WorkspaceContext` is wired into the admin routers
+    (CONTRACTS-V2 §3.1).
+    """
+    with tenant_scope_guard():
+        yield
 
 
 @pytest.fixture

@@ -11,14 +11,68 @@
           "title": "Agent Name",
           "type": "string"
         },
+        "channel": {
+          "default": "web",
+          "enum": [
+            "web",
+            "test",
+            "text",
+            "sip_in",
+            "sip_out",
+            "widget",
+            "api"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
         "config_version": {
           "title": "Config Version",
           "type": "integer"
+        },
+        "connection_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connection Id"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
         },
         "created_at": {
           "format": "date-time",
           "title": "Created At",
           "type": "string"
+        },
+        "disposition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disposition"
         },
         "ended_at": {
           "anyOf": [
@@ -52,7 +106,8 @@
         "pipeline_mode": {
           "enum": [
             "realtime",
-            "cascaded"
+            "cascaded",
+            "half_cascade"
           ],
           "title": "Pipeline Mode",
           "type": "string"

@@ -1,0 +1,56 @@
+{
+  "$id": "lkap-contracts/AvatarOptions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Publisher-side options applied to whichever avatar plugin is selected.",
+  "properties": {
+    "idle_timeout_s": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Idle Timeout S"
+    },
+    "max_duration_s": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Duration S"
+    },
+    "participant_name": {
+      "default": "Avatar",
+      "title": "Participant Name",
+      "type": "string"
+    },
+    "video_quality": {
+      "anyOf": [
+        {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "very_high"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Video Quality"
+    }
+  },
+  "title": "AvatarOptions",
+  "type": "object"
+}

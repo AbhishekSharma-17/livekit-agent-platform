@@ -8,7 +8,13 @@ Inference defaults ever change.
 from __future__ import annotations
 
 from lkap_contracts import providers
-from lkap_contracts.agent_config import CapabilitiesConfig, PipelineConfig, ProviderRef
+from lkap_contracts.agent_config import (
+    CapabilitiesConfig,
+    PanelLayout,
+    PipelineConfig,
+    ProviderRef,
+)
+from lkap_contracts.migrate import default_panel_for
 from lkap_contracts.packs import PackManifest
 
 _STT = providers.get("livekit-inference-stt")
@@ -27,6 +33,9 @@ MANIFEST = PackManifest(
     name="Generic assistant",
     description="A plain voice assistant with no pack-specific tools or UI state.",
     ui_panel_id="generic",
+    # v2: the generic panel is the built-in composite panel with the four default
+    # blocks, exactly what `migrate.agent_config_v1_to_v2` writes for v1 agents.
+    default_panel=PanelLayout.model_validate(default_panel_for("generic")),
     default_instructions=DEFAULT_INSTRUCTIONS,
     default_greeting=DEFAULT_GREETING,
     default_voice={},

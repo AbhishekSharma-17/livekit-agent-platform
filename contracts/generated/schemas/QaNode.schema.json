@@ -1,0 +1,58 @@
+{
+  "$id": "lkap-contracts/QaNode.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Post-call scoring step; never part of the conversational graph.",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "qa",
+      "default": "qa",
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+    },
+    "position": {
+      "default": [
+        0.0,
+        0.0
+      ],
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Position",
+      "type": "array"
+    },
+    "rubric_prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rubric Prompt"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "QaNode",
+  "type": "object"
+}

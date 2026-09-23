@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -11,9 +11,11 @@ import type {
 } from "@/contracts/lkap-contracts";
 import type { PanelProps } from "@/panels/registry";
 import { PANELS, resolvePanel } from "@/panels/registry";
+import { NOTEBOOK_CSS } from "@/panels/insurance_notebook/notebook-styles";
 import {
   INSURANCE_NOTEBOOK_PANEL,
   InsuranceNotebookPanel,
+  handleNotebookRequest,
 } from "@/panels/insurance_notebook";
 
 import autoFixture from "./fixtures/insurance_ui_state_lkap_auto.json";
@@ -528,5 +530,150 @@ describe("degraded state", () => {
     render(<InsuranceNotebookPanel {...props({ state })} />);
     expect(screen.getByText("Maya Singh · H0-44721")).toBeTruthy();
     expect(screen.queryByTestId("notebook-confirm-sketch")).toBeNull();
+  });
+});
+
+describe("the paper's stylesheet", () => {
+  it("loads no fonts at runtime and reads the session's font variables", () => {
+    expect(NOTEBOOK_CSS).not.toContain("@import");
+    expect(NOTEBOOK_CSS).not.toContain("fonts.googleapis.com");
+    expect(NOTEBOOK_CSS).toContain('--hand: var(--font-hand, "Caveat")');
+    expect(NOTEBOOK_CSS).toContain('--hand-label: var(--font-hand-label, "Patrick Hand")');
+  });
+
+  it("marks a field's status with a dot, never a side stripe", () => {
+    expect(NOTEBOOK_CSS).not.toContain("border-left");
+    expect(NOTEBOOK_CSS).toContain(".lkap-notebook .field .f-label::before");
+    expect(NOTEBOOK_CSS).toContain(
+      '.lkap-notebook .field[data-status="urgent"] .f-label::before',
+    );
+  });
+
+  it("keeps the paper's character: tape, stamp, pen and the ink-in animation", () => {
+    expect(NOTEBOOK_CSS).toContain("mix-blend-mode: multiply");
+    expect(NOTEBOOK_CSS).toContain("@keyframes lkapInkIn");
+    expect(NOTEBOOK_CSS).toContain("@keyframes lkapPinIn");
+    expect(NOTEBOOK_CSS).toContain("@keyframes lkapStampIn");
+    expect(NOTEBOOK_CSS).toContain("@keyframes lkapScribble");
+    expect(NOTEBOOK_CSS).toContain("--tape:");
+    expect(NOTEBOOK_CSS).toContain("prefers-reduced-motion");
+  });
+
+  it("paints the % ready ring's inner disc with the card token", () => {
+    expect(NOTEBOOK_CSS).toContain("background: var(--card, var(--color-card));");
+    expect(NOTEBOOK_CSS).not.toContain("#1e2126");
+  });
+});
+
+describe("the desk on tokens", () => {
+  it("renders the stamp and no palette classes", () => {
+    const { container } = render(
+      <InsuranceNotebookPanel {...props({ state: FLOOD })} />,
+    );
+    expect(screen.getByTestId("notebook-stamp")).toBeTruthy();
+    expect(container.innerHTML).not.toMatch(
+      /\b(?:bg|text|border)-(?:emerald|sky|amber|red|blue)-\d/,
+    );
+  });
+
+  it("shows the state meter on a running claim-team row", () => {
+    const { container } = render(
+      <InsuranceNotebookPanel
+        {...props({ state: { ...FLOOD, activity: [running("sync_claim_packet")] } })}
+      />,
+    );
+    const row = container.querySelector(
+      '[data-testid="notebook-team-feed"] li[data-phase="running"]',
+    );
+    expect(row?.querySelector('[data-slot="state-meter"]')).toBeTruthy();
+  });
+});
+
+describe("the agent's open_dialog request (CONTRACTS-V2 §4.4, R-V2-3b)", () => {
+  it("is registered on the panel definition", () => {
+    expect(INSURANCE_NOTEBOOK_PANEL.handleRequest).toBe(handleNotebookRequest);
+  });
+
+  it('opens the adjuster packet for {dialog: "packet"}', async () => {
+    render(<InsuranceNotebookPanel {...props({ state: AUTO })} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    let result: ReturnType<typeof handleNotebookRequest> | undefined;
+    act(() => {
+      result = handleNotebookRequest({
+        method: "open_dialog",
+        payload: { dialog: "packet" },
+      });
+    });
+
+    expect(result).toEqual({ ok: true, payload: { dialog: "packet" } });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Adjuster packet");
+    expect(screen.getByTestId("notebook-packet-body").textContent).toContain(
+      "Insurance Claim Intake Packet",
+    );
+  });
+
+  it("ignores params it does not need", async () => {
+    render(<InsuranceNotebookPanel {...props({ state: AUTO })} />);
+    act(() => {
+      handleNotebookRequest({
+        method: "open_dialog",
+        payload: { dialog: "packet", params: { page: 2 } },
+      });
+    });
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("declines the old `id` key, an unknown dialog and a method it does not own", () => {
+    render(<InsuranceNotebookPanel {...props({ state: AUTO })} />);
+
+    // R-V2-3b: contracts win, so `{id: "packet"}` is not accepted.
+    const legacy = handleNotebookRequest({
+      method: "open_dialog",
+      payload: { id: "packet" },
+    });
+    expect(legacy.ok).toBe(false);
+    expect(String(legacy.payload?.error)).toContain("`dialog`");
+
+    const unknown = handleNotebookRequest({
+      method: "open_dialog",
+      payload: { dialog: "policy" },
+    });
+    expect(unknown.ok).toBe(false);
+    expect(unknown.payload?.dialogs).toEqual(["packet"]);
+
+    const focus = handleNotebookRequest({
+      method: "focus",
+      payload: { target: "packet" },
+    });
+    expect(focus.ok).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("declines while the workflow has not written a packet", () => {
+    render(
+      <InsuranceNotebookPanel
+        {...props({ state: withCustom(FLOOD, { packet_markdown: "" }) })}
+      />,
+    );
+    const result = handleNotebookRequest({
+      method: "open_dialog",
+      payload: { dialog: "packet" },
+    });
+    expect(result.ok).toBe(false);
+    expect(String(result.payload?.error)).toContain("not been written");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("declines when no notebook is mounted", () => {
+    const result = handleNotebookRequest({
+      method: "open_dialog",
+      payload: { dialog: "packet" },
+    });
+    expect(result).toEqual({
+      ok: false,
+      payload: { error: "the claim notebook is not open" },
+    });
   });
 });

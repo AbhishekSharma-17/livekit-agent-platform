@@ -304,6 +304,39 @@ export function toPanelConnectionState(
   }
 }
 
+/**
+ * Which of the §5.7 "unavailable" pages an agent-load / connect failure maps
+ * onto (docs/UI_UX_SPEC.md §5.7).
+ *
+ * - `not_found` — 404: no agent at this slug.
+ * - `not_published` — 403: it exists but is a draft.
+ * - `unreachable` — the API could not be reached at all (network/DNS, or no
+ *   `NEXT_PUBLIC_API_BASE_URL`), which `ConnectError` reports as status 0.
+ * - `other` — anything else (5xx, an unexpected code). The UI renders it with
+ *   the `unreachable` card, which says "try again in a moment".
+ *
+ * In test mode the call goes through the console's admin proxy, so a 401/403
+ * means the proxy's admin token was rejected — not that the agent is a draft
+ * (DECISIONS-W2 D-W2-1 item 5). Pass `{ viaConsole: true }` to get `other`.
+ */
+export type ConnectErrorKind =
+  | "not_found"
+  | "not_published"
+  | "unreachable"
+  | "other";
+
+export function classifyConnectError(
+  error: unknown,
+  options: { viaConsole?: boolean } = {},
+): ConnectErrorKind {
+  if (!(error instanceof ConnectError)) return "unreachable";
+  if (error.status === 0) return "unreachable";
+  if (error.isNotFound) return "not_found";
+  if (error.status === 401) return "other";
+  if (error.isForbidden) return options.viaConsole ? "other" : "not_published";
+  return "other";
+}
+
 /** Human-readable message for anything thrown by the connect endpoint. */
 export function describeConnectError(error: unknown): string {
   if (error instanceof ConnectError) {

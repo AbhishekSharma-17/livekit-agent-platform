@@ -1,0 +1,174 @@
+{
+  "$defs": {
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AgentNode.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One conversational step with its own instructions, tools and extractions.",
+  "properties": {
+    "allow_interruptions": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Allow Interruptions"
+    },
+    "extract": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Extract",
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "instructions": {
+      "default": "",
+      "title": "Instructions",
+      "type": "string"
+    },
+    "kb_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Kb Ids",
+      "type": "array"
+    },
+    "kind": {
+      "const": "agent",
+      "default": "agent",
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+    },
+    "max_turns": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Turns"
+    },
+    "position": {
+      "default": [
+        0.0,
+        0.0
+      ],
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Position",
+      "type": "array"
+    },
+    "providers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ProviderRef"
+      },
+      "default": {},
+      "propertyNames": {
+        "enum": [
+          "llm",
+          "tts"
+        ]
+      },
+      "title": "Providers",
+      "type": "object"
+    },
+    "tools": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "AgentNode",
+  "type": "object"
+}

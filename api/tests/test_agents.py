@@ -364,7 +364,7 @@ async def test_validate_endpoint_reports_warnings(admin_client: httpx.AsyncClien
     response = await admin_client.post(f"/v1/agents/{agent['id']}/validate")
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True, "errors": [], "warnings": []}
+    assert response.json() == {"ok": True, "errors": [], "warnings": [], "issues": []}
 
 
 async def test_delete_removes_the_agent(admin_client: httpx.AsyncClient) -> None:

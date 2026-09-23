@@ -1,0 +1,26 @@
+{
+  "$id": "lkap-contracts/ProviderSettingsIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PUT /v1/providers/{id}/settings``.",
+  "properties": {
+    "default_credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Credential Id"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    }
+  },
+  "title": "ProviderSettingsIn",
+  "type": "object"
+}

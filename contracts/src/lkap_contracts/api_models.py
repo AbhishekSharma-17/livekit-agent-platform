@@ -5,17 +5,29 @@ session page use the generated types rather than hand-written interfaces.
 """
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from lkap_contracts.agent_config import (
     AgentConfig,
+    AgentLimits,
     CapabilitiesConfig,
     PipelineMode,
 )
+from lkap_contracts.common import Issue as Issue
+from lkap_contracts.common import SessionChannel as SessionChannel
+from lkap_contracts.common import Severity as Severity
+from lkap_contracts.connections import (
+    ConnectionCapabilities,
+    DeploymentMode,
+    DeploymentType,
+)
+from lkap_contracts.flow import FlowSpec
 from lkap_contracts.packs import PackManifest
-from lkap_contracts.providers import ProviderSpec
+from lkap_contracts.pricing import Unit as Unit
+from lkap_contracts.providers import CatalogKind, ProviderSpec
 from lkap_contracts.tools import ToolDefinition
 from lkap_contracts.ui_protocol import UiState
 
@@ -44,10 +56,48 @@ class ErrorResponse(BaseModel):
 
 # ------------------------------------------------------------------------ providers
 class ProvidersResponse(BaseModel):
-    """``GET /v1/providers``."""
+    """``GET /v1/providers``.
 
-    v: Literal[1] = 1
+    ``providers`` stays ``list[ProviderSpec]``; V2-06 serves the enriched
+    :class:`ProviderOut` (a superset) through the same field and bumps ``v`` to
+    ``2`` then — the payload is still v1-shaped, so ``2`` is accepted but not
+    yet emitted.
+    """
+
+    v: Literal[1, 2] = 1
     providers: list[ProviderSpec]
+
+
+class ProviderOut(ProviderSpec):
+    """A registry entry plus this workspace's settings (``GET /v1/providers``)."""
+
+    enabled: bool = True
+    installed_on: list[str] = Field(default_factory=list)
+    default_credential_id: str | None = None
+
+
+class ProviderSettingsIn(BaseModel):
+    """``PUT /v1/providers/{id}/settings``."""
+
+    enabled: bool = True
+    default_credential_id: str | None = None
+
+
+class CatalogItem(BaseModel):
+    """One model, voice, avatar or persona listed by a vendor catalog adapter."""
+
+    id: str
+    label: str
+    meta: dict[str, Any] = {}
+
+
+class CatalogResponse(BaseModel):
+    """``GET /v1/providers/{id}/catalog``."""
+
+    kind: CatalogKind
+    items: list[CatalogItem] = []
+    fetched_at: datetime | None = None
+    source: Literal["vendor", "static"] = "static"
 
 
 # ---------------------------------------------------------------------- credentials
@@ -83,6 +133,8 @@ class CredentialTestResult(BaseModel):
 
     ok: bool
     message: str
+    checked_at: datetime | None = None
+    catalog_preview: list[CatalogItem] | None = None
 
 
 # --------------------------------------------------------------------------- agents
@@ -94,6 +146,8 @@ class AgentCreate(BaseModel):
     pack_id: str = "generic"
     ui_panel_id: str | None = None
     config: AgentConfig | None = None
+    connection_id: str | None = None
+    mode: Literal["prompt", "flow"] = "prompt"
 
 
 class AgentUpdate(BaseModel):
@@ -104,6 +158,10 @@ class AgentUpdate(BaseModel):
     ui_panel_id: str | None = None
     config: AgentConfig | None = None
     published: bool | None = None
+    connection_id: str | None = None
+    mode: Literal["prompt", "flow"] | None = None
+    limits: AgentLimits | None = None
+    allowed_origins: list[str] | None = None
 
 
 class AgentOut(BaseModel):
@@ -120,6 +178,14 @@ class AgentOut(BaseModel):
     config_version: int
     created_at: datetime
     updated_at: datetime
+    workspace_id: str = ""
+    connection_id: str | None = None
+    mode: Literal["prompt", "flow"] = "prompt"
+    archived_at: datetime | None = None
+    limits: AgentLimits = AgentLimits()
+    allowed_origins: list[str] = []
+    session_count: int | None = None
+    last_session_at: datetime | None = None
 
 
 class AgentPublicOut(BaseModel):
@@ -135,11 +201,48 @@ class AgentPublicOut(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    """``POST /v1/agents/{id}/validate``."""
+    """``POST /v1/agents/{id}/validate``.
+
+    ``errors``/``warnings`` are the flat v1 lists; ``issues`` carries the same
+    findings with a ``path`` so the console can focus the offending field
+    (UI_UX_SPEC §7.14).
+    """
 
     ok: bool
     errors: list[str] = []
     warnings: list[str] = []
+    issues: list[Issue] = []
+
+
+class ConfigVersionOut(BaseModel):
+    """One row of ``GET /v1/agents/{id}/versions``."""
+
+    config_version: int
+    created_at: datetime
+    created_by: str | None = None
+    note: str | None = None
+    config: AgentConfig | None = None
+
+
+class FlowValidateRequest(BaseModel):
+    """``POST /v1/agents/{id}/flow/validate``."""
+
+    flow: FlowSpec
+
+
+class NodeSpecSchema(BaseModel):
+    """The JSON schema of one flow node kind, for the flow builder's forms."""
+
+    kind: str
+    label: str
+    json_schema: dict[str, Any] = {}
+
+
+class NodeSpecsResponse(BaseModel):
+    """``GET /v1/flows/node-specs``."""
+
+    v: Literal[1] = 1
+    nodes: list[NodeSpecSchema] = []
 
 
 # -------------------------------------------------------------------------- connect
@@ -280,6 +383,62 @@ class TranscriptTurn(BaseModel):
     interrupted: bool = False
 
 
+class SessionLatency(BaseModel):
+    """Per-session latency percentiles collected from ``metrics_collected``."""
+
+    eou_to_first_audio_ms_p50: float | None = None
+    eou_to_first_audio_ms_p95: float | None = None
+    llm_ttft_ms_p50: float | None = None
+    llm_ttft_ms_p95: float | None = None
+    tts_ttfb_ms_p50: float | None = None
+    tts_ttfb_ms_p95: float | None = None
+    turns: int = 0
+
+
+class CostLine(BaseModel):
+    """One priced usage line of a session.
+
+    ``cost_usd`` is ``None`` with ``note="no price"`` when the price table has
+    no entry — an unknown price is never reported as zero.
+    """
+
+    provider_id: str
+    model: str | None = None
+    unit: Unit
+    quantity: Decimal
+    unit_price_usd: Decimal | None = None
+    cost_usd: Decimal | None = None
+    note: str | None = None
+
+
+class SessionCost(BaseModel):
+    """The cost block of ``SessionDetailOut``."""
+
+    total_usd: Decimal | None = None
+    lines: list[CostLine] = []
+
+
+class QaOut(BaseModel):
+    """LLM-judge scoring of a finished session."""
+
+    status: Literal["pending", "done", "failed"] = "pending"
+    score: int | None = None
+    sentiment: Literal["positive", "neutral", "negative"] | None = None
+    tags: list[str] = []
+    summary: str | None = None
+    scored_at: datetime | None = None
+    model: str | None = None
+
+
+class RecordingOut(BaseModel):
+    """The recording block of ``SessionDetailOut`` (``url`` is a signed URL)."""
+
+    status: Literal["none", "requested", "active", "ready", "failed"] = "none"
+    url: str | None = None
+    duration_s: float | None = None
+    expires_at: datetime | None = None
+
+
 class SessionOut(BaseModel):
     """Session list row."""
 
@@ -295,6 +454,10 @@ class SessionOut(BaseModel):
     ended_at: datetime | None = None
     usage: dict[str, Any] | None = None
     error: str | None = None
+    channel: SessionChannel = "web"
+    connection_id: str | None = None
+    cost_usd: Decimal | None = None
+    disposition: str | None = None
 
 
 class SessionDetailOut(SessionOut):
@@ -302,6 +465,33 @@ class SessionDetailOut(SessionOut):
 
     transcript: list[TranscriptTurn] | None = None
     final_ui_state: UiState | None = None
+    caller: dict[str, Any] | None = None
+    recording: RecordingOut = RecordingOut()
+    cost: SessionCost = SessionCost()
+    latency: SessionLatency = SessionLatency()
+    qa: QaOut | None = None
+    variables: dict[str, Any] = {}
+
+
+class AnalyticsBucket(BaseModel):
+    """One day or one agent in ``AnalyticsSummary``."""
+
+    key: str
+    sessions: int = 0
+    minutes: float = 0.0
+    cost_usd: Decimal | None = None
+    failed: int = 0
+
+
+class AnalyticsSummary(BaseModel):
+    """``GET /v1/analytics/summary``."""
+
+    sessions: int = 0
+    minutes: float = 0.0
+    cost_usd: Decimal | None = None
+    failed: int = 0
+    by_day: list[AnalyticsBucket] = []
+    by_agent: list[AnalyticsBucket] = []
 
 
 class SessionEventOut(BaseModel):
@@ -357,6 +547,268 @@ class HealthResponse(BaseModel):
     db: Literal["ok", "error"]
 
 
+# ----------------------------------------------------------------------- auth/team
+class UserOut(BaseModel):
+    """A platform user, without any credential material."""
+
+    id: str
+    email: str
+    name: str = ""
+    is_platform_admin: bool = False
+
+
+class WorkspaceMembership(BaseModel):
+    """One workspace the signed-in user belongs to, and their role in it."""
+
+    id: str
+    slug: str
+    name: str
+    role: Literal["owner", "admin", "builder", "viewer"]
+
+
+class Me(BaseModel):
+    """``GET /v1/auth/me``."""
+
+    user: UserOut
+    workspaces: list[WorkspaceMembership] = []
+
+
+# ---------------------------------------------------------------------- connections
+class ConnectionTestResult(BaseModel):
+    """``POST /v1/connections/{id}/test``."""
+
+    ok: bool
+    message: str
+    capabilities: ConnectionCapabilities = ConnectionCapabilities()
+    latency_ms: float | None = None
+
+
+class ConnectionRotateIn(BaseModel):
+    """``POST /v1/connections/{id}/rotate`` — bumps ``credentials_version``."""
+
+    api_key: str
+    api_secret: str
+
+
+class WorkerInstanceOut(BaseModel):
+    """One registered worker process of a connection's pool."""
+
+    instance_key: str
+    image: Literal["slim", "full"] = "slim"
+    sdk_version: str = ""
+    installed_provider_ids: list[str] = []
+    pack_ids: list[str] = []
+    status: Literal["starting", "ready", "draining", "gone"] = "starting"
+    managed_by: Literal["external", "supervisor", "cloud"] = "external"
+    registered_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+
+
+class FleetStatus(BaseModel):
+    """``GET /v1/connections/{id}/fleet``."""
+
+    desired_replicas: int = 0
+    instances: list[WorkerInstanceOut] = []
+    installed_provider_ids: list[str] = []
+    image: Literal["slim", "full"] = "slim"
+
+
+class FleetActionIn(BaseModel):
+    """``POST /v1/connections/{id}/fleet`` (supervised connections only)."""
+
+    action: Literal["start", "stop", "restart"]
+    replicas: int | None = None
+
+
+class ConnectionOut(BaseModel):
+    """A LiveKit deployment the workspace can run agents on (secrets redacted)."""
+
+    id: str
+    workspace_id: str = ""
+    slug: str
+    name: str
+    deployment_type: DeploymentType = "cloud"
+    url: str
+    fingerprint: str = ""
+    credentials_version: int = 1
+    agent_name: str = "lkap-agent"
+    deployment_mode: DeploymentMode = "external"
+    replicas: int = 1
+    worker_image: Literal["slim", "full"] = "slim"
+    region: str | None = None
+    use_inference: bool = True
+    storage_config_id: str | None = None
+    is_default: bool = False
+    status: Literal["unverified", "ok", "error"] = "unverified"
+    capabilities: ConnectionCapabilities = ConnectionCapabilities()
+    last_checked_at: datetime | None = None
+    last_error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ConnectionCreate(BaseModel):
+    """``POST /v1/connections`` — secrets are write-only."""
+
+    slug: str
+    name: str
+    deployment_type: DeploymentType = "cloud"
+    url: str
+    api_key: str
+    api_secret: str
+    agent_name: str = "lkap-agent"
+    deployment_mode: DeploymentMode = "external"
+    replicas: int = 1
+    worker_image: Literal["slim", "full"] = "slim"
+    region: str | None = None
+    use_inference: bool = True
+    storage_config_id: str | None = None
+    is_default: bool = False
+
+
+class ConnectionUpdate(BaseModel):
+    """``PUT /v1/connections/{id}`` — a partial update; secrets go through rotate."""
+
+    name: str | None = None
+    url: str | None = None
+    agent_name: str | None = None
+    deployment_mode: DeploymentMode | None = None
+    replicas: int | None = None
+    worker_image: Literal["slim", "full"] | None = None
+    region: str | None = None
+    use_inference: bool | None = None
+    storage_config_id: str | None = None
+
+
+# ------------------------------------------------------------------------ webhooks
+class WebhookEndpointCreate(BaseModel):
+    """``POST /v1/webhooks`` (https only outside dev)."""
+
+    url: str
+    events: list[str] = []
+    description: str = ""
+    enabled: bool = True
+
+
+class WebhookEndpointOut(BaseModel):
+    """A webhook endpoint; the signing secret is shown only by its prefix."""
+
+    id: str
+    url: str
+    events: list[str] = []
+    description: str = ""
+    enabled: bool = True
+    secret_prefix: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class WebhookDeliveryOut(BaseModel):
+    """One delivery attempt of one event to one endpoint."""
+
+    id: str
+    endpoint_id: str
+    event_type: str
+    event_id: str
+    attempt: int = 0
+    status: Literal["pending", "delivered", "failed", "dead"] = "pending"
+    next_attempt_at: datetime | None = None
+    last_status_code: int | None = None
+    last_error: str | None = None
+    created_at: datetime | None = None
+    delivered_at: datetime | None = None
+
+
+class WebhookEvent(BaseModel):
+    """The signed envelope posted to a webhook endpoint.
+
+    Signature header: ``X-LKAP-Signature: t=<unix>,v1=<hmac_sha256(secret, f"{t}.{body}")>``.
+    """
+
+    id: str
+    type: str
+    created_at: datetime
+    workspace_id: str
+    data: dict[str, Any] = {}
+
+
+# ----------------------------------------------------------------------- telephony
+class CallCreate(BaseModel):
+    """``POST /v1/calls`` — place one outbound call."""
+
+    agent_id: str
+    to_e164: str
+    trunk_id: str | None = None
+    variables: dict[str, Any] = {}
+    timeout_s: int = 30
+
+
+class CallOut(BaseModel):
+    """One inbound or outbound call."""
+
+    id: str
+    session_id: str | None = None
+    workspace_id: str = ""
+    connection_id: str = ""
+    direction: Literal["inbound", "outbound"]
+    from_e164: str = ""
+    to_e164: str = ""
+    status: Literal[
+        "dialing",
+        "ringing",
+        "answered",
+        "no_answer",
+        "busy",
+        "failed",
+        "completed",
+        "transferred",
+    ] = "dialing"
+    sip_call_id: str | None = None
+    lk_participant_identity: str | None = None
+    started_at: datetime | None = None
+    answered_at: datetime | None = None
+    ended_at: datetime | None = None
+    hangup_reason: str | None = None
+    transfer_to: str | None = None
+
+
+# --------------------------------------------------------- internal (service token)
+class SessionStartIn(BaseModel):
+    """``POST /internal/v1/sessions/start`` — the worker creates the session row.
+
+    Used for rooms the platform did not create (inbound SIP), where the
+    dispatch metadata carries no ``session_id``.
+    """
+
+    agent_id: str
+    room_name: str
+    channel: SessionChannel = "web"
+    participant_identity: str = ""
+    caller: dict[str, Any] | None = None
+    dispatch_metadata: dict[str, Any] = {}
+
+
+class SessionMetricsIn(BaseModel):
+    """``POST /internal/v1/sessions/{id}/metrics``."""
+
+    latency: SessionLatency = SessionLatency()
+    usage_lines: list[CostLine] = []
+
+
+class RecordingStartOut(BaseModel):
+    """``POST /internal/v1/sessions/{id}/recording/start``."""
+
+    egress_id: str
+
+
+class SessionRecordingIn(BaseModel):
+    """``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation."""
+
+    egress_id: str
+    status: Literal["none", "requested", "active", "ready", "failed"]
+    duration_s: float | None = None
+
+
 # Concrete page parametrisations exported to JSON Schema / TypeScript.
 CredentialPage = Page[CredentialOut]
 AgentPage = Page[AgentOut]
@@ -365,3 +817,8 @@ KbPage = Page[KbOut]
 KbDocumentPage = Page[KbDocumentOut]
 SessionPage = Page[SessionOut]
 SessionEventPage = Page[SessionEventOut]
+ConnectionPage = Page[ConnectionOut]
+ConfigVersionPage = Page[ConfigVersionOut]
+CallPage = Page[CallOut]
+WebhookEndpointPage = Page[WebhookEndpointOut]
+WebhookDeliveryPage = Page[WebhookDeliveryOut]

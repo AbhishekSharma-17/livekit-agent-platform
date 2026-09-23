@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/UserOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A platform user, without any credential material.",
+  "properties": {
+    "email": {
+      "title": "Email",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "is_platform_admin": {
+      "default": false,
+      "title": "Is Platform Admin",
+      "type": "boolean"
+    },
+    "name": {
+      "default": "",
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "email"
+  ],
+  "title": "UserOut",
+  "type": "object"
+}

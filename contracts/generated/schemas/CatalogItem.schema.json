@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/CatalogItem.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One model, voice, avatar or persona listed by a vendor catalog adapter.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "meta": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Meta",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "label"
+  ],
+  "title": "CatalogItem",
+  "type": "object"
+}

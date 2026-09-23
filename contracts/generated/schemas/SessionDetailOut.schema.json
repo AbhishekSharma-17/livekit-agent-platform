@@ -171,6 +171,103 @@
       "title": "ChecklistItem",
       "type": "object"
     },
+    "CostLine": {
+      "description": "One priced usage line of a session.\n\n``cost_usd`` is ``None`` with ``note=\"no price\"`` when the price table has\nno entry — an unknown price is never reported as zero.",
+      "properties": {
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Quantity"
+        },
+        "unit": {
+          "enum": [
+            "tokens_in",
+            "tokens_out",
+            "audio_s_in",
+            "audio_s_out",
+            "chars",
+            "minutes",
+            "images"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "unit_price_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Price Usd"
+        }
+      },
+      "required": [
+        "provider_id",
+        "unit",
+        "quantity"
+      ],
+      "title": "CostLine",
+      "type": "object"
+    },
     "Note": {
       "description": "A line in the panel's notes list. A repeated ``key`` upserts in place.",
       "properties": {
@@ -222,6 +319,268 @@
         "ts"
       ],
       "title": "Note",
+      "type": "object"
+    },
+    "QaOut": {
+      "description": "LLM-judge scoring of a finished session.",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "scored_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scored At"
+        },
+        "sentiment": {
+          "anyOf": [
+            {
+              "enum": [
+                "positive",
+                "neutral",
+                "negative"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sentiment"
+        },
+        "status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "done",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "title": "QaOut",
+      "type": "object"
+    },
+    "RecordingOut": {
+      "description": "The recording block of ``SessionDetailOut`` (``url`` is a signed URL).",
+      "properties": {
+        "duration_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration S"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "status": {
+          "default": "none",
+          "enum": [
+            "none",
+            "requested",
+            "active",
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "title": "RecordingOut",
+      "type": "object"
+    },
+    "SessionCost": {
+      "description": "The cost block of ``SessionDetailOut``.",
+      "properties": {
+        "lines": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CostLine"
+          },
+          "title": "Lines",
+          "type": "array"
+        },
+        "total_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Usd"
+        }
+      },
+      "title": "SessionCost",
+      "type": "object"
+    },
+    "SessionLatency": {
+      "description": "Per-session latency percentiles collected from ``metrics_collected``.",
+      "properties": {
+        "eou_to_first_audio_ms_p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eou To First Audio Ms P50"
+        },
+        "eou_to_first_audio_ms_p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eou To First Audio Ms P95"
+        },
+        "llm_ttft_ms_p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Ttft Ms P50"
+        },
+        "llm_ttft_ms_p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Ttft Ms P95"
+        },
+        "tts_ttfb_ms_p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tts Ttfb Ms P50"
+        },
+        "tts_ttfb_ms_p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tts Ttfb Ms P95"
+        },
+        "turns": {
+          "default": 0,
+          "title": "Turns",
+          "type": "integer"
+        }
+      },
+      "title": "SessionLatency",
       "type": "object"
     },
     "StatusStamp": {
@@ -296,7 +655,7 @@
       "type": "object"
     },
     "UiState": {
-      "description": "The platform envelope every panel renders; ``custom`` is pack-defined.",
+      "description": "The platform envelope every panel renders; ``custom`` is pack-defined.\n\n``v`` accepts ``1`` for one release so v1 producers (and the web reducer's\nown literals) keep validating while panels migrate to blocks.",
       "properties": {
         "activity": {
           "default": [],
@@ -313,6 +672,12 @@
           },
           "title": "Assets",
           "type": "array"
+        },
+        "blocks": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Blocks",
+          "type": "object"
         },
         "checklist": {
           "default": [],
@@ -360,8 +725,11 @@
           "default": null
         },
         "v": {
-          "const": 1,
-          "default": 1,
+          "default": 2,
+          "enum": [
+            1,
+            2
+          ],
           "title": "V",
           "type": "integer"
         }
@@ -382,14 +750,88 @@
       "title": "Agent Name",
       "type": "string"
     },
+    "caller": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Caller"
+    },
+    "channel": {
+      "default": "web",
+      "enum": [
+        "web",
+        "test",
+        "text",
+        "sip_in",
+        "sip_out",
+        "widget",
+        "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
     "config_version": {
       "title": "Config Version",
       "type": "integer"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    },
+    "cost": {
+      "$ref": "#/$defs/SessionCost",
+      "default": {
+        "lines": [],
+        "total_usd": null
+      }
+    },
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Usd"
     },
     "created_at": {
       "format": "date-time",
       "title": "Created At",
       "type": "string"
+    },
+    "disposition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Disposition"
     },
     "ended_at": {
       "anyOf": [
@@ -431,13 +873,46 @@
       "title": "Id",
       "type": "string"
     },
+    "latency": {
+      "$ref": "#/$defs/SessionLatency",
+      "default": {
+        "eou_to_first_audio_ms_p50": null,
+        "eou_to_first_audio_ms_p95": null,
+        "llm_ttft_ms_p50": null,
+        "llm_ttft_ms_p95": null,
+        "tts_ttfb_ms_p50": null,
+        "tts_ttfb_ms_p95": null,
+        "turns": 0
+      }
+    },
     "pipeline_mode": {
       "enum": [
         "realtime",
-        "cascaded"
+        "cascaded",
+        "half_cascade"
       ],
       "title": "Pipeline Mode",
       "type": "string"
+    },
+    "qa": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QaOut"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recording": {
+      "$ref": "#/$defs/RecordingOut",
+      "default": {
+        "duration_s": null,
+        "expires_at": null,
+        "status": "none",
+        "url": null
+      }
     },
     "room_name": {
       "title": "Room Name",
@@ -493,6 +968,12 @@
       ],
       "default": null,
       "title": "Usage"
+    },
+    "variables": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Variables",
+      "type": "object"
     }
   },
   "required": [

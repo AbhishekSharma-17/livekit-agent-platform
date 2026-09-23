@@ -1,0 +1,43 @@
+{
+  "$id": "lkap-contracts/RecordingConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Whether and where the session is recorded through Egress.",
+  "properties": {
+    "audio_only": {
+      "default": true,
+      "title": "Audio Only",
+      "type": "boolean"
+    },
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "retention_days": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retention Days"
+    },
+    "storage_config_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Storage Config Id"
+    }
+  },
+  "title": "RecordingConfig",
+  "type": "object"
+}

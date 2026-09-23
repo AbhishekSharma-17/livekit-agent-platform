@@ -1,0 +1,58 @@
+{
+  "$id": "lkap-contracts/ConnectionCapabilities.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a probed LiveKit deployment supports (CONTRACTS-V2 §4.3).\n\nDefaults describe the most restrictive target (a bare self-hosted server), so\nan unprobed connection never advertises a feature it may not have.",
+  "properties": {
+    "cloud_hosting": {
+      "default": false,
+      "title": "Cloud Hosting",
+      "type": "boolean"
+    },
+    "egress_enabled": {
+      "default": false,
+      "title": "Egress Enabled",
+      "type": "boolean"
+    },
+    "inference_available": {
+      "default": false,
+      "title": "Inference Available",
+      "type": "boolean"
+    },
+    "ingress_enabled": {
+      "default": false,
+      "title": "Ingress Enabled",
+      "type": "boolean"
+    },
+    "noise_cancellation_tier": {
+      "default": "none",
+      "enum": [
+        "none",
+        "ai_coustics",
+        "krisp"
+      ],
+      "title": "Noise Cancellation Tier",
+      "type": "string"
+    },
+    "observability_dashboard": {
+      "default": false,
+      "title": "Observability Dashboard",
+      "type": "boolean"
+    },
+    "sip_enabled": {
+      "default": false,
+      "title": "Sip Enabled",
+      "type": "boolean"
+    },
+    "turn_detector_mode": {
+      "default": "local",
+      "enum": [
+        "hosted",
+        "local"
+      ],
+      "title": "Turn Detector Mode",
+      "type": "string"
+    }
+  },
+  "title": "ConnectionCapabilities",
+  "type": "object"
+}

@@ -183,11 +183,13 @@ class ProviderSpec(BaseModel):
     price_ref: str | None = None       # key into pricing.PRICES
     notes: str | None = None
     @computed_field
-    def status(self) -> Literal["mvp","deferred"]:  # alias for one release
-        return "mvp" if self.availability == "available" and self.verification == "verified" else "deferred"
+    def status(self) -> Literal["mvp","deferred"]:  # alias for one release (R-V2-1)
+        # "mvp" == constructible on the slim worker image. verification NEVER affects status:
+        # it is an informational chip, not a gate.
+        return "mvp" if self.availability == "available" and self.worker_image == "slim" else "deferred"
 ```
 
-`REGISTRY` helpers keep their names; add `available_providers()`, `by_image(image)`, `constructible(installed_ids)`. `GEMINI_LIVE_VOICES` becomes the full 30-name list. Consumers of `status` that V2-00 owns and updates: `providers.mvp_providers()`, `providers._deferred()`, `api/config_service.validate_agent_config`, `api/packs.py` seeding, `web/src/components/console/registry/*` filter, `web/src/lib/providers.ts` (if present), `PANEL_META/CAPABILITY_META` in `web/src/components/shared`.
+`REGISTRY` helpers keep their names; add `available_providers()`, `by_image(image)`, `constructible(installed_ids)`. `GEMINI_LIVE_VOICES` becomes the full 30-name list. Every v1 MVP entry (all 18, including `image_gen`/`embedding`/`secret_bag`) carries `worker_image="slim"`; every entry V2-05 adds carries `worker_image="full"`, so the alias preserves the exact v1 `mvp` set until consumers migrate (ruling R-V2-1 in PLAN §8). Consumers of `status` (unchanged in waves 0–1; migrated by V2-03 for the api and V2-13 for the web): `providers.mvp_providers()`, `providers._deferred()`, `api/config_service.validate_agent_config`, `api/packs.py` seeding, `web/src/components/console/registry/*` filter, `web/src/lib/providers.ts` (if present), `PANEL_META/CAPABILITY_META` in `web/src/components/shared`.
 
 ### 4.2 Pricing (`pricing.py`, new)
 
@@ -279,7 +281,7 @@ class ResolvedAgentConfig(BaseModel):              # v1 fields +
 - `UiState.v: Literal[2]`; `UiState.blocks: dict[str, Any] = {}` keyed by `BlockSpec.id`; everything else unchanged (`custom` stays for packs).
 - `BlockSpec{id, type: BlockType, title: str|None, config: dict, order: int}`; `BlockType = Literal["status","notes","checklist","activity","form","document","gallery","table","transcript","video","kb_citations","custom"]`.
 - Block state models (exported to TS, validated by the reducer): `FormBlockState{schema: dict (JSON schema), values: dict, status: idle|requested|submitted, submitted_at}`, `DocumentBlockState{asset_id|url, page:int, highlights:[{page, bbox, note}]}`, `GalleryBlockState{asset_ids: list[str], selected: str|None}`, `TableBlockState{columns:[{key,label,type}], rows: list[dict], selected_row: str|None}`, `TranscriptBlockState{show_tools: bool}`, `VideoBlockState{source: agent_avatar|user_camera|user_screen|track:<sid>, muted}`, `KbCitationsBlockState{items:[{chunk_id, filename, score, text}]}`; `status/notes/checklist/activity` blocks render the envelope fields and hold `{}`.
-- `UiRequest.method` += `"form"` (`payload={block_id, schema, prefill}`; result `{values}` or `{cancelled: true}`), `"show_block"` (`{block_id}`), `"navigate"` (`{url}`, opens in a new tab; UI confirms).
+- `UiRequest.method` += `"form"` (`payload={block_id, schema, prefill}`; result `{values}` or `{cancelled: true}`), `"show_block"` (`{block_id}`), `"navigate"` (`{url}`, opens in a new tab; UI confirms). Payload keys are now fixed for the v1 methods too (R-V2-3b): `open_dialog` → `{dialog: str, params?: dict}`; `focus` → `{target: str}`; `request_video_source` → `{source: "camera"|"screen"}`; `toast` → `{message: str, tone?: Tone}`. `{"id": ...}` for `open_dialog` is wrong; the agent side changes.
 - `AgentAction.action` += `"form_submit"` (`{block_id, values}`), `"block_action"` (`{block_id, name, data}` → `Pack.on_block_action`), `"rewind"`, `"inject_user_text"`.
 - `UiChannel` protocol (packs.base) += `set_block(block_id, state: dict)`, `patch_block(block_id, ops)`, `request_form(block_id, schema, prefill=None, timeout_s=120) -> dict | None`, `cite(block_id, hits)`.
 - Built-in tools (worker): `update_block(block_id, patch: dict)`, `show_document(asset_id|url, page?, note?)`, `table_append(block_id, row)`, `request_form(block_id, fields: list[{name,label,type,required}]) -> values` (blocking with timeout; realtime mode returns `None` and the result arrives as an urgent background result), `cite_sources` (implicit).

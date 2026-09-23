@@ -1,0 +1,126 @@
+{
+  "$id": "lkap-contracts/ConnectionUpdate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PUT /v1/connections/{id}`` — a partial update; secrets go through rotate.",
+  "properties": {
+    "agent_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Name"
+    },
+    "deployment_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "external",
+            "supervised",
+            "cloud_hosted"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Deployment Mode"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "region": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Region"
+    },
+    "replicas": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Replicas"
+    },
+    "storage_config_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Storage Config Id"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    },
+    "use_inference": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Use Inference"
+    },
+    "worker_image": {
+      "anyOf": [
+        {
+          "enum": [
+            "slim",
+            "full"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Worker Image"
+    }
+  },
+  "title": "ConnectionUpdate",
+  "type": "object"
+}

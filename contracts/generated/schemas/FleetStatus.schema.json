@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "WorkerInstanceOut": {
+      "description": "One registered worker process of a connection's pool.",
+      "properties": {
+        "image": {
+          "default": "slim",
+          "enum": [
+            "slim",
+            "full"
+          ],
+          "title": "Image",
+          "type": "string"
+        },
+        "installed_provider_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Installed Provider Ids",
+          "type": "array"
+        },
+        "instance_key": {
+          "title": "Instance Key",
+          "type": "string"
+        },
+        "last_heartbeat_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Heartbeat At"
+        },
+        "managed_by": {
+          "default": "external",
+          "enum": [
+            "external",
+            "supervisor",
+            "cloud"
+          ],
+          "title": "Managed By",
+          "type": "string"
+        },
+        "pack_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Pack Ids",
+          "type": "array"
+        },
+        "registered_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registered At"
+        },
+        "sdk_version": {
+          "default": "",
+          "title": "Sdk Version",
+          "type": "string"
+        },
+        "status": {
+          "default": "starting",
+          "enum": [
+            "starting",
+            "ready",
+            "draining",
+            "gone"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instance_key"
+      ],
+      "title": "WorkerInstanceOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/FleetStatus.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/connections/{id}/fleet``.",
+  "properties": {
+    "desired_replicas": {
+      "default": 0,
+      "title": "Desired Replicas",
+      "type": "integer"
+    },
+    "image": {
+      "default": "slim",
+      "enum": [
+        "slim",
+        "full"
+      ],
+      "title": "Image",
+      "type": "string"
+    },
+    "installed_provider_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Installed Provider Ids",
+      "type": "array"
+    },
+    "instances": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/WorkerInstanceOut"
+      },
+      "title": "Instances",
+      "type": "array"
+    }
+  },
+  "title": "FleetStatus",
+  "type": "object"
+}

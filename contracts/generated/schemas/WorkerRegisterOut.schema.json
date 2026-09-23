@@ -1,0 +1,21 @@
+{
+  "$id": "lkap-contracts/WorkerRegisterOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the api tells a freshly registered worker about itself.",
+  "properties": {
+    "agent_name": {
+      "default": "lkap-agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection_id"
+  ],
+  "title": "WorkerRegisterOut",
+  "type": "object"
+}

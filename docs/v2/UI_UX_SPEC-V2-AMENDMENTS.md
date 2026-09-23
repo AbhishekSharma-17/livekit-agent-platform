@@ -67,9 +67,9 @@ Workspace switcher: a compact popover in the sidebar footer (name + role chip), 
 | WP-6 Knowledge | Unchanged | Upload cap error copy (25 MB). |
 | WP-7 Sessions | **Change** | List filters add channel/connection; detail tabs extended by V2-14 — WP-7 must expose a tab registry so V2-14 adds tabs without editing WP-7 files. |
 | WP-8 Session experience | Unchanged | Keep the `StageView` seam; V2-11/V2-18 plug the avatar/video and embed layouts into it. |
-| WP-9 Panels tokens | Unchanged | Generic panel becomes the `status/notes/checklist/activity` blocks' visual reference. |
+| WP-9 Panels tokens | Unchanged | Generic panel becomes the `status/notes/checklist/activity` blocks' visual reference. `handleRequest` for the notebook reads `payload.dialog` (R-V2-3b). |
 | WP-10 Preview/capture | Unchanged | Add block scenes later (V2-11 owns `preview/**` after WP-10 lands). |
-| WP-11 Home/not-found | Unchanged | Home links to `/login`. |
+| WP-11 Home/not-found | Unchanged | Home links to `/login`. Footer "Architecture"/"Runbook" links are **removed** (R-V2-3a in PLAN §8): no docs are served from the web app; an optional external "Documentation" link lives in the console sidebar footer when `NEXT_PUBLIC_DOCS_URL` is set. |
 | WP-12 Integration | Unchanged | Runs at the end of wave 2 instead of after WP-11 alone. |
 
 ## 4. Copy and vocabulary additions

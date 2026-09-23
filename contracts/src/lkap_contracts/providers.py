@@ -9,7 +9,7 @@ objects from it, and the web console renders its forms from the exported
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ProviderKind = Literal[
     "realtime",
@@ -17,11 +17,30 @@ ProviderKind = Literal[
     "llm",
     "tts",
     "avatar",
+    "vad",
+    "turn_detection",
+    "noise_cancellation",
     "image_gen",
     "embedding",
     "secret_bag",
 ]
-FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "model"]
+FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "model", "file", "catalog"]
+
+#: Whether the platform offers a provider at all (CONTRACTS-V2 §4.1).
+#:
+#: ``available`` — offered; ``deferred`` — catalogued but not shipped yet;
+#: ``incompatible`` — cannot coexist with the pinned ``livekit-agents``;
+#: ``removed`` — withdrawn by its vendor.
+Availability = Literal["available", "deferred", "incompatible", "removed"]
+
+#: Whether a provider has completed a live call on this platform.
+Verification = Literal["verified", "unverified"]
+
+#: Which worker image carries the provider's plugin.
+WorkerImage = Literal["slim", "full", "isolated"]
+
+#: What a vendor catalog adapter can list.
+CatalogKind = Literal["models", "voices", "avatars", "personas"]
 
 #: Gemini Live prebuilt voice names offered in the console.
 GEMINI_LIVE_VOICES: list[str] = [
@@ -49,6 +68,10 @@ class FieldSpec(BaseModel):
     help: str | None = None
     condition: str | None = None
     env_fallback: str | None = None
+    catalog_kind: CatalogKind | None = None
+    accept: str | None = None
+    positional: bool = False
+    nested_model: str | None = None
 
 
 class ModelSpec(BaseModel):
@@ -66,6 +89,14 @@ class ModelSpec(BaseModel):
     note: str | None = None
 
 
+class CatalogSpec(BaseModel):
+    """How to list a provider's models, voices, avatars or personas from the vendor."""
+
+    adapter: str
+    kinds: list[CatalogKind] = []
+    ttl_s: int = 3600
+
+
 class ProviderCapabilities(BaseModel):
     """What a provider can do, used to gate UI affordances and runtime behaviour."""
 
@@ -73,17 +104,39 @@ class ProviderCapabilities(BaseModel):
     tool_calling: bool = True
     silent_tool_reply: bool = False
     voices: list[str] = []
+    text_modality: bool = False
+    audio_input: bool = True
+    languages: list[str] = []
+    vision: bool | None = None
+    voices_dynamic: bool = False
+    cloud_only: bool = False
+    platforms: list[str] = []
 
 
 class ProviderSpec(BaseModel):
-    """Everything the platform needs to offer, configure and construct a provider."""
+    """Everything the platform needs to offer, configure and construct a provider.
 
-    v: Literal[1] = 1
+    ``v`` accepts ``1`` for one release so v1 documents (a stored
+    ``providers.json`` snapshot, console test fixtures) keep validating; the
+    registry itself always emits ``2``.
+    """
+
+    v: Literal[1, 2] = 2
     id: str
     kind: ProviderKind
     label: str
     vendor: str
     status: Literal["mvp", "deferred"] = "mvp"
+    """Read-only v1 alias, kept for one release; see :meth:`_derive_status`."""
+    availability: Availability = "available"
+    verification: Verification = "unverified"
+    verified_at: str | None = None
+    verified_note: str | None = None
+    worker_image: WorkerImage = "full"
+    catalog: CatalogSpec | None = None
+    test: str | None = None
+    price_ref: str | None = None
+    notes: str | None = None
     package: str
     python_class: str
     requires_credential: bool = True
@@ -94,6 +147,26 @@ class ProviderSpec(BaseModel):
     capabilities: ProviderCapabilities = ProviderCapabilities()
     docs_url: str | None = None
     get_key_url: str | None = None
+
+    @model_validator(mode="after")
+    def _derive_status(self) -> "ProviderSpec":
+        """Recompute the v1 ``status`` alias (ruling R-V2-1, PLAN-V2 §8).
+
+        ``status == "mvp"`` iff the provider is offered *and* the slim worker
+        image can construct it. ``verification`` is an informational chip and
+        never takes part: it gates no validation, seeding, picker or
+        construction. Because every v1 MVP entry is ``worker_image="slim"`` and
+        every entry V2-05 adds is ``"full"``, the alias keeps exactly the v1
+        ``mvp`` set until V2-03/V2-13 migrate the consumers. Anything passed in
+        for ``status`` is ignored.
+
+        Returns:
+            This spec, with ``status`` set from the v2 fields.
+        """
+        self.status = (
+            "mvp" if self.availability == "available" and self.worker_image == "slim" else "deferred"
+        )
+        return self
 
 
 def _api_key(label: str = "API key", *, help_text: str | None = None, env: str | None = None) -> FieldSpec:
@@ -119,7 +192,7 @@ def _deferred(
         kind=kind,
         label=label,
         vendor=vendor,
-        status="deferred",
+        availability="deferred",
         package=package,
         python_class=python_class,
         requires_credential=requires_credential,
@@ -128,7 +201,7 @@ def _deferred(
     )
 
 
-_MVP: list[ProviderSpec] = [
+_AVAILABLE: list[ProviderSpec] = [
     # ---------------------------------------------------------------- LiveKit Inference
     ProviderSpec(
         id="livekit-inference-stt",
@@ -519,6 +592,41 @@ _MVP: list[ProviderSpec] = [
     ),
 ]
 
+
+#: The only providers that have completed a live call on this platform
+#: (RUNBOOK stages 0-9). Everything else stays ``unverified`` until V2-20.
+VERIFIED_IDS: frozenset[str] = frozenset(
+    {"livekit-inference-stt", "livekit-inference-llm", "livekit-inference-tts", "fastembed-embedding"}
+)
+
+
+def _shipped(spec: ProviderSpec) -> ProviderSpec:
+    """Return a copy of ``spec`` as the v1 MVP set shipped it.
+
+    The v1 plugin set *is* the slim worker image (CONTRACTS-V2 §7), so every
+    entry gets ``worker_image="slim"`` — which is what the ``status`` alias
+    derives from (R-V2-1). ``verification`` is set honestly: only the four
+    providers in :data:`VERIFIED_IDS` have passed a live call, and the rest
+    flip in V2-20 without changing ``status``.
+
+    Args:
+        spec: The available entry to mark.
+
+    Returns:
+        A revalidated copy (so the ``status`` alias is recomputed).
+    """
+    payload = {
+        **spec.model_dump(exclude={"status"}),
+        "worker_image": "slim",
+        "verification": "verified" if spec.id in VERIFIED_IDS else "unverified",
+    }
+    return ProviderSpec.model_validate(payload)
+
+
+#: The v1 MVP set, all of which the alias must still report as ``status="mvp"``.
+_MVP: list[ProviderSpec] = [_shipped(spec) for spec in _AVAILABLE]
+
+
 _DEFERRED: list[ProviderSpec] = [
     _deferred(
         "azure-openai-realtime",
@@ -715,6 +823,48 @@ def by_kind(kind: ProviderKind, *, status: str | None = "mvp") -> list[ProviderS
 def mvp_providers() -> list[ProviderSpec]:
     """Return every provider currently shipped (``status == "mvp"``)."""
     return [s for s in REGISTRY if s.status == "mvp"]
+
+
+def available_providers() -> list[ProviderSpec]:
+    """Return every provider the platform offers (``availability == "available"``).
+
+    Unlike :func:`mvp_providers` this ignores verification, so a provider that
+    ships but has not yet passed a live call is included.
+    """
+    return [s for s in REGISTRY if s.availability == "available"]
+
+
+def by_image(image: WorkerImage) -> list[ProviderSpec]:
+    """Return every available provider carried by a worker image.
+
+    The ``slim`` image is a subset of ``full``, so asking for ``full`` also
+    returns the ``slim`` entries.
+
+    Args:
+        image: The worker image flavour to filter on.
+
+    Returns:
+        The matching provider specs, in registry order.
+    """
+    wanted = {"slim"} if image == "slim" else {"slim", "full"} if image == "full" else {"isolated"}
+    return [s for s in available_providers() if s.worker_image in wanted]
+
+
+def constructible(installed_ids: list[str] | set[str] | None) -> list[ProviderSpec]:
+    """Return the available providers a worker pool can actually build.
+
+    Args:
+        installed_ids: ``installed_provider_ids`` reported by the pool's workers,
+            or ``None`` when the pool has not registered yet (then every
+            available provider is assumed constructible, as in v1).
+
+    Returns:
+        The matching provider specs, in registry order.
+    """
+    if installed_ids is None:
+        return available_providers()
+    installed = set(installed_ids)
+    return [s for s in available_providers() if s.id in installed]
 
 
 def vision_support(provider_id: str, model: str | None) -> bool | None:

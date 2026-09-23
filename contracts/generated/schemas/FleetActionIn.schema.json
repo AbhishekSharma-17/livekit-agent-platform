@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/FleetActionIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/connections/{id}/fleet`` (supervised connections only).",
+  "properties": {
+    "action": {
+      "enum": [
+        "start",
+        "stop",
+        "restart"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "replicas": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Replicas"
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "title": "FleetActionIn",
+  "type": "object"
+}

@@ -1,0 +1,47 @@
+{
+  "$id": "lkap-contracts/AnalyticsBucket.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One day or one agent in ``AnalyticsSummary``.",
+  "properties": {
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Usd"
+    },
+    "failed": {
+      "default": 0,
+      "title": "Failed",
+      "type": "integer"
+    },
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "minutes": {
+      "default": 0.0,
+      "title": "Minutes",
+      "type": "number"
+    },
+    "sessions": {
+      "default": 0,
+      "title": "Sessions",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "key"
+  ],
+  "title": "AnalyticsBucket",
+  "type": "object"
+}

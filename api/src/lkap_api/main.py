@@ -26,19 +26,33 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from lkap_api import __version__
+from lkap_api.bootstrap import bootstrap
 from lkap_api.db.session import Database
 from lkap_api.errors import ApiError
 from lkap_api.logging import configure_logging, get_logger
 from lkap_api.packs import router as packs_router
 from lkap_api.routers import (
     agents,
+    analytics,
+    api_keys,
+    auth,
+    calls,
     connect,
+    connections,
     credentials,
+    fleet,
+    fleet_internal,
+    flows,
     health,
+    hooks,
     internal,
     providers,
     sessions,
+    telephony,
+    text_sessions,
     tools,
+    webhooks,
+    workspaces,
 )
 from lkap_api.routers.credentials import seed_bootstrap_credentials
 from lkap_api.sessions_sweep import sweep_loop
@@ -103,6 +117,12 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
+    """Include every router, v1 and v2.
+
+    The v2 routers are declared by V2-01 and filled in by their owning package
+    (see each module's docstring), so wave-1 and wave-2 packages never have to
+    edit this function again.
+    """
     app.include_router(providers.router)
     app.include_router(packs_router)
     app.include_router(credentials.router)
@@ -112,6 +132,19 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(sessions.router)
     app.include_router(internal.router)
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(workspaces.router)
+    app.include_router(api_keys.router)
+    app.include_router(connections.router)
+    app.include_router(fleet.router)
+    app.include_router(hooks.router)
+    app.include_router(fleet_internal.router)
+    app.include_router(webhooks.router)
+    app.include_router(analytics.router)
+    app.include_router(flows.router)
+    app.include_router(telephony.router)
+    app.include_router(calls.router)
+    app.include_router(text_sessions.router)
     _include_knowledge_router(app)
 
 
@@ -127,9 +160,33 @@ def _include_knowledge_router(app: FastAPI) -> None:
     app.include_router(knowledge.router)
 
 
+async def _run_bootstrap(app: FastAPI, settings: Settings) -> None:
+    """Create the default workspace, owner and connection if they are missing (D-V2-6).
+
+    Failure is logged and swallowed: an api that cannot bootstrap must still
+    start and answer ``/v1/health``, which is where the operator sees
+    ``db: "error"`` when the migrations were never run.
+    """
+    try:
+        result = await bootstrap(app.state.db, settings)
+    except Exception as exc:  # noqa: BLE001 - startup must survive a bootstrap failure
+        log.warning("bootstrap_failed", error_type=type(exc).__name__)
+        return
+    if result.changed:
+        log.info(
+            "bootstrap_applied",
+            workspace_created=result.workspace_created,
+            owner_created=result.owner_created,
+            connection_created=result.connection_created,
+            agents_bound=result.agents_bound,
+            sessions_bound=result.sessions_bound,
+        )
+
+
 async def _startup(app: FastAPI, settings: Settings) -> None:
     await asyncio.to_thread(Path(settings.data_dir).mkdir, parents=True, exist_ok=True)
     app.state.db = Database(settings.resolved_database_url)
+    await _run_bootstrap(app, settings)
     if settings.bootstrap_credentials_json:
         try:
             async with app.state.db.session() as session:

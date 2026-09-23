@@ -19,7 +19,12 @@ model flagged ``supports_video`` (DECISIONS-W2 §D-W2-10): the registry default
 from __future__ import annotations
 
 from lkap_contracts import providers
-from lkap_contracts.agent_config import CapabilitiesConfig, PipelineConfig, ProviderRef
+from lkap_contracts.agent_config import (
+    CapabilitiesConfig,
+    PanelLayout,
+    PipelineConfig,
+    ProviderRef,
+)
 from lkap_contracts.packs import KbSeed, PackManifest
 from lkap_contracts.providers import ProviderSpec
 
@@ -56,6 +61,8 @@ MANIFEST = PackManifest(
     name="Insurance claim intake",
     description=DESCRIPTION,
     ui_panel_id="insurance_notebook",
+    # v2: a custom React panel, so no composite blocks (CONTRACTS-V2 §4.4).
+    default_panel=PanelLayout(panel_id="insurance_notebook", blocks=[]),
     default_instructions=SYSTEM_INSTRUCTION,
     default_greeting=DEFAULT_GREETING,
     # google-realtime's voice once an admin switches to Gemini Live (mapping #1).

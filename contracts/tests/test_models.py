@@ -168,15 +168,20 @@ def test_model_round_trips_through_python_dict(model: BaseModel) -> None:
     assert type(model).model_validate(model.model_dump()) == model
 
 
+#: Envelopes bumped to ``v=2`` by LKAP v2 (CONTRACTS-V2 §4); everything else stays v1.
+V2_ENVELOPES = {"AgentConfig", "ResolvedAgentConfig", "DispatchMetadata", "UiState", "ProviderSpec"}
+
+
 @pytest.mark.parametrize("model", ROUND_TRIP_CASES, ids=lambda m: type(m).__name__)
-def test_versioned_models_pin_v_to_one(model: BaseModel) -> None:
+def test_versioned_models_pin_v_to_their_protocol_version(model: BaseModel) -> None:
+    expected = 2 if type(model).__name__ in V2_ENVELOPES else 1
     if "v" in type(model).model_fields:
-        assert model.model_dump()["v"] == 1
+        assert model.model_dump()["v"] == expected
 
 
 def test_agent_config_applies_documented_defaults() -> None:
     config = _agent_config()
-    assert config.v == 1
+    assert config.v == 2
     assert config.timezone == "UTC"
     assert config.voice.greeting == "Hello! How can I help you today?"
     assert config.voice.greeting_mode == "say"
@@ -204,14 +209,22 @@ def test_agent_config_mutable_defaults_are_not_shared_between_instances() -> Non
 def test_dispatch_metadata_carries_ids_only() -> None:
     meta = DispatchMetadata(session_id="s1", agent_id="a1", config_version=1, participant_identity="user-abc")
     payload: dict[str, Any] = json.loads(meta.model_dump_json())
-    assert set(payload) == {"v", "session_id", "agent_id", "config_version", "participant_identity"}
+    assert set(payload) == {
+        "v",
+        "session_id",
+        "agent_id",
+        "config_version",
+        "participant_identity",
+        "channel",
+        "connection_id",
+    }
     assert all(isinstance(value, str | int) for value in payload.values())
 
 
 def test_dispatch_metadata_rejects_extra_smuggled_fields() -> None:
     parsed = DispatchMetadata.model_validate(
         {
-            "v": 1,
+            "v": 2,
             "session_id": "s1",
             "agent_id": "a1",
             "config_version": 1,

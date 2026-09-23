@@ -25,7 +25,7 @@ export type ProviderRefForm = z.infer<typeof providerRefSchema>;
 
 export const pipelineConfigSchema = z
   .object({
-    mode: z.enum(["realtime", "cascaded"]),
+    mode: z.enum(["realtime", "cascaded", "half_cascade"]),
     realtime: providerRefSchema.nullable().optional(),
     stt: providerRefSchema.nullable().optional(),
     llm: providerRefSchema.nullable().optional(),

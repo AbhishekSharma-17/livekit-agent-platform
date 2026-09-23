@@ -1,5 +1,5 @@
 {
-  "v": 1,
+  "v": 2,
   "status": {
     "label": "Needs docs",
     "tone": "warning",
@@ -83,6 +83,7 @@
   ],
   "assets": [],
   "activity": [],
+  "blocks": {},
   "custom": {
     "fields": {
       "claimant": {

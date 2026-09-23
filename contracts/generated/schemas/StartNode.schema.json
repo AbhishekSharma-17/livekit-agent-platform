@@ -1,0 +1,67 @@
+{
+  "$id": "lkap-contracts/StartNode.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Entry point: greets the caller and hands off along its first matching edge.",
+  "properties": {
+    "greeting": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Greeting"
+    },
+    "greeting_mode": {
+      "default": "say",
+      "enum": [
+        "say",
+        "generate"
+      ],
+      "title": "Greeting Mode",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "start",
+      "default": "start",
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+    },
+    "position": {
+      "default": [
+        0.0,
+        0.0
+      ],
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Position",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "StartNode",
+  "type": "object"
+}

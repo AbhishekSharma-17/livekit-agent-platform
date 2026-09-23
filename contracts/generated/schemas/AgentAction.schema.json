@@ -7,7 +7,11 @@
       "enum": [
         "get_snapshot",
         "set_video_source",
-        "ui_action"
+        "ui_action",
+        "form_submit",
+        "block_action",
+        "rewind",
+        "inject_user_text"
       ],
       "title": "Action",
       "type": "string"

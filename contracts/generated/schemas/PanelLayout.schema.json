@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "BlockSpec": {
+      "description": "One block of a composite panel (CONTRACTS-V2 §4.4).\n\n``id`` keys the block's state in :attr:`UiState.blocks`; ``config`` is\nblock-type specific and rendered by the matching React component.",
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Config",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "type": {
+          "enum": [
+            "status",
+            "notes",
+            "checklist",
+            "activity",
+            "form",
+            "document",
+            "gallery",
+            "table",
+            "transcript",
+            "video",
+            "kb_citations",
+            "custom"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "BlockSpec",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/PanelLayout.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Which panel renders the session, and (for ``composite``) its blocks.",
+  "properties": {
+    "blocks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BlockSpec"
+      },
+      "title": "Blocks",
+      "type": "array"
+    },
+    "layout": {
+      "default": "side",
+      "enum": [
+        "side",
+        "wide"
+      ],
+      "title": "Layout",
+      "type": "string"
+    },
+    "panel_id": {
+      "default": "composite",
+      "title": "Panel Id",
+      "type": "string"
+    }
+  },
+  "title": "PanelLayout",
+  "type": "object"
+}

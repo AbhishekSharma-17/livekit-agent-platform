@@ -7,10 +7,19 @@
  *
  * The dialog is fully labelled (`DialogTitle` + `DialogDescription` wired to
  * the content through Radix) so screen readers announce what opened.
+ *
+ * It can also be opened by the agent: `lkap.ui.request` `open_dialog` with
+ * `{dialog: "packet"}` (CONTRACTS-V2 §4.4, ruling R-V2-3b) reaches
+ * `openPacketDialog()` below, which the panel's `handleRequest` calls. The
+ * indirection exists because `PanelDefinition` is a module-level object while
+ * the dialog's open state belongs to the mounted component: a mounted dialog
+ * subscribes, and the request is declined when none is mounted.
  */
 import * as React from "react";
+import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
+import { DescriptionList } from "@/components/shared/description-list";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +30,31 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+/** What `openPacketDialog()` was able to do. */
+export type PacketOpenOutcome = "opened" | "empty" | "absent";
+
+type PacketOpener = () => PacketOpenOutcome;
+
+/** Mounted packet dialogs. Normally one; a set keeps remounts honest. */
+const OPENERS = new Set<PacketOpener>();
+
+/**
+ * Open the adjuster packet on behalf of the agent.
+ *
+ * @returns `"opened"` when a mounted dialog opened, `"empty"` when the
+ * workflow has not written a packet yet (nothing to show, so nothing opens),
+ * `"absent"` when no notebook is mounted.
+ */
+export function openPacketDialog(): PacketOpenOutcome {
+  let outcome: PacketOpenOutcome = "absent";
+  for (const opener of OPENERS) {
+    const result = opener();
+    if (result === "opened") return "opened";
+    outcome = result;
+  }
+  return outcome;
+}
+
 export function PacketDialog({
   markdown,
   handoff,
@@ -30,9 +64,26 @@ export function PacketDialog({
 }) {
   const entries = Object.entries(handoff);
   const ready = markdown.trim().length > 0;
+  const [open, setOpen] = useState(false);
+
+  // The opener is registered once; `ready` is read through a ref so a packet
+  // arriving mid-call does not churn the subscription.
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  useEffect(() => {
+    const opener: PacketOpener = () => {
+      if (!readyRef.current) return "empty";
+      setOpen(true);
+      return "opened";
+    };
+    OPENERS.add(opener);
+    return () => {
+      OPENERS.delete(opener);
+    };
+  }, []);
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -55,21 +106,11 @@ export function PacketDialog({
 
         <div className="max-h-[65vh] overflow-y-auto pr-1">
           {entries.length > 0 && (
-            <dl className="mb-5 grid gap-2 sm:grid-cols-2">
-              {entries.map(([term, value]) => (
-                <div
-                  key={term}
-                  className="border-border/60 bg-muted/30 rounded-lg border px-3 py-2"
-                >
-                  <dt className="text-muted-foreground text-[0.65rem] tracking-[0.06em] uppercase">
-                    {term}
-                  </dt>
-                  <dd className="mt-1 text-sm leading-snug break-words">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <DescriptionList
+              className="mb-5"
+              columns={2}
+              items={entries.map(([term, detail]) => ({ term, detail }))}
+            />
           )}
           <div
             className="prose-sm max-w-none [&_h1]:mt-0 [&_h1]:mb-3 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_li]:my-1 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"

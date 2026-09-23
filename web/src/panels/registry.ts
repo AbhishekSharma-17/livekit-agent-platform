@@ -18,7 +18,12 @@
 import type { ReceivedMessage } from "@livekit/components-react";
 import type { ComponentType } from "react";
 
-import type { AgentPublicOut, UiState } from "@/contracts/lkap-contracts";
+import type {
+  AgentPublicOut,
+  UiRequest,
+  UiRequestResult,
+  UiState,
+} from "@/contracts/lkap-contracts";
 import type { PanelConnectionState } from "@/lib/livekit";
 import { GENERIC_PANEL } from "@/panels/generic";
 import { INSURANCE_NOTEBOOK_PANEL } from "@/panels/insurance_notebook";
@@ -57,6 +62,19 @@ export interface PanelDefinition {
    * main column and demotes the stage to a rail (the insurance notebook).
    */
   layout?: "side" | "wide";
+  /**
+   * Optional handler for the `lkap.ui.request` methods that target a panel
+   * affordance (UI_UX_SPEC §5.4). The session room forwards a request here
+   * when the rendered panel defines it, and declines politely (`{ok: false}`)
+   * when it does not.
+   *
+   * Payload keys are fixed by CONTRACTS-V2 §4.4 (ruling R-V2-3b):
+   * `open_dialog {dialog, params?}`, `focus {target}`,
+   * `request_video_source {source}`, `toast {message, tone?}` — the last two
+   * are handled by the room, not by a panel. The insurance notebook answers
+   * `open_dialog {dialog: "packet"}`.
+   */
+  handleRequest?: (request: UiRequest) => UiRequestResult | Promise<UiRequestResult>;
 }
 
 export const GENERIC_PANEL_ID = "generic";

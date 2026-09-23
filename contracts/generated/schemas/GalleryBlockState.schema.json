@@ -1,0 +1,29 @@
+{
+  "$id": "lkap-contracts/GalleryBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Images delivered on the asset stream, with one optionally selected.",
+  "properties": {
+    "asset_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Asset Ids",
+      "type": "array"
+    },
+    "selected": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected"
+    }
+  },
+  "title": "GalleryBlockState",
+  "type": "object"
+}

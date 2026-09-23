@@ -4,7 +4,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from lkap_contracts.agent_config import CapabilitiesConfig, PipelineConfig, PipelineMode
+from lkap_contracts.agent_config import (
+    CapabilitiesConfig,
+    PanelLayout,
+    PipelineConfig,
+    PipelineMode,
+)
+from lkap_contracts.ui_protocol import BlockSpec
 
 
 class KbSeed(BaseModel):
@@ -31,6 +37,8 @@ class PackManifest(BaseModel):
     name: str
     description: str
     ui_panel_id: str
+    default_panel: PanelLayout | None = None
+    blocks: list[BlockSpec] = []
     default_instructions: str
     default_greeting: str
     default_voice: dict[str, str] = {}

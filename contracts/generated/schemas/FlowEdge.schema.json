@@ -1,0 +1,60 @@
+{
+  "$id": "lkap-contracts/FlowEdge.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A conditional transition; ``condition`` becomes the handoff tool description.",
+  "properties": {
+    "condition": {
+      "default": "",
+      "title": "Condition",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
+    "priority": {
+      "default": 0,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    },
+    "transition_speech": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transition Speech"
+    }
+  },
+  "required": [
+    "id",
+    "source",
+    "target"
+  ],
+  "title": "FlowEdge",
+  "type": "object"
+}

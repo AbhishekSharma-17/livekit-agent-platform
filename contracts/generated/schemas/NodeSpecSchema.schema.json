@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/NodeSpecSchema.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The JSON schema of one flow node kind, for the flow builder's forms.",
+  "properties": {
+    "json_schema": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Json Schema",
+      "type": "object"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "label"
+  ],
+  "title": "NodeSpecSchema",
+  "type": "object"
+}

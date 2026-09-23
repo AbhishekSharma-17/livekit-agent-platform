@@ -1,0 +1,25 @@
+{
+  "$id": "lkap-contracts/WorkerHeartbeatIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/workers/{instance_key}/heartbeat``.",
+  "properties": {
+    "active_jobs": {
+      "default": 0,
+      "title": "Active Jobs",
+      "type": "integer"
+    },
+    "status": {
+      "default": "ready",
+      "enum": [
+        "starting",
+        "ready",
+        "draining",
+        "gone"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "title": "WorkerHeartbeatIn",
+  "type": "object"
+}

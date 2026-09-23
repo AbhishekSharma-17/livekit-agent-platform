@@ -22,20 +22,60 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter
 
 from lkap_contracts import api_models, providers
-from lkap_contracts.agent_config import AgentConfig, ResolvedAgentConfig
+from lkap_contracts.agent_config import (
+    AgentConfig,
+    AgentLimits,
+    AvatarOptions,
+    PanelLayout,
+    QaConfig,
+    RecordingConfig,
+    ResolvedAgentConfig,
+)
+from lkap_contracts.common import Issue
+from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.fleet import (
+    FleetDesired,
+    ReplicaHandle,
+    WorkerEnv,
+    WorkerHeartbeatIn,
+    WorkerRegisterIn,
+    WorkerRegisterOut,
+)
+from lkap_contracts.flow import (
+    AgentNode,
+    EndNode,
+    FlowEdge,
+    FlowNode,
+    FlowSpec,
+    FlowState,
+    GlobalNode,
+    QaNode,
+    StartNode,
+    TransferNode,
+    VariableSpec,
+)
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
+from lkap_contracts.pricing import Price
 from lkap_contracts.providers import ProviderSpec
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
 from lkap_contracts.ui_protocol import (
     ActivityEvent,
     AgentAction,
     AgentActionResult,
+    BlockSpec,
+    DocumentBlockState,
+    FormBlockState,
+    GalleryBlockState,
+    KbCitationsBlockState,
+    TableBlockState,
+    TranscriptBlockState,
     UiPatch,
     UiRequest,
     UiRequestResult,
     UiSnapshot,
     UiState,
+    VideoBlockState,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,13 +91,47 @@ COMBINED_TITLE = "LkapContracts"
 EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # core config + dispatch
     "AgentConfig": AgentConfig,
+    "AgentLimits": AgentLimits,
+    "AvatarOptions": AvatarOptions,
+    "PanelLayout": PanelLayout,
+    "RecordingConfig": RecordingConfig,
+    "QaConfig": QaConfig,
     "ResolvedAgentConfig": ResolvedAgentConfig,
     "DispatchMetadata": DispatchMetadata,
+    "Issue": Issue,
+    # connections and fleet
+    "ConnectionCapabilities": ConnectionCapabilities,
+    "ConnectionInfo": ConnectionInfo,
+    "FleetDesired": FleetDesired,
+    "WorkerEnv": WorkerEnv,
+    "ReplicaHandle": ReplicaHandle,
+    "WorkerRegisterIn": WorkerRegisterIn,
+    "WorkerRegisterOut": WorkerRegisterOut,
+    "WorkerHeartbeatIn": WorkerHeartbeatIn,
+    # flows
+    "FlowSpec": FlowSpec,
+    "FlowEdge": FlowEdge,
+    "FlowState": FlowState,
+    "VariableSpec": VariableSpec,
+    "StartNode": StartNode,
+    "AgentNode": AgentNode,
+    "EndNode": EndNode,
+    "GlobalNode": GlobalNode,
+    "TransferNode": TransferNode,
+    "QaNode": QaNode,
     # ui protocol
     "UiState": UiState,
     "UiSnapshot": UiSnapshot,
     "UiPatch": UiPatch,
     "ActivityEvent": ActivityEvent,
+    "BlockSpec": BlockSpec,
+    "FormBlockState": FormBlockState,
+    "DocumentBlockState": DocumentBlockState,
+    "GalleryBlockState": GalleryBlockState,
+    "TableBlockState": TableBlockState,
+    "TranscriptBlockState": TranscriptBlockState,
+    "VideoBlockState": VideoBlockState,
+    "KbCitationsBlockState": KbCitationsBlockState,
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
     "AgentAction": AgentAction,
@@ -66,8 +140,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PackManifest": PackManifest,
     "KbSeed": KbSeed,
     "ToolMeta": ToolMeta,
-    # providers
+    # providers and pricing
     "ProviderSpec": ProviderSpec,
+    "Price": Price,
     # tools
     "HttpToolDefinition": HttpToolDefinition,
     "McpServerDefinition": McpServerDefinition,
@@ -76,6 +151,10 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ErrorBody": api_models.ErrorBody,
     "ErrorResponse": api_models.ErrorResponse,
     "ProvidersResponse": api_models.ProvidersResponse,
+    "ProviderOut": api_models.ProviderOut,
+    "ProviderSettingsIn": api_models.ProviderSettingsIn,
+    "CatalogItem": api_models.CatalogItem,
+    "CatalogResponse": api_models.CatalogResponse,
     "CredentialCreate": api_models.CredentialCreate,
     "CredentialUpdate": api_models.CredentialUpdate,
     "CredentialOut": api_models.CredentialOut,
@@ -85,6 +164,10 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "AgentOut": api_models.AgentOut,
     "AgentPublicOut": api_models.AgentPublicOut,
     "ValidationResult": api_models.ValidationResult,
+    "ConfigVersionOut": api_models.ConfigVersionOut,
+    "FlowValidateRequest": api_models.FlowValidateRequest,
+    "NodeSpecSchema": api_models.NodeSpecSchema,
+    "NodeSpecsResponse": api_models.NodeSpecsResponse,
     "ConnectRequest": api_models.ConnectRequest,
     "ConnectResponse": api_models.ConnectResponse,
     "ToolCreate": api_models.ToolCreate,
@@ -102,12 +185,42 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "TranscriptTurn": api_models.TranscriptTurn,
     "SessionOut": api_models.SessionOut,
     "SessionDetailOut": api_models.SessionDetailOut,
+    "SessionLatency": api_models.SessionLatency,
+    "CostLine": api_models.CostLine,
+    "SessionCost": api_models.SessionCost,
+    "QaOut": api_models.QaOut,
+    "RecordingOut": api_models.RecordingOut,
+    "AnalyticsBucket": api_models.AnalyticsBucket,
+    "AnalyticsSummary": api_models.AnalyticsSummary,
     "SessionEventOut": api_models.SessionEventOut,
     "SessionEventIn": api_models.SessionEventIn,
     "SessionEventsIn": api_models.SessionEventsIn,
     "SessionSummaryIn": api_models.SessionSummaryIn,
     "InternalKbSearchRequest": api_models.InternalKbSearchRequest,
+    "SessionStartIn": api_models.SessionStartIn,
+    "SessionMetricsIn": api_models.SessionMetricsIn,
+    "RecordingStartOut": api_models.RecordingStartOut,
+    "SessionRecordingIn": api_models.SessionRecordingIn,
     "HealthResponse": api_models.HealthResponse,
+    # auth, team and connections
+    "UserOut": api_models.UserOut,
+    "WorkspaceMembership": api_models.WorkspaceMembership,
+    "Me": api_models.Me,
+    "ConnectionOut": api_models.ConnectionOut,
+    "ConnectionCreate": api_models.ConnectionCreate,
+    "ConnectionUpdate": api_models.ConnectionUpdate,
+    "ConnectionRotateIn": api_models.ConnectionRotateIn,
+    "ConnectionTestResult": api_models.ConnectionTestResult,
+    "WorkerInstanceOut": api_models.WorkerInstanceOut,
+    "FleetStatus": api_models.FleetStatus,
+    "FleetActionIn": api_models.FleetActionIn,
+    # webhooks and telephony
+    "WebhookEndpointCreate": api_models.WebhookEndpointCreate,
+    "WebhookEndpointOut": api_models.WebhookEndpointOut,
+    "WebhookDeliveryOut": api_models.WebhookDeliveryOut,
+    "WebhookEvent": api_models.WebhookEvent,
+    "CallCreate": api_models.CallCreate,
+    "CallOut": api_models.CallOut,
     # concrete page parametrisations
     "CredentialPage": api_models.CredentialPage,
     "AgentPage": api_models.AgentPage,
@@ -116,11 +229,17 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "KbDocumentPage": api_models.KbDocumentPage,
     "SessionPage": api_models.SessionPage,
     "SessionEventPage": api_models.SessionEventPage,
+    "ConnectionPage": api_models.ConnectionPage,
+    "ConfigVersionPage": api_models.ConfigVersionPage,
+    "CallPage": api_models.CallPage,
+    "WebhookEndpointPage": api_models.WebhookEndpointPage,
+    "WebhookDeliveryPage": api_models.WebhookDeliveryPage,
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.
 EXPORTED_UNIONS: dict[str, Any] = {
     "ToolDefinition": ToolDefinition,
+    "FlowNode": FlowNode,
 }
 
 
@@ -137,17 +256,15 @@ def _dumps(payload: object) -> str:
 def build_providers_document() -> dict[str, Any]:
     """Build the ``providers.json`` payload from :data:`lkap_contracts.providers.REGISTRY`.
 
-    The payload is exactly ``ProvidersResponse``: no extra keys, so a strict parse
-    of the file against the generated type succeeds. Topic constants live in
-    :mod:`lkap_contracts.ui_protocol`, not here.
+    The payload is exactly ``ProvidersResponse`` (dumped from the model, so the
+    protocol version can never drift from the contract): no extra keys, so a
+    strict parse of the file against the generated type succeeds. Topic
+    constants live in :mod:`lkap_contracts.ui_protocol`, not here.
 
     Returns:
         A mapping with the protocol version and every registry entry, in registry order.
     """
-    return {
-        "v": 1,
-        "providers": [spec.model_dump(mode="json") for spec in providers.REGISTRY],
-    }
+    return api_models.ProvidersResponse(providers=providers.REGISTRY).model_dump(mode="json")
 
 
 def _schema_for(name: str) -> dict[str, Any]:

@@ -6,14 +6,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -23,19 +17,28 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useCreateKb, useProviders } from "@/components/console/lib/api-hooks";
+import { useCreateKb } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
+import { Field } from "@/components/shared/field";
+import { CapabilityBadge } from "@/components/shared/capability-badge";
+import { EMBEDDER_CHOICES, embedderHelp, embedderLabel } from "@/components/console/knowledge/embedder-label";
+import { cn } from "@/lib/utils";
 
+const DEFAULT_EMBEDDER_ID = "fastembed-embedding";
+
+/**
+ * `create-kb-dialog.tsx` (docs/UI_UX_SPEC.md §7.7 item 4): "stays a dialog (2
+ * fields) with embedder choice as radio cards" — Name, then the embedder.
+ * Description isn't a create-time field (`KbCreate.description` is optional
+ * and there's no update-knowledge-base hook in WP-6's scope to edit it
+ * afterwards); it can be added once WP-0 ships one.
+ */
 export function CreateKbDialog() {
   const uid = React.useId();
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [description, setDescription] = React.useState("");
-  const [embedderId, setEmbedderId] = React.useState("fastembed-embedding");
-  const providersQuery = useProviders();
+  const [embedderId, setEmbedderId] = React.useState(DEFAULT_EMBEDDER_ID);
   const createKb = useCreateKb();
-
-  const embedders = (providersQuery.data?.providers ?? []).filter((p) => p.kind === "embedding" && p.status === "mvp");
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -44,11 +47,11 @@ export function CreateKbDialog() {
       return;
     }
     try {
-      const kb = await createKb.mutateAsync({ name: name.trim(), description: description.trim(), embedder_id: embedderId });
+      const kb = await createKb.mutateAsync({ name: name.trim(), embedder_id: embedderId });
       setName("");
-      setDescription("");
+      setEmbedderId(DEFAULT_EMBEDDER_ID);
       setOpen(false);
-      toast.success(`Knowledge base "${kb.name}" created.`);
+      toast.success(`"${kb.name}" created.`);
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -67,40 +70,50 @@ export function CreateKbDialog() {
             <DialogTitle>New knowledge base</DialogTitle>
             <DialogDescription>Documents are chunked and embedded on upload.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <label htmlFor={`${uid}-name`} className="mb-1 block text-sm font-medium">
-                Name
-              </label>
+          <div className="space-y-5 py-2">
+            <Field label="Name" htmlFor={`${uid}-name`} required>
               <Input
                 id={`${uid}-name`}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Policy handbook"
+                autoFocus
               />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-description`} className="mb-1 block text-sm font-medium">
-                Description
-              </label>
-              <Textarea id={`${uid}-description`} value={description} onChange={(e) => setDescription(e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-embedder`} className="mb-1 block text-sm font-medium">
-                Embedder
-              </label>
-              <Select value={embedderId} onValueChange={setEmbedderId}>
-                <SelectTrigger id={`${uid}-embedder`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {embedders.map((embedder) => (
-                    <SelectItem key={embedder.id} value={embedder.id}>
-                      {embedder.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            </Field>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Embedder</span>
+              <RadioGroup
+                value={embedderId}
+                onValueChange={setEmbedderId}
+                aria-label="Embedder"
+                className="grid gap-2 sm:grid-cols-2"
+              >
+                {EMBEDDER_CHOICES.map((id) => {
+                  const inputId = `${uid}-embedder-${id}`;
+                  const selected = embedderId === id;
+                  return (
+                    <Label
+                      key={id}
+                      htmlFor={inputId}
+                      className={cn(
+                        "flex cursor-pointer flex-col gap-1.5 rounded-md border border-border p-3 text-sm font-normal",
+                        selected && "border-primary bg-muted/50",
+                      )}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-foreground">{embedderLabel(id)}</span>
+                        <RadioGroupItem id={inputId} value={id} />
+                      </span>
+                      <span className="text-xs text-muted-foreground">{embedderHelp(id)}</span>
+                      <CapabilityBadge
+                        kind={id === "fastembed-embedding" ? "no-key" : "key-required"}
+                        className="self-start"
+                      />
+                    </Label>
+                  );
+                })}
+              </RadioGroup>
             </div>
           </div>
           <DialogFooter>

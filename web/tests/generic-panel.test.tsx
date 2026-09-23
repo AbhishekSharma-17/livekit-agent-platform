@@ -7,6 +7,8 @@ import type { AgentPublicOut, UiState } from "@/contracts/lkap-contracts";
 import { GenericPanel } from "@/panels/generic";
 import type { PanelProps } from "@/panels/registry";
 
+import genericFixture from "./fixtures/generic_ui_state.json";
+
 afterEach(cleanup);
 
 const AGENT: AgentPublicOut = {
@@ -113,6 +115,9 @@ function props(overrides: Partial<PanelProps> = {}): PanelProps {
   };
 }
 
+/** The golden envelope fixture the preview route and WP-10 also render. */
+const GOLDEN = genericFixture as unknown as UiState;
+
 describe("GenericPanel", () => {
   it("renders every envelope slot from a fixture UiState", () => {
     render(<GenericPanel {...props()} />);
@@ -177,5 +182,52 @@ describe("GenericPanel", () => {
     expect(screen.getByText("The agent has not run any tools yet.")).toBeTruthy();
     expect(screen.queryByText("Show raw state")).toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+});
+
+describe("the golden generic fixture", () => {
+  it("renders every block of tests/fixtures/generic_ui_state.json", () => {
+    const { container } = render(
+      <GenericPanel
+        {...props({
+          state: GOLDEN,
+          assets: new Map([["asset-leak-photo", "blob:mock/leak"]]),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("In progress")).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("45");
+    expect(container.querySelectorAll('[data-slot="panel-note"]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-slot="panel-checklist-item"]')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-slot="panel-asset"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-slot="panel-activity-item"]')).toHaveLength(5);
+    // One blocking item, marked with a chip rather than a red asterisk.
+    expect(screen.getByText("Required")).toBeTruthy();
+    // The pdf has no bytes in this render, so it stays a placeholder.
+    expect(container.querySelectorAll("img")).toHaveLength(1);
+    expect(screen.getByText("Receiving…")).toBeTruthy();
+    expect(screen.getByText(/SRV-40218/)).toBeTruthy();
+  });
+
+  it("marks a running activity row with the state meter and the rest with dots", () => {
+    const { container } = render(<GenericPanel {...props({ state: GOLDEN })} />);
+    const rows = Array.from(
+      container.querySelectorAll('[data-slot="panel-activity-item"]'),
+    );
+    // Newest first: the running "Holding Thursday morning" row leads.
+    expect(rows[0]?.getAttribute("data-phase")).toBe("running");
+    expect(rows[0]?.querySelector('[data-slot="state-meter"]')).toBeTruthy();
+    expect(
+      container.querySelectorAll('[data-slot="panel-activity-item"] [data-slot="state-meter"]'),
+    ).toHaveLength(1);
+    expect(screen.getByText("Urgent")).toBeTruthy();
+  });
+
+  it("uses tokens, not palette classes, for every block", () => {
+    const { container } = render(<GenericPanel {...props({ state: GOLDEN })} />);
+    expect(container.innerHTML).not.toMatch(
+      /\b(?:bg|text|border)-(?:emerald|sky|amber|red|blue)-\d/,
+    );
   });
 });

@@ -242,7 +242,7 @@ async def test_request_ui_performs_rpc_to_remote_participant() -> None:
         {"ok": True, "payload": {"opened": True}}
     )
 
-    result = await channel.request_ui("open_dialog", {"id": "packet"})
+    result = await channel.request_ui("open_dialog", {"dialog": "packet"})
 
     assert result == {"opened": True}
     call = room.local_participant.rpc_calls[-1]

@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "UserOut": {
+      "description": "A platform user, without any credential material.",
+      "properties": {
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_platform_admin": {
+          "default": false,
+          "title": "Is Platform Admin",
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "email"
+      ],
+      "title": "UserOut",
+      "type": "object"
+    },
+    "WorkspaceMembership": {
+      "description": "One workspace the signed-in user belongs to, and their role in it.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "owner",
+            "admin",
+            "builder",
+            "viewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "role"
+      ],
+      "title": "WorkspaceMembership",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/Me.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/auth/me``.",
+  "properties": {
+    "user": {
+      "$ref": "#/$defs/UserOut"
+    },
+    "workspaces": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/WorkspaceMembership"
+      },
+      "title": "Workspaces",
+      "type": "array"
+    }
+  },
+  "required": [
+    "user"
+  ],
+  "title": "Me",
+  "type": "object"
+}

@@ -20,3 +20,4 @@ coverage/
 lancedb/
 dist/
 build/
+.claude/

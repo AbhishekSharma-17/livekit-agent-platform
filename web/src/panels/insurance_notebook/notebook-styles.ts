@@ -9,16 +9,21 @@
  * The rules are a port of the Gemini demo's `styles.css` — ruled paper, ink-in
  * note lines, red blanks, taped polaroids, the rubber stamp, the scribbling
  * pen — scoped under `.lkap-notebook` so nothing leaks into the session shell.
- * The two handwriting faces are pulled from Google Fonts exactly as the demo's
- * `index.html` did; `next/font` cannot be used from a panel module because
- * `panels/registry.ts` makes it a transitive import of every session-surface
- * test and the loader only runs under Next's compiler.
+ *
+ * The two handwriting faces are **not** loaded here (docs/UI_UX_SPEC.md §2.3):
+ * the runtime Google Fonts `@import` is gone, and the paper reads the CSS
+ * variables `--font-hand` (Caveat) and `--font-hand-label` (Patrick Hand) that
+ * the surface around it defines with `next/font/google` — the session layout
+ * (WP-8) and the preview layout (WP-10). `next/font` cannot be called from a
+ * panel module itself, because `panels/registry.ts` makes it a transitive
+ * import of every session-surface test and the loader only runs under Next's
+ * compiler; the `var(…, "Caveat", …)` fallbacks keep the paper legible
+ * wherever the variables are not set (tests, other surfaces).
+ *
  * Only the three signature animations live here; they are switched off under
  * `prefers-reduced-motion`.
  */
 export const NOTEBOOK_CSS = `
-@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&family=Patrick+Hand&display=swap");
-
 .lkap-notebook {
   --paper: #fbf6ea;
   --paper-line: #dcd2bd;
@@ -29,8 +34,8 @@ export const NOTEBOOK_CSS = `
   --ink-ok: #3f7a3a;
   --ink-info: #2f6a94;
   --tape: rgba(236, 222, 176, 0.85);
-  --hand: "Caveat", ui-rounded, cursive;
-  --hand-label: "Patrick Hand", ui-rounded, cursive;
+  --hand: var(--font-hand, "Caveat"), ui-rounded, cursive;
+  --hand-label: var(--font-hand-label, "Patrick Hand"), ui-rounded, cursive;
   --marker-x: -42px;
 }
 
@@ -322,19 +327,33 @@ export const NOTEBOOK_CSS = `
   outline-offset: 2px;
 }
 
+/*
+ * The side stripe is a banned pattern (UI_UX_SPEC §2.1): a field's status is
+ * a small ink dot before its label instead.
+ */
 .lkap-notebook .field {
   padding: 5px 8px;
   border-radius: 7px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border-left: 2px solid color-mix(in srgb, var(--ink-soft) 30%, transparent);
 }
 
 .lkap-notebook .field .f-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-soft);
+}
+
+.lkap-notebook .field .f-label::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink-soft) 45%, transparent);
 }
 
 .lkap-notebook .field .f-value {
@@ -353,8 +372,8 @@ export const NOTEBOOK_CSS = `
 }
 
 .lkap-notebook .field[data-status="missing"] .f-value { color: var(--ink-soft); font-style: italic; }
-.lkap-notebook .field[data-status="complete"] { border-left-color: var(--ink-ok); }
-.lkap-notebook .field[data-status="urgent"] { border-left-color: var(--ink-urgent); }
+.lkap-notebook .field[data-status="complete"] .f-label::before { background: var(--ink-ok); }
+.lkap-notebook .field[data-status="urgent"] .f-label::before { background: var(--ink-urgent); }
 .lkap-notebook .field[data-status="urgent"] .f-value { color: var(--ink-urgent); font-weight: 600; }
 
 /* the % ready ring */
@@ -365,7 +384,7 @@ export const NOTEBOOK_CSS = `
   height: 46px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: conic-gradient(var(--ring-tone, currentColor) calc(var(--value) * 1%), rgba(255, 255, 255, 0.1) 0);
+  background: conic-gradient(var(--ring-tone, currentColor) calc(var(--value) * 1%), color-mix(in srgb, var(--muted-foreground, currentColor) 28%, transparent) 0);
   display: grid;
   place-items: center;
   transition: background 320ms ease;
@@ -376,7 +395,12 @@ export const NOTEBOOK_CSS = `
   position: absolute;
   inset: 5px;
   border-radius: 50%;
-  background: var(--color-card, #1e2126);
+  /*
+   * The disc is the card surface behind the ring. It reads --card and not
+   * Tailwind's --color-card: @theme inline emits the latter on :root with the
+   * light value only, so it stays pale on the dark session surface.
+   */
+  background: var(--card, var(--color-card));
 }
 
 .lkap-notebook .ring > span {
@@ -390,8 +414,13 @@ export const NOTEBOOK_CSS = `
 @container (max-width: 640px) {
   .lkap-notebook { --marker-x: -28px; }
 
+  /*
+   * Bottom padding = the scaled stamp's own height (~50px) + its offset from
+   * the edge (24px) + a line of clearance, so the stamp never lands on the
+   * last handwritten line on a 358px-wide phone column.
+   */
   .lkap-notebook .paper {
-    padding: 20px 16px 96px 44px;
+    padding: 20px 16px 106px 44px;
     background-image:
       linear-gradient(90deg, transparent 28px, var(--paper-margin) 28px, var(--paper-margin) 30px, transparent 30px),
       repeating-linear-gradient(transparent 0 30px, var(--paper-line) 30px 31px);
@@ -403,7 +432,13 @@ export const NOTEBOOK_CSS = `
   .lkap-notebook .note.title { font-size: 27px; }
   .lkap-notebook .note.aside { font-size: 20px; }
   .lkap-notebook .frame, .lkap-notebook .frame.sketch { width: 100%; }
-  .lkap-notebook .stamp { right: 16px; bottom: 24px; font-size: 22px; }
+  .lkap-notebook .stamp {
+    right: 16px;
+    bottom: 24px;
+    font-size: 22px;
+    max-width: calc(100% - 32px);
+    padding: 4px 12px;
+  }
   .lkap-notebook .pen { left: 44px; bottom: 28px; font-size: 18px; }
 }
 

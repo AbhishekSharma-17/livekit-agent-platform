@@ -265,7 +265,7 @@
   },
   "$id": "lkap-contracts/UiState.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "The platform envelope every panel renders; ``custom`` is pack-defined.",
+  "description": "The platform envelope every panel renders; ``custom`` is pack-defined.\n\n``v`` accepts ``1`` for one release so v1 producers (and the web reducer's\nown literals) keep validating while panels migrate to blocks.",
   "properties": {
     "activity": {
       "default": [],
@@ -282,6 +282,12 @@
       },
       "title": "Assets",
       "type": "array"
+    },
+    "blocks": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Blocks",
+      "type": "object"
     },
     "checklist": {
       "default": [],
@@ -329,8 +335,11 @@
       "default": null
     },
     "v": {
-      "const": 1,
-      "default": 1,
+      "default": 2,
+      "enum": [
+        1,
+        2
+      ],
       "title": "V",
       "type": "integer"
     }

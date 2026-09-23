@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentOut, ConnectResponse } from "@/contracts/lkap-contracts";
 import {
+  ConnectError,
+  classifyConnectError,
   createConnectTokenSource,
   toPublicAgent,
 } from "@/lib/livekit";
@@ -162,5 +164,49 @@ describe("createConnectTokenSource — freeze after first connect (DECISIONS-W2 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(first.participantToken).toBe(CONNECT_RESPONSE.participantToken);
     expect(second.participantToken).toBe(first.participantToken);
+  });
+});
+
+/**
+ * UI_UX_SPEC §5.7: which "unavailable" page a load/connect failure produces.
+ */
+describe("classifyConnectError", () => {
+  it("maps 404 to not_found and 403 to not_published", () => {
+    expect(
+      classifyConnectError(new ConnectError(404, "not_found", "nope")),
+    ).toBe("not_found");
+    expect(
+      classifyConnectError(new ConnectError(403, "forbidden", "draft")),
+    ).toBe("not_published");
+  });
+
+  it("treats a 403 through the console proxy as a token problem, not a draft", () => {
+    // DECISIONS-W2 D-W2-1 item 5: in test mode the proxy's admin token is the
+    // only thing a 401/403 can be about.
+    expect(
+      classifyConnectError(new ConnectError(403, "forbidden", "draft"), {
+        viaConsole: true,
+      }),
+    ).toBe("other");
+    expect(
+      classifyConnectError(new ConnectError(401, "unauthorized", "no token")),
+    ).toBe("other");
+  });
+
+  it("treats transport failures and a missing base URL as unreachable", () => {
+    expect(classifyConnectError(new TypeError("fetch failed"))).toBe(
+      "unreachable",
+    );
+    expect(
+      classifyConnectError(
+        new ConnectError(0, "missing_api_base_url", "not configured"),
+      ),
+    ).toBe("unreachable");
+  });
+
+  it("falls back to other for anything else the API returns", () => {
+    expect(classifyConnectError(new ConnectError(500, "boom", "server"))).toBe(
+      "other",
+    );
   });
 });

@@ -1,0 +1,108 @@
+{
+  "$id": "lkap-contracts/ConnectionCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/connections`` — secrets are write-only.",
+  "properties": {
+    "agent_name": {
+      "default": "lkap-agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "api_key": {
+      "title": "Api Key",
+      "type": "string"
+    },
+    "api_secret": {
+      "title": "Api Secret",
+      "type": "string"
+    },
+    "deployment_mode": {
+      "default": "external",
+      "enum": [
+        "external",
+        "supervised",
+        "cloud_hosted"
+      ],
+      "title": "Deployment Mode",
+      "type": "string"
+    },
+    "deployment_type": {
+      "default": "cloud",
+      "enum": [
+        "cloud",
+        "self_hosted"
+      ],
+      "title": "Deployment Type",
+      "type": "string"
+    },
+    "is_default": {
+      "default": false,
+      "title": "Is Default",
+      "type": "boolean"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "region": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Region"
+    },
+    "replicas": {
+      "default": 1,
+      "title": "Replicas",
+      "type": "integer"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    },
+    "storage_config_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Storage Config Id"
+    },
+    "url": {
+      "title": "Url",
+      "type": "string"
+    },
+    "use_inference": {
+      "default": true,
+      "title": "Use Inference",
+      "type": "boolean"
+    },
+    "worker_image": {
+      "default": "slim",
+      "enum": [
+        "slim",
+        "full"
+      ],
+      "title": "Worker Image",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slug",
+    "name",
+    "url",
+    "api_key",
+    "api_secret"
+  ],
+  "title": "ConnectionCreate",
+  "type": "object"
+}

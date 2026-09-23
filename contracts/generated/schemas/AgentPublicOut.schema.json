@@ -13,6 +13,11 @@
           "title": "Chat Input",
           "type": "boolean"
         },
+        "dtmf": {
+          "default": false,
+          "title": "Dtmf",
+          "type": "boolean"
+        },
         "screen_share": {
           "default": false,
           "title": "Screen Share",
@@ -50,7 +55,8 @@
     "pipeline_mode": {
       "enum": [
         "realtime",
-        "cascaded"
+        "cascaded",
+        "half_cascade"
       ],
       "title": "Pipeline Mode",
       "type": "string"

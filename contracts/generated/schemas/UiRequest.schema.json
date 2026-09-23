@@ -1,14 +1,17 @@
 {
   "$id": "lkap-contracts/UiRequest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "RPC payload for ``lkap.ui.request`` (agent asks the browser to do something).",
+  "description": "RPC payload for ``lkap.ui.request`` (agent asks the browser to do something).\n\nPayload keys per method are fixed (ruling R-V2-3b, PLAN-V2 §8):\n\n* ``open_dialog`` — ``{dialog: str, params?: dict}`` (never ``{id: ...}``)\n* ``focus`` — ``{target: str}``\n* ``request_video_source`` — ``{source: \"camera\" | \"screen\"}``\n* ``toast`` — ``{message: str, tone?: Tone}``\n* ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``\n* ``show_block`` — ``{block_id}``\n* ``navigate`` — ``{url}`` (new tab; the UI confirms first)",
   "properties": {
     "method": {
       "enum": [
         "open_dialog",
         "focus",
         "request_video_source",
-        "toast"
+        "toast",
+        "form",
+        "show_block",
+        "navigate"
       ],
       "title": "Method",
       "type": "string"

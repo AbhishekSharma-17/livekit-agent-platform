@@ -1063,8 +1063,11 @@ async def _audit_actions(database: Database) -> list[str]:
     [
         ("+15557654321", True),
         ("tel:+15557654321", True),
-        ("sip:+15551230000@carrier.example.net", True),  # a numeric user passes by prefix
-        ("sips:+15551230000;user=phone@carrier.example.net", True),
+        # R-V2-28: a numeric user needs the prefix *and* a listed host.
+        ("sip:+15551230000@carrier.example.net", False),
+        ("sips:+15551230000;user=phone@carrier.example.net", False),
+        ("sips:+15551230000;user=phone@pbx.example.com", True),
+        ("sip:+14155550000@pbx.example.com", False),  # listed host, off-list prefix
         ("sip:desk@pbx.example.com", True),
         ("sip:desk@PBX.example.com:5060", True),
         ("+15550000000", True),
@@ -1232,15 +1235,22 @@ async def test_console_transfer_policy_sip_host_and_numeric_user(
 
     evil = await admin_client.post(f"/v1/calls/{call['id']}/transfer", json={"to": "sip:100@evil.example"})
     off_list = await admin_client.post(f"/v1/calls/{call['id']}/transfer", json={"to": "+14155550100"})
+    # R-V2-28 (inverted from R-V2-23): the prefix alone no longer admits a numeric
+    # user on an unlisted host; that host could be anyone's SIP server.
     by_prefix = await admin_client.post(
         f"/v1/calls/{call['id']}/transfer", json={"to": "sip:+15551230000@carrier.example.net"}
+    )
+    listed = await admin_client.post(
+        f"/v1/calls/{call['id']}/transfer", json={"to": "sip:+15551230000@pbx.example.com"}
     )
 
     assert evil.status_code == 422 and evil.json()["error"]["code"] == "destination_not_allowed"
     assert off_list.status_code == 422
-    assert by_prefix.status_code == 200, by_prefix.text
+    assert by_prefix.status_code == 422, by_prefix.text
+    assert "allowed_sip_hosts" in by_prefix.json()["error"]["message"]
+    assert listed.status_code == 200, listed.text
     (refer,) = world.lk.named("transfer_sip_participant")
-    assert refer.transfer_to == "sip:+15551230000@carrier.example.net"
+    assert refer.transfer_to == "sip:+15551230000@pbx.example.com"
 
 
 async def test_dials_and_transfers_write_audit_rows(

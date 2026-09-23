@@ -39,14 +39,14 @@ _SECRET_PLACEHOLDER = "<{name}>"
 
 
 def api_base_url(settings: Settings) -> str:
-    """The api url a worker should call back.
+    """The api url a worker should call back (V2-22, ask #75).
 
-    ``LKAP_PUBLIC_BASE_URL`` when set, else the api on this host (the
-    subprocess backend's case). Docker/cloud workers need the public url.
+    :attr:`~lkap_api.settings.Settings.worker_callback_base_url`: the explicit
+    ``LKAP_API_BASE_URL`` api setting, else ``LKAP_PUBLIC_BASE_URL``, else the
+    api on this host at ``PORT`` (the subprocess backend's case; logged at
+    startup as a guess). Docker/cloud workers need an explicit url.
     """
-    if settings.public_base_url:
-        return settings.public_base_url.rstrip("/")
-    return f"http://127.0.0.1:{settings.port}"
+    return settings.worker_callback_base_url
 
 
 def _shared_env(row: LiveKitConnection, settings: Settings) -> dict[str, str]:

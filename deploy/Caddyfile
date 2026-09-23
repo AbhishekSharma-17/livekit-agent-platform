@@ -10,13 +10,29 @@
 #
 # `/v1/*`, `/hooks/*` and `/internal/*` go straight to the api — these are
 # the api's own public surface (agent connect/session endpoints, LiveKit/
-# webhook receivers, and the internal worker API that cloud-hosted or
-# externally-run workers reach over the public HTTPS origin per D-V2-3/§6
-# `LKAP_PUBLIC_BASE_URL`, protected by the service token header, not network
-# isolation). Everything else goes to `web` (the console, session pages, the
-# widget), which itself proxies `/api/console/*` to the api server-side
+# webhook receivers, and the internal worker API). Everything else goes to
+# `web` (the console, session pages, the widget), which itself proxies
+# `/api/console/*` to the api server-side
 # (web/src/app/api/console/[...path]/route.ts) — that hop never touches
 # Caddy, it is container-to-container inside `web`'s own outbound call.
+#
+# `/internal/*` is gated by source address (V2-22, ruling R-V2-27). The
+# worker API is authenticated by ONE platform-wide service token, so it is
+# reachable only from `LKAP_INTERNAL_ALLOWED_CIDRS`, which defaults to Caddy's
+# `private_ranges` shortcut (RFC 1918, RFC 4193, loopback): workers on the
+# compose network or a private LAN. Every other caller gets 403 from Caddy
+# before the api sees the request. An operator whose workers call back over
+# the internet (LiveKit Cloud-hosted agents, a worker on another network)
+# lists their egress addresses, space-separated, e.g.
+#   LKAP_INTERNAL_ALLOWED_CIDRS="10.0.0.0/8 203.0.113.7/32"
+# Caddy substitutes `{$VAR}` into the file's bytes BEFORE tokenising it
+# (caddyconfig/caddyfile/parse.go: `allTokens` = `Tokenize(replaceEnvVars(input))`),
+# so a space-separated value becomes several `remote_ip` arguments. Keep
+# `private_ranges` in the list if in-network workers still need access. The
+# variable must not be set to an empty string (compose defaults it). Caddy is
+# the only ingress in the prod compose, so `remote_ip` is the real peer; if a
+# load balancer is ever put in front of Caddy, switch to `client_ip` with
+# `trusted_proxies`, or every request will look like the balancer's address.
 #
 # api ×2 (`docker compose ... up --scale api=2`): `reverse_proxy api:8080`
 # resolves the `api` service name via Docker's embedded DNS, which returns
@@ -31,7 +47,14 @@
 	encode zstd gzip
 
 	@apiPaths path /v1/* /hooks/* /internal/*
+	@internalRefused {
+		path /internal/*
+		not remote_ip {$LKAP_INTERNAL_ALLOWED_CIDRS:private_ranges}
+	}
 	handle @apiPaths {
+		# `respond` runs before `reverse_proxy` in Caddy's fixed directive
+		# order, so a refused /internal/* request never reaches the api.
+		respond @internalRefused "forbidden: the internal worker API is not reachable from this address" 403
 		reverse_proxy api:8080
 	}
 

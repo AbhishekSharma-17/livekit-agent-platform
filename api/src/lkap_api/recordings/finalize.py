@@ -14,8 +14,16 @@ request transaction when they find out (ARCHITECTURE-V2 D-V2-16):
   (`routers/internal.py`, ask #49) — the fallback for deployments where
   LiveKit's webhook cannot reach this api (no `LKAP_PUBLIC_BASE_URL`).
 
-Both call :func:`apply_egress_result` then :func:`schedule_finalize_job` on the
-*same* `AsyncSession` they already hold. `schedule_finalize_job` never calls
+Both call :func:`apply_egress_result` then :func:`schedule_finalize_once` on the
+*same* `AsyncSession` they already hold. **One `recording.ready` per session**
+(V2-22, REVIEW-V2 R2-20): both producers can report the same egress (the
+webhook, then the worker's shutdown report, or the other way round), and each
+used to schedule its own job, so consumers got two deliveries with different
+event ids. :func:`schedule_finalize_once` schedules only while the recording is
+`ready` and only when no finalise job exists for the session yet. (A "schedule
+on the transition to `ready`" rule cannot work here: V2-03's built-in
+`egress_ended` handler has already set `ready` before this package's handler
+runs.) `schedule_finalize_job` never calls
 `JobsService.enqueue` — that method opens its own database connection to
 write the job row, and calling it while the caller's own transaction is still
 open is exactly the SQLite "database is locked" deadlock `docs/v2/_asks.md`
@@ -67,6 +75,30 @@ def schedule_finalize_job(db: AsyncSession, session_id: str) -> None:
     )
 
 
+async def schedule_finalize_once(db: AsyncSession, session: SessionRow) -> bool:
+    """Schedule the session's one `recording_finalize` job, if it is due and not already scheduled.
+
+    Nothing is scheduled while the recording is not `ready` (the job would
+    skip it anyway), so an early "still ending" report cannot use up the one
+    job a later `ready` needs.
+
+    Returns:
+        Whether a job row was added to `db`.
+    """
+    if session.recording_status != "ready":
+        return False
+    existing = await db.scalar(
+        select(Job.id)
+        .where(Job.kind == RECORDING_FINALIZE, Job.payload["session_id"].as_string() == session.id)
+        .limit(1)
+    )
+    if existing is not None:
+        log.info("recording_finalize_already_scheduled", session_id=session.id)
+        return False
+    schedule_finalize_job(db, session.id)
+    return True
+
+
 async def apply_egress_result(
     db: AsyncSession,
     session: SessionRow,
@@ -115,5 +147,5 @@ async def _on_egress_ended_finalize(ctx: WebhookContext) -> None:
     await apply_egress_result(
         ctx.db, session, status=status_from_egress(int(info.status)), duration_s=duration_s
     )
-    schedule_finalize_job(ctx.db, session.id)
+    await schedule_finalize_once(ctx.db, session)
     await ctx.db.flush()

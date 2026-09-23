@@ -30,20 +30,20 @@ from lkap_contracts.api_models import ConnectRequest, ConnectResponse
 from pydantic import BaseModel
 
 from lkap_api.auth.deps import OptionalPrincipalDep, client_ip
-from lkap_api.auth.ratelimit import AgentBusyError, RateLimiterDep, enforce
+from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.service import mint_session_token
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import new_id
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, UnprocessableEntityError
+from lkap_api.limits import reserve_session_slot
 from lkap_api.livekit_tokens import new_participant_identity, room_name_for
 from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
 from lkap_api.routers.connect import (
     MAX_PARTICIPANT_METADATA_BYTES,
     is_privileged,
-    live_session_count,
     origin_allowed,
     request_origin,
 )
@@ -161,55 +161,52 @@ async def start_text_session(
             capacity=limits.rate_per_agent_per_min,
             what="connects per minute for this agent",
         )
-    live = await live_session_count(db, agent)
-    if live >= limits.max_concurrent_sessions:
-        raise AgentBusyError(
-            "this agent is at its concurrent session limit; try again shortly",
-            details={"max_concurrent_sessions": limits.max_concurrent_sessions},
-        )
+    # R-V2-34: count, insert and commit under the agent's slot lock (the commit
+    # is explicit so the lock is released only once the row is visible).
+    async with reserve_session_slot(db, agent, limits):
+        config = agent_config_of(agent)
+        session_id = new_id()
+        room_name = room_name_for(session_id)
+        identity = (payload.participant_identity if privileged else None) or new_participant_identity()
 
-    config = agent_config_of(agent)
-    session_id = new_id()
-    room_name = room_name_for(session_id)
-    identity = (payload.participant_identity if privileged else None) or new_participant_identity()
-
-    minted = await mint_session_token(
-        db,
-        factory,
-        agent,
-        session_id=session_id,
-        room_name=room_name,
-        identity=identity,
-        participant_name=payload.participant_name,
-        channel="text",
-        attributes=payload.participant_metadata or None,
-        ttl=dt.timedelta(seconds=limits.max_session_duration_s),
-    )
-    db.add(
-        SessionRow(
-            id=session_id,
-            workspace_id=agent.workspace_id,
-            agent_id=agent.id,
-            connection_id=minted.connection_id,
-            config_version=agent.config_version,
+        minted = await mint_session_token(
+            db,
+            factory,
+            agent,
+            session_id=session_id,
             room_name=room_name,
-            participant_identity=identity,
+            identity=identity,
             participant_name=payload.participant_name,
-            status="created",
-            pipeline_mode=config.pipeline.mode,
             channel="text",
+            attributes=payload.participant_metadata or None,
+            ttl=dt.timedelta(seconds=limits.max_session_duration_s),
         )
-    )
-    await db.flush()
-    log.info(
-        "text_session_created",
-        session_id=session_id,
-        agent_id=agent.id,
-        workspace_id=agent.workspace_id,
-        connection_id=minted.connection_id,
-        room_name=room_name,
-        pipeline_mode=config.pipeline.mode,
-    )
+        db.add(
+            SessionRow(
+                id=session_id,
+                workspace_id=agent.workspace_id,
+                agent_id=agent.id,
+                connection_id=minted.connection_id,
+                config_version=agent.config_version,
+                room_name=room_name,
+                participant_identity=identity,
+                participant_name=payload.participant_name,
+                status="created",
+                pipeline_mode=config.pipeline.mode,
+                channel="text",
+            )
+        )
+        await db.flush()
+        log.info(
+            "text_session_created",
+            session_id=session_id,
+            agent_id=agent.id,
+            workspace_id=agent.workspace_id,
+            connection_id=minted.connection_id,
+            room_name=room_name,
+            pipeline_mode=config.pipeline.mode,
+        )
+        await db.commit()
     public_agent = to_public(agent, settings)
     return ConnectResponse(
         serverUrl=minted.server_url,

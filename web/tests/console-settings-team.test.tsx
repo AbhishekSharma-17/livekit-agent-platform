@@ -89,4 +89,23 @@ describe("TeamTab", () => {
 
     expect(await within(dialog).findByText("http://localhost:3000/login?invite=tok")).toBeTruthy();
   });
+
+  it("adds people only through Send invite, never the member route that answers 409 use_invite (R-V2-30)", async () => {
+    renderTeamTab();
+    await screen.findAllByText("owner@local");
+
+    fireEvent.click(screen.getByRole("button", { name: "Invite" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/confirm with\s+their own password if they already have an account/)).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText("Email"), { target: { value: "alice@b.example" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send invite" }));
+    await within(dialog).findByText("http://localhost:3000/login?invite=tok");
+
+    const writes = vi
+      .mocked(fetch)
+      .mock.calls.filter(([, init]) => init?.method && init.method !== "GET")
+      .map(([input, init]) => `${init?.method} ${String(input)}`);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatch(/^POST .*\/workspaces\/w1\/invites$/);
+  });
 });

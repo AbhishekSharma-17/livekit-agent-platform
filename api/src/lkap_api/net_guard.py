@@ -23,6 +23,16 @@ Rules:
   :class:`GuardedResolver` (aiohttp, the LiveKit server SDK) never hand a name
   back to the socket layer, so a name that resolves to a public address during
   validation and to ``169.254.169.254`` a second later cannot slip through.
+* **Redirects are never followed** (V2-22, R2-38): httpx clients are built with
+  ``follow_redirects=False`` and the aiohttp session forces
+  ``allow_redirects=False`` on every request; the aiohttp connector also checks
+  IP-literal hosts itself (:class:`GuardedTCPConnector`), because aiohttp never
+  hands a literal to a resolver.
+* **Numeric-looking names** (V2-22, R2-39): a host that is not a canonical IP
+  literal but whose last label is all digits or a ``0x`` number
+  (``2130706433``, ``0x7f000001``, ``127.1``, ``0``) is refused offline; the
+  resolver would turn it into an address (``127.0.0.1``) and no public TLD is
+  numeric (RFC 1123).
 
 :func:`check_url` is the cheap, offline save-time check (scheme, host, IP
 literal, blocked names). The connect-time check is the authoritative one.
@@ -33,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
+import warnings
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
@@ -43,6 +54,7 @@ import httpcore
 import httpx
 from aiohttp.abc import AbstractResolver, ResolveResult
 from aiohttp.resolver import DefaultResolver
+from aiohttp.tracing import Trace
 
 from lkap_api.errors import UnprocessableEntityError
 from lkap_api.settings import Settings
@@ -52,7 +64,9 @@ __all__ = [
     "BlockedDestinationError",
     "GuardedNetworkBackend",
     "GuardedResolver",
+    "GuardedTCPConnector",
     "GuardedTransport",
+    "NoRedirectClientSession",
     "NetPolicy",
     "address_problem",
     "blocked_reason_of",
@@ -60,6 +74,7 @@ __all__ = [
     "guarded_aiohttp_session",
     "guarded_http_client",
     "host_problem",
+    "numeric_host",
     "policy_from_settings",
     "validate_url",
 ]
@@ -207,12 +222,30 @@ def address_problem(address: IpAddress, policy: NetPolicy, *, host_exempt: bool 
     return f"{address} is {reason}"
 
 
+def numeric_host(host: str) -> bool:
+    """Whether a host that is *not* a canonical IP literal still reads as a number.
+
+    ``2130706433``, ``0x7f000001``, ``127.1`` and ``0`` are names to
+    :mod:`ipaddress` but addresses to ``getaddrinfo`` (``inet_aton`` forms). A
+    host whose last label is all digits or a ``0x`` hex number is one of those:
+    no public top-level domain is numeric (RFC 1123), so nothing legitimate is
+    refused (V2-22, R2-39).
+    """
+    name = _normalise_host(host)
+    if not name or ":" in name or _ip_literal(name) is not None:
+        return False
+    last = name.rsplit(".", 1)[-1]
+    return last.isdigit() or (last.startswith("0x") and len(last) > 2)
+
+
 def host_problem(host: str, policy: NetPolicy) -> str | None:
     """The offline check of a url host: IP literals and blocked names (no DNS)."""
     literal = _ip_literal(host)
     if literal is not None:
         return address_problem(literal, policy)
     name = _normalise_host(host)
+    if numeric_host(name):
+        return f"{name} is a numeric address in a non-canonical form"
     if policy.host_exempt(name):
         return None
     if name in BLOCKED_HOST_NAMES or name.endswith(".localhost"):
@@ -406,7 +439,7 @@ class GuardedResolver(AbstractResolver):
 
     aiohttp connects to exactly the addresses a resolver returns, so the check
     and the connection see the same address. IP-literal hosts never reach a
-    resolver in aiohttp: check them with :func:`check_url` before the request.
+    resolver in aiohttp: :class:`GuardedTCPConnector` checks those.
     """
 
     def __init__(self, policy: NetPolicy, *, inner: AbstractResolver | None = None) -> None:
@@ -435,15 +468,78 @@ class GuardedResolver(AbstractResolver):
         await self._inner.close()
 
 
+class GuardedTCPConnector(aiohttp.TCPConnector):
+    """A ``TCPConnector`` that also checks IP-literal hosts (V2-22, R2-38).
+
+    aiohttp's ``_resolve_host`` returns an IP-literal host as it is, without
+    asking the resolver, so :class:`GuardedResolver` never sees one: a redirect
+    (or a stored row) naming ``http://127.0.0.1/`` would connect unchecked. This
+    connector runs every literal through :func:`address_problem` first and
+    raises :class:`BlockedDestinationError` (an ``OSError``, which aiohttp
+    reports as ``ClientConnectorError``; :func:`blocked_cause` finds it).
+    """
+
+    def __init__(self, policy: NetPolicy, *, resolver: AbstractResolver, **kwargs: Any) -> None:
+        """Build the connector with the guard's policy and resolver."""
+        super().__init__(resolver=resolver, **kwargs)
+        self._guard_policy = policy
+
+    async def _resolve_host(
+        self, host: str, port: int, traces: Sequence[Trace] | None = None
+    ) -> list[ResolveResult]:
+        literal = _ip_literal(host)
+        if literal is not None:
+            problem = address_problem(literal, self._guard_policy)
+            if problem is not None:
+                raise BlockedDestinationError(f"blocked destination: {problem}")
+        return await super()._resolve_host(host, port, traces)
+
+
+#: Redirect statuses aiohttp would follow.
+_REDIRECT_STATUSES: Final[frozenset[int]] = frozenset({301, 302, 303, 307, 308})
+
+with warnings.catch_warnings():
+    # aiohttp discourages subclassing ClientSession with a DeprecationWarning at
+    # class-definition time; overriding `_request` is the one way to force the
+    # redirect policy for every request a third-party client (LiveKit's Twirp
+    # client) makes through the session.
+    warnings.simplefilter("ignore", DeprecationWarning)
+
+    class NoRedirectClientSession(aiohttp.ClientSession):
+        """A ``ClientSession`` that never follows a redirect (V2-22, R2-38).
+
+        ``allow_redirects=False`` is forced on every request, whatever the
+        caller asks for. Not ``max_redirects=0``: aiohttp 3.14 reads that as
+        unlimited (``if max_redirects and redirects >= max_redirects``). A
+        redirect answer is then released and raised as
+        :class:`BlockedDestinationError`: no LiveKit API call is ever
+        redirected, and the probe can say why it failed instead of relaying a
+        Twirp parse error. The ``Location`` is not repeated in the message.
+        """
+
+        async def _request(
+            self, method: str, str_or_url: Any, *, allow_redirects: bool = False, **kwargs: Any
+        ) -> aiohttp.ClientResponse:
+            del allow_redirects
+            response = await super()._request(method, str_or_url, allow_redirects=False, **kwargs)
+            if response.status in _REDIRECT_STATUSES:
+                response.release()
+                raise BlockedDestinationError(
+                    f"blocked destination: {response.url.host} answered {response.status} "
+                    "with a redirect, and redirects are never followed"
+                )
+            return response
+
+
 def guarded_aiohttp_session(
     policy: NetPolicy, *, timeout: aiohttp.ClientTimeout, inner_resolver: AbstractResolver | None = None
 ) -> aiohttp.ClientSession:
-    """An aiohttp session whose connector resolves through :class:`GuardedResolver`.
+    """An aiohttp session behind the guard: checked literals, a guarded resolver, no redirects.
 
     ``inner_resolver`` replaces aiohttp's default name lookup (tests).
     """
-    connector = aiohttp.TCPConnector(resolver=GuardedResolver(policy, inner=inner_resolver))
-    return aiohttp.ClientSession(connector=connector, timeout=timeout)
+    connector = GuardedTCPConnector(policy, resolver=GuardedResolver(policy, inner=inner_resolver))
+    return NoRedirectClientSession(connector=connector, timeout=timeout)
 
 
 def blocked_cause(exc: BaseException) -> BlockedDestinationError | None:

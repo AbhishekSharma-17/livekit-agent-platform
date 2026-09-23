@@ -44,9 +44,23 @@ def test_private_targets_are_refused_even_when_allowlisted(url: str) -> None:
         check_url_allowed(url, tool_allowed_hosts=[host], platform_allowed_hosts=[host])
 
 
-@pytest.mark.parametrize("host", ["8.8.8.8", "api.example.com", "10.example.com"])
+@pytest.mark.parametrize("host", ["8.8.8.8", "api.example.com", "10.example.com", "0xabc.example.com"])
 def test_public_hosts_are_not_private(host: str) -> None:
     assert is_private_host(host) is False
+
+
+@pytest.mark.parametrize("host", ["2130706433", "0x7f000001", "127.1", "0", "127.0.0.0x1", "2130706433."])
+def test_numeric_hosts_are_refused_before_any_resolution(host: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """V2-22 / R2-39: non-canonical numeric forms never reach `getaddrinfo`, even when allowlisted."""
+
+    def _no_dns(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("the offline check must not resolve anything")
+
+    monkeypatch.setattr("socket.getaddrinfo", _no_dns)
+    url = f"http://{host}/latest/meta-data/"
+
+    with pytest.raises(HttpToolSecurityError, match="private or local"):
+        check_url_allowed(url, tool_allowed_hosts=[host], platform_allowed_hosts=[host])
 
 
 @pytest.mark.parametrize(

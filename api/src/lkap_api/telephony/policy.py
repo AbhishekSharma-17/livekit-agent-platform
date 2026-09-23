@@ -12,8 +12,20 @@ Every exit to the phone network goes through :func:`check_destination`:
 ``POST /v1/calls``, ``POST /v1/calls/{id}/transfer``, the worker's
 ``POST /internal/v1/telephony/sessions/{id}/transfer`` and save-time
 validation of ``config.telephony.transfer_targets`` and flow ``transfer``
-nodes (:mod:`lkap_api.telephony.validation`). :data:`BLOCKED_PREFIXES`
-(premium-rate and satellite ranges) always win over the allow list.
+nodes (:mod:`lkap_api.telephony.validation`). The order of the checks
+(:func:`destination_problem`):
+
+1. :data:`BLOCKED_PREFIXES` (premium-rate and satellite ranges) and the NANP
+   ``NPA-976-xxxx`` pay-per-call exchange: always refused ("always blocked").
+2. ``+1`` alone means the United States and Canada (R-V2-29): a number whose
+   longest matching allowed prefix is exactly ``+1`` and whose area code is in
+   :data:`NANP_NON_US_CA_NPAS` (the Caribbean and Atlantic countries and the US
+   territories) is refused. A longer explicit prefix (``+1876``) admits it.
+3. The number must start with an allowed prefix.
+4. A ``sip:`` / ``sips:`` target with an E.164 user (``sip:+1555…@host``) must
+   pass the number rules **and** name a host in ``allowed_sip_hosts``
+   (R-V2-28); ``tel:+E164`` and bare ``+E164`` go through the trunk's own
+   carrier and need no host. A non-numeric ``sip:`` user needs a listed host.
 
 Never imports ``config_service``: that module loads the policy through
 :func:`workspace_policy` for save-time validation.
@@ -37,6 +49,7 @@ log = get_logger(__name__)
 
 __all__ = [
     "BLOCKED_PREFIXES",
+    "NANP_NON_US_CA_NPAS",
     "NOT_ALLOWED_TO_MODEL",
     "SETTINGS_KEY",
     "CallsBusyError",
@@ -55,7 +68,11 @@ SETTINGS_KEY = "telephony"
 #: satellite / international-network codes toll fraud favours. Checked first.
 BLOCKED_PREFIXES: tuple[str, ...] = (
     "+1900",  # NANP premium rate
-    "+1976",  # NANP pay-per-call
+    # NANP pay-per-call is the 976 *exchange* inside any area code (+1 NPA 976
+    # xxxx), which a prefix cannot express: `_NANP_976_EXCHANGE` below does
+    # (R-V2-29). 976 is not an assigned NPA, so this entry matches nothing real;
+    # it is kept so the area code can never be opened if it is ever assigned.
+    "+1976",
     "+449",  # UK 09x premium rate
     "+4487",  # UK 087x revenue share
     "+4470",  # UK 070 "personal numbers" (premium redirect)
@@ -69,6 +86,54 @@ BLOCKED_PREFIXES: tuple[str, ...] = (
     "+883",  # International Networks
     "+979",  # International Premium Rate Service
     "+991",  # ITPCS trial
+)
+
+#: NANP pay-per-call numbers: the ``976`` exchange in any area code (R-V2-29).
+_NANP_976_EXCHANGE = re.compile(r"^\+1[2-9][0-9]{2}976[0-9]{4}$")
+
+#: NANP area codes of every jurisdiction that is not a US state, DC or a Canadian
+#: province or territory: the Caribbean and Atlantic member countries and the US
+#: territories (R-V2-29). An ``allowed_prefixes`` entry of exactly ``+1`` does not
+#: reach them; each needs its own prefix (``+1876``, ``+1787``, …).
+#:
+#: Source: the NANPA NPA assignment table ("Area codes by geographic location",
+#: https://www.nationalnanpa.com/area_codes/index.html), cross-checked on
+#: 2026-09-24 against https://en.wikipedia.org/wiki/North_American_Numbering_Plan
+#: (member countries and territories) and
+#: https://en.wikipedia.org/wiki/Area_codes_in_the_Caribbean. nationalnanpa.com
+#: did not resolve from the build host on that date, so the list was taken from
+#: the two mirrors of that table and must be re-checked against NANPA when a new
+#: overlay is announced (the most recent here: 658 Jamaica, 829/849 DR, 939 PR).
+NANP_NON_US_CA_NPAS: frozenset[str] = frozenset(
+    {
+        "242",  # Bahamas
+        "246",  # Barbados
+        "264",  # Anguilla
+        "268",  # Antigua and Barbuda
+        "284",  # British Virgin Islands
+        "340",  # US Virgin Islands (territory)
+        "345",  # Cayman Islands
+        "441",  # Bermuda
+        "473",  # Grenada
+        "649",  # Turks and Caicos Islands
+        "658",  # Jamaica (overlay)
+        "664",  # Montserrat
+        "670",  # Northern Mariana Islands (territory)
+        "671",  # Guam (territory)
+        "684",  # American Samoa (territory)
+        "721",  # Sint Maarten
+        "758",  # Saint Lucia
+        "767",  # Dominica
+        "784",  # Saint Vincent and the Grenadines
+        "787",  # Puerto Rico (territory)
+        "809",  # Dominican Republic
+        "829",  # Dominican Republic
+        "849",  # Dominican Republic
+        "868",  # Trinidad and Tobago
+        "869",  # Saint Kitts and Nevis
+        "876",  # Jamaica
+        "939",  # Puerto Rico (territory)
+    }
 )
 
 #: What the worker's ``transfer_call`` tool is told when the policy refuses a target.
@@ -146,11 +211,12 @@ async def workspace_policy(db: AsyncSession, workspace_id: str) -> TelephonyPoli
 
 
 def _number_and_host(target: str) -> tuple[str | None, str | None]:
-    """Split a destination into ``(E.164 number, None)`` or ``(None, sip host)``.
+    """Split a destination into its E.164 number and its SIP host (either may be ``None``).
 
-    ``+E164`` and ``tel:+E164`` yield the number; ``sip(s):+E164@host`` yields
-    the number (the prefix decides, whatever the host); ``sip(s):user@host`` with
-    a non-numeric user yields the host. Anything else yields ``(None, None)``.
+    ``+E164`` and ``tel:+E164`` yield ``(number, None)``; ``sip(s):+E164@host``
+    yields ``(number, host)`` (both are checked, R-V2-28); ``sip(s):user@host``
+    with a non-numeric user yields ``(None, host)``. Anything else yields
+    ``(None, None)``.
     """
     value = target.strip()
     lowered = value.lower()
@@ -164,12 +230,28 @@ def _number_and_host(target: str) -> tuple[str | None, str | None]:
                 return None, None
             user, host = rest.split("@", 1)
             user = user.split(";", 1)[0]
-            if _E164.match(user):
-                return user, None
             host = host.split(";", 1)[0].split("?", 1)[0]
             host = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
-            return None, host.strip().lower().rstrip(".") or None
+            clean_host = host.strip().lower().rstrip(".") or None
+            if _E164.match(user):
+                return user, clean_host
+            return None, clean_host
     return (value, None) if _E164.match(value) else (None, None)
+
+
+def _number_problem(policy: TelephonyPolicy, number: str) -> str | None:
+    """The prefix rules for one E.164 number (blocked ranges, ``+1`` = US/CA, allow list)."""
+    if any(number.startswith(prefix) for prefix in BLOCKED_PREFIXES) or _NANP_976_EXCHANGE.match(number):
+        return f"{number} is in a premium-rate or satellite range that is always blocked"
+    matches = [prefix for prefix in policy.allowed_prefixes if number.startswith(prefix)]
+    if not matches:
+        return f"{number} does not start with an allowed prefix ({', '.join(policy.allowed_prefixes)})"
+    if max(matches, key=len) == "+1" and number[2:5] in NANP_NON_US_CA_NPAS:
+        return (
+            f"{number} is outside the United States and Canada: +1 covers the US and Canada only, "
+            f"so Caribbean and territory numbers need their own prefix (for example +1{number[2:5]})"
+        )
+    return None
 
 
 def destination_problem(policy: TelephonyPolicy, target: str) -> str | None:
@@ -186,15 +268,18 @@ def destination_problem(policy: TelephonyPolicy, target: str) -> str | None:
         )
     number, host = _number_and_host(target)
     if number is not None:
-        if any(number.startswith(prefix) for prefix in BLOCKED_PREFIXES):
-            return f"{number} is in a premium-rate or satellite range that is always blocked"
-        if not any(number.startswith(prefix) for prefix in policy.allowed_prefixes):
-            return f"{number} does not start with an allowed prefix ({', '.join(policy.allowed_prefixes)})"
-        return None
+        problem = _number_problem(policy, number)
+        if problem is not None:
+            return problem
     if host is not None:
         if host in policy.allowed_sip_hosts:
             return None
-        return f"SIP host '{host}' is not in the dialing policy's allowed SIP hosts"
+        return (
+            f"SIP host '{host}' is not in the dialing policy's allowed SIP hosts (allowed_sip_hosts); "
+            "to transfer to a phone number use +E.164, and use sip: only for a listed SIP host"
+        )
+    if number is not None:
+        return None
     return "the destination is not an E.164 number (+15551234567), a tel:+… number or a sip: URI"
 
 

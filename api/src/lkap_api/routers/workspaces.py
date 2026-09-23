@@ -108,6 +108,24 @@ def _audit(db: AsyncSession, ctx: WorkspaceContext, action: str, target_id: str,
     )
 
 
+#: Audit actions that prove an account was a member of the workspace (R-V2-30).
+_MEMBERSHIP_EVIDENCE = ("member.join", "member.add", "member.remove")
+
+
+async def _was_member(db: AsyncSession, workspace_id: str, user_id: str) -> bool:
+    """Whether the account ever belonged to the workspace (its membership audit rows)."""
+    found = await db.scalar(
+        select(AuditLog.id)
+        .where(
+            AuditLog.workspace_id == workspace_id,
+            AuditLog.target_id == user_id,
+            AuditLog.action.in_(_MEMBERSHIP_EVIDENCE),
+        )
+        .limit(1)
+    )
+    return found is not None
+
+
 # ------------------------------------------------------------------ workspaces
 @router.get(
     "/workspaces",
@@ -221,10 +239,27 @@ async def list_members(
     response_model=MemberOut,
     status_code=status.HTTP_201_CREATED,
     summary="Add a member",
-    description="Adds an existing user by email. New people are invited instead. Needs `admin`.",
+    description=(
+        "Re-adds a former member of this workspace by email. Any other account is invited "
+        "instead: 409 `use_invite` (the invite is accepted with the account's own password), "
+        "404 for an unknown email. Needs `admin`."
+    ),
 )
 async def add_member(payload: MemberCreate, ctx: PathWorkspaceDep, db: DbDep) -> MemberOut:
-    """Add an existing user to the workspace."""
+    """Re-add a former member of the workspace (ruling R-V2-30).
+
+    Accounts are global and nothing proves who owns an email, so adding an
+    existing account in one step would let another workspace's admin who
+    pre-registered the address hold a membership here (REVIEW-V2 R2-19). Only
+    an account with a ``member.join`` / ``member.add`` / ``member.remove``
+    audit row in **this** workspace is re-added; every other one needs an
+    invite, which the user accepts with their own password.
+
+    Raises:
+        NotFoundError: No account has this email.
+        ConflictError: Already a member, or ``use_invite`` for an account that
+            was never a member here.
+    """
     ctx.check(_MANAGE)
     _check_owner_change(ctx, payload.role)
     user = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
@@ -232,6 +267,12 @@ async def add_member(payload: MemberCreate, ctx: PathWorkspaceDep, db: DbDep) ->
         raise NotFoundError(f"no user with email '{payload.email}'; send an invite instead")
     if await db.get(WorkspaceMember, (ctx.workspace_id, user.id)) is not None:
         raise ConflictError(f"'{payload.email}' is already a member")
+    if not await _was_member(db, ctx.workspace_id, user.id):
+        raise ConflictError(
+            f"'{payload.email}' has never been a member of this workspace; send an invite, which "
+            "the user accepts with their own password",
+            details={"reason": "use_invite"},
+        )
     member = WorkspaceMember(workspace_id=ctx.workspace_id, user_id=user.id, role=payload.role)
     db.add(member)
     await db.flush()

@@ -28,7 +28,19 @@ Four processes:
 | web | 3000 |
 | worker (or the supervisor that starts workers) | none |
 
-Secrets come from your shell, or from the launch config outside the repo. Never put them in committed files. Never read or write `.env*` files with tools.
+Secrets come from your shell, or from a dev env file outside the repo (below). Never put them in committed files, and never on a command line. Never read or write `.env*` files with tools.
+
+**Dev secrets in an env file (R-V2-35).** A secret written into a launch command (`bash -c "export LIVEKIT_API_SECRET=… && exec …"`) is visible to every local user in `ps` and stays in the launcher's config. Keep them in one file instead:
+
+1. Create `~/.config/lkap/dev.env` yourself, outside the repo, and `chmod 600` it. One `KEY=value` per line: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LKAP_MASTER_KEY`, `LKAP_ADMIN_TOKEN`, `LKAP_SERVICE_TOKEN` (and any provider keys a worker reads from its env).
+2. Have each process's launcher source it and then `exec` the process, so the values reach the process environment and never its argv:
+   ```bash
+   bash -c 'set -a; . "$HOME/.config/lkap/dev.env"; set +a; cd api && exec uv run uvicorn lkap_api.main:app --host 127.0.0.1 --port 8080'
+   ```
+   The same wrapper works for the worker (`cd agent && exec uv run python -m lkap_agent.main dev`), the supervisor and `pnpm dev`. Non-secret settings (`LKAP_PACKS`, `LKAP_API_BASE_URL`, ports) can stay in the launcher.
+3. Rotate anything that was ever on a command line after moving it (§7).
+
+Nothing in the repo reads that file or knows where your launcher keeps its configuration; the rotation CLI (`keys rotate`), `scripts/smoke_v2.sh` and both supervisor backends already take secrets from the environment only.
 
 | Variable | api | worker | supervisor | web | Dev value / meaning |
 |---|---|---|---|---|---|
@@ -43,7 +55,8 @@ Secrets come from your shell, or from the launch config outside the repo. Never 
 | `LKAP_ALLOW_ADMIN_TOKEN` | ✓ | | | | unset = on in `dev`, off in `prod` |
 | `LKAP_WEB_BASE_URL`, `LKAP_CORS_ORIGINS` | ✓ | | | | invite links, and the origins allowed to call `connect` anonymously |
 | `LKAP_PUBLIC_BASE_URL` | ✓ | | | | public `https://` origin of the api, needed for Cloud-hosted pools (§3) |
-| `LKAP_API_BASE_URL` | | ✓ | ✓ | | `http://127.0.0.1:8080` |
+| `LKAP_API_BASE_URL` | ✓ | ✓ | ✓ | | `http://127.0.0.1:8080`. On the api it is the url handed to workers (worker env, deploy bundle); unset falls back to `LKAP_PUBLIC_BASE_URL`, then to a guess from `PORT`, which the api logs as `worker_callback_url_derived_from_port`. |
+| `LKAP_NET_ALLOW_PRIVATE_HOSTS` | ✓ | | | | comma list of host names, IPs or CIDRs the outbound network guard may reach although they are private. Unset = `localhost,127.0.0.1,::1` in `dev`, nothing in `prod` (§5.1). |
 | `LKAP_CONNECTION_ID` | | optional | | | the connection a worker serves. Unset means the default connection. |
 | `LKAP_AGENT_NAME` | | optional | | | must equal the connection's `agent_name` (default `lkap-agent`) |
 | `LKAP_INSTANCE_KEY`, `LKAP_MANAGED_BY` | | set by the supervisor | | | leave unset for a hand-started worker |
@@ -133,7 +146,7 @@ A **connection** is one LiveKit server: Cloud or self-hosted, with a URL, an API
 - **Registration.** Every worker registers with the api (`POST /internal/v1/workers/register`: installed providers, pack ids, image) and heartbeats every 30 s.
   - The api validates provider choices against what that pool actually reports as installed (R-V2-2).
   - A worker that goes silent for 90 s is marked `gone`.
-- **Security.** Connection test and update will dial any URL an admin enters (S1, open for V2-21). Only admins can create or change connections.
+- **Security.** Only admins can create or change connections. Every LiveKit call the api makes goes through the outbound network guard (V2-21, R-V2-26): a url on a private, loopback, link-local or cloud-metadata address is refused at save (422 `blocked_destination`) and again at connect time, after DNS; numeric host forms such as `2130706433` or `127.1` are refused outright; redirects are never followed (V2-22). A self-hosted LiveKit on a private network must be listed in `LKAP_NET_ALLOW_PRIVATE_HOSTS` (§5.1).
 
 ## 4. Supervisor and worker pools
 
@@ -171,6 +184,16 @@ docker build -f supervisor/Dockerfile -t lkap-supervisor .
   - `deploy/docker-compose.prod.yml`: two api replicas behind Caddy, web, supervisor, postgres, redis, minio.
 - **Config.** Env files are human-created copies of `deploy/*.env.example`. Run `alembic upgrade head` in the api container after every image update.
 - **Not built locally yet.** Docker has not been running on the dev host, so no image has been built. CI builds them in `.github/workflows/docker.yml`, and the nightly `full` build runs once the repo has a GitHub remote.
+
+### 5.1 Production rules (REVIEW-V2 §8, V2-22)
+
+Follow these for anything that is not a developer's machine:
+
+- **`LKAP_ENV=prod`.** The dev network allowlist (loopback) and weak `dev-*` secrets are refused in `prod`, and the admin token is off.
+- **SQLite runs exactly one api process (R-V2-34).** Concurrency caps (`max_concurrent_sessions`, the dialing policy's `max_concurrent_outbound`) are reserved under a per-process lock plus a `FOR UPDATE` row lock. SQLite has no row locks, so with SQLite the guarantee is the in-process lock alone: never run a second api process (or `uvicorn --workers 2`) against one SQLite file. Anything that scales the api (`api ×2` in the prod compose) needs Postgres.
+- **A private self-hosted LiveKit must be allowlisted (R-V2-26).** The api refuses private and local destinations. A self-hosted LiveKit server on a private network (for example `ws://livekit.internal:7880`) only works once its host name or CIDR is in `LKAP_NET_ALLOW_PRIVATE_HOSTS`, e.g. `LKAP_NET_ALLOW_PRIVATE_HOSTS=livekit.internal,10.20.0.0/16`. Cloud metadata addresses stay refused whatever is listed. The same list covers webhook endpoints and HTTP-tool dry runs, so list only what the api must reach. A future storage-config route must check S3 `endpoint_url`s the same way (`storage/endpoint.py`); the operator's own `LKAP_STORAGE_ENDPOINT_URL` is not checked.
+- **The internal worker API is gated by source address (R-V2-27).** `deploy/Caddyfile` answers 403 on `/internal/*` unless the caller's address is in `LKAP_INTERNAL_ALLOWED_CIDRS` (space-separated CIDRs or IPs; default `private_ranges`: the compose network and private LANs). Workers that call back over the internet (LiveKit Cloud-hosted agents, §17, or a worker on another network) need their egress addresses listed, e.g. `LKAP_INTERNAL_ALLOWED_CIDRS=private_ranges 203.0.113.7/32` in `deploy/prod.env`. Check with LiveKit which addresses Cloud-hosted agents call out from; if they are not fixed, a `cloud_hosted` pool cannot pass this gate without opening `/internal/*` widely, so until Phase 2's per-connection worker tokens prefer `supervised` or `external` pools on your own network. If a load balancer is ever put in front of Caddy, switch the matcher to `client_ip` with `trusted_proxies`, or every caller looks like the balancer.
+- **The service token is operator-only (R-V2-27).** `LKAP_SERVICE_TOKEN` unlocks every workspace's decrypted provider keys and every connection's LiveKit secret through `/internal/v1/*`. Never give it to a workspace admin, never paste it into the console, and keep the deploy bundle's placeholder until you, the operator, fill it in on infrastructure you control. Per-connection worker tokens (designed in PLAN-V2 R-V2-27) become mandatory before a second organisation is a tenant with its own admins, a tenant hosts its own workers, the Phase 2 automated `cloud_hosted` deploy ships, or the api serves workspaces of more than one operator.
 
 ## 6. Backups and restore
 
@@ -215,7 +238,11 @@ It dumps Postgres (when configured) and tars `LKAP_DATA_DIR` (local storage, Lan
 
 ## 8. Telephony
 
-Outbound dialing and transfers are **denied by default**. Before any outbound call or transfer, an admin must set the workspace dialing policy (`workspaces.settings.telephony.allowed_prefixes`, on `/console/telephony`; R-V2-23). Premium-rate and satellite ranges are always refused.
+Outbound dialing and transfers are **denied by default**. Before any outbound call or transfer, an admin must set the workspace dialing policy (`workspaces.settings.telephony.allowed_prefixes`, on `/console/telephony`; R-V2-23). Premium-rate and satellite ranges are always refused, and so is the NANP pay-per-call exchange (`+1 NPA 976 xxxx`).
+
+- **`+1` means the United States and Canada only (R-V2-29).** Caribbean countries and US territories share `+1` but need their own prefix: `+1876` (Jamaica), `+1787`/`+1939` (Puerto Rico), `+1809`/`+1829`/`+1849` (Dominican Republic) and so on (`telephony/policy.py::NANP_NON_US_CA_NPAS`). The console warns when `+1` is the only NANP entry.
+- **A `sip:` address with a number needs a listed host (R-V2-28).** `sip:+15551230000@pbx.example.com` passes only when the number passes the prefix rules **and** `pbx.example.com` is in `allowed_sip_hosts`. To transfer to a phone number, use `+E.164` (or `tel:+E.164`); use `sip:` only for a listed SIP host.
+- **Concurrent dials** are capped by `max_concurrent_outbound` under a lock (§5.1), so a burst never exceeds it.
 
 Setup, carrier side, trunk/rule/number creation and the live test ladder are in **`docs/v2/TELEPHONY-LIVE-TEST.md`** (§2 covers `allowed_prefixes`). This runbook does not repeat them.
 

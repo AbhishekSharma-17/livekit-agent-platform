@@ -21,8 +21,11 @@ the platform list applies.
 an IP literal in a loopback, private (RFC 1918 / ULA), link-local (including
 the `169.254.169.254` cloud metadata address), CGNAT, multicast, reserved or
 unspecified range is refused, as are `localhost` and `*.localhost` and the
-well-known cloud metadata host names. :func:`check_url_allowed` does not
-resolve names; that happens at connect time.
+well-known cloud metadata host names. So is a numeric-looking name that is
+not a canonical IP literal (`2130706433`, `0x7f000001`, `127.1`, `0`: its last
+label is all digits or a `0x` number), which `getaddrinfo` would turn into an
+address (V2-22, R2-39). :func:`check_url_allowed` does not resolve names; that
+happens at connect time.
 
 **DNS rebinding and names that resolve inward (V2-21).** An allowlisted *name*
 can resolve to `169.254.169.254` (e.g. a `nip.io`-style record) or change its
@@ -69,6 +72,21 @@ def _ip_literal(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | No
     return address
 
 
+def is_numeric_host(host: str) -> bool:
+    """Whether a host that is not a canonical IP literal still reads as an address.
+
+    `2130706433`, `0x7f000001`, `127.1` and `0` are names to :mod:`ipaddress`
+    but addresses to `getaddrinfo` (`inet_aton` forms). No public top-level
+    domain is numeric (RFC 1123), so a last label that is all digits or a `0x`
+    hex number is refused (V2-22, R2-39).
+    """
+    name = host.strip().lower().strip("[]").rstrip(".")
+    if not name or ":" in name or _ip_literal(name) is not None:
+        return False
+    last = name.rsplit(".", 1)[-1]
+    return last.isdigit() or (last.startswith("0x") and len(last) > 2)
+
+
 def is_private_host(host: str) -> bool:
     """Whether `host` names the platform's own network rather than the internet.
 
@@ -77,12 +95,12 @@ def is_private_host(host: str) -> bool:
 
     Returns:
         `True` for loopback/private/link-local/CGNAT/multicast/reserved/
-        unspecified IP literals, `localhost` / `*.localhost`, and well-known
-        cloud metadata names; `False` for every other name (names are not
-        resolved).
+        unspecified IP literals, numeric-looking names (:func:`is_numeric_host`),
+        `localhost` / `*.localhost`, and well-known cloud metadata names;
+        `False` for every other name (names are not resolved).
     """
     lowered = host.lower().rstrip(".")
-    if lowered in _DENIED_HOST_NAMES or lowered.endswith(".localhost"):
+    if lowered in _DENIED_HOST_NAMES or lowered.endswith(".localhost") or is_numeric_host(lowered):
         return True
     address = _ip_literal(lowered)
     if address is None:

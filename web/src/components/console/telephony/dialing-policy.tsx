@@ -23,6 +23,11 @@ import { api } from "@/lib/api";
  * nobody can place a call or transfer one, from the console, the API or the
  * agent's `transfer_call` tool. Premium-rate and satellite ranges stay blocked
  * whatever is listed here.
+ *
+ * V2-22: `+1` admits the United States and Canada only (ruling R-V2-29); the
+ * Caribbean countries and the US territories each need their own prefix, and
+ * the card warns when `+1` is the only NANP entry. A `sip:` address with a
+ * number as its user must also name a listed SIP host (R-V2-28).
  */
 export interface DialingPolicy {
   allowed_prefixes: string[];
@@ -56,6 +61,15 @@ export function policyFromSettings(settings: Record<string, unknown> | undefined
     max_calls_per_min: count("max_calls_per_min", DEFAULT_DIALING_POLICY.max_calls_per_min),
     max_concurrent_outbound: count("max_concurrent_outbound", DEFAULT_DIALING_POLICY.max_concurrent_outbound),
   };
+}
+
+/** Shown while `+1` is the only NANP prefix listed (R-V2-29). */
+export const PLUS_ONE_WARNING =
+  "+1 covers the US and Canada; Caribbean and territory numbers need their own prefix, for example +1876.";
+
+/** Whether `+1` is listed with no longer `+1…` prefix beside it. */
+export function plusOneAlone(prefixes: string[]): boolean {
+  return prefixes.includes("+1") && !prefixes.some((prefix) => prefix.startsWith("+1") && prefix !== "+1");
 }
 
 /** Split a comma / newline list, dropping spaces and dashes people paste into numbers. */
@@ -125,6 +139,7 @@ export function DialingPolicyCard() {
   }, [storedKey]);
 
   const enabled = stored.allowed_prefixes.length > 0;
+  const warnPlusOne = plusOneAlone(splitList(draft.prefixes, { numbers: true }));
   const ids = { prefixes: "dialing-prefixes", hosts: "dialing-hosts", perMin: "dialing-per-min", concurrent: "dialing-concurrent" };
 
   async function onSave(event: React.FormEvent) {
@@ -183,10 +198,15 @@ export function DialingPolicyCard() {
               readOnly={!canEdit}
             />
           </Field>
+          {warnPlusOne ? (
+            <p role="note" className="text-[0.8125rem] text-pretty text-warning-text">
+              {PLUS_ONE_WARNING}
+            </p>
+          ) : null}
           <Field
             label="Allowed SIP hosts"
             htmlFor={ids.hosts}
-            hint="Hosts a sip: address with a name (not a number) may reach, for example your PBX."
+            hint="Hosts a sip: address may reach, for example your PBX. To transfer to a phone number use +E.164; use sip: only for a listed SIP host (a sip: address with a number needs its host listed too)."
             error={errors.hosts}
             optional
           >

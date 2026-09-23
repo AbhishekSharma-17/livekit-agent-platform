@@ -65,7 +65,7 @@ from lkap_api.jobs.deps import JobsDep
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
-from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_job
+from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 from lkap_api.webhooks import events as webhook_events
@@ -453,21 +453,16 @@ async def connection_worker_env(
 ) -> WorkerEnv:
     """Return a connection's decrypted worker environment.
 
-    Overrides ``bundle.worker_env``'s own ``LKAP_API_BASE_URL`` (derived from
-    ``PORT``, which can silently disagree with the port the api actually
-    bound — docs/v2/_asks.md V2-20-2) with
-    :attr:`~lkap_api.settings.Settings.worker_callback_base_url`, which also
-    honours the new, explicit ``LKAP_API_BASE_URL`` api setting.
-    ``lkap_api.connections.bundle`` is V2-21's exclusive file this wave, so
-    this override lives here instead — see the "Open — left by V2-20F" ask
-    filed for folding it into ``bundle.api_base_url`` directly.
+    ``LKAP_API_BASE_URL`` is ``bundle.api_base_url``, i.e.
+    :attr:`~lkap_api.settings.Settings.worker_callback_base_url` (V2-22, ask
+    #75, which retired V2-20F's override here). When that url is only a
+    ``PORT`` guess it is logged on every fetch, as well as at startup.
 
     Raises:
         NotFoundError: If the connection does not exist.
     """
     row = await get_connection_by_id(db, connection_id)
     env = worker_env(row, factory.credentials(row), settings)
-    env.env["LKAP_API_BASE_URL"] = settings.worker_callback_base_url
     if settings.worker_callback_url_is_derived:
         log.warning(
             "worker_callback_url_derived_from_port",
@@ -552,7 +547,8 @@ async def post_recording(
     await apply_egress_result(
         db, session, status=payload.status, duration_s=payload.duration_s, error=payload.error
     )
-    schedule_finalize_job(db, session.id)
+    # One `recording.ready` per session, whichever of this and `egress_ended` comes first (R2-20).
+    await schedule_finalize_once(db, session)
     await db.flush()
     log.info(
         "recording_reported_by_worker",

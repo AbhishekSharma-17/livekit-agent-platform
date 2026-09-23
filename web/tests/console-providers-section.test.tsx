@@ -5,7 +5,11 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 
-import { ProvidersSection } from "@/components/console/agents/providers-section/providers-section";
+import {
+  ENDPOINT_FIELD_LOCKED_REASON,
+  ProvidersSection,
+  endpointFieldLockedReason,
+} from "@/components/console/agents/providers-section/providers-section";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { AgentOut, ConnectionOut, ProviderOut } from "@/contracts/lkap-contracts";
 
@@ -137,13 +141,18 @@ const TTS_PROVIDER: ProviderOut = {
   label: "LiveKit Inference TTS",
 };
 
-function stubApi(providers: ProviderOut[], connections: ConnectionOut[]) {
+function stubApi(providers: ProviderOut[], connections: ConnectionOut[], role?: "builder" | "admin") {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       let body: unknown = { items: [], total: 0 };
-      if (url.includes("/api/console/providers")) body = { v: 2, providers };
+      if (role && url.includes("/api/console/auth/me"))
+        body = {
+          user: { id: "u-1", email: "a@b.c", name: "A" },
+          workspaces: [{ id: "ws-1", slug: "default", name: "Default", role }],
+        };
+      else if (url.includes("/api/console/providers")) body = { v: 2, providers };
       else if (url.includes("/api/console/connections")) body = { items: connections, total: connections.length };
       else if (url.includes("/api/console/credentials")) body = { items: [], total: 0 };
       return { ok: true, status: 200, json: async () => body } as Response;
@@ -215,5 +224,54 @@ describe("ProvidersSection", () => {
     expect(within(sttCard).getByText(/cloud-a/)).toBeTruthy();
     // The unavailable provider is listed, never offered as a selectable radio.
     expect(within(sttCard).queryByRole("radio", { name: /Deepgram/ })).toBeNull();
+  });
+
+  describe("endpoint fields (V2-22, R-V2-33)", () => {
+    const COMPATIBLE_LLM: ProviderOut = {
+      ...LLM_PROVIDER,
+      id: "openai-compatible-llm",
+      label: "OpenAI-compatible LLM",
+      vendor: "OpenAI",
+      fields: [
+        { name: "base_url", label: "Base URL", type: "string" },
+        { name: "temperature", label: "Temperature", type: "number" },
+      ],
+    };
+    const llm = { ...ref("openai-compatible-llm"), fields: { base_url: "https://llm.example/v1", temperature: 0.2 } };
+
+    async function openLlm(role: "builder" | "admin") {
+      stubApi([COMPATIBLE_LLM, TTS_PROVIDER], [CONNECTION_A], role);
+      render(<Harness connectionId="conn-a" pipeline={{ mode: "cascaded", llm, tts: ref("livekit-inference-tts") }} />);
+      fireEvent.click(await screen.findByRole("button", { name: /Edit language model/i }));
+      return screen.getByRole("region", { name: "Language model" });
+    }
+
+    it("shows a builder the base URL read-only with the reason, other options editable", async () => {
+      const card = await openLlm("builder");
+
+      const baseUrl = (await within(card).findByLabelText(/Base URL/)) as HTMLInputElement;
+      expect(baseUrl.readOnly).toBe(true);
+      expect(baseUrl.value).toBe("https://llm.example/v1");
+      expect(within(card).getByText(ENDPOINT_FIELD_LOCKED_REASON)).toBeTruthy();
+      expect((within(card).getByLabelText(/Temperature/) as HTMLInputElement).readOnly).toBe(false);
+    });
+
+    it("lets an admin edit the base URL", async () => {
+      const card = await openLlm("admin");
+
+      const baseUrl = (await within(card).findByLabelText(/Base URL/)) as HTMLInputElement;
+      await vi.waitFor(() => expect(baseUrl.readOnly).toBe(false));
+      expect(within(card).queryByText(ENDPOINT_FIELD_LOCKED_REASON)).toBeNull();
+    });
+
+    it("matches the api's endpoint-field names", () => {
+      const field = (name: string) => ({ name, label: name, type: "string" as const });
+      for (const name of ["base_url", "ws_url", "endpoint", "azure_endpoint", "host", "api_base"]) {
+        expect(endpointFieldLockedReason(field(name))).toBe(ENDPOINT_FIELD_LOCKED_REASON);
+      }
+      for (const name of ["model", "voice", "temperature", "hostname_hint"]) {
+        expect(endpointFieldLockedReason(field(name))).toBeNull();
+      }
+    });
   });
 });

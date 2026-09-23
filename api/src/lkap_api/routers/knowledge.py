@@ -12,6 +12,7 @@ Two audiences share this module and are combined into the single `router`
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Response, UploadFile, status
@@ -184,6 +185,17 @@ async def _read_capped(file: UploadFile, *, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
+def upload_basename(filename: str | None) -> str:
+    """The client's filename reduced to its last path segment (V2-22, REVIEW-V2 R2-26).
+
+    It becomes part of the object key and the stored document name, so any
+    directory part (``../../x``, ``C:\\x``, ``/etc/x``) is dropped; an empty or
+    dot-only result falls back to ``document``.
+    """
+    base = PurePosixPath((filename or "").replace("\\", "/")).name.strip()
+    return base if base.strip(".") else "document"
+
+
 # --------------------------------------------------------------------------- knowledge bases
 @admin_router.post(
     "",
@@ -313,7 +325,7 @@ async def upload_document(
             f"upload exceeds the {MAX_UPLOAD_BYTES} byte limit", details={"max_bytes": MAX_UPLOAD_BYTES}
         )
     data = await _read_capped(file, max_bytes=MAX_UPLOAD_BYTES)
-    filename = file.filename or "document"
+    filename = upload_basename(file.filename)
     mime = file.content_type or "application/octet-stream"
 
     document = KbDocument(kb_id=kb.id, filename=filename, mime=mime, bytes=len(data), status="pending")

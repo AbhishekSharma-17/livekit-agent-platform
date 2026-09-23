@@ -39,7 +39,7 @@ from test_telephony import CALLEE, TEST_POLICY, World, _call, _inbound_session, 
 from lkap_api.db.models import AuditLog, Workspace
 from lkap_api.db.session import Database
 from lkap_api.settings import Settings, get_settings
-from lkap_api.telephony.policy import BLOCKED_PREFIXES, NOT_ALLOWED_TO_MODEL
+from lkap_api.telephony.policy import BLOCKED_PREFIXES, NANP_NON_US_CA_NPAS, NOT_ALLOWED_TO_MODEL
 
 # The telephony world's fixtures, shared with ``test_telephony`` (pytest finds them by name).
 fake_lk = tel.fake_lk
@@ -331,3 +331,159 @@ async def test_another_workspace_cannot_see_steer_or_dial_through_these_calls(
     assert listed.json()["total"] == 0
     assert world.lk.named("transfer_sip_participant") == []
     assert world.lk.named("send_data") == []
+
+
+# ------------------------------------------------- R-V2-28: numeric sip user needs a host
+async def test_numeric_sip_user_on_an_unlisted_host_is_422_naming_allowed_sip_hosts(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _set_policy(database, {**TEST_POLICY, "allowed_prefixes": ["+1"]})
+    call = await _call(admin_client, world)
+
+    response = await admin_client.post(
+        f"/v1/calls/{call['id']}/transfer", json={"to": "sip:+15551230000@evil.example"}
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "destination_not_allowed"
+    assert "allowed_sip_hosts" in error["message"]
+    assert error["details"]["allowed_sip_hosts"] == ["pbx.example.com"]
+    assert world.lk.named("transfer_sip_participant") == []
+
+
+async def test_numeric_sip_user_on_a_listed_host_under_plus_one_passes(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _set_policy(database, {**TEST_POLICY, "allowed_prefixes": ["+1"]})
+    call = await _call(admin_client, world)
+
+    response = await admin_client.post(
+        f"/v1/calls/{call['id']}/transfer", json={"to": "sip:+15551230000@pbx.example.com"}
+    )
+
+    assert response.status_code == 200, response.text
+    (refer,) = world.lk.named("transfer_sip_participant")
+    assert refer.transfer_to == "sip:+15551230000@pbx.example.com"
+
+
+async def test_premium_number_on_a_listed_sip_host_is_still_always_blocked(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _set_policy(database, {**TEST_POLICY, "allowed_prefixes": ["+1"]})
+    call = await _call(admin_client, world)
+
+    response = await admin_client.post(
+        f"/v1/calls/{call['id']}/transfer", json={"to": "sip:+19005550100@pbx.example.com"}
+    )
+
+    assert response.status_code == 422
+    assert "always blocked" in response.json()["error"]["message"]
+
+
+async def test_transfer_target_with_a_numeric_sip_user_on_an_unlisted_host_is_422_at_save(
+    admin_client: httpx.AsyncClient, world: World
+) -> None:
+    config = (await admin_client.get(f"/v1/agents/{world.agent_id}")).json()["config"]
+    config["telephony"] = {"transfer_targets": [{"label": "Desk", "to": "sip:+15551230000@unlisted.example"}]}
+
+    response = await admin_client.put(f"/v1/agents/{world.agent_id}", json={"config": config})
+
+    assert response.status_code == 422, response.text
+    issues = response.json()["error"]["details"]["issues"]
+    assert any(
+        i["path"] == "telephony.transfer_targets[0].to" and "allowed_sip_hosts" in i["message"]
+        for i in issues
+    )
+
+
+# ------------------------------------------------- R-V2-29: +1 = US and Canada; 976 exchange
+@pytest.mark.parametrize(
+    "number",
+    [
+        "+18095550100",  # Dominican Republic
+        "+18295550100",
+        "+18495550100",
+        "+18765550100",  # Jamaica
+        "+12845550100",  # British Virgin Islands
+        "+14735550100",  # Grenada
+        "+16495550100",  # Turks and Caicos
+        "+17875550100",  # Puerto Rico
+    ],
+)
+async def test_plus_one_alone_does_not_reach_the_caribbean_or_the_territories(
+    admin_client: httpx.AsyncClient, world: World, database: Database, number: str
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {"allowed_prefixes": ["+1"]})
+
+    response = await admin_client.post("/v1/calls", json={"agent_id": world.agent_id, "to_e164": number})
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "destination_not_allowed"
+    assert "US and Canada" in response.json()["error"]["message"]
+    assert world.lk.named("create_sip_participant") == []
+
+
+async def test_plus_one_still_reaches_the_united_states(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {"allowed_prefixes": ["+1"]})
+
+    response = await admin_client.post(
+        "/v1/calls", json={"agent_id": world.agent_id, "to_e164": "+14155550100"}
+    )
+
+    assert response.status_code == 201, response.text
+
+
+async def test_an_explicit_caribbean_prefix_overrides_the_plus_one_exclusion(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {"allowed_prefixes": ["+1", "+1876"]})
+
+    jamaica = await admin_client.post(
+        "/v1/calls", json={"agent_id": world.agent_id, "to_e164": "+18765550100"}
+    )
+
+    assert jamaica.status_code == 201, jamaica.text
+
+
+@pytest.mark.parametrize("prefixes", [["+1"], ["+1", "+1212"], ["+1212"]])
+async def test_the_976_exchange_is_always_blocked(
+    admin_client: httpx.AsyncClient, world: World, database: Database, prefixes: list[str]
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {"allowed_prefixes": prefixes})
+
+    response = await admin_client.post(
+        "/v1/calls", json={"agent_id": world.agent_id, "to_e164": "+12129765555"}
+    )
+
+    assert response.status_code == 422
+    assert "always blocked" in response.json()["error"]["message"]
+
+
+def test_the_non_us_ca_npa_set_is_the_nanp_table_and_excludes_the_mainland() -> None:
+    assert {
+        "809",
+        "829",
+        "849",
+        "876",
+        "658",
+        "284",
+        "473",
+        "649",
+        "787",
+        "939",
+        "340",
+        "671",
+        "670",
+        "684",
+    } <= (NANP_NON_US_CA_NPAS)
+    assert (
+        not {"212", "415", "416", "604", "202", "907", "808"} & NANP_NON_US_CA_NPAS
+    )  # NY, CA, ON, BC, DC, AK, HI
+    assert all(len(npa) == 3 and npa.isdigit() for npa in NANP_NON_US_CA_NPAS)

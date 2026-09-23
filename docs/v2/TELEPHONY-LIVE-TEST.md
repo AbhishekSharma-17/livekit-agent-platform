@@ -39,11 +39,11 @@ Follow your carrier's docs; the values below are the ones LKAP needs.
 ## 2. Create the LKAP objects (Console → Telephony)
 
 0. **Set the outbound dialing policy** (Console → Telephony → **Outbound dialing policy**; admins and owners only). Until `allowed_prefixes` is set, every outbound call, console transfer and `transfer_call` is refused (422 `destination_not_allowed`), and an agent with transfer destinations can't be saved.
-   - Allowed number prefixes: the narrowest prefixes that cover phone 1 and phone 2, for example `+1555` or the full numbers.
-   - Allowed SIP hosts: leave empty unless you transfer to a `sip:name@host` address.
+   - Allowed number prefixes: the narrowest prefixes that cover phone 1 and phone 2, for example `+1555` or the full numbers. **`+1` on its own admits only the United States and Canada** (R-V2-29): a Caribbean or US-territory phone (`+1876` Jamaica, `+1787` Puerto Rico, `+1809` Dominican Republic, …) needs its own prefix, and the card warns while `+1` is the only NANP entry.
+   - Allowed SIP hosts: leave empty unless you transfer to a `sip:` address. **Any `sip:` target needs its host listed**, including one whose user is a phone number (`sip:+15551230000@pbx.example.com`, R-V2-28): the number must pass the prefix rules and the host must be listed. To transfer to a phone number, use `+E.164`; use `sip:` only for a listed SIP host.
    - Keep the defaults for calls per minute (10) and outbound calls at once (5).
    - Check: the card shows **Outbound calls on**. The same policy is `settings.telephony` in `GET /v1/workspaces`.
-   - Premium-rate and satellite ranges (`+1900`, `+1976`, `+449`, `+881`, `+882`, `+870`, `+979`, …) stay blocked whatever you list.
+   - Premium-rate and satellite ranges (`+1900`, `+449`, `+881`, `+882`, `+870`, `+979`, …) and the NANP pay-per-call exchange (`+1 NPA 976 xxxx`, e.g. `+12129765555`) stay blocked whatever you list.
 1. **Add trunk → Inbound**:
    - Connection: the Cloud connection.
    - Name: `carrier-in`.

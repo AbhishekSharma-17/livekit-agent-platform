@@ -221,6 +221,13 @@ function RemoveMemberButton({
   );
 }
 
+/**
+ * The Team tab's only way to add someone (R-V2-30): accounts are global and an
+ * email is not proven, so the api's `POST …/members` re-adds former members
+ * only and answers 409 `use_invite` for anyone else. The console never calls
+ * it; "Send invite" is the path, and an existing account accepts with its own
+ * password.
+ */
 function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvited: () => void }) {
   const [open, setOpen] = React.useState(false);
   const [email, setEmail] = React.useState("");
@@ -269,7 +276,8 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
         <DialogHeader>
           <DialogTitle>Invite someone</DialogTitle>
           <DialogDescription>
-            Creates a one-time link, valid for 7 days. They set a password when they open it.
+            Creates a one-time link, valid for 7 days. They set a password when they open it, or confirm with
+            their own password if they already have an account.
           </DialogDescription>
         </DialogHeader>
         {invite ? (

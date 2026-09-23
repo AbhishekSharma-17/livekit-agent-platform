@@ -21,7 +21,7 @@ import {
 } from "@/components/console/registry/provider-meta";
 import { defaultFieldValues, RegistryForm } from "@/components/console/registry/registry-form";
 import { cn } from "@/lib/utils";
-import type { ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
+import type { FieldSpec, ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
  * What a slot may offer. Every member is optional; `{}` is the v1 behaviour.
@@ -48,6 +48,12 @@ export interface SlotConstraints {
   disabledReason?: (spec: ProviderSpec) => string | null;
   /** Open the model list filtered to vision-capable models. */
   preferVision?: boolean;
+  /**
+   * Render an option field read-only with this reason (or `null` to leave it
+   * editable). The providers section uses it for endpoint fields below
+   * `admin` (V2-22, R-V2-33); the api refuses those edits either way.
+   */
+  fieldLockedReason?: (field: FieldSpec) => string | null;
 }
 
 export interface ProviderSlotEditorProps {
@@ -234,6 +240,7 @@ export function ProviderSlotEditor({
                 onChange={(name, fieldValue) => onChange({ ...value, fields: { ...(value.fields ?? {}), [name]: fieldValue } })}
                 idPrefix={`${prefix}-field`}
                 voices={current.capabilities?.voices}
+                lockedReason={constraints.fieldLockedReason}
                 catalogContext={{
                   providerId: current.id,
                   kind: current.kind,

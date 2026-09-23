@@ -2,6 +2,22 @@
 
 This is written for a fresh coordinator session so it can continue the v2 build without the prior chat. **Snapshot taken 2026-09-23.** Before acting on anything here, verify it against `git status`, the gates and `docs/v2/_asks.md`. The code is the source of truth.
 
+## Status: Phase 1 complete (2026-09-24)
+- **Commits (local only):** 5b715df (waves 1–2), 53f9295 (wave 3), 5367a50 (V2-19 integration), db8326e (V2-20 live verification), 1d660f6 (V2-21 security + V2-20F), and the V2-22 hardening commit on top.
+- **Architect verdict** (REVIEW-V2 §8):
+  - SHIP-WITH-CONDITIONS for local/MVP use.
+  - NO-SHIP for multi-tenant production until the Phase 2 conditions are met: per-connection worker tokens, email verification, digest pins, and Postgres + Redis verified with two api processes.
+- **DB:** at `v2_011_recording_error`; a backup from before the migration is in the scratchpad.
+- **Open, owned by the user:**
+  - Set the owner password.
+  - Move secrets from launch.json into `~/.config/lkap/dev.env` (REVIEW-V2 §7).
+  - Supply the Bey/Simli keys (L13), a SIP trunk (L12b) and Docker (L11/L14).
+  - Add a GitHub remote and secrets.
+  - Run `caddy validate` (V2-22-5).
+  - Re-check the NANPA list (V2-22-6).
+  - Add a Google key via Console → Keys to use Gemini Live directly.
+- **Phase 2 backlog:** the open MEDIUM/LOW items in REVIEW-V2, the multi-tenant conditions, the text-chat fake worker for e2e (V2-19C-4), server-side sessions paging (V2-19C-8), and the storage-configs API.
+
 ## Status update (2026-09-23, later)
 - **Commit `5b715df`:** waves 1–2 plus V2-15 and V2-17, including partial V2-16/V2-18 files.
 - **Worker `lkap-agent`:** restarted on v2 code; log at scratchpad/worker.log.

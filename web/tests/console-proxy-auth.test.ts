@@ -171,6 +171,50 @@ describe("console proxy CSRF and path guards (V2-21)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("refuses a write with a foreign Origin and no Sec-Fetch-Site (R2-40)", async () => {
+    const response = await POST(
+      request("connections", { method: "POST", headers: { origin: "https://evil.example" } }),
+      params("connections"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an opaque (null) Origin write too", async () => {
+    const response = await POST(
+      request("connections", { method: "POST", headers: { origin: "null" } }),
+      params("connections"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("forwards a write whose Origin is its own, with or without Sec-Fetch-Site", async () => {
+    const bare = await POST(
+      request("agents", { method: "POST", headers: { origin: "http://localhost:3000" } }),
+      params("agents"),
+    );
+    const noOrigin = await POST(request("agents", { method: "POST" }), params("agents"));
+
+    expect(bare.status).toBe(200);
+    expect(noOrigin.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves the Origin check to the api once the bypass is off", async () => {
+    vi.stubEnv("LKAP_WEB_ADMIN_BYPASS", "0");
+
+    const response = await POST(
+      request("agents", { method: "POST", headers: { origin: "https://console.example" } }),
+      params("agents"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock.mock.calls[0][1].headers.get("x-admin-token")).toBeNull();
+  });
+
   it("refuses path segments that would climb out of /v1", async () => {
     const response = await GET(request("x"), {
       params: Promise.resolve({ path: ["..", "internal", "v1", "sessions"] }),

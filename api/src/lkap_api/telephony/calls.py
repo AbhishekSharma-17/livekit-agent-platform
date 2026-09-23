@@ -27,6 +27,16 @@ Status only moves forward (:func:`advance`): ``dialing → ringing → answered 
 (``POST /internal/v1/telephony/calls/report``) all feed the same function, so
 whichever arrives first wins and the others are no-ops.
 
+**Webhooks (ask #76, V2-22).** :func:`advance` is the one place a call moves
+forward, so it is where ``call.started`` (into ``answered``) and ``call.ended``
+(into a terminal state) come from. It runs inside its caller's open
+transaction, and ``webhooks.emit`` opens a connection of its own (the SQLite
+deadlock of ask #40), so it never emits: it adds a ``call_event`` job row to
+the call's own session, which commits with the transition (or rolls back with
+it), and :func:`_emit_call_event` fans the webhook out a tick later on its own
+connection — the outbox pattern ``recordings.finalize`` uses for
+``recording.ready``. A bare row outside any session (unit tests) emits nothing.
+
 :func:`sweep_stuck_calls` (run by ``sessions_sweep.sweep_loop``, R-V2-24)
 closes rows nobody else will: an outbound dial the api forgot (restart
 mid-dial), and any open row whose session already ended.
@@ -58,14 +68,17 @@ from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.telephony import E164_PATTERN
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import object_session
 
 from lkap_api.connections.clients import ConnectionClientFactory
 from lkap_api.connections.service import resolve_agent_connection
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
-from lkap_api.db.models import Call, LiveKitConnection, SipTrunk, new_id, utcnow
+from lkap_api.db.models import Call, Job, LiveKitConnection, SipTrunk, new_id, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
+from lkap_api.jobs.context import JobContext
+from lkap_api.jobs.registry import job
 from lkap_api.limits import live_session_count
 from lkap_api.logging import get_logger
 from lkap_api.telephony.common import (
@@ -80,6 +93,8 @@ from lkap_api.telephony.common import (
     to_sip_uri,
 )
 from lkap_api.telephony.policy import CallsBusyError, TelephonyPolicy, check_destination
+from lkap_api.webhooks import emit
+from lkap_api.webhooks.events import CALL_ENDED, CALL_STARTED
 
 log = get_logger(__name__)
 
@@ -146,7 +161,66 @@ def advance(
             call.ended_at = when
         if reason:
             call.hangup_reason = reason[:128]
+    if status == "answered":
+        _queue_call_event(call, CALL_STARTED)
+    elif status in TERMINAL:
+        _queue_call_event(call, CALL_ENDED)
     return True
+
+
+#: Job kind of the outbox row :func:`advance` writes for a call webhook (ask #76).
+CALL_EVENT_JOB = "call_event"
+
+
+def _iso(value: dt.datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def call_event_data(call: Call) -> dict[str, Any]:
+    """The ``data`` of a ``call.started`` / ``call.ended`` webhook (ids, numbers and times only)."""
+    return {
+        "call_id": call.id,
+        "session_id": call.session_id,
+        "direction": call.direction,
+        "status": call.status,
+        "from_e164": call.from_e164,
+        "to_e164": call.to_e164,
+        "answered_at": _iso(call.answered_at),
+        "ended_at": _iso(call.ended_at),
+        "hangup_reason": call.hangup_reason,
+    }
+
+
+def _queue_call_event(call: Call, event_type: str) -> None:
+    """Add a ``call_event`` job to the call's own session (committed with the transition)."""
+    session = object_session(call)
+    if session is None:
+        return
+    session.add(
+        Job(
+            kind=CALL_EVENT_JOB,
+            payload={
+                "event_type": event_type,
+                "workspace_id": call.workspace_id,
+                "data": call_event_data(call),
+            },
+            status="pending",
+            run_at=utcnow(),
+        )
+    )
+
+
+@job(CALL_EVENT_JOB)
+async def _emit_call_event(ctx: JobContext, payload: dict[str, object]) -> None:
+    """Fan a queued ``call.started`` / ``call.ended`` out to the workspace's webhooks."""
+    data = payload.get("data")
+    await emit(
+        ctx.database,
+        ctx.jobs,
+        workspace_id=str(payload["workspace_id"]),
+        event_type=str(payload["event_type"]),
+        data=dict(data) if isinstance(data, dict) else {},
+    )
 
 
 def status_for_sip_code(code: int | None) -> CallStatus:
@@ -328,6 +402,10 @@ async def prepare_outbound_call(
     db: AsyncSession, workspace_id: str, payload: CallCreate, *, policy: TelephonyPolicy
 ) -> tuple[Call, DialPlan]:
     """Validate an outbound call and store its session and call rows (not committed).
+
+    The two cap counts here are only race-free under the workspace's and the
+    agent's ``lkap_api.limits.slot_lock`` held through the caller's commit
+    (R-V2-34); ``POST /v1/calls`` does that.
 
     Raises:
         NotFoundError: Unknown agent or trunk.

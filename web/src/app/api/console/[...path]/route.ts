@@ -59,11 +59,29 @@ function errorResponse(status: number, code: string, message: string): NextRespo
  * request a browser marks `cross-site` or `same-site` is refused. Clients that
  * send no such header (server-side code, curl) are unaffected; the api's own
  * Origin check still guards cookie-authenticated writes behind this.
+ *
+ * `Origin` too (V2-22, REVIEW-V2 R2-40): a browser that does not send
+ * `Sec-Fetch-Site` (Safari before 16.4) still sends `Origin` on a cross-origin
+ * POST, so while the break-glass token is attached a write whose `Origin` is
+ * present and is not this request's own origin is refused as well. Only while
+ * the bypass is on: without it the proxy adds no credential of its own, and
+ * behind a TLS-terminating proxy the origin this route sees can differ in
+ * scheme from the one the browser sends.
  */
+function ownOrigins(request: NextRequest): Set<string> {
+  const origins = new Set([request.nextUrl.origin]);
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(/:$/, "");
+  if (host) origins.add(`${proto}://${host}`);
+  return origins;
+}
+
 function crossSiteWrite(request: NextRequest): boolean {
   if (SAFE_METHODS.has(request.method.toUpperCase())) return false;
   const site = request.headers.get("sec-fetch-site")?.toLowerCase();
-  return site === "cross-site" || site === "same-site";
+  if (site === "cross-site" || site === "same-site") return true;
+  const origin = request.headers.get("origin");
+  return adminBypassEnabled() && origin !== null && !ownOrigins(request).has(origin);
 }
 
 /** Path segments that could climb out of `/v1/` once joined (`..`, `.`, or an embedded slash). */

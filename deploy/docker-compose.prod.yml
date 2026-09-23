@@ -51,6 +51,9 @@ services:
       - "443:443"
     environment:
       LKAP_PUBLIC_DOMAIN: ${LKAP_PUBLIC_DOMAIN:-localhost}
+      # Who may reach /internal/* (the worker API) through Caddy; see the Caddyfile
+      # (V2-22, R-V2-27). `:-` also turns an empty value into the default.
+      LKAP_INTERNAL_ALLOWED_CIDRS: ${LKAP_INTERNAL_ALLOWED_CIDRS:-private_ranges}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -265,13 +268,15 @@ services:
     image: minio/mc:RELEASE.2025-04-08T15-39-49Z
     networks: [backend]
     entrypoint: ["/bin/sh", "-c"]
+    # The `local` alias comes from `MC_HOST_local` (V2-22, REVIEW-V2 R2-36), so
+    # the MinIO password is never an `mc alias set` argument visible in `ps`.
+    # The access and secret keys sit inside a URL here: use URL-safe values
+    # (letters, digits, `-`, `_`, `.`, `~`), or percent-encode them.
     command:
       - >
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
         mc mb --ignore-existing "local/${LKAP_STORAGE_BUCKET:-lkap}"
     environment:
-      MINIO_ROOT_USER: ${LKAP_STORAGE_ACCESS_KEY:?set in deploy/api.env}
-      MINIO_ROOT_PASSWORD: ${LKAP_STORAGE_SECRET_KEY:?set in deploy/api.env}
+      MC_HOST_local: "http://${LKAP_STORAGE_ACCESS_KEY:?set in deploy/api.env}:${LKAP_STORAGE_SECRET_KEY:?set in deploy/api.env}@minio:9000"
     depends_on:
       minio:
         condition: service_healthy

@@ -55,6 +55,7 @@ from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, ServiceDep
 from lkap_api.errors import ApiError, ConflictError, NotFoundError
+from lkap_api.limits import slot_lock
 from lkap_api.logging import get_logger
 from lkap_api.telephony import calls as call_service
 from lkap_api.telephony import webhooks as _webhooks  # noqa: F401 - registers the webhook handlers
@@ -159,7 +160,13 @@ async def place_call(
     limiter: RateLimiterDep,
     background: BackgroundTasks,
 ) -> CallOut:
-    """Check the policy and caps, store the call, commit, and dial in the background."""
+    """Check the policy and caps, store the call, commit, and dial in the background.
+
+    The two caps are counted and the rows committed under the workspace's and
+    the agent's slot locks (R-V2-34; workspace outer, agent inner), so a burst
+    of dials cannot all read the same count. A refusal is audited after the
+    locks are released (``_audit_refusal`` writes through a second session).
+    """
     policy = await workspace_policy(db, ctx.workspace_id)
     try:
         call_service.check_outbound_number(policy, payload.to_e164)
@@ -169,17 +176,29 @@ async def place_call(
             capacity=policy.max_calls_per_min,
             what="outbound calls per minute for this workspace",
         )
-        call, plan = await call_service.prepare_outbound_call(db, ctx.workspace_id, payload, policy=policy)
+        async with (
+            slot_lock(db, workspace_id=ctx.workspace_id),
+            slot_lock(db, workspace_id=ctx.workspace_id, agent_id=payload.agent_id),
+        ):
+            call, plan = await call_service.prepare_outbound_call(
+                db, ctx.workspace_id, payload, policy=policy
+            )
+            _audit(
+                db,
+                ctx,
+                "call.placed",
+                call,
+                agent_id=payload.agent_id,
+                session_id=plan.session_id,
+                to=plan.to_e164,
+            )
+            out = call_service.call_out(call)
+            await db.commit()  # the dial task reads these rows on its own session
     except _POLICY_REFUSALS as exc:
         await _audit_refusal(
             db, database, ctx, "call.refused", exc, agent_id=payload.agent_id, to=payload.to_e164[:64]
         )
         raise
-    _audit(
-        db, ctx, "call.placed", call, agent_id=payload.agent_id, session_id=plan.session_id, to=plan.to_e164
-    )
-    out = call_service.call_out(call)
-    await db.commit()  # the dial task reads these rows on its own session
     background.add_task(call_service.run_dial, database, factory, plan)
     return out
 

@@ -15,7 +15,13 @@ import {
   splitNumbers,
 } from "@/components/console/telephony/model";
 import { TelephonyPage } from "@/components/console/telephony/telephony-page";
-import { DialingPolicyCard, parseDraft, policyFromSettings } from "@/components/console/telephony/dialing-policy";
+import {
+  DialingPolicyCard,
+  PLUS_ONE_WARNING,
+  parseDraft,
+  plusOneAlone,
+  policyFromSettings,
+} from "@/components/console/telephony/dialing-policy";
 import { PhoneCallsCard } from "@/components/console/telephony/tools-section";
 import { TELEPHONY_TOOLS, BUILTIN_TOOLS } from "@/components/console/lib/constants";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
@@ -410,6 +416,28 @@ describe("DialingPolicyCard", () => {
     expect(await screen.findByText("Only admins and owners can change the policy.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save policy" })).toBeNull();
     expect((screen.getByLabelText("Allowed number prefixes") as HTMLInputElement).readOnly).toBe(true);
+  });
+
+  it("warns that +1 alone covers only the US and Canada (R-V2-29)", async () => {
+    stubApi({
+      ...meWith("admin"),
+      "GET workspaces": { items: [{ id: "ws-1", settings: { telephony: { allowed_prefixes: ["+1"] } } }], total: 1 },
+    });
+    renderWithClient(<DialingPolicyCard />);
+
+    expect(await screen.findByText(PLUS_ONE_WARNING)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Allowed number prefixes"), { target: { value: "+1, +1876" } });
+    await waitFor(() => expect(screen.queryByText(PLUS_ONE_WARNING)).toBeNull());
+    fireEvent.change(screen.getByLabelText("Allowed number prefixes"), { target: { value: "+44" } });
+    expect(screen.queryByText(PLUS_ONE_WARNING)).toBeNull();
+  });
+
+  it("knows when +1 is the only NANP prefix", () => {
+    expect(plusOneAlone(["+1"])).toBe(true);
+    expect(plusOneAlone(["+1", "+44"])).toBe(true);
+    expect(plusOneAlone(["+1", "+1787"])).toBe(false);
+    expect(plusOneAlone(["+1876"])).toBe(false);
+    expect(plusOneAlone([])).toBe(false);
   });
 
   it("parses stored settings leniently and validates drafts", () => {

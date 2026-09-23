@@ -52,9 +52,12 @@ async def test_admin_adds_and_reroles_a_member_but_cannot_grant_owner(
     app: FastAPI, database: Database
 ) -> None:
     await make_user(database, "a@example.com", role="admin")
-    user_id = await make_user(database, "x@example.com", role=None)
+    # R-V2-30: `add_member` re-adds a *former* member; x was one until just now.
+    user_id = await make_user(database, "x@example.com", role="viewer")
 
     async with await login(app, "a@example.com") as admin:
+        removed = await admin.delete(f"/v1/workspaces/default/members/{user_id}")
+        assert removed.status_code == 204, removed.text
         added = await admin.post(
             "/v1/workspaces/default/members", json={"email": "x@example.com", "role": "viewer"}
         )

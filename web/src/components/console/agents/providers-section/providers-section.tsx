@@ -23,12 +23,13 @@ import {
   type ProviderKind,
 } from "@/components/console/registry/provider-meta";
 import type { SlotConstraints } from "@/components/console/registry/provider-slot-editor";
+import { useWriteAccess } from "@/components/console/lib/roles";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { useConnections } from "@/hooks/useConnections";
 import { cn } from "@/lib/utils";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { EditorSectionProps } from "@/components/console/agents/editor/types";
-import type { ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
+import type { FieldSpec, ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
 
 type SlotKey = "stt" | "llm" | "tts" | "realtime" | "avatar" | "image_gen" | "workflow_llm" | "vad" | "turn_detection" | "noise_cancellation";
@@ -94,6 +95,18 @@ const OPTIONAL_SLOTS: { key: SlotKey; add: string }[] = [
   { key: "workflow_llm", add: "Advanced: workflow model" },
 ];
 
+/** The api's endpoint-field rule (`routers/agents.py::_ENDPOINT_FIELD`, REVIEW-V2 R2-03). */
+const ENDPOINT_FIELD = /(url|endpoint|host|api_base)$/i;
+
+/** Shown on a provider endpoint field a builder may not set (V2-22, R-V2-33). */
+export const ENDPOINT_FIELD_LOCKED_REASON =
+  "Only admins and owners can set a provider endpoint, because the provider's key is sent to it.";
+
+/** Read-only reason for an endpoint field below `admin`, `null` for any other field. */
+export function endpointFieldLockedReason(field: FieldSpec): string | null {
+  return ENDPOINT_FIELD.test(field.name) ? ENDPOINT_FIELD_LOCKED_REASON : null;
+}
+
 /**
  * Providers section (V2-13, replacing WP-4's `tabs/providers-tab.tsx` via the
  * `providers` `EditorExtension` — UI_UX_SPEC-V2-AMENDMENTS §2.3): adds the
@@ -114,6 +127,9 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
   const camera = watch("config.capabilities.camera");
   const screenShare = watch("config.capabilities.screen_share");
   const { issueFor } = useSectionIssues();
+  // R-V2-33: adding or changing a provider endpoint (`base_url`, `*_url`,
+  // `*endpoint`, `*host`) needs `admin`; the api refuses it for builders.
+  const { canWrite: canSetEndpoints } = useWriteAccess("admin");
 
   const [expanded, setExpanded] = React.useState<SlotKey | null>(null);
   const [added, setAdded] = React.useState<Set<SlotKey>>(() => new Set());
@@ -135,6 +151,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
   const constraints: SlotConstraints = {
     inference: boundConnection && boundConnection.capabilities?.inference_available === false ? "off" : "auto",
     disabledReason: (spec: ProviderSpec) => connectionDisabledReason(spec, boundConnection),
+    fieldLockedReason: canSetEndpoints ? undefined : endpointFieldLockedReason,
   };
 
   const pipelineErrors = formState.errors.config?.pipeline;

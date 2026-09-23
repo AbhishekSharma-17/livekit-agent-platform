@@ -72,6 +72,12 @@ export interface RegistryFormProps {
   singleColumn?: boolean;
   /** Enables the catalog combobox for the fields it matches (see `CatalogFieldContext`). */
   catalogContext?: CatalogFieldContext;
+  /**
+   * Return a sentence to render a field read-only with that reason as its
+   * hint, or `null` to leave it editable (V2-22, R-V2-33: a provider endpoint
+   * field below `admin`). Default: every field editable.
+   */
+  lockedReason?: (field: FieldSpec) => string | null;
 }
 
 const CUSTOM = "__custom__";
@@ -125,6 +131,7 @@ export function RegistryForm({
   errors,
   singleColumn = false,
   catalogContext,
+  lockedReason,
 }: RegistryFormProps) {
   const autoId = useId();
   const prefix = idPrefix ?? autoId;
@@ -152,6 +159,7 @@ export function RegistryForm({
               error={errors?.[field.name]}
               className={wide && !singleColumn ? "sm:col-span-2" : undefined}
               catalogContext={catalogContext}
+              locked={lockedReason?.(field) ?? null}
             />
           );
         })}
@@ -194,6 +202,7 @@ function RegistryField({
   error,
   className,
   catalogContext,
+  locked = null,
 }: {
   field: FieldSpec;
   value: FieldValue | undefined;
@@ -204,8 +213,24 @@ function RegistryField({
   error?: string;
   className?: string;
   catalogContext?: CatalogFieldContext;
+  locked?: string | null;
 }) {
   const required = Boolean(field.required) && !(field.type === "secret" && secretsMasked);
+  if (locked) {
+    const shown = typeof value === "string" ? value : value !== undefined && value !== null ? String(value) : "";
+    return (
+      <Field label={field.label} htmlFor={fieldId} hint={locked} error={error} className={className}>
+        <Input
+          id={fieldId}
+          value={shown}
+          placeholder={field.placeholder ?? undefined}
+          readOnly
+          aria-readonly
+          className="font-mono text-[0.8125rem]"
+        />
+      </Field>
+    );
+  }
   return (
     <Field
       label={field.label}

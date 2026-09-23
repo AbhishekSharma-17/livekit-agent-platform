@@ -114,3 +114,25 @@ describe("WebhooksTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Redeliver" }));
   });
 });
+
+describe("webhook event picker parity (ask #76)", () => {
+  it("offers exactly the api's KNOWN_EVENTS, call events included", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const source = readFileSync(path.resolve(__dirname, "../../api/src/lkap_api/webhooks/events.py"), "utf8");
+    const constants = Object.fromEntries(
+      Array.from(source.matchAll(/^([A-Z_]+) = "([a-z_.]+)"$/gm), (m) => [m[1], m[2]]),
+    );
+    const block = /KNOWN_EVENTS: tuple\[str, \.\.\.\] = \(([^)]*)\)/.exec(source)?.[1] ?? "";
+    const known = block
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => constants[name]);
+    const { KNOWN_WEBHOOK_EVENTS, WEBHOOK_EVENT_LABEL } = await import("@/components/console/settings/api-types");
+
+    expect(KNOWN_WEBHOOK_EVENTS).toEqual(known);
+    expect(known).toEqual(expect.arrayContaining(["call.started", "call.ended"]));
+    expect(KNOWN_WEBHOOK_EVENTS.every((event) => WEBHOOK_EVENT_LABEL[event])).toBe(true);
+  });
+});

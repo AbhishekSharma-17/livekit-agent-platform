@@ -57,7 +57,7 @@ from lkap_api.auth.deps import (
     member_role_in,
     require,
 )
-from lkap_api.auth.ratelimit import AgentBusyError, RateLimiterDep, enforce
+from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.auth.roles import role_at_least, scope_allows
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.service import mint_session_token
@@ -68,6 +68,7 @@ from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.limits import live_session_count as live_session_count
+from lkap_api.limits import reserve_session_slot
 from lkap_api.livekit_tokens import new_participant_identity, room_name_for
 from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
@@ -213,59 +214,55 @@ async def connect(
             capacity=limits.rate_per_agent_per_min,
             what="connects per minute for this agent",
         )
-    live = await live_session_count(db, agent)
-    if live >= limits.max_concurrent_sessions:
-        raise AgentBusyError(
-            "this agent is at its concurrent session limit; try again shortly",
-            details={"max_concurrent_sessions": limits.max_concurrent_sessions},
-        )
+    # R-V2-34: count, insert and commit under the agent's slot lock, so a burst
+    # cannot read the same count twice; the webhook is emitted after it is released.
+    async with reserve_session_slot(db, agent, limits):
+        config = agent_config_of(agent)
+        session_id = new_id()
+        room_name = room_name_for(session_id)
+        identity = (payload.participant_identity if privileged else None) or new_participant_identity()
+        channel: SessionChannel = "test" if privileged else "web"
 
-    config = agent_config_of(agent)
-    session_id = new_id()
-    room_name = room_name_for(session_id)
-    identity = (payload.participant_identity if privileged else None) or new_participant_identity()
-    channel: SessionChannel = "test" if privileged else "web"
-
-    minted = await mint_session_token(
-        db,
-        factory,
-        agent,
-        session_id=session_id,
-        room_name=room_name,
-        identity=identity,
-        participant_name=payload.participant_name,
-        channel=channel,
-        attributes=payload.participant_metadata or None,
-        ttl=dt.timedelta(seconds=limits.max_session_duration_s),
-    )
-    db.add(
-        SessionRow(
-            id=session_id,
-            workspace_id=agent.workspace_id,
-            agent_id=agent.id,
-            connection_id=minted.connection_id,
-            config_version=agent.config_version,
+        minted = await mint_session_token(
+            db,
+            factory,
+            agent,
+            session_id=session_id,
             room_name=room_name,
-            participant_identity=identity,
+            identity=identity,
             participant_name=payload.participant_name,
-            status="created",
+            channel=channel,
+            attributes=payload.participant_metadata or None,
+            ttl=dt.timedelta(seconds=limits.max_session_duration_s),
+        )
+        db.add(
+            SessionRow(
+                id=session_id,
+                workspace_id=agent.workspace_id,
+                agent_id=agent.id,
+                connection_id=minted.connection_id,
+                config_version=agent.config_version,
+                room_name=room_name,
+                participant_identity=identity,
+                participant_name=payload.participant_name,
+                status="created",
+                pipeline_mode=config.pipeline.mode,
+                channel=channel,
+            )
+        )
+        await db.flush()
+        log.info(
+            "session_created",
+            session_id=session_id,
+            agent_id=agent.id,
+            workspace_id=agent.workspace_id,
+            connection_id=minted.connection_id,
+            room_name=room_name,
             pipeline_mode=config.pipeline.mode,
             channel=channel,
         )
-    )
-    await db.flush()
-    log.info(
-        "session_created",
-        session_id=session_id,
-        agent_id=agent.id,
-        workspace_id=agent.workspace_id,
-        connection_id=minted.connection_id,
-        room_name=room_name,
-        pipeline_mode=config.pipeline.mode,
-        channel=channel,
-    )
-    workspace_id = agent.workspace_id
-    await db.commit()
+        workspace_id = agent.workspace_id
+        await db.commit()
     await webhooks.emit(
         database,
         jobs,

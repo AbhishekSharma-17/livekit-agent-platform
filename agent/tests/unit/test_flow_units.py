@@ -219,9 +219,11 @@ def test_prepare_flow_resolved_applies_start_greeting_and_qa_node() -> None:
     assert prepared.config.qa.rubric_prompt == "Score empathy."
 
 
-def test_prepare_flow_resolved_keeps_qa_off_without_a_resolved_judge() -> None:
+def test_prepare_flow_resolved_turns_qa_on_for_a_qa_node_even_without_a_resolved_judge() -> None:
+    """R-V2-11: the node is the author's intent; a missing `qa_llm` is the judge's
+    `failed, "qa_llm not resolved"` (R-V2-6), never QA silently staying off."""
     prepared = prepare_flow_resolved(_with_flow(resolved_config(), _QA_FLOW))
-    assert prepared.config.qa.enabled is False
+    assert prepared.config.qa.enabled is True
     assert prepared.config.qa.rubric_prompt == "Score empathy."
 
 

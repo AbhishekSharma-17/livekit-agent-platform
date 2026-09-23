@@ -53,6 +53,7 @@ from lkap_contracts.api_models import (
     SessionSummaryIn,
     TranscriptTurn,
 )
+from lkap_contracts.flow import FlowState
 from lkap_contracts.ui_protocol import UiState
 
 from lkap_agent.config_client import ConfigClientProtocol
@@ -354,8 +355,14 @@ class SessionObserver:
         status: str = "ended",
         error: str | None = None,
         final_ui_state: UiState | None = None,
+        flow: FlowState | None = None,
     ) -> None:
-        """Flush events and `PUT` the session summary. Safe to call twice."""
+        """Flush events and `PUT` the session summary. Safe to call twice.
+
+        `flow` is a flow session's final `FlowState` (R-V2-8): its end-node
+        disposition and extracted variables travel in the summary, the one
+        terminal write. Prompt agents pass nothing and send the defaults.
+        """
         if self._closed:
             return
         self._closed = True
@@ -388,6 +395,8 @@ class SessionObserver:
             transcript=transcript,
             final_ui_state=final_ui_state,
             error=error,
+            disposition=flow.disposition if flow is not None else None,
+            variables=dict(flow.variables) if flow is not None else {},
         )
         await self._client.put_summary(self._session_id, summary)
         logger.info(

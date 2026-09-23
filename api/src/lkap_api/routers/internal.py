@@ -589,7 +589,10 @@ async def put_summary(
     # R-V2-8: the summary is the one terminal write for a flow's outcome (never
     # the best-effort `flow_ended` event); prompt agents send `None` / `{}`.
     session.disposition = payload.disposition
-    session.variables = payload.variables
+    # R-V2-22: merged, not overwritten — an outbound call stores `CallCreate.variables`
+    # on the row before it starts; the summary's values win on a conflict.
+    merged_variables = {**(session.variables or {}), **payload.variables}
+    session.variables = merged_variables
     session.ended_at = utcnow()
     _merge_turn_count(session)
     await cost_session(db, session)
@@ -615,7 +618,7 @@ async def put_summary(
                 "agent_id": session.agent_id,
                 "status": payload.status,
                 "disposition": payload.disposition,
-                "variables": payload.variables,
+                "variables": merged_variables,
             },
             background_tasks=background_tasks,
         )

@@ -75,6 +75,7 @@ from lkap_contracts.agent_config import ResolvedAgentConfig
 from lkap_contracts.api_models import SessionRecordingIn, SessionStartIn, SessionSummaryIn
 from lkap_contracts.connections import TurnDetectorMode
 from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.flow import FlowState
 from lkap_contracts.ui_protocol import ActivityEvent, ChecklistItem, Tone, UiPatchOp, UiState
 from packs.base import FrameSnapshot, Pack, StructuredLLM
 
@@ -100,8 +101,15 @@ from lkap_agent.platform_agent import (
 from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
 from lkap_agent.qa import build_judge, score_session
 from lkap_agent.registration import FleetClient, WorkerRegistration
-from lkap_agent.session_builder import SessionBuilder, SessionPlan, factory_view, prepare_resolved
+from lkap_agent.session_builder import (
+    SessionBuilder,
+    SessionPlan,
+    factory_view,
+    is_text_channel,
+    prepare_resolved,
+)
 from lkap_agent.settings import DEFAULT_AGENT_NAME, Settings, get_settings
+from lkap_agent.text_mode import handle_agent_action as handle_text_mode_action
 from lkap_agent.workflow_llm import PromptJsonStructuredLLM
 
 __all__ = [
@@ -1090,6 +1098,17 @@ def _assemble(
         # first caller, as RoomIO does.
         ui_identity=resolved.participant_identity or None,
     )
+    if is_text_channel(resolved):
+        # V2-18: `rewind`/`inject_user_text` need the built `AgentSession` (not yet
+        # in `cell`), so this closes over `plan` directly rather than routing
+        # through `pack.on_ui_action` like `_on_ui_action` above. Kept separate
+        # from the flow hooks (`is_flow`/`prepare_flow_resolved`) below.
+        async def _on_text_action(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+            return await handle_text_mode_action(plan.session, action, payload)
+
+        bind_text = getattr(ui, "bind", None)
+        if callable(bind_text):
+            bind_text(on_text_action=_on_text_action)
     frames = deps.frame_buffer_factory(
         room=ctx.room, participant_identity=resolved.participant_identity or None
     )
@@ -1247,7 +1266,14 @@ def _shutdown_callback(
                 logger.warning("could not cancel background jobs", exc_info=True)
         await agent.on_pack_session_end(reason)
         _deactivate(agent)
-        await observer.shutdown(reason=reason, final_ui_state=agent.context.ui.state)
+        # R-V2-8: `on_pack_session_end` (above) settled a flow's extractions; its final
+        # `FlowState` rides in the summary. Prompt agents have no "flow" userdata.
+        flow_state = agent.context.userdata.get("flow")
+        await observer.shutdown(
+            reason=reason,
+            final_ui_state=agent.context.ui.state,
+            flow=flow_state if isinstance(flow_state, FlowState) else None,
+        )
         # Everything below runs after the summary is posted, so neither the
         # Egress poll (up to 5 s) nor the QA judge (R-V2-5, up to 30 s) delays
         # the ≤10 s summary target.

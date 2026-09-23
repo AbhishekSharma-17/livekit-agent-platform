@@ -3,6 +3,8 @@ import type { EditorExtension } from "./types";
 import { providersSectionExtension } from "@/components/console/agents/providers-section/extension";
 import { panelComposerExtension } from "@/components/console/agents/panel-section/extension";
 import { telephonyExtension } from "@/components/console/telephony/extension";
+import { flowBuilderExtension } from "@/components/console/flow/extension";
+import { testChatExtension } from "@/components/console/agents/test-chat/extension";
 
 /**
  * The agent editor's plug-in list (WP-3 contract; rules in `./README.md`).
@@ -24,4 +26,6 @@ export const EDITOR_EXTENSIONS: EditorExtension[] = [
   providersSectionExtension,
   panelComposerExtension,
   telephonyExtension,
+  flowBuilderExtension,
+  testChatExtension,
 ];

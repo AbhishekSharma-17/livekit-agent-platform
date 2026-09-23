@@ -72,6 +72,7 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       timezone: config.timezone ?? "UTC",
       recording: { ...DEFAULT_RECORDING, ...config.recording },
       panel: panelFormValue(agent),
+      flow: config.flow ?? null,
     },
   };
 }
@@ -130,6 +131,8 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
     timezone: edited.timezone,
     recording: { ...stored.recording, ...edited.recording },
   };
+  // The flow builder (V2-16) owns `config.flow`; the api derives `mode` from it (R-V2-12).
+  if (edited.flow !== undefined) config.flow = edited.flow;
   // The panel composer (V2-11) owns `config.panel` and writes `ui_panel_id`
   // with it; `ui_panel_id` is the read-only mirror of `config.panel.panel_id`
   // (CONTRACTS-V2 §1.3). A form whose `ui_panel_id` alone moved (anything

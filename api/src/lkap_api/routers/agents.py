@@ -39,13 +39,13 @@ from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, AgentConfigVersion, Credential, LiveKitConnection, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.deps import AdminCtxDep, DbDep, SettingsDep, VaultDep
-from lkap_api.flows import derived_mode
 from lkap_api.errors import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
     UnprocessableEntityError,
 )
+from lkap_api.flows import derived_mode
 from lkap_api.kb.embed import resolve_embedder
 from lkap_api.kb.seed import import_pack_kb_seeds
 from lkap_api.kb.store import get_lancedb_store

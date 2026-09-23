@@ -25,15 +25,17 @@ installed SDK):
 * **End nodes** end the call from the tool: the pending extraction settles,
   `FlowState.disposition` is set, the farewell is spoken and awaited, then the
   job shuts down (the same route as the `end_call` built-in).
-* **Global node**: its instructions prefix every node prompt; its tools and
-  knowledge bases are added to every node.
+* **Prompt order** (R-V2-13): `AgentConfig.instructions` (the agent's base
+  prompt, in both modes) → the global node's instructions → the node's own.
+  The global node's tools and knowledge bases are added to every node.
 * **max_turns**: after `max_turns` caller turns in one node without a
   transition, the node's fallback edge (highest `priority`, then declaration
   order) is taken as soon as the agent is listening again.
 * **Events**: a `handoff` session event `{from, to, edge_id, reason}` on every
   node entry after the start, and one `flow_ended` event at teardown with the
-  final `FlowState` (the api has no summary field for it yet — see the V2-15
-  report).
+  final `FlowState`. The disposition and variables reach the api in the
+  session summary (R-V2-8): `main._shutdown_callback` hands the `FlowState` to
+  `SessionObserver.shutdown(flow=...)` after this teardown settled it.
 """
 
 from __future__ import annotations
@@ -47,7 +49,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from livekit.agents import RunContext, get_job_context
 from livekit.agents import llm as lk_llm
-from lkap_contracts.agent_config import ResolvedAgentConfig
+from lkap_contracts.agent_config import ResolvedAgentConfig, effective_qa
 from lkap_contracts.flow import (
     AgentNode,
     EndNode,
@@ -56,7 +58,6 @@ from lkap_contracts.flow import (
     FlowSpec,
     FlowState,
     GlobalNode,
-    QaNode,
     StartNode,
     TransferNode,
     VariableSpec,
@@ -141,10 +142,10 @@ def prepare_flow_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
 
     * The start node's `greeting`/`greeting_mode` (when set) replace
       `voice.greeting`/`voice.greeting_mode`, so `PlatformAgent` speaks it.
-    * A `qa` node overrides `qa.rubric_prompt` and turns `qa.enabled` on —
-      but only when the api resolved a `qa_llm` for this session (R-V2-6:
-      it resolves one only when `qa.enabled`), otherwise a warning is logged
-      and QA keeps its stored setting.
+    * `qa` becomes `effective_qa(config)` (R-V2-11): a `qa` node turns QA on
+      and its `rubric_prompt` wins. The api resolves `qa_llm` by the same
+      rule; if it is missing anyway, the judge reports R-V2-6's
+      `failed, "qa_llm not resolved"` rather than QA silently staying off.
 
     Prompt agents are returned unchanged.
     """
@@ -156,22 +157,9 @@ def prepare_flow_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
     start = next(n for n in flow.nodes if isinstance(n, StartNode))
     if start.greeting is not None:
         voice = voice.model_copy(update={"greeting": start.greeting, "greeting_mode": start.greeting_mode})
-    qa = config.qa
-    qa_node = next((n for n in flow.nodes if isinstance(n, QaNode)), None)
-    if qa_node is not None:
-        update: dict[str, Any] = {}
-        if qa_node.rubric_prompt:
-            update["rubric_prompt"] = qa_node.rubric_prompt
-        if not qa.enabled:
-            if "qa_llm" in resolved.resolved:
-                update["enabled"] = True
-            else:
-                logger.warning(
-                    "flow has a qa node but qa is disabled and no qa_llm was resolved; qa stays off",
-                    node=qa_node.id,
-                )
-        qa = qa.model_copy(update=update)
-    return resolved.model_copy(update={"config": config.model_copy(update={"voice": voice, "qa": qa})})
+    return resolved.model_copy(
+        update={"config": config.model_copy(update={"voice": voice, "qa": effective_qa(config)})}
+    )
 
 
 @dataclass(slots=True)
@@ -297,19 +285,19 @@ class FlowRuntime:
     def instructions_for(self, node: ConversationNode) -> str:
         """The composed system prompt for `node`, rendered with the current variables.
 
-        Order: global node instructions (or, without a global node,
-        `AgentConfig.instructions`) → node instructions → flow notes → the
+        Order (R-V2-13): `AgentConfig.instructions` (the base prompt) → the
+        global node's instructions → the node's instructions → flow notes → the
         already-collected variables → the pack's mode addendum and the
-        platform pipeline note (`compose_instructions`).
+        platform pipeline note (`compose_instructions`). Empty parts are
+        skipped, so an author who wants the global node alone empties
+        `instructions`.
         """
         variables = self.state.variables
-        parts: list[str] = []
+        parts: list[str] = [
+            render_template(self.services.ctx.config.instructions, variables, missing="(not yet known)")
+        ]
         if self._global is not None:
             parts.append(render_template(self._global.instructions, variables, missing="(not yet known)"))
-        else:
-            parts.append(
-                render_template(self.services.ctx.config.instructions, variables, missing="(not yet known)")
-            )
         if isinstance(node, AgentNode):
             parts.append(render_template(node.instructions, variables, missing="(not yet known)"))
         else:

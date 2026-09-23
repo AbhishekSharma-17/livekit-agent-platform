@@ -75,6 +75,8 @@ _ATTRIBUTE_PUBLISH_ON_BEHALF = "lk.publish_on_behalf"
 OnSetVideoSource = Callable[[str], Awaitable[None]]
 #: `block_action` handler: `(block_id, name, data) -> result payload`.
 OnBlockAction = Callable[[str, str, dict[str, Any]], Awaitable[dict[str, Any]]]
+#: `rewind`/`inject_user_text` handler: `(action, payload) -> result payload` (V2-18).
+OnTextAction = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 #: Called with `(block_id, values)` for a `form_submit` nobody is awaiting.
 OnUnsolicitedForm = Callable[[str, dict[str, Any]], Awaitable[None]]
 #: `SessionContext.record_event`-shaped session event sink.
@@ -305,6 +307,7 @@ class UiChannel:
         on_set_video_source: OnSetVideoSource | None = None,
         on_ui_action: OnUiAction | None = None,
         on_block_action: OnBlockAction | None = None,
+        on_text_action: OnTextAction | None = None,
         record_event: RecordEvent | None = None,
         log: Any = None,
     ) -> None:
@@ -316,6 +319,7 @@ class UiChannel:
         self._on_set_video_source = on_set_video_source
         self._on_ui_action = on_ui_action
         self._on_block_action = on_block_action
+        self._on_text_action = on_text_action
         self._on_unsolicited_form: OnUnsolicitedForm | None = None
         self._record_event = record_event
         self._patches_since_snapshot = 0
@@ -355,16 +359,22 @@ class UiChannel:
         *,
         on_block_action: OnBlockAction | None = None,
         on_unsolicited_form: OnUnsolicitedForm | None = None,
+        on_text_action: OnTextAction | None = None,
         record_event: RecordEvent | None = None,
     ) -> None:
         """Attach the platform callbacks for block actions, late form submissions and events.
 
         Only the arguments that are not `None` replace the current callbacks.
+        `on_text_action` (V2-18) handles `rewind`/`inject_user_text`; `main.py`
+        binds it only for `channel="text"` sessions, before `PlatformAgent`
+        binds the block callbacks, so calling `bind` twice never clobbers it.
         """
         if on_block_action is not None:
             self._on_block_action = on_block_action
         if on_unsolicited_form is not None:
             self._on_unsolicited_form = on_unsolicited_form
+        if on_text_action is not None:
+            self._on_text_action = on_text_action
         if record_event is not None:
             self._record_event = record_event
 
@@ -661,6 +671,12 @@ class UiChannel:
                 # Default no-op (CONTRACTS-V2 §4.4): acknowledged, nothing to return.
                 return AgentActionResult(ok=True)
             payload = await self._on_block_action(block_id, name, data)
+            return AgentActionResult(ok=True, payload=payload)
+
+        if action.action in ("rewind", "inject_user_text"):
+            if self._on_text_action is None:
+                return AgentActionResult(ok=False, error=f"{action.action} is not supported")
+            payload = await self._on_text_action(action.action, dict(action.payload))
             return AgentActionResult(ok=True, payload=payload)
 
         return AgentActionResult(ok=False, error=f"unsupported action: {action.action!r}")

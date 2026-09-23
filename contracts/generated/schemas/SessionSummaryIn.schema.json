@@ -383,6 +383,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "``PUT /internal/v1/sessions/{id}/summary`` — posted from a shutdown callback.",
   "properties": {
+    "disposition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Disposition"
+    },
     "error": {
       "anyOf": [
         {
@@ -424,6 +436,12 @@
     "usage": {
       "additionalProperties": true,
       "title": "Usage",
+      "type": "object"
+    },
+    "variables": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Variables",
       "type": "object"
     }
   },

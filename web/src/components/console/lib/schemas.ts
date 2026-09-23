@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { FlowSpec } from "@/contracts/lkap-contracts";
+
 /**
  * Hand-authored zod mirrors of the generated contract interfaces
  * (`@/contracts/lkap-contracts`, produced by `lkap_contracts.export` — see
@@ -178,6 +180,12 @@ export const agentConfigFormSchema = z.object({
   timezone: z.string().min(1, "Timezone is required"),
   recording: recordingConfigSchema,
   panel: panelLayoutSchema,
+  /**
+   * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the
+   * builder checks the graph itself (`components/console/flow/flow-model.ts`)
+   * and the api validates it on save. `null` = a prompt agent (R-V2-12).
+   */
+  flow: z.custom<FlowSpec | null>().optional(),
 });
 export type AgentConfigForm = z.infer<typeof agentConfigFormSchema>;
 

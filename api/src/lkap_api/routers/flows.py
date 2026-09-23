@@ -16,7 +16,7 @@ under ``/v1/agents``; ``main.py`` includes it as before.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body
 from lkap_contracts.api_models import Issue, NodeSpecsResponse, ValidationResult
@@ -66,7 +66,9 @@ async def validate_flow(
     agent_id: str,
     db: DbDep,
     ctx: AdminCtxDep,
-    payload: dict[str, Any] = Body(..., examples=[{"flow": {"nodes": [], "edges": [], "variables": []}}]),
+    payload: Annotated[
+        dict[str, Any], Body(examples=[{"flow": {"nodes": [], "edges": [], "variables": []}}])
+    ],
 ) -> ValidationResult:
     """Validate a draft flow against the agent's stored configuration."""
     row = await load_scoped_agent(db, ctx, agent_id)

@@ -2144,11 +2144,15 @@ export interface SessionStartIn {
  * via the `definition` "SessionSummaryIn".
  */
 export interface SessionSummaryIn {
+  disposition?: string | null;
   error?: string | null;
   final_ui_state?: UiState | null;
   status: "ended" | "failed";
   transcript: TranscriptTurn[];
   usage: {
+    [k: string]: unknown;
+  };
+  variables?: {
     [k: string]: unknown;
   };
 }

@@ -12,6 +12,8 @@ import {
 } from "@/lib/livekit";
 import { fetchAdminAgentServerSide } from "@/lib/livekit-server";
 
+import { EmbedLayout } from "./embed-layout";
+
 /**
  * Public session page (docs/ARCHITECTURE.md §12, CONTRACTS §7).
  *
@@ -32,7 +34,7 @@ export const dynamic = "force-dynamic";
 
 interface SessionPageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; embed?: string; channel?: string }>;
 }
 
 async function loadAgent(
@@ -78,9 +80,26 @@ export default async function SessionPage({
   searchParams,
 }: SessionPageProps) {
   const { slug } = await params;
-  const { mode } = await searchParams;
+  const { mode, embed, channel } = await searchParams;
   const testMode = mode === "test";
   const { agent, loadError, loadErrorKind } = await loadAgent(slug, testMode);
+
+  // `?embed=1` (V2-18, UI_UX_SPEC-V2-AMENDMENTS §2.6): the widget's iframe and
+  // the console's Test chat drawer preview. `middleware.ts` sets this route's
+  // `Content-Security-Policy: frame-ancestors` header for the same request —
+  // that is the actual origin enforcement; this branch only picks the layout.
+  if (embed === "1") {
+    return (
+      <EmbedLayout
+        slug={slug}
+        agent={agent}
+        loadError={loadError}
+        loadErrorKind={loadErrorKind}
+        channel={channel === "text" ? "text" : "voice"}
+        testMode={testMode}
+      />
+    );
+  }
 
   return (
     <SessionExperience

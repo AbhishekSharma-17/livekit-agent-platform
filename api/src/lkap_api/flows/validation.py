@@ -76,7 +76,9 @@ VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", 
 
 #: `BLOCK_TOOL_NAMES` → the panel block types that make the worker register each one.
 BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
-    "update_block": frozenset({"document", "gallery", "table", "transcript", "video", "kb_citations", "custom"}),
+    "update_block": frozenset(
+        {"document", "gallery", "table", "transcript", "video", "kb_citations", "custom"}
+    ),
     "show_document": frozenset({"document"}),
     "table_append": frozenset({"table"}),
     "request_form": frozenset({"form"}),
@@ -182,7 +184,8 @@ def _tool_issue(config: AgentConfig, name: str) -> str:
 def _tool_and_kb_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
     config = ctx.config
     issues: list[Issue] = []
-    if ctx.tool_names_by_id is not None:
+    referenced = any(isinstance(n, AgentNode | GlobalNode) and n.tools for n in flow.nodes)
+    if ctx.tool_names_by_id is not None and referenced:
         allowed = allowed_tool_names(
             config, tool_names_by_id=ctx.tool_names_by_id, pack_tool_names=installed_pack_tool_names()
         )
@@ -191,7 +194,9 @@ def _tool_and_kb_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
                 continue
             for j, name in enumerate(node.tools):
                 if name not in allowed:
-                    issues.append(Issue(path=f"flow.nodes[{i}].tools[{j}]", message=_tool_issue(config, name)))
+                    issues.append(
+                        Issue(path=f"flow.nodes[{i}].tools[{j}]", message=_tool_issue(config, name))
+                    )
     agent_kbs = set(config.knowledge.kb_ids)
     for i, node in enumerate(flow.nodes):
         if not isinstance(node, AgentNode | GlobalNode):
@@ -478,7 +483,9 @@ def draft_flow_issues(raw: Mapping[str, Any]) -> tuple[FlowSpec | None, list[Iss
     seen_vars: set[str] = set()
     for k, variable in variables:
         if variable.name in seen_vars:
-            issues.append(Issue(path=f"flow.variables[{k}].name", message=f"duplicate variable '{variable.name}'"))
+            issues.append(
+                Issue(path=f"flow.variables[{k}].name", message=f"duplicate variable '{variable.name}'")
+            )
         seen_vars.add(variable.name)
 
     if len(starts) == 1:

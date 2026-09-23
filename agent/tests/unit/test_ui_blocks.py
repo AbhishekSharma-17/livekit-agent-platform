@@ -491,11 +491,15 @@ async def test_block_action_needs_a_block_id() -> None:
 
 
 @pytest.mark.parametrize("action", ["rewind", "inject_user_text"])
-async def test_v2_18_actions_are_reported_unsupported(action: str) -> None:
+async def test_v2_18_actions_without_a_bound_handler_are_reported_unsupported(action: str) -> None:
+    """V2-18 wires `rewind`/`inject_user_text` through `UiChannel.bind(on_text_action=...)`
+    (only for `channel="text"` sessions, from `main.py`); with nothing bound — every other
+    channel, and a text channel before `main.py`'s hook runs — both still fail cleanly.
+    """
     _ch, room, _ = _channel()
     result = await _action(room, action, {})
     assert result.ok is False
-    assert result.error is not None and "unsupported" in result.error
+    assert result.error is not None and "is not supported" in result.error
 
 
 async def test_show_block_sends_a_show_block_request() -> None:

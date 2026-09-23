@@ -403,10 +403,10 @@ __all__ = [
     "by_kind",
     "constructible",
     "edge_tool_name",
+    "effective_qa",
     "get",
     "lookup",
     "mvp_providers",
-    "effective_qa",
     "pipeline_issues",
     "vision_support",
 ]

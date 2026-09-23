@@ -13,7 +13,14 @@ from lkap_contracts.agent_config import AgentConfig, PipelineConfig, ProviderRef
 from lkap_contracts.flow import AgentNode
 from sqlalchemy import select
 
-from lkap_api.config_service import VALIDATORS, ValidationContext, register_validator, resolve_providers, validate
+from lkap_api.config_service import (
+    VALIDATORS,
+    ValidationContext,
+    register_validator,
+    resolve_providers,
+    validate,
+)
+from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import WebhookDelivery
 from lkap_api.db.session import Database
 from lkap_api.flows import allowed_tool_names, derived_mode, draft_flow_issues, flow_issues
@@ -58,7 +65,8 @@ async def _validate(client: httpx.AsyncClient, agent_id: object, flow: dict[str,
 
 async def _credential(client: httpx.AsyncClient, provider_id: str) -> str:
     response = await client.post(
-        "/v1/credentials", json={"provider_id": provider_id, "label": provider_id, "secrets": {"api_key": "k"}}
+        "/v1/credentials",
+        json={"provider_id": provider_id, "label": provider_id, "secrets": {"api_key": "k"}},
     )
     assert response.status_code == 201, response.text
     return str(response.json()["id"])
@@ -196,7 +204,9 @@ def test_allowed_tool_names_is_the_agent_level_union() -> None:
         }
     )
 
-    names = allowed_tool_names(config, tool_names_by_id={"t1": "crm", "t2": "other"}, pack_tool_names=["lookup"])
+    names = allowed_tool_names(
+        config, tool_names_by_id={"t1": "crm", "t2": "other"}, pack_tool_names=["lookup"]
+    )
 
     assert {"end_call", "show_document", "update_block", "crm", "lookup"} <= names
     assert not names & {"push_note", "http_request", "pin_frame", "table_append", "other"}
@@ -232,7 +242,11 @@ async def test_a_vendor_key_override_absent_from_the_pipeline_is_an_error(
 async def test_a_cheaper_model_on_the_pipelines_own_key_is_accepted(admin_client: httpx.AsyncClient) -> None:
     credential_id = await _credential(admin_client, "openai-llm")
     config = _config(None)
-    config["pipeline"]["llm"] = {"provider_id": "openai-llm", "credential_id": credential_id, "model": "gpt-4.1"}
+    config["pipeline"]["llm"] = {
+        "provider_id": "openai-llm",
+        "credential_id": credential_id,
+        "model": "gpt-4.1",
+    }
     created = await admin_client.post("/v1/agents", json={"name": "Keyed", "config": config})
     assert created.status_code == 201, created.text
     override = {"llm": {"provider_id": "openai-llm", "model": "gpt-4.1-mini"}}
@@ -321,7 +335,9 @@ async def test_mode_is_derived_on_save(admin_client: httpx.AsyncClient) -> None:
     assert to_prompt.status_code == 200, to_prompt.text
     assert to_prompt.json()["mode"] == "prompt"
 
-    to_flow = await admin_client.put(f"/v1/agents/{agent_id}", json={"config": _config(_flow()), "mode": "flow"})
+    to_flow = await admin_client.put(
+        f"/v1/agents/{agent_id}", json={"config": _config(_flow()), "mode": "flow"}
+    )
     assert to_flow.status_code == 200, to_flow.text
     assert to_flow.json()["mode"] == "flow"
 
@@ -424,6 +440,45 @@ async def test_a_prompt_summary_stores_the_defaults(
 
     detail = (await admin_client.get(f"/v1/sessions/{session_id}")).json()
     assert (detail["disposition"], detail["variables"]) == (None, {})
+
+
+async def test_summary_variables_merge_into_stored_ones_with_the_summary_winning(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    """R-V2-22: an outbound call's seeds survive the summary; the summary wins on conflicts."""
+    agent = await create_agent(admin_client)
+    session_id = (await admin_client.post(f"/v1/agents/{agent['id']}/connect", json={})).json()["sessionId"]
+    async with database.session() as session:
+        row = await session.get(SessionRow, session_id)
+        assert row is not None
+        row.variables = {"claim_id": "C-1", "name": "seeded"}
+        await session.commit()
+
+    await service_client.put(
+        f"/internal/v1/sessions/{session_id}/summary",
+        json={"status": "ended", "usage": {}, "transcript": [], "variables": {"name": "Ada", "phone": "555"}},
+    )
+
+    detail = (await admin_client.get(f"/v1/sessions/{session_id}")).json()
+    assert detail["variables"] == {"claim_id": "C-1", "name": "Ada", "phone": "555"}
+
+
+async def test_a_prompt_summary_keeps_the_stored_variables(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    agent = await create_agent(admin_client)
+    session_id = (await admin_client.post(f"/v1/agents/{agent['id']}/connect", json={})).json()["sessionId"]
+    async with database.session() as session:
+        row = await session.get(SessionRow, session_id)
+        assert row is not None
+        row.variables = {"claim_id": "C-1"}
+        await session.commit()
+
+    await service_client.put(
+        f"/internal/v1/sessions/{session_id}/summary", json={"status": "ended", "usage": {}, "transcript": []}
+    )
+
+    assert (await admin_client.get(f"/v1/sessions/{session_id}")).json()["variables"] == {"claim_id": "C-1"}
 
 
 def test_flow_validator_is_registered() -> None:

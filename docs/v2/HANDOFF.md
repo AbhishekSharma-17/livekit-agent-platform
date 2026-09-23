@@ -2,6 +2,19 @@
 
 This is written for a fresh coordinator session so it can continue the v2 build without the prior chat. **Snapshot taken 2026-09-23.** Before acting on anything here, verify it against `git status`, the gates and `docs/v2/_asks.md`. The code is the source of truth.
 
+## Status update (2026-09-23, later)
+- **Commit `5b715df`:** waves 1–2 plus V2-15 and V2-17, including partial V2-16/V2-18 files.
+- **Worker `lkap-agent`:** restarted on v2 code; log at scratchpad/worker.log.
+- **Done since the snapshot below:** V2-11, V2-13, V2-14, V2-15 (live L12a passed), V2-17 (worker wiring deferred to V2-19 per R-V2-20), the V2-02 #25 pass.
+- **Rulings:** R-V2-8..R-V2-25 are in PLAN-V2 §8.
+- **Running:** V2-16 (told about the R-V2-22 merge amendment) and V2-18.
+- **Next:**
+  1. V2-19 integration, with a separate telephony block (R-V2-20..25) that starts only after V2-16 and V2-18 land.
+  2. V2-20 live verification.
+  3. V2-21 security review.
+- **Telephony:** after V2-19, outbound calls are default-deny until `workspaces.settings.telephony.allowed_prefixes` is set (R-V2-23).
+The sections below are the original snapshot, and their in-flight list is stale.
+
 ## What this is
 LKAP (LiveKit Agent Platform) is a configurable voice and video agent platform.
 - **Stack:** LiveKit Cloud (or a self-hosted server), a Python LiveKit Agents worker, FastAPI, and Next.js.

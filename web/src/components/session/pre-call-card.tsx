@@ -54,6 +54,21 @@ const EXPECTATION_ICON: Record<ExpectationIcon, LucideIcon> = {
   chat: MessageSquareTextIcon,
 };
 
+const subscribeNever = () => () => {};
+
+/**
+ * The visitor's user agent, or `""` on the server *and* during hydration, so
+ * the per-browser denied hint renders the generic fallback in both places and
+ * only switches to the browser-specific text after hydration (no mismatch).
+ */
+function useUserAgent(): string {
+  return React.useSyncExternalStore(
+    subscribeNever,
+    () => navigator.userAgent,
+    () => "",
+  );
+}
+
 export interface PreCallCardProps {
   agent: AgentPublicOut;
   participantName: string;
@@ -95,6 +110,7 @@ export function PreCallCard({
   const items = expectations(agent.name, agent.capabilities);
   const requesting = devices.status === "requesting";
   const denied = devices.status === "denied";
+  const userAgent = useUserAgent();
 
   return (
     <SessionCardScreen
@@ -213,9 +229,7 @@ export function PreCallCard({
 
               {denied && (
                 <p className="text-muted-foreground text-sm">
-                  {micPermissionHint(
-                    typeof navigator === "undefined" ? "" : navigator.userAgent,
-                  )}
+                  {micPermissionHint(userAgent)}
                 </p>
               )}
 

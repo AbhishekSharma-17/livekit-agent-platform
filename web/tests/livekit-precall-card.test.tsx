@@ -1,13 +1,18 @@
 import * as React from "react";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentPublicOut } from "@/contracts/lkap-contracts";
 import { PreCallCard } from "@/components/session/pre-call-card";
 import type { MicDevices } from "@/hooks/use-mic-check";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const AGENT: AgentPublicOut = {
   id: "agent-1",
@@ -21,8 +26,8 @@ const AGENT: AgentPublicOut = {
 
 const IDLE: MicDevices = { status: "idle", level: 0, inputs: [] };
 
-function renderCard(props: Partial<React.ComponentProps<typeof PreCallCard>> = {}) {
-  return render(
+function card(props: Partial<React.ComponentProps<typeof PreCallCard>> = {}) {
+  return (
     <PreCallCard
       agent={AGENT}
       participantName=""
@@ -32,8 +37,12 @@ function renderCard(props: Partial<React.ComponentProps<typeof PreCallCard>> = {
       onCheckMicrophone={vi.fn()}
       onSelectInput={vi.fn()}
       {...props}
-    />,
+    />
   );
+}
+
+function renderCard(props: Partial<React.ComponentProps<typeof PreCallCard>> = {}) {
+  return render(card(props));
 }
 
 /**
@@ -81,6 +90,37 @@ describe("PreCallCard device check", () => {
       /Microphone is blocked/,
     );
     expect(screen.getByRole("button", { name: /reload/i })).toBeTruthy();
+  });
+
+  it("hydrates the denied hint without a mismatch, then shows the browser's steps", async () => {
+    const denied = { devices: { ...IDLE, status: "denied" as const } };
+
+    // Server render: no `navigator`, so the hint is the generic fallback.
+    vi.stubGlobal("navigator", undefined);
+    const html = renderToString(card(denied));
+    vi.unstubAllGlobals();
+    expect(html).toContain("Allow the microphone for this site");
+
+    // Client: a Chrome UA is available from the very first render.
+    vi.stubGlobal("navigator", {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const onRecoverableError = vi.fn();
+    const root = await act(async () =>
+      hydrateRoot(container, card(denied), { onRecoverableError }),
+    );
+
+    try {
+      expect(onRecoverableError).not.toHaveBeenCalled();
+      expect(container.textContent).toMatch(/In Chrome: the lock icon/);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 
   it("says so when the browser cannot capture audio at all", () => {

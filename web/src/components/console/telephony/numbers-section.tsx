@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { AgentOut, PhoneNumberOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 import { useCreateNumber, useDeleteNumber, usePhoneNumbers, useTrunks, useUpdateNumber } from "./hooks";
@@ -33,6 +34,9 @@ export function NumbersSection({ agents }: { agents: AgentOut[] }) {
   const [creating, setCreating] = React.useState(false);
   const numbers = data?.items ?? [];
   const trunks = trunksQuery.data?.items ?? [];
+  // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
+  const { canWrite } = useWriteAccess("admin");
+  const writeReason = writeAccessReason("admin");
 
   const columns: ResponsiveTableColumn<PhoneNumberOut>[] = [
     {
@@ -87,7 +91,14 @@ export function NumbersSection({ agents }: { agents: AgentOut[] }) {
       title="Phone numbers"
       description="Which agent answers each number."
       aside={
-        <Button type="button" size="sm" variant="outline" onClick={() => setCreating(true)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!canWrite}
+          title={canWrite ? undefined : writeReason}
+          onClick={() => setCreating(true)}
+        >
           <Icon as={PlusIcon} size="sm" />
           Add number
         </Button>
@@ -141,14 +152,15 @@ export function InboundAgentPicker({
   trunks: TrunkOut[];
 }) {
   const update = useUpdateNumber();
+  const { canWrite } = useWriteAccess("admin");
   const trunk = trunks.find((t) => t.id === number.trunk_id);
   const inbound = trunk?.direction === "inbound";
   return (
     <NativeSelect
       aria-label={`Inbound agent for ${number.e164}`}
       value={number.inbound_agent_id ?? ""}
-      disabled={!inbound || update.isPending}
-      title={inbound ? undefined : "Bind the number to an inbound trunk to route its calls"}
+      disabled={!canWrite || !inbound || update.isPending}
+      title={!canWrite ? writeAccessReason("admin") : inbound ? undefined : "Bind the number to an inbound trunk to route its calls"}
       className="max-w-56"
       onChange={(e) =>
         update.mutate(
@@ -173,13 +185,15 @@ export function InboundAgentPicker({
 
 function DeleteNumberButton({ number }: { number: PhoneNumberOut }) {
   const remove = useDeleteNumber();
+  const { canWrite } = useWriteAccess("admin");
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
       aria-label={`Delete ${number.e164}`}
-      disabled={remove.isPending}
+      disabled={!canWrite || remove.isPending}
+      title={canWrite ? undefined : writeAccessReason("admin")}
       onClick={() =>
         remove.mutate(number.id, {
           onSuccess: () => toast.success(`${number.e164} removed`),

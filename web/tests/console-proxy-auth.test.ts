@@ -125,6 +125,68 @@ describe("console proxy auth forwarding", () => {
   });
 });
 
+describe("console proxy CSRF and path guards (V2-21)", () => {
+  const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>();
+
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://api.test:8080/");
+    vi.stubEnv("LKAP_ADMIN_TOKEN", "test-admin");
+    vi.stubEnv("LKAP_WEB_ADMIN_BYPASS", "1");
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["cross-site", "same-site"])(
+    "refuses a %s write before attaching the admin token",
+    async (site) => {
+      const response = await POST(
+        request("connections", { method: "POST", headers: { "sec-fetch-site": site } }),
+        params("connections"),
+      );
+
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.code).toBe("forbidden");
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("forwards same-origin writes and reads from anywhere", async () => {
+    const write = await POST(
+      request("agents", { method: "POST", headers: { "sec-fetch-site": "same-origin" } }),
+      params("agents"),
+    );
+    const read = await GET(
+      request("agents", { headers: { "sec-fetch-site": "cross-site" } }),
+      params("agents"),
+    );
+
+    expect(write.status).toBe(200);
+    expect(read.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses path segments that would climb out of /v1", async () => {
+    const response = await GET(request("x"), {
+      params: Promise.resolve({ path: ["..", "internal", "v1", "sessions"] }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("encodes each segment so an encoded slash stays inside one segment", async () => {
+    await GET(request("x"), { params: Promise.resolve({ path: ["agents", "a b"] }) });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe("http://api.test:8080/v1/agents/a%20b");
+  });
+});
+
 describe("activeWorkspace", () => {
   it("decodes the cookie value and ignores blanks", () => {
     expect(

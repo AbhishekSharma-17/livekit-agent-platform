@@ -27,6 +27,10 @@ on:
         required: false
         default: ""
 
+# V2-21: least-privilege GITHUB_TOKEN (every job only reads the repo).
+permissions:
+  contents: read
+
 jobs:
   live:
     runs-on: ubuntu-latest
@@ -57,4 +61,7 @@ jobs:
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
-        run: uv run pytest -m live -v tests/live/ ${{ inputs.pytest_args }}
+          # V2-21: the free-text input is data, never script (no ${{ }} inside `run`).
+          PYTEST_ARGS: ${{ inputs.pytest_args }}
+        # Word-splitting of PYTEST_ARGS is intended (several pytest flags).
+        run: uv run pytest -m live -v tests/live/ $PYTEST_ARGS

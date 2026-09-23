@@ -147,6 +147,33 @@ async def test_participant_left_appends_an_event(
     assert stored.payload["identity"] == "u"
 
 
+async def test_a_replayed_event_id_is_acknowledged_but_not_handled_twice(
+    client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    """V2-21: a captured, still-valid delivery posted again appends nothing."""
+    connection_id, session_id, room = await _seed(database, settings, status="active")
+    event = WebhookEvent(
+        event="participant_left",
+        id="EV_replay",
+        room=Room(name=room),
+        participant=ParticipantInfo(identity="u"),
+    )
+    body, headers = _signed(event)
+    url = f"/hooks/livekit/{connection_id}"
+
+    first = await client.post(url, content=body, headers=headers)
+    replay = await client.post(url, content=body, headers=headers)
+
+    assert (first.status_code, replay.status_code) == (204, 204)
+    async with database.session() as session:
+        rows = (
+            (await session.execute(select(SessionEvent).where(SessionEvent.session_id == session_id)))
+            .scalars()
+            .all()
+        )
+    assert len(rows) == 1
+
+
 @pytest.mark.parametrize(
     ("egress_status", "expected"),
     [(EgressStatus.EGRESS_COMPLETE, "ready"), (EgressStatus.EGRESS_FAILED, "failed")],

@@ -105,7 +105,12 @@ function stubApi(overrides: (call: Call) => { status: number; body: unknown } | 
       let status = 200;
       let body: unknown;
       if (override) ({ status, body } = override);
-      else if (call.url.includes("/providers")) body = { providers: REGISTRY };
+      else if (call.url.includes("/auth/me")) {
+        body = {
+          user: { id: "u1", email: "admin@example.test" },
+          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+        };
+      } else if (call.url.includes("/providers")) body = { providers: REGISTRY };
       else if (call.url.includes("/credentials")) body = { items: credentials, total: credentials.length };
       else if (call.url.includes("/agents")) body = { items: agents, total: agents.length };
       else if (call.url.includes("/tools")) body = { items: tools, total: tools.length };

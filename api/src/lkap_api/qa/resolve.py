@@ -16,8 +16,10 @@ from lkap_contracts.agent_config import AgentConfig
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.db.models import Credential
 from lkap_api.qa.llm_client import JudgeLLM, OpenAiCompatibleJudgeLLM
+from lkap_api.settings import get_settings
 from lkap_api.vault import Vault
 
 #: Provider ids whose HTTP wire format is the documented OpenAI chat-completions
@@ -80,6 +82,11 @@ async def resolve_judge(
     secrets = vault.decrypt(credential.ciphertext)
     api_key = secrets.get("api_key") or next(iter(secrets.values()), "")
     base_url = str(ref.fields.get("base_url") or _OPENAI_COMPATIBLE_DEFAULT_BASE_URL[ref.provider_id])
+    blocked = net_guard.check_url(base_url, net_guard.policy_from_settings(get_settings()))
+    if blocked is not None:
+        # V2-21: the judge call carries the credential's key; the guarded client
+        # re-checks after DNS, this is the early, readable refusal.
+        return None, f"judge base_url refused: {blocked}"
     model = ref.model or spec.default_model
     if not model:
         return None, f"provider {ref.provider_id} has no model resolved (no ref.model, no default_model)"

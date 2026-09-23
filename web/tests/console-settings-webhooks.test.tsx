@@ -70,6 +70,12 @@ beforeEach(() => {
         });
       }
       if (url.includes("/redeliver")) return jsonResponse({});
+      if (path.endsWith("/auth/me")) {
+        return jsonResponse({
+          user: { id: "u1", email: "admin@example.test" },
+          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+        });
+      }
       return jsonResponse({});
     }),
   );

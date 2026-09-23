@@ -30,12 +30,15 @@ from functools import lru_cache
 from typing import Annotated, Protocol
 
 import aiohttp
+from aiohttp.abc import AbstractResolver
 from fastapi import Depends
 from livekit.api import LiveKitAPI, TokenVerifier
 from lkap_contracts.dispatch import DispatchMetadata
 
+from lkap_api import net_guard
 from lkap_api.deps import VaultDep
 from lkap_api.livekit_tokens import TOKEN_TTL, mint_participant_token
+from lkap_api.settings import get_settings
 from lkap_api.vault import Vault
 
 #: How long a decrypted key/secret pair stays in the in-process cache.
@@ -103,6 +106,8 @@ class ConnectionClientFactory:
         ttl_s: float = CREDENTIAL_CACHE_TTL_S,
         max_entries: int = CREDENTIAL_CACHE_MAX,
         clock: Callable[[], float] = time.monotonic,
+        net_policy: net_guard.NetPolicy | None = None,
+        net_resolver: Callable[[], AbstractResolver] | None = None,
     ) -> None:
         """Build a factory.
 
@@ -111,8 +116,14 @@ class ConnectionClientFactory:
             ttl_s: Lifetime of a cached decrypted key/secret pair.
             max_entries: Maximum number of cached connections.
             clock: Monotonic clock, injectable for tests.
+            net_policy: The outbound network guard's allowlist; by default read
+                from the process settings at each call (``LKAP_NET_ALLOW_PRIVATE_HOSTS``).
+            net_resolver: Builds the name resolver the guard wraps (tests inject a
+                fake; by default aiohttp's own).
         """
         self._vault = vault
+        self._net_policy = net_policy
+        self._net_resolver = net_resolver
         self._ttl_s = ttl_s
         self._max_entries = max_entries
         self._clock = clock
@@ -185,17 +196,30 @@ class ConnectionClientFactory:
             A client authenticated with this connection's key/secret.
         """
         creds = self.credentials(row)
+        policy = self._net_policy or net_guard.policy_from_settings(get_settings())
+        # V2-21 / S1: IP-literal hosts never reach aiohttp's resolver, so they are
+        # checked here; names are checked by the guarded resolver at connect time,
+        # against the very address the socket then uses (no DNS-rebinding window).
+        problem = net_guard.check_url(creds.url, policy, schemes=net_guard.LIVEKIT_SCHEMES)
+        if problem is not None:
+            raise net_guard.BlockedDestinationError(f"blocked destination: {problem}")
+        timeout = aiohttp.ClientTimeout(total=timeout_s)
+        session = net_guard.guarded_aiohttp_session(
+            policy, timeout=timeout, inner_resolver=self._net_resolver() if self._net_resolver else None
+        )
         client = LiveKitAPI(
             url=creds.url,
             api_key=creds.api_key,
             api_secret=creds.api_secret,
-            timeout=aiohttp.ClientTimeout(total=timeout_s),
+            timeout=timeout,
+            session=session,
             failover=failover,
         )
         try:
             yield client
         finally:
             await client.aclose()
+            await session.close()
 
     def token_verifier(self, row: ConnectionRowLike) -> TokenVerifier:
         """Return a verifier for JWTs signed with this connection's secret (webhooks)."""

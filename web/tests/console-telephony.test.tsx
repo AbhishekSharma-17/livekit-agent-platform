@@ -115,6 +115,10 @@ interface Recorded {
 function stubApi(overrides: Record<string, unknown> = {}) {
   const requests: Recorded[] = [];
   const routes: Record<string, unknown> = {
+    "GET auth/me": {
+      user: { id: "u1", email: "admin@example.test" },
+      workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+    },
     "GET connections": { items: [SIP_CONN], total: 1 },
     "GET agents": { items: [AGENT], total: 1 },
     "GET telephony/trunks": { items: [IN_TRUNK, OUT_TRUNK], total: 2 },
@@ -208,6 +212,28 @@ describe("TelephonyPage", () => {
 
     expect(await screen.findByText(/None of your connections reports SIP/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Add trunk" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  // -------------------------------------------------- V2-20-5: role gating
+  it("disables Add trunk/Add number/Add rule for a builder (below the admin floor)", async () => {
+    stubApi(meWith("builder"));
+    renderWithClient(<TelephonyPage />);
+    await screen.findByRole("table", { name: "Phone numbers" });
+
+    // `/v1/telephony` writes need `admin` (auth/roles.py::ROUTE_POLICY),
+    // stricter than every other console page's `builder` floor.
+    expect((screen.getByRole("button", { name: "Add trunk" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Add number" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("enables Add trunk/Add number/Add rule for an admin", async () => {
+    stubApi(meWith("admin"));
+    renderWithClient(<TelephonyPage />);
+    await screen.findByRole("table", { name: "Phone numbers" });
+
+    expect((screen.getByRole("button", { name: "Add number" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("hangs up a live call from the calls log", async () => {

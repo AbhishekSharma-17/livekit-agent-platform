@@ -22,8 +22,12 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from lkap_api.auth.roles import ROLES, Role
-from lkap_api.db.models import utcnow
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
+from lkap_api.db.models import AuditLog, utcnow
 from lkap_api.settings import Settings
 
 #: How long an invite link stays valid.
@@ -52,10 +56,53 @@ def signing_secret(settings: Settings) -> bytes:
     return hmac.new(settings.master_key.encode(), b"lkap-invite-signing-v1", hashlib.sha256).digest()
 
 
-def state_fingerprint(password_hash: str | None, is_member: bool) -> str:
-    """Hash of the account state an invite is valid for (see module docstring)."""
-    material = f"{password_hash or ''}|{int(is_member)}".encode()
-    return hashlib.sha256(material).hexdigest()[:32]
+def state_fingerprint(password_hash: str | None, is_member: bool, joins: int = 0) -> str:
+    """Hash of the account state an invite is valid for (see module docstring).
+
+    Args:
+        password_hash: The user's current password hash.
+        is_member: Whether the user already belongs to the workspace.
+        joins: How many times the user has joined this workspace by invite
+            (``member.join`` audit rows). Accepting bumps it, so a token stays
+            dead after its member is removed again (V2-21); ``0`` leaves the
+            material of tokens issued before this counter existed unchanged.
+    """
+    material = f"{password_hash or ''}|{int(is_member)}" + (f"|{joins}" if joins else "")
+    return hashlib.sha256(material.encode()).hexdigest()[:32]
+
+
+async def join_count(db: AsyncSession, workspace_id: str, user_id: str) -> int:
+    """How many ``member.join`` audit rows the user has in the workspace."""
+    total = await db.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(
+            AuditLog.workspace_id == workspace_id,
+            AuditLog.action == "member.join",
+            AuditLog.target_id == user_id,
+        )
+    )
+    return int(total or 0)
+
+
+async def invited_elsewhere(db: AsyncSession, workspace_id: str, user_id: str) -> bool:
+    """Whether another workspace has already issued an invite to this user.
+
+    Used for *pending* (password-less) accounts: the invite token sets the
+    account's password, so a second workspace's admin must not be able to mint
+    one for an account another workspace created and is waiting on (V2-21).
+    """
+    found = await db.scalar(
+        select(AuditLog.id)
+        .where(
+            AuditLog.action == "member.invite",
+            AuditLog.target_id == user_id,
+            AuditLog.workspace_id != workspace_id,
+        )
+        .limit(1)
+        .execution_options(**{CROSS_WORKSPACE_OPTION: True})  # deliberately cross-workspace
+    )
+    return found is not None
 
 
 def _b64(data: bytes) -> str:

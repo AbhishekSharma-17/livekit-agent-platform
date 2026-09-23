@@ -169,6 +169,12 @@ async def test_recording_disabled_never_calls_recording_start() -> None:
 
 
 async def test_recording_start_failure_records_a_failed_event_and_keeps_the_call() -> None:
+    """docs/v2/_asks.md V2-20-3: the timeline event alone left `sessions.recording_status`
+
+    at `"none"` — the session row itself must also learn about the failure,
+    via the same `post_recording` fallback route a *started* Egress's
+    shutdown report uses.
+    """
     api = FakeApi(
         _with_recording(resolved_config()),
         recording_error=RecordingUnavailableError("recording/start answered HTTP 501"),
@@ -183,6 +189,10 @@ async def test_recording_start_failure_records_a_failed_event_and_keeps_the_call
     assert event.payload["status"] == "failed"
     assert ctx.shutdown_reasons == []
     assert api.summaries[0].status == "ended"
+    (recording,) = api.recordings
+    assert recording.status == "failed"
+    assert recording.egress_id == ""
+    assert recording.error is not None and "recording/start answered HTTP 501" in recording.error
 
 
 async def test_shutdown_polls_the_egress_and_posts_its_state() -> None:

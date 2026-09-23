@@ -13,6 +13,7 @@ import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 
 /** `method + host` per docs/UI_UX_SPEC.md §7.6 item 4 ("method + host"), not the full URL template. */
@@ -51,6 +52,8 @@ export function ToolRow({
   secretBagSpec: ProviderSpec | undefined;
 }) {
   const deleteTool = useDeleteTool();
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
@@ -84,7 +87,14 @@ export function ToolRow({
             secretBagSpec={secretBagSpec}
             onSaved={onSaved}
             trigger={
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
                 <PencilIcon className="size-3.5" />
               </Button>
             }
@@ -96,7 +106,14 @@ export function ToolRow({
             secretBagSpec={secretBagSpec}
             onSaved={onSaved}
             trigger={
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
                 <PencilIcon className="size-3.5" />
               </Button>
             }
@@ -104,7 +121,14 @@ export function ToolRow({
         )}
         <ConfirmDialog
           trigger={
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="Delete">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Delete"
+              disabled={!canWrite}
+              title={canWrite ? undefined : writeReason}
+            >
               <Trash2Icon className="size-3.5" />
             </Button>
           }

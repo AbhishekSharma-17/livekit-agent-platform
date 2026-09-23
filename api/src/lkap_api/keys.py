@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -157,10 +158,40 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m lkap_api.keys")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("generate", help="print a fresh LKAP_MASTER_KEY")
-    rotate_parser = sub.add_parser("rotate", help="re-encrypt every secret with a new master key")
-    rotate_parser.add_argument("--old", required=True, help="the current LKAP_MASTER_KEY")
-    rotate_parser.add_argument("--new", required=True, help="the replacement key")
+    rotate_parser = sub.add_parser(
+        "rotate",
+        help="re-encrypt every secret with a new master key",
+        description=(
+            f"Reads the keys from {OLD_KEY_ENV} and {NEW_KEY_ENV}. --old/--new still work but put "
+            "the keys in the process list and shell history; prefer the environment."
+        ),
+    )
+    rotate_parser.add_argument("--old", default=None, help=f"the current key (prefer {OLD_KEY_ENV})")
+    rotate_parser.add_argument("--new", default=None, help=f"the replacement key (prefer {NEW_KEY_ENV})")
     return parser
+
+
+#: Where ``rotate`` reads the keys from, so they never appear in ``ps`` (V2-21).
+OLD_KEY_ENV = "LKAP_OLD_MASTER_KEY"
+NEW_KEY_ENV = "LKAP_NEW_MASTER_KEY"
+
+
+def _rotation_keys(old_arg: str | None, new_arg: str | None) -> tuple[str, str]:
+    """The old and new keys: the flag if given, else the environment variable.
+
+    Raises:
+        RotationError: When either key is missing.
+    """
+    old_key = old_arg or os.environ.get(OLD_KEY_ENV, "")
+    new_key = new_arg or os.environ.get(NEW_KEY_ENV, "")
+    missing = [name for name, value in ((OLD_KEY_ENV, old_key), (NEW_KEY_ENV, new_key)) if not value]
+    if missing:
+        raise RotationError(f"set {' and '.join(missing)} (or pass --old/--new)")
+    if old_arg or new_arg:
+        log.warning(
+            "master_key_on_command_line", hint=f"use {OLD_KEY_ENV}/{NEW_KEY_ENV}: argv is visible in ps"
+        )
+    return old_key, new_key
 
 
 async def _rotate_command(old_key: str, new_key: str) -> int:
@@ -195,7 +226,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(generate_master_key() + "\n")
         return 0
     try:
-        return asyncio.run(_rotate_command(args.old, args.new))
+        old_key, new_key = _rotation_keys(args.old, args.new)
+        return asyncio.run(_rotate_command(old_key, new_key))
     except RotationError as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 1

@@ -124,10 +124,40 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
 
 
+def cookie_allowed(request: Request, settings: Settings) -> bool:
+    """Whether the ``lkap_session`` cookie may authenticate this request (CSRF, V2-21).
+
+    ``SameSite=Lax`` keeps the cookie off cross-*site* POSTs, but a sibling
+    subdomain or another port on the same host is the same *site*. So a
+    state-changing request authenticates by cookie only when the browser does
+    not call it cross-site (``Sec-Fetch-Site``) and its ``Origin``, when sent,
+    is one of the platform's own web origins; a same-site sibling fails the
+    Origin test. Requests without these headers (server-side fetches, curl)
+    are unaffected; API keys and the service token never ride on a cookie.
+    """
+    if request.method.upper() not in MUTATING_METHODS:
+        return True
+    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+        return False
+    origin = request.headers.get("origin")
+    if origin is None or origin == "null":
+        return origin is None
+    return origin.rstrip("/") in settings.web_origins
+
+
 async def _principal_from_session(
     request: Request, response: Response, db: AsyncSession, settings: Settings
 ) -> Principal | None:
-    resolved: ResolvedSession | None = await resolve_session(db, request.cookies.get(SESSION_COOKIE))
+    raw_cookie = request.cookies.get(SESSION_COOKIE)
+    if raw_cookie and not cookie_allowed(request, settings):
+        log.info(
+            "session_cookie_ignored_cross_origin",
+            method=request.method,
+            origin=request.headers.get("origin"),
+            fetch_site=request.headers.get("sec-fetch-site"),
+        )
+        return None
+    resolved: ResolvedSession | None = await resolve_session(db, raw_cookie)
     if resolved is None:
         return None
     rotated = await refresh_if_due(db, resolved, ttl=dt.timedelta(hours=settings.session_ttl_hours))

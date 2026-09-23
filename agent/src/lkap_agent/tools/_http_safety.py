@@ -21,16 +21,28 @@ the platform list applies.
 an IP literal in a loopback, private (RFC 1918 / ULA), link-local (including
 the `169.254.169.254` cloud metadata address), CGNAT, multicast, reserved or
 unspecified range is refused, as are `localhost` and `*.localhost` and the
-well-known cloud metadata host names. Host *names* are not resolved here (no
-DNS on the hot path, and the callers' test transports never resolve); DNS
-rebinding is out of scope for this check.
+well-known cloud metadata host names. :func:`check_url_allowed` does not
+resolve names; that happens at connect time.
+
+**DNS rebinding and names that resolve inward (V2-21).** An allowlisted *name*
+can resolve to `169.254.169.254` (e.g. a `nip.io`-style record) or change its
+answer between the check and the request. Both callers therefore build their
+client with :func:`guarded_transport`, whose network backend resolves the
+name, refuses it if **any** address is private, and connects to the checked
+address itself, so the answer that was checked is the one that is used.
 """
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
-from typing import Final
+import socket
+from collections.abc import Callable, Iterable
+from typing import Any, Final
 from urllib.parse import urlsplit
+
+import httpcore
+import httpx
 
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 
@@ -138,6 +150,113 @@ def check_url_allowed(
     allowed = effective_allowlist(tool_allowed_hosts, platform_allowed_hosts)
     if host.lower() not in allowed:
         raise HttpToolSecurityError(f"host {host!r} is not on the outbound allowlist")
+
+
+async def _getaddrinfo(host: str, port: int) -> list[str]:
+    loop = asyncio.get_running_loop()
+    infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    addresses: list[str] = []
+    for _family, _type, _proto, _canon, sockaddr in infos:
+        address = str(sockaddr[0]).split("%", 1)[0]
+        if address not in addresses:
+            addresses.append(address)
+    return addresses
+
+
+class _BlockedConnectError(httpcore.ConnectError):
+    """Mapped by httpx to :class:`httpx.ConnectError` (the callers turn it into a `ToolError`)."""
+
+
+class GuardedNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Resolve, refuse private answers, and connect to the checked address."""
+
+    def __init__(
+        self,
+        *,
+        resolve: Callable[[str, int], Any] = _getaddrinfo,
+        inner: httpcore.AsyncNetworkBackend | None = None,
+    ) -> None:
+        """Wrap `inner` (default: httpcore's anyio backend) with the private-range check."""
+        self._resolve = resolve
+        self._inner = inner or httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,  # noqa: ASYNC109 - httpcore's backend interface
+        local_address: str | None = None,
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        """Connect to the first reachable address of `host`, once every address is public."""
+        if is_private_host(host):
+            raise _BlockedConnectError(f"host {host!r} is in a private or local network range")
+        if _ip_literal(host) is not None:
+            addresses = [host.strip("[]")]
+        else:
+            try:
+                addresses = list(await self._resolve(host, port))
+            except OSError as exc:
+                raise httpcore.ConnectError(f"could not resolve {host!r}: {type(exc).__name__}") from exc
+            inward = [address for address in addresses if is_private_host(address)]
+            if inward or not addresses:
+                raise _BlockedConnectError(
+                    f"host {host!r} resolves to a private or local network address"
+                    if inward
+                    else f"host {host!r} did not resolve"
+                )
+        last: Exception | None = None
+        for address in addresses:
+            try:
+                return await self._inner.connect_tcp(
+                    address, port, timeout=timeout, local_address=local_address, socket_options=socket_options
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
+                last = exc
+        assert last is not None  # noqa: S101 - `addresses` is never empty here
+        raise last
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,  # noqa: ASYNC109 - httpcore's backend interface
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        """Unix sockets are never a tool destination."""
+        raise _BlockedConnectError("unix sockets are not an allowed destination")
+
+    async def sleep(self, seconds: float) -> None:
+        """Delegate to the wrapped backend."""
+        await self._inner.sleep(seconds)
+
+
+class GuardedTransport(httpx.AsyncHTTPTransport):
+    """An httpx transport whose every connection goes through :class:`GuardedNetworkBackend`.
+
+    An explicit transport also turns off httpx's `HTTP(S)_PROXY` handling, so a
+    proxy can never carry a tool request around the check.
+    """
+
+    def __init__(
+        self,
+        *,
+        resolve: Callable[[str, int], Any] = _getaddrinfo,
+        inner: httpcore.AsyncNetworkBackend | None = None,
+    ) -> None:
+        """Build the transport with httpx's default limits and TLS verification."""
+        super().__init__()
+        self._pool = httpcore.AsyncConnectionPool(
+            ssl_context=httpx.create_ssl_context(),
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=5.0,
+            network_backend=GuardedNetworkBackend(resolve=resolve, inner=inner),
+        )
+
+
+def guarded_transport() -> GuardedTransport:
+    """The transport every HTTP tool client must use (see the module docstring)."""
+    return GuardedTransport()
 
 
 def truncate(text: str, max_chars: int) -> str:

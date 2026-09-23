@@ -9,8 +9,10 @@ import respx
 from conftest import inference_config
 from lkap_contracts.agent_config import AgentConfig, QaConfig
 from lkap_contracts.common import ProviderRef
+from sqlalchemy import select
+from test_webhooks import _make_endpoint
 
-from lkap_api.db.models import Agent, Credential, SessionQa
+from lkap_api.db.models import Agent, Credential, SessionQa, WebhookDelivery
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.jobs.context import JobContext
@@ -249,3 +251,60 @@ async def test_missing_session_is_a_no_op(database: Database, settings: Settings
     async with httpx.AsyncClient() as http:
         await score_session(_ctx(database, settings, vault, http), "does-not-exist")
     assert await _get_qa(database, "does-not-exist") is None
+
+
+# --------------------------------------------------------------- V2-20-1: session.qa_completed
+async def test_a_done_rescore_emits_session_qa_completed(database: Database, settings: Settings) -> None:
+    vault = Vault(settings.master_key)
+    await _make_endpoint(database, vault, "https://hooks.example.com/qa", events=["session.qa_completed"])
+    credential_id = await _make_credential(database, vault)
+    config = inference_config(
+        qa=QaConfig(enabled=True, model=ProviderRef(provider_id="openai-llm", credential_id=credential_id))
+    )
+    agent_id = await _make_agent(database, config)
+    session_id = await _make_session(database, agent_id, transcript=TRANSCRIPT)
+
+    with respx.mock:
+        respx.post(CHAT_URL).mock(return_value=_judge_response(score=7))
+        async with httpx.AsyncClient() as http:
+            await score_session(_ctx(database, settings, vault, http), session_id)
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    (delivery,) = [d for d in deliveries if d.event_type == "session.qa_completed"]
+    assert delivery.payload["data"]["session_id"] == session_id
+    assert delivery.payload["data"]["status"] == "done"
+    assert delivery.payload["data"]["scored_by"] == "api"
+
+
+async def test_a_failed_rescore_also_emits_session_qa_completed(
+    database: Database, settings: Settings
+) -> None:
+    vault = Vault(settings.master_key)
+    await _make_endpoint(database, vault, "https://hooks.example.com/qa", events=["session.qa_completed"])
+    config = inference_config(qa=QaConfig(enabled=True))  # no credential -> unresolvable judge -> "failed"
+    agent_id = await _make_agent(database, config)
+    session_id = await _make_session(database, agent_id, transcript=TRANSCRIPT)
+
+    async with httpx.AsyncClient() as http:
+        await score_session(_ctx(database, settings, vault, http), session_id)
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    (delivery,) = [d for d in deliveries if d.event_type == "session.qa_completed"]
+    assert delivery.payload["data"]["status"] == "failed"
+
+
+async def test_qa_disabled_skip_emits_no_webhook(database: Database, settings: Settings) -> None:
+    vault = Vault(settings.master_key)
+    await _make_endpoint(database, vault, "https://hooks.example.com/qa", events=[])  # wildcard
+    config = inference_config(qa=QaConfig(enabled=False))
+    agent_id = await _make_agent(database, config)
+    session_id = await _make_session(database, agent_id, transcript=TRANSCRIPT)
+
+    async with httpx.AsyncClient() as http:
+        await score_session(_ctx(database, settings, vault, http), session_id)
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    assert deliveries == []

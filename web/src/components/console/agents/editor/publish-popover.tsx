@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useUpdateAgent, useValidateAgent } from "@/components/console/lib/api-hooks";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";
@@ -65,6 +66,8 @@ const MAX_LISTED = 3;
 export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIssue }: PublishControlProps) {
   const updateAgent = useUpdateAgent(agent.id);
   const validateAgent = useValidateAgent(agent.id);
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<"unsaved" | "review">("review");
   const [check, setCheck] = React.useState<CheckState>({ status: "idle" });
@@ -145,9 +148,9 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   if (agent.published) {
     return (
       <>
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={canWrite && open} onOpenChange={(next) => canWrite && setOpen(next)}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="outline">
+            <Button type="button" variant="outline" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
               Unpublish
             </Button>
           </PopoverTrigger>
@@ -209,9 +212,9 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   const blocked = check.status !== "done" || messages.errors.length > 0;
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover open={canWrite && open} onOpenChange={(next) => canWrite && onOpenChange(next)}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline">
+        <Button type="button" variant="outline" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
           Publish
         </Button>
       </PopoverTrigger>

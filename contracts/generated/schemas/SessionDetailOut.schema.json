@@ -444,6 +444,18 @@
           "default": null,
           "title": "Duration S"
         },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
         "expires_at": {
           "anyOf": [
             {
@@ -926,10 +938,23 @@
       "$ref": "#/$defs/RecordingOut",
       "default": {
         "duration_s": null,
+        "error": null,
         "expires_at": null,
         "status": "none",
         "url": null
       }
+    },
+    "recording_status": {
+      "default": "none",
+      "enum": [
+        "none",
+        "requested",
+        "active",
+        "ready",
+        "failed"
+      ],
+      "title": "Recording Status",
+      "type": "string"
     },
     "room_name": {
       "title": "Room Name",

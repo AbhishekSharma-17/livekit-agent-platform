@@ -1,8 +1,7 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { NewResourceButton } from "@/components/shared/new-resource-button";
 import { ConnectionsTable } from "@/components/console/connections/connections-table";
 
 export const metadata: Metadata = { title: "Connections" };
@@ -18,9 +17,9 @@ export default function ConsoleConnectionsPage() {
         title="Connections"
         description="A connection is a LiveKit Cloud project or self-hosted server. Agents bind to one to run."
         actions={
-          <Button asChild>
-            <Link href="/console/connections/new">New connection</Link>
-          </Button>
+          <NewResourceButton href="/console/connections/new" min="admin">
+            New connection
+          </NewResourceButton>
         }
       />
       <ConnectionsTable />

@@ -44,11 +44,46 @@ function adminToken(): string | undefined {
   return process.env.LKAP_ADMIN_TOKEN;
 }
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function errorResponse(status: number, code: string, message: string): NextResponse {
+  return NextResponse.json({ error: { code, message, details: null } }, { status });
+}
+
+/**
+ * CSRF guard (V2-21). While `adminBypassEnabled()` is on, this route attaches
+ * the break-glass token to *any* request, so a page on another origin could
+ * otherwise make the browser POST here with admin rights (a form or a no-cors
+ * fetch needs no cookie at all). Browsers label every request with
+ * `Sec-Fetch-Site`; the console's own calls are `same-origin`. A state-changing
+ * request a browser marks `cross-site` or `same-site` is refused. Clients that
+ * send no such header (server-side code, curl) are unaffected; the api's own
+ * Origin check still guards cookie-authenticated writes behind this.
+ */
+function crossSiteWrite(request: NextRequest): boolean {
+  if (SAFE_METHODS.has(request.method.toUpperCase())) return false;
+  const site = request.headers.get("sec-fetch-site")?.toLowerCase();
+  return site === "cross-site" || site === "same-site";
+}
+
+/** Path segments that could climb out of `/v1/` once joined (`..`, `.`, or an embedded slash). */
+function unsafeSegment(segment: string): boolean {
+  return segment === "." || segment === ".." || /[\\/]/.test(segment);
+}
+
 async function proxy(
   request: NextRequest,
   path: string[],
 ): Promise<NextResponse> {
-  const upstreamUrl = new URL(`${apiBaseUrl()}/v1/${path.join("/")}`);
+  if (crossSiteWrite(request)) {
+    return errorResponse(403, "forbidden", "cross-site requests to the console api are refused");
+  }
+  if (path.some(unsafeSegment)) {
+    return errorResponse(400, "bad_request", "invalid console api path");
+  }
+  const upstreamUrl = new URL(
+    `${apiBaseUrl()}/v1/${path.map((segment) => encodeURIComponent(segment)).join("/")}`,
+  );
   upstreamUrl.search = request.nextUrl.search;
 
   const headers = new Headers();

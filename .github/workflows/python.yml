@@ -25,6 +25,10 @@ on:
       - "testing/**"
       - ".github/workflows/python.yml"
 
+# V2-21: least-privilege GITHUB_TOKEN (every job only reads the repo).
+permissions:
+  contents: read
+
 jobs:
   # sqlite (or no-db) leg: one job per package, each with its own venv via
   # `uv sync --frozen` (path deps on ../contracts / ../packs resolve

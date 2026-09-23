@@ -81,8 +81,12 @@ call() {
   if [[ "${DRY_RUN}" == true && "${method}" != GET ]]; then
     die "dry-run refused a ${method} ${path} (read-only mode)"
   fi
-  [[ -n "${body}" ]] && args+=(--data "${body}")
-  curl "${args[@]}" "${API}${path}"
+  # Bodies (passwords, api secrets) go through stdin, never argv: `ps` shows argv to every user (V2-21).
+  if [[ -n "${body}" ]]; then
+    printf '%s' "${body}" | curl "${args[@]}" --data-binary @- "${API}${path}"
+  else
+    curl "${args[@]}" "${API}${path}" </dev/null
+  fi
 }
 
 expect() {  # expect <status> <METHOD> <path> [body]
@@ -140,7 +144,9 @@ if [[ -n "${LKAP_SMOKE_EMAIL:-}" && "${DRY_RUN}" == false ]]; then
   pass "signed in as ${LKAP_SMOKE_EMAIL}"
 else
   [[ -n "${LKAP_ADMIN_TOKEN:-}" ]] || die "--dry-run reads with LKAP_ADMIN_TOKEN (no login POST in read-only mode)"
-  AUTH_ARGS=(-H "X-Admin-Token: ${LKAP_ADMIN_TOKEN}")
+  # The token goes in a 0600 header file, not argv (V2-21).
+  (umask 077 && printf 'X-Admin-Token: %s\n' "${LKAP_ADMIN_TOKEN}" > "${WORK_DIR}/admin.headers")
+  AUTH_ARGS=(-H "@${WORK_DIR}/admin.headers")
   log "using the break-glass admin token (dev only; the api refuses it unless LKAP_ALLOW_ADMIN_TOKEN is on)"
 fi
 expect 200 GET /v1/auth/me

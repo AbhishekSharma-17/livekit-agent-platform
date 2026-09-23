@@ -69,5 +69,16 @@ def test_keys_cli_prints_a_key(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_keys_cli_rejects_unknown_commands(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["rotate"]) == 2
+    assert main(["bogus"]) == 2
     assert "usage" in capsys.readouterr().err
+
+
+def test_keys_cli_rotate_without_keys_names_the_environment_variables(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """V2-21: keys come from LKAP_OLD/NEW_MASTER_KEY so they never sit in argv."""
+    monkeypatch.delenv("LKAP_OLD_MASTER_KEY", raising=False)
+    monkeypatch.delenv("LKAP_NEW_MASTER_KEY", raising=False)
+
+    assert main(["rotate"]) == 1
+    assert "LKAP_OLD_MASTER_KEY" in capsys.readouterr().err

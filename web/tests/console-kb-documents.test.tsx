@@ -54,6 +54,12 @@ function mockFetch({
       onUpload?.();
       return jsonResponse(document_({ id: "doc-new", filename: "new.md", status: "pending" }), 202);
     }
+    if (url.includes("/auth/me")) {
+      return jsonResponse({
+        user: { id: "u1", email: "admin@example.test" },
+        workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+      });
+    }
     return jsonResponse({}, 200);
   });
   vi.stubGlobal("fetch", fetchMock);

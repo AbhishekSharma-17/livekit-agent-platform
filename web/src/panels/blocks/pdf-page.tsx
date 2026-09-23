@@ -18,7 +18,8 @@ export interface PdfPageProps {
 }
 
 type PdfJs = typeof import("pdfjs-dist");
-type PdfDocument = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
+type PdfLoadingTask = ReturnType<PdfJs["getDocument"]>;
+type PdfDocument = Awaited<PdfLoadingTask["promise"]>;
 
 let pdfjsPromise: Promise<PdfJs> | null = null;
 
@@ -40,17 +41,19 @@ export function PdfPage({ url, page, onPageCount, children }: PdfPageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    let loaded: PdfDocument | null = null;
+    // The loading task owns the document and its worker: destroying it frees
+    // both (pdf.js 6 removed `PDFDocumentProxy.destroy`; the task's works in 5 and 6).
+    let loadingTask: PdfLoadingTask | null = null;
     setDoc(null);
     setError(null);
     loadPdfJs()
-      .then((pdfjs) => pdfjs.getDocument({ url }).promise)
+      .then((pdfjs) => {
+        if (cancelled) return null;
+        loadingTask = pdfjs.getDocument({ url });
+        return loadingTask.promise;
+      })
       .then((document) => {
-        loaded = document;
-        if (cancelled) {
-          void document.destroy();
-          return;
-        }
+        if (!document || cancelled) return;
         setDoc(document);
         onPageCountRef.current?.(document.numPages);
       })
@@ -59,7 +62,8 @@ export function PdfPage({ url, page, onPageCount, children }: PdfPageProps) {
       });
     return () => {
       cancelled = true;
-      if (loaded) void loaded.destroy();
+      const task: PdfLoadingTask | null = loadingTask;
+      if (task) void task.destroy();
     };
   }, [url]);
 

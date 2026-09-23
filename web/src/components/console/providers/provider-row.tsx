@@ -13,6 +13,7 @@ import { CredentialSheet } from "@/components/console/registry/credential-sheet"
 import { useCredentials } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useUpdateProviderSettings } from "@/hooks/useProviders";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { ConnectionOut, ProviderOut } from "@/contracts/lkap-contracts";
 
 /** A one-sentence badge for capabilities `CapabilityBadge` (WP-0's `shared/capability-badge.tsx`) doesn't have a kind for yet — `text_modality`/`cloud_only` (UI_UX_SPEC-V2-AMENDMENTS §2.2). Flagged in the V2-13 report as a follow-up ask to extend `CAPABILITY_BADGE_META` instead of duplicating this locally. */
@@ -27,6 +28,9 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
   const hasKey = (credentials?.items.length ?? 0) > 0;
   const installedNames = connections.filter((c) => (provider.installed_on ?? []).includes(c.id)).map((c) => c.slug);
   const notInstalledNames = connections.filter((c) => !(provider.installed_on ?? []).includes(c.id)).map((c) => c.slug);
+  // Providers/credentials need `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
+  const { canWrite } = useWriteAccess("admin");
+  const writeReason = writeAccessReason("admin");
 
   async function toggleEnabled(next: boolean) {
     try {
@@ -80,13 +84,21 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
       <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end">
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{enabled ? "Enabled" : "Disabled"}</span>
-          <Switch checked={enabled} onCheckedChange={(next) => void toggleEnabled(next)} aria-label={`Enable ${provider.label}`} disabled={updateSettings.isPending} />
+          <Switch
+            checked={enabled}
+            onCheckedChange={(next) => void toggleEnabled(next)}
+            aria-label={`Enable ${provider.label}`}
+            disabled={!canWrite || updateSettings.isPending}
+            title={canWrite ? undefined : writeReason}
+          />
         </div>
         {needsKey ? (
           <button
             type="button"
-            onClick={() => setSheetOpen(true)}
-            className="rounded-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => canWrite && setSheetOpen(true)}
+            disabled={!canWrite}
+            title={canWrite ? undefined : writeReason}
+            className="rounded-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             <CapabilityBadge kind={hasKey ? "key-set" : "key-required"}>{hasKey ? "Key set" : "Key required"}</CapabilityBadge>
           </button>

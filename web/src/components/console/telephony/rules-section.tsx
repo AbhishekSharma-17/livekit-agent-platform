@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { AgentOut, DispatchRuleOut } from "@/contracts/lkap-contracts";
 
 import { useCreateDispatchRule, useDeleteDispatchRule, useDispatchRules, useTrunks } from "./hooks";
@@ -35,6 +36,9 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
   const rules = data?.items ?? [];
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Unknown agent";
   const inboundTrunks = trunks.filter((t) => t.direction === "inbound");
+  // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
+  const { canWrite } = useWriteAccess("admin");
+  const writeReason = writeAccessReason("admin");
 
   const columns: ResponsiveTableColumn<DispatchRuleOut>[] = [
     {
@@ -93,7 +97,8 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
           type="button"
           size="sm"
           variant="outline"
-          disabled={inboundTrunks.length === 0}
+          disabled={!canWrite || inboundTrunks.length === 0}
+          title={canWrite ? undefined : writeReason}
           onClick={() => setCreating(true)}
         >
           <Icon as={PlusIcon} size="sm" />
@@ -141,6 +146,7 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
 
 function DeleteRuleButton({ rule }: { rule: DispatchRuleOut }) {
   const remove = useDeleteDispatchRule();
+  const { canWrite } = useWriteAccess("admin");
   const label = rule.managed_by_number ? `Stop routing ${rule.managed_by_number}` : "Delete rule";
   return (
     <Button
@@ -148,8 +154,8 @@ function DeleteRuleButton({ rule }: { rule: DispatchRuleOut }) {
       variant="ghost"
       size="icon"
       aria-label={label}
-      title={label}
-      disabled={remove.isPending}
+      title={canWrite ? label : writeAccessReason("admin")}
+      disabled={!canWrite || remove.isPending}
       onClick={() =>
         remove.mutate(rule.id, {
           onSuccess: () => toast.success("Dispatch rule deleted"),

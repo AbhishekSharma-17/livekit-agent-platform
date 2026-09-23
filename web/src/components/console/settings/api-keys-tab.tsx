@@ -25,6 +25,7 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared
 import { StatusChip } from "@/components/shared/status-chip";
 import { Section, SectionRow } from "@/components/shared/section";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { api, ApiError } from "@/lib/api";
 import type { ApiKeyCreated, ApiKeyOut, Scope } from "./api-types";
 import { SCOPES } from "./api-types";
@@ -131,6 +132,7 @@ export function ApiKeysTab() {
 
 function RevokeButton({ apiKey, onRevoked }: { apiKey: ApiKeyOut; onRevoked: () => void }) {
   const [busy, setBusy] = React.useState(false);
+  const { canWrite } = useWriteAccess("admin");
 
   async function onClick() {
     setBusy(true);
@@ -146,13 +148,22 @@ function RevokeButton({ apiKey, onRevoked }: { apiKey: ApiKeyOut; onRevoked: () 
   }
 
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={onClick} disabled={busy}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      disabled={!canWrite || busy}
+      title={canWrite ? undefined : writeAccessReason("admin")}
+    >
       Revoke
     </Button>
   );
 }
 
 function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
+  // API keys need `admin` server-side (`routers/api_keys.py::KeyAdminDep`).
+  const { canWrite } = useWriteAccess("admin");
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
   const [scopes, setScopes] = React.useState<Set<Scope>>(new Set());
@@ -197,14 +208,15 @@ function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog
-      open={open}
+      open={canWrite && open}
       onOpenChange={(next) => {
+        if (!canWrite) return;
         setOpen(next);
         if (!next) reset();
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" size="sm">
+        <Button type="button" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeAccessReason("admin")}>
           <PlusIcon />
           Create key
         </Button>

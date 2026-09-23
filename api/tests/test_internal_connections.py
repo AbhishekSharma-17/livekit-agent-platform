@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
-from conftest import inference_config
+from conftest import captured_text, inference_config
 from connection_fakes import KEY_B, SECRET_B, add_agent, connection_row
 from sqlalchemy import select
 
@@ -150,6 +150,39 @@ async def test_internal_worker_env_is_decrypted_and_service_only(
     assert denied.status_code == 401
 
 
+# --------------------------------------------------------- V2-20-2: worker callback url
+async def test_worker_env_honours_an_explicit_api_base_url_over_the_port_guess(
+    service_client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    connection_id, _agent_id = await _connection_and_agent(database, settings, worker_image="slim")
+    settings.api_base_url = "http://scratch-api.internal:8096"
+    settings.port = 8080  # a different, wrong value: proves it's never consulted once set
+
+    response = await service_client.get(f"/internal/v1/connections/{connection_id}/worker-env")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["env"]["LKAP_API_BASE_URL"] == "http://scratch-api.internal:8096"
+
+
+async def test_worker_env_warns_when_the_callback_url_is_derived_from_port(
+    service_client: httpx.AsyncClient,
+    database: Database,
+    settings: Settings,
+    log_capture: pytest.LogCaptureFixture,
+) -> None:
+    connection_id, _agent_id = await _connection_and_agent(database, settings, worker_image="slim")
+    settings.api_base_url = None
+    settings.public_base_url = None
+    settings.port = 8096
+
+    response = await service_client.get(f"/internal/v1/connections/{connection_id}/worker-env")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["env"]["LKAP_API_BASE_URL"] == "http://127.0.0.1:8096"
+    text = captured_text(log_capture)
+    assert "worker_callback_url_derived_from_port" in text
+
+
 async def test_recording_start_conflicts_when_the_agent_has_no_recording_configured(
     service_client: httpx.AsyncClient, database: Database, settings: Settings
 ) -> None:
@@ -180,6 +213,80 @@ async def test_recording_start_conflicts_when_the_agent_has_no_recording_configu
 
     assert response.status_code == 409, response.text
     assert response.json()["error"]["code"] == "conflict"
+
+
+# --------------------------------------------------------- V2-20-3: failed recording surfaced
+async def test_post_recording_failed_status_persists_the_reason(
+    service_client: httpx.AsyncClient, admin_client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    """A `recording/start` that never got an egress id still reports `status=failed` here.
+
+    Mirrors `_Recording._start`'s new fallback in `agent/src/lkap_agent/main.py`:
+    on `RecordingUnavailableError` it posts `SessionRecordingIn(egress_id="",
+    status="failed", error=...)` to this same route.
+    """
+    connection_id, agent_id = await _connection_and_agent(database, settings)
+    async with database.session() as session:
+        session.add(
+            SessionRow(
+                id="c" * 32,
+                agent_id=agent_id,
+                connection_id=connection_id,
+                config_version=1,
+                room_name="lkap-cccccccc",
+                participant_identity="u",
+                participant_name="U",
+                status="active",
+                pipeline_mode="cascaded",
+            )
+        )
+
+    response = await service_client.post(
+        f"/internal/v1/sessions/{'c' * 32}/recording",
+        json={"egress_id": "", "status": "failed", "error": "recording/start answered HTTP 422"},
+    )
+    assert response.status_code == 204, response.text
+
+    detail = (await admin_client.get(f"/v1/sessions/{'c' * 32}")).json()
+    assert detail["recording"]["status"] == "failed"
+    assert detail["recording"]["error"] == "recording/start answered HTTP 422"
+    assert detail["recording_status"] == "failed"
+
+    listed = (await admin_client.get("/v1/sessions")).json()
+    (row,) = [item for item in listed["items"] if item["id"] == "c" * 32]
+    assert row["recording_status"] == "failed"
+
+
+async def test_post_recording_success_clears_a_previous_failure_reason(
+    service_client: httpx.AsyncClient, admin_client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    connection_id, agent_id = await _connection_and_agent(database, settings)
+    async with database.session() as session:
+        session.add(
+            SessionRow(
+                id="d" * 32,
+                agent_id=agent_id,
+                connection_id=connection_id,
+                config_version=1,
+                room_name="lkap-dddddddd",
+                participant_identity="u",
+                participant_name="U",
+                status="active",
+                pipeline_mode="cascaded",
+                recording_status="failed",
+                recording_error="an earlier attempt failed",
+            )
+        )
+
+    response = await service_client.post(
+        f"/internal/v1/sessions/{'d' * 32}/recording",
+        json={"egress_id": "EG_retry", "status": "active"},
+    )
+    assert response.status_code == 204, response.text
+
+    detail = (await admin_client.get(f"/v1/sessions/{'d' * 32}")).json()
+    assert detail["recording"]["status"] == "active"
+    assert detail["recording"]["error"] is None
 
 
 @pytest.mark.parametrize(

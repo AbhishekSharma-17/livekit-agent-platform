@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { CreateKbDialog } from "@/components/console/knowledge/create-kb-dialog";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
+import { useWriteAccess } from "@/components/console/lib/roles";
 import { Icon } from "@/components/shared/icon";
 import { pluralize } from "@/lib/format";
 import { RelativeTime } from "@/components/shared/relative-time";
@@ -133,6 +134,7 @@ function KbRowActions({ kb }: { kb: KbOut }) {
   const deleteKb = useDeleteKb();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const { canWrite } = useWriteAccess();
 
   async function handleDelete() {
     try {
@@ -158,6 +160,7 @@ function KbRowActions({ kb }: { kb: KbOut }) {
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
+            disabled={!canWrite}
             onSelect={(event) => {
               event.preventDefault();
               setMenuOpen(false);

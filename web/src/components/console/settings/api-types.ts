@@ -190,14 +190,15 @@ export interface WebhookEndpointCreated {
 }
 
 // ---- webhooks/events.py::KNOWN_EVENTS ----
+// `call.started`/`call.ended` are deliberately absent: they have no emitter
+// yet (docs/v2/_asks.md V2-20-1 / "Open — left by V2-20F"), so offering them
+// here would let an admin subscribe to an event that never fires.
 
 export const KNOWN_WEBHOOK_EVENTS: string[] = [
   "session.started",
   "session.ended",
   "session.qa_completed",
   "recording.ready",
-  "call.started",
-  "call.ended",
 ];
 
 export const WEBHOOK_EVENT_LABEL: Record<string, string> = {
@@ -205,6 +206,4 @@ export const WEBHOOK_EVENT_LABEL: Record<string, string> = {
   "session.ended": "Session ended",
   "session.qa_completed": "QA completed",
   "recording.ready": "Recording ready",
-  "call.started": "Call started",
-  "call.ended": "Call ended",
 };

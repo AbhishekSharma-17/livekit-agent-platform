@@ -92,6 +92,12 @@ describe("VersionHistory", () => {
       if (url.includes("/versions/1")) {
         return json({ config_version: 1, created_at: "2026-09-22T10:00:00Z", note: "created", config: PROMPT });
       }
+      if (url.includes("/auth/me")) {
+        return json({
+          user: { id: "u1", email: "admin@example.test" },
+          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+        });
+      }
       return json({
         items: [
           { config_version: 2, created_at: "2026-09-23T10:00:00Z", note: null },
@@ -115,6 +121,9 @@ describe("VersionHistory", () => {
     const changes = await screen.findByRole("list", { name: "Changes" });
     expect(within(changes).getByText("instructions")).toBeTruthy();
 
+    // `canWrite` (docs/v2/_asks.md V2-20-5) resolves from a separate
+    // `auth/me` query that may still be in flight.
+    await waitFor(() => expect((screen.getByRole("button", { name: "Restore" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     const dialog = await screen.findByRole("dialog", { name: /Restore version 1/ });
     expect(within(dialog).getByText(/saved as version 3/)).toBeTruthy();

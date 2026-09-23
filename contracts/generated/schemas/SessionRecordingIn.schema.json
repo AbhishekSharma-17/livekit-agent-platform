@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/SessionRecordingIn.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.",
+  "description": "``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.\n\n``egress_id`` defaults to ``\"\"`` (docs/v2/_asks.md V2-20-3): a recording\nthat never started (``status=\"failed\"`` from ``recording/start`` itself\nfailing) has no egress id at all, and the route's mismatch guard only\nfires when the session already has a *different*, real one on file.",
   "properties": {
     "duration_s": {
       "anyOf": [
@@ -16,8 +16,21 @@
       "title": "Duration S"
     },
     "egress_id": {
+      "default": "",
       "title": "Egress Id",
       "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
     },
     "status": {
       "enum": [
@@ -32,7 +45,6 @@
     }
   },
   "required": [
-    "egress_id",
     "status"
   ],
   "title": "SessionRecordingIn",

@@ -10,7 +10,7 @@ dependencies = [
   "aiosqlite>=0.21,<1",
   "asyncpg>=0.30,<1",
   "alembic>=1.16,<2",
-  "cryptography>=45,<46",
+  "cryptography>=46.0.7,<51",
   "livekit-api==1.2.1",
   "lancedb>=0.24,<1",
   "fastembed>=0.7,<1",

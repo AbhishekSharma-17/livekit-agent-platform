@@ -22,6 +22,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import type { AgentOut, ConfigVersionOut } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+
 import { useAgentVersion, useAgentVersions, useRestoreVersion } from "./api";
 import { diffRows, objectHash, preview, type DiffRow } from "./version-diff";
 import { SkeletonRows } from "@/components/shared/loading-state";
@@ -67,6 +69,8 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
   const [confirming, setConfirming] = React.useState(false);
   const version = useAgentVersion(agent.id, selected);
   const restore = useRestoreVersion(agent.id);
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
   const form = useFormContext() as ReturnType<typeof useFormContext> | null;
   const dirty = Boolean(form?.formState.isDirty);
   const items = versions.data?.items ?? [];
@@ -142,7 +146,13 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
               <h3 id="version-diff-title" className="text-sm font-medium">
                 Version {selected} → current (version {agent.config_version})
               </h3>
-              <Button type="button" size="sm" onClick={() => setConfirming(true)} disabled={!version.data}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setConfirming(true)}
+                disabled={!canWrite || !version.data}
+                title={canWrite ? undefined : writeReason}
+              >
                 <Icon as={RotateCcwIcon} />
                 Restore
               </Button>

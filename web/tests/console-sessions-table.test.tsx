@@ -137,6 +137,33 @@ describe("SessionsTable — DECISIONS-W2 D-W2-2(b) swept-row chip", () => {
   });
 });
 
+describe("SessionsTable — V2-20-3 failed-recording chip", () => {
+  it("shows a danger 'Recording failed' chip on an otherwise-ended session", async () => {
+    stubApi([
+      session({
+        id: "s-rec-failed",
+        status: "ended",
+        started_at: "2026-09-19T00:00:00Z",
+        ended_at: "2026-09-19T00:05:00Z",
+        recording_status: "failed",
+      }),
+    ]);
+    renderWithClient(<SessionsTable />);
+
+    const chip = await (await loadedTable()).findByText("Recording failed");
+    expect(chip.closest("[data-slot=status-chip]")?.getAttribute("data-tone")).toBe("danger");
+    // The session's own status chip is unaffected — the row ended fine.
+    expect(table().getByText("Ended")).toBeTruthy();
+  });
+
+  it("shows no recording chip when the recording never failed", async () => {
+    stubApi([session({ id: "s-ok", status: "ended", recording_status: "ready" })]);
+    renderWithClient(<SessionsTable />);
+    await loadedTable();
+    expect(screen.queryByText("Recording failed")).toBeNull();
+  });
+});
+
 describe("SessionsTable — columns, links, pagination", () => {
   it("asks the api for its maximum page and renders duration, channel, mode and a row link", async () => {
     stubApi([

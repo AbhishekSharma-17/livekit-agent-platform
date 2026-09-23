@@ -1026,6 +1026,18 @@ class _Recording:
         except RecordingUnavailableError as exc:
             logger.warning("could not start the session recording", error=str(exc))
             self._record_event("recording", {"status": "failed", "error": str(exc)})
+            # docs/v2/_asks.md V2-20-3: the timeline event above is easy to
+            # miss (it's buried in the transcript view); persist the failure
+            # on the session row itself too, via the same fallback route
+            # `finalize()` uses for a *started* Egress's shutdown report, so
+            # the console's Recording tab and the sessions list both show it.
+            try:
+                await self._deps.config_client.post_recording(
+                    self._session_id,
+                    SessionRecordingIn(egress_id="", status="failed", error=str(exc)[:500]),
+                )
+            except Exception:
+                logger.warning("could not post the recording failure status", exc_info=True)
             return
         self.egress_id = egress_id
         logger.info("session recording started", egress_id=egress_id)
@@ -1574,7 +1586,23 @@ def install_worker_registration(agent_server: Any, settings: Settings) -> Worker
 
     Runs in the main (server) process only: job processes never import the
     `__main__` block that calls this.
+
+    Logs `api_base_url` at startup (docs/v2/_asks.md V2-20-2): unlike the api,
+    the worker never guesses this value — `Settings.api_base_url` is a
+    required field with no `PORT`-derived fallback (`settings.py`) — but the
+    *value itself* can still be wrong if whatever launched this worker (the
+    supervisor, a hand-written `export`) computed it incorrectly, which is
+    exactly what happened in the V2-20 isolation incident. A worker that
+    registers against the wrong api is otherwise silent until something times
+    out, so this line is the first place to look.
     """
+    logger.info(
+        "worker starting",
+        api_base_url=settings.api_base_url,
+        agent_name=settings.agent_name,
+        connection_id=settings.connection_id,
+        managed_by=settings.managed_by,
+    )
     registration = WorkerRegistration(
         client=FleetClient(settings.api_base_url, settings.service_token),
         settings=settings,

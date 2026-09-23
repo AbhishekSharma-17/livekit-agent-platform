@@ -1992,6 +1992,7 @@ export interface QaVerdict {
  */
 export interface RecordingOut {
   duration_s?: number | null;
+  error?: string | null;
   expires_at?: string | null;
   status?: "none" | "requested" | "active" | "ready" | "failed";
   url?: string | null;
@@ -2108,6 +2109,7 @@ export interface SessionDetailOut {
   pipeline_mode: "realtime" | "cascaded" | "half_cascade";
   qa?: QaOut | null;
   recording?: RecordingOut;
+  recording_status?: "none" | "requested" | "active" | "ready" | "failed";
   room_name: string;
   started_at?: string | null;
   status: "created" | "active" | "ended" | "failed";
@@ -2297,6 +2299,7 @@ export interface SessionOut {
   error?: string | null;
   id: string;
   pipeline_mode: "realtime" | "cascaded" | "half_cascade";
+  recording_status?: "none" | "requested" | "active" | "ready" | "failed";
   room_name: string;
   started_at?: string | null;
   status: "created" | "active" | "ended" | "failed";
@@ -2338,12 +2341,18 @@ export interface SessionQaIn {
 /**
  * ``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.
  *
+ * ``egress_id`` defaults to ``""`` (docs/v2/_asks.md V2-20-3): a recording
+ * that never started (``status="failed"`` from ``recording/start`` itself
+ * failing) has no egress id at all, and the route's mismatch guard only
+ * fires when the session already has a *different*, real one on file.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "SessionRecordingIn".
  */
 export interface SessionRecordingIn {
   duration_s?: number | null;
-  egress_id: string;
+  egress_id?: string;
+  error?: string | null;
   status: "none" | "requested" | "active" | "ready" | "failed";
 }
 /**

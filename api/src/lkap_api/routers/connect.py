@@ -37,16 +37,17 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from typing import Annotated
+from typing import Annotated, cast
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from lkap_contracts.agent_config import AgentLimits
 from lkap_contracts.api_models import ConnectRequest, ConnectResponse
 from lkap_contracts.common import SessionChannel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import webhooks
 from lkap_api.auth.audit import record
 from lkap_api.auth.deps import (
     OptionalPrincipalDep,
@@ -62,13 +63,16 @@ from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.service import mint_session_token
 from lkap_api.db.models import Agent, new_id
 from lkap_api.db.models import Session as SessionRow
+from lkap_api.db.session import Database
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, NotFoundError, UnprocessableEntityError
+from lkap_api.jobs.deps import JobsDep
 from lkap_api.limits import live_session_count as live_session_count
 from lkap_api.livekit_tokens import new_participant_identity, room_name_for
 from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
 from lkap_api.settings import Settings
+from lkap_api.webhooks import events as webhook_events
 
 log = get_logger(__name__)
 
@@ -76,6 +80,19 @@ router = APIRouter(prefix="/v1/agents", tags=["connect"])
 
 #: Upper bound on the JSON size of ``participant_metadata`` (F-13).
 MAX_PARTICIPANT_METADATA_BYTES = 2048
+
+
+def _process_database(request: Request) -> Database:
+    """The process-wide `Database` (as opposed to `DbDep`'s request-scoped session).
+
+    `webhooks.emit` opens its own session to write the first `webhook_deliveries`
+    row, so it needs this rather than the request's already-open `AsyncSession`
+    (same reason `routers/internal.py::put_summary` documents, ask #40).
+    """
+    return cast(Database, request.app.state.db)
+
+
+DatabaseDep = Annotated[Database, Depends(_process_database)]
 
 
 async def is_privileged(db: AsyncSession, principal: Principal | None, agent: Agent) -> bool:
@@ -147,8 +164,16 @@ async def connect(
     principal: OptionalPrincipalDep,
     limiter: RateLimiterDep,
     factory: ClientFactoryDep,
+    jobs: JobsDep,
+    database: DatabaseDep,
+    background_tasks: BackgroundTasks,
 ) -> ConnectResponse:
     """Mint a participant token that dispatches this platform's agent.
+
+    Emits `session.started` once the row is committed (docs/v2/_asks.md
+    V2-20-1) — `webhooks.emit` opens its own connection, so it runs after an
+    explicit early `db.commit()` for the same "don't deadlock SQLite" reason
+    `routers/internal.py::put_summary` documents (ask #40).
 
     Raises:
         ForbiddenError: Unpublished/archived agent for an unprivileged caller, or
@@ -238,6 +263,21 @@ async def connect(
         room_name=room_name,
         pipeline_mode=config.pipeline.mode,
         channel=channel,
+    )
+    workspace_id = agent.workspace_id
+    await db.commit()
+    await webhooks.emit(
+        database,
+        jobs,
+        workspace_id=workspace_id,
+        event_type=webhook_events.SESSION_STARTED,
+        data={
+            "session_id": session_id,
+            "agent_id": agent.id,
+            "channel": channel,
+            "connection_id": minted.connection_id,
+        },
+        background_tasks=background_tasks,
     )
     public_agent = to_public(agent, settings)
     return ConnectResponse(

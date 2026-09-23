@@ -55,6 +55,23 @@ def configure_logging(*, level: str = "INFO", json_output: bool = False) -> None
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
     root_logger.setLevel(log_level)
+    # V2-21: httpx/httpcore log every request url at INFO/DEBUG, and a tool url can
+    # carry a substituted `{{ secret.NAME }}`; keep only their warnings.
+    quiet_http_client_loggers()
+
+
+#: Third-party loggers that print full request urls (query strings included).
+HTTP_CLIENT_LOGGERS: tuple[str, ...] = ("httpx", "httpcore", "hpack")
+
+
+def quiet_http_client_loggers() -> None:
+    """Raise the HTTP client libraries' loggers to WARNING, whatever the root level.
+
+    Their INFO/DEBUG lines contain the full url, which is where a secret sits
+    when a tool template substitutes one into a query string (V2-21).
+    """
+    for name in HTTP_CLIENT_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

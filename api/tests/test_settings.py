@@ -67,3 +67,28 @@ def test_bootstrap_credentials_json_validated_eagerly(monkeypatch: pytest.Monkey
             get_settings()
     finally:
         get_settings.cache_clear()
+
+
+# --------------------------------------------------------- V2-20-2: worker callback url
+def test_worker_callback_url_falls_back_to_a_loopback_guess_from_port(settings: Settings) -> None:
+    settings.api_base_url = None
+    settings.public_base_url = None
+    settings.port = 8096
+    assert settings.worker_callback_base_url == "http://127.0.0.1:8096"
+    assert settings.worker_callback_url_is_derived is True
+
+
+def test_worker_callback_url_prefers_public_base_url_over_the_port_guess(settings: Settings) -> None:
+    settings.api_base_url = None
+    settings.public_base_url = "https://api.example.com/"
+    settings.port = 8096
+    assert settings.worker_callback_base_url == "https://api.example.com"
+    assert settings.worker_callback_url_is_derived is False
+
+
+def test_worker_callback_url_prefers_the_explicit_setting_over_everything(settings: Settings) -> None:
+    settings.api_base_url = "http://127.0.0.1:8096/"
+    settings.public_base_url = "https://api.example.com"
+    settings.port = 8080  # deliberately wrong/mismatched, to prove it's never consulted
+    assert settings.worker_callback_base_url == "http://127.0.0.1:8096"
+    assert settings.worker_callback_url_is_derived is False

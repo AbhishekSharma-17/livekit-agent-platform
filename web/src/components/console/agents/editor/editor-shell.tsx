@@ -35,6 +35,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { GatedButton } from "@/components/shared/gated-button";
 import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
@@ -114,6 +116,7 @@ export function EditorShell({
   const [summaryOpen, setSummaryOpen] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const { canWrite } = useWriteAccess();
 
   React.useLayoutEffect(() => {
     const node = headerRef.current;
@@ -185,9 +188,9 @@ export function EditorShell({
               onValidated={onValidated}
               goToFirstIssue={goToFirstIssue}
             />
-            <Button type="submit" disabled={!dirty || saving}>
+            <GatedButton type="submit" allowed={canWrite} reason={writeAccessReason()} disabled={!dirty || saving}>
               {saving ? "Saving…" : "Save"}
-            </Button>
+            </GatedButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="ghost" size="icon" aria-label="More agent actions">
@@ -195,7 +198,11 @@ export function EditorShell({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!canWrite}
+                  onSelect={() => setConfirmDelete(true)}
+                >
                   <Icon as={Trash2Icon} size="md" />
                   Delete agent
                 </DropdownMenuItem>

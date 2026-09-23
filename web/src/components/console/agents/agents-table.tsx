@@ -31,10 +31,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EmptyState, Icon, RelativeTime, ResponsiveTable, StatusChip, VendorMark } from "@/components/shared";
+import { EmptyState, GatedButton, Icon, RelativeTime, ResponsiveTable, StatusChip, VendorMark } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { useAgents, useDeleteAgent, usePacks, useProviders, useUpdateAgent } from "@/components/console/lib/api-hooks";
 import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
 
@@ -113,6 +114,8 @@ export function AgentsTable() {
   const providersQuery = useProviders();
   const packsQuery = usePacks();
   const deleteAgent = useDeleteAgent();
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
 
   const [q, setQ] = useQueryParamState("q");
   const [status, setStatus] = useQueryParamState("status");
@@ -167,9 +170,15 @@ export function AgentsTable() {
         title="No agents yet"
         description="An agent is a voice or video assistant with its own providers, instructions and tools."
         action={
-          <Button asChild>
-            <Link href="/console/agents/new">New agent</Link>
-          </Button>
+          canWrite ? (
+            <Button asChild>
+              <Link href="/console/agents/new">New agent</Link>
+            </Button>
+          ) : (
+            <GatedButton allowed={false} reason={writeReason}>
+              New agent
+            </GatedButton>
+          )
         }
       />
     );
@@ -381,6 +390,7 @@ function AgentRowMenu({
 }) {
   const updateAgent = useUpdateAgent(agent.id);
   const [confirmAction, setConfirmAction] = React.useState<RowConfirmAction>(null);
+  const { canWrite } = useWriteAccess();
 
   async function togglePublished() {
     const next = !agent.published;
@@ -438,10 +448,14 @@ function AgentRowMenu({
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => setConfirmAction("toggle-publish")}>
+          <DropdownMenuItem disabled={!canWrite} onSelect={() => setConfirmAction("toggle-publish")}>
             {agent.published ? "Unpublish" : "Publish"}
           </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmAction("delete")}>
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={!canWrite}
+            onSelect={() => setConfirmAction("delete")}
+          >
             Delete <Icon as={TrashIcon} size="sm" className="ml-auto" />
           </DropdownMenuItem>
         </DropdownMenuContent>

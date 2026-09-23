@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpcore
 import httpx
 import pytest
 import respx
 from livekit.agents import ToolError
 
 from lkap_agent.tools._http_safety import (
+    GuardedNetworkBackend,
+    GuardedTransport,
     HttpToolSecurityError,
     check_url_allowed,
     effective_allowlist,
@@ -96,3 +99,76 @@ async def test_builtin_http_request_to_a_private_address_is_refused_even_if_allo
     with pytest.raises(ToolError, match="private or local"):
         await tool(context=run_ctx, method="GET", url="http://10.0.0.1/status")
     assert not route.called
+
+
+# ------------------------------------------------ V2-21: resolve-and-pin transport
+class _RecordingBackend(httpcore.AsyncNetworkBackend):
+    """Stands in for httpcore's socket backend; records where a connection would go."""
+
+    def __init__(self) -> None:
+        self.connected: list[tuple[str, int]] = []
+
+    async def connect_tcp(self, host: str, port: int, **_: Any) -> httpcore.AsyncNetworkStream:
+        self.connected.append((host, port))
+        raise httpcore.ConnectError("recorded, not connected")
+
+    async def sleep(self, seconds: float) -> None:  # pragma: no cover - unused
+        return None
+
+
+def _resolver(answers: dict[str, list[str]]) -> Any:
+    async def resolve(host: str, port: int) -> list[str]:
+        return answers[host]
+
+    return resolve
+
+
+@pytest.mark.parametrize(
+    "answers",
+    [
+        ["169.254.169.254"],  # a public-looking name that points at cloud metadata
+        ["93.184.216.34", "10.0.0.5"],  # one inward answer poisons the whole name
+        ["::ffff:127.0.0.1"],  # IPv4-mapped loopback
+        ["fd00:ec2::254"],
+    ],
+)
+async def test_guarded_backend_refuses_names_that_resolve_inward(answers: list[str]) -> None:
+    inner = _RecordingBackend()
+    backend = GuardedNetworkBackend(resolve=_resolver({"rebind.example": answers}), inner=inner)
+
+    with pytest.raises(httpcore.ConnectError, match="private or local"):
+        await backend.connect_tcp("rebind.example", 443)
+
+    assert inner.connected == []
+
+
+async def test_guarded_backend_connects_to_the_checked_address_not_the_name() -> None:
+    inner = _RecordingBackend()
+    backend = GuardedNetworkBackend(resolve=_resolver({"api.example": ["93.184.216.34"]}), inner=inner)
+
+    with pytest.raises(httpcore.ConnectError, match="recorded"):
+        await backend.connect_tcp("api.example", 443)
+
+    assert inner.connected == [("93.184.216.34", 443)]
+
+
+async def test_guarded_transport_turns_a_rebound_name_into_a_tool_error() -> None:
+    client = httpx.AsyncClient(
+        transport=GuardedTransport(
+            resolve=_resolver({"allowed.example": ["127.0.0.1"]}), inner=_RecordingBackend()
+        )
+    )
+
+    with pytest.raises(httpx.ConnectError, match="private or local"):
+        await client.get("http://allowed.example/status")
+    await client.aclose()
+
+
+def test_tool_clients_are_built_with_the_guarded_transport() -> None:
+    import inspect
+
+    from lkap_agent.tools import declarative
+    from lkap_agent.tools.builtin import http_request
+
+    for module in (declarative, http_request):
+        assert "transport=guarded_transport()" in inspect.getsource(module), module.__name__

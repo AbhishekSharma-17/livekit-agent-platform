@@ -68,7 +68,12 @@ def schedule_finalize_job(db: AsyncSession, session_id: str) -> None:
 
 
 async def apply_egress_result(
-    db: AsyncSession, session: SessionRow, *, status: str, duration_s: float | None
+    db: AsyncSession,
+    session: SessionRow,
+    *,
+    status: str,
+    duration_s: float | None,
+    error: str | None = None,
 ) -> None:
     """Update a session's recording state and, once `ready`, its egress cost line.
 
@@ -76,8 +81,15 @@ async def apply_egress_result(
     after deciding whether this call actually changed anything (idempotency
     lives in the callers: the webhook path always calls this, the worker's
     best-effort report may repeat it after a network retry).
+
+    Args:
+        error: Why the recording failed, when `status == "failed"`
+            (docs/v2/_asks.md V2-20-3). Cleared on any other status so a
+            stale reason from an earlier failed attempt never lingers on a
+            since-recovered recording.
     """
     session.recording_status = status
+    session.recording_error = error if status == "failed" else None
     if duration_s is not None:
         session.recording_duration_s = duration_s
     if status == "ready":

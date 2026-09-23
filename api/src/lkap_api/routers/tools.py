@@ -19,11 +19,13 @@ from pydantic import TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
+from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import host_allowed, render_arguments, resolve_tool_definition
 from lkap_api.db.models import Agent, Credential, Tool, utcnow
-from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, VaultDep
-from lkap_api.errors import BadRequestError, NotFoundError, UnprocessableEntityError
+from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
+from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
 from lkap_api.vault import Vault
 
@@ -79,6 +81,12 @@ async def _load(db: AsyncSession, ctx: WorkspaceContext, tool_id: str) -> Tool:
     return row
 
 
+#: Binding a secret to a tool is credential management (V2-21).
+_BIND_CREDENTIAL = Requirement("admin", "providers:write")  # the /v1/credentials write rule
+#: The only credential kind a tool may reference (a secret bag made for tools).
+TOOL_SECRET_PROVIDER = "http-tool-secret"
+
+
 async def _workspace_credential(db: AsyncSession, workspace_id: str, credential_id: str) -> Credential | None:
     """A credential of the given workspace, or ``None``."""
     stmt = select(Credential).where(Credential.id == credential_id, Credential.workspace_id == workspace_id)
@@ -109,9 +117,24 @@ async def _check_payload(db: AsyncSession, vault: Vault, ctx: WorkspaceContext, 
     credential_id = payload.definition.credential_id
     credential: Credential | None = None
     if credential_id is not None:
+        # V2-21: a tool decides where its secrets are sent (url, headers, body), so
+        # binding one is credential management (the /v1/credentials write rule),
+        # never a builder, who could otherwise send an admin-held key to a host they own.
+        if not ctx.allows(_BIND_CREDENTIAL):
+            raise ForbiddenError(
+                "attaching a credential to a tool needs the 'admin' role (and the "
+                "'providers:write' scope for API keys): the tool decides where the secret is sent",
+                details={"required_role": _BIND_CREDENTIAL.role, "required_scope": _BIND_CREDENTIAL.scope},
+            )
         credential = await _workspace_credential(db, ctx.workspace_id, credential_id)
         if credential is None:
             raise UnprocessableEntityError(f"unknown credential '{credential_id}'")
+        if credential.provider_id != TOOL_SECRET_PROVIDER:
+            raise UnprocessableEntityError(
+                f"a tool may only use '{TOOL_SECRET_PROVIDER}' credentials, not a provider key "
+                f"('{credential.provider_id}')",
+                details={"credential_id": credential_id, "provider_id": credential.provider_id},
+            )
     referenced = _referenced_secret_names(payload.definition)
     if referenced:
         if credential is None:
@@ -279,6 +302,7 @@ async def dry_run_tool(
     db: DbDep,
     vault: VaultDep,
     client: HttpClientDep,
+    settings: SettingsDep,
     ctx: AdminCtxDep,
 ) -> ToolDryRunResult:
     """Run an HTTP tool once and report what the model would have seen."""
@@ -286,6 +310,9 @@ async def dry_run_tool(
     definition = await _resolved_http_definition(db, vault, row)
 
     url = render_arguments(definition.url, payload.arguments, url_encode=True)
+    # V2-21: the dry run reads the response back to the caller, so it must never
+    # reach a private, loopback or metadata address, allowlisted or not.
+    net_guard.validate_url(url, net_guard.policy_from_settings(settings), field_name="definition.url")
     if not host_allowed(url, allowed_hosts=definition.allowed_hosts):
         raise BadRequestError(
             "the request host is not in the tool's allowed_hosts — add it "
@@ -317,9 +344,10 @@ async def dry_run_tool(
     except httpx.HTTPError as exc:
         duration_ms = int((time.perf_counter() - started) * 1000)
         log.warning("tool_dry_run_failed", tool_id=tool_id, error_type=type(exc).__name__)
+        blocked = net_guard.blocked_cause(exc)
         return ToolDryRunResult(
             ok=False,
-            result=f"request failed: {type(exc).__name__}",
+            result=f"request failed: {blocked if blocked is not None else type(exc).__name__}",
             status_code=None,
             duration_ms=duration_ms,
         )

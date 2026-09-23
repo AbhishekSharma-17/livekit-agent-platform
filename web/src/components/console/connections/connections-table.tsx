@@ -22,7 +22,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EmptyState, Icon, ResponsiveTable, StatusChip } from "@/components/shared";
+import { EmptyState, Icon, NewResourceButton, ResponsiveTable, StatusChip } from "@/components/shared";
+import { useWriteAccess } from "@/components/console/lib/roles";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import {
   connectionStatusLabel,
@@ -78,9 +79,9 @@ export function ConnectionsTable() {
         title="No connections yet"
         description="A connection is a LiveKit Cloud project or self-hosted server your agents run on."
         action={
-          <Button asChild>
-            <Link href="/console/connections/new">New connection</Link>
-          </Button>
+          <NewResourceButton href="/console/connections/new" min="admin">
+            New connection
+          </NewResourceButton>
         }
       />
     );
@@ -204,6 +205,9 @@ function ConnectionRowMenu({ connection }: { connection: ConnectionOut }) {
   const setDefault = useSetDefaultConnection();
   const deleteConnection = useDeleteConnection();
   const [confirmAction, setConfirmAction] = React.useState<RowConfirmAction>(null);
+  // Connections need `admin` server-side (`auth/roles.py::ROUTE_POLICY`), a
+  // stricter floor than the `builder` default everywhere else.
+  const { canWrite } = useWriteAccess("admin");
 
   async function runTest() {
     try {
@@ -250,15 +254,22 @@ function ConnectionRowMenu({ connection }: { connection: ConnectionOut }) {
             {testConnection.isPending ? "Testing…" : "Test"}
           </DropdownMenuItem>
           {!connection.is_default ? (
-            <DropdownMenuItem onSelect={() => void makeDefault()} disabled={setDefault.isPending}>
+            <DropdownMenuItem
+              disabled={!canWrite || setDefault.isPending}
+              onSelect={() => void makeDefault()}
+            >
               Make default
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem disabled={!canWrite} asChild>
             <Link href={`/console/connections/${connection.id}?tab=overview#rotate`}>Rotate keys</Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmAction("delete")}>
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={!canWrite}
+            onSelect={() => setConfirmAction("delete")}
+          >
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

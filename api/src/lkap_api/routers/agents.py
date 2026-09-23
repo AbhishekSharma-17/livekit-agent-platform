@@ -15,6 +15,7 @@ import unicodedata
 from typing import Any
 
 from fastapi import APIRouter, Query, Response, status
+from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.api_models import (
     AgentCreate,
@@ -27,7 +28,7 @@ from lkap_contracts.api_models import (
     Page,
     ValidationResult,
 )
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,11 +64,28 @@ _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 _READ = Requirement("viewer", "agents:read")
 
 
+#: The shape of a row id (``uuid4().hex``); no slug may take it (V2-21).
+_ID_SHAPED = re.compile(r"^[0-9a-f]{32}$")
+
+
 def slugify(name: str) -> str:
-    """Return a url-safe slug for an agent name (never empty)."""
+    """Return a url-safe slug for an agent name (never empty, never id-shaped).
+
+    Routes accept an id *or* a slug, so a slug equal to another agent's id
+    would make that id resolve to the wrong agent (V2-21: an agent named after
+    a foreign agent's id read the foreign config history). Such a name gets an
+    ``agent-`` prefix.
+    """
     ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     slug = _SLUG_STRIP.sub("-", ascii_name.lower()).strip("-")
+    if _ID_SHAPED.match(slug):
+        slug = f"agent-{slug}"
     return slug or "agent"
+
+
+def by_id_first(id_or_slug: str) -> Any:
+    """``ORDER BY`` that ranks an exact id match above a slug match (V2-21)."""
+    return case((Agent.id == id_or_slug, 0), else_=1)
 
 
 async def unique_slug(db: AsyncSession, base: str) -> str:
@@ -212,6 +230,8 @@ async def load_agent(db: AsyncSession, id_or_slug: str) -> Agent:
         await db.execute(
             select(Agent)
             .where(or_(Agent.id == id_or_slug, Agent.slug == id_or_slug))
+            .order_by(by_id_first(id_or_slug))
+            .limit(1)
             .execution_options(**{CROSS_WORKSPACE_OPTION: True})
         )
     ).scalar_one_or_none()
@@ -228,10 +248,13 @@ async def load_scoped_agent(db: AsyncSession, ctx: WorkspaceContext, id_or_slug:
     """
     row = (
         await db.execute(
-            select(Agent).where(
+            select(Agent)
+            .where(
                 Agent.workspace_id == ctx.workspace_id,
                 or_(Agent.id == id_or_slug, Agent.slug == id_or_slug),
             )
+            .order_by(by_id_first(id_or_slug))
+            .limit(1)
         )
     ).scalar_one_or_none()
     if row is None:
@@ -324,6 +347,73 @@ async def _seed_config(
     return config, manifest.ui_panel_id
 
 
+#: ``ProviderRef.fields`` names that choose where a provider's traffic goes.
+_ENDPOINT_FIELD = re.compile(r"(url|endpoint|host|api_base)$", re.IGNORECASE)
+#: Pointing a provider at a new endpoint is credential management (V2-21).
+_SET_ENDPOINT = Requirement("admin", "providers:write")
+
+
+def _field_defaults(provider_id: str) -> dict[str, Any]:
+    try:
+        spec = provider_registry.get(provider_id)
+    except KeyError:
+        return {}
+    return {field.name: field.default for field in spec.fields if field.default is not None}
+
+
+def endpoint_overrides(config: Any) -> set[tuple[str, str, str]]:
+    """Every ``(provider_id, field, value)`` endpoint override in a config document.
+
+    Walks the whole document (pipeline slots, ``qa.model``, flow nodes …) for
+    provider references (``{"provider_id": …, "fields": {…}}``) and collects
+    the fields whose name ends in ``url``, ``endpoint``, ``host`` or ``api_base``.
+    """
+    found: set[tuple[str, str, str]] = set()
+    stack: list[Any] = [config]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            fields = node.get("fields")
+            if isinstance(node.get("provider_id"), str) and isinstance(fields, dict):
+                provider_id = str(node["provider_id"])
+                defaults = _field_defaults(provider_id)
+                for name, value in fields.items():
+                    if not _ENDPOINT_FIELD.search(str(name)) or value in (None, ""):
+                        continue
+                    if defaults.get(str(name)) == value:
+                        continue  # the registry's own default is not an override
+                    found.add((provider_id, str(name), str(value)))
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return found
+
+
+def check_endpoint_overrides(ctx: WorkspaceContext, old: Any, new: Any) -> None:
+    """Refuse a builder who adds or changes a provider endpoint override (V2-21).
+
+    A provider's endpoint receives its API key (the bound credential, or the
+    worker's own environment key when none is bound), so a builder who could
+    set ``base_url`` could send an admin-held key to a host they own. Keeping
+    an override that is already there, or removing one, stays a builder's job.
+
+    Raises:
+        ForbiddenError: The caller is below ``admin`` (or an API key without
+            ``providers:write``) and the new config has an override the old one lacked.
+    """
+    added = endpoint_overrides(new) - endpoint_overrides(old)
+    if added and not ctx.allows(_SET_ENDPOINT):
+        raise ForbiddenError(
+            "setting a provider endpoint (base_url and similar fields) needs the 'admin' role "
+            "(and the 'providers:write' scope for API keys): the endpoint receives the provider's key",
+            details={
+                "fields": sorted({f"{provider}.{field}" for provider, field, _ in added}),
+                "required_role": _SET_ENDPOINT.role,
+                "required_scope": _SET_ENDPOINT.scope,
+            },
+        )
+
+
 def _raise_if_invalid(result: ValidationResult) -> None:
     if not result.ok:
         raise UnprocessableEntityError(
@@ -382,6 +472,7 @@ async def create_agent(
         )
     else:
         config = payload.config
+        check_endpoint_overrides(ctx, {}, config.model_dump(mode="json"))
         manifest = get_manifest(settings.packs_list, payload.pack_id)
         panel_id = manifest.ui_panel_id if manifest else "generic"
     _raise_if_invalid(
@@ -513,6 +604,7 @@ async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: Admi
     if payload.ui_panel_id is not None:
         row.ui_panel_id = payload.ui_panel_id
     if payload.config is not None:
+        check_endpoint_overrides(ctx, row.config, payload.config.model_dump(mode="json"))
         _raise_if_invalid(
             await validate_stored_config(
                 db,
@@ -627,10 +719,11 @@ async def list_versions(
     offset: int = Query(default=0, ge=0),
 ) -> Page[ConfigVersionOut]:
     """Return a page of an agent's `agent_config_versions`, without their full `config` bodies."""
-    await load_scoped_agent(db, ctx, agent_id)
-    stmt = select(AgentConfigVersion).where(AgentConfigVersion.agent_id == agent_id)
+    # Always the loaded row's id, never the raw path value (which may be a slug).
+    agent = await load_scoped_agent(db, ctx, agent_id)
+    stmt = select(AgentConfigVersion).where(AgentConfigVersion.agent_id == agent.id)
     count_stmt = (
-        select(func.count()).select_from(AgentConfigVersion).where(AgentConfigVersion.agent_id == agent_id)
+        select(func.count()).select_from(AgentConfigVersion).where(AgentConfigVersion.agent_id == agent.id)
     )
     rows = (
         (
@@ -675,8 +768,8 @@ async def _load_version(db: AsyncSession, agent_id: str, config_version: int) ->
 )
 async def get_version(agent_id: str, config_version: int, db: DbDep, ctx: AdminCtxDep) -> ConfigVersionOut:
     """Return one version, with its full `config`."""
-    await load_scoped_agent(db, ctx, agent_id)
-    row = await _load_version(db, agent_id, config_version)
+    agent = await load_scoped_agent(db, ctx, agent_id)
+    row = await _load_version(db, agent.id, config_version)
     return ConfigVersionOut(
         config_version=row.config_version,
         created_at=row.created_at,
@@ -701,8 +794,9 @@ async def restore_version(agent_id: str, config_version: int, db: DbDep, ctx: Ad
             credential or connection it referenced is gone).
     """
     row = await load_scoped_agent(db, ctx, agent_id)
-    version_row = await _load_version(db, agent_id, config_version)
+    version_row = await _load_version(db, row.id, config_version)
     restored = AgentConfig.model_validate(version_row.config)
+    check_endpoint_overrides(ctx, row.config, restored.model_dump(mode="json"))
     _raise_if_invalid(
         await validate_stored_config(
             db, restored, workspace_id=row.workspace_id, connection_id=row.connection_id, pack_id=row.pack_id

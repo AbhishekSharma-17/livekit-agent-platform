@@ -15,6 +15,18 @@
       "default": null,
       "title": "Duration S"
     },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
     "expires_at": {
       "anyOf": [
         {

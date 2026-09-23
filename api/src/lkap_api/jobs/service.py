@@ -31,6 +31,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 
+from lkap_api import net_guard
 from lkap_api.db.models import Job, utcnow
 from lkap_api.db.session import Database
 from lkap_api.jobs.context import JobContext
@@ -81,7 +82,11 @@ class JobsService:
         self._vault = vault
         self._jobs_settings = jobs_settings or get_jobs_settings()
         self._owns_http = http_client is None
-        self._http = http_client or httpx.AsyncClient(follow_redirects=False, timeout=15.0)
+        # V2-21: webhook deliveries and QA judge calls reach admin-supplied urls,
+        # so the default client refuses private and metadata addresses after DNS.
+        self._http = http_client or net_guard.guarded_http_client(
+            net_guard.policy_from_settings(settings), timeout=15.0
+        )
         self._arq_redis = arq_redis
         self._poll_task: asyncio.Task[None] | None = None
 

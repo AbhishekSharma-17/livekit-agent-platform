@@ -43,6 +43,7 @@ import type {
 } from "@/contracts/lkap-contracts";
 import { KNOWN_WEBHOOK_EVENTS, WEBHOOK_EVENT_LABEL, type WebhookEndpointCreated } from "./api-types";
 import { SkeletonRows } from "@/components/shared/loading-state";
+import { RequireWrite } from "@/components/shared/require-write";
 
 function useWebhooks() {
   return useQuery({
@@ -58,7 +59,22 @@ const DELIVERY_TONE: Record<NonNullable<WebhookDeliveryOut["status"]>, StatusTon
   dead: "danger",
 };
 
+/**
+ * `/v1/webhooks` needs `admin` server-side for both reads and writes
+ * (`auth/roles.py::ROUTE_POLICY`) — unlike every other settings tab, a
+ * builder can't even list endpoints here, so the gate wraps the whole tab
+ * rather than just its mutating buttons (docs/v2/_asks.md V2-20-5): no point
+ * mounting a query that only ever 403s.
+ */
 export function WebhooksTab() {
+  return (
+    <RequireWrite min="admin" title="Only admins and owners can see webhooks">
+      <WebhooksTabInner />
+    </RequireWrite>
+  );
+}
+
+function WebhooksTabInner() {
   const query = useWebhooks();
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["settings", "webhooks"] });

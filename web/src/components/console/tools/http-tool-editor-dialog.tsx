@@ -25,6 +25,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import type { HttpToolDefinition, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
@@ -118,6 +119,10 @@ export function HttpToolEditorDialog({
   const [errors, setErrors] = React.useState<DraftErrors>({});
   const createTool = useCreateTool();
   const updateTool = useUpdateTool();
+  // Binding a credential needs `admin` server-side (REVIEW-V2 R2-03,
+  // docs/v2/_asks.md V2-21-2) — stricter than the `builder` floor for the
+  // rest of the tool editor.
+  const { canWrite: canBindCredential } = useWriteAccess("admin");
 
   React.useEffect(() => {
     if (open) {
@@ -323,11 +328,17 @@ export function HttpToolEditorDialog({
                 />
               </Field>
               {secretBagSpec ? (
-                <CredentialPicker
-                  spec={secretBagSpec}
-                  value={draft.credential_id}
-                  onChange={(id) => setDraft((d) => ({ ...d, credential_id: id }))}
-                />
+                <div
+                  className={canBindCredential ? undefined : "pointer-events-none opacity-50"}
+                  aria-disabled={!canBindCredential}
+                  title={canBindCredential ? undefined : writeAccessReason("admin")}
+                >
+                  <CredentialPicker
+                    spec={secretBagSpec}
+                    value={draft.credential_id}
+                    onChange={(id) => setDraft((d) => ({ ...d, credential_id: id }))}
+                  />
+                </div>
               ) : null}
             </section>
 

@@ -8,8 +8,13 @@ another package while this follow-up landed.
 from __future__ import annotations
 
 import httpx
+import respx
 from lkap_contracts.agent_config import ResolvedAgentConfig
+from sqlalchemy import select
 from test_internal import API_KEY, _credential, _openai_config, _session_for
+
+from lkap_api.db.models import WebhookDelivery
+from lkap_api.db.session import Database
 
 
 async def test_put_qa_requires_the_service_token(admin_client: httpx.AsyncClient) -> None:
@@ -92,6 +97,55 @@ async def test_put_qa_upserts_a_second_report(
     detail = await admin_client.get(f"/v1/sessions/{session_id}")
     assert detail.json()["qa"]["status"] == "done"
     assert detail.json()["qa"]["score"] == 5
+
+
+# --------------------------------------------------------------------------- V2-20-1: session.qa_completed
+async def test_put_qa_emits_session_qa_completed(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    created = await admin_client.post(
+        "/v1/webhooks",
+        json={"url": "https://hooks.example.com/qa-worker", "events": ["session.qa_completed"]},
+    )
+    assert created.status_code == 201, created.text
+    session_id, _ = await _session_for(admin_client)
+
+    with respx.mock:
+        respx.post("https://hooks.example.com/qa-worker").mock(return_value=httpx.Response(200))
+        response = await service_client.put(
+            f"/internal/v1/sessions/{session_id}/qa",
+            json={"status": "done", "score": 9, "sentiment": "positive"},
+        )
+    assert response.status_code == 204
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    (delivery,) = [d for d in deliveries if d.event_type == "session.qa_completed"]
+    assert delivery.payload["data"]["session_id"] == session_id
+    assert delivery.payload["data"]["score"] == 9
+    assert delivery.payload["data"]["scored_by"] == "worker"
+
+
+async def test_put_qa_skipped_still_emits_session_qa_completed(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    created = await admin_client.post(
+        "/v1/webhooks", json={"url": "https://hooks.example.com/qa-skip", "events": []}
+    )
+    assert created.status_code == 201, created.text
+    session_id, _ = await _session_for(admin_client)
+
+    with respx.mock:
+        respx.post("https://hooks.example.com/qa-skip").mock(return_value=httpx.Response(200))
+        response = await service_client.put(
+            f"/internal/v1/sessions/{session_id}/qa", json={"status": "skipped"}
+        )
+    assert response.status_code == 204
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    (delivery,) = [d for d in deliveries if d.event_type == "session.qa_completed"]
+    assert delivery.payload["data"]["status"] == "skipped"
 
 
 # --------------------------------------------------------------------------- qa_llm resolve slot (R-V2-6)

@@ -202,7 +202,7 @@ It dumps Postgres (when configured) and tars `LKAP_DATA_DIR` (local storage, Lan
 
 | Secret | How to rotate | Effect |
 |---|---|---|
-| `LKAP_MASTER_KEY` | Back up the DB, then stop the api. Run `cd api && uv run python -m lkap_api.keys rotate --old <old> --new <new>`, which re-encrypts every `*_ct` column in one transaction. Then set the new key in the launch config and start. | Nothing, if done in that order. Outstanding invites die when `LKAP_SESSION_SECRET` is unset. |
+| `LKAP_MASTER_KEY` | Back up the DB, then stop the api. Put both keys in the environment, not on the command line (argv is visible in `ps`): `LKAP_OLD_MASTER_KEY` and `LKAP_NEW_MASTER_KEY`, then run `cd api && uv run python -m lkap_api.keys rotate`, which re-encrypts every `*_ct` column in one transaction. Then set the new key in the launch config and start. | Nothing, if done in that order. Outstanding invites die when `LKAP_SESSION_SECRET` is unset. |
 | A connection's LiveKit key/secret | Console: connection → **Rotate**, then **Test**. The status reads `unverified` until the test passes. | Supervised pools drain and restart automatically, because `credentials_version` is part of the desired hash. Restart external workers with the new env. |
 | Provider credentials | Console → Keys (`/console/keys`) → edit | The next session uses them. There is no worker restart (config is fetched per job). |
 | `LKAP_SERVICE_TOKEN` | Change it on the api, the supervisor and every worker at once, then restart them. For Cloud-hosted pools, update `secrets.env` and redeploy. | Workers that still hold the old token cannot register or fetch config. |

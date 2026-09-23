@@ -518,6 +518,29 @@ async def test_transfer_call_tool_failure_keeps_call_and_tells_model() -> None:
     assert ended == []
 
 
+async def test_transfer_call_tool_policy_refusal_tells_model_and_keeps_call() -> None:
+    """V2-21 / R-V2-23: an off-list target the api refuses never ends the call."""
+    refusal = "destination not allowed by the dialing policy"
+    api = FakeApi(transfer_result=InternalTransferOut(ok=False, status="refused", reason=refusal))
+    session, ctx, _api, events = make_session(sip_room(caller()), api=api)
+    ended: list[str] = []
+    tool = build_telephony_tools(
+        session,
+        ctx,
+        disabled=[],
+        dtmf_enabled=False,
+        targets={"Premium": "+19005550100"},
+        shutdown=ended.append,
+    )[0]
+
+    result = await tool(context=run_ctx(), destination="Premium")
+
+    assert refusal in result
+    assert ended == []
+    assert api.transfers == [("sess-1", "+19005550100", "sip_+15557654321")]
+    assert ("transfer", {"to": "+19005550100", "ok": False, "status": "refused", "reason": refusal}) in events
+
+
 # ------------------------------------------------------------------ assembly wiring
 @dataclass
 class _Resolved:

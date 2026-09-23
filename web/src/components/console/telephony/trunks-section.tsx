@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { ConnectionOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 import { useCreateTrunk, useDeleteTrunk, useSyncTrunk, useTrunks } from "./hooks";
@@ -94,7 +95,9 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
     },
   ];
 
-  const canCreate = connections.some(sipEnabled);
+  // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
+  const { canWrite } = useWriteAccess("admin");
+  const canCreate = canWrite && connections.some(sipEnabled);
 
   return (
     <Section
@@ -102,7 +105,13 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
       title="SIP trunks"
       description="Connect a carrier (Twilio, Telnyx, any SIP provider) to a LiveKit connection."
       aside={
-        <Button type="button" size="sm" onClick={() => setCreating(true)} disabled={!canCreate}>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setCreating(true)}
+          disabled={!canCreate}
+          title={canWrite ? undefined : writeAccessReason("admin")}
+        >
           <Icon as={PlusIcon} size="sm" />
           Add trunk
         </Button>
@@ -154,6 +163,7 @@ function TrunkRowMenu({ trunk }: { trunk: TrunkOut }) {
   const sync = useSyncTrunk();
   const remove = useDeleteTrunk();
   const [confirming, setConfirming] = React.useState(false);
+  const { canWrite } = useWriteAccess("admin");
 
   return (
     <>
@@ -165,6 +175,7 @@ function TrunkRowMenu({ trunk }: { trunk: TrunkOut }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
+            disabled={!canWrite}
             onSelect={() =>
               sync.mutate(trunk.id, {
                 onSuccess: () => toast.success(`${trunk.name} re-created on LiveKit`),
@@ -175,7 +186,7 @@ function TrunkRowMenu({ trunk }: { trunk: TrunkOut }) {
             <Icon as={RefreshCwIcon} size="sm" />
             Re-sync to LiveKit
           </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
+          <DropdownMenuItem variant="destructive" disabled={!canWrite} onSelect={() => setConfirming(true)}>
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     database_url: str | None = None
     cors_origins: str = "http://localhost:3000"
     public_base_url: str | None = None
+    #: `LKAP_API_BASE_URL`: the explicit, authoritative address a worker should
+    #: call this api back on (docs/v2/_asks.md V2-20-2). Takes precedence over
+    #: everything else in :attr:`worker_callback_base_url` — including
+    #: `public_base_url`, which is meant for a *public* cloud/docker address,
+    #: not "this loopback, on whatever port I actually bound". Unset by
+    #: default so a misconfigured host never silently derives the wrong one.
+    api_base_url: str | None = None
     packs: str = "packs.insurance_claim,packs.generic"
     log_level: str = "INFO"
     log_json: bool = False
@@ -87,6 +94,10 @@ class Settings(BaseSettings):
     web_base_url: str | None = None
     redis_url: str | None = None
     rate_limit_enabled: bool = True
+    # --- V2-21 outbound network guard (lkap_api.net_guard) ---
+    #: Comma-separated host names / IPs / CIDRs exempt from the private-range
+    #: block. Unset: ``localhost,127.0.0.1,::1`` in dev, nothing in prod.
+    net_allow_private_hosts: str | None = None
     api_key_rate_per_min: int = Field(default=600, ge=1)
     login_rate_per_min: int = Field(default=10, ge=1)
 
@@ -134,6 +145,30 @@ class Settings(BaseSettings):
             if base not in origins:
                 origins.append(base)
         return origins
+
+    @property
+    def worker_callback_base_url(self) -> str:
+        """The api url a worker should call back (docs/v2/_asks.md V2-20-2).
+
+        Precedence: ``LKAP_API_BASE_URL`` (explicit, authoritative) →
+        ``LKAP_PUBLIC_BASE_URL`` (the cloud/docker case) → a loopback guess
+        built from ``PORT``. The last option is the one that bit V2-20: `PORT`
+        only reflects what uvicorn was *told* to bind, not what it actually
+        bound, so a host running more than one api process (or one started
+        with `--port` and no matching `PORT`) gets a wrong guess here — see
+        :attr:`worker_callback_url_is_derived`, logged loudly at startup by
+        ``lkap_api.main`` for exactly this reason.
+        """
+        if self.api_base_url:
+            return self.api_base_url.rstrip("/")
+        if self.public_base_url:
+            return self.public_base_url.rstrip("/")
+        return f"http://127.0.0.1:{self.port}"
+
+    @property
+    def worker_callback_url_is_derived(self) -> bool:
+        """Whether :attr:`worker_callback_base_url` is a `PORT`-based guess, not an explicit setting."""
+        return not self.api_base_url and not self.public_base_url
 
     @field_validator("bootstrap_credentials_json")
     @classmethod

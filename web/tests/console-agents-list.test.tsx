@@ -74,7 +74,7 @@ const PACKS: PacksResponse = {
   ],
 };
 
-function stubFetch(agents: AgentOut[]) {
+function stubFetch(agents: AgentOut[], role: "owner" | "admin" | "builder" | "viewer" = "admin") {
   const page: AgentPage = { items: agents, total: agents.length };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -97,16 +97,26 @@ function stubFetch(agents: AgentOut[]) {
     if (url.startsWith("/api/console/packs")) {
       return { ok: true, status: 200, json: async () => PACKS } as Response;
     }
+    if (url.startsWith("/api/console/auth/me")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: { id: "u1", email: "admin@example.test" },
+          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role }],
+        }),
+      } as Response;
+    }
     throw new Error(`Unhandled fetch: ${method} ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
-function renderTable(agents: AgentOut[]) {
+function renderTable(agents: AgentOut[], role: "owner" | "admin" | "builder" | "viewer" = "admin") {
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const fetchMock = stubFetch(agents);
+  const fetchMock = stubFetch(agents, role);
   const view = render(
     <QueryClientProvider client={client}>
       <AgentsTable />
@@ -229,4 +239,22 @@ describe("AgentsTable", () => {
     const link = screen.getByRole("link", { name: "New agent" });
     expect(link.getAttribute("href")).toBe("/console/agents/new");
   });
+
+  // ------------------------------------------------------- V2-20-5: viewer gating
+  it("replaces the New agent link with a disabled button for a viewer", async () => {
+    renderTable([], "viewer");
+    await screen.findByText("No agents yet");
+    // `builder`+ is required (auth/roles.py::ROUTE_POLICY "/v1/agents" write);
+    // a viewer never even sees the create form's `Link`, just a disabled
+    // button (docs/v2/_asks.md V2-20-5 — a `<Link>` can't be `disabled`).
+    const button = await screen.findByRole("button", { name: "New agent" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("link", { name: "New agent" })).toBeNull();
+  });
+
+  // The row menu's Publish/Delete items are also gated (`disabled={!canWrite}`
+  // in `AgentRowMenu`), but opening this specific Radix `DropdownMenu` in
+  // jsdom hangs the test process (see the documented limitation above on
+  // "renders a row actions trigger…") — not exercised here for the same
+  // environment reason.
 });

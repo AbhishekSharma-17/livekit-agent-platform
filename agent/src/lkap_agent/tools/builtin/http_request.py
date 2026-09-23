@@ -17,7 +17,12 @@ import httpx
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from packs.base import PackSessionContext
 
-from lkap_agent.tools._http_safety import HttpToolSecurityError, check_url_allowed, truncate
+from lkap_agent.tools._http_safety import (
+    HttpToolSecurityError,
+    check_url_allowed,
+    guarded_transport,
+    truncate,
+)
 
 HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
 
@@ -56,7 +61,9 @@ def build_http_request_tool(
             raise ToolError(str(exc)) from exc
 
         try:
-            async with httpx.AsyncClient(follow_redirects=False, timeout=DEFAULT_TIMEOUT_S) as client:
+            async with httpx.AsyncClient(
+                follow_redirects=False, timeout=DEFAULT_TIMEOUT_S, transport=guarded_transport()
+            ) as client:
                 response = await client.request(method, url, content=body)
         except httpx.HTTPError as exc:
             raise ToolError(f"HTTP request failed: {exc}") from exc

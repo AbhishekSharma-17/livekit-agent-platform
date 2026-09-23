@@ -25,6 +25,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
+
 # Side-effecting imports: ensure this wave's other job handlers are registered
 # as soon as any request touches the api (main.py always includes this
 # router). Neither package's own router is wired into `main.py` yet in this
@@ -71,18 +73,22 @@ def _check_url(settings: Settings, url: str) -> None:
     """Enforce `WebhookEndpointCreate`'s own contract: "https only outside dev".
 
     Args:
-        settings: Used only for `settings.env`.
+        settings: `settings.env` and the network guard's allowlist.
         url: The endpoint URL an admin is trying to save.
 
     Raises:
         UnprocessableEntityError: If the scheme is not `https` (or `http` in
-            `LKAP_ENV=dev`, matching `scripts/webhook_sink.py`'s local listener).
+            `LKAP_ENV=dev`, matching `scripts/webhook_sink.py`'s local listener),
+            or the host is a private, loopback or metadata address (`net_guard`).
     """
     allowed = ("https://",) if settings.env != "dev" else ("https://", "http://")
     if not url.startswith(allowed):
         raise UnprocessableEntityError(
             f"webhook url must start with {' or '.join(allowed)}", details={"url": url}
         )
+    # V2-21: no private, loopback or metadata destination (checked again after DNS
+    # on every delivery by the jobs service's guarded client).
+    net_guard.validate_url(url, net_guard.policy_from_settings(settings), field_name="url")
 
 
 def _check_events(events: list[str]) -> None:

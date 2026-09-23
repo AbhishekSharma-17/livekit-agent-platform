@@ -27,9 +27,16 @@ function renderWithClient(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+/** Full write access by default: these tests predate role gating (V2-20-5) and assume it. */
+const ADMIN_ME = {
+  user: { id: "u1", email: "admin@example.test" },
+  workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+};
+
 function stubFetch(handler: (url: string, init?: RequestInit) => unknown) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/auth/me")) return { ok: true, status: 200, json: async () => ADMIN_ME } as Response;
     return { ok: true, status: 200, json: async () => handler(url, init) } as Response;
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -83,7 +90,10 @@ describe("ConnectionsTable", () => {
     stubFetch(() => ({ items: [], total: 0 }));
     renderWithClient(<ConnectionsTable />);
     expect(await screen.findByText("No connections yet")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "New connection" })).toBeTruthy();
+    // `canWrite` (docs/v2/_asks.md V2-20-5) resolves from a separate
+    // `auth/me` query — the link only replaces the disabled fallback button
+    // once it settles.
+    expect(await screen.findByRole("link", { name: "New connection" })).toBeTruthy();
   });
 });
 

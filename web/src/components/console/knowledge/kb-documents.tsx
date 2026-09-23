@@ -13,6 +13,7 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { Icon } from "@/components/shared/icon";
 import { StatusChip } from "@/components/shared/status-chip";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { KbDocumentOut } from "@/contracts/lkap-contracts";
@@ -51,6 +52,8 @@ export function KbDocuments({ kbId }: { kbId: string }) {
   const [queue, setQueue] = React.useState<QueueItem[]>([]);
   /** Set by "Try again" so the next file picked replaces that failed document. */
   const retryDocIdRef = React.useRef<string | null>(null);
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
 
   function dismissQueueItem(id: string) {
     setQueue((items) => items.filter((item) => item.id !== id));
@@ -89,6 +92,7 @@ export function KbDocuments({ kbId }: { kbId: string }) {
   }
 
   function openFilePicker(retryDocId?: string) {
+    if (!canWrite) return;
     retryDocIdRef.current = retryDocId ?? null;
     fileInputRef.current?.click();
   }
@@ -129,7 +133,14 @@ export function KbDocuments({ kbId }: { kbId: string }) {
       cell: (doc) => (
         <div className="flex items-center justify-end gap-1">
           {doc.status === "failed" ? (
-            <Button type="button" variant="outline" size="sm" onClick={() => openFilePicker(doc.id)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!canWrite}
+              title={canWrite ? undefined : writeReason}
+              onClick={() => openFilePicker(doc.id)}
+            >
               <Icon as={RotateCcwIcon} size="sm" /> Try again
             </Button>
           ) : null}
@@ -138,7 +149,8 @@ export function KbDocuments({ kbId }: { kbId: string }) {
             variant="ghost"
             size="icon-sm"
             aria-label={`Delete ${doc.filename}`}
-            disabled={deleteDoc.isPending}
+            disabled={!canWrite || deleteDoc.isPending}
+            title={canWrite ? undefined : writeReason}
             onClick={() => {
               deleteDoc.mutate(doc.id, {
                 onSuccess: () => toast.success(`${doc.filename} deleted.`),
@@ -174,8 +186,14 @@ export function KbDocuments({ kbId }: { kbId: string }) {
       {/* Drop zone: docs/UI_UX_SPEC.md §4.7 "Drop .md, .txt or .pdf files here, or browse". */}
       <div
         role="button"
-        tabIndex={0}
-        aria-label="Upload documents: drop files here or press Enter to browse"
+        tabIndex={canWrite ? 0 : -1}
+        aria-disabled={!canWrite}
+        title={canWrite ? undefined : writeReason}
+        aria-label={
+          canWrite
+            ? "Upload documents: drop files here or press Enter to browse"
+            : `Upload documents (disabled): ${writeReason}`
+        }
         onClick={() => openFilePicker()}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -185,17 +203,19 @@ export function KbDocuments({ kbId }: { kbId: string }) {
         }}
         onDragOver={(event) => {
           event.preventDefault();
-          setIsDragging(true);
+          if (canWrite) setIsDragging(true);
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(event) => {
           event.preventDefault();
           setIsDragging(false);
+          if (!canWrite) return;
           void handleFiles(event.dataTransfer.files);
         }}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-8 text-center transition-colors",
-          isDragging ? "border-primary bg-muted/50" : "hover:bg-muted/30",
+          "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-8 text-center transition-colors",
+          canWrite ? "cursor-pointer" : "cursor-not-allowed opacity-50",
+          isDragging ? "border-primary bg-muted/50" : canWrite ? "hover:bg-muted/30" : "",
         )}
       >
         <Icon as={UploadCloudIcon} size="lg" className="text-muted-foreground" />
@@ -203,7 +223,9 @@ export function KbDocuments({ kbId }: { kbId: string }) {
           Drop <span className="font-mono text-xs">.md</span>, <span className="font-mono text-xs">.txt</span> or{" "}
           <span className="font-mono text-xs">.pdf</span> files here, or browse
         </p>
-        <p className="text-xs text-muted-foreground">Up to 25 MB per file.</p>
+        <p className="text-xs text-muted-foreground">
+          {canWrite ? "Up to 25 MB per file." : writeReason}
+        </p>
       </div>
 
       {queue.length > 0 ? (

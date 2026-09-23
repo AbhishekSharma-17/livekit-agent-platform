@@ -48,17 +48,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.auth.audit import record
 from lkap_api.auth.deps import WorkspaceContext
-from lkap_api.auth.ratelimit import RateLimiterDep, enforce
+from lkap_api.auth.ratelimit import RateLimitedError, RateLimiterDep, enforce
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.db.models import Call
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, ServiceDep
-from lkap_api.errors import ConflictError, NotFoundError
+from lkap_api.errors import ApiError, ConflictError, NotFoundError
+from lkap_api.logging import get_logger
 from lkap_api.telephony import calls as call_service
 from lkap_api.telephony import webhooks as _webhooks  # noqa: F401 - registers the webhook handlers
 from lkap_api.telephony.common import SIP_CHANNELS
-from lkap_api.telephony.policy import NOT_ALLOWED_TO_MODEL, DestinationNotAllowedError, workspace_policy
+from lkap_api.telephony.policy import (
+    NOT_ALLOWED_TO_MODEL,
+    CallsBusyError,
+    DestinationNotAllowedError,
+    check_destination,
+    workspace_policy,
+)
+
+log = get_logger(__name__)
 
 _public = APIRouter(prefix="/v1/calls", tags=["calls"])
 _internal = APIRouter(prefix="/internal/v1/telephony", tags=["internal"])
@@ -84,6 +93,44 @@ def _audit(db: AsyncSession, ctx: WorkspaceContext, action: str, call: Call, **p
         target_id=call.id,
         payload=dict(payload),
     )
+
+
+#: Refusals that are dialing-policy decisions (R-V2-23) and so leave an audit row.
+_POLICY_REFUSALS = (DestinationNotAllowedError, RateLimitedError, CallsBusyError)
+
+
+async def _audit_refusal(
+    db: AsyncSession,
+    database: Database,
+    ctx: WorkspaceContext,
+    action: str,
+    exc: ApiError,
+    **payload: object,
+) -> None:
+    """Record a refused dial or transfer in its own transaction (V2-19T-5a, V2-21).
+
+    The request's transaction rolls back with the error, so the row is written
+    through a second session. The request session is rolled back **first**:
+    SQLite without WAL would otherwise hold its read lock and deadlock the
+    second session's commit (asks #40). Nothing is lost by it, because every
+    refusal happens before the handler adds a row. Best effort: a failure to
+    write the row is logged and never replaces the refusal the caller gets.
+    """
+    await db.rollback()
+    try:
+        async with database.session() as audit_db:
+            record(
+                audit_db,
+                workspace_id=ctx.workspace_id,
+                actor_type=ctx.actor.actor_type,
+                actor_id=ctx.actor.id,
+                action=action,
+                target_type="calls",
+                target_id=None,
+                payload={**payload, "code": exc.code, "status": exc.status_code},
+            )
+    except Exception as audit_exc:  # noqa: BLE001 - the refusal must still reach the caller
+        log.warning("call_refusal_audit_failed", action=action, error_type=type(audit_exc).__name__)
 
 
 # --------------------------------------------------------------------------- public
@@ -114,14 +161,20 @@ async def place_call(
 ) -> CallOut:
     """Check the policy and caps, store the call, commit, and dial in the background."""
     policy = await workspace_policy(db, ctx.workspace_id)
-    call_service.check_outbound_number(policy, payload.to_e164)
-    await enforce(
-        limiter,
-        f"calls:workspace:{ctx.workspace_id}",
-        capacity=policy.max_calls_per_min,
-        what="outbound calls per minute for this workspace",
-    )
-    call, plan = await call_service.prepare_outbound_call(db, ctx.workspace_id, payload, policy=policy)
+    try:
+        call_service.check_outbound_number(policy, payload.to_e164)
+        await enforce(
+            limiter,
+            f"calls:workspace:{ctx.workspace_id}",
+            capacity=policy.max_calls_per_min,
+            what="outbound calls per minute for this workspace",
+        )
+        call, plan = await call_service.prepare_outbound_call(db, ctx.workspace_id, payload, policy=policy)
+    except _POLICY_REFUSALS as exc:
+        await _audit_refusal(
+            db, database, ctx, "call.refused", exc, agent_id=payload.agent_id, to=payload.to_e164[:64]
+        )
+        raise
     _audit(
         db, ctx, "call.placed", call, agent_id=payload.agent_id, session_id=plan.session_id, to=plan.to_e164
     )
@@ -190,11 +243,30 @@ async def hangup_call(call_id: str, ctx: AdminCtxDep, db: DbDep, factory: Client
     ),
 )
 async def transfer_call(
-    call_id: str, payload: CallTransferIn, ctx: AdminCtxDep, db: DbDep, factory: ClientFactoryDep
+    call_id: str,
+    payload: CallTransferIn,
+    ctx: AdminCtxDep,
+    db: DbDep,
+    database: DatabaseDep,
+    factory: ClientFactoryDep,
 ) -> CallOut:
     """Transfer."""
     call = await call_service.get_call(db, ctx.workspace_id, call_id)
     policy = await workspace_policy(db, ctx.workspace_id)
+    try:
+        check_destination(policy, payload.to)
+    except DestinationNotAllowedError as exc:
+        await _audit_refusal(
+            db,
+            database,
+            ctx,
+            "call.transfer_refused",
+            exc,
+            call_id=call_id,
+            to=payload.to[:64],
+            via="console",
+        )
+        raise
     call = await call_service.transfer(db, factory, call, payload.to, policy=policy)
     _audit(db, ctx, "call.transferred", call, to=payload.to, via="console")
     return call_service.call_out(call)

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAgent, useDeleteAgent, useUpdateAgent, useValidateAgent } from "@/components/console/lib/api-hooks";
 import { firstErrorMessage } from "@/components/console/lib/form-errors";
+import { useWriteAccess } from "@/components/console/lib/roles";
 import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
 import { zodResolver } from "@/components/console/lib/zod-resolver";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
@@ -110,6 +111,7 @@ function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSecti
   const updateAgent = useUpdateAgent(agent.id);
   const validateAgent = useValidateAgent(agent.id);
   const deleteAgent = useDeleteAgent();
+  const { canWrite } = useWriteAccess();
   const contentRef = React.useRef<HTMLDivElement>(null);
 
   const form = useForm<AgentEditorForm>({
@@ -199,7 +201,12 @@ function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSecti
   }, [looksGood]);
 
   // Validate the saved config once on open so the section dots are meaningful before the first save.
+  // Skipped for a viewer (docs/v2/_asks.md V2-20-5): `POST .../validate` needs
+  // `builder`+ server-side, so this would otherwise fire two guaranteed 403s
+  // on every load for a role that can never see the dots' payoff (Save/Publish
+  // are gated off for them too).
   React.useEffect(() => {
+    if (!canWrite) return;
     let cancelled = false;
     validateAgent
       .mutateAsync()
@@ -213,7 +220,7 @@ function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSecti
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent.id]);
+  }, [agent.id, canWrite]);
 
   // ---- save ----
   const [saving, setSaving] = React.useState(false);

@@ -91,6 +91,7 @@ def _to_out(row: SessionRow, agent_name: str) -> SessionOut:
         connection_id=row.connection_id,
         cost_usd=Decimal(str(row.cost_usd)) if row.cost_usd is not None else None,
         disposition=row.disposition,
+        recording_status=cast(_RecordingStatus, row.recording_status),
     )
 
 
@@ -139,17 +140,26 @@ def _qa_out(row: SessionQa | None) -> QaOut | None:
 async def _recording_out(
     db: AsyncSession, vault: Vault, settings: Settings, row: SessionRow, config: AgentConfig | None
 ) -> RecordingOut:
-    """Build the recording block, minting a fresh signed URL when one is playable."""
+    """Build the recording block, minting a fresh signed URL when one is playable.
+
+    `error` (docs/v2/_asks.md V2-20-3) is carried through on every branch —
+    including the "not ready" one, which is the common case for a `failed`
+    recording — since it's the console Recording tab's only way to learn why.
+    """
     recording_status = cast(_RecordingStatus, row.recording_status)
     if recording_status != "ready" or not row.recording_object_key or not row.connection_id:
-        return RecordingOut(status=recording_status, duration_s=row.recording_duration_s)
+        return RecordingOut(
+            status=recording_status, duration_s=row.recording_duration_s, error=row.recording_error
+        )
     connection = await db.scalar(
         select(LiveKitConnection).where(
             LiveKitConnection.id == row.connection_id, LiveKitConnection.workspace_id == row.workspace_id
         )
     )
     if connection is None:
-        return RecordingOut(status=recording_status, duration_s=row.recording_duration_s)
+        return RecordingOut(
+            status=recording_status, duration_s=row.recording_duration_s, error=row.recording_error
+        )
     storage_config_id = config.recording.storage_config_id if config is not None else None
     storage_row = await recordings.resolve_storage_row(
         db, workspace_id=row.workspace_id, storage_config_id=storage_config_id, connection=connection
@@ -157,7 +167,9 @@ async def _recording_out(
     if storage_row is None:
         # A recording that finished before its storage config was deleted, or a
         # (should-not-happen) local-only workspace — nothing playable to link to.
-        return RecordingOut(status=recording_status, duration_s=row.recording_duration_s)
+        return RecordingOut(
+            status=recording_status, duration_s=row.recording_duration_s, error=row.recording_error
+        )
     backend = storage_from_config(storage_row, vault, settings=settings)
     url = await backend.signed_url(row.recording_object_key, expires_in_s=_RECORDING_URL_TTL_S)
     return RecordingOut(
@@ -165,6 +177,7 @@ async def _recording_out(
         url=url,
         duration_s=row.recording_duration_s,
         expires_at=utcnow() + dt.timedelta(seconds=_RECORDING_URL_TTL_S),
+        error=row.recording_error,
     )
 
 

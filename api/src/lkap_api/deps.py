@@ -21,6 +21,7 @@ import httpx
 from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.auth import SERVICE_HEADER, token_matches
 from lkap_api.auth.deps import (
     OptionalWorkspaceCtxDep,
@@ -56,13 +57,15 @@ def get_vault(settings: SettingsDep) -> Vault:
 VaultDep = Annotated[Vault, Depends(get_vault)]
 
 
-async def get_http_client() -> AsyncIterator[httpx.AsyncClient]:
-    """Yield an outbound HTTP client (credential tests, tool dry runs).
+async def get_http_client(settings: SettingsDep) -> AsyncIterator[httpx.AsyncClient]:
+    """Yield an outbound HTTP client (credential tests, tool dry runs, webhook tests, QA re-score).
 
+    Every connection goes through :mod:`lkap_api.net_guard` (V2-21): private,
+    loopback and metadata addresses are refused at connect time, after DNS.
     Tests override this dependency with a client backed by
     ``httpx.MockTransport`` so the offline suite never touches the network.
     """
-    async with httpx.AsyncClient(follow_redirects=False) as client:
+    async with net_guard.guarded_http_client(net_guard.policy_from_settings(settings)) as client:
         yield client
 
 

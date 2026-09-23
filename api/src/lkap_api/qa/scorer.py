@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import webhooks
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, SessionQa, utcnow
 from lkap_api.db.models import Session as SessionRow
@@ -31,6 +32,7 @@ from lkap_api.logging import get_logger
 from lkap_api.qa.llm_client import JudgeLLM
 from lkap_api.qa.resolve import resolve_judge
 from lkap_api.qa.rubric import build_prompt
+from lkap_api.webhooks import events as webhook_events
 
 log = get_logger(__name__)
 
@@ -54,6 +56,10 @@ class QaOutcome:
     raw: dict[str, Any] | None = None
     model: str = ""
     error: str | None = None
+    #: The session's workspace, when the row was found (`None` only for the
+    #: "session missing" skip) — lets `score_session` emit `session.qa_completed`
+    #: without a second query (docs/v2/_asks.md V2-20-1).
+    workspace_id: str | None = None
 
 
 def render_transcript(turns: list[Any]) -> str:
@@ -126,28 +132,31 @@ async def _run_scoring(session: AsyncSession, ctx: JobContext, session_id: str) 
     if row is None:
         log.warning("qa_session_missing", session_id=session_id)
         return QaOutcome(action="skip")
+    workspace_id = row.workspace_id
     agent = (
         await session.execute(
             select(Agent).where(Agent.id == row.agent_id, Agent.workspace_id == row.workspace_id)
         )
     ).scalar_one_or_none()
     if agent is None:
-        return QaOutcome(action="failed", error="agent not found")
+        return QaOutcome(action="failed", error="agent not found", workspace_id=workspace_id)
     try:
         config = AgentConfig.model_validate(agent.config)
     except ValidationError as exc:
-        return QaOutcome(action="failed", error=f"invalid agent config: {exc}"[:500])
+        return QaOutcome(
+            action="failed", error=f"invalid agent config: {exc}"[:500], workspace_id=workspace_id
+        )
     # R-V2-11 (asks V2-16-4): a flow `qa` node turns QA on and may carry its own rubric.
     qa = effective_qa(config)
     if not qa.enabled:
         log.debug("qa_disabled", session_id=session_id)
-        return QaOutcome(action="skip")
+        return QaOutcome(action="skip", workspace_id=workspace_id)
 
     resolution, reason = await resolve_judge(
         session, ctx.vault, ctx.http, config, workspace_id=row.workspace_id
     )
     if resolution is None:
-        return QaOutcome(action="failed", error=reason or "no judge resolvable")
+        return QaOutcome(action="failed", error=reason or "no judge resolvable", workspace_id=workspace_id)
 
     transcript_text = render_transcript(row.transcript or [])
     system, user = build_prompt(rubric_prompt=qa.rubric_prompt, transcript_text=transcript_text)
@@ -158,6 +167,7 @@ async def _run_scoring(session: AsyncSession, ctx: JobContext, session_id: str) 
             model=resolution.model_label,
             error=error,
             raw={"last_response": raw_text} if raw_text else None,
+            workspace_id=workspace_id,
         )
     return QaOutcome(
         action="done",
@@ -167,6 +177,7 @@ async def _run_scoring(session: AsyncSession, ctx: JobContext, session_id: str) 
         summary=result.summary,
         raw=result.model_dump(),
         model=resolution.model_label,
+        workspace_id=workspace_id,
     )
 
 
@@ -199,6 +210,13 @@ async def _persist(session: AsyncSession, session_id: str, outcome: QaOutcome) -
 async def score_session(ctx: JobContext, session_id: str) -> None:
     """Score `session_id` and write its `session_qa` row. Never raises.
 
+    Emits `session.qa_completed` for a `done`/`failed` outcome once the row is
+    committed (docs/v2/_asks.md V2-20-1) — this is the re-score path
+    (`routers/sessions.py::rescore_session` enqueues the job that calls this),
+    `scored_by="api"`. A `skip` outcome (session missing, or QA disabled)
+    emits nothing, matching `rescore_session`'s own pre-check that a judge is
+    resolvable before it ever enqueues this job.
+
     Args:
         ctx: The job context (`database`, `vault`, `http`).
         session_id: The `sessions.id` to score.
@@ -210,8 +228,25 @@ async def score_session(ctx: JobContext, session_id: str) -> None:
             log.warning("qa_scoring_unexpected_error", session_id=session_id, error_type=type(exc).__name__)
             outcome = QaOutcome(action="failed", error=str(exc)[:500])
         await _persist(session, session_id, outcome)
+        # `session.session()` commits on a clean exit (expire_on_commit=False),
+        # so `outcome` stays valid after the block for the emit below.
 
     if outcome.action == "done":
         log.info("qa_scored", session_id=session_id, score=outcome.score, sentiment=outcome.sentiment)
     elif outcome.action == "failed":
         log.warning("qa_scoring_failed", session_id=session_id, error=outcome.error)
+
+    if outcome.action in ("done", "failed") and outcome.workspace_id is not None:
+        await webhooks.emit(
+            ctx.database,
+            ctx.jobs,
+            workspace_id=outcome.workspace_id,
+            event_type=webhook_events.SESSION_QA_COMPLETED,
+            data={
+                "session_id": session_id,
+                "status": outcome.action,
+                "score": outcome.score,
+                "sentiment": outcome.sentiment,
+                "scored_by": "api",
+            },
+        )

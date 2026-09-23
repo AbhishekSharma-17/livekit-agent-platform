@@ -37,6 +37,7 @@ from livekit.api import (
 from lkap_contracts.api_models import ConnectionTestResult
 from lkap_contracts.connections import ConnectionCapabilities
 
+from lkap_api import net_guard
 from lkap_api.connections.clients import ConnectionClientFactory, ConnectionRowLike
 from lkap_api.logging import get_logger
 
@@ -98,6 +99,9 @@ def effective_capabilities(
 
 def _describe(exc: BaseException) -> str:
     """A short, secret-free description of a probe failure."""
+    blocked = net_guard.blocked_cause(exc)
+    if blocked is not None:
+        return str(blocked)
     if isinstance(exc, ServerError):
         # LiveKit Cloud answers a bad key/secret with a bare 401 and no Twirp JSON
         # body, which the SDK reports as code "unknown"; name it from the status.
@@ -166,6 +170,15 @@ async def probe_connection(
                 _secondary(client.egress.list_egress(ListEgressRequest()), timeout_s),
                 _secondary(client.ingress.list_ingress(ListIngressRequest()), timeout_s),
             )
+    except net_guard.BlockedDestinationError as exc:
+        # A private, loopback or metadata address (V2-21 / S1): nothing was sent.
+        return ConnectionTestResult(
+            ok=False,
+            message=str(exc),
+            capabilities=caps.model_copy(
+                update={"sip_enabled": False, "egress_enabled": False, "ingress_enabled": False}
+            ),
+        )
     except ValueError as exc:
         # LiveKitAPI raises ValueError for an empty url or missing key/secret.
         return ConnectionTestResult(ok=False, message=f"invalid connection: {exc}", capabilities=caps)

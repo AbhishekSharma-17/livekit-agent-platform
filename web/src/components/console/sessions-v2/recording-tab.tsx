@@ -53,7 +53,7 @@ export function RecordingTab({ session }: SessionTabProps) {
         title={STATUS_LABEL[status] ?? status}
         description={
           status === "failed"
-            ? "The recording could not be produced for this session."
+            ? (recording.error ?? "The recording could not be produced for this session.")
             : status === "none"
               ? "This session's agent doesn't have recording turned on, or the call hasn't ended yet."
               : "The recording is still being processed — check back in a moment."

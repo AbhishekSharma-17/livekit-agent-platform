@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { RequireWrite } from "@/components/shared/require-write";
 import { ConnectionCreateForm } from "@/components/console/connections/connection-create-form";
 import { ConsoleBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 
@@ -14,7 +15,9 @@ export default function NewConnectionPage() {
         title="New connection"
         description="Test the details before saving — nothing is stored until the test passes."
       />
-      <ConnectionCreateForm />
+      <RequireWrite min="admin" title="You can't create connections">
+        <ConnectionCreateForm />
+      </RequireWrite>
     </div>
   );
 }

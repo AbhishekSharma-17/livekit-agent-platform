@@ -60,6 +60,7 @@ from lkap_contracts.fleet import FleetDesired
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.connections.clients import ConnectionClientFactory
 from lkap_api.connections.probe import effective_capabilities
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
@@ -67,6 +68,7 @@ from lkap_api.db.models import Agent, FleetDesiredState, LiveKitConnection, Stor
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.livekit_tokens import TOKEN_TTL
 from lkap_api.logging import get_logger
+from lkap_api.settings import get_settings
 from lkap_api.vault import UNKNOWN_FINGERPRINT, Vault, VaultError
 
 log = get_logger(__name__)
@@ -81,7 +83,8 @@ def validate_url(url: str) -> str:
     """Return a normalised connection url or raise a 422.
 
     Raises:
-        UnprocessableEntityError: Unless the url is ``ws(s)://`` or ``http(s)://`` with a host.
+        UnprocessableEntityError: Unless the url is ``ws(s)://`` or ``http(s)://`` with a host
+            that is not a private, loopback or metadata address (``lkap_api.net_guard``).
     """
     cleaned = url.strip().rstrip("/")
     parsed = urlparse(cleaned)
@@ -90,6 +93,11 @@ def validate_url(url: str) -> str:
             "url must be a ws://, wss://, http:// or https:// LiveKit server url",
             details={"field": "url"},
         )
+    # V2-21 / S1: no private, loopback or metadata address unless allowlisted
+    # (LKAP_NET_ALLOW_PRIVATE_HOSTS; dev allows localhost for a self-hosted server).
+    net_guard.validate_url(
+        cleaned, net_guard.policy_from_settings(get_settings()), field_name="url", schemes=_URL_SCHEMES
+    )
     return cleaned
 
 

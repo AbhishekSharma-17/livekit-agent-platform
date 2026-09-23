@@ -30,7 +30,12 @@ from livekit.agents.llm import RawFunctionTool
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
 
 from lkap_agent.logging import get_logger
-from lkap_agent.tools._http_safety import HttpToolSecurityError, check_url_allowed, truncate
+from lkap_agent.tools._http_safety import (
+    HttpToolSecurityError,
+    check_url_allowed,
+    guarded_transport,
+    truncate,
+)
 
 _log = get_logger(__name__)
 
@@ -131,7 +136,9 @@ def _handler_for(definition: HttpToolDefinition, *, platform_allowed_hosts: list
             request_headers["Content-Type"] = "application/json"
 
         try:
-            async with httpx.AsyncClient(follow_redirects=False, timeout=definition.timeout_s) as client:
+            async with httpx.AsyncClient(
+                follow_redirects=False, timeout=definition.timeout_s, transport=guarded_transport()
+            ) as client:
                 response = await client.request(definition.method, url, content=body, headers=request_headers)
         except httpx.HTTPError as exc:
             raise ToolError(f"HTTP request failed: {exc}") from exc

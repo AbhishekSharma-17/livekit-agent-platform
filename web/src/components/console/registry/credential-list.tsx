@@ -35,6 +35,7 @@ import { CredentialSheet, type CredentialSheetMode } from "@/components/console/
 import { OUTCOME_LABEL, OUTCOME_TONE, useCredentialTest } from "@/components/console/registry/credential-test";
 import { KIND_LABEL, kindRank } from "@/components/console/registry/provider-meta";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { pluralize } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, CredentialOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
@@ -113,6 +114,9 @@ export function CredentialList() {
   const toolsQuery = useTools();
   const [sheet, setSheet] = React.useState<SheetState | null>(null);
   const [deleting, setDeleting] = React.useState<CredentialOut | null>(null);
+  // Credentials need `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
+  const { canWrite } = useWriteAccess("admin");
+  const writeReason = writeAccessReason("admin");
 
   const specs = React.useMemo(() => {
     const map = new Map<string, ProviderSpec>();
@@ -138,7 +142,12 @@ export function CredentialList() {
   }, [credentialsQuery.data, specs]);
 
   const addButton = (
-    <Button type="button" onClick={() => setSheet({ mode: "create" })}>
+    <Button
+      type="button"
+      disabled={!canWrite}
+      title={canWrite ? undefined : writeReason}
+      onClick={() => setSheet({ mode: "create" })}
+    >
       Add credential
     </Button>
   );
@@ -354,6 +363,7 @@ function RowActions({
   onDelete: (credential: CredentialOut) => void;
 }) {
   const { run, pending } = useCredentialTest(credential.id);
+  const { canWrite } = useWriteAccess("admin");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -366,16 +376,16 @@ function RowActions({
           <FlaskConicalIcon aria-hidden="true" />
           Test
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onOpenSheet("rotate", credential)}>
+        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenSheet("rotate", credential)}>
           <RefreshCwIcon aria-hidden="true" />
           Rotate
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onOpenSheet("rename", credential)}>
+        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenSheet("rename", credential)}>
           <PencilIcon aria-hidden="true" />
           Rename
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => onDelete(credential)}>
+        <DropdownMenuItem variant="destructive" disabled={!canWrite} onSelect={() => onDelete(credential)}>
           <TrashIcon aria-hidden="true" />
           Delete
         </DropdownMenuItem>

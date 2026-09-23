@@ -183,9 +183,33 @@ async def _run_bootstrap(app: FastAPI, settings: Settings) -> None:
         )
 
 
+def _log_worker_callback_url(settings: Settings) -> None:
+    """Log the api url supervised/external workers will be told to call back on.
+
+    docs/v2/_asks.md V2-20-2: a derived (``PORT``-based) url is only a guess —
+    it disagrees with reality whenever uvicorn's actual ``--port`` doesn't
+    match ``PORT``, which is exactly what caused the V2-20 isolation incident.
+    A WARNING here is the "clear startup log line" so that mismatch is loud
+    from the first boot, not discovered by a worker 404ing against the wrong
+    api. Split out from `_startup` so a test can call it directly with
+    `caplog`, without needing a full app lifespan.
+    """
+    if settings.worker_callback_url_is_derived:
+        log.warning(
+            "worker_callback_url_derived_from_port",
+            port=settings.port,
+            derived_url=settings.worker_callback_base_url,
+            hint="set LKAP_API_BASE_URL explicitly if this api does not bind PORT directly "
+            "(e.g. uvicorn --port differs from PORT, or more than one api runs on this host)",
+        )
+    else:
+        log.info("worker_callback_url", url=settings.worker_callback_base_url)
+
+
 async def _startup(app: FastAPI, settings: Settings) -> None:
     await asyncio.to_thread(Path(settings.data_dir).mkdir, parents=True, exist_ok=True)
     app.state.db = Database(settings.resolved_database_url)
+    _log_worker_callback_url(settings)
     await _run_bootstrap(app, settings)
     if settings.bootstrap_credentials_json:
         try:

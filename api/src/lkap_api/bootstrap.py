@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Result, select, update
@@ -266,13 +268,40 @@ async def bootstrap(database: Database, settings: Settings) -> BootstrapResult:
         notes=result.notes,
     )
     if result.owner_password is not None:
+        _announce_generated_password(settings, result.owner_password)
+    return result
+
+
+#: Where a generated owner password goes in ``LKAP_ENV=prod`` (relative to ``LKAP_DATA_DIR``).
+OWNER_PASSWORD_FILE = "owner-password.txt"
+
+
+def _announce_generated_password(settings: Settings, password: str) -> None:
+    """Hand the operator a generated owner password without putting it in the log pipeline.
+
+    ``dev`` keeps the one-time log line (RUNBOOK). In ``prod`` the password is
+    written to ``<LKAP_DATA_DIR>/owner-password.txt`` (mode 0600) and only the
+    path is logged, because production logs are shipped and retained (V2-21).
+    """
+    if settings.env != "prod":
         log.warning(
             "bootstrap_owner_password_generated",
             email=settings.bootstrap_owner_email,
-            password=result.owner_password,
+            password=password,
             hint="shown once; store it now",
         )
-    return result
+        return
+    path = Path(settings.data_dir) / OWNER_PASSWORD_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(f"{settings.bootstrap_owner_email} {password}\n")
+    log.warning(
+        "bootstrap_owner_password_generated",
+        email=settings.bootstrap_owner_email,
+        password_file=str(path),
+        hint="read it once, sign in, change the password, then delete the file",
+    )
 
 
 async def _main() -> int:

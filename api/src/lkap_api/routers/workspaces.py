@@ -308,6 +308,14 @@ async def create_invite(
         await db.flush()
     elif user.disabled_at is not None:
         raise ForbiddenError(f"'{payload.email}' is disabled")
+    elif user.password_hash is None and await invites.invited_elsewhere(db, ctx.workspace_id, user.id):
+        # V2-21: the token of a pending account sets its password; another
+        # workspace's pending invitee must not be claimable from here.
+        raise ConflictError(
+            f"'{payload.email}' has a pending invite from another workspace; they must accept it "
+            "(and sign in) before this workspace can invite them",
+            details={"reason": "pending_elsewhere"},
+        )
     if await db.get(WorkspaceMember, (ctx.workspace_id, user.id)) is not None:
         raise ConflictError(f"'{payload.email}' is already a member")
     token, expires_at = invites.issue(
@@ -315,7 +323,9 @@ async def create_invite(
         workspace_id=ctx.workspace_id,
         user_id=user.id,
         role=payload.role,
-        fingerprint=invites.state_fingerprint(user.password_hash, False),
+        fingerprint=invites.state_fingerprint(
+            user.password_hash, False, await invites.join_count(db, ctx.workspace_id, user.id)
+        ),
     )
     _audit(db, ctx, "member.invite", user.id, role=payload.role)
     log.info("invite_created", workspace_id=ctx.workspace_id, user_id=user.id, role=payload.role)

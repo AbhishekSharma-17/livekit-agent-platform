@@ -107,6 +107,16 @@ function stubProviders(providers: ProviderOut[], connections: ConnectionOut[]) {
       if (url.includes("/api/console/providers")) return { ok: true, status: 200, json: async () => ({ v: 2, providers }) } as Response;
       if (url.includes("/api/console/connections")) return { ok: true, status: 200, json: async () => ({ items: connections, total: connections.length }) } as Response;
       if (url.includes("/api/console/credentials")) return { ok: true, status: 200, json: async () => ({ items: [], total: 0 }) } as Response;
+      if (url.includes("/api/console/auth/me")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            user: { id: "u1", email: "admin@example.test" },
+            workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+          }),
+        } as Response;
+      }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     }),
   );
@@ -130,6 +140,9 @@ describe("ProvidersCatalog", () => {
     const put = stubProviders([OPENAI], [CONNECTION_A]);
     renderWithClient(<ProvidersCatalog />);
     await screen.findByText("OpenAI Realtime");
+    // `canWrite` (docs/v2/_asks.md V2-20-5) resolves from a separate
+    // `auth/me` query that may still be in flight when the row first renders.
+    await waitFor(() => expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("switch"));
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith("/api/console/providers/openai-realtime/settings", {

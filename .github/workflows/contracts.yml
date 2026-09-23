@@ -16,6 +16,10 @@ on:
       - "scripts/check_installed_providers.py"
       - ".github/workflows/contracts.yml"
 
+# V2-21: least-privilege GITHUB_TOKEN (every job only reads the repo).
+permissions:
+  contents: read
+
 jobs:
   contracts:
     runs-on: ubuntu-latest

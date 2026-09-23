@@ -592,6 +592,10 @@ class Session(Base):
         String(16), nullable=False, default="none", server_default="none"
     )
     recording_egress_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    #: Why a `recording_status="failed"` recording failed (docs/v2/_asks.md
+    #: V2-20-3), e.g. "recording/start answered HTTP 422". `None` otherwise —
+    #: cleared on any later status change so a stale reason never lingers.
+    recording_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     recording_object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     recording_duration_s: Mapped[float | None] = mapped_column(Numeric(12, 3, asdecimal=False), nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)

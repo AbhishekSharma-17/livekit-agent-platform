@@ -93,6 +93,22 @@ describe("RecordingTab", () => {
     renderWithClient(<RecordingTab session={baseSession({ recording: { status: "none" } })} />);
     expect(screen.getByText("No recording")).toBeTruthy();
   });
+
+  it("shows the worker's reason for a failed recording (V2-20-3)", async () => {
+    const { RecordingTab } = await import("@/components/console/sessions-v2/recording-tab");
+    const session = baseSession({
+      recording: { status: "failed", error: "recording/start answered HTTP 422" },
+    });
+    renderWithClient(<RecordingTab session={session} />);
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("recording/start answered HTTP 422")).toBeTruthy();
+  });
+
+  it("falls back to a generic reason when a failed recording carries no error text", async () => {
+    const { RecordingTab } = await import("@/components/console/sessions-v2/recording-tab");
+    renderWithClient(<RecordingTab session={baseSession({ recording: { status: "failed" } })} />);
+    expect(screen.getByText("The recording could not be produced for this session.")).toBeTruthy();
+  });
 });
 
 describe("CostTab", () => {

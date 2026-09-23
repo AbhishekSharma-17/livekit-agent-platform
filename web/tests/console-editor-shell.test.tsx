@@ -208,6 +208,12 @@ function stubServer(agent: AgentOut, validation: ValidationResult = { ok: true, 
       if (path === "providers") return json(200, { providers: [] });
       if (path === "packs") return json(200, { items: [] });
       if (path === "tools") return json(200, { items: [], total: 0 });
+      if (path === "auth/me") {
+        return json(200, {
+          user: { id: "u1", email: "admin@example.test" },
+          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+        });
+      }
       throw new Error(`Unhandled fetch: ${method} ${url}`);
     }),
   );
@@ -259,6 +265,14 @@ function header() {
 
 async function ready() {
   await screen.findByRole("heading", { level: 1, name: "Claims intake" });
+  // `canWrite` (docs/v2/_asks.md V2-20-5) resolves from a separate `auth/me`
+  // query; wait for it so Save/Publish aren't still showing their
+  // role-disabled state when a test's first action clicks them.
+  await waitFor(() => {
+    const trigger = (screen.queryByRole("button", { name: "Publish" }) ??
+      screen.queryByRole("button", { name: "Unpublish" })) as HTMLButtonElement | null;
+    if (trigger) expect(trigger.disabled).toBe(false);
+  });
 }
 
 beforeEach(() => {
@@ -298,7 +312,10 @@ describe("editor header", () => {
     fireEvent.change(screen.getByLabelText("Instructions"), { target: { value: "Be brief." } });
 
     await screen.findByText("Unsaved changes");
-    expect(save.disabled).toBe(false);
+    // `canWrite` (docs/v2/_asks.md V2-20-5) resolves from a separate
+    // `auth/me` query that may still be in flight; wait for it rather than
+    // asserting the instant "Unsaved changes" appears.
+    await waitFor(() => expect(save.disabled).toBe(false));
   });
 
   it("edits the name inline: Enter applies, Escape cancels", async () => {

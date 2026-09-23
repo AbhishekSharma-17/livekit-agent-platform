@@ -26,7 +26,7 @@ dependencies = [
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
   "structlog>=25.4,<26",
-  "pillow>=11,<12",
+  "pillow>=12.3,<13",
   "lkap-contracts",
   "lkap-packs",
 ]

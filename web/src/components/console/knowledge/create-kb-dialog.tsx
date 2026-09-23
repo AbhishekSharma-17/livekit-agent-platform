@@ -22,6 +22,7 @@ import { errorMessage } from "@/components/console/shared/error-banner";
 import { Field } from "@/components/shared/field";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { EMBEDDER_CHOICES, embedderHelp, embedderLabel } from "@/components/console/knowledge/embedder-label";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_EMBEDDER_ID = "fastembed-embedding";
@@ -39,6 +40,7 @@ export function CreateKbDialog() {
   const [name, setName] = React.useState("");
   const [embedderId, setEmbedderId] = React.useState(DEFAULT_EMBEDDER_ID);
   const createKb = useCreateKb();
+  const { canWrite } = useWriteAccess();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -58,9 +60,9 @@ export function CreateKbDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={canWrite && open} onOpenChange={(next) => canWrite && setOpen(next)}>
       <DialogTrigger asChild>
-        <Button type="button">
+        <Button type="button" disabled={!canWrite} title={canWrite ? undefined : writeAccessReason()}>
           <PlusIcon className="size-4" /> New knowledge base
         </Button>
       </DialogTrigger>

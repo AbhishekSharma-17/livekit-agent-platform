@@ -27,6 +27,10 @@ on:
     - cron: "17 3 * * *"
   workflow_dispatch: {}
 
+# V2-21: least-privilege GITHUB_TOKEN (every job only reads the repo).
+permissions:
+  contents: read
+
 jobs:
   build-simple-images:
     # api/web/supervisor: no repo-specific prep beyond checkout (contracts/

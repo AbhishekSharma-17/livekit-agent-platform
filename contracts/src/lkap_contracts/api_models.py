@@ -450,13 +450,20 @@ class QaOut(BaseModel):
     scored_by: Literal["worker", "api"] | None = None
 
 
+#: Mirrors the `recording_status_valid` CHECK on `sessions` (db/models.py).
+RecordingStatus = Literal["none", "requested", "active", "ready", "failed"]
+
+
 class RecordingOut(BaseModel):
     """The recording block of ``SessionDetailOut`` (``url`` is a signed URL)."""
 
-    status: Literal["none", "requested", "active", "ready", "failed"] = "none"
+    status: RecordingStatus = "none"
     url: str | None = None
     duration_s: float | None = None
     expires_at: datetime | None = None
+    #: Why `status == "failed"`, e.g. "recording/start answered HTTP 422"
+    #: (docs/v2/_asks.md V2-20-3). `None` for every other status.
+    error: str | None = None
 
 
 class SessionOut(BaseModel):
@@ -478,6 +485,10 @@ class SessionOut(BaseModel):
     connection_id: str | None = None
     cost_usd: Decimal | None = None
     disposition: str | None = None
+    #: Surfaced on the list row too (docs/v2/_asks.md V2-20-3) so a `failed`
+    #: recording is visible without opening the session; the reason itself
+    #: is only on `SessionDetailOut.recording.error` (list rows stay light).
+    recording_status: RecordingStatus = "none"
 
 
 class SessionDetailOut(SessionOut):
@@ -1038,11 +1049,20 @@ class RecordingStartOut(BaseModel):
 
 
 class SessionRecordingIn(BaseModel):
-    """``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation."""
+    """``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.
 
-    egress_id: str
-    status: Literal["none", "requested", "active", "ready", "failed"]
+    ``egress_id`` defaults to ``""`` (docs/v2/_asks.md V2-20-3): a recording
+    that never started (``status="failed"`` from ``recording/start`` itself
+    failing) has no egress id at all, and the route's mismatch guard only
+    fires when the session already has a *different*, real one on file.
+    """
+
+    egress_id: str = ""
+    status: RecordingStatus
     duration_s: float | None = None
+    #: Why `status == "failed"`; `None` for every other status or when the
+    #: worker could not determine a reason.
+    error: str | None = None
 
 
 # Concrete page parametrisations exported to JSON Schema / TypeScript.

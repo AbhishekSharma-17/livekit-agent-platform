@@ -323,9 +323,21 @@ async def resolved_config(
     ),
 )
 async def start_session(
-    payload: SessionStartIn, db: DbDep, vault: VaultDep, settings: SettingsDep, _service: ServiceDep
+    payload: SessionStartIn,
+    db: DbDep,
+    vault: VaultDep,
+    settings: SettingsDep,
+    _service: ServiceDep,
+    jobs: JobsDep,
+    database: DatabaseDep,
+    background_tasks: BackgroundTasks,
 ) -> ResolvedAgentConfig:
     """Create a session row for a worker-discovered room and resolve it.
+
+    Emits `session.started` once the row is committed (docs/v2/_asks.md
+    V2-20-1) — `webhooks.emit` opens its own connection, so it runs after
+    `db.commit()` for the same "don't deadlock SQLite" reason `put_summary`
+    documents (ask #40).
 
     Raises:
         NotFoundError: If the agent does not exist.
@@ -441,11 +453,28 @@ async def connection_worker_env(
 ) -> WorkerEnv:
     """Return a connection's decrypted worker environment.
 
+    Overrides ``bundle.worker_env``'s own ``LKAP_API_BASE_URL`` (derived from
+    ``PORT``, which can silently disagree with the port the api actually
+    bound — docs/v2/_asks.md V2-20-2) with
+    :attr:`~lkap_api.settings.Settings.worker_callback_base_url`, which also
+    honours the new, explicit ``LKAP_API_BASE_URL`` api setting.
+    ``lkap_api.connections.bundle`` is V2-21's exclusive file this wave, so
+    this override lives here instead — see the "Open — left by V2-20F" ask
+    filed for folding it into ``bundle.api_base_url`` directly.
+
     Raises:
         NotFoundError: If the connection does not exist.
     """
     row = await get_connection_by_id(db, connection_id)
     env = worker_env(row, factory.credentials(row), settings)
+    env.env["LKAP_API_BASE_URL"] = settings.worker_callback_base_url
+    if settings.worker_callback_url_is_derived:
+        log.warning(
+            "worker_callback_url_derived_from_port",
+            connection_id=row.id,
+            port=settings.port,
+            derived_url=settings.worker_callback_base_url,
+        )
     log.info("connection_worker_env_served", connection_id=row.id, keys=len(env.env))
     return env
 
@@ -520,7 +549,9 @@ async def post_recording(
             reported=payload.egress_id,
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    await apply_egress_result(db, session, status=payload.status, duration_s=payload.duration_s)
+    await apply_egress_result(
+        db, session, status=payload.status, duration_s=payload.duration_s, error=payload.error
+    )
     schedule_finalize_job(db, session.id)
     await db.flush()
     log.info(
@@ -528,6 +559,7 @@ async def post_recording(
         session_id=session_id,
         egress_id=payload.egress_id,
         status=payload.status,
+        error=payload.error,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -642,7 +674,15 @@ async def _summary_webhook_context(db: AsyncSession, session: SessionRow) -> tup
         "`scored_by` is always 'worker' here — the api's own re-score path sets 'api'."
     ),
 )
-async def put_qa(session_id: str, payload: SessionQaIn, db: DbDep, _service: ServiceDep) -> Response:
+async def put_qa(
+    session_id: str,
+    payload: SessionQaIn,
+    db: DbDep,
+    _service: ServiceDep,
+    jobs: JobsDep,
+    database: DatabaseDep,
+    background_tasks: BackgroundTasks,
+) -> Response:
     """Upsert `session_qa` from the worker's verdict.
 
     The worker posts this once, after `put_summary`, from its shutdown
@@ -651,8 +691,13 @@ async def put_qa(session_id: str, payload: SessionQaIn, db: DbDep, _service: Ser
     `qa.enabled` is false; `status="failed"` when no judge could be built or
     the judge/repair calls both failed; `status="done"` with a full verdict
     otherwise.
+
+    Emits `session.qa_completed` once the verdict is committed (docs/v2/_asks.md
+    V2-20-1), for every terminal status (`done`/`failed`/`skipped`) — the
+    worker calls this exactly once per session, so "completed" means "the
+    worker's QA pass is over", not "scored successfully".
     """
-    await _load_session(db, session_id)
+    session = await _load_session(db, session_id)
     row = await db.get(SessionQa, session_id)
     if row is None:
         row = SessionQa(session_id=session_id)
@@ -668,11 +713,27 @@ async def put_qa(session_id: str, payload: SessionQaIn, db: DbDep, _service: Ser
     row.error = payload.error
     row.scored_at = utcnow()
     await db.flush()
+    workspace_id = session.workspace_id
     log.info(
         "session_qa_reported",
         session_id=session_id,
         status=payload.status,
         scored_by="worker",
         score=row.score,
+    )
+    await db.commit()
+    await webhooks.emit(
+        database,
+        jobs,
+        workspace_id=workspace_id,
+        event_type=webhook_events.SESSION_QA_COMPLETED,
+        data={
+            "session_id": session_id,
+            "status": payload.status,
+            "score": payload.score,
+            "sentiment": payload.sentiment,
+            "scored_by": "worker",
+        },
+        background_tasks=background_tasks,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

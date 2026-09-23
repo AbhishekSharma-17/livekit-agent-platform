@@ -1,8 +1,7 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { NewResourceButton } from "@/components/shared/new-resource-button";
 import { AgentsTable } from "@/components/console/agents/agents-table";
 
 export const metadata: Metadata = { title: "Agents" };
@@ -19,11 +18,7 @@ export default function ConsoleAgentsPage() {
       <PageHeader
         title="Agents"
         description="Configure providers, instructions, tools and knowledge, then open a test call."
-        actions={
-          <Button asChild>
-            <Link href="/console/agents/new">New agent</Link>
-          </Button>
-        }
+        actions={<NewResourceButton href="/console/agents/new">New agent</NewResourceButton>}
       />
       <AgentsTable />
     </div>

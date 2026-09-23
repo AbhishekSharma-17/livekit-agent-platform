@@ -7,13 +7,14 @@ from typing import Any
 import httpx
 import jwt
 import pytest
+import respx
 from auth_helpers import WEB_ORIGIN, key_client, login, make_api_key, make_user, set_agent_columns
 from conftest import create_agent
 from fastapi import FastAPI
 from sqlalchemy import select
 
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
-from lkap_api.db.models import Agent, LiveKitConnection
+from lkap_api.db.models import Agent, LiveKitConnection, WebhookDelivery
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.settings import Settings, get_settings
@@ -277,3 +278,41 @@ async def test_limits_route_reads_defaults_and_builder_can_replace_them(
     assert replaced.json() == new
     assert (await admin_client.get(f"/v1/agents/{agent['id']}/limits")).json() == new
     assert zero.status_code == 422
+
+
+# --------------------------------------------------------------------------- V2-20-1: session.started
+async def test_connect_emits_session_started(admin_client: httpx.AsyncClient, database: Database) -> None:
+    created = await admin_client.post(
+        "/v1/webhooks", json={"url": "https://hooks.example.com/started", "events": ["session.started"]}
+    )
+    assert created.status_code == 201, created.text
+    agent = await create_agent(admin_client)
+
+    with respx.mock:
+        respx.post("https://hooks.example.com/started").mock(return_value=httpx.Response(200))
+        response = await _connect(admin_client, agent)
+    assert response.status_code == 200
+    session_id = response.json()["sessionId"]
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    (delivery,) = [d for d in deliveries if d.event_type == "session.started"]
+    assert delivery.payload["data"]["session_id"] == session_id
+    assert delivery.payload["data"]["agent_id"] == agent["id"]
+
+
+async def test_connect_with_no_matching_subscription_emits_nothing(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    created = await admin_client.post(
+        "/v1/webhooks", json={"url": "https://hooks.example.com/ended-only", "events": ["session.ended"]}
+    )
+    assert created.status_code == 201, created.text
+    agent = await create_agent(admin_client)
+
+    response = await _connect(admin_client, agent)
+    assert response.status_code == 200
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    assert [d for d in deliveries if d.event_type == "session.started"] == []

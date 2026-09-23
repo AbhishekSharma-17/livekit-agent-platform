@@ -20,6 +20,7 @@ import { requestSummary } from "@/components/console/tools/tool-row";
 import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 import { PageHeader } from "@/components/shared/page-header";
 import { SkeletonRows } from "@/components/shared/loading-state";
+import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 
 /**
  * `/console/tools` (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1, §3 WP-5
@@ -35,6 +36,8 @@ export function ToolsList() {
   const agentsQuery = useAgents();
   const providersQuery = useProviders();
   const secretBagSpec = providersQuery.data?.providers.find((p) => p.kind === "secret_bag");
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
 
   // The two "add" actions live in the page header, like every other console
   // list's primary action (UI_UX_SPEC §3.2), and stay reachable while the
@@ -51,7 +54,12 @@ export function ToolsList() {
             secretBagSpec={secretBagSpec}
             onSaved={refetch}
             trigger={
-              <Button type="button" variant="outline">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
                 <PlusIcon className="size-3.5" /> Add MCP server
               </Button>
             }
@@ -61,7 +69,7 @@ export function ToolsList() {
             secretBagSpec={secretBagSpec}
             onSaved={refetch}
             trigger={
-              <Button type="button">
+              <Button type="button" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
                 <PlusIcon className="size-3.5" /> Add HTTP tool
               </Button>
             }
@@ -215,6 +223,8 @@ function ToolActions({
   onRefetch: () => void;
 }) {
   const deleteTool = useDeleteTool();
+  const { canWrite } = useWriteAccess();
+  const writeReason = writeAccessReason();
 
   async function handleDelete() {
     try {
@@ -245,7 +255,14 @@ function ToolActions({
           secretBagSpec={secretBagSpec}
           onSaved={onRefetch}
           trigger={
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Edit ${tool.name}`}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${tool.name}`}
+              disabled={!canWrite}
+              title={canWrite ? undefined : writeReason}
+            >
               <PencilIcon className="size-3.5" />
             </Button>
           }
@@ -257,7 +274,14 @@ function ToolActions({
           secretBagSpec={secretBagSpec}
           onSaved={onRefetch}
           trigger={
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Edit ${tool.name}`}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${tool.name}`}
+              disabled={!canWrite}
+              title={canWrite ? undefined : writeReason}
+            >
               <PencilIcon className="size-3.5" />
             </Button>
           }
@@ -265,7 +289,14 @@ function ToolActions({
       )}
       <ConfirmDialog
         trigger={
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${tool.name}`}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Delete ${tool.name}`}
+            disabled={!canWrite}
+            title={canWrite ? undefined : writeReason}
+          >
             <Trash2Icon className="size-3.5" />
           </Button>
         }

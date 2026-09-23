@@ -130,7 +130,12 @@ describe("HttpToolEditorDialog", () => {
     fireEvent.click(getByText("Save tool"));
 
     await waitFor(() => expect(getByText("Save tool")).toBeTruthy());
-    expect(fetchMock).not.toHaveBeenCalled();
+    // `useWriteAccess` (docs/v2/_asks.md V2-20-5/V2-21-2) reads `auth/me` on
+    // every mount regardless of whether the credential picker renders — a
+    // harmless read, unlike the tool create/update call this test guards
+    // against.
+    const calls = fetchMock.mock.calls as unknown as [string, unknown][];
+    expect(calls.filter(([url]) => url !== "/api/console/auth/me")).toHaveLength(0);
     expect(onSaved).not.toHaveBeenCalled();
   });
 });

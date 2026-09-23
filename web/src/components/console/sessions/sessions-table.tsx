@@ -368,6 +368,13 @@ export function SessionStatusChips({ session }: { session: SessionOut }) {
           {sentenceCase(swept)}
         </StatusChip>
       ) : null}
+      {session.recording_status === "failed" ? (
+        <span title="Recording failed — see the Recording tab for details">
+          <StatusChip tone="danger" size="sm">
+            Recording failed
+          </StatusChip>
+        </span>
+      ) : null}
     </div>
   );
 }

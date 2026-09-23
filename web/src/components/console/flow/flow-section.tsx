@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useEditorContext } from "@/components/console/agents/editor/editor-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AgentOut } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /**
  * The agent editor's `flow` section (V2-16; visible only in flow mode, full
@@ -15,10 +16,10 @@ import type { AgentOut } from "@/contracts/lkap-contracts";
 const FlowCanvas = dynamic(() => import("./flow-canvas").then((mod) => mod.FlowCanvas), {
   ssr: false,
   loading: () => (
-    <div aria-busy="true" aria-label="Loading the flow canvas" className="flex flex-col gap-3">
+    <LoadingRegion label="Loading the flow canvas" className="flex flex-col gap-3">
       <Skeleton className="h-8 w-80" />
       <Skeleton className="h-[520px] w-full" />
-    </div>
+    </LoadingRegion>
   ),
 });
 

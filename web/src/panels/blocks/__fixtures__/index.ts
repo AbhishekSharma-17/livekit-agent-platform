@@ -15,9 +15,9 @@
  */
 import type { ReceivedMessage } from "@livekit/components-react";
 
-import type { AssetRef, UiState } from "@/contracts/lkap-contracts";
+import type { AssetRef, UiState, BlockSpec, PanelLayout } from "@/contracts/lkap-contracts";
 import { normalizeUiState, type UiStateStore } from "@/lib/ui-state";
-import type { BlockSpecV2, BlockType, PanelLayoutV2 } from "@/panels/composite/layout";
+import type { BlockType } from "@/panels/composite/layout";
 
 import genericUiState from "../../../../tests/fixtures/generic_ui_state.json";
 import documentState from "./document.json";
@@ -31,7 +31,7 @@ import transcriptState from "./transcript.json";
 import videoState from "./video.json";
 
 /** A `PanelLayout` with one block of every type (ids as in `layout.json`). */
-export const FIXTURE_LAYOUT = layout as PanelLayoutV2 & { blocks: BlockSpecV2[] };
+export const FIXTURE_LAYOUT = layout as PanelLayout & { blocks: BlockSpec[] };
 
 /** Filled state per stateful block type (form: `requested`). */
 export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unknown>>> = {

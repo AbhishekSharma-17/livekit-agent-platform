@@ -1,0 +1,99 @@
+{
+  "$id": "lkap-contracts/TrunkCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/telephony/trunks``.\n\n``inbound`` trunks accept calls to ``numbers`` (optionally only from\n``address``, an IP/CIDR/host allow-list entry); ``outbound`` trunks dial\nthrough ``address`` (the carrier's SIP host, e.g. ``example.pstn.twilio.com``)\nand present ``numbers[0]`` as the caller id. Secrets are write-only.",
+  "properties": {
+    "address": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Address"
+    },
+    "auth_password": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Write-only",
+      "title": "Auth Password"
+    },
+    "auth_username": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Auth Username"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "LiveKit connection; defaults to the workspace's default connection",
+      "title": "Connection Id"
+    },
+    "direction": {
+      "enum": [
+        "inbound",
+        "outbound"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "numbers": {
+      "items": {
+        "pattern": "^\\+[1-9]\\d{6,14}$",
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Numbers",
+      "type": "array"
+    },
+    "provider_hint": {
+      "default": "other",
+      "enum": [
+        "twilio",
+        "telnyx",
+        "other"
+      ],
+      "title": "Provider Hint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "direction",
+    "name"
+  ],
+  "title": "TrunkCreate",
+  "type": "object"
+}

@@ -55,3 +55,20 @@ export function splitNumbers(value: string): string[] {
     .map((part) => normalizeE164(part))
     .filter(Boolean);
 }
+
+/**
+ * Value patterns, mirroring `lkap_contracts.telephony` (R-V2-21; the generated
+ * `.d.ts` carries types, not regexes). The api re-checks every value.
+ */
+/** E.164: `+`, a non-zero country digit, 7–15 digits. */
+export const E164_PATTERN = /^\+[1-9]\d{6,14}$/;
+
+/** Keys `POST /v1/calls/{id}/dtmf` accepts. */
+export const DTMF_PATTERN = /^[0-9*#A-D]{1,32}$/;
+
+/** Transfer targets: E.164 or a `tel:` / `sip:` / `sips:` URI. */
+export const TRANSFER_TARGET_PATTERN = /^(\+[1-9]\d{6,14}|tel:\+?[0-9]{3,20}|sips?:[^\s@]+@\S+)$/;
+
+/** Trunk direction and carrier hint (`TrunkOut.direction` / `provider_hint`). */
+export type TrunkDirection = "inbound" | "outbound";
+export type ProviderHint = "twilio" | "telnyx" | "other";

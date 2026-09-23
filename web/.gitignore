@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# `next build` route table captured by CI for scripts/check-bundle.mjs (R-V2-18)
+/build.log
+
 # debug
 npm-debug.log*
 yarn-debug.log*

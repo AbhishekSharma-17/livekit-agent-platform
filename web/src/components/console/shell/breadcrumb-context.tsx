@@ -43,3 +43,14 @@ export function useSetBreadcrumbs(trail: BreadcrumbEntry[] | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setTrail, key]);
 }
+
+/**
+ * Declarative form of `useSetBreadcrumbs` for server pages (V2-19C): renders
+ * nothing, sets the top bar's trail. Every depth ≥ 2 console page uses the
+ * top bar for its trail — one breadcrumb `nav` per page (axe
+ * `landmark-unique`), never a second copy inside the `PageHeader`.
+ */
+export function ConsoleBreadcrumbs({ trail }: { trail: BreadcrumbEntry[] }) {
+  useSetBreadcrumbs(trail);
+  return null;
+}

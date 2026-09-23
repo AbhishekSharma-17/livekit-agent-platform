@@ -30,6 +30,7 @@ from lkap_api.deps import DbDep, ServiceDep, SettingsDep
 from lkap_api.fleet import registry
 from lkap_api.fleet.sweep import sweep_loop
 from lkap_api.logging import get_logger
+from lkap_api.packs import discover_manifests
 
 log = get_logger(__name__)
 
@@ -64,9 +65,12 @@ router = APIRouter(prefix="/internal/v1", tags=["fleet-internal"], lifespan=_swe
         "`connection_id` attributes the worker to the default connection."
     ),
 )
-async def register_worker(payload: WorkerRegisterIn, db: DbDep, _service: ServiceDep) -> WorkerRegisterOut:
-    """Upsert a worker instance."""
-    return await registry.register_worker(db, payload)
+async def register_worker(
+    payload: WorkerRegisterIn, db: DbDep, settings: SettingsDep, _service: ServiceDep
+) -> WorkerRegisterOut:
+    """Upsert a worker instance; warn when its packs differ from the api's (F-17)."""
+    api_pack_ids = [manifest.id for manifest in discover_manifests(settings.packs_list)]
+    return await registry.register_worker(db, payload, api_pack_ids=api_pack_ids)
 
 
 @router.post(

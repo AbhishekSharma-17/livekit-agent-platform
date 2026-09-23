@@ -16,6 +16,7 @@ under ``/v1/agents``; ``main.py`` includes it as before.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body
@@ -23,7 +24,7 @@ from lkap_contracts.api_models import Issue, NodeSpecsResponse, ValidationResult
 
 from lkap_api.config_service import validate, validation_context_for
 from lkap_api.deps import AdminCtxDep, DbDep
-from lkap_api.flows import draft_flow_issues, node_specs
+from lkap_api.flows import draft_flow_issues, node_specs, pack_tool_names_for
 from lkap_api.routers.agents import agent_config_of, load_scoped_agent
 
 router = APIRouter(tags=["flows"])
@@ -84,5 +85,5 @@ async def validate_flow(
     context = await validation_context_for(
         db, config, workspace_id=row.workspace_id, connection_id=row.connection_id
     )
-    full = validate(context)
+    full = validate(dataclasses.replace(context, pack_tool_names=pack_tool_names_for(row.pack_id)))
     return _result([i for i in full.issues if i.path.startswith(_FLOW_PATH_PREFIXES)])

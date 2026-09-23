@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Settings" };
 export default function ConsoleSettingsPage() {
   return (
     <div>
-      <PageHeader title="Settings" />
+      <PageHeader title="Settings" description="Your workspace, team, API keys, webhooks and account." />
       <SettingsTabs />
     </div>
   );

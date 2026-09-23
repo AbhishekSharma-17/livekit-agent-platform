@@ -19,6 +19,11 @@ Status rules:
   is still the supervisor's replica.
 * Rows that stop heartbeating are marked ``gone`` by :mod:`lkap_api.fleet.sweep`.
 
+``LKAP_PACKS`` parity (REVIEW-FINAL F-17): the api seeds agents from its own packs
+and the worker resolves an unknown ``pack_id`` to the null pack (generic panel, no
+pack tools), so a worker that registers with a different pack set than the api's
+logs a ``worker_pack_mismatch`` warning here, naming what is missing on each side.
+
 Nothing here reads or writes a secret.
 """
 
@@ -78,12 +83,32 @@ async def _by_key(db: AsyncSession, instance_key: str) -> WorkerInstance | None:
     return row
 
 
-async def register_worker(db: AsyncSession, payload: WorkerRegisterIn) -> WorkerRegisterOut:
+def pack_mismatch(api_pack_ids: Sequence[str], worker_pack_ids: Sequence[str]) -> tuple[list[str], list[str]]:
+    """Compare the api's and a worker's pack ids (F-17).
+
+    Args:
+        api_pack_ids: The manifest ids the api discovered from its ``LKAP_PACKS``.
+        worker_pack_ids: The ids the worker reported at registration.
+
+    Returns:
+        ``(missing_on_worker, unknown_to_api)``, both sorted; two empty lists mean parity.
+    """
+    api, worker = set(api_pack_ids), set(worker_pack_ids)
+    return sorted(api - worker), sorted(worker - api)
+
+
+async def register_worker(
+    db: AsyncSession, payload: WorkerRegisterIn, *, api_pack_ids: Sequence[str] | None = None
+) -> WorkerRegisterOut:
     """Insert or refresh the ``worker_instances`` row of one worker process.
 
     Args:
         db: Open session; the caller commits.
         payload: What the worker (or the supervisor on its behalf) reports.
+        api_pack_ids: The api's own pack ids; when given, a worker reporting a
+            different non-empty set is logged as ``worker_pack_mismatch`` (F-17).
+            An empty report is not compared: the supervisor registers a replica
+            before the worker itself reports its packs.
 
     Returns:
         The connection the worker is attributed to and the agent name it must serve.
@@ -119,6 +144,17 @@ async def register_worker(db: AsyncSession, payload: WorkerRegisterIn) -> Worker
         managed_by=managed_by,
         installed_providers=len(row.installed_provider_ids),
     )
+    if api_pack_ids is not None and payload.pack_ids:
+        missing_on_worker, unknown_to_api = pack_mismatch(api_pack_ids, payload.pack_ids)
+        if missing_on_worker or unknown_to_api:
+            log.warning(
+                "worker_pack_mismatch",
+                instance_key=row.instance_key,
+                connection_id=connection.id,
+                missing_on_worker=missing_on_worker,
+                unknown_to_api=unknown_to_api,
+                hint="set the same LKAP_PACKS for the api and the worker, then restart both",
+            )
     return WorkerRegisterOut(connection_id=connection.id, agent_name=connection.agent_name)
 
 

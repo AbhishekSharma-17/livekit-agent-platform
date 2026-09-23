@@ -15,9 +15,13 @@ import {
   splitNumbers,
 } from "@/components/console/telephony/model";
 import { TelephonyPage } from "@/components/console/telephony/telephony-page";
+import { DialingPolicyCard, parseDraft, policyFromSettings } from "@/components/console/telephony/dialing-policy";
+import { PhoneCallsCard } from "@/components/console/telephony/tools-section";
+import { TELEPHONY_TOOLS, BUILTIN_TOOLS } from "@/components/console/lib/constants";
+import type { AgentEditorForm } from "@/components/console/lib/schemas";
+import { FormProvider, useForm } from "react-hook-form";
 import { TrunkDialog } from "@/components/console/telephony/trunks-section";
-import type { AgentOut, CallOut, ConnectionOut } from "@/contracts/lkap-contracts";
-import type { DispatchRuleOut, PhoneNumberOut, TrunkOut } from "@/components/console/telephony/types";
+import type { AgentOut, CallOut, ConnectionOut, DispatchRuleOut, PhoneNumberOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 /**
  * `/console/telephony` and "Call a number" (V2-17). The api is mocked at
@@ -310,3 +314,169 @@ describe("Call a number", () => {
     expect(await screen.findByRole("dialog", { name: "Call a number" })).toBeTruthy();
   });
 });
+
+// ------------------------------------------------ V2-19: dialing policy (R-V2-23)
+function meWith(role: "owner" | "admin" | "builder" | "viewer") {
+  return {
+    "GET auth/me": {
+      user: { id: "u-1", email: "a@b.c", name: "A" },
+      workspaces: [{ id: "ws-1", slug: "default", name: "Default", role }],
+    },
+  };
+}
+
+describe("DialingPolicyCard", () => {
+  it("says outbound calls are off when the workspace has no policy", async () => {
+    stubApi({ ...meWith("admin"), "GET workspaces": { items: [{ id: "ws-1", settings: {} }], total: 1 } });
+    renderWithClient(<DialingPolicyCard />);
+
+    expect(await screen.findByText("Outbound calls off")).toBeTruthy();
+    expect(screen.getByText(/nobody can place or transfer a call/)).toBeTruthy();
+  });
+
+  it("saves the whole telephony object through PUT /v1/workspaces/{id}", async () => {
+    const requests = stubApi({
+      ...meWith("admin"),
+      "GET workspaces": {
+        items: [{ id: "ws-1", settings: { timezone: "UTC", telephony: { allowed_prefixes: ["+1"] } } }],
+        total: 1,
+      },
+    });
+    renderWithClient(<DialingPolicyCard />);
+    expect(await screen.findByText("Outbound calls on")).toBeTruthy();
+    const prefixes = await screen.findByLabelText("Allowed number prefixes");
+    await waitFor(() => expect((prefixes as HTMLInputElement).value).toBe("+1"));
+
+    fireEvent.change(prefixes, { target: { value: "+1, +44 20" } });
+    fireEvent.change(screen.getByLabelText(/Allowed SIP hosts/), { target: { value: "PBX.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+
+    await waitFor(() => expect(requests.some((r) => r.method === "PUT")).toBe(true));
+    const put = requests.find((r) => r.method === "PUT");
+    expect(put?.path).toBe("workspaces/ws-1");
+    expect(put?.body).toEqual({
+      settings: {
+        telephony: {
+          allowed_prefixes: ["+1", "+4420"],
+          allowed_sip_hosts: ["pbx.example.com"],
+          max_calls_per_min: 10,
+          max_concurrent_outbound: 5,
+        },
+      },
+    });
+  });
+
+  it("refuses a malformed prefix without calling the api", async () => {
+    const requests = stubApi({ ...meWith("owner"), "GET workspaces": { items: [{ id: "ws-1", settings: {} }], total: 1 } });
+    renderWithClient(<DialingPolicyCard />);
+
+    fireEvent.change(await screen.findByLabelText("Allowed number prefixes"), { target: { value: "1-555" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+
+    expect(await screen.findByText(/"1555" is not a prefix/)).toBeTruthy();
+    expect(requests.some((r) => r.method === "PUT")).toBe(false);
+  });
+
+  it("is read-only for builders", async () => {
+    stubApi({ ...meWith("builder"), "GET workspaces": { items: [{ id: "ws-1", settings: {} }], total: 1 } });
+    renderWithClient(<DialingPolicyCard />);
+
+    expect(await screen.findByText("Only admins and owners can change the policy.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save policy" })).toBeNull();
+    expect((screen.getByLabelText("Allowed number prefixes") as HTMLInputElement).readOnly).toBe(true);
+  });
+
+  it("parses stored settings leniently and validates drafts", () => {
+    expect(policyFromSettings(undefined).allowed_prefixes).toEqual([]);
+    expect(policyFromSettings({ telephony: { allowed_prefixes: ["+1", 2], max_calls_per_min: "x" } })).toEqual({
+      allowed_prefixes: ["+1"],
+      allowed_sip_hosts: [],
+      max_calls_per_min: 10,
+      max_concurrent_outbound: 5,
+    });
+    expect(parseDraft({ prefixes: "", hosts: "", perMin: "-1", concurrent: "2.5" }).errors).toEqual({
+      perMin: "Whole numbers only",
+      concurrent: "Whole numbers only",
+    });
+  });
+
+  it("is on the telephony page", async () => {
+    stubApi({ ...meWith("admin"), "GET workspaces": { items: [{ id: "ws-1", settings: {} }], total: 1 } });
+    renderWithClient(<TelephonyPage />);
+
+    expect(await screen.findByRole("region", { name: "Outbound dialing policy" })).toBeTruthy();
+  });
+});
+
+// ------------------------------------- V2-19: phone tools + destinations (R-V2-21/25)
+function PhoneCardHarness({
+  targets = [],
+  disabled = [],
+  onValues,
+}: {
+  targets?: { label: string; to: string }[];
+  disabled?: string[];
+  onValues: (values: AgentEditorForm) => void;
+}) {
+  const form = useForm<AgentEditorForm>({
+    defaultValues: {
+      config: {
+        tools: { builtin_disabled: disabled, http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+        telephony: { transfer_targets: targets },
+      },
+    } as unknown as AgentEditorForm,
+  });
+  const values = form.watch();
+  React.useEffect(() => {
+    onValues(values as AgentEditorForm);
+  });
+  return (
+    <FormProvider {...form}>
+      <PhoneCallsCard />
+    </FormProvider>
+  );
+}
+
+describe("PhoneCallsCard", () => {
+  it("lists the two phone tools, outside the ordinary built-ins", () => {
+    expect(TELEPHONY_TOOLS.map((t) => t.name)).toEqual(["send_dtmf", "transfer_call"]);
+    expect(BUILTIN_TOOLS.some((t) => TELEPHONY_TOOLS.some((p) => p.name === t.name))).toBe(false);
+  });
+
+  it("toggles write tools.builtin_disabled, and transfer needs a destination", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(<PhoneCardHarness onValues={(v) => (latest = v)} />);
+
+    const transfer = screen.getByRole("switch", { name: "Transfer calls" });
+    expect(transfer.getAttribute("data-disabled")).not.toBeNull();
+    expect(screen.getByText(/Phone calls only\. Add a transfer destination first/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Press phone keys" }));
+    await waitFor(() => expect(latest?.config.tools.builtin_disabled).toEqual(["send_dtmf"]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add destination" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Front desk" } });
+    fireEvent.change(screen.getByLabelText("Number or SIP address"), { target: { value: "+15550003333" } });
+    await waitFor(() =>
+      expect(latest?.config.telephony.transfer_targets).toEqual([{ label: "Front desk", to: "+15550003333" }]),
+    );
+    expect(screen.getByRole("switch", { name: "Transfer calls" }).getAttribute("data-disabled")).toBeNull();
+  });
+
+  it("removes a destination", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(
+      <PhoneCardHarness
+        targets={[{ label: "Sales", to: "+15550001111" }, { label: "Desk", to: "sip:desk@pbx.example.com" }]}
+        onValues={(v) => (latest = v)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove destination 1" }));
+
+    await waitFor(() =>
+      expect(latest?.config.telephony.transfer_targets).toEqual([{ label: "Desk", to: "sip:desk@pbx.example.com" }]),
+    );
+  });
+});
+

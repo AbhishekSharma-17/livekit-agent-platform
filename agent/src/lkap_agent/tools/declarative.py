@@ -168,8 +168,10 @@ def build_http_tools(
     Args:
         defs: HTTP tool definitions from `ResolvedAgentConfig.tools`
             (already secret-substituted by the api).
-        platform_allowed_hosts: `LKAP_HTTP_TOOL_ALLOWED_HOSTS`, unioned with
-            each definition's own `allowed_hosts` (docs/CONTRACTS.md §3/§9).
+        platform_allowed_hosts: `LKAP_HTTP_TOOL_ALLOWED_HOSTS`. Since F-14 a
+            request must pass the intersection of this list with each
+            definition's own `allowed_hosts`, plus a private-range deny-list,
+            enforced in `_http_safety.check_url_allowed` (docs/CONTRACTS.md §3/§9).
 
     Returns:
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.

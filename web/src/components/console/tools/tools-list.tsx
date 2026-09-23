@@ -9,7 +9,6 @@ import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { StatusChip } from "@/components/shared/status-chip";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents, useDeleteTool, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { EmptyState } from "@/components/console/shared/empty-state";
@@ -19,6 +18,8 @@ import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-edito
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
 import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import { PageHeader } from "@/components/shared/page-header";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 /**
  * `/console/tools` (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1, §3 WP-5
@@ -35,19 +36,56 @@ export function ToolsList() {
   const providersQuery = useProviders();
   const secretBagSpec = providersQuery.data?.providers.find((p) => p.kind === "secret_bag");
 
+  // The two "add" actions live in the page header, like every other console
+  // list's primary action (UI_UX_SPEC §3.2), and stay reachable while the
+  // list loads or errors.
+  const refetch = () => void toolsQuery.refetch();
+  const header = (
+    <PageHeader
+      title="Tools"
+      description="HTTP tools and MCP servers, shared across agents."
+      actions={
+        <>
+          <McpToolEditorDialog
+            agentId={null}
+            secretBagSpec={secretBagSpec}
+            onSaved={refetch}
+            trigger={
+              <Button type="button" variant="outline">
+                <PlusIcon className="size-3.5" /> Add MCP server
+              </Button>
+            }
+          />
+          <HttpToolEditorDialog
+            agentId={null}
+            secretBagSpec={secretBagSpec}
+            onSaved={refetch}
+            trigger={
+              <Button type="button">
+                <PlusIcon className="size-3.5" /> Add HTTP tool
+              </Button>
+            }
+          />
+        </>
+      }
+    />
+  );
+
   if (toolsQuery.isLoading) {
     return (
-      <div className="space-y-2">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
+      <div>
+        {header}
+        <SkeletonRows label="Loading tools" rowClassName="h-12" />
       </div>
     );
   }
 
   if (toolsQuery.isError) {
     return (
-      <ErrorBanner message={`Could not reach the api: ${errorMessage(toolsQuery.error)}`} onRetry={() => toolsQuery.refetch()} />
+      <div>
+        {header}
+        <ErrorBanner message={`Couldn't load tools — ${errorMessage(toolsQuery.error)}`} onRetry={refetch} />
+      </div>
     );
   }
 
@@ -112,30 +150,8 @@ export function ToolsList() {
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <HttpToolEditorDialog
-          agentId={null}
-          secretBagSpec={secretBagSpec}
-          onSaved={() => void toolsQuery.refetch()}
-          trigger={
-            <Button type="button" variant="outline" size="sm">
-              <PlusIcon className="size-3.5" /> Add HTTP tool
-            </Button>
-          }
-        />
-        <McpToolEditorDialog
-          agentId={null}
-          secretBagSpec={secretBagSpec}
-          onSaved={() => void toolsQuery.refetch()}
-          trigger={
-            <Button type="button" variant="outline" size="sm">
-              <PlusIcon className="size-3.5" /> Add MCP server
-            </Button>
-          }
-        />
-      </div>
-
+    <div>
+      {header}
       <ResponsiveTable
         columns={columns}
         rows={tools}
@@ -171,7 +187,7 @@ export function ToolsList() {
               <HttpToolEditorDialog
                 agentId={null}
                 secretBagSpec={secretBagSpec}
-                onSaved={() => void toolsQuery.refetch()}
+                onSaved={refetch}
                 trigger={<Button type="button">Add HTTP tool</Button>}
               />
             }

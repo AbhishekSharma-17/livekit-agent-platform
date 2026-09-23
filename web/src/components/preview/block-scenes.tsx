@@ -13,7 +13,7 @@
  */
 import * as React from "react";
 
-import type { AgentPublicOut } from "@/contracts/lkap-contracts";
+import type { AgentPublicOut, BlockSpec, PanelLayout } from "@/contracts/lkap-contracts";
 import { emptyUiState, normalizeUiState, type UiStateStore } from "@/lib/ui-state";
 import { Block } from "@/panels/blocks";
 import { BLOCK_CATALOG, BLOCK_TYPES } from "@/panels/blocks/catalog";
@@ -29,9 +29,7 @@ import {
 import { CompositePanel } from "@/panels/composite";
 import {
   effectiveLayout,
-  type BlockSpecV2,
   type BlockType,
-  type PanelLayoutV2,
 } from "@/panels/composite/layout";
 
 import { previewPerform } from "./fixtures";
@@ -39,7 +37,7 @@ import { previewPerform } from "./fixtures";
 const NO_ASSETS = new Map<string, string>();
 
 /** The agent the block scenes render for. */
-export function previewCompositeAgent(panel: PanelLayoutV2): AgentPublicOut {
+export function previewCompositeAgent(panel: PanelLayout): AgentPublicOut {
   return {
     id: "preview-composite-agent",
     name: "Maya",
@@ -57,14 +55,14 @@ export function previewCompositeAgent(panel: PanelLayoutV2): AgentPublicOut {
  * fixture, keyed by the block's own id — so a draft with ids the fixtures
  * never heard of still renders filled blocks.
  */
-export function fixtureStateFor(blocks: readonly BlockSpecV2[]): UiStateStore["state"] {
+export function fixtureStateFor(blocks: readonly BlockSpec[]): UiStateStore["state"] {
   const states: Record<string, unknown> = {};
   for (const spec of blocks) states[spec.id] = BLOCK_FIXTURE_STATES[spec.type] ?? {};
   return fixtureUiState(states);
 }
 
 /** The composite panel rendering `layout` against the fixtures (no room). */
-export function CompositePreview({ layout, className }: { layout: PanelLayoutV2; className?: string }) {
+export function CompositePreview({ layout, className }: { layout: PanelLayout; className?: string }) {
   const resolved = effectiveLayout(layout);
   const agent = React.useMemo(() => previewCompositeAgent(layout), [layout]);
   const state = React.useMemo(() => fixtureStateFor(resolved.blocks), [resolved.blocks]);
@@ -92,7 +90,7 @@ export const BLOCK_SCENE_STATES = ["filled", "empty", "submitted"] as const;
 export type BlockSceneState = (typeof BLOCK_SCENE_STATES)[number];
 
 /** The single-block spec a `blocks` scene renders (title from the catalog). */
-export function blockSceneSpec(type: BlockType): BlockSpecV2 {
+export function blockSceneSpec(type: BlockType): BlockSpec {
   const fromLayout = FIXTURE_LAYOUT.blocks.find((spec) => spec.type === type);
   return fromLayout ?? { id: type, type, title: BLOCK_CATALOG[type].defaultTitle, config: {}, order: 0 };
 }

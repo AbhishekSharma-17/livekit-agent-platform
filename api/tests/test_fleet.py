@@ -15,6 +15,7 @@ from sqlalchemy import select
 from lkap_api.connections import service
 from lkap_api.db.models import AuditLog, FleetDesiredState, LiveKitConnection, WorkerInstance, utcnow
 from lkap_api.db.session import Database
+from lkap_api.fleet import registry
 from lkap_api.fleet.registry import STALE_AFTER
 from lkap_api.fleet.sweep import PRUNE_GONE_AFTER, sweep_once
 from lkap_api.settings import Settings
@@ -68,6 +69,69 @@ async def test_register_creates_a_ready_row_and_returns_the_agent_name(
     assert (row.connection_id, row.status, row.managed_by) == (connection_id, "ready", "external")
     assert row.installed_provider_ids == ["deepgram-stt", "openai-llm"]
     assert row.last_heartbeat_at is not None
+
+
+class _RecordingLog:
+    def __init__(self) -> None:
+        self.warnings: list[tuple[str, dict[str, Any]]] = []
+
+    def warning(self, event: str, **kwargs: Any) -> None:
+        self.warnings.append((event, kwargs))
+
+    def info(self, event: str, **kwargs: Any) -> None:
+        pass
+
+    def debug(self, event: str, **kwargs: Any) -> None:
+        pass
+
+
+def test_pack_mismatch_names_what_each_side_lacks() -> None:
+    assert registry.pack_mismatch(["generic", "insurance_claim"], ["insurance_claim", "generic"]) == ([], [])
+    assert registry.pack_mismatch(["generic", "insurance_claim"], ["generic", "acme"]) == (
+        ["insurance_claim"],
+        ["acme"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("worker_packs", "warned"),
+    [
+        (["generic", "insurance_claim"], False),
+        (["generic"], True),
+        ([], False),  # the supervisor pre-registers a replica with no packs yet
+    ],
+)
+async def test_register_warns_when_the_worker_packs_differ_from_the_api(
+    service_client: httpx.AsyncClient,
+    database: Database,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    worker_packs: list[str],
+    warned: bool,
+) -> None:
+    """F-17: the api's `LKAP_PACKS` (conftest: generic + insurance_claim) vs the worker's report."""
+    recorder = _RecordingLog()
+    monkeypatch.setattr(registry, "log", recorder)
+    connection_id = await _connection(database, settings, slug="pool-packs")
+
+    response = await service_client.post(
+        "/internal/v1/workers/register", json=_register_body(connection_id, pack_ids=worker_packs)
+    )
+
+    assert response.status_code == 200, response.text
+    mismatches = [kwargs for event, kwargs in recorder.warnings if event == "worker_pack_mismatch"]
+    if warned:
+        assert mismatches == [
+            {
+                "instance_key": "host:101",
+                "connection_id": connection_id,
+                "missing_on_worker": ["insurance_claim"],
+                "unknown_to_api": [],
+                "hint": "set the same LKAP_PACKS for the api and the worker, then restart both",
+            }
+        ]
+    else:
+        assert mismatches == []
 
 
 async def test_register_without_connection_id_uses_the_default_connection(

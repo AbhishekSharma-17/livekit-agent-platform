@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/BlockConfig_custom.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).\n\n``kind`` names what the block shows (``\"flow_progress\"`` mirrors the flow\nstate, R-V2-14). It is optional so a block added from the composer, which\nhas no field for it yet, still saves.",
+  "properties": {
+    "kind": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Kind"
+    }
+  },
+  "title": "BlockConfig_custom",
+  "type": "object"
+}

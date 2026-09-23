@@ -29,6 +29,7 @@ import { api, ApiError } from "@/lib/api";
 import type { ApiKeyCreated, ApiKeyOut, Scope } from "./api-types";
 import { SCOPES } from "./api-types";
 import { useActiveWorkspace, useApiKeys, useInvalidateSettings } from "./use-settings-queries";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 function keyStatus(key: ApiKeyOut): { tone: "success" | "danger" | "warning"; label: string } {
   if (key.revoked_at) return { tone: "danger", label: "Revoked" };
@@ -77,7 +78,7 @@ export function ApiKeysTab() {
     },
     {
       id: "actions",
-      header: "",
+      header: <span className="sr-only">Actions</span>,
       align: "end",
       interactive: true,
       cell: (key) =>
@@ -96,7 +97,7 @@ export function ApiKeysTab() {
     >
       <SectionRow>
         {keysQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <SkeletonRows label="Loading API keys" rowClassName="h-12" />
         ) : keysQuery.isError ? (
           <ErrorBanner message={`Couldn't load API keys — ${errorMessage(keysQuery.error)}`} onRetry={() => keysQuery.refetch()} />
         ) : keys.length === 0 ? (

@@ -32,8 +32,12 @@ export interface LkapContracts {
   AvatarOptions?: AvatarOptions;
   BlockSpec?: BlockSpec;
   CallCreate?: CallCreate;
+  CallDtmfIn?: CallDtmfIn;
+  CallDtmfOut?: CallDtmfOut;
   CallOut?: CallOut;
   CallPage?: CallPage;
+  CallReportIn?: CallReportIn;
+  CallTransferIn?: CallTransferIn;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
   ConfigVersionOut?: ConfigVersionOut;
@@ -55,6 +59,9 @@ export interface LkapContracts {
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
   DispatchMetadata?: DispatchMetadata;
+  DispatchRuleCreate?: DispatchRuleCreate;
+  DispatchRuleOut?: DispatchRuleOut;
+  DispatchRulePage?: DispatchRulePage;
   DocumentBlockState?: DocumentBlockState;
   EndNode?: EndNode;
   ErrorBody?: ErrorBody;
@@ -73,6 +80,8 @@ export interface LkapContracts {
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
   InternalKbSearchRequest?: InternalKbSearchRequest;
+  InternalTransferIn?: InternalTransferIn;
+  InternalTransferOut?: InternalTransferOut;
   Issue?: Issue;
   KbCitationsBlockState?: KbCitationsBlockState;
   KbCreate?: KbCreate;
@@ -93,6 +102,10 @@ export interface LkapContracts {
   PacksResponse?: PacksResponse;
   Page?: Page;
   PanelLayout?: PanelLayout;
+  PhoneNumberCreate?: PhoneNumberCreate;
+  PhoneNumberOut?: PhoneNumberOut;
+  PhoneNumberPage?: PhoneNumberPage;
+  PhoneNumberUpdate?: PhoneNumberUpdate;
   Price?: Price;
   ProviderOut?: ProviderOut;
   ProviderSettingsIn?: ProviderSettingsIn;
@@ -123,6 +136,7 @@ export interface LkapContracts {
   SessionSummaryIn?: SessionSummaryIn;
   StartNode?: StartNode;
   TableBlockState?: TableBlockState;
+  TelephonyConfig?: TelephonyConfig;
   ToolCreate?: ToolCreate;
   ToolDefinition?: ToolDefinition;
   ToolDryRunRequest?: ToolDryRunRequest;
@@ -133,6 +147,11 @@ export interface LkapContracts {
   TranscriptBlockState?: TranscriptBlockState;
   TranscriptTurn?: TranscriptTurn;
   TransferNode?: TransferNode;
+  TransferTarget?: TransferTarget;
+  TrunkCreate?: TrunkCreate;
+  TrunkOut?: TrunkOut;
+  TrunkPage?: TrunkPage;
+  TrunkUpdate?: TrunkUpdate;
   UiPatch?: UiPatch;
   UiRequest?: UiRequest;
   UiRequestResult?: UiRequestResult;
@@ -224,6 +243,7 @@ export interface AgentConfig {
   pipeline: PipelineConfig;
   qa?: QaConfig;
   recording?: RecordingConfig;
+  telephony?: TelephonyConfig;
   timezone?: string;
   tools?: ToolsConfig;
   v?: 1 | 2;
@@ -450,6 +470,7 @@ export interface BlockSpec {
   };
   id: string;
   order?: number;
+  title?: string | null;
   type:
     | "status"
     | "notes"
@@ -525,6 +546,34 @@ export interface RecordingConfig {
   enabled?: boolean;
   retention_days?: number | null;
   storage_config_id?: string | null;
+}
+/**
+ * Phone-call settings of an agent (``AgentConfig.telephony``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TelephonyConfig".
+ */
+export interface TelephonyConfig {
+  /**
+   * @maxItems 50
+   */
+  transfer_targets?: TransferTarget[];
+}
+/**
+ * One destination the agent may transfer a caller to.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TransferTarget".
+ */
+export interface TransferTarget {
+  /**
+   * What the model and the caller call it
+   */
+  label: string;
+  /**
+   * E.164 number or tel:/sip:/sips: URI
+   */
+  to: string;
 }
 /**
  * Built-in tool gating plus references to admin-authored tool rows.
@@ -697,6 +746,29 @@ export interface CallCreate {
   };
 }
 /**
+ * ``POST /v1/calls/{id}/dtmf``: digits the agent plays into the call.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallDtmfIn".
+ */
+export interface CallDtmfIn {
+  /**
+   * 0-9, *, #, A-D; up to 32
+   */
+  digits: string;
+}
+/**
+ * What was queued to the worker (no delivery acknowledgement, R-V2-25).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallDtmfOut".
+ */
+export interface CallDtmfOut {
+  call_id: string;
+  digits: string;
+  queued?: boolean;
+}
+/**
  * One inbound or outbound call.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -726,6 +798,40 @@ export interface CallOut {
 export interface CallPage {
   items: CallOut[];
   total: number;
+}
+/**
+ * ``POST /internal/v1/telephony/calls/report`` — the worker's view of a SIP leg.
+ *
+ * Webhooks are the primary source of call status, but a dev install often
+ * has no public webhook url; the worker reports what it saw so the calls log
+ * is right either way. Transitions only ever move forward.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallReportIn".
+ */
+export interface CallReportIn {
+  direction?: ("inbound" | "outbound") | null;
+  from_e164?: string | null;
+  participant_identity?: string | null;
+  reason?: string | null;
+  session_id: string;
+  sip_call_id?: string | null;
+  status: "answered" | "completed" | "failed";
+  to_e164?: string | null;
+}
+/**
+ * ``POST /v1/calls/{id}/transfer``: a cold (SIP REFER) transfer.
+ *
+ * ``to`` must also pass the workspace's dialing policy (R-V2-23).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CallTransferIn".
+ */
+export interface CallTransferIn {
+  /**
+   * E.164 number or tel:/sip: URI
+   */
+  to: string;
 }
 /**
  * One model, voice, avatar or persona listed by a vendor catalog adapter.
@@ -1041,6 +1147,54 @@ export interface DispatchMetadata {
   v?: 2;
 }
 /**
+ * ``POST /v1/telephony/dispatch-rules``: route calls on an inbound trunk to an agent.
+ *
+ * ``numbers`` empty means every number of the trunk. Each call gets its own
+ * room named ``<room_prefix><caller>_<random>`` (LiveKit's individual rule).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DispatchRuleCreate".
+ */
+export interface DispatchRuleCreate {
+  agent_id: string;
+  /**
+   * @maxItems 100
+   */
+  numbers?: string[];
+  /**
+   * Write-only
+   */
+  pin?: string | null;
+  room_prefix?: string;
+  trunk_id: string;
+}
+/**
+ * A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DispatchRuleOut".
+ */
+export interface DispatchRuleOut {
+  agent_id: string;
+  connection_id: string;
+  created_at: string;
+  has_pin?: boolean;
+  id: string;
+  lk_rule_id?: string | null;
+  managed_by_number?: string | null;
+  numbers?: string[];
+  room_prefix?: string;
+  trunk_id: string;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DispatchRulePage".
+ */
+export interface DispatchRulePage {
+  items: DispatchRuleOut[];
+  total: number;
+}
+/**
  * A document shown page by page, optionally with highlights.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1248,6 +1402,28 @@ export interface InternalKbSearchRequest {
   k?: number;
   kb_ids: string[];
   query: string;
+}
+/**
+ * ``POST /internal/v1/telephony/sessions/{id}/transfer`` (the ``transfer_call`` tool).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InternalTransferIn".
+ */
+export interface InternalTransferIn {
+  participant_identity?: string | null;
+  to: string;
+}
+/**
+ * The transfer outcome as the tool reports it to the model (``refused`` / ``failed`` / a call status).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InternalTransferOut".
+ */
+export interface InternalTransferOut {
+  call_id?: string | null;
+  ok: boolean;
+  reason?: string | null;
+  status: string;
 }
 /**
  * One addressable validation finding (UI_UX_SPEC §7.14).
@@ -1524,6 +1700,57 @@ export interface PacksResponse {
 export interface Page {
   items: unknown[];
   total: number;
+}
+/**
+ * ``POST /v1/telephony/numbers``.
+ *
+ * Binding a number to a trunk adds it to the trunk's numbers. Setting
+ * ``inbound_agent_id`` (inbound trunks only) creates a dispatch rule that
+ * sends calls to this number to that agent.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PhoneNumberCreate".
+ */
+export interface PhoneNumberCreate {
+  e164: string;
+  inbound_agent_id?: string | null;
+  label?: string;
+  trunk_id?: string | null;
+}
+/**
+ * A number owned by the workspace and the agent its inbound calls reach.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PhoneNumberOut".
+ */
+export interface PhoneNumberOut {
+  dispatch_rule_id?: string | null;
+  e164: string;
+  id: string;
+  inbound_agent_id?: string | null;
+  label?: string;
+  trunk_id?: string | null;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PhoneNumberPage".
+ */
+export interface PhoneNumberPage {
+  items: PhoneNumberOut[];
+  total: number;
+}
+/**
+ * ``PUT /v1/telephony/numbers/{id}``: only the fields present in the body change.
+ *
+ * ``inbound_agent_id: null`` stops inbound routing for the number.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PhoneNumberUpdate".
+ */
+export interface PhoneNumberUpdate {
+  inbound_agent_id?: string | null;
+  label?: string | null;
+  trunk_id?: string | null;
 }
 /**
  * One vendor price point.
@@ -1825,6 +2052,9 @@ export interface ResolvedAgentConfig {
   tools: (HttpToolDefinition | McpServerDefinition)[];
   ui_panel_id: string;
   v?: 2;
+  variables?: {
+    [k: string]: unknown;
+  };
   workspace_id?: string;
 }
 /**
@@ -2259,6 +2489,83 @@ export interface ToolPage {
  */
 export interface TranscriptBlockState {
   show_tools?: boolean;
+}
+/**
+ * ``POST /v1/telephony/trunks``.
+ *
+ * ``inbound`` trunks accept calls to ``numbers`` (optionally only from
+ * ``address``, an IP/CIDR/host allow-list entry); ``outbound`` trunks dial
+ * through ``address`` (the carrier's SIP host, e.g. ``example.pstn.twilio.com``)
+ * and present ``numbers[0]`` as the caller id. Secrets are write-only.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TrunkCreate".
+ */
+export interface TrunkCreate {
+  address?: string | null;
+  /**
+   * Write-only
+   */
+  auth_password?: string | null;
+  auth_username?: string | null;
+  /**
+   * LiveKit connection; defaults to the workspace's default connection
+   */
+  connection_id?: string | null;
+  direction: "inbound" | "outbound";
+  name: string;
+  /**
+   * @maxItems 100
+   */
+  numbers?: string[];
+  provider_hint?: "twilio" | "telnyx" | "other";
+}
+/**
+ * A SIP trunk as stored by the platform, with its LiveKit id (never its password).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TrunkOut".
+ */
+export interface TrunkOut {
+  address?: string | null;
+  auth_username?: string | null;
+  connection_id: string;
+  created_at: string;
+  direction: "inbound" | "outbound";
+  has_password?: boolean;
+  id: string;
+  lk_trunk_id?: string | null;
+  name: string;
+  numbers?: string[];
+  provider_hint?: "twilio" | "telnyx" | "other";
+  updated_at: string;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TrunkPage".
+ */
+export interface TrunkPage {
+  items: TrunkOut[];
+  total: number;
+}
+/**
+ * ``PUT /v1/telephony/trunks/{id}``: omitted fields keep their value.
+ *
+ * ``auth_password`` omitted keeps the stored password, ``""`` clears it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TrunkUpdate".
+ */
+export interface TrunkUpdate {
+  address?: string | null;
+  /**
+   * Write-only
+   */
+  auth_password?: string | null;
+  auth_username?: string | null;
+  name?: string | null;
+  numbers?: string[] | null;
+  provider_hint?: ("twilio" | "telnyx" | "other") | null;
 }
 /**
  * An ordered batch of ops applied to the UI's copy of :class:`UiState`.

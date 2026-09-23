@@ -5,12 +5,13 @@
  * case `h3`, count chip, hairline above, no nested card) plus the block's
  * identity for `show_block`, tests and the capture harness.
  */
+import type { BlockSpec } from "@/contracts/lkap-contracts";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { PanelBlock } from "@/panels/generic/blocks";
 
-import type { BlockSpecV2 } from "@/panels/composite/layout";
+
 import { blockDomId } from "./types";
 
 export function BlockFrame({
@@ -23,7 +24,7 @@ export function BlockFrame({
   className,
   children,
 }: {
-  spec: BlockSpecV2;
+  spec: BlockSpec;
   title: string | null;
   count?: number;
   action?: React.ReactNode;

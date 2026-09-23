@@ -1,6 +1,5 @@
 "use client";
 
-import { PageHeader } from "@/components/shared/page-header";
 import { ToolsList } from "@/components/console/tools/tools-list";
 
 /**
@@ -11,9 +10,7 @@ import { ToolsList } from "@/components/console/tools/tools-list";
  */
 export default function ToolsPage() {
   return (
-    <div>
-      <PageHeader title="Tools" description="HTTP tools and MCP servers, shared across agents." />
-      <ToolsList />
-    </div>
+    // `ToolsList` renders the header: its add actions share the list's queries.
+    <ToolsList />
   );
 }

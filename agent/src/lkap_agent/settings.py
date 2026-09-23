@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     #: the room before it shuts down (REVIEW-FINAL F-33). `None`/`0` ends the
     #: job as soon as the caller leaves.
     reconnect_grace_s: float | None = 60.0
+    #: `LKAP_SIP_ANSWER_TIMEOUT_S`: how long an outbound (`sip_out`) job waits for
+    #: the callee to answer before it gives up without speaking (R-V2-20). A
+    #: backstop only: the api deletes the room when the dial fails, which ends
+    #: the wait at once. Default = the api's `MAX_RING_S + DIAL_MARGIN_S`. SIP
+    #: jobs get no reconnect grace: a phone leg never rejoins.
+    sip_answer_timeout_s: float = 135.0
 
     service_token: str
     api_base_url: str

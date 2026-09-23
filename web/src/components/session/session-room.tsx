@@ -48,6 +48,7 @@ import { useAgentRpc } from "@/hooks/useAgentRpc";
 import { useUiRequests } from "@/hooks/useUiRequests";
 import { useUiState } from "@/hooks/useUiState";
 import { toPanelConnectionState } from "@/lib/livekit";
+import { panelLayoutOf } from "@/panels/composite/layout";
 import {
   agentActionFor,
   panelLayoutFor,
@@ -81,6 +82,8 @@ export interface SessionRoomProps {
   error?: string | null;
   /** `?mode=test`: show the test bar and the way back to the editor. */
   testMode?: boolean;
+  /** `?embed=1`: no top strip, compact control bar (ask V2-18-9). */
+  embed?: boolean;
   onRetry: () => void;
   /** Leave without ending the call normally (the failure overlay). The
    * reason travels back so the pre-call card can show it above Start. */
@@ -94,6 +97,7 @@ export function SessionRoom({
   uiPanelId,
   error,
   testMode,
+  embed = false,
   onRetry,
   onLeave,
   onEnded,
@@ -323,6 +327,16 @@ export function SessionRoom({
   // The composite panel's layout is per agent (`PanelLayout.layout`, V2-11).
   const layout = panelLayoutFor(panel, agent);
   const status = ui.state.status;
+  // R-V2-16: the avatar is decoded once — by the video block when a
+  // blocks-aware panel shows one, otherwise by the stage.
+  const avatarInPanel = useMemo(
+    () =>
+      Boolean(panel.blocksAware) &&
+      panelLayoutOf(agent).blocks.some(
+        (block) => block.type === "video" && (block.config?.source ?? "agent_avatar") === "agent_avatar",
+      ),
+    [agent, panel.blocksAware],
+  );
 
   return (
     <SessionShell
@@ -338,6 +352,7 @@ export function SessionRoom({
       agentName={agent.name}
       agentState={agentState}
       elapsedMs={elapsedMs}
+      embed={embed}
       testBar={
         testMode ? <TestModeBar backHref={`/console/agents/${agent.id}`} /> : undefined
       }
@@ -347,6 +362,7 @@ export function SessionRoom({
           agentName={agent.name}
           agentState={agentState}
           compact={layout === "wide"}
+          suppressAgentVideo={avatarInPanel}
           elapsedMs={elapsedMs}
           audioBlocked={connectionState === "connected" && !canPlayAudio}
           onEnableAudio={startAudioProps.onClick}
@@ -394,6 +410,7 @@ export function SessionRoom({
           onDisconnect={handleDisconnect}
           onDeviceError={handleDeviceError}
           deviceErrors={deviceErrors}
+          compact={embed}
         />
       }
     />

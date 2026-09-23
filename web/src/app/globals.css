@@ -185,7 +185,9 @@
   --border: oklch(1 0 0 / 16%); /* spec 10% → 16%: 1.5:1 decorative floor */
   --input: oklch(1 0 0 / 35%); /* spec 16% → 35%: 3:1 over background and card */
   --ring: var(--brand);
-  --destructive: oklch(0.66 0.19 25);
+  /* 0.66 → 0.72 (V2-19C): the destructive button's text on its own
+     `destructive/20` tint over --card was 4.07:1; now 4.85:1 (4.6:1 on popover). */
+  --destructive: oklch(0.72 0.19 25);
   --destructive-foreground: oklch(0.15 0.03 25);
 
   --brand: oklch(0.74 0.15 152);

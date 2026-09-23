@@ -2,15 +2,16 @@ import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { ConnectionCreateForm } from "@/components/console/connections/connection-create-form";
+import { ConsoleBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 
 export const metadata: Metadata = { title: "New connection" };
 
 export default function NewConnectionPage() {
   return (
     <div>
+      <ConsoleBreadcrumbs trail={[{ label: "Connections", href: "/console/connections" }, { label: "New connection" }]} />
       <PageHeader
         title="New connection"
-        breadcrumbs={[{ label: "Connections", href: "/console/connections" }, { label: "New" }]}
         description="Test the details before saving — nothing is stored until the test passes."
       />
       <ConnectionCreateForm />

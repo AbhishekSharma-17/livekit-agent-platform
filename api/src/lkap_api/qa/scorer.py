@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from lkap_contracts.agent_config import AgentConfig
+from lkap_contracts.agent_config import AgentConfig, effective_qa
 from lkap_contracts.qa import QaVerdict
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -137,7 +137,9 @@ async def _run_scoring(session: AsyncSession, ctx: JobContext, session_id: str) 
         config = AgentConfig.model_validate(agent.config)
     except ValidationError as exc:
         return QaOutcome(action="failed", error=f"invalid agent config: {exc}"[:500])
-    if not config.qa.enabled:
+    # R-V2-11 (asks V2-16-4): a flow `qa` node turns QA on and may carry its own rubric.
+    qa = effective_qa(config)
+    if not qa.enabled:
         log.debug("qa_disabled", session_id=session_id)
         return QaOutcome(action="skip")
 
@@ -148,7 +150,7 @@ async def _run_scoring(session: AsyncSession, ctx: JobContext, session_id: str) 
         return QaOutcome(action="failed", error=reason or "no judge resolvable")
 
     transcript_text = render_transcript(row.transcript or [])
-    system, user = build_prompt(rubric_prompt=config.qa.rubric_prompt, transcript_text=transcript_text)
+    system, user = build_prompt(rubric_prompt=qa.rubric_prompt, transcript_text=transcript_text)
     result, raw_text, error = await _complete_with_repair(resolution.llm, system, user)
     if result is None:
         return QaOutcome(

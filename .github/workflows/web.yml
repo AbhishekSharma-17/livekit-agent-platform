@@ -55,4 +55,11 @@ jobs:
         working-directory: web
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
-        run: pnpm build
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee build.log
+
+      # R-V2-18 (PLAN-V2 §8): `/s/[slug]` First Load JS must stay ≤ 620 kB.
+      - name: Session bundle budget
+        working-directory: web
+        run: node scripts/check-bundle.mjs build.log

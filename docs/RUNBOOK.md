@@ -1,66 +1,271 @@
-# LKAP — Runbook
+# LKAP — Runbook (v2)
 
-How to run the LiveKit Agent Platform locally, create agents, test every feature by hand, deploy the worker, and what is known not to work yet. Written by W3-E2E-INSURANCE on 2026-09-19 from live runs against `wss://your-project.livekit.cloud`.
+This runbook covers running the LiveKit Agent Platform, operating it (sign-in, LiveKit connections, worker pools, images, backups, key rotation) and testing it by hand.
 
-Binding references: `DECISIONS-W2.md` (wins everywhere) → `CONTRACTS.md` → `ARCHITECTURE.md` → `LIVE_TEST_PLAN.md` (the stage ladder this file reports on). `deploy/README.md` has the container and LiveKit Cloud details.
+- Sections 1–11 are v2, written by V2-19 on 2026-09-23.
+- Sections 12–19 are the v1 runbook, from live runs on 2026-09-18 and 2026-09-19. They still hold, except where a v2 section replaces them.
 
-> **Shared project.** The LiveKit project also hosts an unrelated deployed agent, **`other-project-agent`**. Never dispatch to it, redeploy it, or pass its ids or secrets to any `lk agent` command. Our dispatch name is **`lkap-agent`**. The worker registers under that name in code and rejects every job not dispatched to it (D-W2-11).
+**Binding references:**
+- **v2:** `docs/v2/README.md`, which gives the precedence order: ARCHITECTURE-V2, CONTRACTS-V2, PLAN-V2 §8 rulings.
+- **v1:** `DECISIONS-W2.md` (wins everywhere) → `CONTRACTS.md` → `ARCHITECTURE.md` → `LIVE_TEST_PLAN.md`.
+- **Containers:** `deploy/README.md` §4 has the container details.
+
+> **Shared LiveKit project.** The project also hosts an unrelated deployed agent, **`other-project-agent`**.
+> - Never dispatch to it or redeploy it.
+> - Never pass its ids or secrets to any `lk agent` command.
+>
+> The default connection's dispatch name is **`lkap-agent`**. Every connection has its own `agent_name`, and a worker serves exactly one of them. Never run two workers under one name, because dispatch would split between them.
 
 ---
 
 ## 1. Run locally
 
-Three processes. The api listens on 8080, web on 3000, and the worker has no port. Secrets come from your shell or `.claude/launch.json` (`lkap-api`, `lkap-web`, `lkap-agent` entries), never from committed files.
+Four processes:
 
-| Variable | api | worker | web | Dev value |
-|---|---|---|---|---|
-| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | ✓ | ✓ | | project creds |
-| `LKAP_MASTER_KEY` | ✓ | | | `cd api && uv run python -m lkap_api.keys generate` |
-| `LKAP_ADMIN_TOKEN` | ✓ | | ✓ | `dev-admin` |
-| `LKAP_SERVICE_TOKEN` | ✓ | ✓ (byte-identical) | | `dev-service` |
-| `LKAP_AGENT_NAME` | ✓ (`lkap-agent`) | | | |
-| `LKAP_API_BASE_URL` | | ✓ | | `http://127.0.0.1:8080` |
-| `LKAP_PACKS` | | ✓ | | `packs.insurance_claim,packs.generic` |
-| `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | | optional | | comma list; empty = only the per-tool `allowed_hosts` applies |
-| `LKAP_VISION_MAX_FRAME_AGE_S` | | optional | | default `8` |
-| `LKAP_IDLE_HANGUP_S` | | optional | | default `120`; hangs up a session left `away` this long while listening/idle; `0`/unset to disable |
-| `NEXT_PUBLIC_API_BASE_URL` | | | ✓ | `http://localhost:8080` |
-| `LIVEKIT_AGENT_NAME` | | optional; if set it must be `lkap-agent` | | leave unset |
+| Process | Port |
+|---|---|
+| api | 8080 |
+| web | 3000 |
+| worker (or the supervisor that starts workers) | none |
 
-`LKAP_PACKS` must list the same packs for the api and the worker. A pack the worker cannot import degrades to the generic panel with no tools (worker log: `pack not available, falling back to the null pack`) even though the api still seeds/serves it normally.
+Secrets come from your shell, or from the launch config outside the repo. Never put them in committed files. Never read or write `.env*` files with tools.
 
-One-time setup:
+| Variable | api | worker | supervisor | web | Dev value / meaning |
+|---|---|---|---|---|---|
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | ✓ | ✓ | | | project credentials. On first start the api creates the **default connection** from them (§3). |
+| `LKAP_MASTER_KEY` | ✓ | | | | Fernet key encrypting every `*_ct` column: `cd api && uv run python -m lkap_api.keys generate`. Rotation: §7. |
+| `LKAP_ENV` | ✓ | | | | `dev` (default) or `prod`. `prod` refuses weak or `dev-*` static secrets and turns the admin token off (§2). |
+| `LKAP_ADMIN_TOKEN` | ✓ | | | ✓ | `dev-admin`, the break-glass token (§2). |
+| `LKAP_SERVICE_TOKEN` | ✓ | ✓ | ✓ | | `dev-service`. Must be byte-identical everywhere. |
+| `LKAP_PACKS` | ✓ | ✓ | | | `packs.insurance_claim,packs.generic`. **Must match on the api and every worker** (F-17, §4). |
+| `LKAP_BOOTSTRAP_OWNER_EMAIL` / `_PASSWORD` | ✓ | | | | the first owner (default `owner@local`); see §2 |
+| `LKAP_SESSION_SECRET` | ✓ | | | | signs invite links; unset = derived from the master key. Required in `prod`. |
+| `LKAP_ALLOW_ADMIN_TOKEN` | ✓ | | | | unset = on in `dev`, off in `prod` |
+| `LKAP_WEB_BASE_URL`, `LKAP_CORS_ORIGINS` | ✓ | | | | invite links, and the origins allowed to call `connect` anonymously |
+| `LKAP_PUBLIC_BASE_URL` | ✓ | | | | public `https://` origin of the api, needed for Cloud-hosted pools (§3) |
+| `LKAP_API_BASE_URL` | | ✓ | ✓ | | `http://127.0.0.1:8080` |
+| `LKAP_CONNECTION_ID` | | optional | | | the connection a worker serves. Unset means the default connection. |
+| `LKAP_AGENT_NAME` | | optional | | | must equal the connection's `agent_name` (default `lkap-agent`) |
+| `LKAP_INSTANCE_KEY`, `LKAP_MANAGED_BY` | | set by the supervisor | | | leave unset for a hand-started worker |
+| `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | | optional | | | comma list. A tool's hosts must be in it **and** in its own `allowed_hosts`, and private ranges are refused (F-14). |
+| `LKAP_VISION_MAX_FRAME_AGE_S`, `LKAP_IDLE_HANGUP_S` | | optional | | | default `8` / `120` |
+| `NEXT_PUBLIC_API_BASE_URL` | | | | ✓ | `http://localhost:8080` |
+| `LKAP_WEB_ADMIN_BYPASS` | | | | ✓ | unset = on outside `NODE_ENV=production` (§2) |
+
+The full v2 variable list is in CONTRACTS-V2 §6.
+
+### One-time setup
 
 ```bash
-cd contracts && uv sync && uv run python -m lkap_contracts.export && cd .. && scripts/export_contracts.sh
-cd api && uv sync && uv run alembic upgrade head && cd ..
-cd agent && uv sync && cd ..
+cd contracts && uv sync && cd .. && scripts/export_contracts.sh --generate
+cd api && uv sync && uv run alembic upgrade head && cd ..   # back up api/data/lkap.db first (§9)
+cd agent && uv sync && cd ..       # also installs testing/ (shared test fakes) as a dev dependency
 cd packs && uv sync && cd ..
+cd supervisor && uv sync && cd ..
 cd web && pnpm install && cd ..
 ```
 
-Start in this order and check each one before starting the next (LIVE_TEST_PLAN §A1):
+### Start and check
+
+Start each process in order, and check it before starting the next:
 
 ```bash
 # 1. api
 cd api && uv run uvicorn lkap_api.main:app --host 127.0.0.1 --port 8080
-curl -s localhost:8080/v1/health        # {"ok":true,"packs":["insurance_claim","generic"],"db":"ok",...}
+curl -s localhost:8080/v1/health   # {"ok":true,"packs":[...],"db":"ok","agents_unbound":0,...}
+                                   # db is "ok" only at the migration head
 
-# 2. worker (dev mode). No LIVEKIT_AGENT_NAME needed.
+# 2a. one hand-started worker for the default connection
 cd agent && uv run python -m lkap_agent.main dev
-#   expect: registered worker {"agent_name": "lkap-agent", ...}
-#   and, on the first job: accepting job agent_name=lkap-agent
-#                          worker process prewarmed agent_name=lkap-agent
+# 2b. or the supervisor, which starts pools for `supervised` connections (§4)
+cd supervisor && uv run python -m lkap_supervisor
 
 # 3. web
-cd web && pnpm dev                      # http://localhost:3000/console
+cd web && pnpm dev                 # http://localhost:3000/login, then /console
 ```
 
-`scripts/dev.sh` starts all three with env from your shell.
+`scripts/dev.sh` starts api, worker and web from your shell's env. `LKAP_SUPERVISOR=1 scripts/dev.sh` swaps the worker for the supervisor.
 
-**Before every live run, check that exactly one worker is running:** `ps aux | grep "lkap_agent.main" | grep -v grep` should show one process, and `lk agent list` should show no cloud `lkap-agent` while a local one is running. Two workers with one name split dispatch nondeterministically.
+**Before every live run:**
+- `ps aux | grep lkap_agent.main | grep -v grep` must show exactly one worker per agent name.
+- The connection's **Fleet** card (§4) must show one `ready` instance per replica you expect.
+- A connection that shows both `external` and `supervisor` instances is running two pools. Stop one.
 
-### 1.1 Restarting the worker (D-W2-13)
+Restarting a worker: §12.1 (SIGINT, wait at least 15 s, then SIGKILL only if it is still alive).
+
+---
+
+## 2. Sign-in, the owner password and the escape hatch
+
+- **Users.** The console is behind `/login`: an email and password, then an `lkap_session` cookie. Each user has a role (`viewer`, `builder`, `admin` or `owner`) in each workspace. Invites are `/login?invite=<token>`. API keys (`lkap_…`, scoped) are for machines. All of it is under Settings (`/console/settings`).
+- **The owner.** Bootstrap creates `owner@local` (or `LKAP_BOOTSTRAP_OWNER_EMAIL`):
+  - With `LKAP_BOOTSTRAP_OWNER_PASSWORD` set, bootstrap uses that password.
+  - Without it, bootstrap logs a generated password **once** at WARNING.
+- **An owner row with no password.** The dev DB's row predates this (#29). **Only the user sets their own password.** No agent or script runs this:
+  ```bash
+  cd api && LKAP_MASTER_KEY=… uv run python -m lkap_api.auth set-password --email owner@local   # --force replaces one
+  ```
+  It takes `LKAP_BOOTSTRAP_OWNER_PASSWORD` when set, otherwise it generates a password and logs it once.
+- **The escape hatch (break-glass admin token).**
+  - The api accepts `X-Admin-Token: $LKAP_ADMIN_TOKEN` while `LKAP_ALLOW_ADMIN_TOKEN` is on. Unset means on in `LKAP_ENV=dev` and off in `prod`.
+  - The web proxy attaches the token while `LKAP_WEB_ADMIN_BYPASS` is on. Unset means on outside `NODE_ENV=production`.
+  - The token acts as the `default` workspace's admin, and every write is audited as `actor_id="break-glass"` (`GET /v1/audit`).
+  - Use it for scripts, the smoke (§10), and for recovering a locked-out owner.
+  - In production, leave it off.
+  - **To test real sign-in locally**, set `LKAP_WEB_ADMIN_BYPASS=false` on the web. The api then 401s and the console redirects to `/login`.
+
+## 3. LiveKit connections
+
+A **connection** is one LiveKit server: Cloud or self-hosted, with a URL, an API key and a secret (encrypted), an `agent_name` and a pool mode. Every agent is bound to one (`agents.connection_id`). An unbound agent uses the workspace default.
+
+- **Console.** Go to Connections (`/console/connections`), then **New connection**. **Test** checks the credentials and reads capabilities (Inference, SIP, Egress, the noise-cancellation tier). Enter the secret once; it is never shown again.
+  - To change a key or secret, use **Rotate** (`POST /v1/connections/{id}/rotate`). A plain update never takes secrets.
+  - **Make default** moves the default. The api's own `LIVEKIT_*` only seed the first default connection.
+- **Pool modes** (`deployment_mode`):
+
+  | Mode | Who runs the workers | What you do |
+  |---|---|---|
+  | `external` | you, by hand or on your own infrastructure | Copy the **worker env** from the connection (`GET /v1/connections/{id}/worker-env?format=env\|compose\|lk`; secrets are placeholders) and start `python -m lkap_agent.main start` with `LKAP_CONNECTION_ID` set. |
+  | `supervised` | the supervisor (§4) | Set replicas and the image (`slim`/`full`) on the Fleet card, then **Start**. |
+  | `cloud_hosted` | LiveKit Cloud | **Download deploy bundle** (`POST …/deploy-bundle`: `livekit.toml`, `secrets.env` with placeholders, `lk agent` commands). This needs a Cloud connection and a public `https` `LKAP_PUBLIC_BASE_URL`. Then follow §17. |
+
+- **Registration.** Every worker registers with the api (`POST /internal/v1/workers/register`: installed providers, pack ids, image) and heartbeats every 30 s.
+  - The api validates provider choices against what that pool actually reports as installed (R-V2-2).
+  - A worker that goes silent for 90 s is marked `gone`.
+- **Security.** Connection test and update will dial any URL an admin enters (S1, open for V2-21). Only admins can create or change connections.
+
+## 4. Supervisor and worker pools
+
+`python -m lkap_supervisor` reconciles `GET /internal/v1/fleet/desired` every `LKAP_SUPERVISOR_INTERVAL_S` (10 s). It starts or stops replicas for each `supervised` connection, and rolls them on **Restart** (R-V2-4).
+
+- **Backends** (`LKAP_SUPERVISOR_BACKEND`):
+  - `subprocess` (dev default) runs `agent/` in-process-tree workers.
+  - `docker` runs `lkap-agent:slim|full` containers. It needs `/var/run/docker.sock`, `LKAP_SUPERVISOR_WORKER_API_URL` (workers cannot reach the api's loopback) and `LKAP_SUPERVISOR_DOCKER_NETWORK`.
+- **Stopping.** The supervisor stops a replica with SIGINT, waits `LKAP_SUPERVISOR_DRAIN_S` (3600 s; never less than 15 s, D-W2-13), then SIGKILL.
+- **Replica count.** Run exactly **one** supervisor. In prod it takes a Redis lease (`LKAP_REDIS_URL`).
+- **Metrics** are on `:9105`. Its state dir remembers which replicas it already signalled.
+- **Env.** Each replica gets its env from `GET /internal/v1/connections/{id}/worker-env`. That includes `LKAP_PACKS`, so the api and supervised workers agree by construction.
+- **Pack parity (F-17).**
+  - Workers you start by hand must use the api's `LKAP_PACKS`.
+  - A worker that registers with a different pack set makes the api log `worker_pack_mismatch` with `missing_on_worker` and `unknown_to_api`.
+  - Without the fix, sessions on that worker fall back to the null pack: a generic panel and no pack tools.
+  - Grep the api log after starting a worker, or compare each instance's `pack_ids` in `GET /v1/connections/{id}/fleet` with `GET /v1/health`'s `packs`.
+
+## 5. Images and compose
+
+Details are in `deploy/README.md` §4. In short:
+
+```bash
+scripts/vendor_agent_deps.sh                                       # lkap-contracts/lkap-packs wheels → agent/vendor/
+contracts/.venv/bin/python scripts/gen_plugin_requirements.py      # after any registry change (--check in CI)
+docker build --build-arg LKAP_IMAGE_FLAVOR=slim -f agent/Dockerfile -t lkap-agent:slim agent
+docker build --build-arg LKAP_IMAGE_FLAVOR=full -f agent/Dockerfile -t lkap-agent:full agent
+docker build -f supervisor/Dockerfile -t lkap-supervisor .
+```
+
+- **The import check.** Each worker image runs an import check at build time and writes `/app/installed_providers.json`. A provider that fails to import fails the build, and the fix is to mark it `deferred` in the registry. For example, Krisp is `deferred` because `livekit-plugins-krisp` has no 1.8.2 release (asks #56).
+- **What is not in the image.** The shared test fakes (`testing/`) are a dev dependency only and are never installed in the image.
+- **Compose:**
+  - `deploy/docker-compose.dev.yml`: api (+ web on :3000), supervisor, and optional `postgres`/`redis`/`minio` profiles.
+  - `deploy/docker-compose.prod.yml`: two api replicas behind Caddy, web, supervisor, postgres, redis, minio.
+- **Config.** Env files are human-created copies of `deploy/*.env.example`. Run `alembic upgrade head` in the api container after every image update.
+- **Not built locally yet.** Docker has not been running on the dev host, so no image has been built. CI builds them in `.github/workflows/docker.yml`, and the nightly `full` build runs once the repo has a GitHub remote.
+
+## 6. Backups and restore
+
+**Production (Postgres + `LKAP_DATA_DIR`).** Run this on a schedule from a host that has the `aws` CLI and `pg_dump`:
+
+```bash
+LKAP_BACKUP_S3_BUCKET=lkap-backups scripts/backup.sh
+```
+
+It dumps Postgres (when configured) and tars `LKAP_DATA_DIR` (local storage, LanceDB, any SQLite file), both to S3. It then prints the exact restore commands.
+
+**Restore** is a decision, not a script:
+1. Stop the api, the jobs worker and the supervisor.
+2. `aws s3 cp` both artifacts down.
+3. `pg_restore --clean` the dump, and untar the data dir in place.
+4. Run `alembic current`. It must be the head of the running code; if it is not, run `upgrade head`.
+5. Start the processes again, then check `/v1/health` (`db: ok`).
+
+**Dev (SQLite):**
+- **Before every `alembic` run and every downgrade:**
+  ```bash
+  sqlite3 api/data/lkap.db ".backup /somewhere/outside/api/data/lkap-$(date +%s).db"
+  ```
+  SQLite DDL is not transactional, so a failed chain leaves `alembic_version` out of step with the schema.
+- **To restore:** stop the api, then copy the file back.
+- **A full downgrade is lossy:** it drops v2 tables such as connections and channels. See `docs/v2/_briefs/migration-rehearsal.md`.
+
+## 7. Key and secret rotation
+
+| Secret | How to rotate | Effect |
+|---|---|---|
+| `LKAP_MASTER_KEY` | Back up the DB, then stop the api. Run `cd api && uv run python -m lkap_api.keys rotate --old <old> --new <new>`, which re-encrypts every `*_ct` column in one transaction. Then set the new key in the launch config and start. | Nothing, if done in that order. Outstanding invites die when `LKAP_SESSION_SECRET` is unset. |
+| A connection's LiveKit key/secret | Console: connection → **Rotate**, then **Test**. The status reads `unverified` until the test passes. | Supervised pools drain and restart automatically, because `credentials_version` is part of the desired hash. Restart external workers with the new env. |
+| Provider credentials | Console → Keys (`/console/keys`) → edit | The next session uses them. There is no worker restart (config is fetched per job). |
+| `LKAP_SERVICE_TOKEN` | Change it on the api, the supervisor and every worker at once, then restart them. For Cloud-hosted pools, update `secrets.env` and redeploy. | Workers that still hold the old token cannot register or fetch config. |
+| `LKAP_ADMIN_TOKEN` | Change it on the api and the web, then restart both | Scripts using the old token get 401 |
+| `LKAP_SESSION_SECRET` | Change it and restart the api | Outstanding invite links stop working |
+| Webhook signing secrets | Settings → Webhooks → recreate the endpoint | The new secret is shown once |
+| User passwords / API keys | Settings → Account (password), Settings → API keys (revoke, then create) | Immediate |
+
+**Never pass secrets as command-line arguments in production.** `ps` shows them. The dev launch config still does this (S2, open for V2-21).
+
+## 8. Telephony
+
+Outbound dialing and transfers are **denied by default**. Before any outbound call or transfer, an admin must set the workspace dialing policy (`workspaces.settings.telephony.allowed_prefixes`, on `/console/telephony`; R-V2-23). Premium-rate and satellite ranges are always refused.
+
+Setup, carrier side, trunk/rule/number creation and the live test ladder are in **`docs/v2/TELEPHONY-LIVE-TEST.md`** (§2 covers `allowed_prefixes`). This runbook does not repeat them.
+
+## 9. Database migrations
+
+- The migration head is shown by `cd api && uv run alembic heads`. `/v1/health` reports `db: error` until the schema is at head.
+- **Before every run against the dev file:**
+  1. Back it up (§6).
+  2. Only the coordinator migrates `api/data/lkap.db`. Packages rehearse on a copy, using `-x url=sqlite+aiosqlite:///<copy>`.
+- The last rehearsal (copy and fresh DB, up/down/up) is `docs/v2/_briefs/migration-rehearsal.md`.
+- Postgres is exercised in CI (`python.yml`, job `test-postgres`).
+
+## 10. Smoke test
+
+`scripts/smoke_v2.sh` runs end to end against compose dev:
+1. Boots compose dev.
+2. Signs in (`LKAP_SMOKE_EMAIL`/`LKAP_SMOKE_PASSWORD`, or `LKAP_ADMIN_TOKEN`).
+3. Creates a **supervised** connection from `LIVEKIT_*`, under a fresh `agent_name` `lkap-smoke-<ts>` so it can never split `lkap-agent` dispatch.
+4. Binds and publishes a generic agent.
+5. Waits for a ready replica.
+6. Runs a text-mode round trip (`lk.chat` in, `lk.transcription` out).
+7. Checks the session row. It then stops the pool and tears the stack down (`--keep` leaves it up).
+
+Modes:
+- `--no-boot` runs against an api that is already up.
+- `--dry-run` makes **read-only** GETs against a running api (`LKAP_ADMIN_TOKEN=dev-admin scripts/smoke_v2.sh --dry-run`) and prints the writes it would make.
+
+The dry run passes against the local dev api. The full run needs Docker and has not run on the dev host yet.
+
+## 11. Quality gates
+
+Python packages: `contracts`, `api`, `agent`, `packs`, `supervisor`, and `testing` (the shared fakes, F-18). In each:
+
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy src/ --strict && uv run pytest -q -m "not live"
+```
+
+In `web/`: `pnpm lint && pnpm typecheck && pnpm test`. Never run `pnpm build` in `web/` itself, because it clobbers the dev server's `.next`. Build in a scratch copy instead.
+
+- **Test timing.** The api suite runs in about two minutes. Unit tests must never load the real fastembed model: `tests/conftest.py` refuses it (V2-19B found one test downloading ~90 MB for 20 minutes). Use `FakeEmbedder`.
+- **Contracts.** After any contracts edit:
+  ```bash
+  scripts/export_contracts.sh --generate
+  ```
+  `web/src/contracts` must be byte-identical to `contracts/generated/ts`.
+
+---
+
+## 12. v1 reference
+
+### 12.1 Restarting the worker (D-W2-13)
 
 - Config edits (anything saved in the console) **never** need a restart, because config is fetched per job.
 - Code edits **always** do. `python -m lkap_agent.main dev` has **no hot reload**; that exists only when the `lk` CLI drives the process, which the platform does not use.
@@ -75,9 +280,9 @@ cd web && pnpm dev                      # http://localhost:3000/console
 
 ---
 
-## 2. Create agents
+## 13. Create agents (v1; still valid)
 
-Console path: `/console` → **New agent** → name + pack → **Create agent** → the editor opens → toggle **Draft → Published** (or use **Test call** for a draft; see D-W2-1).
+Console path: `/console` → **New agent** → name + pack → **Create agent** → the editor opens → toggle **Draft → Published** (or use **Test call** for a draft; see D-W2-1). In v2 the agent is bound to the workspace's default connection unless you pick another (§3), and **Test chat** on the editor runs a text-mode session.
 
 API path (admin token):
 
@@ -105,7 +310,7 @@ Only `google/gemini-3.5-flash` (Inference) and the three Gemini Live models are 
 
 ---
 
-## 3. Test each feature by hand (real browser, mic and camera)
+## 14. Test each feature by hand (real browser, mic and camera)
 
 Use Chrome on `http://localhost:3000`, allow the microphone and camera, and hang up as soon as each check passes (cost). Every call must leave exactly **one** session row that turns `ended` within 10 s of hangup (`/console/sessions`).
 
@@ -127,9 +332,9 @@ Use Chrome on `http://localhost:3000`, allow the microphone and camera, and hang
 
 ---
 
-## 4. Automated tests
+## 15. Automated and live tests
 
-Offline gates, in each of `contracts/ api/ packs/ agent/`:
+Offline gates: see §11. The v1 form, in each of `contracts/ api/ packs/ agent/`:
 
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run mypy src/ --strict && uv run pytest -q -m "not live"
@@ -154,7 +359,7 @@ The room-level tests create a fresh agent per run (named with a run id). Rows ca
 
 ---
 
-## 5. Live results (LiveKit Cloud, LiveKit credentials only)
+## 16. v1 live results (LiveKit Cloud, LiveKit credentials only)
 
 Stages 0–8 were run by W2-AGENT-INTEGRATION on 2026-09-18 with a scripted room participant (typed `lk.chat`, synthetic camera/screen tracks, a WAV file for audio). Stage 9 was run by W3-E2E-INSURANCE on 2026-09-19.
 
@@ -184,9 +389,9 @@ The browser runs used the Claude Browser pane, which blocks microphone and camer
 
 ---
 
-## 6. Deploy the worker to LiveKit Cloud (human steps)
+## 17. Deploy the worker to LiveKit Cloud (human steps)
 
-These commands create real resources in the shared project. Run them yourself. Stop the local worker first (§1.1).
+These commands create real resources in the shared project. Run them yourself. Stop the local worker first (§12.1). In v2, the connection's **Download deploy bundle** (§3) generates `livekit.toml`/`secrets.env` for a `cloud_hosted` pool.
 
 ```bash
 cd livekit_agent_platform
@@ -207,7 +412,7 @@ End to end from the cloud worker needs a publicly reachable api (`LKAP_API_BASE_
 
 ---
 
-## 7. Known gaps and open items
+## 18. Known gaps and open items
 
 | Item | Status / reason |
 |---|---|
@@ -223,7 +428,7 @@ End to end from the cloud worker needs a publicly reachable api (`LKAP_API_BASE_
 | Initial stamp | The insurance notebook starts at "Needs docs" (the blank-intake route), not a blank stamp. This is pack behaviour. |
 | Other vision models | `openai/gpt-4.1`, `gpt-4o-mini` and the vendor LLMs are not flagged `supports_video` until someone verifies them (§2). |
 
-## 8. Troubleshooting (LIVE_TEST_PLAN Part F, updated)
+## 19. Troubleshooting (LIVE_TEST_PLAN Part F, updated)
 
 1. **The page shows "This session has ended" immediately, and no session row is created.** The token source was frozen before its first connect. This happened under `pnpm dev` (React StrictMode re-runs effects) before the 2026-09-19 fix in `web/src/lib/livekit.ts`: `freeze()` is now a no-op until a connect has been attempted.
 2. **No `accepting job` line / job rejected.** The dispatch name drifted. The api's `LKAP_AGENT_NAME` must be `lkap-agent`; the worker refuses to start if `LIVEKIT_AGENT_NAME(_OVERRIDE)` is set to anything else.
@@ -233,3 +438,7 @@ End to end from the cloud worker needs a publicly reachable api (`LKAP_API_BASE_
 6. **No greeting audio.** Autoplay policy; click **Enable sound**.
 7. **KB answers are empty.** The KB is not `ready` yet, or the fastembed model download (~130 MB, first ingest only) is blocked.
 8. **Costs.** Keep calls short; never leave `/s/…` open (STT streams while it is open); check `usage` on each session in the console.
+9. **Generic panel, no pack tools on a pack agent.** The worker cannot import that pack (it runs the null pack). Check the api log for `worker_pack_mismatch` and give the worker the api's `LKAP_PACKS` (§4).
+10. **The console redirects to `/login`.** Either the web's admin bypass is off or the api refuses the admin token (`LKAP_ENV=prod`). Sign in, or see §2.
+11. **A new agent's provider is rejected as "not installed".** The bound connection's workers do not report it. Use the `full` image, or pick another provider (§3).
+12. **An api test run takes 20+ minutes.** Something is loading the fastembed model over the network. `tests/conftest.py` now fails such a test at once.

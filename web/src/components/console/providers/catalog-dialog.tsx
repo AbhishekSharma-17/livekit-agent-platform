@@ -15,6 +15,7 @@ import {
 import { StatusChip } from "@/components/shared/status-chip";
 import { useCatalog, useRefreshCatalog, type CatalogKind } from "@/hooks/useCatalog";
 import type { ProviderOut } from "@/contracts/lkap-contracts";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 /**
  * Providers catalog's "Catalog" button (UI_UX_SPEC-V2-AMENDMENTS §2.2):
@@ -67,7 +68,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
         </DialogHeader>
         <div className="flex max-h-96 flex-col gap-2 overflow-y-auto">
           {isLoading || refresh.isPending ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <SkeletonRows label="Loading the catalog" rows={4} rowClassName="h-12" />
           ) : isError ? (
             <p className="text-sm text-danger-text">Couldn&apos;t load the catalog.</p>
           ) : (data?.items ?? []).length === 0 ? (

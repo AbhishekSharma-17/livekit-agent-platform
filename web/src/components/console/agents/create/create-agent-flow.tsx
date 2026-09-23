@@ -83,7 +83,7 @@ export function CreateAgentFlow() {
 
   if (packsQuery.isError) {
     return (
-      <ErrorBanner message={`Could not load packs: ${errorMessage(packsQuery.error)}`} onRetry={() => packsQuery.refetch()} />
+      <ErrorBanner message={`Couldn't load packs — ${errorMessage(packsQuery.error)}`} onRetry={() => packsQuery.refetch()} />
     );
   }
 

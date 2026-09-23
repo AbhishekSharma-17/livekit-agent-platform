@@ -405,6 +405,9 @@ describe("Section, DescriptionList, VendorMark, CapabilityBadge, Kbd, RelativeTi
     ["no-key", undefined, "No key needed"],
     ["key-required", undefined, "Key required"],
     ["silent-tools", undefined, "Silent tools"],
+    // V2-13-3: the Providers catalog's two extra kinds.
+    ["text-modality", undefined, "Text modality"],
+    ["cloud-only", undefined, "Cloud only"],
   ] as const)("CapabilityBadge %s (count %s) reads %s", (kind: CapabilityKind, count, text) => {
     const { container } = render(<CapabilityBadge kind={kind} count={count} />);
     expect(container.textContent).toBe(text);

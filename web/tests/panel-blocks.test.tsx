@@ -3,7 +3,7 @@ import * as React from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import type { AgentPublicOut, UiRequest } from "@/contracts/lkap-contracts";
+import type { AgentPublicOut, BlockSpec, PanelLayout, UiRequest } from "@/contracts/lkap-contracts";
 import { emptyUiState } from "@/lib/ui-state";
 import { BLOCK_COMPONENTS, Block, LAZY_BLOCK_TYPES } from "@/panels/blocks";
 import { BLOCK_CATALOG, BLOCK_TYPES, blockStateOf, blockTitle, initialBlockState } from "@/panels/blocks/catalog";
@@ -24,8 +24,6 @@ import {
   normalizeBlocks,
   panelLayoutOf,
   storedPanelLayout,
-  type BlockSpecV2,
-  type PanelLayoutV2,
 } from "@/panels/composite/layout";
 import { handleCompositeRequest, safeNavigateUrl } from "@/panels/composite/requests";
 import { PANELS, agentActionFor, panelLayoutFor, resolvePanel, type PanelProps } from "@/panels/registry";
@@ -70,7 +68,7 @@ afterEach(() => {
 });
 afterAll(() => vi.restoreAllMocks());
 
-function agent(panel?: PanelLayoutV2): AgentPublicOut {
+function agent(panel?: PanelLayout): AgentPublicOut {
   return {
     id: "a-1",
     slug: "claims",
@@ -96,7 +94,7 @@ function panelProps(overrides: Partial<PanelProps> = {}): PanelProps {
   };
 }
 
-function specOf(type: BlockSpecV2["type"]): BlockSpecV2 {
+function specOf(type: BlockSpec["type"]): BlockSpec {
   const spec = FIXTURE_LAYOUT.blocks.find((b) => b.type === type);
   if (!spec) throw new Error(type);
   return spec;
@@ -130,7 +128,7 @@ describe("block catalog", () => {
 });
 
 describe("each block renders its fixture state", () => {
-  const cases: [BlockSpecV2["type"], (el: HTMLElement) => Promise<void> | void][] = [
+  const cases: [BlockSpec["type"], (el: HTMLElement) => Promise<void> | void][] = [
     ["status", (el) => void expect(within(el).getByText("In progress")).toBeTruthy()],
     ["notes", (el) => void expect(within(el).getByText("Booking a service visit for a leaking dishwasher.")).toBeTruthy()],
     ["checklist", (el) => void expect(within(el).getByText("Service address")).toBeTruthy()],
@@ -201,7 +199,7 @@ describe("each block renders its fixture state", () => {
 });
 
 describe("each block has an empty state", () => {
-  const empties: Partial<Record<BlockSpecV2["type"], RegExp>> = {
+  const empties: Partial<Record<BlockSpec["type"], RegExp>> = {
     notes: /Nothing noted yet/,
     checklist: /No open items/,
     activity: /has not run any tools/,
@@ -217,7 +215,7 @@ describe("each block has an empty state", () => {
   it.each(Object.entries(empties))("%s", async (type, text) => {
     render(
       <Block
-        spec={{ id: type, type: type as BlockSpecV2["type"], config: {} }}
+        spec={{ id: type, type: type as BlockSpec["type"], config: {} }}
         {...panelProps({ state: emptyUiState(), assets: new Map(), transcript: [] })}
       />,
     );
@@ -426,6 +424,13 @@ describe("layout (R-V2-7)", () => {
     );
     expect(layout.layout).toBe("wide");
     expect(layout.blocks.map((b) => b.id)).toEqual(["a", "b"]);
+  });
+
+  it("carries BlockSpec.title straight from the generated contract type (R-V2-15)", () => {
+    const titled: BlockSpec = { id: "items", type: "table", title: "Damaged items", config: {}, order: 0 };
+    const layout = panelLayoutOf(agent({ panel_id: "composite", blocks: [titled] }));
+    expect(layout.blocks[0]?.title).toBe("Damaged items");
+    expect(blockTitle(layout.blocks[0]!)).toBe("Damaged items");
   });
 
   it("falls back to the api's effective layout when an older api omits panel", () => {

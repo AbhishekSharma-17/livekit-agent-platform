@@ -81,6 +81,21 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "request_form", label: "Ask with a form", help: "Lets the agent ask the caller to fill in a form and wait for it." },
 ];
 
+/**
+ * Phone-only tools (agent `lkap_agent.telephony.TELEPHONY_TOOL_NAMES`, re-exported by
+ * `tools/builtin/__init__.py`; R-V2-25). The worker registers them only on SIP calls —
+ * `send_dtmf` when keypad input (`capabilities.dtmf`) is on, `transfer_call` when the agent
+ * has transfer destinations — so they sit in the Tools section's "Phone calls" card, kept out
+ * of `BUILTIN_TOOLS` like the block tools; `config.tools.builtin_disabled` turns them off.
+ */
+export const TELEPHONY_TOOLS: BuiltinToolInfo[] = [
+  { name: "send_dtmf", label: "Press phone keys", help: "Lets the agent press keypad keys, e.g. to navigate a phone menu." },
+  { name: "transfer_call", label: "Transfer calls", help: "Lets the agent hand the caller to one of the destinations below." },
+];
+
+/** The hint every phone-only tool toggle carries. */
+export const TELEPHONY_TOOLS_HINT = "phone calls only";
+
 export type CapabilityKey = "camera" | "screen_share" | "chat_input" | "vision_inject_per_turn";
 
 export interface CapabilityMeta {

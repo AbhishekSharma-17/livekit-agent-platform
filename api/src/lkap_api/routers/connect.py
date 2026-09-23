@@ -44,7 +44,7 @@ from fastapi import APIRouter, Depends, Request
 from lkap_contracts.agent_config import AgentLimits
 from lkap_contracts.api_models import ConnectRequest, ConnectResponse
 from lkap_contracts.common import SessionChannel
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.auth.audit import record
@@ -64,6 +64,7 @@ from lkap_api.db.models import Agent, new_id
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, NotFoundError, UnprocessableEntityError
+from lkap_api.limits import live_session_count as live_session_count
 from lkap_api.livekit_tokens import new_participant_identity, room_name_for
 from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
@@ -75,8 +76,6 @@ router = APIRouter(prefix="/v1/agents", tags=["connect"])
 
 #: Upper bound on the JSON size of ``participant_metadata`` (F-13).
 MAX_PARTICIPANT_METADATA_BYTES = 2048
-#: Session states that occupy a concurrency slot.
-LIVE_STATUSES = ("created", "active")
 
 
 async def is_privileged(db: AsyncSession, principal: Principal | None, agent: Agent) -> bool:
@@ -115,23 +114,6 @@ def origin_allowed(origin: str | None, allowed_origins: list[str], settings: Set
         return False
     platform = {entry.rstrip("/").lower() for entry in settings.web_origins}
     return origin in allowed or origin in platform
-
-
-async def live_session_count(db: AsyncSession, agent: Agent) -> int:
-    """Count the agent's sessions that still hold a concurrency slot."""
-    return int(
-        (
-            await db.execute(
-                select(func.count())
-                .select_from(SessionRow)
-                .where(
-                    SessionRow.workspace_id == agent.workspace_id,
-                    SessionRow.agent_id == agent.id,
-                    SessionRow.status.in_(LIVE_STATUSES),
-                )
-            )
-        ).scalar_one()
-    )
 
 
 def _check_metadata(metadata: dict[str, str]) -> None:

@@ -3,9 +3,11 @@ import * as React from "react";
 import {
   AudioLinesIcon,
   AudioWaveformIcon,
+  CloudIcon,
   EyeIcon,
   KeyRoundIcon,
   type LucideIcon,
+  TypeIcon,
   VolumeXIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -22,7 +24,11 @@ export type CapabilityKind =
   | "voices"
   | "no-key"
   | "key-required"
-  | "key-set";
+  | "key-set"
+  /** The model can answer in text as well as audio (UI_UX_SPEC-V2-AMENDMENTS §2.2). */
+  | "text-modality"
+  /** Runs only through LiveKit Cloud (Inference / Cloud-hosted). */
+  | "cloud-only";
 
 export interface CapabilityBadgeProps {
   kind: CapabilityKind;
@@ -50,6 +56,8 @@ export const CAPABILITY_BADGE_META: Record<CapabilityKind, CapabilityMeta> = {
   "no-key": { icon: KeyRoundIcon, label: "No key needed", tone: "success" },
   "key-required": { icon: KeyRoundIcon, label: "Key required", tone: "warning" },
   "key-set": { icon: KeyRoundIcon, label: "Key set", tone: "neutral" },
+  "text-modality": { icon: TypeIcon, label: "Text modality", tone: "neutral" },
+  "cloud-only": { icon: CloudIcon, label: "Cloud only", tone: "neutral" },
 };
 
 const TONE_CLASSES = {

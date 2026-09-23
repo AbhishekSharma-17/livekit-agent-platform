@@ -17,6 +17,8 @@ import { useMe } from "@/components/console/shell/use-me";
 import { api } from "@/lib/api";
 import { ROLE_LABEL } from "./api-types";
 import { useActiveWorkspace, useInvalidateSettings, useWorkspace } from "./use-settings-queries";
+import { SkeletonRows } from "@/components/shared/loading-state";
+import { BREAK_GLASS_USER_ID, signOut } from "@/components/console/lib/sign-out";
 
 /** `admin`/`owner` may rename the workspace or change its settings (CONTRACTS-V2 §3.2). */
 function canManageWorkspace(role: string | undefined): boolean {
@@ -60,7 +62,9 @@ export function WorkspaceTab() {
   if (meLoading || workspaceQuery.isLoading || !membership) {
     return (
       <Section id="workspace" title="Workspace">
-        <SectionRow className="text-sm text-muted-foreground">Loading…</SectionRow>
+        <SectionRow>
+          <SkeletonRows label="Loading workspace" rows={3} rowClassName="h-9" />
+        </SectionRow>
       </Section>
     );
   }
@@ -142,7 +146,7 @@ export function WorkspaceTab() {
 /** The signed-in user's own account: email, and (real sessions only) password + sign out. */
 function AccountSection() {
   const { me } = useMe();
-  const isBreakGlass = me?.user.id === "break-glass";
+  const isBreakGlass = me?.user.id === BREAK_GLASS_USER_ID;
 
   return (
     <Section id="account" title="Account" description="Your own sign-in.">
@@ -175,14 +179,6 @@ function AccountSection() {
       ) : null}
     </Section>
   );
-}
-
-async function signOut() {
-  try {
-    await api.post("auth/logout");
-  } finally {
-    window.location.assign("/login");
-  }
 }
 
 function PasswordForm() {

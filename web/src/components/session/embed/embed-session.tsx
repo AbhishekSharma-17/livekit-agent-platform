@@ -8,12 +8,10 @@
  *
  * `channel=text` gets a purpose-built compact layout (`TextChat`, this
  * package). The default (voice) embed reuses `SessionExperience` as-is
- * inside a full-height, chrome-trimmed-by-CSS wrapper rather than a
- * hand-rolled voice UI: `SessionExperience`/`SessionRoom`/`SessionShell`
- * (WP-8, not owned by this package) have no `embed` prop to ask for a
- * genuinely compact control bar — logged as a follow-up ask (`docs/v2/_asks.md`,
- * "Open — left by V2-18") for WP-12/V2-19 to add one. This keeps the voice
- * path working today without duplicating WP-8's avatar/track rendering.
+ * inside a full-height wrapper rather than a hand-rolled voice UI, passing
+ * `embed` so the live call drops its top strip and uses the compact control
+ * bar (ask V2-18-9, closed by V2-19C). This keeps the voice path on WP-8's
+ * avatar/track rendering instead of duplicating it.
  */
 import * as React from "react";
 import { useEffect } from "react";
@@ -77,6 +75,7 @@ export default function EmbedSession({
         loadError={loadError}
         loadErrorKind={loadErrorKind}
         testMode={testMode}
+        embed
       />
     </div>
   );

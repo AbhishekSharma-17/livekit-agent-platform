@@ -19,9 +19,7 @@ import { errorMessage } from "@/components/console/shared/error-banner";
 import type { CallOut } from "@/contracts/lkap-contracts";
 
 import { useHangupCall, useSendDtmf, useTransferCall } from "./hooks";
-import { isLiveCall, isOpenCall } from "./model";
-import { DTMF_PATTERN, TRANSFER_TARGET_PATTERN } from "./types";
-
+import { DTMF_PATTERN, isLiveCall, isOpenCall, TRANSFER_TARGET_PATTERN } from "./model";
 const KEYPAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
 /**

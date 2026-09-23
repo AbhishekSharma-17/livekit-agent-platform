@@ -26,6 +26,7 @@ import { pluralize } from "@/lib/format";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import type { KbOut } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /**
  * `kb-list.tsx` (docs/UI_UX_SPEC.md §7.7 item 1): `ResponsiveTable`; columns
@@ -38,16 +39,16 @@ export function KbList() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion label="Loading knowledge bases" className="flex flex-col gap-2">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   }
 
   if (isError) {
-    return <ErrorBanner message={`Could not reach the api: ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner message={`Couldn't load knowledge bases — ${errorMessage(error)}`} onRetry={() => refetch()} />;
   }
 
   const kbs = data?.items ?? [];

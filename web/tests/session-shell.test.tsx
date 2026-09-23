@@ -156,3 +156,38 @@ describe("SessionShell", () => {
     expect(screen.getByText("Claim open")).toBeTruthy();
   });
 });
+
+/** Landmarks and the page heading (V2-19C axe pass; UI_UX_SPEC §5.3). */
+describe("SessionShell landmarks", () => {
+  it("is the page's main landmark and names the agent in the h1", () => {
+    renderShell();
+    expect(screen.getByRole("main").getAttribute("data-testid")).toBe("session-shell");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Ada");
+  });
+});
+
+/** `/s/[slug]?embed=1` (UI_UX_SPEC-V2-AMENDMENTS §2.6, ask V2-18-9). */
+describe("SessionShell embed", () => {
+  it("drops the top strip but keeps an h1 for assistive tech", () => {
+    renderShell({ embed: true, agentState: "connecting" });
+    expect(screen.queryByTestId("session-top-strip")).toBeNull();
+    expect(screen.queryByTestId("connection-chip")).toBeNull();
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("Ada");
+    expect(heading.className).toContain("sr-only");
+    expect(screen.getByTestId("session-shell").hasAttribute("data-embed")).toBe(true);
+  });
+
+  it("keeps every region and the controls", () => {
+    renderShell({ embed: true });
+    for (const text of ["stage body", "panel body", "transcript body", "controls body"]) {
+      expect(screen.getByText(text)).toBeTruthy();
+    }
+  });
+
+  it("keeps the top strip outside the embed", () => {
+    renderShell();
+    expect(screen.getByTestId("session-top-strip")).toBeTruthy();
+    expect(screen.getByTestId("session-shell").hasAttribute("data-embed")).toBe(false);
+  });
+});

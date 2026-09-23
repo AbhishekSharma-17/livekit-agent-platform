@@ -44,7 +44,6 @@ livekit-plugins-groq==1.8.2
 livekit-plugins-hume==1.8.2
 livekit-plugins-inworld==1.8.2
 livekit-plugins-keyframe==1.8.2
-livekit-plugins-krisp==1.8.2
 livekit-plugins-lemonslice==1.8.2
 livekit-plugins-liveavatar==1.8.2
 livekit-plugins-lmnt==1.8.2

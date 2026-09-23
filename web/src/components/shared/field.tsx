@@ -52,7 +52,15 @@ export function Field({
   const hasError = error !== undefined && error !== null && error !== false && error !== "";
 
   let control = children;
-  if (React.isValidElement<Record<string, unknown>>(children)) {
+  // A plain layout wrapper (`<div className="relative">` around an input and
+  // its icon) is not the control: ARIA state on it is invalid (axe
+  // `aria-allowed-attr`) and never reaches the input. Such callers wire
+  // `fieldIds(htmlFor)` onto the input themselves.
+  const isLayoutWrapper =
+    React.isValidElement(children) &&
+    typeof children.type === "string" &&
+    !["input", "select", "textarea", "button"].includes(children.type);
+  if (React.isValidElement<Record<string, unknown>>(children) && !isLayoutWrapper) {
     const existing = children.props["aria-describedby"] as string | undefined;
     control = React.cloneElement(children, {
       "aria-describedby": mergeIds(existing, hasHint ? ids.hint : undefined, hasError ? ids.error : undefined),

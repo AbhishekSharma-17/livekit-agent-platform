@@ -19,6 +19,7 @@ const LIMITS = {
 const RECORDING = { enabled: false, audio_only: true, storage_config_id: null, retention_days: null };
 const AVATAR_OPTIONS = { participant_name: "Avatar", video_quality: null, idle_timeout_s: null, max_duration_s: null };
 const PANEL = { panel_id: "composite", layout: "side" as const, blocks: [] };
+const TELEPHONY = { transfer_targets: [] };
 
 describe("zodResolver", () => {
   it("builds a nested error tree matching the form shape", async () => {
@@ -43,6 +44,7 @@ describe("zodResolver", () => {
           timezone: "UTC",
           recording: RECORDING,
           panel: PANEL,
+          telephony: TELEPHONY,
         },
       },
       undefined,
@@ -90,6 +92,7 @@ describe("zodResolver", () => {
           timezone: "UTC",
           recording: RECORDING,
           panel: PANEL,
+          telephony: TELEPHONY,
         },
       },
       undefined,
@@ -130,6 +133,7 @@ describe("zodResolver", () => {
           timezone: "UTC",
           recording: { ...RECORDING, ...overrides.recording },
           panel: PANEL,
+          telephony: TELEPHONY,
         },
       };
     }
@@ -184,6 +188,100 @@ describe("zodResolver", () => {
       expect(Object.keys((await errorsFor(form({ recording: { retention_days: null } }))) as object)).toHaveLength(0);
       const errors = await errorsFor(form({ recording: { retention_days: 0 } }));
       expect(messageAt(errors, "config.recording.retention_days")).toBe("At least 1 day");
+    });
+  });
+
+  describe("V2-19: flow instructions (asks V2-16-5) and transfer destinations (R-V2-21)", () => {
+    const ref = (provider_id: string) => ({ provider_id, credential_id: null, model: null, fields: {} });
+    const FLOW = {
+      nodes: [
+        { id: "start", kind: "start" as const, greeting: "Hi" },
+        { id: "ask", kind: "agent" as const, instructions: "Ask." },
+      ],
+      edges: [{ id: "e1", source: "start", target: "ask", condition: "always" }],
+    };
+
+    function config(overrides: Record<string, unknown>) {
+      return {
+        name: "Intake",
+        description: "",
+        ui_panel_id: "generic",
+        mode: "prompt" as const,
+        connection_id: null,
+        limits: LIMITS,
+        allowed_origins: [],
+        config: {
+          instructions: "Help.",
+          pipeline: {
+            mode: "cascaded" as const,
+            stt: ref("livekit-inference-stt"),
+            llm: ref("livekit-inference-llm"),
+            tts: ref("livekit-inference-tts"),
+            avatar_options: AVATAR_OPTIONS,
+            turn_handling: {},
+          },
+          voice: { greeting: "hi", greeting_mode: "say" as const, language: "en", allow_interruptions: true },
+          capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
+          tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+          knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
+          pack_settings: {},
+          timezone: "UTC",
+          recording: RECORDING,
+          panel: PANEL,
+          telephony: TELEPHONY,
+          ...overrides,
+        },
+      };
+    }
+
+    async function configErrors(overrides: Record<string, unknown>) {
+      const resolver = zodResolver(agentEditorFormSchema);
+      const values = config(overrides) as Parameters<typeof resolver>[0];
+      const result = await resolver(values, undefined, { shouldUseNativeValidation: false, fields: {} });
+      return result.errors as unknown as {
+        config?: {
+          instructions?: { message?: string };
+          telephony?: { transfer_targets?: Record<number, { label?: { message?: string }; to?: { message?: string } }> };
+        };
+      };
+    }
+
+    it("still requires instructions for a prompt agent", async () => {
+      const errors = await configErrors({ instructions: "  " });
+      expect(errors.config?.instructions?.message).toBe("Instructions are required");
+    });
+
+    it("lets a flow agent (config.flow has nodes) save empty instructions", async () => {
+      expect(Object.keys(await configErrors({ instructions: "", flow: FLOW }))).toHaveLength(0);
+    });
+
+    it("requires instructions when the flow is empty", async () => {
+      const errors = await configErrors({ instructions: "", flow: { nodes: [], edges: [] } });
+      expect(errors.config?.instructions?.message).toBe("Instructions are required");
+    });
+
+    it("accepts E.164, tel: and sip: destinations", async () => {
+      const telephony = {
+        transfer_targets: [
+          { label: "Sales", to: "+15550001111" },
+          { label: "Desk", to: "sip:desk@pbx.example.com" },
+          { label: "Night", to: "tel:+15550002222" },
+        ],
+      };
+      expect(Object.keys(await configErrors({ telephony }))).toHaveLength(0);
+    });
+
+    it("rejects a free-text destination and a duplicate name", async () => {
+      const telephony = {
+        transfer_targets: [
+          { label: "Sales", to: "+15550001111" },
+          { label: "sales", to: "call mom" },
+        ],
+      };
+      const targets = (await configErrors({ telephony })).config?.telephony?.transfer_targets;
+      expect(targets?.[1]?.to?.message).toMatch(/\+15551234567/);
+      expect(targets?.[1]?.label?.message).toBe("Two destinations can't share a name.");
+      expect(targets?.[0]).toBeUndefined();
     });
   });
 });

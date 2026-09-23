@@ -15,12 +15,15 @@ import { cn } from "@/lib/utils";
 export interface ControlBarPlaceholderProps {
   camera?: boolean;
   chat?: boolean;
+  /** Mirrors `SessionControls`' compact (embed) bar. */
+  compact?: boolean;
   className?: string;
 }
 
 export function ControlBarPlaceholder({
   camera = true,
   chat = true,
+  compact = false,
   className,
 }: ControlBarPlaceholderProps) {
   return (
@@ -28,7 +31,8 @@ export function ControlBarPlaceholder({
       data-testid="control-bar-placeholder"
       aria-hidden="true"
       className={cn(
-        "border-border bg-card flex h-16 w-full items-center justify-center gap-2 rounded-xl border p-2 shadow-md",
+        "border-border bg-card flex w-full items-center justify-center gap-2 rounded-xl border",
+        compact ? "h-[3.25rem] p-1.5" : "h-16 p-2 shadow-md",
         className,
       )}
     >

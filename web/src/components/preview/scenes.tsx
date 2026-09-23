@@ -137,17 +137,19 @@ function sessionSceneParams(params: Record<string, string>): {
   agentState: AgentUiState;
   audioBlocked: boolean;
   testMode: boolean;
+  embed: boolean;
 } {
   const layout: SessionLayout = params.layout === "wide" ? "wide" : "side";
   const raw = params.state as SessionStateParam;
   const audioBlocked = raw === "audio-blocked";
   const agentState: AgentUiState = audioBlocked ? "listening" : (raw as AgentUiState);
   const testMode = params.test === "1";
-  return { layout, agentState, audioBlocked, testMode };
+  const embed = params.embed === "1";
+  return { layout, agentState, audioBlocked, testMode, embed };
 }
 
 function SessionScene({ params }: { params: Record<string, string> }) {
-  const { layout, agentState, audioBlocked, testMode } = sessionSceneParams(params);
+  const { layout, agentState, audioBlocked, testMode, embed } = sessionSceneParams(params);
   const isWide = layout === "wide";
   const agent = isWide ? PREVIEW_INSURANCE_AGENT : PREVIEW_GENERIC_AGENT;
   const panel = resolvePanel(agent.ui_panel_id);
@@ -161,6 +163,7 @@ function SessionScene({ params }: { params: Record<string, string> }) {
       agentName={agent.name}
       agentState={agentState}
       elapsedMs={125_000}
+      embed={embed}
       testBar={testMode ? <TestModeBar backHref={`/console/agents/${agent.id}`} /> : undefined}
       banner={<ConnectionBanner agentState={agentState} />}
       stage={
@@ -199,7 +202,13 @@ function SessionScene({ params }: { params: Record<string, string> }) {
           connectionState="connected"
         />
       }
-      controls={<ControlBarPlaceholder camera={Boolean(agent.capabilities.camera)} chat={Boolean(agent.capabilities.chat_input)} />}
+      controls={
+        <ControlBarPlaceholder
+          camera={Boolean(agent.capabilities.camera)}
+          chat={Boolean(agent.capabilities.chat_input)}
+          compact={embed}
+        />
+      }
     />
   );
 }
@@ -211,8 +220,9 @@ const sessionScene: SceneDefinition = {
     layout: ["side", "wide"],
     state: SESSION_STATES,
     test: ["0", "1"],
+    embed: ["0", "1"],
   },
-  defaults: { layout: "side", state: "listening", test: "0" },
+  defaults: { layout: "side", state: "listening", test: "0", embed: "0" },
   surfaces: ["dark"],
   // §2.2: "the tokens are complete in both [themes]... the preview route
   // renders the session shell in both to prove it" — one combo per layout
@@ -220,14 +230,18 @@ const sessionScene: SceneDefinition = {
   // surface is dark, fixed, per §2.1).
   combos: (["side", "wide"] as const).flatMap((layout) => [
     ...SESSION_STATES.map((state) => ({
-      params: { layout, state, test: "0" },
+      params: { layout, state, test: "0", embed: "0" },
       surfaces: state === "listening" ? (["dark", "light"] as const) : undefined,
     })),
-    { params: { layout, state: "connecting", test: "1" }, name: `${layout}-connecting-test` },
+    { params: { layout, state: "connecting", test: "1", embed: "0" }, name: `${layout}-connecting-test` },
+    // `/s/[slug]?embed=1` (ask V2-18-9): no top strip, compact control bar.
+    { params: { layout, state: "listening", test: "0", embed: "1" }, name: `${layout}-embed` },
   ]),
   render: (params) => <SessionScene params={params} />,
   testIds: ["session-shell", "stage-view"],
   isSessionSurface: true,
+  // `SessionShell` is the call's `<main>` (V2-19C).
+  ownsMain: true,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -351,6 +365,7 @@ const compositeScene: SceneDefinition = {
   render: (params) => <CompositeScene params={params} />,
   testIds: ["session-shell", "composite-panel"],
   isSessionSurface: true,
+  ownsMain: true,
 };
 
 /* -------------------------------------------------------------------------- */

@@ -605,6 +605,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "lkap-testing" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -621,6 +622,34 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "lkap-testing", editable = "../testing" },
+    { name = "mypy", specifier = ">=1.18" },
+    { name = "pytest", specifier = ">=8.4" },
+    { name = "pytest-asyncio", specifier = ">=1.1" },
+    { name = "pytest-timeout", specifier = ">=2.4" },
+    { name = "ruff", specifier = ">=0.13" },
+]
+
+[[package]]
+name = "lkap-testing"
+version = "0.1.0"
+source = { editable = "../testing" }
+dependencies = [
+    { name = "livekit-agents" },
+    { name = "lkap-contracts" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livekit-agents", specifier = "==1.8.2" },
+    { name = "lkap-contracts", editable = "../contracts" },
+    { name = "pydantic", specifier = ">=2.11,<3" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "lkap-packs", editable = "." },
     { name = "mypy", specifier = ">=1.18" },
     { name = "pytest", specifier = ">=8.4" },
     { name = "pytest-asyncio", specifier = ">=1.1" },

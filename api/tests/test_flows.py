@@ -24,6 +24,7 @@ from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import WebhookDelivery
 from lkap_api.db.session import Database
 from lkap_api.flows import allowed_tool_names, derived_mode, draft_flow_issues, flow_issues
+from lkap_api.settings import Settings
 
 # The flow validator registers itself on import; register explicitly so these tests
 # never depend on collection order (see `lkap_api.catalogs.validation`).
@@ -371,6 +372,28 @@ def test_derived_mode_needs_nodes() -> None:
 
 
 # --------------------------------------------------------------------- versions
+async def test_a_tool_of_another_installed_pack_is_an_error(admin_client: httpx.AsyncClient) -> None:
+    """Asks V2-16-2: node tools are checked against the agent's own pack, not every installed one."""
+    generic = await create_agent(admin_client)  # pack "generic": no pack tools
+    body = await _validate(admin_client, generic["id"], _flow(tools=["lookup_policy"]))
+    assert _paths(body["issues"], "error") == ["flow.nodes[1].tools[0]"]
+    saved = await admin_client.put(
+        f"/v1/agents/{generic['id']}", json={"config": _config(_flow(tools=["lookup_policy"]))}
+    )
+    assert saved.status_code == 422, saved.text
+
+    claims = await create_agent(admin_client, name="Claims", pack_id="insurance_claim")
+    body = await _validate(admin_client, claims["id"], _flow(tools=["lookup_policy"]))
+    assert "flow.nodes[1].tools[0]" not in _paths(body["issues"], "error")
+
+
+def test_an_unknown_pack_falls_back_to_every_installed_packs_tools(settings: Settings) -> None:
+    from lkap_api.flows import pack_tool_names_for
+
+    assert pack_tool_names_for(None) is None
+    assert pack_tool_names_for("not_installed") == frozenset()
+
+
 async def test_versions_list_get_and_restore_creates_a_new_version(admin_client: httpx.AsyncClient) -> None:
     agent = await create_agent(admin_client, published=False)
     agent_id = agent["id"]
@@ -379,6 +402,8 @@ async def test_versions_list_get_and_restore_creates_a_new_version(admin_client:
 
     listed = (await admin_client.get(f"/v1/agents/{agent_id}/versions")).json()
     assert [v["config_version"] for v in listed["items"]] == [2, 1]
+    # V2-16-9: who saved each version (the admin token acts as `break-glass`).
+    assert [v["created_by"] for v in listed["items"]] == ["break-glass", "break-glass"]
     assert listed["items"][0]["config"] is None  # the list omits bodies
     v1 = (await admin_client.get(f"/v1/agents/{agent_id}/versions/1")).json()
     assert v1["config"]["flow"] is None

@@ -39,7 +39,14 @@ export function PreviewShell({ sceneId, params, surface, children }: PreviewShel
           aria-label="Preview controls"
           className="border-border bg-card sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2 text-sm"
         >
-          <span className="text-muted-foreground font-medium">Preview</span>
+          {/* A scene has no heading of its own until it renders one (the
+              session shell's agent name, a card's title); this keeps every
+              scene at one h1 minimum (axe `page-has-heading-one`) without
+              changing what the scene looks like. Scenes that render their
+              own h1 still get this one too — a second h1 is allowed. */}
+          <h1 className="text-muted-foreground font-medium">
+            Preview<span className="sr-only">: {scene?.label ?? sceneId}</span>
+          </h1>
           <nav aria-label="Scenes" className="flex flex-wrap gap-2">
             {Object.values(SCENES).map((entry) => (
               <Link
@@ -99,7 +106,16 @@ export function PreviewShell({ sceneId, params, surface, children }: PreviewShel
         {/* Scenes built on `SessionCardScreen` (precall/ended/unavailable) render
             their own `<main>` — a second one here would be
             `landmark-no-duplicate-main` / `landmark-main-is-top-level`. */}
-        {scene?.ownsMain ? children : <main>{children}</main>}
+        {scene?.ownsMain ? (
+          children
+        ) : (
+          <main>
+            {/* Stands in for the session's panel-column h2, so a block's or
+                panel's own h3 keeps a valid outline in isolation. */}
+            <h2 className="sr-only">{scene?.label ?? "Scene"}</h2>
+            {children}
+          </main>
+        )}
       </div>
     </div>
   );

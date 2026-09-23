@@ -7,6 +7,8 @@ import { ConnectionDetailTabs } from "@/components/console/connections/connectio
 import { connectionStatusTone, connectionStatusLabel } from "@/components/console/connections/connection-model";
 import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
 import { useConnection } from "@/hooks/useConnections";
+import { ConsoleBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /** `/console/connections/[id]?tab=` (needs `Suspense` in the page for `useSearchParams`, WP-1's convention). */
 export function ConnectionDetail({ connectionId }: { connectionId: string }) {
@@ -14,10 +16,10 @@ export function ConnectionDetail({ connectionId }: { connectionId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <LoadingRegion label="Loading connection" className="flex flex-col gap-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-40 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 
@@ -27,9 +29,9 @@ export function ConnectionDetail({ connectionId }: { connectionId: string }) {
 
   return (
     <div>
+      <ConsoleBreadcrumbs trail={[{ label: "Connections", href: "/console/connections" }, { label: connection.name }]} />
       <PageHeader
         title={connection.name}
-        breadcrumbs={[{ label: "Connections", href: "/console/connections" }, { label: connection.name }]}
         description={connection.url}
         actions={
           <StatusChip tone={connectionStatusTone(connection.status)} dot>

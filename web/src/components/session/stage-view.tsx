@@ -85,8 +85,11 @@ export function StageView({
     : AGENT_STATE_CAPTION[agentState];
   const meterState = toMeterState(agentState);
   const failed = agentState === "failed";
-  // §5.4: the stage dims while the room reconnects.
+  // §5.4 as amended by R-V2-19 (WCAG 1.4.3): while the room reconnects only
+  // the stage *media* dims — the video and the meter. The agent name and the
+  // "Reconnecting…" caption (a live announcement) keep full contrast.
   const dimmed = agentState === "reconnecting";
+  const mediaDim = dimmed ? "opacity-60 transition-opacity duration-(--dur-3)" : "transition-opacity duration-(--dur-3)";
 
   return (
     <div
@@ -119,8 +122,7 @@ export function StageView({
       ) : (
         <div
           className={cn(
-            "flex min-w-0 items-center justify-center transition-opacity duration-(--dur-3)",
-            dimmed && "opacity-60",
+            "flex min-w-0 items-center justify-center",
             compact
               ? "w-full gap-3 px-4 lg:flex-col lg:gap-3 lg:px-6"
               : "flex-col gap-4 px-6 py-8",
@@ -134,18 +136,18 @@ export function StageView({
                 state={meterState}
                 size="md"
                 level={level}
-                className="lg:hidden"
+                className={cn("lg:hidden", mediaDim)}
               />
               <StateMeter
                 state={meterState}
                 size="lg"
                 bars={5}
                 level={level}
-                className="hidden lg:inline-flex"
+                className={cn("hidden lg:inline-flex", mediaDim)}
               />
             </>
           ) : (
-            <StateMeter state={meterState} size="lg" bars={5} level={level} />
+            <StateMeter state={meterState} size="lg" bars={5} level={level} className={mediaDim} />
           )}
           <p
             className={cn(

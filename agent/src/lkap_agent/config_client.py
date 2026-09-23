@@ -6,7 +6,9 @@ The worker never reads the database or the credential vault. It fetches one
 by creating the session with `POST /internal/v1/sessions/start` when it did not
 (server-created rooms such as inbound SIP, CONTRACTS-V2 D-V2-5) — posts session
 events, asks the api to start an Egress recording, and pushes latency metrics
-and a final summary from its shutdown callback.
+and a final summary from its shutdown callback. On phone calls it also reports
+the SIP leg's status and asks the api to transfer the caller (R-V2-20; these
+two calls replaced V2-17's separate telephony client).
 
 Nothing in this module logs a response body: `ResolvedAgentConfig` carries
 decrypted vendor keys and substituted tool secrets.
@@ -20,7 +22,10 @@ from typing import TYPE_CHECKING, Protocol, Self
 import httpx
 from lkap_contracts.agent_config import ResolvedAgentConfig
 from lkap_contracts.api_models import (
+    CallReportIn,
     InternalKbSearchRequest,
+    InternalTransferIn,
+    InternalTransferOut,
     KbHit,
     KbSearchResponse,
     RecordingStartOut,
@@ -50,6 +55,9 @@ __all__ = [
 logger = get_logger(__name__)
 
 _SERVICE_TOKEN_HEADER = "X-Service-Token"
+
+#: A cold transfer dials the target, so it may take far longer than a config call.
+_TRANSFER_TIMEOUT_S = 60.0
 
 
 class ConfigUnavailableError(RuntimeError):
@@ -109,6 +117,16 @@ class ConfigClientProtocol(Protocol):
 
     async def kb_search(self, kb_ids: list[str], query: str, k: int = 4) -> list[KbHit]:
         """Search the agent's knowledge bases through the api."""
+        ...
+
+    async def report_call(self, report: CallReportIn) -> None:
+        """Report a SIP leg's status (best effort: failures are logged, never raised)."""
+        ...
+
+    async def transfer_call(
+        self, session_id: str, to: str, participant_identity: str | None
+    ) -> InternalTransferOut:
+        """Ask the api to cold-transfer the session's caller; failures come back as a result."""
         ...
 
     async def aclose(self) -> None:
@@ -348,6 +366,44 @@ class ConfigClient:
         except ValueError:
             logger.warning("kb search returned an unparseable payload", kb_ids=kb_ids)
             return []
+
+    async def report_call(self, report: CallReportIn) -> None:
+        """Post `POST /internal/v1/telephony/calls/report`, swallowing failures."""
+        await self._post_best_effort(
+            "/internal/v1/telephony/calls/report", report.model_dump_json(), what="call report"
+        )
+
+    async def transfer_call(
+        self, session_id: str, to: str, participant_identity: str | None
+    ) -> InternalTransferOut:
+        """Post `POST /internal/v1/telephony/sessions/{id}/transfer` (the `transfer_call` tool).
+
+        Never raises: a transport error or an error status becomes
+        `InternalTransferOut(ok=False, status="failed")` for the model to read.
+        """
+
+        def failed(reason: str) -> InternalTransferOut:
+            return InternalTransferOut(ok=False, status="failed", reason=reason)
+
+        try:
+            body = InternalTransferIn(to=to, participant_identity=participant_identity)
+        except ValueError:
+            return failed("not a valid destination")
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/telephony/sessions/{session_id}/transfer"),
+                content=body.model_dump_json(),
+                headers={"content-type": "application/json"},
+                timeout=_TRANSFER_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            return failed(f"api unreachable: {type(exc).__name__}")
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            return failed(f"api answered {response.status_code}")
+        try:
+            return InternalTransferOut.model_validate_json(response.content)
+        except ValueError:
+            return failed("unparseable transfer result")
 
 
 class ApiKbClient:

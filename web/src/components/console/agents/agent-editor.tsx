@@ -34,6 +34,7 @@ import {
   validationMessages,
   type EditorIssue,
 } from "./editor/validation-map";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /** How long the quiet "Configuration looks good" line stays (docs/UI_UX_SPEC.md §6). */
 const LOOKS_GOOD_MS = 6000;
@@ -60,7 +61,7 @@ export function AgentEditor({ agentId, sections = EDITOR_SECTIONS }: AgentEditor
 
 function EditorSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading agent" className="flex flex-col gap-6">
+    <LoadingRegion label="Loading agent" className="flex flex-col gap-6">
       <div className="flex flex-col gap-2 border-b border-border pb-4">
         <Skeleton className="h-3 w-16" />
         <Skeleton className="h-7 w-64" />
@@ -71,7 +72,7 @@ function EditorSkeleton() {
         <Skeleton className="h-96" />
         <Skeleton className="hidden h-96 lg:block" />
       </div>
-    </div>
+    </LoadingRegion>
   );
 }
 

@@ -62,7 +62,10 @@ export function EmptyState({ icon, title, description, action, secondary, compac
           {renderIcon(icon, "lg")}
         </span>
       ) : null}
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {/* h2, not h3: an empty page's first heading after the PageHeader h1
+          must not skip a level (axe `heading-order`); a lower level never
+          fails that rule inside a deeper section either. */}
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {description ? <p className="max-w-sm text-sm text-muted-foreground">{description}</p> : null}
       {action || secondary ? (
         <div className="mt-1 flex flex-wrap items-center justify-center gap-3">

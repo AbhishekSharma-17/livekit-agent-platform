@@ -88,9 +88,9 @@ export default async function Home() {
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-8 px-4 py-16 text-center">
         <div className="flex items-center gap-2.5">
           <StateMeter state="idle" size="md" />
-          <span className="text-[1.375rem] leading-7 font-semibold tracking-[-0.015em]">
+          <h1 className="text-[1.375rem] leading-7 font-semibold tracking-[-0.015em]">
             LKAP
-          </span>
+          </h1>
         </div>
 
         <p className="max-w-[42ch] text-base text-pretty text-muted-foreground">

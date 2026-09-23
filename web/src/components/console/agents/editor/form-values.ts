@@ -4,6 +4,7 @@ import {
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
   DEFAULT_RECORDING,
+  DEFAULT_TELEPHONY,
   DEFAULT_TOOLS,
   DEFAULT_VOICE,
 } from "@/components/console/agents/defaults";
@@ -15,7 +16,7 @@ import type { AgentConfig, AgentLimits, AgentOut, AgentUpdate, PipelineConfig } 
  * Agent ⇄ editor form conversion (WP-3).
  *
  * The form holds only what the sections edit (`config.panel` since V2-11's
- * composer). Everything else in the stored `AgentConfig` v2 — `qa`, `flow`, `pipeline.vad` / `turn_detection` /
+ * composer, `config.telephony` since V2-19). Everything else in the stored `AgentConfig` v2 — `qa`, `flow`, `pipeline.vad` / `turn_detection` /
  * `noise_cancellation` / `avatar_options`, `voice.first_speaker`,
  * `capabilities.dtmf`, and whatever a later contract adds — is merged back
  * from the loaded agent in `buildAgentUpdate`, so a save never resets a field
@@ -73,6 +74,7 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       recording: { ...DEFAULT_RECORDING, ...config.recording },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
+      telephony: { ...DEFAULT_TELEPHONY, transfer_targets: [...(config.telephony?.transfer_targets ?? [])] },
     },
   };
 }
@@ -131,6 +133,8 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
     timezone: edited.timezone,
     recording: { ...stored.recording, ...edited.recording },
   };
+  // R-V2-21: the Tools section edits `config.telephony` (the transfer destinations).
+  if (edited.telephony !== undefined) config.telephony = { ...stored.telephony, ...edited.telephony };
   // The flow builder (V2-16) owns `config.flow`; the api derives `mode` from it (R-V2-12).
   if (edited.flow !== undefined) config.flow = edited.flow;
   // The panel composer (V2-11) owns `config.panel` and writes `ui_panel_id`

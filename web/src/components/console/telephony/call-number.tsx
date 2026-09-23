@@ -22,10 +22,8 @@ import type { AgentOut } from "@/contracts/lkap-contracts";
 
 import { CallControls } from "./call-controls";
 import { useCall, usePlaceCall, useTrunks } from "./hooks";
-import { callStatusMeta, connectionForAgent, normalizeE164, sipEnabled } from "./model";
+import { callStatusMeta, connectionForAgent, E164_PATTERN, normalizeE164, sipEnabled } from "./model";
 import { NativeSelect } from "./native-select";
-import { E164_PATTERN } from "./types";
-
 /*
  * "Call a number" on the agent editor's Test call split button (V2-17,
  * editor README "Slots"). The menu item lives inside the dropdown, which
@@ -161,7 +159,7 @@ export function CallNumberDialog({
                   <NativeSelect id="call-trunk" value={chosenTrunk} onChange={(e) => setTrunkId(e.target.value)}>
                     {outbound.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.name} ({t.numbers[0] ?? "no caller ID"})
+                        {t.name} ({t.numbers?.[0] ?? "no caller ID"})
                       </option>
                     ))}
                   </NativeSelect>

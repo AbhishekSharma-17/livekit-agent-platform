@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 
 import { useAgentVersion, useAgentVersions, useRestoreVersion } from "./api";
 import { diffRows, objectHash, preview, type DiffRow } from "./version-diff";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 /**
  * Version history (V2-16): every saved `config_version` of the agent, a diff
@@ -96,7 +97,7 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
       </SheetHeader>
       <div className="flex flex-col gap-4 p-4">
         {versions.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <SkeletonRows label="Loading versions" rows={4} rowClassName="h-12" />
         ) : versions.isError ? (
           <p className="text-sm text-danger-text">Couldn&apos;t load versions — {errorMessage(versions.error)}</p>
         ) : (
@@ -151,7 +152,7 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
             ) : version.isError ? (
               <p className="text-sm text-danger-text">Couldn&apos;t load version {selected}.</p>
             ) : (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+              <SkeletonRows label="Loading this version" rows={4} rowClassName="h-6" />
             )}
           </section>
         ) : items.length > 1 ? (

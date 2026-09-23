@@ -11,27 +11,29 @@ import { KbDocuments } from "@/components/console/knowledge/kb-documents";
 import { KbSearchPanel } from "@/components/console/knowledge/kb-search-panel";
 import { DescriptionList } from "@/components/shared/description-list";
 import { pluralize } from "@/lib/format";
+import { ConsoleBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 export function KbDetail({ kbId }: { kbId: string }) {
   const { data: kb, isLoading, isError, error, refetch } = useKb(kbId);
 
   if (isLoading) {
     return (
-      <div>
+      <LoadingRegion label="Loading knowledge base">
         <Skeleton className="mb-6 h-16 w-full" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 
   if (isError || !kb) {
-    return <ErrorBanner message={`Could not load this knowledge base: ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner message={`Couldn't load this knowledge base — ${errorMessage(error)}`} onRetry={() => refetch()} />;
   }
 
   return (
     <div>
+      <ConsoleBreadcrumbs trail={[{ label: "Knowledge", href: "/console/knowledge" }, { label: kb.name }]} />
       <PageHeader
-        breadcrumbs={[{ label: "Knowledge", href: "/console/knowledge" }, { label: kb.name }]}
         title={kb.name}
         description={kb.description || undefined}
       />

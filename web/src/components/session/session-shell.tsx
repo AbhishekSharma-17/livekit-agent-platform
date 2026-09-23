@@ -50,6 +50,12 @@ export interface SessionShellProps {
   onTranscriptOpenChange?: (open: boolean) => void;
   panel: React.ReactNode;
   controls: React.ReactNode;
+  /**
+   * `/s/[slug]?embed=1` (UI_UX_SPEC-V2-AMENDMENTS §2.6, ask V2-18-9): no top
+   * strip — the host page frames the widget — and room for the compact
+   * control bar the room renders in this mode.
+   */
+  embed?: boolean;
 }
 
 const LIVE_STATES: AgentUiState[] = ["listening", "thinking", "speaking"];
@@ -70,27 +76,37 @@ export function SessionShell({
   onTranscriptOpenChange,
   panel,
   controls,
+  embed = false,
 }: SessionShellProps) {
   const model = sessionLayoutModel(layout);
   const live = LIVE_STATES.includes(agentState);
 
   return (
-    <div
+    // The whole call surface is the page's one `main` landmark (axe `region`):
+    // the test bar, the reconnecting banner and the control bar sit outside
+    // the three labelled columns, so they need a landmark around them too.
+    <main
       data-testid="session-shell"
       data-layout={layout}
       data-state={agentState}
+      data-embed={embed ? "" : undefined}
       className={model.root}
     >
       {testBar}
 
+      {/* The embed keeps the page's h1 for assistive tech only. */}
+      {embed && <h1 className="sr-only">{agentName}</h1>}
+
       {/* Top strip (§5.3): who, how long, and the connection state. */}
+      {!embed && (
       <header
         data-testid="session-top-strip"
         className="flex h-10 shrink-0 items-center gap-2 px-3 lg:px-4"
       >
-        <span className="text-foreground min-w-0 truncate text-sm font-medium">
+        {/* The page's h1 (axe `page-has-heading-one`): who the call is with. */}
+        <h1 className="text-foreground min-w-0 truncate text-sm font-medium">
           {agentName}
-        </span>
+        </h1>
         {live && <StatusChip tone="live">Live</StatusChip>}
         <span className="flex-1" />
         {elapsedMs !== undefined && live && (
@@ -136,6 +152,7 @@ export function SessionShell({
           </span>
         )}
       </header>
+      )}
 
       {banner}
 
@@ -198,8 +215,13 @@ export function SessionShell({
       {/* Space for the fixed control bar below `lg` (safe-area aware). */}
       <div
         aria-hidden="true"
-        className="h-[calc(88px+env(safe-area-inset-bottom,0px))] shrink-0 lg:hidden"
+        className={cn(
+          "shrink-0 lg:hidden",
+          embed
+            ? "h-[calc(64px+env(safe-area-inset-bottom,0px))]"
+            : "h-[calc(88px+env(safe-area-inset-bottom,0px))]",
+        )}
       />
-    </div>
+    </main>
   );
 }

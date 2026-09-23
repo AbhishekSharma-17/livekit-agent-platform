@@ -156,10 +156,14 @@ async def sweep_loop(db: Database, settings: Settings) -> None:
     One failed pass (e.g. a transient database error) is logged and never kills
     the loop — the next tick tries again.
     """
+    # Deferred for the same import-cycle reason as `sweep_recording_retention`'s import.
+    from lkap_api.telephony.calls import sweep_stuck_calls  # noqa: PLC0415
+
     while True:
         try:
             await sweep_once(db, settings)
             await sweep_recording_retention(db, settings)
+            await sweep_stuck_calls(db)  # R-V2-24: calls stuck in `dialing` / left open
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - a sweep failure must never kill the loop

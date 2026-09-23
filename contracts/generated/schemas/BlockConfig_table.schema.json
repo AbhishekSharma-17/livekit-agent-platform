@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "TableColumnConfig": {
+      "additionalProperties": false,
+      "description": "One starting column of a table block (``TableColumn``, strictly).",
+      "properties": {
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "date"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "TableColumnConfig",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/BlockConfig_table.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``table``: the columns the table starts with (the agent adds more).",
+  "properties": {
+    "columns": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TableColumnConfig"
+      },
+      "title": "Columns",
+      "type": "array"
+    }
+  },
+  "title": "BlockConfig_table",
+  "type": "object"
+}

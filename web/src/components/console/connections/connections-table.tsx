@@ -42,6 +42,7 @@ import {
   useTestConnection,
 } from "@/hooks/useConnections";
 import type { ConnectionOut } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /**
  * `/console/connections` list (UI_UX_SPEC-V2-AMENDMENTS §2.1): Name, Type,
@@ -56,11 +57,11 @@ export function ConnectionsTable() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion label="Loading connections" className="flex flex-col gap-2">
         {[0, 1].map((i) => (
           <Skeleton key={i} className="h-14 w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   }
 

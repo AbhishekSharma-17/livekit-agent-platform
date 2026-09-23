@@ -16,10 +16,12 @@ dev = [
   "pytest-timeout>=2.4",
   "ruff>=0.13",
   "mypy>=1.18",
+  "lkap-testing",
 ]
 
 [tool.uv.sources]
 lkap-contracts = { path = "../contracts", editable = true }
+lkap-testing = { path = "../testing", editable = true }
 
 [build-system]
 requires = ["hatchling"]

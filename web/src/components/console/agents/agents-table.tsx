@@ -36,6 +36,7 @@ import type { ResponsiveTableColumn } from "@/components/shared/responsive-table
 import { useAgents, useDeleteAgent, usePacks, useProviders, useUpdateAgent } from "@/components/console/lib/api-hooks";
 import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
 import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 const PIPELINE_MODE_LABEL: Record<string, string> = {
   cascaded: "Cascaded",
@@ -147,16 +148,16 @@ export function AgentsTable() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion label="Loading agents" className="flex flex-col gap-2">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   }
 
   if (isError) {
-    return <ErrorBanner message={`Could not reach the api: ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner message={`Couldn't load agents — ${errorMessage(error)}`} onRetry={() => refetch()} />;
   }
 
   if (agents.length === 0) {

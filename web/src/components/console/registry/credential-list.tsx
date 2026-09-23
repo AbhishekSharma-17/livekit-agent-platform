@@ -38,6 +38,7 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { pluralize } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, CredentialOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /** How long the inline test result stays as a chip before it settles to "Tested … ago" (§4.5). */
 export const TEST_CHIP_MS = 10_000;
@@ -147,11 +148,11 @@ export function CredentialList() {
   let body: React.ReactNode;
   if (credentialsQuery.isLoading) {
     body = (
-      <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading credentials">
+      <LoadingRegion label="Loading credentials" className="flex flex-col gap-2">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-14 w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   } else if (credentialsQuery.isError) {
     body = (

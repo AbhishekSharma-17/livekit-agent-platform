@@ -1,15 +1,25 @@
-"""V2-17 telephony: trunks, dispatch rules, numbers, calls, webhooks (LiveKit faked at the boundary)."""
+"""Telephony: trunks, dispatch rules, numbers, calls, webhooks (LiveKit faked at the boundary).
+
+V2-17's suite plus V2-19's rulings: the dialing policy (R-V2-23), save-time
+transfer-destination checks (R-V2-21), call variables in the resolved config
+(R-V2-22) and the stuck-call sweep (R-V2-24). Every test that dials runs under
+:data:`TEST_POLICY` (the ``world`` fixture), because a workspace without a
+policy may not dial at all.
+"""
 
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import hashlib
 import json
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 import pytest
+from auth_helpers import key_client, make_api_key, set_agent_columns
 from conftest import inference_config
 from connection_fakes import KEY_B, SECRET_B, add_agent, connection_row
 from fastapi import FastAPI
@@ -18,22 +28,51 @@ from livekit.api import AccessToken, ServerError, SipCallError
 from livekit.protocol.models import DisconnectReason, ParticipantInfo, Room
 from livekit.protocol.webhook import WebhookEvent
 from lkap_contracts.dispatch import DispatchMetadata
-from sqlalchemy import select
+from lkap_contracts.telephony import TelephonyConfig as TelephonyConfigModel
+from sqlalchemy import select, update
 from telephony_fakes import FakeClientFactory, FakeLiveKitApi
 
+from lkap_api.config_service import ValidationContext
 from lkap_api.connections.clients import get_client_factory
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
-from lkap_api.db.models import Call, SipDispatchRule, SipTrunk, new_id
+from lkap_api.db.models import AuditLog, Call, SipDispatchRule, SipTrunk, Workspace, new_id, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.settings import Settings
-from lkap_api.telephony.calls import advance, status_for_sip_code
+from lkap_api.telephony.calls import (
+    STUCK_DIAL_AFTER_S,
+    SWEPT_DIAL_REASON,
+    advance,
+    status_for_sip_code,
+    sweep_stuck_calls,
+)
 from lkap_api.telephony.common import DTMF_TOPIC
+from lkap_api.telephony.policy import (
+    BLOCKED_PREFIXES,
+    NOT_ALLOWED_TO_MODEL,
+    TelephonyPolicy,
+    destination_problem,
+    policy_of,
+)
+from lkap_api.telephony.validation import telephony_issues
 from lkap_api.vault import Vault
 
 INBOUND_NUMBER = "+15551230000"
 OUTBOUND_NUMBER = "+15551239999"
 CALLEE = "+15557654321"
+
+#: The dialing policy every dialing test runs under (R-V2-23).
+TEST_POLICY: dict[str, Any] = {"allowed_prefixes": ["+1555"], "allowed_sip_hosts": ["pbx.example.com"]}
+
+
+async def _set_policy(database: Database, policy: dict[str, Any] | None) -> None:
+    """Store (or, with ``None``, remove) the default workspace's dialing policy."""
+    async with database.session() as session:
+        await session.execute(
+            update(Workspace)
+            .where(Workspace.id == DEFAULT_WORKSPACE_ID)
+            .values(settings={} if policy is None else {"telephony": policy})
+        )
 
 
 @dataclass
@@ -78,8 +117,18 @@ async def _seed_connection(
 
 
 @pytest.fixture
+async def dial_policy(database: Database) -> dict[str, Any]:
+    await _set_policy(database, TEST_POLICY)
+    return TEST_POLICY
+
+
+@pytest.fixture
 async def world(
-    database: Database, settings: Settings, fake_lk: FakeLiveKitApi, fake_factory: FakeClientFactory
+    database: Database,
+    settings: Settings,
+    fake_lk: FakeLiveKitApi,
+    fake_factory: FakeClientFactory,
+    dial_policy: dict[str, Any],
 ) -> AsyncIterator[World]:
     connection_id, agent_id, agent_name = await _seed_connection(database, settings)
     yield World(connection_id, agent_id, agent_name, fake_lk, fake_factory)
@@ -499,7 +548,11 @@ async def test_place_call_sip_failure_maps_status_and_dismisses_agent(
 
 
 async def test_place_call_sip_disabled_is_409(
-    admin_client: httpx.AsyncClient, database: Database, settings: Settings, fake_factory: FakeClientFactory
+    admin_client: httpx.AsyncClient,
+    database: Database,
+    settings: Settings,
+    fake_factory: FakeClientFactory,
+    dial_policy: dict[str, Any],
 ) -> None:
     _conn, agent_id, _name = await _seed_connection(database, settings, sip=False)
 
@@ -995,3 +1048,458 @@ async def test_sip_join_on_a_foreign_trunk_records_nothing(
 
     async with database.session() as session:
         assert (await session.scalars(select(Call))).all() == []
+
+
+# ================================================================ V2-19 rulings
+async def _audit_actions(database: Database) -> list[str]:
+    async with database.session() as session:
+        rows = (await session.execute(select(AuditLog).where(AuditLog.action.like("call.%")))).scalars()
+        return [row.action for row in rows]
+
+
+# ------------------------------------------------------- R-V2-23 dialing policy
+@pytest.mark.parametrize(
+    ("target", "allowed"),
+    [
+        ("+15557654321", True),
+        ("tel:+15557654321", True),
+        ("sip:+15551230000@carrier.example.net", True),  # a numeric user passes by prefix
+        ("sips:+15551230000;user=phone@carrier.example.net", True),
+        ("sip:desk@pbx.example.com", True),
+        ("sip:desk@PBX.example.com:5060", True),
+        ("+15550000000", True),
+        ("+14155550000", False),  # off-list prefix
+        ("sip:100@evil.example", False),  # non-numeric user on an unlisted host
+        ("tel:5551234", False),  # no country code
+        ("reception", False),
+    ],
+)
+def test_destination_problem_prefix_and_sip_host_rules(target: str, allowed: bool) -> None:
+    policy = policy_of({"telephony": TEST_POLICY})
+
+    assert (destination_problem(policy, target) is None) is allowed
+
+
+@pytest.mark.parametrize("number", ["+19005550100", "+19765550100", "+449098790000", "+881631234567"])
+def test_blocked_prefixes_win_over_a_broad_allow_list(number: str) -> None:
+    policy = TelephonyPolicy(allowed_prefixes=["+1", "+44", "+8"])
+
+    problem = destination_problem(policy, number)
+
+    assert problem is not None and "always blocked" in problem
+
+
+def test_blocked_prefixes_cover_premium_and_satellite_ranges() -> None:
+    assert {"+1900", "+1976", "+449", "+881", "+882", "+870", "+979"} <= set(BLOCKED_PREFIXES)
+
+
+def test_policy_of_defaults_to_deny_and_drops_malformed_entries() -> None:
+    assert policy_of(None).dialing_enabled is False
+    assert policy_of({"telephony": "on"}).allowed_prefixes == []
+    policy = policy_of(
+        {
+            "telephony": {
+                "allowed_prefixes": ["+1", "44", "+", "+1 555"],
+                "allowed_sip_hosts": ["PBX.Example.com."],
+            }
+        }
+    )
+    assert policy.allowed_prefixes == ["+1", "+1555"]
+    assert policy.allowed_sip_hosts == ["pbx.example.com"]
+    assert (policy.max_calls_per_min, policy.max_concurrent_outbound) == (10, 5)
+    broken = policy_of({"telephony": {"allowed_prefixes": ["+1"], "max_calls_per_min": "lots"}})
+    assert broken.allowed_prefixes == ["+1"] and broken.max_calls_per_min == 10
+
+
+async def test_place_call_policy_less_workspace_is_422_with_an_actionable_message(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, None)
+
+    response = await admin_client.post("/v1/calls", json={"agent_id": world.agent_id, "to_e164": CALLEE})
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "destination_not_allowed"
+    assert "allowed number prefixes" in error["message"]
+    assert error["details"]["allowed_prefixes"] == []
+    assert world.lk.named("create_sip_participant") == []
+
+
+async def test_place_call_off_list_and_premium_numbers_are_422_and_never_dialed(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    off_list = await admin_client.post(
+        "/v1/calls", json={"agent_id": world.agent_id, "to_e164": "+14155550100"}
+    )
+    await _set_policy(database, {"allowed_prefixes": ["+1"]})
+    premium = await admin_client.post(
+        "/v1/calls", json={"agent_id": world.agent_id, "to_e164": "+19005550100"}
+    )
+
+    assert off_list.status_code == 422
+    assert off_list.json()["error"]["code"] == "destination_not_allowed"
+    assert off_list.json()["error"]["details"]["allowed_prefixes"] == ["+1555"]
+    assert premium.status_code == 422
+    assert "always blocked" in premium.json()["error"]["message"]
+    assert world.lk.named("create_sip_participant") == []
+    async with database.session() as session:
+        assert (await session.execute(select(Call))).scalars().all() == []
+
+
+async def test_policy_set_through_the_workspace_route_opens_dialing(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _set_policy(database, None)
+    await _trunk(admin_client, world, "outbound")
+    response = await admin_client.put(
+        f"/v1/workspaces/{DEFAULT_WORKSPACE_ID}",
+        json={"settings": {"telephony": {"allowed_prefixes": ["+1555"], "max_calls_per_min": 3}}},
+    )
+    assert response.status_code == 200, response.text
+
+    call = await admin_client.post("/v1/calls", json={"agent_id": world.agent_id, "to_e164": CALLEE})
+
+    assert call.status_code == 201, call.text
+
+
+async def test_eleventh_call_in_a_minute_is_429_rate_limited(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {**TEST_POLICY, "max_concurrent_outbound": 100})
+    await set_agent_columns(database, world.agent_id, limits={"max_concurrent_sessions": 100})
+
+    statuses = [
+        (
+            await admin_client.post("/v1/calls", json={"agent_id": world.agent_id, "to_e164": CALLEE})
+        ).status_code
+        for _ in range(11)
+    ]
+
+    assert statuses == [201] * 10 + [429]
+    last = await admin_client.post("/v1/calls", json={"agent_id": world.agent_id, "to_e164": CALLEE})
+    assert last.json()["error"]["code"] == "rate_limited"
+
+
+async def test_api_key_calls_share_the_workspace_bucket(
+    app: FastAPI, admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {**TEST_POLICY, "max_calls_per_min": 2, "max_concurrent_outbound": 100})
+    await set_agent_columns(database, world.agent_id, limits={"max_concurrent_sessions": 100})
+    _key_id, raw = await make_api_key(database, ["calls:write", "sessions:read"])
+    body = {"agent_id": world.agent_id, "to_e164": CALLEE}
+
+    first = await admin_client.post("/v1/calls", json=body)
+    async with key_client(app, raw) as keyed:
+        second = await keyed.post("/v1/calls", json=body)
+        third = await keyed.post("/v1/calls", json=body)
+        off_list = await keyed.post("/v1/calls", json={**body, "to_e164": "+14155550100"})
+
+    assert (first.status_code, second.status_code, third.status_code) == (201, 201, 429), third.text
+    assert third.json()["error"]["code"] == "rate_limited"
+    assert off_list.status_code == 422
+
+
+async def test_open_outbound_cap_and_agent_session_limit_are_429_calls_busy(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _trunk(admin_client, world, "outbound")
+    await _set_policy(database, {**TEST_POLICY, "max_concurrent_outbound": 1})
+    body = {"agent_id": world.agent_id, "to_e164": CALLEE}
+
+    first = await admin_client.post("/v1/calls", json=body)  # answered by the fake: still open
+    workspace_cap = await admin_client.post("/v1/calls", json=body)
+    await _set_policy(database, {**TEST_POLICY, "max_concurrent_outbound": 50})
+    await set_agent_columns(database, world.agent_id, limits={"max_concurrent_sessions": 1})
+    agent_cap = await admin_client.post("/v1/calls", json=body)
+
+    assert first.status_code == 201
+    assert workspace_cap.status_code == 429
+    assert workspace_cap.json()["error"]["code"] == "calls_busy"
+    assert workspace_cap.json()["error"]["details"]["max_concurrent_outbound"] == 1
+    assert agent_cap.status_code == 429
+    assert agent_cap.json()["error"]["details"]["max_concurrent_sessions"] == 1
+
+
+async def test_console_transfer_policy_sip_host_and_numeric_user(
+    admin_client: httpx.AsyncClient, world: World
+) -> None:
+    call = await _call(admin_client, world)
+
+    evil = await admin_client.post(f"/v1/calls/{call['id']}/transfer", json={"to": "sip:100@evil.example"})
+    off_list = await admin_client.post(f"/v1/calls/{call['id']}/transfer", json={"to": "+14155550100"})
+    by_prefix = await admin_client.post(
+        f"/v1/calls/{call['id']}/transfer", json={"to": "sip:+15551230000@carrier.example.net"}
+    )
+
+    assert evil.status_code == 422 and evil.json()["error"]["code"] == "destination_not_allowed"
+    assert off_list.status_code == 422
+    assert by_prefix.status_code == 200, by_prefix.text
+    (refer,) = world.lk.named("transfer_sip_participant")
+    assert refer.transfer_to == "sip:+15551230000@carrier.example.net"
+
+
+async def test_dials_and_transfers_write_audit_rows(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    call = await _call(admin_client, world)
+    await admin_client.post(f"/v1/calls/{call['id']}/transfer", json={"to": "+15550001111"})
+
+    async with database.session() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(AuditLog)
+                    .where(AuditLog.target_id == call["id"], AuditLog.action.like("call.%"))
+                    .order_by(AuditLog.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert [row.action for row in rows] == ["call.placed", "call.transferred"]
+    assert rows[0].target_type == "calls"
+    assert rows[0].payload is not None and rows[0].payload["to"] == CALLEE
+    assert rows[1].payload is not None and rows[1].payload["to"] == "+15550001111"
+
+
+async def test_internal_transfer_off_list_is_refused_for_the_model_and_audited(
+    service_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    session_id = await _inbound_session(database, world)
+
+    response = await service_client.post(
+        f"/internal/v1/telephony/sessions/{session_id}/transfer",
+        json={"to": "+19005550100", "participant_identity": "sip_caller"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() | {"call_id": None} == {
+        "ok": False,
+        "status": "refused",
+        "call_id": None,
+        "reason": NOT_ALLOWED_TO_MODEL,
+    }
+    assert world.lk.named("transfer_sip_participant") == []
+    assert await _audit_actions(database) == ["call.transfer_refused"]
+
+
+# ------------------------------------------- R-V2-21 save-time destination checks
+def _targets(*pairs: tuple[str, str]) -> dict[str, Any]:
+    return {"transfer_targets": [{"label": label, "to": to} for label, to in pairs]}
+
+
+async def _put_config(client: httpx.AsyncClient, agent_id: str, **config: Any) -> httpx.Response:
+    body: dict[str, Any] = json.loads(inference_config().model_dump_json())
+    body.update(config)
+    return await client.put(f"/v1/agents/{agent_id}", json={"config": body})
+
+
+def _issue_paths(response: httpx.Response) -> list[str]:
+    return [issue["path"] for issue in response.json()["error"]["details"]["issues"]]
+
+
+@pytest.mark.parametrize(
+    "to", ["+19005550100", "sip:x@unknown-host.example", "+14155550100"], ids=["premium", "sip", "off-list"]
+)
+async def test_saving_a_transfer_target_outside_the_policy_is_422_at_its_path(
+    admin_client: httpx.AsyncClient, world: World, database: Database, to: str
+) -> None:
+    await _set_policy(database, {"allowed_prefixes": ["+1555", "+1900"]})  # a listed prefix still loses
+
+    response = await _put_config(
+        admin_client, world.agent_id, telephony=_targets(("Desk", "+15550001111"), ("Other", to))
+    )
+
+    assert response.status_code == 422, response.text
+    assert "telephony.transfer_targets[1].to" in _issue_paths(response)
+    assert "telephony.transfer_targets[0].to" not in _issue_paths(response)
+
+
+async def test_saving_allowed_targets_round_trips_and_duplicate_labels_are_422(
+    admin_client: httpx.AsyncClient, world: World
+) -> None:
+    targets = _targets(("Sales", "+15550001111"), ("Desk", "sip:desk@pbx.example.com"))
+    saved = await _put_config(admin_client, world.agent_id, telephony=targets)
+    duplicate = await _put_config(
+        admin_client, world.agent_id, telephony=_targets(("Sales", "+15550001111"), ("sales", "+15550002222"))
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["config"]["telephony"] == targets
+    assert duplicate.status_code == 422
+    assert _issue_paths(duplicate) == ["telephony.transfer_targets[1].label"]
+
+
+async def test_policy_less_workspace_refuses_every_saved_target_and_flow_transfer_node(
+    admin_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    await _set_policy(database, None)
+    flow = {
+        "nodes": [
+            {"id": "start", "kind": "start", "greeting": "Hello."},
+            {"id": "ask", "kind": "agent", "instructions": "Ask what they need."},
+            {"id": "xfer", "kind": "transfer", "to": "+15550001111"},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start", "target": "ask", "condition": "always"},
+            {"id": "e2", "source": "ask", "target": "xfer", "condition": "They want a person."},
+        ],
+    }
+
+    response = await _put_config(
+        admin_client, world.agent_id, telephony=_targets(("Sales", "+15550001111")), flow=flow
+    )
+
+    assert response.status_code == 422
+    assert {"telephony.transfer_targets[0].to", "flow.nodes[2].to"} <= set(_issue_paths(response))
+
+
+def test_telephony_validator_without_a_policy_checks_labels_only() -> None:
+    config = inference_config().model_copy(
+        update={
+            "telephony": TelephonyConfigModel.model_validate(
+                _targets(("A", "+19005550100"), ("a", "+15550001111"))
+            )
+        }
+    )
+
+    issues = telephony_issues(ValidationContext(config=config))
+
+    assert [i.path for i in issues] == ["telephony.transfer_targets[1].label"]
+
+
+# ------------------------------------------------ R-V2-22 variables to the worker
+async def test_call_variables_reach_the_resolved_config_and_survive_the_summary(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, world: World
+) -> None:
+    call = await _call(admin_client, world, variables={"claim_id": "C-1"})
+    session_id = call["session_id"]
+
+    resolved = await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")
+    summary = await service_client.put(
+        f"/internal/v1/sessions/{session_id}/summary",
+        json={"status": "ended", "usage": {}, "transcript": [], "variables": {}},
+    )
+    detail = await admin_client.get(f"/v1/sessions/{session_id}")
+
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["variables"] == {"claim_id": "C-1"}
+    assert summary.status_code == 204
+    assert detail.json()["variables"] == {"claim_id": "C-1"}
+
+
+# ---------------------------------------------------------- R-V2-24 stuck calls
+async def _sweep_row(
+    database: Database,
+    world: World,
+    *,
+    direction: str,
+    call_status: str,
+    session_status: str,
+    age_s: float,
+    started: bool = False,
+) -> tuple[str, str]:
+    born = utcnow() - dt.timedelta(seconds=age_s)
+    async with database.session() as session:
+        sess = SessionRow(
+            id=new_id(),
+            workspace_id=DEFAULT_WORKSPACE_ID,
+            agent_id=world.agent_id,
+            connection_id=world.connection_id,
+            config_version=1,
+            room_name=f"lkap-call-{new_id()[:8]}",
+            participant_identity="sip-x",
+            participant_name="",
+            status=session_status,
+            pipeline_mode="cascaded",
+            channel="sip_out" if direction == "outbound" else "sip_in",
+            created_at=born,
+        )
+        session.add(sess)
+        await session.flush()
+        call = Call(
+            id=new_id(),
+            session_id=sess.id,
+            workspace_id=DEFAULT_WORKSPACE_ID,
+            connection_id=world.connection_id,
+            direction=direction,
+            to_e164=CALLEE,
+            status=call_status,
+            started_at=born if started else None,
+        )
+        session.add(call)
+    return call.id, sess.id
+
+
+async def test_sweep_fails_an_outbound_dial_that_never_ran(world: World, database: Database) -> None:
+    call_id, session_id = await _sweep_row(
+        database, world, direction="outbound", call_status="dialing", session_status="created", age_s=240
+    )
+
+    assert await sweep_stuck_calls(database) == 1
+
+    row = await _call_row(database, call_id)
+    assert (row.status, row.hangup_reason) == ("failed", SWEPT_DIAL_REASON)
+    async with database.session() as session:
+        sess = await session.get(SessionRow, session_id)
+    assert sess is not None and sess.status == "failed"
+
+
+async def test_sweep_leaves_young_dials_and_inbound_calls_in_progress(
+    world: World, database: Database
+) -> None:
+    young, _ = await _sweep_row(
+        database,
+        world,
+        direction="outbound",
+        call_status="ringing",
+        session_status="created",
+        age_s=STUCK_DIAL_AFTER_S - 30,
+        started=True,
+    )
+    inbound, _ = await _sweep_row(
+        database, world, direction="inbound", call_status="dialing", session_status="active", age_s=240
+    )
+
+    assert await sweep_stuck_calls(database) == 0
+
+    assert (await _call_row(database, young)).status == "ringing"
+    assert (await _call_row(database, inbound)).status == "dialing"
+
+
+async def test_sweep_closes_open_calls_whose_session_ended(world: World, database: Database) -> None:
+    answered, _ = await _sweep_row(
+        database, world, direction="inbound", call_status="answered", session_status="ended", age_s=10
+    )
+    dialing, _ = await _sweep_row(
+        database, world, direction="outbound", call_status="dialing", session_status="failed", age_s=10
+    )
+
+    assert await sweep_stuck_calls(database) == 2
+
+    assert (await _call_row(database, answered)).status == "completed"
+    assert (await _call_row(database, dialing)).status == "failed"
+
+
+async def test_a_late_worker_report_on_a_swept_call_is_a_no_op(
+    service_client: httpx.AsyncClient, world: World, database: Database
+) -> None:
+    call_id, session_id = await _sweep_row(
+        database, world, direction="outbound", call_status="dialing", session_status="active", age_s=240
+    )
+    await sweep_stuck_calls(database)
+
+    response = await service_client.post(
+        "/internal/v1/telephony/calls/report", json={"session_id": session_id, "status": "answered"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    row = await _call_row(database, call_id)
+    assert (row.status, row.answered_at) == ("failed", None)

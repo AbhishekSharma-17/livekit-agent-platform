@@ -10,6 +10,7 @@ import { CopyButton } from "@/components/shared/copy-button";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { downloadDeployBundle, fetchWorkerEnv, type WorkerEnvFormat } from "@/hooks/useConnections";
 import type { ConnectionOut } from "@/contracts/lkap-contracts";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 const FORMATS: { value: WorkerEnvFormat; label: string }[] = [
   { value: "env", label: ".env" },
@@ -75,7 +76,7 @@ function WorkerEnvSnippets({ connectionId }: { connectionId: string }) {
         {FORMATS.map((f) => (
           <TabsContent key={f.value} value={f.value} className="pt-3">
             {loading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+              <SkeletonRows label="Loading the deploy snippet" rows={4} rowClassName="h-5" />
             ) : errorText ? (
               <Alert variant="danger">
                 <AlertDescription>{errorText}</AlertDescription>

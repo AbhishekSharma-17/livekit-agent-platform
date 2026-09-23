@@ -8,6 +8,15 @@ in ``dialing`` and dials after the response (:func:`lkap_api.telephony.calls.run
 Roles: reads ``viewer`` + ``sessions:read``, writes ``builder`` + ``calls:write``
 (``ROUTE_POLICY``).
 
+Dialing policy (R-V2-23): a dial and every transfer (console or worker) must
+pass the workspace's ``settings["telephony"]`` policy (422
+``destination_not_allowed``); a dial also takes a token from the workspace's
+per-minute call bucket (429 ``rate_limited``, enforced whatever
+``LKAP_RATE_LIMIT_ENABLED`` says: it is a toll-fraud control) and respects the
+open-outbound and per-agent caps (429 ``calls_busy``). Placed and transferred
+calls write ``call.placed`` / ``call.transferred`` audit rows; the worker's
+transfer route also records refused and failed attempts.
+
 Internal (service token, ``/internal/v1/telephony``): the worker's
 ``transfer_call`` tool (ARCHITECTURE-V2 §2.6: worker → api →
 ``SipService.transfer_sip_participant``) and its call-status reports, which
@@ -23,10 +32,25 @@ from __future__ import annotations
 from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
-from lkap_contracts.api_models import CallCreate, CallOut, CallPage
+from lkap_contracts.api_models import (
+    CallCreate,
+    CallDtmfIn,
+    CallDtmfOut,
+    CallOut,
+    CallPage,
+    CallReportIn,
+    CallTransferIn,
+    InternalTransferIn,
+    InternalTransferOut,
+)
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.auth.audit import record
+from lkap_api.auth.deps import WorkspaceContext
+from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.connections.clients import ClientFactoryDep
+from lkap_api.db.models import Call
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, ServiceDep
@@ -34,14 +58,7 @@ from lkap_api.errors import ConflictError, NotFoundError
 from lkap_api.telephony import calls as call_service
 from lkap_api.telephony import webhooks as _webhooks  # noqa: F401 - registers the webhook handlers
 from lkap_api.telephony.common import SIP_CHANNELS
-from lkap_api.telephony.models import (
-    CallDtmfIn,
-    CallDtmfOut,
-    CallReportIn,
-    CallTransferIn,
-    InternalTransferIn,
-    InternalTransferOut,
-)
+from lkap_api.telephony.policy import NOT_ALLOWED_TO_MODEL, DestinationNotAllowedError, workspace_policy
 
 _public = APIRouter(prefix="/v1/calls", tags=["calls"])
 _internal = APIRouter(prefix="/internal/v1/telephony", tags=["internal"])
@@ -55,6 +72,20 @@ def _process_database(request: Request) -> Database:
 DatabaseDep = Annotated[Database, Depends(_process_database)]
 
 
+def _audit(db: AsyncSession, ctx: WorkspaceContext, action: str, call: Call, **payload: object) -> None:
+    """One ``audit_log`` row for a dial or a transfer (ids and numbers only)."""
+    record(
+        db,
+        workspace_id=ctx.workspace_id,
+        actor_type=ctx.actor.actor_type,
+        actor_id=ctx.actor.id,
+        action=action,
+        target_type="calls",
+        target_id=call.id,
+        payload=dict(payload),
+    )
+
+
 # --------------------------------------------------------------------------- public
 @_public.post(
     "",
@@ -65,7 +96,11 @@ DatabaseDep = Annotated[Database, Depends(_process_database)]
         "Creates the session (`channel=sip_out`) and the call (`dialing`), answers at once, then "
         "dispatches the agent and dials `to_e164` through the outbound trunk (`trunk_id`, or the "
         "connection's only outbound trunk). Poll `GET /v1/calls/{id}` for `answered`, `busy`, "
-        "`no_answer` or `failed`. 409 `sip_disabled` when the agent's connection has no SIP."
+        "`no_answer` or `failed`. 409 `sip_disabled` when the agent's connection has no SIP. "
+        "The number must pass the workspace's dialing policy (`settings.telephony`): 422 "
+        "`destination_not_allowed` (with `details.allowed_prefixes`) otherwise, and every call is refused "
+        "until an admin sets `allowed_prefixes`. 429 `rate_limited` past `max_calls_per_min`, "
+        "429 `calls_busy` at `max_concurrent_outbound` open calls or the agent's session limit."
     ),
 )
 async def place_call(
@@ -74,10 +109,22 @@ async def place_call(
     db: DbDep,
     database: DatabaseDep,
     factory: ClientFactoryDep,
+    limiter: RateLimiterDep,
     background: BackgroundTasks,
 ) -> CallOut:
-    """Store the call, commit, and dial in the background."""
-    call, plan = await call_service.prepare_outbound_call(db, ctx.workspace_id, payload)
+    """Check the policy and caps, store the call, commit, and dial in the background."""
+    policy = await workspace_policy(db, ctx.workspace_id)
+    call_service.check_outbound_number(policy, payload.to_e164)
+    await enforce(
+        limiter,
+        f"calls:workspace:{ctx.workspace_id}",
+        capacity=policy.max_calls_per_min,
+        what="outbound calls per minute for this workspace",
+    )
+    call, plan = await call_service.prepare_outbound_call(db, ctx.workspace_id, payload, policy=policy)
+    _audit(
+        db, ctx, "call.placed", call, agent_id=payload.agent_id, session_id=plan.session_id, to=plan.to_e164
+    )
     out = call_service.call_out(call)
     await db.commit()  # the dial task reads these rows on its own session
     background.add_task(call_service.run_dial, database, factory, plan)
@@ -138,7 +185,8 @@ async def hangup_call(call_id: str, ctx: AdminCtxDep, db: DbDep, factory: Client
     summary="Cold-transfer a call",
     description=(
         "Transfers the answered phone leg to `to` (E.164 or a `tel:`/`sip:` URI) with a SIP REFER; "
-        "the agent leaves. The trunk must allow transfers (e.g. Twilio: enable call transfer)."
+        "the agent leaves. The trunk must allow transfers (e.g. Twilio: enable call transfer). `to` must "
+        "pass the workspace's dialing policy (422 `destination_not_allowed`)."
     ),
 )
 async def transfer_call(
@@ -146,7 +194,10 @@ async def transfer_call(
 ) -> CallOut:
     """Transfer."""
     call = await call_service.get_call(db, ctx.workspace_id, call_id)
-    return call_service.call_out(await call_service.transfer(db, factory, call, payload.to))
+    policy = await workspace_policy(db, ctx.workspace_id)
+    call = await call_service.transfer(db, factory, call, payload.to, policy=policy)
+    _audit(db, ctx, "call.transferred", call, to=payload.to, via="console")
+    return call_service.call_out(call)
 
 
 @_public.post(
@@ -194,28 +245,51 @@ async def report_call(payload: CallReportIn, db: DbDep, _service: ServiceDep) ->
     "/sessions/{session_id}/transfer",
     response_model=InternalTransferOut,
     summary="Cold-transfer the session's caller (worker only)",
-    description="The `transfer_call` tool's path to `SipService.transfer_sip_participant`.",
+    description=(
+        "The `transfer_call` tool's path to `SipService.transfer_sip_participant`. A destination outside "
+        "the workspace's dialing policy is `refused` (reason: destination not allowed by the dialing policy)."
+    ),
 )
 async def internal_transfer(
     session_id: str, payload: InternalTransferIn, db: DbDep, factory: ClientFactoryDep, _service: ServiceDep
 ) -> InternalTransferOut:
     """Transfer the SIP leg of a session; failures are returned, not raised, for the model to read."""
     session = await _sip_session(db, session_id)
+    policy = await workspace_policy(db, session.workspace_id)
     call = await call_service.call_for_session(db, session)
     if call is None:
         report = CallReportIn(
             session_id=session.id, status="answered", participant_identity=payload.participant_identity
         )
         call = await call_service.apply_report(db, session, report)
+    out: InternalTransferOut
     try:
         call = await call_service.transfer(
-            db, factory, call, payload.to, identity=payload.participant_identity
+            db, factory, call, payload.to, policy=policy, identity=payload.participant_identity
         )
+        out = InternalTransferOut(ok=True, status=call.status, call_id=call.id)
+    except DestinationNotAllowedError:
+        out = InternalTransferOut(ok=False, status="refused", call_id=call.id, reason=NOT_ALLOWED_TO_MODEL)
     except (ConflictError, NotFoundError) as exc:
-        return InternalTransferOut(ok=False, status="refused", call_id=call.id, reason=exc.message)
+        out = InternalTransferOut(ok=False, status="refused", call_id=call.id, reason=exc.message)
     except Exception as exc:  # noqa: BLE001 - LiveKit/SIP failures go back to the model as text
-        return InternalTransferOut(ok=False, status="failed", call_id=call.id, reason=str(exc)[:300])
-    return InternalTransferOut(ok=True, status=call.status, call_id=call.id)
+        out = InternalTransferOut(ok=False, status="failed", call_id=call.id, reason=str(exc)[:300])
+    record(
+        db,
+        workspace_id=session.workspace_id,
+        actor_type="system",
+        actor_id=None,
+        action="call.transferred" if out.ok else f"call.transfer_{out.status}",
+        target_type="calls",
+        target_id=call.id,
+        payload={
+            "to": payload.to,
+            "via": "transfer_call tool",
+            "session_id": session.id,
+            "status": out.status,
+        },
+    )
+    return out
 
 
 router = APIRouter()

@@ -1,4 +1,10 @@
-"""V2-17 worker telephony: caller report, DTMF in/out, transfer, tools (no LiveKit, no api)."""
+"""Worker telephony: caller report, DTMF in/out, transfer, tools (no LiveKit, no api).
+
+V2-17's module as V2-19 reworked it: the api calls live on the config client
+(R-V2-20), transfer destinations come from `config.telephony` (R-V2-21), call
+variables reach prompt agents (R-V2-22) and the phone tools' names are re-exported
+for the console toggles (R-V2-25).
+"""
 
 from __future__ import annotations
 
@@ -9,25 +15,34 @@ from typing import Any, cast
 
 import httpx
 import pytest
+from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_ctx import FakePackSessionContext, default_agent_config
 from fakes.fake_room import FakeRemoteParticipant, FakeRoom
 from livekit import rtc
 from livekit.agents import RunContext
 from livekit.agents.llm.utils import build_legacy_openai_schema
+from lkap_contracts.api_models import CallReportIn, InternalTransferOut
+from lkap_contracts.flow import AgentNode, EndNode, FlowEdge, FlowSpec, StartNode
+from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from packs.base import DtmfPack
 
+from lkap_agent import telephony as telephony_module
+from lkap_agent.config_client import ConfigClient
 from lkap_agent.telephony import (
     DTMF_TOPIC,
+    TELEPHONY_TOOL_NAMES,
     DtmfCollector,
-    HttpTelephonyApi,
     TelephonySession,
-    TransferResult,
+    apply_call_variables,
     build_telephony_tools,
     caller_info,
     dtmf_code,
     publish_digits,
+    seed_variables,
     session_for,
     transfer_targets,
 )
+from lkap_agent.tools import builtin as builtin_tools
 from lkap_agent.tools.builtin.transfer_call import match_target
 
 SIP = rtc.ParticipantKind.PARTICIPANT_KIND_SIP
@@ -66,21 +81,9 @@ def caller(status: str | None = None, identity: str = "sip_+15557654321") -> Fak
     return FakeRemoteParticipant(identity, attributes=attrs, kind=SIP)
 
 
-@dataclass
-class FakeTelephonyApi:
-    reports: list[dict[str, Any]] = field(default_factory=list)
-    transfers: list[tuple[str, str, str | None]] = field(default_factory=list)
-    result: TransferResult = field(default_factory=lambda: TransferResult(ok=True, status="transferred"))
-
-    async def report(self, body: dict[str, Any]) -> None:
-        self.reports.append(body)
-
-    async def transfer(self, session_id: str, to: str, participant_identity: str | None) -> TransferResult:
-        self.transfers.append((session_id, to, participant_identity))
-        return self.result
-
-    async def aclose(self) -> None:
-        return None
+def reports(api: FakeApi) -> list[dict[str, Any]]:
+    """The call reports the worker sent, as the JSON bodies the api receives."""
+    return [report.model_dump(exclude_none=True) for report in api.call_reports]
 
 
 class NoSleep:
@@ -111,11 +114,11 @@ def make_session(
     channel: str = "sip_in",
     pack: Any = None,
     dtmf_to_model: bool = True,
-    api: FakeTelephonyApi | None = None,
-) -> tuple[TelephonySession, FakePackSessionContext, FakeTelephonyApi, list[tuple[str, dict[str, Any]]]]:
+    api: FakeApi | None = None,
+) -> tuple[TelephonySession, FakePackSessionContext, FakeApi, list[tuple[str, dict[str, Any]]]]:
     ctx = FakePackSessionContext(room=cast(rtc.Room, room))
     events: list[tuple[str, dict[str, Any]]] = []
-    fake_api = api or FakeTelephonyApi()
+    fake_api = api or FakeApi()
     session = TelephonySession(
         room=cast(rtc.Room, room),
         session_id="sess-1",
@@ -158,23 +161,21 @@ def test_caller_info_orients_numbers_by_direction() -> None:
     assert (outbound["from"], outbound["to"]) == ("+15551230000", "+15557654321")
 
 
-@pytest.mark.parametrize(
-    ("settings", "expected"),
-    [
-        ({}, {}),
-        (
-            {"transfer_targets": {"Sales": "+15550001111", "Desk": "sip:desk@pbx.example.com"}},
-            {"Sales": "+15550001111", "Desk": "sip:desk@pbx.example.com"},
-        ),
-        ({"transfer_targets": ["+15550001111"]}, {"+15550001111": "+15550001111"}),
-        ({"transfer_targets": {"Bad": "call mom", "Ok": "tel:+15550002222"}}, {"Ok": "tel:+15550002222"}),
-        ({"transfer_targets": "+15550001111"}, {}),
-    ],
-)
-def test_transfer_targets_accepts_only_valid_destinations(
-    settings: dict[str, Any], expected: dict[str, str]
-) -> None:
-    assert transfer_targets(settings) == expected
+def _telephony(**targets: str) -> TelephonyConfig:
+    return TelephonyConfig(transfer_targets=[TransferTarget(label=k, to=v) for k, v in targets.items()])
+
+
+def test_transfer_targets_read_config_telephony_only() -> None:
+    config = TelephonyConfig(
+        transfer_targets=[
+            TransferTarget(label="Sales", to="+15550001111"),
+            TransferTarget(label=" Desk ", to="sip:desk@pbx.example.com"),
+            TransferTarget(label="sales", to="+15550009999"),  # a duplicate label: the first one wins
+        ]
+    )
+
+    assert transfer_targets(config) == {"Sales": "+15550001111", "Desk": "sip:desk@pbx.example.com"}
+    assert transfer_targets(TelephonyConfig()) == {}
 
 
 def test_match_target_by_label_or_listed_number_only() -> None:
@@ -231,7 +232,7 @@ async def test_inbound_leg_present_at_start_reports_answered_with_caller() -> No
     session.start()
     await settle()
 
-    assert api.reports == [
+    assert reports(api) == [
         {
             "session_id": "sess-1",
             "status": "answered",
@@ -253,15 +254,15 @@ async def test_outbound_leg_reports_answered_only_when_call_status_turns_active(
 
     session.start()
     await settle()
-    assert api.reports == []
+    assert reports(api) == []
     leg.attributes["sip.callStatus"] = "active"
     room.emit("participant_attributes_changed", {"sip.callStatus": "active"}, leg)
     room.emit("participant_attributes_changed", {"sip.callStatus": "active"}, leg)
     await settle()
 
-    assert [r["status"] for r in api.reports] == ["answered"]
-    assert api.reports[0]["direction"] == "outbound"
-    assert (api.reports[0]["from_e164"], api.reports[0]["to_e164"]) == ("+15551230000", "+15557654321")
+    assert [r["status"] for r in reports(api)] == ["answered"]
+    assert reports(api)[0]["direction"] == "outbound"
+    assert (reports(api)[0]["from_e164"], reports(api)[0]["to_e164"]) == ("+15551230000", "+15557654321")
 
 
 async def test_leg_joining_later_is_reported_and_close_reports_completed() -> None:
@@ -275,8 +276,8 @@ async def test_leg_joining_later_is_reported_and_close_reports_completed() -> No
     await session.aclose(reason="caller hung up")
     await session.aclose()
 
-    assert [r["status"] for r in api.reports] == ["answered", "completed"]
-    assert api.reports[-1]["reason"] == "caller hung up"
+    assert [r["status"] for r in reports(api)] == ["answered", "completed"]
+    assert reports(api)[-1]["reason"] == "caller hung up"
 
 
 async def test_close_before_answer_reports_failed() -> None:
@@ -285,7 +286,7 @@ async def test_close_before_answer_reports_failed() -> None:
 
     await session.aclose(reason="no answer")
 
-    assert api.reports == [
+    assert reports(api) == [
         {
             "session_id": "sess-1",
             "status": "failed",
@@ -302,7 +303,7 @@ async def test_standard_participant_is_not_a_call_leg() -> None:
     session.start()
     await settle()
 
-    assert api.reports == []
+    assert reports(api) == []
 
 
 # --------------------------------------------------------------------------- DTMF in
@@ -499,7 +500,7 @@ async def test_transfer_call_tool_unknown_destination_is_refused_without_api_cal
 
 
 async def test_transfer_call_tool_failure_keeps_call_and_tells_model() -> None:
-    api = FakeTelephonyApi(result=TransferResult(ok=False, status="failed", reason="403 Forbidden"))
+    api = FakeApi(transfer_result=InternalTransferOut(ok=False, status="failed", reason="403 Forbidden"))
     session, ctx, _api, _events = make_session(sip_room(caller()), api=api)
     ended: list[str] = []
     tool = build_telephony_tools(
@@ -534,7 +535,7 @@ def test_session_for_skips_non_sip_channels() -> None:
         pack_ctx=ctx,
         pack=None,
         record_event=lambda *_: None,
-        api=FakeTelephonyApi(),
+        api=FakeApi(),
     )
 
     assert telephony is None
@@ -544,9 +545,9 @@ async def test_session_for_sip_builds_tools_from_config_and_reports_once_started
     room = sip_room(caller())
     config = default_agent_config()
     config.capabilities.dtmf = True
-    config.pack_settings = {"transfer_targets": {"Front desk": "+15550003333"}}
+    config.telephony = _telephony(**{"Front desk": "+15550003333"})
     ctx = FakePackSessionContext(room=cast(rtc.Room, room), config=config)
-    api = FakeTelephonyApi()
+    api = FakeApi()
 
     telephony = session_for(
         room=cast(rtc.Room, room),
@@ -559,13 +560,52 @@ async def test_session_for_sip_builds_tools_from_config_and_reports_once_started
     assert telephony is not None
     tools = telephony.tools(config=config)
     await settle()
-    assert api.reports == []  # nothing happens before start()
+    assert reports(api) == []  # nothing happens before start()
     telephony.start()
     await settle()
 
     assert {getattr(t, "id", None) for t in tools} == {"send_dtmf", "transfer_call"}
-    assert api.reports[0]["status"] == "answered"
+    assert reports(api)[0]["status"] == "answered"
     await telephony.aclose()
+
+
+def test_transfer_call_registers_from_config_telephony_not_pack_settings() -> None:
+    """R-V2-21: `pack_settings["transfer_targets"]` is retired; only `config.telephony` counts."""
+    config = default_agent_config()
+    config.pack_settings = {"transfer_targets": {"Front desk": "+15550003333"}}
+    session, ctx, _api, _events = make_session(sip_room(caller()))
+
+    assert {getattr(t, "id", None) for t in session.tools(config=config)} == set()
+
+    config.telephony = _telephony(**{"Front desk": "+15550003333"})
+    assert {getattr(t, "id", None) for t in session.tools(config=config)} == {"transfer_call"}
+
+
+@pytest.mark.parametrize("name", TELEPHONY_TOOL_NAMES)
+def test_builtin_disabled_switches_each_phone_tool_off(name: str) -> None:
+    """R-V2-25: the console's two `TELEPHONY_TOOLS` toggles write `tools.builtin_disabled`."""
+    config = default_agent_config()
+    config.capabilities.dtmf = True
+    config.telephony = _telephony(Sales="+15550001111")
+    session, _ctx, _api, _events = make_session(sip_room(caller()))
+    assert {getattr(t, "id", None) for t in session.tools(config=config)} == set(TELEPHONY_TOOL_NAMES)
+
+    config.tools.builtin_disabled = [name]
+
+    remaining = {getattr(t, "id", None) for t in session.tools(config=config)}
+    assert remaining == set(TELEPHONY_TOOL_NAMES) - {name}
+
+
+def test_telephony_tool_names_are_re_exported_by_the_builtin_package() -> None:
+    assert builtin_tools.TELEPHONY_TOOL_NAMES == ("send_dtmf", "transfer_call")
+    assert not set(builtin_tools.TELEPHONY_TOOL_NAMES) & set(builtin_tools.BUILTIN_TOOL_NAMES)
+
+
+def test_dtmf_pack_protocol_lives_in_packs_base() -> None:
+    """R-V2-25: `DtmfPack` sits next to `BlockActionPack`; the worker re-exports the same object."""
+    assert telephony_module.DtmfPack is DtmfPack
+    assert getattr(DtmfPack, "_is_protocol", False) is True
+    assert not hasattr(telephony_module, "HttpTelephonyApi")
 
 
 @dataclass
@@ -585,7 +625,7 @@ async def test_flow_transfer_node_transfers_through_api() -> None:
 
 
 async def test_flow_transfer_warm_node_falls_back_to_cold_and_says_so() -> None:
-    api = FakeTelephonyApi(result=TransferResult(ok=False, status="failed", reason="403"))
+    api = FakeApi(transfer_result=InternalTransferOut(ok=False, status="failed", reason="403"))
     session, _ctx, _api, events = make_session(sip_room(caller()), api=api)
 
     ok = await session.flow_transfer(_TransferNode(to="+15550004444", mode="warm"), state=None)
@@ -594,21 +634,23 @@ async def test_flow_transfer_warm_node_falls_back_to_cold_and_says_so() -> None:
     assert events[0] == ("info", {"message": "warm transfer is not available yet; transferring cold"})
 
 
-# ------------------------------------------------------------------------ http client
-async def test_http_telephony_api_posts_with_service_token() -> None:
+# --------------------------------------------------------- config client (R-V2-20)
+async def test_config_client_reports_calls_and_requests_transfers_with_the_service_token() -> None:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         if request.url.path.endswith("/transfer"):
-            return httpx.Response(200, json={"ok": False, "status": "failed", "reason": "busy"})
+            return httpx.Response(
+                200, json={"ok": False, "status": "refused", "reason": "destination not allowed"}
+            )
         return httpx.Response(200, json={})
 
     client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
-    api = HttpTelephonyApi("http://api.test", "svc-token", client=client)
+    api = ConfigClient("http://api.test", "svc-token", client=client)
 
-    await api.report({"session_id": "s1", "status": "answered"})
-    result = await api.transfer("s1", "+15550001111", "sip_x")
+    await api.report_call(CallReportIn(session_id="s1", status="answered"))
+    result = await api.transfer_call("s1", "+15550001111", "sip_x")
     await client.aclose()
 
     assert [r.url.path for r in seen] == [
@@ -616,22 +658,70 @@ async def test_http_telephony_api_posts_with_service_token() -> None:
         "/internal/v1/telephony/sessions/s1/transfer",
     ]
     assert all(r.headers["X-Service-Token"] == "svc-token" for r in seen)
+    assert json.loads(seen[0].content)["status"] == "answered"
     assert json.loads(seen[1].content) == {"to": "+15550001111", "participant_identity": "sip_x"}
-    assert result == TransferResult(ok=False, status="failed", reason="busy")
+    assert result == InternalTransferOut(ok=False, status="refused", reason="destination not allowed")
 
 
-async def test_http_telephony_api_report_swallows_transport_errors() -> None:
+async def test_config_client_telephony_calls_never_raise() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("down", request=request)
 
     client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
-    api = HttpTelephonyApi("http://api.test", "svc-token", client=client)
+    api = ConfigClient("http://api.test", "svc-token", client=client)
 
-    await api.report({"session_id": "s1", "status": "answered"})
-    result = await api.transfer("s1", "+15550001111", None)
+    await api.report_call(CallReportIn(session_id="s1", status="answered"))
+    result = await api.transfer_call("s1", "+15550001111", None)
     await client.aclose()
 
     assert result.ok is False and "unreachable" in (result.reason or "")
+
+
+# ------------------------------------------------------------- call variables (R-V2-22)
+def test_apply_call_variables_appends_the_known_variables_block_to_a_prompt_agent() -> None:
+    resolved = resolved_config(channel="sip_out", instructions="You call customers.").model_copy(
+        update={"variables": {"claim_id": "C-1", "amount": 120, "tags": ["a", "b"]}}
+    )
+
+    out = apply_call_variables(resolved)
+
+    assert out.config.instructions.startswith("You call customers.")
+    assert out.config.instructions.endswith(
+        "Information already collected in this call (do not ask for it again unless the caller "
+        'corrects it):\n- claim_id: C-1\n- amount: 120\n- tags: ["a", "b"]'
+    )
+    assert resolved.config.instructions == "You call customers."  # not mutated
+
+
+def test_apply_call_variables_leaves_flow_agents_and_empty_variables_alone() -> None:
+    plain = resolved_config()
+    assert apply_call_variables(plain) is plain
+
+    flow = FlowSpec(
+        nodes=[
+            StartNode(id="start", greeting="Hi"),
+            AgentNode(id="ask", instructions="Ask."),
+            EndNode(id="end"),
+        ],
+        edges=[
+            FlowEdge(id="e1", source="start", target="ask", condition="always"),
+            FlowEdge(id="e2", source="ask", target="end", condition="done"),
+        ],
+    )
+    base = resolved_config()
+    flow_resolved = base.model_copy(
+        update={"config": base.config.model_copy(update={"flow": flow}), "variables": {"claim_id": "C-1"}}
+    )
+    assert apply_call_variables(flow_resolved) is flow_resolved
+
+
+def test_seed_variables_keeps_scalars_and_serialises_the_rest() -> None:
+    assert seed_variables({"a": "x", "b": 2, "c": None, "d": {"k": 1}}) == {
+        "a": "x",
+        "b": 2,
+        "c": None,
+        "d": '{"k": 1}',
+    }
 
 
 # ---------------------------------------------------------------- outbound answer wait

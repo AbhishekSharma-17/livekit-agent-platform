@@ -74,7 +74,7 @@ Contract: CONTRACTS-V2 §4.4, R-V2-7, and the V2-10 → V2-11 wire contract in `
 
 | Path | What it is |
 |---|---|
-| `composite/layout.ts` | Layout delivery (R-V2-7) and the **one contract adapter**: `panelLayoutOf(agent)` reads `ConnectResponse.agent.panel` (`AgentPublicOut.panel`), falling back to the api's `effective_layout` rule when an older api omits it; `BlockSpecV2` adds the `title` the generated TS drops. `storedPanelLayout()` is for the two admin-sourced paths (test-mode pre-call, the console's end-of-call snapshot). |
+| `composite/layout.ts` | Layout delivery (R-V2-7) and the **one contract adapter**: `panelLayoutOf(agent)` reads `ConnectResponse.agent.panel` (`AgentPublicOut.panel`), falling back to the api's `effective_layout` rule when an older api omits it; the generated `BlockSpec` carries `title` (R-V2-15), so there is no type adapter any more. `storedPanelLayout()` is for the two admin-sourced paths (test-mode pre-call, the console's end-of-call snapshot). |
 | `composite/index.tsx` | `COMPOSITE_PANEL` (registry id `composite`, `blocksAware`, `layoutFor` → `PanelLayout.layout`). Renders the blocks in order; `wide` flows them into two columns from `xl`. |
 | `composite/requests.ts` | `handleRequest` for `form` (ack `{ok:true, payload:{}}` at once, scroll + focus the form), `show_block` (scroll + brand ring), `focus {target}` (a block id), `navigate` (http(s) only, confirm dialog, `window.open(…, "noopener,noreferrer")`). |
 | `blocks/index.tsx` | `BLOCK_COMPONENTS` (one per `BlockType`) and **`<Block spec {...panelProps} />`** — the entry point for the composite panel *and* custom pack panels. `document` and `table` are `React.lazy`; pdf.js is a second, PDF-only split (`blocks/pdf-page.tsx`). |

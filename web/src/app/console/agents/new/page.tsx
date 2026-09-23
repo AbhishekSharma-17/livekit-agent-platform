@@ -2,6 +2,7 @@
 
 import { PageHeader } from "@/components/shared";
 import { CreateAgentFlow } from "@/components/console/agents/create/create-agent-flow";
+import { ConsoleBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 
 /**
  * `/console/agents/new` (docs/UI_UX_SPEC.md §4.2): the guided pack + name
@@ -12,10 +13,10 @@ import { CreateAgentFlow } from "@/components/console/agents/create/create-agent
 export default function NewAgentPage() {
   return (
     <div>
+      <ConsoleBreadcrumbs trail={[{ label: "Agents", href: "/console/agents" }, { label: "New agent" }]} />
       <PageHeader
         title="New agent"
         description="Start from a pack, then name your agent."
-        breadcrumbs={[{ label: "Agents", href: "/console/agents" }, { label: "New agent" }]}
       />
       <CreateAgentFlow />
     </div>

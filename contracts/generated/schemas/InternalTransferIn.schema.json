@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/InternalTransferIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/telephony/sessions/{id}/transfer`` (the ``transfer_call`` tool).",
+  "properties": {
+    "participant_identity": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Participant Identity"
+    },
+    "to": {
+      "maxLength": 256,
+      "minLength": 3,
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "to"
+  ],
+  "title": "InternalTransferIn",
+  "type": "object"
+}

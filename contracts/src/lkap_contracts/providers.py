@@ -1348,6 +1348,7 @@ _NEW: list[ProviderSpec] = [
         "Krisp",
         "livekit-plugins-krisp",
         "livekit.plugins.krisp.KrispVivaFilterFrameProcessor",
+        availability="deferred",
         requires_credential=True,
         fields=[
             FieldSpec(
@@ -1368,7 +1369,11 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(name="noise_suppression_level", label="Noise suppression level", type="number"),
         ],
         capabilities=ProviderCapabilities(cloud_only=True, platforms=["linux-x86_64", "linux-aarch64"]),
-        notes="Ships a native livekit-plugins-krisp-internal wheel; not lockstep-versioned with core.",
+        notes="Deferred (asks #56): livekit-plugins-krisp has no 1.8.2 release on PyPI (it is versioned "
+        "independently, latest 0.4.2), so the lockstep ==1.8.2 pin of CONTRACTS-V2 §7 cannot install, "
+        "and 0.4.2 is unverified against the 1.8.2 plugin ABI. Ships a native "
+        "livekit-plugins-krisp-internal wheel. Re-enable after an import check of a compatible release "
+        "in the full image.",
         docs_url="https://docs.livekit.io/agents/build/audio/#noise-cancellation",
     ),
     # ---------------------------------------------------------------- avatars (new)

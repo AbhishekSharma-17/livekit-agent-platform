@@ -5,6 +5,7 @@ import { Section, SectionRow } from "@/components/shared/section";
 import { StatusChip } from "@/components/shared/status-chip";
 import { CopyButton } from "@/components/shared/copy-button";
 import { useHealth } from "@/components/console/lib/api-hooks";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 function hostOf(url: string): string {
   try {
@@ -21,7 +22,9 @@ export function EnvironmentTab() {
   if (isLoading || !health) {
     return (
       <Section id="environment" title="Environment">
-        <SectionRow className="text-sm text-muted-foreground">Loading…</SectionRow>
+        <SectionRow>
+          <SkeletonRows label="Loading environment" rows={3} rowClassName="h-6" />
+        </SectionRow>
       </Section>
     );
   }

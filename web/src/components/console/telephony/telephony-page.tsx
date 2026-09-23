@@ -10,6 +10,7 @@ import { useAgents } from "@/components/console/lib/api-hooks";
 import { useConnections } from "@/hooks/useConnections";
 
 import { CallsSection } from "./calls-section";
+import { DialingPolicyCard } from "./dialing-policy";
 import { sipEnabled } from "./model";
 import { NumbersSection } from "./numbers-section";
 import { RulesSection } from "./rules-section";
@@ -19,7 +20,8 @@ import { TrunksSection } from "./trunks-section";
  * `/console/telephony` (PLAN-V2 V2-17): trunks, numbers with the inbound
  * agent picker, dispatch rules and the calls log. Everything is mirrored to
  * the LiveKit SIP service of the object's connection; a connection whose
- * capability probe did not find SIP cannot hold trunks.
+ * capability probe did not find SIP cannot hold trunks. The outbound dialing
+ * policy (R-V2-23, default deny) sits between the trunks and the numbers.
  */
 export function TelephonyPage() {
   const connections = useConnections().data?.items ?? [];
@@ -41,6 +43,7 @@ export function TelephonyPage() {
         </Alert>
       ) : null}
       <TrunksSection connections={connections} />
+      <DialingPolicyCard />
       <NumbersSection agents={agents} />
       <RulesSection agents={agents} />
       <CallsSection />

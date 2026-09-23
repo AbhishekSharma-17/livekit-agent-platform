@@ -88,6 +88,7 @@ import { useFlowDraft } from "./use-flow-draft";
 import { useNodeOptions } from "./use-node-options";
 import { VariablesDialog } from "./variables-dialog";
 import { VersionHistory } from "./version-history";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 /**
  * The flow canvas (V2-16): `@xyflow/react` v12 + dagre. This module — and
@@ -605,7 +606,7 @@ function NodeInspector({
         ) : specs.isError ? (
           <p className="text-sm text-danger-text">Couldn&apos;t load the node form. Reload to try again.</p>
         ) : (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <SkeletonRows label="Loading the node form" rows={4} rowClassName="h-9" />
         )}
       </div>
       {kind !== "start" ? (

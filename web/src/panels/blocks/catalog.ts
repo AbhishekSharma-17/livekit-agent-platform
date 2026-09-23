@@ -16,18 +16,9 @@
  * are configurable, and nothing else is — `BlockSpec.config` is public
  * (R-V2-7), so it never carries anything but these.
  */
-import type {
-  DocumentBlockState,
-  FormBlockState,
-  GalleryBlockState,
-  KbCitationsBlockState,
-  TableBlockState,
-  TableColumn,
-  TranscriptBlockState,
-  VideoBlockState,
-} from "@/contracts/lkap-contracts";
+import type { DocumentBlockState, FormBlockState, GalleryBlockState, KbCitationsBlockState, TableBlockState, TableColumn, TranscriptBlockState, VideoBlockState, BlockSpec } from "@/contracts/lkap-contracts";
 
-import type { BlockSpecV2, BlockType } from "@/panels/composite/layout";
+import type { BlockType } from "@/panels/composite/layout";
 
 /** Every block type, in palette order. */
 export const BLOCK_TYPES: readonly BlockType[] = [
@@ -258,7 +249,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 };
 
 /** The heading a block shows: its title, else the type's default (`null` = none). */
-export function blockTitle(spec: BlockSpecV2): string | null {
+export function blockTitle(spec: BlockSpec): string | null {
   const title = typeof spec.title === "string" ? spec.title.trim() : "";
   return title || BLOCK_CATALOG[spec.type]?.defaultTitle || null;
 }
@@ -297,7 +288,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * `BlockSpec.config` key that names a state field — the same rule as the
  * worker's `initial_block_state`. Envelope and custom blocks are `{}`.
  */
-export function initialBlockState(spec: BlockSpecV2): Record<string, unknown> {
+export function initialBlockState(spec: BlockSpec): Record<string, unknown> {
   const factory = STATE_DEFAULTS[spec.type as keyof BlockStateByType];
   if (!factory) return {};
   const state: Record<string, unknown> = { ...factory() };
@@ -312,7 +303,7 @@ export function initialBlockState(spec: BlockSpecV2): Record<string, unknown> {
  * A block's live state: the wire value from `UiState.blocks[id]` laid over
  * the initial state, so a renderer never sees a missing field.
  */
-export function blockStateOf(spec: BlockSpecV2, blocks: Record<string, unknown> | undefined): Record<string, unknown> {
+export function blockStateOf(spec: BlockSpec, blocks: Record<string, unknown> | undefined): Record<string, unknown> {
   const initial = initialBlockState(spec);
   const live = blocks?.[spec.id];
   return isRecord(live) ? { ...initial, ...live } : initial;

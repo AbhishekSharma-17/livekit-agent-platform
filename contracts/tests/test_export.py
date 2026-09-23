@@ -12,6 +12,7 @@ import pytest
 
 from lkap_contracts.export import (
     COMBINED_TITLE,
+    EXPORTED_BLOCK_CONFIGS,
     EXPORTED_MODELS,
     EXPORTED_UNIONS,
     build_combined_schema,
@@ -30,6 +31,11 @@ TS_RELATIVE_PATH = Path("ts") / "lkap-contracts.d.ts"
 
 def _exported_names() -> list[str]:
     return [*EXPORTED_MODELS, *EXPORTED_UNIONS]
+
+
+def _schema_names() -> list[str]:
+    """Every ``schemas/*.schema.json``: the TS names plus the JSON-only block configs (R-V2-17)."""
+    return [*_exported_names(), *EXPORTED_BLOCK_CONFIGS]
 
 
 def test_generated_directory_exists(generated_dir: Path) -> None:
@@ -86,10 +92,10 @@ def test_providers_document_is_deterministic() -> None:
 def test_a_schema_file_exists_for_every_exported_model(generated_dir: Path) -> None:
     schemas_dir = generated_dir / "schemas"
     on_disk = {p.name.removesuffix(".schema.json") for p in schemas_dir.glob("*.schema.json")}
-    assert on_disk == set(_exported_names())
+    assert on_disk == set(_schema_names())
 
 
-@pytest.mark.parametrize("name", _exported_names())
+@pytest.mark.parametrize("name", _schema_names())
 def test_each_schema_file_is_valid_json_with_an_id(generated_dir: Path, name: str) -> None:
     schema = json.loads((generated_dir / "schemas" / f"{name}.schema.json").read_text(encoding="utf-8"))
     assert schema["$id"] == f"lkap-contracts/{name}.schema.json"
@@ -151,6 +157,36 @@ def test_typescript_preparation_titles_only_real_models() -> None:
                 assert all("title" not in sub for sub in nested.values() if isinstance(sub, dict)), (
                     f"{name}.{key} leaks a per-property title into TypeScript"
                 )
+
+
+def test_typescript_preparation_keeps_a_property_named_title() -> None:
+    """R-V2-15 (#72): only the ``title`` keyword is stripped, never a field called ``title``."""
+    prepared = prepare_for_typescript(build_combined_schema())
+    block_spec = prepared["definitions"]["BlockSpec"]
+    assert "title" in block_spec["properties"]
+    assert "title" not in block_spec["properties"]["title"]
+
+
+def test_strip_titles_keeps_names_inside_schema_maps() -> None:
+    from lkap_contracts.export import _strip_titles
+
+    schema = {
+        "title": "Root",
+        "properties": {"title": {"title": "Title", "type": "string"}},
+        "$defs": {"title": {"title": "Named", "type": "object"}},
+        "definitions": {"x": {"properties": {"title": {"type": "string", "title": "T"}}}},
+    }
+    assert _strip_titles(schema) == {
+        "properties": {"title": {"type": "string"}},
+        "$defs": {"title": {"type": "object"}},
+        "definitions": {"x": {"properties": {"title": {"type": "string"}}}},
+    }
+
+
+def test_committed_typescript_declares_block_spec_title(generated_dir: Path) -> None:
+    text = (generated_dir / TS_RELATIVE_PATH).read_text(encoding="utf-8")
+    block_spec = text.split("export interface BlockSpec {", 1)[1].split("\n}", 1)[0]
+    assert "title?: string | null;" in block_spec
 
 
 def test_committed_typescript_exists_and_declares_ui_state(generated_dir: Path) -> None:

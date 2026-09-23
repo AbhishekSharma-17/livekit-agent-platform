@@ -156,6 +156,12 @@ async function shoot(page, { name, route, viewport, theme, group, fullPage }) {
 
 async function runAxe(page, { route, viewport, theme }) {
   try {
+    // A streamed page can be idle on the network before its <head> has its
+    // title and <html lang>; axe on that half-page reports document-title /
+    // html-has-lang / landmark-one-main that no user ever sees.
+    await page
+      .waitForFunction(() => Boolean(document.title) && Boolean(document.documentElement.lang), null, { timeout: 10_000 })
+      .catch(() => {});
     const result = await new AxeBuilder({ page }).analyze();
     const violations = result.violations.map((v) => ({
       id: v.id,
@@ -163,6 +169,13 @@ async function runAxe(page, { route, viewport, theme }) {
       help: v.help,
       helpUrl: v.helpUrl,
       nodes: v.nodes.length,
+      // The first few offenders, so a finding can be traced to a component
+      // without re-running axe by hand (V2-19C).
+      targets: v.nodes.slice(0, 5).map((n) => ({
+        target: n.target.join(" "),
+        html: n.html.slice(0, 200),
+        summary: (n.failureSummary ?? "").split("\n").slice(0, 3).join(" ").slice(0, 300),
+      })),
     }));
     axeResults.push({ route, viewport, theme, violations });
     const serious = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
@@ -190,6 +203,9 @@ async function gotoStable(page, url, { heading = true } = {}) {
 async function captureConsole(browser, ids) {
   const staticRoutes = [
     ["home", "/"],
+    // V2-14's sign-in card (outside the console shell; renders without a
+    // session cookie too, so the capture never needs a password).
+    ["login", "/login"],
     ["console-overview", "/console"],
     ["console-agents", "/console/agents"],
     ["console-agents-new", "/console/agents/new"],
@@ -197,6 +213,10 @@ async function captureConsole(browser, ids) {
     ["console-sessions", "/console/sessions"],
     ["console-settings", "/console/settings"],
     ["console-tools", "/console/tools"],
+    // V2-19C: the v2 routes V2-12 / V2-14 / V2-17 added. All read-only.
+    ["console-analytics", "/console/analytics"],
+    ["console-telephony", "/console/telephony"],
+    ["console-keys", "/console/keys"],
     // V2-13: read-only navigations only — no Test/Rotate/Delete click ever
     // fires from this script, so the user's live default connection is
     // never touched by a capture run.
@@ -326,6 +346,7 @@ async function capturePreview(browser) {
         const url = `${BASE}/console/preview/panels?${entry.query}&surface=${surface}`;
         try {
           await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+          await page.locator('[data-testid="preview-shell"]').waitFor({ timeout: 15_000 }).catch(() => {});
           await page.evaluate(() => document.fonts.ready).catch(() => {});
           await page.waitForTimeout(250);
           await shoot(page, {
@@ -374,7 +395,7 @@ async function main() {
   }
 
   const indexLines = [
-    "# UI capture — after WP-10",
+    `# UI capture — ${path.basename(OUT)}`,
     "",
     `Generated ${new Date().toISOString()} against \`${BASE}\`.`,
     "",

@@ -14,10 +14,10 @@ export const metadata: Metadata = { title: "Sign in · LKAP console" };
  */
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <Suspense>
         <LoginForm />
       </Suspense>
-    </div>
+    </main>
   );
 }

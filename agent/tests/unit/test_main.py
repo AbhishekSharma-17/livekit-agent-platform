@@ -15,12 +15,15 @@ from typing import Any, cast
 import pytest
 from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_llm import FakeLLM
+from fakes.fake_room import FakeRemoteParticipant, FakeRoom
 from fakes.fake_stt import FakeSTT
 from fakes.fake_tts import FakeTTS
 from livekit import rtc
 from livekit.agents import AgentServer, AgentSession, inference, llm
 from lkap_contracts.api_models import KbHit
 from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from packs.base import UiChannel as UiChannelProtocol
 
 from lkap_agent.config_client import ConfigUnavailableError, SessionEndedError, SessionNotFoundError
 from lkap_agent.main import (
@@ -44,6 +47,7 @@ from lkap_agent.observability import SessionObserver, redact_arguments, transcri
 from lkap_agent.packs.loader import NullPack, PackLoader
 from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
 from lkap_agent.settings import Settings
+from lkap_agent.telephony import TelephonySession
 
 SECRET = "sk-SECRET123"
 
@@ -856,6 +860,13 @@ async def test_noop_collaborators_satisfy_the_pack_protocols() -> None:
     await ui.add_note("note")
     assert await ui.push_asset(b"x", "image/png", "sketch")
     assert (await ui.request_ui("toast", {}))["ok"] is False
+    # asks #66 / V2-19B-5: the v2 block methods exist, so the no-op satisfies `packs.base.UiChannel`.
+    await ui.set_block("notes", {})
+    await ui.patch_block("table", [])
+    assert await ui.request_form("form", {"type": "object"}) is None
+    await ui.cite("sources", [])
+    ui_protocol_methods = {name for name in dir(UiChannelProtocol) if not name.startswith("_")}
+    assert ui_protocol_methods <= set(dir(ui))
 
     frames = NoopFrameBuffer()
     assert frames.latest() is None
@@ -1276,3 +1287,214 @@ async def test_an_assistant_turn_reaches_the_pack_agent_turn_hook() -> None:
     await asyncio.sleep(0.1)
 
     assert ("Hello there!", False) in turns
+
+
+# ------------------------------------------------------------ telephony (R-V2-20)
+
+_SIP = rtc.ParticipantKind.PARTICIPANT_KIND_SIP
+
+
+def _sip_metadata(channel: str) -> str:
+    return DispatchMetadata(
+        session_id="sess-1", agent_id="agent-1", config_version=1, participant_identity="", channel=channel
+    ).model_dump_json()
+
+
+def _sip_resolved(channel: str, *, dtmf: bool = True, targets: bool = True) -> Any:
+    resolved = resolved_config(channel=channel, participant_identity="")
+    config = resolved.config.model_copy(
+        update={
+            "capabilities": resolved.config.capabilities.model_copy(update={"dtmf": dtmf}),
+            "telephony": TelephonyConfig(
+                transfer_targets=[TransferTarget(label="Front desk", to="+15550003333")] if targets else []
+            ),
+        }
+    )
+    return resolved.model_copy(update={"config": config})
+
+
+def _sip_leg(status: str | None = "active") -> FakeRemoteParticipant:
+    attributes = {"sip.phoneNumber": "+15557654321", "sip.trunkPhoneNumber": "+15551230000"}
+    if status is not None:
+        attributes["sip.callStatus"] = status
+    return FakeRemoteParticipant("sip_+15557654321", attributes=attributes, kind=_SIP)
+
+
+def _tool_ids(agent: Any) -> set[str]:
+    return {getattr(tool, "id", "") for tool in agent.tools}
+
+
+async def test_a_sip_out_job_whose_room_closes_before_answer_fails_silently_and_ends() -> None:
+    """R-V2-20: the api deletes the room of a failed dial; nobody hears a fixed line."""
+    room = FakeRoom("lkap-call-1")
+    room.add_remote_participant(_sip_leg("ringing"))
+    api = FakeApi(_sip_resolved("sip_out"))
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    starter = RoomlessStarter()
+    spoken: list[str] = []
+
+    async def _speaker(job_ctx: Any, line: str) -> None:
+        spoken.append(line)
+
+    job = asyncio.create_task(
+        run_session(ctx, _deps(api, fallback_speaker=_speaker, session_starter=starter))
+    )
+    await asyncio.sleep(0.05)
+    assert not job.done(), "the job waits for the callee"
+    room.emit("disconnected", "room deleted")
+    await asyncio.wait_for(job, 2.0)
+
+    assert [s.status for s in api.summaries] == ["failed"]
+    assert "never answered" in (api.summaries[0].error or "")
+    assert starter.session is None, "the session never started"
+    assert spoken == []
+    assert any(reason.startswith("start failed") for reason in ctx.shutdown_reasons)
+    assert "session_started" not in api.event_types()
+    await ctx.fire_shutdown("start failed")
+    assert [r.status for r in api.call_reports] == ["failed"]
+
+
+async def test_a_sip_out_job_starts_only_once_the_callee_answers() -> None:
+    room = FakeRoom("lkap-call-1")
+    leg = room.add_remote_participant(_sip_leg("ringing"))
+    api = FakeApi(_sip_resolved("sip_out"))
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    starter = RoomlessStarter()
+
+    job = asyncio.create_task(run_session(ctx, _deps(api, session_starter=starter)))
+    await asyncio.sleep(0.05)
+    assert starter.session is None
+    leg.attributes["sip.callStatus"] = "active"
+    room.emit("participant_attributes_changed", {"sip.callStatus": "active"}, leg)
+    await asyncio.wait_for(job, 2.0)
+
+    assert starter.session is not None
+    await ctx.fire_shutdown("participant left")
+    assert "session_started" in api.event_types()
+
+
+async def test_a_sip_answer_timeout_is_only_a_backstop(monkeypatch: pytest.MonkeyPatch) -> None:
+    room = FakeRoom("lkap-call-1")
+    room.add_remote_participant(_sip_leg("ringing"))
+    api = FakeApi(_sip_resolved("sip_out"))
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    deps = _deps(api, fallback_speaker=None)
+    deps.settings = deps.settings.model_copy(update={"sip_answer_timeout_s": 0.02})
+
+    await run_session(ctx, deps)
+
+    assert _settings().sip_answer_timeout_s == 135.0
+    assert [s.status for s in api.summaries] == ["failed"]
+
+
+async def test_a_sip_in_job_registers_phone_tools_and_reports_completed_before_the_summary() -> None:
+    room = FakeRoom("call-_+15557654321_abcd")
+    room.add_remote_participant(_sip_leg())
+    api = FakeApi(_sip_resolved("sip_in"))
+    ctx = FakeJobContext(_sip_metadata("sip_in"), room=cast(rtc.Room, room))
+    starter = RoomlessStarter()
+
+    await run_session(ctx, _deps(api, session_starter=starter))
+    await asyncio.sleep(0.02)
+
+    assert {"send_dtmf", "transfer_call"} <= _tool_ids(starter.agent)
+    assert isinstance(starter.agent.context.userdata["telephony"], TelephonySession)
+    assert [r.status for r in api.call_reports] == ["answered"]
+    await ctx.fire_shutdown("participant left: CLIENT_INITIATED")
+
+    assert [r.status for r in api.call_reports] == ["answered", "completed"]
+    assert api.call_log.index("call_report:completed") < api.call_log.index("summary")
+
+
+@pytest.mark.parametrize(
+    ("dtmf", "targets", "expected"),
+    [(True, False, {"send_dtmf"}), (False, True, {"transfer_call"}), (False, False, set())],
+)
+async def test_a_sip_in_job_registers_phone_tools_per_config(
+    dtmf: bool, targets: bool, expected: set[str]
+) -> None:
+    room = FakeRoom("call-1")
+    api = FakeApi(_sip_resolved("sip_in", dtmf=dtmf, targets=targets))
+    ctx = FakeJobContext(_sip_metadata("sip_in"), room=cast(rtc.Room, room))
+    starter = RoomlessStarter()
+
+    await run_session(ctx, _deps(api, session_starter=starter))
+
+    assert _tool_ids(starter.agent) & {"send_dtmf", "transfer_call"} == expected
+    await ctx.fire_shutdown("done")
+
+
+async def test_a_sip_leg_leaving_with_unknown_reason_ends_the_job_with_no_grace() -> None:
+    room = FakeRoom("call-1")
+    leg = room.add_remote_participant(_sip_leg())
+    api = FakeApi(_sip_resolved("sip_in"))
+    ctx = FakeJobContext(_sip_metadata("sip_in"), room=cast(rtc.Room, room))
+    slept: list[float] = []
+
+    async def _sleep(delay: float) -> None:
+        slept.append(delay)
+
+    await run_session(ctx, _deps(api, sleep=_sleep))
+    room.emit("participant_disconnected", leg)  # no disconnect_reason: UNKNOWN_REASON
+    await asyncio.sleep(0)
+
+    assert ctx.shutdown_reasons == ["participant left: UNKNOWN_REASON"]
+    assert slept == [], "no reconnect grace timer on a phone leg"
+    assert "caller disconnected; waiting to reconnect" not in str(api.events)
+
+
+@pytest.mark.parametrize("channel", ["web", "text", "test"])
+async def test_web_and_text_jobs_build_no_telephony_session(channel: str) -> None:
+    api = FakeApi(resolved_config(channel=channel))
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+
+    await run_session(ctx, _deps(api, session_starter=starter))
+    await ctx.fire_shutdown("done")
+
+    assert "telephony" not in starter.agent.context.userdata
+    assert not _tool_ids(starter.agent) & {"send_dtmf", "transfer_call"}
+    assert api.call_reports == []
+
+
+# ------------------------------------------------------- call variables (R-V2-22)
+
+
+async def test_a_prompt_agent_hears_the_call_variables_in_its_instructions() -> None:
+    resolved = resolved_config(channel="sip_out", instructions="You call customers.").model_copy(
+        update={"variables": {"claim_id": "C-1"}}
+    )
+    api = FakeApi(resolved)
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(api, session_starter=starter)
+    deps.settings = deps.settings.model_copy(update={"sip_answer_timeout_s": 0.01})
+    room = FakeRoom("lkap-call-1")
+    room.add_remote_participant(_sip_leg())
+    ctx.room = cast(rtc.Room, room)
+
+    await run_session(ctx, deps)
+    await ctx.fire_shutdown("done")
+
+    assert starter.agent.instructions.startswith("You call customers.")
+    assert starter.agent.instructions.split("\n\n")[1:2] == [
+        "Information already collected in this call (do not ask for it again unless the caller "
+        "corrects it):\n- claim_id: C-1"
+    ]
+
+
+async def test_a_flow_agent_starts_its_flow_state_with_the_call_variables() -> None:
+    from test_flow_runtime import INTAKE_FLOW, ScriptedLLM, _flow_config, _FlowFactory  # noqa: PLC0415
+
+    resolved = _flow_config(INTAKE_FLOW).model_copy(update={"variables": {"claim_id": "C-1", "n": 2}})
+    api = FakeApi(resolved)
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    factory = _FlowFactory(ScriptedLLM(["Hi, this is intake."]), FakeLLM(["{}"]))
+
+    await run_session(ctx, _deps(api, factory=factory, session_starter=starter))
+
+    state = starter.agent.context.userdata["flow"]
+    assert state.variables == {"claim_id": "C-1", "n": 2}
+    assert "claim_id" not in resolved.config.instructions  # flows render it themselves
+    await ctx.fire_shutdown("done")

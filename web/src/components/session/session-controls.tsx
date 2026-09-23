@@ -86,8 +86,17 @@ export interface SessionControlsProps {
   onDeviceError: (error: { source: Track.Source; error: Error }) => void;
   /** Controls whose last device attempt failed. */
   deviceErrors?: Partial<Record<"microphone" | "camera" | "screenShare", boolean>>;
+  /**
+   * The embed's compact bar (ask V2-18-9): tighter padding and no drop
+   * shadow, restyled from outside like the rest (the vendored bar is never
+   * forked). The buttons keep their size — the session's 40 px hit targets.
+   */
+  compact?: boolean;
   className?: string;
 }
+
+/** The compact (embed) restyle of the vendored bar's own chrome. */
+export const CONTROL_BAR_COMPACT = "p-1.5! shadow-none! drop-shadow-none! [&_button]:ring-offset-0";
 
 export function SessionControls({
   agentState,
@@ -99,6 +108,7 @@ export function SessionControls({
   onDisconnect,
   onDeviceError,
   deviceErrors,
+  compact = false,
   className,
 }: SessionControlsProps) {
   const visible = visibleControls({
@@ -128,7 +138,11 @@ export function SessionControls({
   );
 
   return (
-    <div data-testid="session-control-bar" onClickCapture={swallowLocked}>
+    <div
+      data-testid="session-control-bar"
+      data-compact={compact ? "" : undefined}
+      onClickCapture={swallowLocked}
+    >
       <AgentControlBar
         variant="livekit"
         isConnected={isConnected}
@@ -144,7 +158,8 @@ export function SessionControls({
           chat: visible.chat,
         }}
         className={cn(
-          "bg-card! border-border! shadow-md",
+          "bg-card! border-border!",
+          compact ? CONTROL_BAR_COMPACT : "shadow-md",
           CONTROL_BAR_BRAND_ON,
           locked.map((key) => LOCKED_CLASS[key]),
           deviceErrors?.microphone && ERROR_DOT.microphone,

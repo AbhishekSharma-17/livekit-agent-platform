@@ -349,11 +349,11 @@ describe("section navigation", () => {
   it("opens the default section, hides flow in prompt mode and switches via the nav", async () => {
     renderEditor();
     await ready();
-    expect(screen.getByRole("region", { name: "Providers" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Providers section" })).toBeTruthy();
     expect(listNav().queryByRole("button", { name: /Flow/ })).toBeNull();
 
     fireEvent.click(listNav().getByRole("button", { name: "Tools" }));
-    expect(screen.getByRole("region", { name: "Tools" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Tools section" })).toBeTruthy();
     expect(screen.getByText("Tools of Claims intake")).toBeTruthy();
     expect(listNav().getByRole("button", { name: "Tools" }).getAttribute("aria-current")).toBe("page");
     expect(routerReplace).toHaveBeenCalledWith("/console/agents/a-1?section=tools", { scroll: false });
@@ -363,13 +363,13 @@ describe("section navigation", () => {
     searchParams = new URLSearchParams("section=instructions");
     const { unmount } = renderEditor();
     await ready();
-    expect(screen.getByRole("region", { name: "Instructions & voice" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Instructions & voice section" })).toBeTruthy();
     unmount();
 
     searchParams = new URLSearchParams("section=nope");
     renderEditor();
     await ready();
-    expect(screen.getByRole("region", { name: "Providers" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Providers section" })).toBeTruthy();
   });
 
   it("shows the flow section (full width, no rail) for flow agents", async () => {
@@ -395,7 +395,7 @@ describe("section navigation", () => {
     fireEvent.keyDown(instructions, { key: "End" });
     expect(document.activeElement).toBe(listNav().getByRole("button", { name: "Tools" }));
     fireEvent.click(document.activeElement as HTMLElement);
-    expect(screen.getByRole("region", { name: "Tools" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Tools section" })).toBeTruthy();
   });
 });
 
@@ -480,7 +480,7 @@ describe("saving", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(screen.getByRole("region", { name: "Providers" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("region", { name: "Providers section" })).toBeTruthy());
     expect(listNav().getByRole("button", { name: /Providers.*Has errors/ })).toBeTruthy();
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
@@ -667,7 +667,7 @@ describe("summary rail", () => {
     expect((within(rail).getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Takes first notice of loss");
 
     fireEvent.click(within(rail).getByRole("button", { name: /Tools: open the Tools section/ }));
-    expect(screen.getByRole("region", { name: "Tools" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Tools section" })).toBeTruthy();
   });
 
   it("edits the description as part of the form", async () => {

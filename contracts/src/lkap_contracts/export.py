@@ -31,6 +31,7 @@ from lkap_contracts.agent_config import (
     RecordingConfig,
     ResolvedAgentConfig,
 )
+from lkap_contracts.blocks import BLOCK_CONFIG_MODELS, block_config_schema_name
 from lkap_contracts.common import Issue
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 from lkap_contracts.dispatch import DispatchMetadata
@@ -59,7 +60,13 @@ from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price
 from lkap_contracts.providers import ProviderSpec
 from lkap_contracts.qa import QaVerdict, SessionQaIn
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
+from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from lkap_contracts.tools import (
+    HttpToolDefinition,
+    McpServerDefinition,
+    ToolDefinition,
+    builtin_tools_document,
+)
 from lkap_contracts.ui_protocol import (
     ActivityEvent,
     AgentAction,
@@ -225,6 +232,23 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "WebhookEvent": api_models.WebhookEvent,
     "CallCreate": api_models.CallCreate,
     "CallOut": api_models.CallOut,
+    # telephony, promoted from the api by R-V2-25 (V2-19T); patterns + transfer targets R-V2-21
+    "TransferTarget": TransferTarget,
+    "TelephonyConfig": TelephonyConfig,
+    "TrunkCreate": api_models.TrunkCreate,
+    "TrunkUpdate": api_models.TrunkUpdate,
+    "TrunkOut": api_models.TrunkOut,
+    "DispatchRuleCreate": api_models.DispatchRuleCreate,
+    "DispatchRuleOut": api_models.DispatchRuleOut,
+    "PhoneNumberCreate": api_models.PhoneNumberCreate,
+    "PhoneNumberUpdate": api_models.PhoneNumberUpdate,
+    "PhoneNumberOut": api_models.PhoneNumberOut,
+    "CallTransferIn": api_models.CallTransferIn,
+    "CallDtmfIn": api_models.CallDtmfIn,
+    "CallDtmfOut": api_models.CallDtmfOut,
+    "CallReportIn": api_models.CallReportIn,
+    "InternalTransferIn": api_models.InternalTransferIn,
+    "InternalTransferOut": api_models.InternalTransferOut,
     # concrete page parametrisations
     "CredentialPage": api_models.CredentialPage,
     "AgentPage": api_models.AgentPage,
@@ -236,6 +260,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ConnectionPage": api_models.ConnectionPage,
     "ConfigVersionPage": api_models.ConfigVersionPage,
     "CallPage": api_models.CallPage,
+    "TrunkPage": api_models.TrunkPage,
+    "DispatchRulePage": api_models.DispatchRulePage,
+    "PhoneNumberPage": api_models.PhoneNumberPage,
     "WebhookEndpointPage": api_models.WebhookEndpointPage,
     "WebhookDeliveryPage": api_models.WebhookDeliveryPage,
 }
@@ -244,6 +271,13 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
 EXPORTED_UNIONS: dict[str, Any] = {
     "ToolDefinition": ToolDefinition,
     "FlowNode": FlowNode,
+}
+
+#: Per-block-type config schemas (R-V2-17), JSON only: ``BlockConfig_<type>``.
+#: They stay out of the TypeScript document (several types share one model, and
+#: the composer's config forms are hand-written, kept equal by a vitest parity test).
+EXPORTED_BLOCK_CONFIGS: dict[str, type[BaseModel]] = {
+    block_config_schema_name(block_type): model for block_type, model in BLOCK_CONFIG_MODELS.items()
 }
 
 
@@ -282,6 +316,8 @@ def _schema_for(name: str) -> dict[str, Any]:
     """Return a self-contained JSON Schema for one exported name."""
     if name in EXPORTED_UNIONS:
         schema: dict[str, Any] = TypeAdapter(EXPORTED_UNIONS[name]).json_schema(mode="validation")
+    elif name in EXPORTED_BLOCK_CONFIGS:
+        schema = EXPORTED_BLOCK_CONFIGS[name].model_json_schema(mode="validation")
     else:
         schema = EXPORTED_MODELS[name].model_json_schema(mode="validation")
     schema["title"] = name
@@ -291,12 +327,12 @@ def _schema_for(name: str) -> dict[str, Any]:
 
 
 def build_schema_documents() -> dict[str, dict[str, Any]]:
-    """Build one JSON Schema document per exported model and union.
+    """Build one JSON Schema document per exported model, union and block config.
 
     Returns:
         Mapping of exported name to its self-contained JSON Schema.
     """
-    names = [*EXPORTED_MODELS, *EXPORTED_UNIONS]
+    names = [*EXPORTED_MODELS, *EXPORTED_UNIONS, *EXPORTED_BLOCK_CONFIGS]
     return {name: _schema_for(name) for name in names}
 
 
@@ -347,16 +383,39 @@ def _rewrite_refs(node: Any) -> Any:
     return node
 
 
-def _strip_titles(node: Any) -> Any:
-    """Drop every ``title`` key.
+#: Keys whose value is a *map of names to subschemas*: inside one, ``title`` is a
+#: property (or definition) name, never the schema keyword (R-V2-15, ask #72).
+_SCHEMA_MAP_KEYS = frozenset({"properties", "patternProperties", "$defs", "definitions"})
+
+
+def _strip_titles(node: Any, *, in_map: bool = False) -> Any:
+    """Drop every ``title`` schema keyword, keeping properties that are named ``title``.
 
     Pydantic titles each individual property (``"title": "Ok"``), and
     json-schema-to-typescript turns any titled subschema into a standalone exported
     alias. Stripping them keeps the ``.d.ts`` namespace to real models only, instead
     of leaking names like ``Ok``, ``Id`` or ``Error`` that collide with globals.
+
+    ``title`` is only stripped as a keyword: a key of a ``properties`` /
+    ``patternProperties`` / ``$defs`` / ``definitions`` map names a field or a
+    definition (``BlockSpec.title``), so it is kept and only its subschema is
+    recursed into (R-V2-15).
+
+    Args:
+        node: A schema node (or any JSON value inside one).
+        in_map: Whether ``node`` is itself a name → subschema map.
+
+    Returns:
+        A copy of ``node`` without ``title`` keywords.
     """
     if isinstance(node, dict):
-        return {key: _strip_titles(value) for key, value in node.items() if key != "title"}
+        if in_map:
+            return {key: _strip_titles(value) for key, value in node.items()}
+        return {
+            key: _strip_titles(value, in_map=key in _SCHEMA_MAP_KEYS)
+            for key, value in node.items()
+            if key != "title"
+        }
     if isinstance(node, list):
         return [_strip_titles(item) for item in node]
     return node
@@ -510,7 +569,7 @@ _TS_BANNER = (
 
 
 def write_json_outputs(out_dir: Path) -> list[Path]:
-    """Write ``providers.json`` and ``schemas/*.schema.json`` (no node required).
+    """Write ``providers.json``, ``builtin_tools.json`` and ``schemas/*.schema.json`` (no node required).
 
     Args:
         out_dir: The ``generated/`` directory to write into.
@@ -523,6 +582,9 @@ def write_json_outputs(out_dir: Path) -> list[Path]:
     providers_path = out_dir / "providers.json"
     providers_path.write_text(_dumps(build_providers_document()), encoding="utf-8")
     written.append(providers_path)
+    tools_path = out_dir / "builtin_tools.json"
+    tools_path.write_text(_dumps(builtin_tools_document()), encoding="utf-8")
+    written.append(tools_path)
 
     schemas_dir = out_dir / "schemas"
     schemas_dir.mkdir(parents=True, exist_ok=True)

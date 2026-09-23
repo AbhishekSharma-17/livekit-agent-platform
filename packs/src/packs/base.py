@@ -28,6 +28,7 @@ from pydantic import BaseModel
 __all__ = [
     "BackgroundRunner",
     "BlockActionPack",
+    "DtmfPack",
     "FrameBufferProto",
     "FrameSnapshot",
     "ImageGen",
@@ -289,4 +290,18 @@ class BlockActionPack(Protocol):
 
         Returns the RPC result payload for the browser.
         """
+        ...
+
+
+class DtmfPack(Protocol):
+    """The optional ``on_dtmf`` hook a `Pack` may add (V2-17; moved here by R-V2-25).
+
+    Like `BlockActionPack`, it is kept out of `Pack` so every existing pack
+    still satisfies `Pack` structurally; the worker looks the method up with
+    `getattr`. It runs on phone calls only, once per keypad entry (digits
+    buffered until ``#`` or a 2.5 s pause), before the entry reaches the model.
+    """
+
+    async def on_dtmf(self, ctx: PackSessionContext, digits: str) -> bool:
+        """Handle a keypad entry; return ``True`` to consume it (the model never sees it)."""
         ...

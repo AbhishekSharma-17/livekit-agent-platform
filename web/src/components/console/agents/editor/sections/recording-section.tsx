@@ -98,7 +98,7 @@ export function RecordingSection() {
             control={control}
             name="config.recording.retention_days"
             render={({ field }) => (
-              <InputGroup className="max-w-48">
+              <InputGroup className="max-w-48" aria-disabled={!enabled || undefined}>
                 <InputGroupInput
                   id="recording-retention"
                   type="number"

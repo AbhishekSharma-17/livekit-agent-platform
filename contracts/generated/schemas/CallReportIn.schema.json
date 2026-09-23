@@ -1,0 +1,107 @@
+{
+  "$id": "lkap-contracts/CallReportIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/telephony/calls/report`` — the worker's view of a SIP leg.\n\nWebhooks are the primary source of call status, but a dev install often\nhas no public webhook url; the worker reports what it saw so the calls log\nis right either way. Transitions only ever move forward.",
+  "properties": {
+    "direction": {
+      "anyOf": [
+        {
+          "enum": [
+            "inbound",
+            "outbound"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Direction"
+    },
+    "from_e164": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "From E164"
+    },
+    "participant_identity": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Participant Identity"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "sip_call_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sip Call Id"
+    },
+    "status": {
+      "enum": [
+        "answered",
+        "completed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "to_e164": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "To E164"
+    }
+  },
+  "required": [
+    "session_id",
+    "status"
+  ],
+  "title": "CallReportIn",
+  "type": "object"
+}

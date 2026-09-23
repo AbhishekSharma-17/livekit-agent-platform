@@ -1,0 +1,19 @@
+{
+  "$id": "lkap-contracts/CallTransferIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/calls/{id}/transfer``: a cold (SIP REFER) transfer.\n\n``to`` must also pass the workspace's dialing policy (R-V2-23).",
+  "properties": {
+    "to": {
+      "description": "E.164 number or tel:/sip: URI",
+      "maxLength": 256,
+      "minLength": 3,
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "to"
+  ],
+  "title": "CallTransferIn",
+  "type": "object"
+}

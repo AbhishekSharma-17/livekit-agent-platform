@@ -71,13 +71,16 @@ RUN test -f "requirements/${LKAP_IMAGE_FLAVOR}.txt" || \
 
 # `--no-install-package`: lkap-contracts/lkap-packs are path deps
 # (`../contracts`, `../packs`) this context doesn't have; skip them here and
-# install the vendored wheels next. `--no-editable`: everything else
+# install the vendored wheels next. lkap-testing (`../testing`, a dev-group
+# path dep holding the shared test fakes, F-18) is skipped the same way and
+# never shipped. `--no-editable`: everything else
 # installs as a real site-packages copy, not a link back into /app (which
 # the runtime stage keeps, but keep both stages' layouts identical).
 # `--frozen`: fail rather than silently drift from agent/uv.lock.
 RUN uv sync --frozen --no-editable \
     --no-install-package lkap-contracts \
-    --no-install-package lkap-packs
+    --no-install-package lkap-packs \
+    --no-install-package lkap-testing
 RUN uv pip install --python /app/.venv/bin/python --no-deps vendor/*.whl
 
 # `--no-deps` above trusts that lkap-contracts/lkap-packs' own runtime deps

@@ -1,0 +1,79 @@
+{
+  "$id": "lkap-contracts/DispatchRuleOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "has_pin": {
+      "default": false,
+      "title": "Has Pin",
+      "type": "boolean"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "lk_rule_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lk Rule Id"
+    },
+    "managed_by_number": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Managed By Number"
+    },
+    "numbers": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Numbers",
+      "type": "array"
+    },
+    "room_prefix": {
+      "default": "",
+      "title": "Room Prefix",
+      "type": "string"
+    },
+    "trunk_id": {
+      "title": "Trunk Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "connection_id",
+    "trunk_id",
+    "agent_id",
+    "created_at"
+  ],
+  "title": "DispatchRuleOut",
+  "type": "object"
+}

@@ -44,6 +44,9 @@ export interface SessionExperienceProps {
   testMode: boolean;
   /** `NEXT_PUBLIC_LKAP_PRIVACY_URL`, when the deployment sets one. */
   privacyUrl?: string;
+  /** `?embed=1` (V2-18 widget): the live call drops its top strip and uses
+   * the compact control bar (ask V2-18-9). */
+  embed?: boolean;
 }
 
 /** Create + resume the playback context inside the click (§5.2). */
@@ -70,6 +73,7 @@ export function SessionExperience({
   loadError,
   testMode,
   privacyUrl,
+  embed = false,
 }: SessionExperienceProps) {
   const [participantName, setParticipantName] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -188,6 +192,7 @@ export function SessionExperience({
         agent={agent}
         participantName={participantName.trim() || "Guest"}
         testMode={testMode}
+        embed={embed}
         audioContext={audioContext}
         audioDeviceId={audioDeviceId}
         onRetry={retry}

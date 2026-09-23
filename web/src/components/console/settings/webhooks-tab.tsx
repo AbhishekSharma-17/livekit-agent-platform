@@ -42,6 +42,7 @@ import type {
   WebhookEndpointPage,
 } from "@/contracts/lkap-contracts";
 import { KNOWN_WEBHOOK_EVENTS, WEBHOOK_EVENT_LABEL, type WebhookEndpointCreated } from "./api-types";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 function useWebhooks() {
   return useQuery({
@@ -100,7 +101,7 @@ export function WebhooksTab() {
     },
     {
       id: "actions",
-      header: "",
+      header: <span className="sr-only">Actions</span>,
       align: "end",
       interactive: true,
       cell: (endpoint) => (
@@ -127,7 +128,7 @@ export function WebhooksTab() {
     >
       <SectionRow>
         {query.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <SkeletonRows label="Loading webhooks" rowClassName="h-12" />
         ) : query.isError ? (
           <ErrorBanner message={`Couldn't load webhooks — ${errorMessage(query.error)}`} onRetry={() => query.refetch()} />
         ) : endpoints.length === 0 ? (
@@ -438,7 +439,7 @@ function DeliveriesSheet({ endpoint, onClose }: { endpoint: WebhookEndpointOut; 
         </SheetHeader>
         <div className="flex-1 space-y-2 overflow-auto px-4 pb-4">
           {query.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <SkeletonRows label="Loading deliveries" rowClassName="h-14" />
           ) : deliveries.length === 0 ? (
             <EmptyState icon={SendIcon} title="No deliveries yet" compact />
           ) : (

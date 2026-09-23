@@ -44,6 +44,7 @@ import {
   type SessionRange,
 } from "./session-model";
 import { SESSION_LIST_FETCH_LIMIT, useConnectionNames, useSessionList } from "./use-session-queries";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 const ALL = "__all__";
 
@@ -159,12 +160,12 @@ export function SessionsTable() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2" aria-busy="true" aria-label="Loading sessions">
+      <LoadingRegion label="Loading sessions" className="flex flex-col gap-2">
         <Skeleton className="h-9 w-full max-w-2xl" />
         {[0, 1, 2, 3, 4].map((i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   }
 
@@ -349,7 +350,7 @@ function StartedCell({ session }: { session: SessionOut }) {
   return (
     <span className="text-muted-foreground">
       <span className="sr-only">Not started; created </span>
-      <RelativeTime iso={session.created_at} className="text-muted-foreground/70" />
+      <RelativeTime iso={session.created_at} className="text-muted-foreground italic" />
     </span>
   );
 }
@@ -363,7 +364,7 @@ export function SessionStatusChips({ session }: { session: SessionOut }) {
         {SESSION_STATUS_LABEL[session.status]}
       </StatusChip>
       {swept ? (
-        <StatusChip tone="neutral" size="sm" className="opacity-80">
+        <StatusChip tone="neutral" size="sm">
           {sentenceCase(swept)}
         </StatusChip>
       ) : null}

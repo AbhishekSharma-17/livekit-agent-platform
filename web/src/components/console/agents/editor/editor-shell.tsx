@@ -251,7 +251,9 @@ export function EditorShell({
             ref={contentRef}
             id="agent-editor-section"
             role="region"
-            aria-label={active.label}
+            // "… section": a section component inside often reuses the bare
+            // label for its own `<section>` (axe `landmark-unique`).
+            aria-label={`${active.label} section`}
             tabIndex={-1}
             data-section={active.id}
             className="min-w-0 outline-none"

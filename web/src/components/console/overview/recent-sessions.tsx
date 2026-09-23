@@ -10,6 +10,7 @@ import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
 import { formatDuration, toMillis } from "@/lib/format";
 import { useSessions } from "@/components/console/lib/api-hooks";
 import type { SessionOut } from "@/contracts/lkap-contracts";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 const STATUS_TONE: Record<SessionOut["status"], StatusTone> = {
   created: "neutral",
@@ -47,7 +48,9 @@ export function RecentSessions() {
       }
     >
       {isLoading ? (
-        <SectionRow className="text-sm text-muted-foreground">Loading…</SectionRow>
+        <SectionRow>
+          <SkeletonRows label="Loading recent sessions" rows={3} rowClassName="h-8" />
+        </SectionRow>
       ) : items.length === 0 ? (
         <SectionRow>
           <EmptyState

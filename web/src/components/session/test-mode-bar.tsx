@@ -18,8 +18,12 @@ export interface TestModeBarProps {
 
 export function TestModeBar({ backHref, className }: TestModeBarProps) {
   return (
+    // A labelled region so the bar is inside a landmark wherever it renders —
+    // above the pre-call / end-of-call `main` as well as inside the call's.
     <div
       data-testid="test-mode-bar"
+      role="region"
+      aria-label="Test call"
       className={cn(
         "bg-muted text-muted-foreground flex w-full shrink-0 items-center gap-2 px-3 py-1.5 text-xs font-medium lg:px-4",
         className,

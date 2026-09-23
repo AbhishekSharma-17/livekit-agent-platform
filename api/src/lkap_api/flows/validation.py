@@ -28,10 +28,9 @@ Two entry points:
   addressable path per finding (``FlowSpec``'s own validator raises one
   message for the whole graph, which cannot put a dot on a node).
 
-The built-in and block tool names mirror
-``agent/src/lkap_agent/tools/builtin/__init__.py`` (``BUILTIN_TOOL_NAMES``,
-``BLOCK_TOOL_NAMES`` and the block types each needs); the api cannot import the
-worker, so a change there must be repeated here (see ``docs/v2/_asks.md``).
+The built-in and block tool names (and the block types each block tool needs) come
+from :mod:`lkap_contracts.tools`, the one list the worker, the api and the web share
+(asks V2-16-3). They are re-exported here for existing importers.
 """
 
 from __future__ import annotations
@@ -52,37 +51,12 @@ from lkap_contracts.flow import (
     VariableSpec,
 )
 from lkap_contracts.providers import get
+from lkap_contracts.tools import BLOCK_TOOL_TYPES, BUILTIN_TOOL_NAMES, VISION_TOOL_NAMES
 from pydantic import TypeAdapter, ValidationError
 
 from lkap_api.config_service import INFERENCE_DEFAULT, ValidationContext, register_validator
 from lkap_api.packs import discover_manifests
 from lkap_api.settings import get_settings
-
-#: `lkap_agent.tools.builtin.BUILTIN_TOOL_NAMES`, in the worker's order.
-BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
-    "end_call",
-    "search_knowledge",
-    "http_request",
-    "describe_current_frame",
-    "pin_frame",
-    "push_note",
-    "set_status",
-    "escalate_to_human",
-    "current_time",
-)
-
-#: Built-ins the worker registers only with camera or screen share on.
-VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", "pin_frame"})
-
-#: `BLOCK_TOOL_NAMES` → the panel block types that make the worker register each one.
-BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
-    "update_block": frozenset(
-        {"document", "gallery", "table", "transcript", "video", "kb_citations", "custom"}
-    ),
-    "show_document": frozenset({"document"}),
-    "table_append": frozenset({"table"}),
-    "request_form": frozenset({"form"}),
-}
 
 #: Already-resolved slots whose secrets a node override may reuse (the worker's `_REUSABLE_SLOTS`).
 OverrideSlot = Literal["llm", "tts"]
@@ -108,14 +82,31 @@ def derived_mode(config: AgentConfig) -> Literal["prompt", "flow"]:
 def installed_pack_tool_names() -> frozenset[str]:
     """Tool names of every installed pack (``LKAP_PACKS``).
 
-    ``ValidationContext`` does not carry the agent's pack, so this is the union
-    over installed packs — a name from another installed pack passes here and
-    is dropped with a warning by the worker (asks: V2-16-2).
+    The fallback when the agent's pack is unknown (``ValidationContext.pack_tool_names``
+    is ``None``): the union over installed packs.
     """
     names: set[str] = set()
     for manifest in discover_manifests(get_settings().packs_list):
         names.update(manifest.tool_names)
     return frozenset(names)
+
+
+def pack_tool_names_for(pack_id: str | None) -> frozenset[str] | None:
+    """The tool names of the agent's own pack (asks V2-16-2).
+
+    Args:
+        pack_id: ``agents.pack_id``.
+
+    Returns:
+        The pack's ``tool_names``; empty when that pack is not installed (the worker
+        then runs the null pack, with no pack tools); ``None`` when ``pack_id`` is unset.
+    """
+    if pack_id is None:
+        return None
+    for manifest in discover_manifests(get_settings().packs_list):
+        if manifest.id == pack_id:
+            return frozenset(manifest.tool_names)
+    return frozenset()
 
 
 def allowed_tool_names(
@@ -186,8 +177,9 @@ def _tool_and_kb_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
     issues: list[Issue] = []
     referenced = any(isinstance(n, AgentNode | GlobalNode) and n.tools for n in flow.nodes)
     if ctx.tool_names_by_id is not None and referenced:
+        pack_tools = ctx.pack_tool_names if ctx.pack_tool_names is not None else installed_pack_tool_names()
         allowed = allowed_tool_names(
-            config, tool_names_by_id=ctx.tool_names_by_id, pack_tool_names=installed_pack_tool_names()
+            config, tool_names_by_id=ctx.tool_names_by_id, pack_tool_names=pack_tools
         )
         for i, node in enumerate(flow.nodes):
             if not isinstance(node, AgentNode | GlobalNode):

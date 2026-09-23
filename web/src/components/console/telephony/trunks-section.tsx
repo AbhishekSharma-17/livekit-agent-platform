@@ -24,13 +24,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import type { ConnectionOut } from "@/contracts/lkap-contracts";
+import type { ConnectionOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 import { useCreateTrunk, useDeleteTrunk, useSyncTrunk, useTrunks } from "./hooks";
-import { E164_PATTERN, type ProviderHint, type TrunkDirection, type TrunkOut } from "./types";
+import { E164_PATTERN, type ProviderHint, sipEnabled, splitNumbers, type TrunkDirection } from "./model";
 import { NativeSelect } from "./native-select";
-import { sipEnabled, splitNumbers } from "./model";
-
 const PROVIDER_LABEL: Record<ProviderHint, string> = { twilio: "Twilio", telnyx: "Telnyx", other: "Other" };
 
 /**
@@ -52,7 +50,7 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
         <div className="min-w-0">
           <p className="truncate font-medium">{trunk.name}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {PROVIDER_LABEL[trunk.provider_hint]} · {connectionName(trunk.connection_id)}
+            {PROVIDER_LABEL[trunk.provider_hint ?? "other"]} · {connectionName(trunk.connection_id)}
           </p>
         </div>
       ),
@@ -71,7 +69,7 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
       header: "Numbers",
       cell: (trunk) => (
         <span className="font-mono text-[0.8125rem] text-muted-foreground">
-          {trunk.numbers.length ? trunk.numbers.join(", ") : "Any"}
+          {trunk.numbers?.length ? trunk.numbers.join(", ") : "Any"}
         </span>
       ),
     },
@@ -140,7 +138,7 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium">{trunk.name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{trunk.numbers.join(", ") || "Any number"}</p>
+                <p className="font-mono text-xs text-muted-foreground">{(trunk.numbers ?? []).join(", ") || "Any number"}</p>
               </div>
               <TrunkRowMenu trunk={trunk} />
             </div>

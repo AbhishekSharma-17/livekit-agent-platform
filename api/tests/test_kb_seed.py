@@ -154,12 +154,19 @@ async def test_import_pack_kb_seeds_missing_module_still_creates_the_kb(
 
 
 async def test_seed_config_populates_agent_config_kb_ids(
-    fake_pack_on_disk: str, settings: Settings, database: Database
+    fake_pack_on_disk: str, settings: Settings, database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """End-to-end through `routers.agents._seed_config`, the seam W1 left for this package."""
     from lkap_api.packs import clear_manifest_cache
+    from lkap_api.routers import agents as agents_router
     from lkap_api.routers.agents import _seed_config
     from lkap_api.vault import Vault
+
+    # Never the real fastembed model: it downloads ~90 MB (this test once took 1211 s).
+    async def _fake_resolve_embedder(*_args: object, **_kwargs: object) -> FakeEmbedder:
+        return FakeEmbedder()
+
+    monkeypatch.setattr(agents_router, "resolve_embedder", _fake_resolve_embedder)
 
     settings.packs = fake_pack_on_disk
     clear_manifest_cache()

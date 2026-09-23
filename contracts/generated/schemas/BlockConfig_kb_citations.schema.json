@@ -1,0 +1,9 @@
+{
+  "$id": "lkap-contracts/BlockConfig_kb_citations.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A block type that takes no configuration at all.",
+  "properties": {},
+  "title": "BlockConfig_kb_citations",
+  "type": "object"
+}

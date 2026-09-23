@@ -16,12 +16,20 @@ Outbound (``POST /v1/calls``, ARCHITECTURE-V2 §2.6):
    replays a request on a transport error, which for a dial would ring the
    callee twice.
 
+Every dial and transfer first passes the workspace's dialing policy
+(:mod:`lkap_api.telephony.policy`, R-V2-23); a dial also respects the
+policy's open-outbound cap and the agent's ``max_concurrent_sessions``.
+
 Status only moves forward (:func:`advance`): ``dialing → ringing → answered →
 {completed | transferred}``, or from any open state to ``no_answer`` /
 ``busy`` / ``failed``. The dial task, LiveKit webhooks
 (:mod:`lkap_api.telephony.webhooks`) and the worker's reports
 (``POST /internal/v1/telephony/calls/report``) all feed the same function, so
 whichever arrives first wins and the others are no-ops.
+
+:func:`sweep_stuck_calls` (run by ``sessions_sweep.sweep_loop``, R-V2-24)
+closes rows nobody else will: an outbound dial the api forgot (restart
+mid-dial), and any open row whose session already ended.
 """
 
 from __future__ import annotations
@@ -44,18 +52,21 @@ from livekit.api import (
     SIPTransferStatus,
     TransferSIPParticipantRequest,
 )
-from lkap_contracts.agent_config import AgentConfig
-from lkap_contracts.api_models import CallCreate, CallOut
+from lkap_contracts.agent_config import AgentConfig, AgentLimits
+from lkap_contracts.api_models import CallCreate, CallOut, CallReportIn
 from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.telephony import E164_PATTERN
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.connections.clients import ConnectionClientFactory
 from lkap_api.connections.service import resolve_agent_connection
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Call, LiveKitConnection, SipTrunk, new_id, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
+from lkap_api.limits import live_session_count
 from lkap_api.logging import get_logger
 from lkap_api.telephony.common import (
     DTMF_TOPIC,
@@ -68,7 +79,7 @@ from lkap_api.telephony.common import (
     require_sip,
     to_sip_uri,
 )
-from lkap_api.telephony.models import E164_PATTERN, CallReportIn
+from lkap_api.telephony.policy import CallsBusyError, TelephonyPolicy, check_destination
 
 log = get_logger(__name__)
 
@@ -78,6 +89,9 @@ CallStatus = Literal[
 
 #: Open states in the order a call moves through them.
 _OPEN_RANK: dict[str, int] = {"dialing": 0, "ringing": 1, "answered": 2}
+
+#: States a call can still leave.
+OPEN: frozenset[str] = frozenset(_OPEN_RANK)
 
 #: States a call never leaves.
 TERMINAL: frozenset[str] = frozenset({"no_answer", "busy", "failed", "completed", "transferred"})
@@ -90,6 +104,16 @@ DIAL_MARGIN_S = 15.0
 
 #: Seconds a cold transfer may take (it dials the target).
 TRANSFER_TIMEOUT_S = 45.0
+
+#: Age after which an outbound call still ``dialing``/``ringing`` is swept to ``failed``
+#: (R-V2-24): the longest dial the api makes plus a minute.
+STUCK_DIAL_AFTER_S = MAX_RING_S + DIAL_MARGIN_S + 60
+
+#: ``hangup_reason`` of a swept dial.
+SWEPT_DIAL_REASON = "dial timed out (swept)"
+
+#: Session states after which the session's call cannot be open any more.
+_TERMINAL_SESSION: frozenset[str] = frozenset({"ended", "failed"})
 
 _E164 = re.compile(E164_PATTERN)
 
@@ -276,8 +300,32 @@ async def _outbound_trunk(
     return trunk
 
 
+def check_outbound_number(policy: TelephonyPolicy, to_e164: str) -> str:
+    """The stripped callee number, once it is E.164 and the dialing policy allows it.
+
+    Raises:
+        UnprocessableEntityError: Not an E.164 number.
+        DestinationNotAllowedError: Outside the policy (422 ``destination_not_allowed``).
+    """
+    number = to_e164.strip()
+    if not _E164.match(number):
+        raise UnprocessableEntityError("to_e164 must be an E.164 number such as +15551234567")
+    check_destination(policy, number)
+    return number
+
+
+async def open_outbound_calls(db: AsyncSession, workspace_id: str) -> int:
+    """How many outbound calls of the workspace are still dialing, ringing or answered."""
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Call)
+        .where(Call.workspace_id == workspace_id, Call.direction == "outbound", Call.status.in_(OPEN))
+    )
+    return int(total or 0)
+
+
 async def prepare_outbound_call(
-    db: AsyncSession, workspace_id: str, payload: CallCreate
+    db: AsyncSession, workspace_id: str, payload: CallCreate, *, policy: TelephonyPolicy
 ) -> tuple[Call, DialPlan]:
     """Validate an outbound call and store its session and call rows (not committed).
 
@@ -285,14 +333,27 @@ async def prepare_outbound_call(
         NotFoundError: Unknown agent or trunk.
         ConflictError: Archived agent, SIP disabled, or trunk not on LiveKit.
         UnprocessableEntityError: Bad number or no usable outbound trunk.
+        DestinationNotAllowedError: The dialing policy refuses the number.
+        CallsBusyError: The workspace's open-outbound cap or the agent's
+            ``max_concurrent_sessions`` is reached.
     """
-    to_e164 = payload.to_e164.strip()
-    if not _E164.match(to_e164):
-        raise UnprocessableEntityError("to_e164 must be an E.164 number such as +15551234567")
+    to_e164 = check_outbound_number(policy, payload.to_e164)
     agent = await get_agent(db, workspace_id, payload.agent_id)
     conn = await resolve_agent_connection(db, agent)
     require_sip(conn)
     trunk = await _outbound_trunk(db, workspace_id, conn.id, payload.trunk_id)
+    open_calls = await open_outbound_calls(db, workspace_id)
+    if open_calls >= policy.max_concurrent_outbound:
+        raise CallsBusyError(
+            "the workspace already has its maximum of outbound calls in progress; try again shortly",
+            details={"max_concurrent_outbound": policy.max_concurrent_outbound, "open": open_calls},
+        )
+    limits = AgentLimits.model_validate(agent.limits or {})
+    if await live_session_count(db, agent) >= limits.max_concurrent_sessions:
+        raise CallsBusyError(
+            "this agent is at its concurrent session limit; try again shortly",
+            details={"max_concurrent_sessions": limits.max_concurrent_sessions},
+        )
     ring = max(MIN_RING_S, min(MAX_RING_S, payload.timeout_s))
     from_e164 = (trunk.numbers or [""])[0]
     call_id, session_id = new_id(), new_id()
@@ -473,14 +534,22 @@ async def hangup(db: AsyncSession, factory: ConnectionClientFactory, call: Call)
 
 
 async def transfer(
-    db: AsyncSession, factory: ConnectionClientFactory, call: Call, to: str, *, identity: str | None = None
+    db: AsyncSession,
+    factory: ConnectionClientFactory,
+    call: Call,
+    to: str,
+    *,
+    policy: TelephonyPolicy,
+    identity: str | None = None,
 ) -> Call:
     """Cold-transfer the call's SIP leg with a SIP REFER.
 
     Raises:
+        DestinationNotAllowedError: The dialing policy refuses ``to`` (nothing is sent).
         ConflictError: The call is not answered, or SIP is disabled.
         LiveKitUpstreamError: The REFER failed (SIP status in ``details``).
     """
+    check_destination(policy, to)
     conn, session = await _live_leg(db, call)
     if call.status != "answered":
         raise ConflictError("only an answered call can be transferred", details={"status": call.status})
@@ -653,3 +722,55 @@ async def apply_report(db: AsyncSession, session: SessionRow, report: CallReport
         advance(call, report.status, reason=report.reason)
     await db.flush()
     return call
+
+
+# --------------------------------------------------------------------------- sweep
+async def sweep_stuck_calls(database: Database, *, now: dt.datetime | None = None) -> int:
+    """Close call rows nothing else will close (ruling R-V2-24); never calls LiveKit.
+
+    * **Outbound only**: a ``dialing`` / ``ringing`` row older than
+      :data:`STUCK_DIAL_AFTER_S` — by ``calls.started_at``, or the session's
+      ``created_at`` when the dial task never ran — becomes ``failed``
+      (:data:`SWEPT_DIAL_REASON`), and a still ``created`` / ``active`` session
+      becomes ``failed`` with it.
+    * **Any direction**: an open row whose session is already ``ended`` /
+      ``failed`` follows it: ``answered`` → ``completed``, else ``failed``.
+
+    Inbound rows are never ring-swept: ``new_inbound_call`` creates them in
+    ``dialing`` and a call in progress must never be failed. A late worker
+    report on a swept row is a no-op (:func:`advance` ignores terminal rows).
+
+    Returns:
+        How many call rows changed.
+    """
+    ts = now or utcnow()
+    cutoff = ts - dt.timedelta(seconds=STUCK_DIAL_AFTER_S)
+    changed = 0
+    async with database.session() as db:
+        rows = (
+            await db.execute(
+                select(Call, SessionRow)
+                .outerjoin(SessionRow, SessionRow.id == Call.session_id)
+                .where(Call.status.in_(OPEN))
+                # The sweep runs platform-wide, across every workspace.
+                .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+            )
+        ).all()
+        for call, session in rows:
+            if session is not None and session.status in _TERMINAL_SESSION:
+                status: CallStatus = "completed" if call.status == "answered" else "failed"
+                changed += advance(call, status, at=ts, reason=f"session {session.status}")
+                continue
+            if call.direction != "outbound" or call.status not in ("dialing", "ringing"):
+                continue
+            born = call.started_at or (session.created_at if session is not None else None)
+            if born is None or born > cutoff:
+                continue
+            changed += advance(call, "failed", at=ts, reason=SWEPT_DIAL_REASON)
+            if session is not None and session.status in ("created", "active"):
+                session.status = "failed"
+                session.error = f"call not answered: {SWEPT_DIAL_REASON}"
+                session.ended_at = ts
+    if changed:
+        log.info("stuck_calls_swept", count=changed)
+    return changed

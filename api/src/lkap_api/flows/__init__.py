@@ -9,14 +9,15 @@ validates flows without ``config_service`` knowing about them.
 
 from __future__ import annotations
 
+from lkap_contracts.tools import BLOCK_TOOL_TYPES, BUILTIN_TOOL_NAMES
+
 from lkap_api.flows.specs import NODE_KINDS, node_specs
 from lkap_api.flows.validation import (
-    BLOCK_TOOL_TYPES,
-    BUILTIN_TOOL_NAMES,
     allowed_tool_names,
     derived_mode,
     draft_flow_issues,
     flow_issues,
+    pack_tool_names_for,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "draft_flow_issues",
     "flow_issues",
     "node_specs",
+    "pack_tool_names_for",
 ]

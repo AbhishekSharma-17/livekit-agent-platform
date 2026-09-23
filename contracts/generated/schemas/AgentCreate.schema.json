@@ -70,6 +70,12 @@
             "storage_config_id": null
           }
         },
+        "telephony": {
+          "$ref": "#/$defs/TelephonyConfig",
+          "default": {
+            "transfer_targets": []
+          }
+        },
         "timezone": {
           "default": "UTC",
           "title": "Timezone",
@@ -1080,6 +1086,21 @@
       "title": "StartNode",
       "type": "object"
     },
+    "TelephonyConfig": {
+      "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
+      "properties": {
+        "transfer_targets": {
+          "items": {
+            "$ref": "#/$defs/TransferTarget"
+          },
+          "maxItems": 50,
+          "title": "Transfer Targets",
+          "type": "array"
+        }
+      },
+      "title": "TelephonyConfig",
+      "type": "object"
+    },
     "ToolsConfig": {
       "description": "Built-in tool gating plus references to admin-authored tool rows.",
       "properties": {
@@ -1181,6 +1202,31 @@
         "to"
       ],
       "title": "TransferNode",
+      "type": "object"
+    },
+    "TransferTarget": {
+      "description": "One destination the agent may transfer a caller to.",
+      "properties": {
+        "label": {
+          "description": "What the model and the caller call it",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "to": {
+          "description": "E.164 number or tel:/sip:/sips: URI",
+          "maxLength": 256,
+          "pattern": "^(\\+[1-9]\\d{6,14}|tel:\\+?[0-9]{3,20}|sips?:[^\\s@]+@[^\\s]+)$",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "to"
+      ],
+      "title": "TransferTarget",
       "type": "object"
     },
     "VariableSpec": {

@@ -40,6 +40,7 @@ import {
 import { describeUsage, UsageGroups } from "./session-usage";
 import { collectTurns, pairToolCalls } from "./timeline-model";
 import { useAllSessionEvents, useConnectionNames } from "./use-session-queries";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 // Kept importable from here: `tests/console-session-detail-view.test.ts` and older callers use this path.
 export { formatUsageLabel, formatUsageValue } from "./session-usage";
@@ -89,7 +90,7 @@ export function SessionDetailView({
 
 function DetailSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading session">
+    <LoadingRegion label="Loading session" className="flex flex-col gap-6">
       <div className="space-y-3">
         <Skeleton className="h-7 w-64" />
         <div className="flex flex-wrap gap-2">
@@ -101,7 +102,7 @@ function DetailSkeleton() {
       <Skeleton className="h-28 w-full" />
       <Skeleton className="h-8 w-80" />
       <Skeleton className="h-64 w-full" />
-    </div>
+    </LoadingRegion>
   );
 }
 

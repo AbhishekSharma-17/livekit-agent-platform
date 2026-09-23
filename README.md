@@ -4,7 +4,17 @@ A reusable, configurable **real-time voice + video agent platform on LiveKit Clo
 
 The reference pack is the **insurance claim live agent** (voice intake, camera evidence pinned with confirmed/unconfirmed captions, incident sketches, policy verification, background claim workflow producing routing, missing items and an adjuster packet).
 
-Status: MVP; see `docs/RUNBOOK.md` for what was verified live and `docs/REVIEW-FINAL.md` for the pre-handoff review.
+Status: **v2 in integration** (Phase 1, `docs/v2/PLAN-V2.md`). On top of the v1 MVP, v2 adds:
+- every LiveKit provider and avatar is configurable from the console, through a 121-entry registry;
+- LiveKit connections, Cloud or self-hosted, with a worker supervisor that runs per-connection pools;
+- sign-in, workspaces, roles and API keys;
+- a no-code panel of blocks;
+- a flow builder;
+- a text test mode with rewind, and an embeddable widget;
+- telephony over LiveKit SIP, with a default-deny dialing policy;
+- QA scoring, recordings, cost lines and webhooks.
+
+`docs/RUNBOOK.md` is the operator guide: running, connections, the supervisor, images, backups, key rotation and the smoke test. `docs/v2/README.md` indexes the v2 design. `docs/REVIEW-FINAL.md` is the v1 pre-handoff review.
 
 ## Architecture
 
@@ -46,13 +56,15 @@ Key design points (details in `docs/ARCHITECTURE.md`):
 
 | Path | What |
 |---|---|
-| `contracts/` | `lkap_contracts` — provider registry, agent config, dispatch metadata, UI protocol, API models; generated JSON + TS |
+| `contracts/` | `lkap_contracts`: provider registry, agent config, flows, panel blocks and their config schemas, dispatch metadata, UI protocol, API models, built-in tool names; generated JSON and TS |
 | `agent/` | LiveKit worker (`lkap_agent`) |
-| `api/` | FastAPI control plane (`lkap_api`) |
-| `packs/` | `generic` and `insurance_claim` packs |
-| `web/` | Next.js session surface + admin console |
-| `deploy/`, `scripts/` | Dockerfiles, compose, dev scripts |
-| `docs/` | `ARCHITECTURE.md`, `CONTRACTS.md`, `INSURANCE_PACK_MAPPING.md`, `IMPLEMENTATION_PLAN.md`, `research/` |
+| `api/` | FastAPI control plane (`lkap_api`): auth/tenancy, connections, fleet, flows, telephony, jobs, webhooks |
+| `supervisor/` | Worker supervisor (`lkap_supervisor`): reconciles `supervised` pools as subprocesses or Docker containers |
+| `packs/` | The `generic` and `insurance_claim` packs |
+| `testing/` | `lkap_testing`: the shared in-memory `packs.base` fakes that the agent and pack test suites use (F-18) |
+| `web/` | Next.js session surface, widget and admin console |
+| `deploy/`, `scripts/` | Dockerfiles, dev/prod compose, dev scripts, `backup.sh`, `smoke_v2.sh` |
+| `docs/` | v1 `ARCHITECTURE.md`, `CONTRACTS.md` and `RUNBOOK.md`; v2 design under `docs/v2/`; research under `docs/research-v2/` |
 
 ## Quickstart (local dev against LiveKit Cloud)
 
@@ -83,6 +95,15 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 LKAP_ADMIN_TOKEN=dev-admin pnpm d
 #   (default pipeline: LiveKit Inference, no vendor keys needed) → Publish → Test call
 ```
 
+On first start the api creates:
+- the default workspace;
+- an owner (`owner@local`, which **you** give a password; RUNBOOK §2);
+- a default LiveKit connection from your `LIVEKIT_*`.
+
+In dev, the web proxy signs you in with the break-glass `LKAP_ADMIN_TOKEN`. To run workers under the supervisor instead of by hand, see RUNBOOK §3–§4. `LKAP_PACKS` must be the same on the api and every worker.
+
+**Smoke test:** `scripts/smoke_v2.sh` runs compose dev, a connection, a generic agent and a text round trip. It needs Docker. `--dry-run` makes read-only checks against a running api.
+
 Select Gemini Live in the agent's Providers tab after saving a Google API key credential; select an image-gen credential to enable incident sketches.
 
 ## Screenshots
@@ -102,8 +123,20 @@ The console and session pages are verified working end-to-end against the local 
 
 ## Quality gates
 
-Each Python package: `uv run ruff check . --fix && uv run ruff format . && uv run mypy src/ --strict && uv run pytest -x -v` (offline; `-m live` for LiveKit Cloud tests). Web: `pnpm lint && pnpm typecheck && pnpm test` (`pnpm e2e` is not a gate yet — `web/e2e/` has no specs).
+Each Python package (`contracts`, `api`, `agent`, `packs`, `supervisor`, `testing`):
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy src/ --strict && uv run pytest -q -m "not live"
+```
+`-m live` runs the LiveKit Cloud tests.
+
+Web: `pnpm lint && pnpm typecheck && pnpm test`. After any contracts change, run `scripts/export_contracts.sh --generate`. CI runs the same gates (`.github/workflows/`), plus the api suite and a migration round trip on Postgres.
 
 ## Deployment
 
-Agent → LiveKit Cloud (`cd agent && lk agent create --secrets-file secrets.env`, then `lk agent deploy`; `livekit.toml` names the agent `lkap-agent`). api + web → containers (`deploy/docker-compose.yml`). See `docs/CONTRACTS.md §12`.
+**Workers:**
+- A LiveKit Cloud-hosted pool uses the deploy bundle from a connection's page (`lk agent create` / `lk agent deploy`).
+- Self-run pools use the `lkap-agent:slim|full` images under the supervisor.
+
+**Platform:** api, web, supervisor, Postgres, Redis and MinIO run under `deploy/docker-compose.prod.yml`, behind Caddy.
+
+See `deploy/README.md` §4 and `docs/RUNBOOK.md` §3–§7. No image has been built on the dev host yet (Docker not running), so treat the images as "build unverified" until CI or a local `docker build` has passed.

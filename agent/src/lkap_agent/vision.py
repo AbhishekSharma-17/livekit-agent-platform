@@ -4,10 +4,11 @@ Implements `packs.base.FrameBufferProto` (docs/CONTRACTS.md §8;
 docs/ARCHITECTURE.md §8). Subscribes to `track_subscribed`/`track_unsubscribed`
 on the session's `rtc.Room` for the linked participant's `SOURCE_CAMERA` and
 `SOURCE_SCREENSHARE` video tracks, and keeps the freshest decoded
-`rtc.VideoFrame` per source. Active in both realtime and cascaded pipeline
-modes (realtime additionally wires `RoomOptions(video_input=True)` at the
-`SessionBuilder`, W1-AGENT-CORE; this buffer independently backs
-`pin_frame`/`describe_current_frame` and cascaded-mode vision injection).
+`rtc.VideoFrame` per source. Active in every pipeline mode (realtime and
+half-cascade additionally wire `RoomOptions(video_input=True)` at the
+`SessionBuilder`, so their realtime model sees the video itself; this buffer
+independently backs `pin_frame`/`describe_current_frame` and cascaded-mode
+per-turn vision injection, which half-cascade skips like realtime — asks #54).
 
 The concrete `rtc.VideoStream` is FFI-backed and cannot be constructed in a
 unit test, so track-to-stream construction is injected via

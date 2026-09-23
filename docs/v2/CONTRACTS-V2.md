@@ -273,6 +273,7 @@ class ResolvedAgentConfig(BaseModel):              # v1 fields +
     recording: RecordingConfig
     panel: PanelLayout
     installed_provider_ids: list[str] | None = None
+    variables: dict[str, Any] = {}                 # R-V2-22: sessions.variables (an outbound call's CallCreate.variables)
 ```
 
 `DispatchMetadata` v2: `{v:2, session_id: str|None, agent_id: str, config_version: int|None, participant_identity: str|None, channel: SessionChannel, connection_id: str}`. The worker: `session_id` present → `resolved`; absent → `sessions/start`.
@@ -342,7 +343,7 @@ class FlowSpec(BaseModel):
     # no edges from/to global or qa; end nodes have no outgoing edges; tool/kb refs resolvable at api validation time.
 ```
 
-Runtime contract: edge tool name `go_to_{target_id}` (ids are `^[a-z][a-z0-9_]{0,31}$`), `FlowState{current_node, path: list[str], variables: dict, disposition: str|None}` stored in `session.userdata.flow`, `handoff` session event `{from, to, edge_id}`; exposed to the UI as `blocks["flow"]` when a `custom` block of `config.kind="flow_progress"` exists (Phase 2 UI block).
+Runtime contract: edge tool name `go_to_{target_id}` (ids are `^[a-z][a-z0-9_]{0,31}$`), `FlowState{current_node, path: list[str], variables: dict, disposition: str|None}` stored in `session.userdata.flow`, `handoff` session event `{from, to, edge_id}`; mirrored into **every** `custom` block whose `config.kind == "flow_progress"`, under that block's own id (`UiState.blocks[<block id>]`), as `{current_node, label, path, variables, disposition}` (R-V2-14). A dedicated renderer is Phase 2; the custom block shows the JSON today.
 
 ### 4.6 Sessions, calls, webhooks models (api_models.py)
 

@@ -1,4 +1,5 @@
 import { BLOCK_TOOLS, BUILTIN_TOOLS } from "@/components/console/lib/constants";
+import { BLOCK_TOOL_TYPES, type BlockToolName } from "@/panels/blocks/catalog";
 
 /**
  * The tools a flow node may pick (R-V2-10): exactly the agent-level union the
@@ -19,15 +20,14 @@ export interface NodeToolOption {
   group: "Built-in" | "Panel" | "Pack" | "Agent tools";
 }
 
-/** Block type(s) that make the worker register each block tool (`BLOCK_TOOL_TYPES` in the api). */
-export const BLOCK_TOOL_TYPES: Record<string, readonly string[]> = {
-  update_block: ["document", "gallery", "table", "transcript", "video", "kb_citations", "custom"],
-  show_document: ["document"],
-  table_append: ["table"],
-  request_form: ["form"],
-};
-
-const VISION_TOOLS = new Set(["describe_current_frame", "pin_frame"]);
+/**
+ * The built-ins the worker registers only with camera or screen share
+ * (`lkap_contracts.tools.VISION_TOOL_NAMES`; pinned to
+ * `contracts/generated/builtin_tools.json` by `tests/tool-names-parity.test.ts`).
+ * Which block makes each block tool register is `BLOCK_TOOL_TYPES` in the
+ * panel catalog — one web copy, pinned by the same test (V2-19B-3).
+ */
+export const VISION_TOOL_NAMES: ReadonlySet<string> = new Set(["describe_current_frame", "pin_frame"]);
 
 export interface ToolOptionsInput {
   builtinDisabled: readonly string[];
@@ -47,7 +47,7 @@ export function nodeToolOptions(input: ToolOptionsInput): NodeToolOption[] {
   const out: NodeToolOption[] = [];
   for (const tool of BUILTIN_TOOLS) {
     if (disabled.has(tool.name)) continue;
-    if (VISION_TOOLS.has(tool.name) && !vision) continue;
+    if (VISION_TOOL_NAMES.has(tool.name) && !vision) continue;
     out.push({ name: tool.name, label: tool.label, group: "Built-in" });
   }
   if (input.httpRequestEnabled && !disabled.has("http_request")) {
@@ -56,7 +56,8 @@ export function nodeToolOptions(input: ToolOptionsInput): NodeToolOption[] {
   const blocks = new Set(input.blockTypes);
   for (const tool of BLOCK_TOOLS) {
     if (disabled.has(tool.name)) continue;
-    if ((BLOCK_TOOL_TYPES[tool.name] ?? []).some((type) => blocks.has(type))) {
+    const types = BLOCK_TOOL_TYPES[tool.name as BlockToolName];
+    if (types && [...types].some((type) => blocks.has(type))) {
       out.push({ name: tool.name, label: tool.label, group: "Panel" });
     }
   }

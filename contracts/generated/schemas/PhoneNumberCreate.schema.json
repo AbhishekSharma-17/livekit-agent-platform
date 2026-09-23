@@ -1,0 +1,47 @@
+{
+  "$id": "lkap-contracts/PhoneNumberCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/telephony/numbers``.\n\nBinding a number to a trunk adds it to the trunk's numbers. Setting\n``inbound_agent_id`` (inbound trunks only) creates a dispatch rule that\nsends calls to this number to that agent.",
+  "properties": {
+    "e164": {
+      "pattern": "^\\+[1-9]\\d{6,14}$",
+      "title": "E164",
+      "type": "string"
+    },
+    "inbound_agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inbound Agent Id"
+    },
+    "label": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Label",
+      "type": "string"
+    },
+    "trunk_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trunk Id"
+    }
+  },
+  "required": [
+    "e164"
+  ],
+  "title": "PhoneNumberCreate",
+  "type": "object"
+}

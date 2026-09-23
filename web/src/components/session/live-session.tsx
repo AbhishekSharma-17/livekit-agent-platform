@@ -48,6 +48,8 @@ export interface LiveSessionProps {
    * console's admin proxy instead of the public API.
    */
   testMode: boolean;
+  /** `?embed=1`: the widget's trimmed chrome (ask V2-18-9). */
+  embed?: boolean;
   /** Primed in the Start click (§5.2) and owned by `SessionExperience`. */
   audioContext?: AudioContext | null;
   /** The microphone chosen in the pre-call device check, if any. */
@@ -62,6 +64,7 @@ export function LiveSession({
   agent,
   participantName,
   testMode,
+  embed = false,
   audioContext,
   audioDeviceId,
   onRetry,
@@ -157,6 +160,7 @@ export function LiveSession({
         uiPanelId={details?.uiPanelId ?? null}
         error={error}
         testMode={testMode}
+        embed={embed}
         onRetry={onRetry}
         onLeave={onLeave}
         onEnded={onEnded}

@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * E2E smoke tests (`web/e2e/**`), against a running `pnpm dev`/`next start`.
- * No spec files exist yet — Wave 3 (W3-E2E-INSURANCE) adds the console →
- * session → transcript smoke test.
+ * E2E tests (`web/e2e/**`), against a running `pnpm dev`/`next start` —
+ * see `e2e/README.md` for what each spec covers and needs.
  */
 export default defineConfig({
   testDir: "./e2e",

@@ -13,7 +13,7 @@ import { InstructionsTab } from "@/components/console/agents/tabs/instructions-t
 import { KnowledgeTab } from "@/components/console/agents/tabs/knowledge-tab";
 import { PanelTab } from "@/components/console/agents/tabs/panel-tab";
 import { ProvidersTab } from "@/components/console/agents/tabs/providers-tab";
-import { ToolsTab } from "@/components/console/agents/tabs/tools-tab";
+import { ToolsSection } from "@/components/console/telephony/tools-section";
 
 import { FlowSection } from "./sections/flow-section";
 import { LimitsSection } from "./sections/limits-section";
@@ -74,9 +74,10 @@ export const BUILTIN_SECTIONS: EditorSectionDef[] = [
     label: "Tools",
     icon: WrenchIcon,
     order: 50,
-    Component: ToolsTab,
-    issuePaths: ["tools"],
-    issueKeywords: /\b(tool|http|mcp)/i,
+    // V2-19 (R-V2-21/25): WP-5's tools tab plus the "Phone calls" card (transfer destinations).
+    Component: ToolsSection,
+    issuePaths: ["tools", "telephony"],
+    issueKeywords: /\b(tool|http|mcp|transfer|dtmf)/i,
     issueKeywordPriority: 30,
   },
   {

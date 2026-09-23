@@ -32,8 +32,19 @@ leg has, through one object per job, :class:`TelephonySession`:
   (``POST /internal/v1/telephony/sessions/{id}/transfer``), which issues
   ``SipService.transfer_sip_participant`` (SIP REFER) and updates the call row.
   Destinations are an allowlist, never free text from the model: the tool is
-  registered only when ``config.pack_settings["transfer_targets"]`` names at
-  least one (``{"Sales": "+15551230000"}`` or a list of numbers/URIs).
+  registered only when ``config.telephony.transfer_targets`` names at least
+  one (R-V2-21), and the api checks every target against the workspace's
+  dialing policy again before it dials (R-V2-23).
+* **Call variables** (R-V2-22): :func:`apply_call_variables` appends an
+  outbound call's ``variables`` to a prompt agent's instructions; flow agents
+  seed ``FlowState.variables`` with them instead.
+
+Wiring (R-V2-20, ``main.py``): :func:`session_for` builds the object in
+``_assemble`` with ``api=deps.config_client`` (``report_call`` /
+``transfer_call`` live on ``ConfigClientProtocol``) and stores it as
+``SessionContext.userdata["telephony"]``; ``_start`` waits for the callee with
+:func:`wait_for_answer` on ``sip_out``; :meth:`TelephonySession.start` runs once
+the session is up and :meth:`TelephonySession.aclose` in the shutdown callback.
 
 Nothing here runs for web, test or text sessions: :func:`is_sip_channel`.
 """
@@ -45,13 +56,38 @@ import inspect
 import json
 import re
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
-import httpx
 from livekit import rtc
+from lkap_contracts.agent_config import ResolvedAgentConfig
+from lkap_contracts.api_models import CallReportIn, InternalTransferOut
+from lkap_contracts.telephony import DTMF_PATTERN, TelephonyConfig
+from packs.base import DtmfPack
 
+from lkap_agent.flow.runtime import is_flow
+from lkap_agent.flow.variables import VariableValue, known_variables_block
 from lkap_agent.logging import get_logger
+
+__all__ = [
+    "DTMF_TOPIC",
+    "SIP_CHANNELS",
+    "TELEPHONY_TOOL_NAMES",
+    "DtmfCollector",
+    "DtmfPack",
+    "TelephonyApi",
+    "TelephonySession",
+    "apply_call_variables",
+    "build_telephony_tools",
+    "caller_info",
+    "dtmf_code",
+    "is_sip_channel",
+    "publish_digits",
+    "seed_variables",
+    "session_for",
+    "sip_participant",
+    "transfer_targets",
+    "wait_for_answer",
+]
 
 logger = get_logger(__name__)
 
@@ -77,17 +113,12 @@ DTMF_FLUSH_AFTER_S = 2.5
 #: Keys that end a keypad entry at once.
 DTMF_TERMINATORS = "#"
 
-#: Digits LiveKit can publish (RFC 4733 events 0–15).
-DTMF_DIGITS = re.compile(r"^[0-9*#A-D]{1,32}$")
+#: Digits LiveKit can publish (RFC 4733 events 0-15; ``lkap_contracts.telephony.DTMF_PATTERN``).
+DTMF_DIGITS = re.compile(DTMF_PATTERN)
 
-#: ``pack_settings`` key holding the transfer allowlist.
-TRANSFER_TARGETS_KEY = "transfer_targets"
-
-#: The built-in tool names ``AgentConfig.tools.builtin_disabled`` can switch off.
+#: The phone-only built-in tools (``tools.builtin_disabled`` switches them off; the console
+#: shows them as ``TELEPHONY_TOOLS``). Re-exported by ``lkap_agent.tools.builtin``.
 TELEPHONY_TOOL_NAMES: tuple[str, ...] = ("send_dtmf", "transfer_call")
-
-_SERVICE_TOKEN_HEADER = "X-Service-Token"
-_TRANSFER_TARGET = re.compile(r"^(\+[1-9]\d{6,14}|tel:\+?[0-9]{3,20}|sips?:[^\s@]+@[^\s]+)$")
 
 
 def is_sip_channel(channel: str) -> bool:
@@ -191,117 +222,73 @@ def caller_info(attributes: Mapping[str, str], *, channel: str) -> dict[str, str
     }
 
 
-def transfer_targets(pack_settings: Mapping[str, Any]) -> dict[str, str]:
-    """The agent's transfer allowlist as ``{label: target}`` (invalid entries dropped).
+def transfer_targets(telephony: TelephonyConfig) -> dict[str, str]:
+    """The agent's transfer allowlist as ``{label: target}`` (R-V2-21: ``config.telephony`` only).
 
-    Accepts ``{"Sales": "+15551230000"}`` or ``["+15551230000", "sip:desk@pbx"]``.
+    ``pack_settings["transfer_targets"]`` is retired and never read. Labels
+    are unique case-insensitively (the api refuses duplicates at save); should
+    a stored config still carry one, the first entry wins.
     """
-    raw = pack_settings.get(TRANSFER_TARGETS_KEY)
-    pairs: list[tuple[str, Any]]
-    if isinstance(raw, Mapping):
-        pairs = [(str(k), v) for k, v in raw.items()]
-    elif isinstance(raw, list):
-        pairs = [(str(v), v) for v in raw]
-    else:
-        return {}
-    return {
-        label.strip(): str(target).strip()
-        for label, target in pairs
-        if isinstance(target, str) and _TRANSFER_TARGET.match(target.strip()) and label.strip()
-    }
+    targets: dict[str, str] = {}
+    seen: set[str] = set()
+    for target in telephony.transfer_targets:
+        label = target.label.strip()
+        if label and label.casefold() not in seen:
+            seen.add(label.casefold())
+            targets[label] = target.to.strip()
+    return targets
+
+
+def seed_variables(variables: Mapping[str, Any]) -> dict[str, VariableValue]:
+    """A session's seed variables as flow-variable values (R-V2-22).
+
+    Scalars pass through; anything else (a list, an object) becomes its JSON
+    text, because ``FlowState.variables`` holds scalars only.
+    """
+    values: dict[str, VariableValue] = {}
+    for name, value in variables.items():
+        if value is None or isinstance(value, str | int | float | bool):
+            values[str(name)] = value
+        else:
+            values[str(name)] = json.dumps(value, ensure_ascii=False, default=str)
+    return values
+
+
+def apply_call_variables(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
+    """Append the session's seed variables to a prompt agent's instructions (R-V2-22).
+
+    An outbound call's ``CallCreate.variables`` reach the worker as
+    ``ResolvedAgentConfig.variables``. A prompt agent gets the same "already
+    collected" block the flow runtime renders; a flow agent is returned
+    unchanged (``FlowServices.initial_variables`` seeds its ``FlowState``).
+    """
+    if not resolved.variables or is_flow(resolved):
+        return resolved
+    block = known_variables_block(seed_variables(resolved.variables), [])
+    if block is None:
+        return resolved
+    instructions = f"{resolved.config.instructions.rstrip()}\n\n{block}".lstrip()
+    return resolved.model_copy(
+        update={"config": resolved.config.model_copy(update={"instructions": instructions})}
+    )
 
 
 # ------------------------------------------------------------------------ api client
-@dataclass(frozen=True, slots=True)
-class TransferResult:
-    """What the api answered to a transfer request."""
-
-    ok: bool
-    status: str
-    reason: str | None = None
-
-
 class TelephonyApi(Protocol):
-    """The two worker → api telephony calls (injectable for tests)."""
+    """The two worker → api telephony calls; ``ConfigClientProtocol`` provides both (R-V2-20)."""
 
-    async def report(self, body: dict[str, Any]) -> None:
+    async def report_call(self, report: CallReportIn) -> None:
         """``POST /internal/v1/telephony/calls/report`` (best effort, never raises)."""
         ...
 
-    async def transfer(self, session_id: str, to: str, participant_identity: str | None) -> TransferResult:
-        """``POST /internal/v1/telephony/sessions/{id}/transfer``."""
+    async def transfer_call(
+        self, session_id: str, to: str, participant_identity: str | None
+    ) -> InternalTransferOut:
+        """``POST /internal/v1/telephony/sessions/{id}/transfer`` (never raises)."""
         ...
-
-    async def aclose(self) -> None:
-        """Release the HTTP pool."""
-        ...
-
-
-class HttpTelephonyApi:
-    """``httpx`` implementation of :class:`TelephonyApi` over the service token.
-
-    Kept here rather than on ``config_client.ConfigClient`` (V2-07's file);
-    ``docs/v2/_asks.md`` V2-17-3 proposes folding it in.
-    """
-
-    def __init__(self, base_url: str, service_token: str, *, client: httpx.AsyncClient | None = None) -> None:
-        """Create the client.
-
-        Args:
-            base_url: The api base url (``LKAP_API_BASE_URL``).
-            service_token: ``LKAP_SERVICE_TOKEN``.
-            client: An existing client (tests pass one with a mock transport).
-        """
-        self._owns = client is None
-        self._client = client or httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=10.0)
-        self._client.headers[_SERVICE_TOKEN_HEADER] = service_token
-
-    async def report(self, body: dict[str, Any]) -> None:
-        """Report a leg's status; failures are logged, never raised."""
-        try:
-            response = await self._client.post("/internal/v1/telephony/calls/report", json=body)
-            if response.status_code >= 400:
-                logger.warning(
-                    "call report rejected", status_code=response.status_code, status=body.get("status")
-                )
-        except httpx.HTTPError as exc:
-            logger.warning("call report failed", error=type(exc).__name__, status=body.get("status"))
-
-    async def transfer(self, session_id: str, to: str, participant_identity: str | None) -> TransferResult:
-        """Ask the api to REFER the caller to ``to``; transport failures become a failed result."""
-        try:
-            response = await self._client.post(
-                f"/internal/v1/telephony/sessions/{session_id}/transfer",
-                json={"to": to, "participant_identity": participant_identity},
-                timeout=60.0,
-            )
-        except httpx.HTTPError as exc:
-            return TransferResult(ok=False, status="failed", reason=f"api unreachable: {type(exc).__name__}")
-        if response.status_code >= 400:
-            return TransferResult(ok=False, status="failed", reason=f"api answered {response.status_code}")
-        data = response.json()
-        return TransferResult(
-            ok=bool(data.get("ok")), status=str(data.get("status", "")), reason=data.get("reason")
-        )
-
-    async def aclose(self) -> None:
-        """Close the HTTP pool if this client owns it."""
-        if self._owns:
-            await self._client.aclose()
 
 
 # ----------------------------------------------------------------------------- DTMF in
-class DtmfPack(Protocol):
-    """The optional ``on_dtmf`` hook a pack may add (looked up with ``getattr``, like ``on_block_action``).
-
-    Return ``True`` to consume the digits (the model never sees them).
-    """
-
-    async def on_dtmf(self, ctx: Any, digits: str) -> bool:
-        """Handle a keypad entry."""
-        ...
-
-
 class DtmfCollector:
     """Buffers keypad digits into one entry: flushed on a terminator or after a pause."""
 
@@ -457,13 +444,13 @@ class TelephonySession:
         await self._dtmf.aclose()
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
-        await self._api.report(
-            {
-                "session_id": self._session_id,
-                "status": "completed" if self._answered else "failed",
-                "participant_identity": self._identity,
-                "reason": reason[:128],
-            }
+        await self._api.report_call(
+            CallReportIn(
+                session_id=self._session_id,
+                status="completed" if self._answered else "failed",
+                participant_identity=self._identity,
+                reason=reason[:128],
+            )
         )
 
     # --------------------------------------------------------------- leg status
@@ -488,16 +475,16 @@ class TelephonySession:
         info = caller_info(attributes, channel=self._channel)
         self._record("sip_answered", {"participant_identity": participant.identity, **info})
         self._spawn(
-            self._api.report(
-                {
-                    "session_id": self._session_id,
-                    "status": "answered",
-                    "direction": "outbound" if self._channel == "sip_out" else "inbound",
-                    "participant_identity": participant.identity,
-                    "sip_call_id": info["call_id"] or None,
-                    "from_e164": info["from"] or None,
-                    "to_e164": info["to"] or None,
-                }
+            self._api.report_call(
+                CallReportIn(
+                    session_id=self._session_id,
+                    status="answered",
+                    direction="outbound" if self._channel == "sip_out" else "inbound",
+                    participant_identity=participant.identity,
+                    sip_call_id=info["call_id"][:128] or None,
+                    from_e164=info["from"][:32] or None,
+                    to_e164=info["to"][:32] or None,
+                )
             )
         )
 
@@ -550,13 +537,17 @@ class TelephonySession:
         self._record("dtmf", {"direction": "sent", "digits": digits, "source": source})
 
     # -------------------------------------------------------------------- transfer
-    async def transfer(self, to: str) -> TransferResult:
-        """Cold-transfer the caller through the api and record a ``transfer`` event."""
+    async def transfer(self, to: str) -> InternalTransferOut:
+        """Cold-transfer the caller through the api and record a ``transfer`` event.
+
+        The api answers ``refused`` (reason "destination not allowed by the
+        dialing policy") for a target outside the workspace's policy (R-V2-23).
+        """
         identity = self._identity
         if identity is None:
             participant = sip_participant(self._room)
             identity = participant.identity if participant else None
-        result = await self._api.transfer(self._session_id, to, identity)
+        result = await self._api.transfer_call(self._session_id, to, identity)
         self._record(
             "transfer", {"to": to, "ok": result.ok, "status": result.status, "reason": result.reason}
         )
@@ -581,7 +572,7 @@ class TelephonySession:
             self._pack_ctx,
             disabled=list(config.tools.builtin_disabled),
             dtmf_enabled=bool(config.capabilities.dtmf),
-            targets=transfer_targets(config.pack_settings),
+            targets=transfer_targets(config.telephony),
             shutdown=shutdown,
         )
 
@@ -604,8 +595,8 @@ def build_telephony_tools(
     """The phone-only built-in tools this session gets.
 
     ``send_dtmf`` needs ``capabilities.dtmf``; ``transfer_call`` needs a
-    non-empty transfer allowlist. Either can be switched off with
-    ``tools.builtin_disabled``.
+    non-empty ``config.telephony.transfer_targets``. Either can be switched off
+    with ``tools.builtin_disabled`` (the console's ``TELEPHONY_TOOLS`` toggles).
     """
     from lkap_agent.tools.builtin.send_dtmf import build_send_dtmf_tool  # noqa: PLC0415
     from lkap_agent.tools.builtin.transfer_call import build_transfer_call_tool  # noqa: PLC0415
@@ -640,8 +631,7 @@ def session_for(
     join the tool pool of prompt *and* flow agents and
     :meth:`TelephonySession.flow_transfer` can be handed to ``FlowServices``);
     :meth:`TelephonySession.start` runs once the session has started and
-    :meth:`TelephonySession.aclose` in the shutdown callback. The exact wiring
-    is ``docs/v2/_asks.md`` V2-17-2.
+    :meth:`TelephonySession.aclose` in the shutdown callback (R-V2-20).
 
     Args:
         room: The job room (connected later).
@@ -649,7 +639,7 @@ def session_for(
         pack_ctx: The session's ``PackSessionContext``.
         pack: The session's pack (its optional ``on_dtmf`` hook).
         record_event: The observer's ``record``.
-        api: Worker → api telephony client.
+        api: Worker → api telephony calls (``deps.config_client``).
     """
     if not is_sip_channel(resolved.channel):
         return None

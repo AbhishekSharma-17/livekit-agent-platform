@@ -47,6 +47,7 @@ EXPECTED_MVP_IDS = [
 #: this file instead asserts each of the four `Availability` outcomes by id,
 #: which is the meaningful post-V2-05 invariant.
 EXPECTED_DEFERRED_AVAILABILITY_IDS = [
+    "krisp-noise-cancellation",  # asks #56: no livekit-plugins-krisp==1.8.2 release
     "playai-tts",
     "nvidia-personaplex-realtime",
     "legacy-noise-cancellation",

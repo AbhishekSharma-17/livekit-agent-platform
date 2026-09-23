@@ -22,6 +22,7 @@ on:
       - "packs/**"
       - "supervisor/**"
       - "contracts/**"
+      - "testing/**"
       - ".github/workflows/python.yml"
 
 jobs:
@@ -35,7 +36,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [api, agent, packs, supervisor]
+        # `testing` is the shared fakes package (F-18); agent and packs use it as a dev dep.
+        package: [api, agent, packs, supervisor, testing]
 
     steps:
       - uses: actions/checkout@v4

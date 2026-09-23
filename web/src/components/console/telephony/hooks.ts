@@ -3,19 +3,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
-import type { CallCreate, CallOut, CallPage } from "@/contracts/lkap-contracts";
-
 import type {
+  CallCreate,
   CallDtmfOut,
+  CallOut,
+  CallPage,
   DispatchRuleCreate,
   DispatchRuleOut,
-  Page,
+  DispatchRulePage,
   PhoneNumberCreate,
   PhoneNumberOut,
+  PhoneNumberPage,
   PhoneNumberUpdate,
   TrunkCreate,
   TrunkOut,
-} from "./types";
+  TrunkPage,
+} from "@/contracts/lkap-contracts";
 
 /**
  * Telephony data (V2-17): `/v1/telephony/{trunks,dispatch-rules,numbers}` and
@@ -34,20 +37,20 @@ export const telephonyKeys = {
 export const OPEN_CALL_STATUSES = new Set(["dialing", "ringing", "answered"]);
 
 export function useTrunks() {
-  return useQuery({ queryKey: telephonyKeys.trunks, queryFn: () => api.get<Page<TrunkOut>>("telephony/trunks") });
+  return useQuery({ queryKey: telephonyKeys.trunks, queryFn: () => api.get<TrunkPage>("telephony/trunks") });
 }
 
 export function useDispatchRules() {
   return useQuery({
     queryKey: telephonyKeys.rules,
-    queryFn: () => api.get<Page<DispatchRuleOut>>("telephony/dispatch-rules"),
+    queryFn: () => api.get<DispatchRulePage>("telephony/dispatch-rules"),
   });
 }
 
 export function usePhoneNumbers() {
   return useQuery({
     queryKey: telephonyKeys.numbers,
-    queryFn: () => api.get<Page<PhoneNumberOut>>("telephony/numbers"),
+    queryFn: () => api.get<PhoneNumberPage>("telephony/numbers"),
   });
 }
 

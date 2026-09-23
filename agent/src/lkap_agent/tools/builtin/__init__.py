@@ -12,7 +12,10 @@ from collections.abc import Callable
 from typing import Any
 
 from livekit.agents import FunctionTool
+from lkap_contracts.tools import BLOCK_TOOL_NAMES, BUILTIN_TOOL_NAMES
 from packs.base import PackSessionContext
+
+from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
 
 from .current_time import build_current_time_tool
 from .describe_current_frame import build_describe_current_frame_tool
@@ -31,6 +34,7 @@ from .update_block import UPDATABLE_BLOCK_TYPES, build_update_block_tool
 __all__ = [
     "BLOCK_TOOL_NAMES",
     "BUILTIN_TOOL_NAMES",
+    "TELEPHONY_TOOL_NAMES",
     "build_builtin_tools",
     "build_current_time_tool",
     "build_describe_current_frame_tool",
@@ -47,30 +51,18 @@ __all__ = [
     "build_update_block_tool",
 ]
 
-#: Every built-in tool name, in the order `build_builtin_tools` considers
-#: them — the same names `AgentConfig.tools.builtin_disabled` and the
-#: console's built-in-tool toggles refer to.
-BUILTIN_TOOL_NAMES: tuple[str, ...] = (
-    "end_call",
-    "search_knowledge",
-    "http_request",
-    "describe_current_frame",
-    "pin_frame",
-    "push_note",
-    "set_status",
-    "escalate_to_human",
-    "current_time",
-)
+# `BUILTIN_TOOL_NAMES` (the order `build_builtin_tools` considers them — the names
+# `AgentConfig.tools.builtin_disabled` and the console's toggles refer to) and
+# `BLOCK_TOOL_NAMES` (panel-block tools, CONTRACTS-V2 §4.4; registered only when the
+# panel has a block they write) come from `lkap_contracts.tools`, the single list
+# the api's flow validation and the web share (asks V2-16-3, V2-19B-2).
 
-#: Panel-block tools (CONTRACTS-V2 §4.4, V2-10). Kept out of
-#: `BUILTIN_TOOL_NAMES` because each is registered only when the agent's
-#: panel has a block it can write; `builtin_disabled` still switches them off.
-BLOCK_TOOL_NAMES: tuple[str, ...] = (
-    "update_block",
-    "show_document",
-    "table_append",
-    "request_form",
-)
+# `TELEPHONY_TOOL_NAMES` (`send_dtmf`, `transfer_call`; R-V2-25) is imported from
+# `lkap_agent.telephony` above: like the block tools they stay out of
+# `BUILTIN_TOOL_NAMES`, because `build_telephony_tools` registers them only on
+# SIP sessions (`send_dtmf` with `capabilities.dtmf`, `transfer_call` with a
+# non-empty `config.telephony.transfer_targets`); `builtin_disabled` still
+# switches them off.
 
 
 def build_builtin_tools(

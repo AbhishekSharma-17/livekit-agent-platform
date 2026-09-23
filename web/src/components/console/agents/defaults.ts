@@ -4,6 +4,7 @@ import type {
   CapabilitiesConfig,
   KnowledgeConfig,
   RecordingConfig,
+  TelephonyConfig,
   ToolsConfig,
   VoiceConfig,
 } from "@/contracts/lkap-contracts";
@@ -58,6 +59,11 @@ export const DEFAULT_AVATAR_OPTIONS: Required<AvatarOptions> = {
   video_quality: null,
   idle_timeout_s: null,
   max_duration_s: null,
+};
+
+/** `TelephonyConfig` defaults (R-V2-21): no transfer destinations. */
+export const DEFAULT_TELEPHONY: Required<TelephonyConfig> = {
+  transfer_targets: [],
 };
 
 /** `AgentLimits` defaults (CONTRACTS-V2 §3.3). */

@@ -15,6 +15,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useProviderList } from "@/hooks/useProviders";
 import { KIND_LABEL, type ProviderKind } from "@/components/console/registry/provider-meta";
 import type { ProviderOut } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 /**
  * `/console/providers?kind=` (UI_UX_SPEC-V2-AMENDMENTS §2.2). Groups VAD,
@@ -54,11 +55,11 @@ export function ProvidersCatalog() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion label="Loading providers" className="flex flex-col gap-2">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-20 w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   }
   if (isError) {

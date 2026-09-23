@@ -119,6 +119,40 @@ export const agentLimitsSchema = z.object({
 });
 export type AgentLimitsForm = z.infer<typeof agentLimitsSchema>;
 
+/**
+ * `TransferTarget` / `TelephonyConfig` (R-V2-21, `lkap_contracts.telephony`). Mirrors the
+ * contract's pattern; the api also checks every `to` against the workspace's dialing policy.
+ */
+export const TRANSFER_TARGET_PATTERN = /^(\+[1-9]\d{6,14}|tel:\+?[0-9]{3,20}|sips?:[^\s@]+@\S+)$/;
+
+export const transferTargetSchema = z.object({
+  label: z.string().trim().min(1, "Name the destination").max(64, "64 characters max"),
+  to: z
+    .string()
+    .trim()
+    .max(256, "256 characters max")
+    .regex(TRANSFER_TARGET_PATTERN, "Use +15551234567, tel:+15551234567 or sip:user@host"),
+});
+export type TransferTargetForm = z.infer<typeof transferTargetSchema>;
+
+export const telephonyConfigSchema = z
+  .object({ transfer_targets: z.array(transferTargetSchema).max(50, "50 destinations max") })
+  .superRefine((val, ctx) => {
+    const seen = new Set<string>();
+    val.transfer_targets.forEach((target, index) => {
+      const key = target.label.trim().toLowerCase();
+      if (key && seen.has(key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["transfer_targets", index, "label"],
+          message: "Two destinations can't share a name.",
+        });
+      }
+      seen.add(key);
+    });
+  });
+export type TelephonyConfigForm = z.infer<typeof telephonyConfigSchema>;
+
 /** `"*"` or a bare origin (`https://example.com[:port]`, no path). */
 export const ORIGIN_PATTERN = /^(\*|https?:\/\/[a-z0-9.-]+(:\d{1,5})?)$/i;
 
@@ -169,24 +203,38 @@ export const panelLayoutSchema = z
   });
 export type PanelLayoutForm = z.infer<typeof panelLayoutSchema>;
 
-export const agentConfigFormSchema = z.object({
-  instructions: z.string().min(1, "Instructions are required"),
-  pipeline: pipelineConfigSchema,
-  voice: voiceConfigSchema,
-  capabilities: capabilitiesConfigSchema,
-  tools: toolsConfigSchema,
-  knowledge: knowledgeConfigSchema,
-  pack_settings: z.record(z.string(), z.unknown()),
-  timezone: z.string().min(1, "Timezone is required"),
-  recording: recordingConfigSchema,
-  panel: panelLayoutSchema,
-  /**
-   * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the
-   * builder checks the graph itself (`components/console/flow/flow-model.ts`)
-   * and the api validates it on save. `null` = a prompt agent (R-V2-12).
-   */
-  flow: z.custom<FlowSpec | null>().optional(),
-});
+export const agentConfigFormSchema = z
+  .object({
+    /**
+     * Required for prompt agents; a flow agent may leave it empty and run on its global
+     * node alone (R-V2-13, asks V2-16-5) — enforced by the `superRefine` below.
+     */
+    instructions: z.string(),
+    pipeline: pipelineConfigSchema,
+    voice: voiceConfigSchema,
+    capabilities: capabilitiesConfigSchema,
+    tools: toolsConfigSchema,
+    knowledge: knowledgeConfigSchema,
+    pack_settings: z.record(z.string(), z.unknown()),
+    timezone: z.string().min(1, "Timezone is required"),
+    recording: recordingConfigSchema,
+    panel: panelLayoutSchema,
+    /**
+     * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the
+     * builder checks the graph itself (`components/console/flow/flow-model.ts`)
+     * and the api validates it on save. `null` = a prompt agent (R-V2-12).
+     */
+    flow: z.custom<FlowSpec | null>().optional(),
+    /** `config.telephony` (R-V2-21): the transfer destinations, edited in the Tools section. */
+    telephony: telephonyConfigSchema,
+  })
+  .superRefine((val, ctx) => {
+    // A flow agent (`config.flow` has nodes) may run on its global node alone (R-V2-13).
+    const isFlow = (val.flow?.nodes?.length ?? 0) > 0;
+    if (!isFlow && !val.instructions.trim()) {
+      ctx.addIssue({ code: "custom", path: ["instructions"], message: "Instructions are required" });
+    }
+  });
 export type AgentConfigForm = z.infer<typeof agentConfigFormSchema>;
 
 /**

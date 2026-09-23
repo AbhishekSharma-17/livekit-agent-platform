@@ -168,3 +168,35 @@ describe("unappliedFields", () => {
     ).toEqual([]);
   });
 });
+
+describe("config.telephony (R-V2-21)", () => {
+  const TELEPHONY = {
+    transfer_targets: [
+      { label: "Front desk", to: "+15550003333" },
+      { label: "PBX", to: "sip:desk@pbx.example.com" },
+    ],
+  };
+
+  it("an unrelated editor save round-trips a stored telephony block byte-identical", () => {
+    const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
+    const body = buildAgentUpdate(a, submitted(a, (v) => (v.config.instructions = "Something else.")));
+
+    expect(JSON.stringify(body.config?.telephony)).toBe(JSON.stringify(TELEPHONY));
+  });
+
+  it("an agent without a telephony block gets an empty destination list, not a dropped one", () => {
+    const a = agent();
+    expect(toFormValues(a).config.telephony).toEqual({ transfer_targets: [] });
+    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({ transfer_targets: [] });
+  });
+
+  it("sends edited destinations", () => {
+    const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
+    const body = buildAgentUpdate(
+      a,
+      submitted(a, (v) => (v.config.telephony.transfer_targets = [{ label: "Sales", to: "+15550001111" }])),
+    );
+
+    expect(body.config?.telephony).toEqual({ transfer_targets: [{ label: "Sales", to: "+15550001111" }] });
+  });
+});

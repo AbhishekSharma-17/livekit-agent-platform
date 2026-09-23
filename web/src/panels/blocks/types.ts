@@ -1,5 +1,6 @@
+import type { BlockSpec } from "@/contracts/lkap-contracts";
 import type { PanelProps } from "@/panels/registry";
-import type { BlockSpecV2 } from "@/panels/composite/layout";
+
 
 /**
  * What every block component receives from `<Block>`.
@@ -14,7 +15,7 @@ import type { BlockSpecV2 } from "@/panels/composite/layout";
  * - `highlighted`: `show_block` / a `form` request just pointed at this block.
  */
 export interface BlockRenderProps<S = Record<string, unknown>> {
-  spec: BlockSpecV2;
+  spec: BlockSpec;
   data: S;
   panel: PanelProps;
   title: string | null;

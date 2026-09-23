@@ -18,13 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import type { AgentOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, DispatchRuleOut } from "@/contracts/lkap-contracts";
 
 import { useCreateDispatchRule, useDeleteDispatchRule, useDispatchRules, useTrunks } from "./hooks";
-import { splitNumbers } from "./model";
+import { E164_PATTERN, splitNumbers } from "./model";
 import { NativeSelect } from "./native-select";
-import { E164_PATTERN, type DispatchRuleOut } from "./types";
-
 /**
  * Dispatch rules (V2-17): LiveKit's inbound routing. Each call gets its own
  * room (`<prefix>_<caller>_<random>`) and the agent's worker is dispatched with
@@ -58,7 +56,7 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
       header: "Called numbers",
       cell: (rule) => (
         <span className="font-mono text-[0.8125rem] text-muted-foreground">
-          {rule.numbers.length ? rule.numbers.join(", ") : "Every number on the trunk"}
+          {rule.numbers?.length ? rule.numbers.join(", ") : "Every number on the trunk"}
         </span>
       ),
     },
@@ -129,7 +127,7 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-medium">{agentName(rule.agent_id)}</p>
-                <p className="font-mono text-xs text-muted-foreground">{rule.numbers.join(", ") || "Every number"}</p>
+                <p className="font-mono text-xs text-muted-foreground">{(rule.numbers ?? []).join(", ") || "Every number"}</p>
               </div>
               <DeleteRuleButton rule={rule} />
             </div>

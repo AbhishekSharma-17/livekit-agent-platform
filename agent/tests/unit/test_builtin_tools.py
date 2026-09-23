@@ -16,7 +16,7 @@ from fakes.fake_ctx import FakePackSessionContext, default_agent_config
 from livekit import rtc
 from livekit.agents import ChatContext, RunContext, ToolError
 from livekit.agents.llm.utils import build_legacy_openai_schema
-from lkap_contracts.agent_config import CapabilitiesConfig, KnowledgeConfig, ToolsConfig
+from lkap_contracts.agent_config import CapabilitiesConfig, KnowledgeConfig, PipelineMode, ToolsConfig
 from lkap_contracts.api_models import KbHit
 from packs.base import FrameSnapshot
 
@@ -352,8 +352,11 @@ class TestDescribeCurrentFrame:
         with pytest.raises(ToolError, match="No cascaded LLM"):
             await tool(context=_run_ctx())
 
-    async def test_realtime_reports_frame_presence_without_calling_llm(self) -> None:
-        ctx = FakePackSessionContext(pipeline_mode="realtime")
+    @pytest.mark.parametrize("mode", ["realtime", "half_cascade"])
+    async def test_realtime_reports_frame_presence_without_calling_llm(self, mode: PipelineMode) -> None:
+        # Half-cascade follows the realtime path (asks #54): its realtime model
+        # sees the video, and there is no cascaded LLM (session.llm is None).
+        ctx = FakePackSessionContext(pipeline_mode=mode, session=SimpleNamespace(llm=None))
         ctx.frames.set_latest(FrameSnapshot(frame=_video_frame(), source="screen", age_s=0.5))
         tool = build_describe_current_frame_tool(ctx)
 
@@ -362,8 +365,9 @@ class TestDescribeCurrentFrame:
         assert "screen" in result
         assert "already see it" in result
 
-    async def test_realtime_with_no_frame(self) -> None:
-        ctx = FakePackSessionContext(pipeline_mode="realtime")
+    @pytest.mark.parametrize("mode", ["realtime", "half_cascade"])
+    async def test_realtime_with_no_frame(self, mode: PipelineMode) -> None:
+        ctx = FakePackSessionContext(pipeline_mode=mode)
         tool = build_describe_current_frame_tool(ctx)
 
         result = await tool(context=_run_ctx())

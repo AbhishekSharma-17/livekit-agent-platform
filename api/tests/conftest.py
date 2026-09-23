@@ -184,6 +184,28 @@ def _fast_password_hashing() -> Iterator[None]:
         passwords._dummy_hash.cache_clear()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _no_fastembed_model_download() -> Iterator[None]:
+    """Refuse to load the real fastembed ONNX model in unit tests.
+
+    Loading it downloads ~90 MB into the per-test data dir on every run: one test
+    that reached it through `_seed_config` took 1211 s of a 1352 s suite on a
+    slow link (V2-19B). Tests use `FakeEmbedder`; this turns a silent download
+    into an immediate, named failure.
+    """
+    from lkap_api.kb.embed import FastEmbedEmbedder
+
+    async def _refuse(self: FastEmbedEmbedder) -> object:
+        raise RuntimeError("unit tests must not load the fastembed model (network); use FakeEmbedder")
+
+    patcher = pytest.MonkeyPatch()
+    patcher.setattr(FastEmbedEmbedder, "_get_model", _refuse)
+    try:
+        yield
+    finally:
+        patcher.undo()
+
+
 def _issued_by_test_code(_state: object) -> bool:
     """True when the nearest application-or-test frame issuing the query is a test module.
 

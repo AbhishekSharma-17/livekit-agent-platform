@@ -53,6 +53,17 @@ room deleted, call rejected — the SDK's own close-on-disconnect reasons) ends
 the job at once, as before. Any other drop (network, signal loss) keeps the
 job alive for `LKAP_RECONNECT_GRACE_S` (60 s) and cancels the shutdown if the
 same identity rejoins. A session `close` still ends the job (D-W2-9e).
+
+**Phone calls (R-V2-20).** On `sip_in` / `sip_out` jobs `_assemble` builds a
+`telephony.TelephonySession` (kept in `SessionContext.userdata["telephony"]`)
+whose `send_dtmf` / `transfer_call` tools join the tool pool and whose
+`flow_transfer` serves flow `transfer` nodes. `_start` waits on `sip_out` for
+the callee to answer (`sip.callStatus == "active"`) right after
+`ctx.connect()`; a dial that fails (the api deletes the room) or outlasts
+`LKAP_SIP_ANSWER_TIMEOUT_S` ends the job with a `failed` summary and no spoken
+line. `TelephonySession.start()` runs once the session is up and `aclose()` in
+the shutdown callback before the summary (bounded to 5 s). A phone leg never
+rejoins, so SIP jobs get no reconnect grace.
 """
 
 from __future__ import annotations
@@ -72,7 +83,7 @@ from livekit.agents.voice.events import UserStateChangedEvent
 from livekit.agents.voice.room_io import TextInputOptions
 from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import ResolvedAgentConfig
-from lkap_contracts.api_models import SessionRecordingIn, SessionStartIn, SessionSummaryIn
+from lkap_contracts.api_models import KbHit, SessionRecordingIn, SessionStartIn, SessionSummaryIn
 from lkap_contracts.connections import TurnDetectorMode
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.flow import FlowState
@@ -109,6 +120,14 @@ from lkap_agent.session_builder import (
     prepare_resolved,
 )
 from lkap_agent.settings import DEFAULT_AGENT_NAME, Settings, get_settings
+from lkap_agent.telephony import (
+    TelephonySession,
+    apply_call_variables,
+    is_sip_channel,
+    seed_variables,
+    session_for,
+    wait_for_answer,
+)
 from lkap_agent.text_mode import handle_agent_action as handle_text_mode_action
 from lkap_agent.workflow_llm import PromptJsonStructuredLLM
 
@@ -174,6 +193,17 @@ _DELIBERATE_LEAVE_REASONS: frozenset[int] = frozenset(
 
 #: How long the shutdown callback waits for LiveKit's `list_egress` answer.
 _EGRESS_POLL_TIMEOUT_S = 5.0
+
+#: How long the shutdown callback waits for the telephony teardown (R-V2-20: the
+#: summary must still land within ~10 s of a hang-up).
+_TELEPHONY_CLOSE_TIMEOUT_S = 5.0
+
+#: `SessionContext.userdata` key of a phone call's `TelephonySession` (R-V2-20).
+TELEPHONY_USERDATA_KEY = "telephony"
+
+
+class CalleeNotAnsweredError(RuntimeError):
+    """An outbound call's callee never answered; the job ends without speaking."""
 
 
 # --------------------------------------------------------------------- context
@@ -258,6 +288,26 @@ class NoopUiChannel:
     async def request_ui(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Report that no UI is listening."""
         return {"ok": False}
+
+    # V2 block methods (CONTRACTS-V2 §4.4; asks #66): no panel, so nothing to write.
+    async def set_block(self, block_id: str, state: dict[str, Any]) -> None:
+        """Drop the block state."""
+
+    async def patch_block(self, block_id: str, ops: list[UiPatchOp]) -> None:
+        """Drop the block patch."""
+
+    async def request_form(
+        self,
+        block_id: str,
+        schema: dict[str, Any],
+        prefill: dict[str, Any] | None = None,
+        timeout_s: float = 120,
+    ) -> dict[str, Any] | None:
+        """Nobody can fill a form in: answer as a timed-out request."""
+        return None
+
+    async def cite(self, block_id: str, hits: list[KbHit]) -> None:
+        """Drop the citations."""
 
 
 class NoopFrameBuffer:
@@ -592,6 +642,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     observer = SessionObserver(session_id=resolved.session_id, client=deps.config_client)
     try:
         resolved = prepare_flow_resolved(prepare_resolved(resolved))
+        # R-V2-22: a prompt agent hears an outbound call's variables (flows seed `FlowState`).
+        resolved = apply_call_variables(resolved)
         plan, agent = _assemble(ctx, deps, resolved, record_event=observer.record)
     except Exception as exc:
         logger.error("could not build the session", error=str(exc), exc_info=True)
@@ -600,11 +652,13 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         return
 
     observer.attach(plan.session)
+    telephony = _telephony_of(agent)
     idle = _IdleHangup(ctx=ctx, session=plan.session, delay_s=deps.settings.idle_hangup_s, sleep=deps.sleep)
     grace = _ReconnectGrace(
         ctx=ctx,
         identity=resolved.participant_identity,
-        delay_s=deps.settings.reconnect_grace_s,
+        # R-V2-20: a phone leg never rejoins under the same identity; end the job at once.
+        delay_s=0 if is_sip_channel(resolved.channel) else deps.settings.reconnect_grace_s,
         sleep=deps.sleep,
         record_event=observer.record,
     )
@@ -626,15 +680,20 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
             grace,
             recording,
             quality=lambda: _score_quality(deps, resolved, observer),
+            telephony=telephony,
         )
     )
 
     try:
-        await _start(ctx, plan, agent, deps)
+        await _start(ctx, plan, agent, deps, resolved)
     except Exception as exc:
         grace.close()
-        await _abort_start(ctx, deps, plan, agent, observer, idle, exc)
+        # Nobody is listening on an unanswered phone: no fixed line (R-V2-20).
+        speak = not isinstance(exc, CalleeNotAnsweredError)
+        await _abort_start(ctx, deps, plan, agent, observer, idle, exc, speak=speak)
         return
+    if telephony is not None:
+        telephony.start()
     observer.record(
         "session_started",
         {
@@ -727,8 +786,13 @@ async def _abort_start(
     observer: SessionObserver,
     idle: _IdleHangup,
     exc: Exception,
+    *,
+    speak: bool = True,
 ) -> None:
     """Tear down a session whose avatar or `session.start` failed (F-01).
+
+    `speak=False` (an outbound call nobody answered, R-V2-20) ends the job
+    without the fixed line.
 
     The order matters: the observer posts `failed` first, which makes the
     shutdown callback registered earlier a no-op (`SessionObserver.shutdown` is
@@ -751,6 +815,9 @@ async def _abort_start(
             await avatar_aclose()
     with contextlib.suppress(Exception):
         await plan.session.aclose()
+    if not speak:
+        ctx.shutdown(reason=f"start failed: {exc}"[:200])
+        return
     await _fail_cleanly(ctx, deps, reason="start failed", line=START_FAILED_LINE)
 
 
@@ -1136,6 +1203,18 @@ def _assemble(
     )
     cell.append(session_ctx)
 
+    # R-V2-20: phone calls get their telephony wiring (none on web/test/text jobs).
+    telephony = session_for(
+        room=ctx.room,
+        resolved=resolved,
+        pack_ctx=session_ctx,
+        pack=pack,
+        record_event=record_event or _noop_record_event,
+        api=deps.config_client,
+    )
+    if telephony is not None:
+        session_ctx.userdata[TELEPHONY_USERDATA_KEY] = telephony
+
     tools: list[lk_llm.Tool | lk_llm.Toolset] = [
         *deps.builtin_tools_builder(
             session_ctx,
@@ -1144,6 +1223,11 @@ def _assemble(
         ),
         *deps.declarative_tools_builder([t for t in resolved.tools if t.kind == "http"]),
         *pack.tools(session_ctx),
+        *(
+            telephony.tools(config=resolved.config, shutdown=lambda reason: ctx.shutdown(reason=reason))
+            if telephony is not None
+            else []
+        ),
     ]
     mcp_servers = deps.mcp_servers_builder([t for t in resolved.tools if t.kind == "mcp"])
 
@@ -1163,6 +1247,8 @@ def _assemble(
                 vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
                 record_event=record_event,
                 shutdown=lambda reason: ctx.shutdown(reason=reason),
+                transfer=telephony.flow_transfer if telephony is not None else None,
+                initial_variables=seed_variables(resolved.variables),
             )
         )
     else:
@@ -1205,13 +1291,25 @@ async def _start_session(
     await session.start(agent, room=room, room_options=room_options)
 
 
-async def _start(ctx: JobContextLike, plan: SessionPlan, agent: PlatformAgent, deps: Deps) -> None:
-    """Connect, start the avatar if configured, then start the session.
+async def _start(
+    ctx: JobContextLike, plan: SessionPlan, agent: PlatformAgent, deps: Deps, resolved: ResolvedAgentConfig
+) -> None:
+    """Connect, wait for an outbound callee, start the avatar if configured, then the session.
 
     See the module docstring for why `ctx.connect()` leads: both the explicit
-    participant link and the avatar session need a connected room.
+    participant link and the avatar session need a connected room. On
+    `sip_out` the callee's leg joins while it still rings and RoomIO would link
+    it at once, so the agent waits for `sip.callStatus == "active"` first
+    (R-V2-20); the api deleting the room (a failed dial) ends the wait early.
+
+    Raises:
+        CalleeNotAnsweredError: The outbound callee never answered.
     """
     await ctx.connect()
+    if resolved.channel == "sip_out":
+        answered = await wait_for_answer(ctx.room, timeout_s=deps.settings.sip_answer_timeout_s)
+        if answered is None:
+            raise CalleeNotAnsweredError("the callee never answered")
     _activate(agent)
     if plan.avatar is not None:
         await plan.avatar.start(plan.session, room=ctx.room)
@@ -1245,6 +1343,20 @@ def _deactivate(agent: PlatformAgent) -> None:
                 logger.debug("collaborator teardown failed", method=method, exc_info=True)
 
 
+def _telephony_of(agent: PlatformAgent) -> TelephonySession | None:
+    """The job's `TelephonySession`, when it is a phone call (built by `_assemble`)."""
+    telephony = agent.context.userdata.get(TELEPHONY_USERDATA_KEY)
+    return telephony if isinstance(telephony, TelephonySession) else None
+
+
+async def _close_telephony(telephony: TelephonySession, reason: str) -> None:
+    """Report the leg's end (best effort, bounded so the summary stays within target)."""
+    try:
+        await asyncio.wait_for(telephony.aclose(reason=reason), _TELEPHONY_CLOSE_TIMEOUT_S)
+    except Exception:
+        logger.warning("telephony teardown failed", exc_info=True)
+
+
 def _shutdown_callback(
     agent: PlatformAgent,
     observer: SessionObserver,
@@ -1253,6 +1365,7 @@ def _shutdown_callback(
     recording: _Recording,
     *,
     quality: Callable[[], Awaitable[None]] | None = None,
+    telephony: TelephonySession | None = None,
 ) -> Callable[[str], Awaitable[None]]:
     async def _on_shutdown(reason: str) -> None:
         idle.close()
@@ -1265,6 +1378,9 @@ def _shutdown_callback(
             except Exception:
                 logger.warning("could not cancel background jobs", exc_info=True)
         await agent.on_pack_session_end(reason)
+        if telephony is not None:
+            # R-V2-20: the leg's `completed`/`failed` report goes out before the summary.
+            await _close_telephony(telephony, reason)
         _deactivate(agent)
         # R-V2-8: `on_pack_session_end` (above) settled a flow's extractions; its final
         # `FlowState` rides in the summary. Prompt agents have no "flow" userdata.

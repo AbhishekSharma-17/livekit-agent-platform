@@ -279,6 +279,8 @@ async def _build_resolved(
         recording=config.recording,
         panel=effective_layout(agent, pack),
         installed_provider_ids=sorted(installed) if installed is not None else None,
+        # R-V2-22: the session's seed variables (an outbound call's `CallCreate.variables`).
+        variables=dict(session.variables or {}),
     )
 
 

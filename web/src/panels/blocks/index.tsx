@@ -16,11 +16,12 @@
  * split out of the first load (`React.lazy`); pdf.js is a further PDF-only
  * split inside the document block.
  */
+import type { BlockSpec } from "@/contracts/lkap-contracts";
 import * as React from "react";
 import { Suspense, lazy } from "react";
 
 import type { PanelProps } from "@/panels/registry";
-import type { BlockSpecV2, BlockType } from "@/panels/composite/layout";
+import type { BlockType } from "@/panels/composite/layout";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
 import { ActivityBlock } from "./activity";
@@ -69,12 +70,12 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
 export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(["document", "table", "video"]);
 
 export interface BlockProps extends PanelProps {
-  spec: BlockSpecV2;
+  spec: BlockSpec;
   /** `show_block` / a `form` request just pointed here (brand ring). */
   highlighted?: boolean;
 }
 
-function BlockFallback({ spec, title }: { spec: BlockSpecV2; title: string | null }) {
+function BlockFallback({ spec, title }: { spec: BlockSpec; title: string | null }) {
   return (
     <BlockFrame spec={spec} title={title} loading>
       <PanelEmpty>Loading…</PanelEmpty>

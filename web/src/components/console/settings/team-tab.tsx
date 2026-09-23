@@ -27,6 +27,7 @@ import { api, ApiError } from "@/lib/api";
 import type { InviteOut, MemberOut, Role } from "./api-types";
 import { ROLE_LABEL } from "./api-types";
 import { useActiveWorkspace, useInvalidateSettings, useMembers } from "./use-settings-queries";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 const ROLES: Role[] = ["viewer", "builder", "admin", "owner"];
 
@@ -91,7 +92,7 @@ export function TeamTab() {
       ? [
           {
             id: "actions",
-            header: "",
+            header: <span className="sr-only">Actions</span>,
             align: "end" as const,
             interactive: true,
             cell: (member: MemberOut) => (
@@ -119,7 +120,7 @@ export function TeamTab() {
     >
       <SectionRow>
         {membersQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <SkeletonRows label="Loading the team" rowClassName="h-12" />
         ) : membersQuery.isError ? (
           <ErrorBanner message={`Couldn't load the team — ${errorMessage(membersQuery.error)}`} onRetry={() => membersQuery.refetch()} />
         ) : members.length === 0 ? (

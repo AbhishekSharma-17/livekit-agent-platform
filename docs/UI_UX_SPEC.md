@@ -627,7 +627,7 @@ State model (in `session-room.tsx` → `StageView.agentState`): `connecting` (ro
 | listening | meter `listening` (or LiveKit bars on audio), caption "Listening" | live chip + timer | none | all |
 | thinking | meter `thinking` (sweep), caption "Thinking…" | same | none | all |
 | speaking | LiveKit bar visualizer driven by the audio track (same geometry as the meter), caption "Speaking" | same | none | all |
-| reconnecting | stage dims to 60 %, meter `connecting`, caption "Reconnecting…" | "Reconnecting…" chip (warning) | slim warning banner "Connection lost — reconnecting" (no button) | mic stays; others disabled |
+| reconnecting | stage media (video, meter) dims to 60 %, meter `connecting`, caption "Reconnecting…" at full contrast (R-V2-19: WCAG 1.4.3; the agent name, caption and elapsed chip are never dimmed) | "Reconnecting…" chip (warning) | slim warning banner "Connection lost — reconnecting" (no button) | mic stays; others disabled |
 | failed | overlay in `danger-soft`: "<Agent> couldn't join the call" + reason if any (from `failureReasons`) + "Try again" (`brand`) and "Leave" (secondary) | "Failed" chip | none (overlay is the message) | only Leave |
 | ended | transition to the end-of-call card | — | — | — |
 

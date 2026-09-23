@@ -49,7 +49,7 @@ import dataclasses
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlparse
 
 from lkap_contracts.agent_config import (
@@ -80,6 +80,9 @@ from lkap_api.db.models import (
     WorkerInstance,
     WorkspaceProvider,
 )
+
+if TYPE_CHECKING:  # runtime import is deferred: `lkap_api.telephony` registers a validator from here
+    from lkap_api.telephony.policy import TelephonyPolicy
 
 #: Which registry `kind` may fill each pipeline slot. `workflow_llm` takes an llm.
 #: `qa_llm` (R-V2-6) also takes an llm, but is resolved from `config.qa.model`, not
@@ -189,6 +192,12 @@ class ValidationContext:
     tool_names_by_id: Mapping[str, str] | None = None
     """``{tool_id: name}`` for every tool row of the workspace (R-V2-10: flow nodes reference
     tools by name); ``None`` skips the flow tool-reference check."""
+    pack_tool_names: frozenset[str] | None = None
+    """Tool names of the agent's own pack (asks V2-16-2); ``None`` (pack unknown) falls back to
+    the union over every installed pack. Set by :func:`validate_in_db` callers that know the pack."""
+    telephony_policy: TelephonyPolicy | None = None
+    """The workspace's outbound dialing policy (R-V2-23; ``settings["telephony"]``, default deny);
+    ``None`` skips the transfer-destination policy check (``lkap_api.telephony.validation``)."""
 
     def slots(self) -> list[tuple[ProviderSlot, ProviderRef]]:
         """The (slot, ref) pairs the pipeline declares, plus `qa.model` when set (R-V2-6).
@@ -713,7 +722,15 @@ async def validation_context_for(
         known_tool_ids=tool_ids,
         known_kb_ids=kb_ids,
         tool_names_by_id=tool_names_by_id,
+        telephony_policy=await _telephony_policy(db, workspace_id),
     )
+
+
+async def _telephony_policy(db: AsyncSession, workspace_id: str) -> TelephonyPolicy:
+    """The workspace's dialing policy (R-V2-23), default deny when unset."""
+    from lkap_api.telephony.policy import workspace_policy  # noqa: PLC0415 - see the TYPE_CHECKING import
+
+    return await workspace_policy(db, workspace_id)
 
 
 async def validate_in_db(
@@ -722,15 +739,16 @@ async def validate_in_db(
     *,
     workspace_id: str,
     connection_id: str | None = None,
+    pack_tool_names: frozenset[str] | None = None,
 ) -> ValidationResult:
     """Validate a configuration against everything stored for its workspace and connection.
 
     This is the call the agents router should use on save/publish/validate
     (it replaces the v1 ``validate_stored_config`` helper there).
+    ``pack_tool_names`` is the agent's own pack's tool names (asks V2-16-2).
     """
-    return validate(
-        await validation_context_for(db, config, workspace_id=workspace_id, connection_id=connection_id)
-    )
+    context = await validation_context_for(db, config, workspace_id=workspace_id, connection_id=connection_id)
+    return validate(dataclasses.replace(context, pack_tool_names=pack_tool_names))
 
 
 # --------------------------------------------------------------------------- seeding

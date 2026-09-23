@@ -1,0 +1,26 @@
+{
+  "$id": "lkap-contracts/CallDtmfOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What was queued to the worker (no delivery acknowledgement, R-V2-25).",
+  "properties": {
+    "call_id": {
+      "title": "Call Id",
+      "type": "string"
+    },
+    "digits": {
+      "title": "Digits",
+      "type": "string"
+    },
+    "queued": {
+      "default": true,
+      "title": "Queued",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "call_id",
+    "digits"
+  ],
+  "title": "CallDtmfOut",
+  "type": "object"
+}

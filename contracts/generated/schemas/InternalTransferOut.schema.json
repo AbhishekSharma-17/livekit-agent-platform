@@ -1,0 +1,45 @@
+{
+  "$id": "lkap-contracts/InternalTransferOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The transfer outcome as the tool reports it to the model (``refused`` / ``failed`` / a call status).",
+  "properties": {
+    "call_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Call Id"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "status"
+  ],
+  "title": "InternalTransferOut",
+  "type": "object"
+}

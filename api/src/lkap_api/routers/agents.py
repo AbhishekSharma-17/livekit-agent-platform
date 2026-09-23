@@ -45,7 +45,7 @@ from lkap_api.errors import (
     NotFoundError,
     UnprocessableEntityError,
 )
-from lkap_api.flows import derived_mode
+from lkap_api.flows import derived_mode, pack_tool_names_for
 from lkap_api.kb.embed import resolve_embedder
 from lkap_api.kb.seed import import_pack_kb_seeds
 from lkap_api.kb.store import get_lancedb_store
@@ -155,19 +155,22 @@ async def _session_aggregates(
     return {agent_id: (count, last_at) for agent_id, count, last_at in rows}
 
 
-def _snapshot_version(db: AsyncSession, row: Agent, *, note: str = "") -> None:
+def _snapshot_version(db: AsyncSession, row: Agent, *, created_by: str | None, note: str = "") -> None:
     """Write an immutable `agent_config_versions` row for `row`'s *current* config (D-V2-13).
 
     Called once on create (version 1) and once per `update_agent` call that
     actually bumps `config_version` — never on a no-op save (the `new_config
     != row.config` guard already in `update_agent` prevents a version churn
     that would make `GET .../versions` useless as a change history).
+    `created_by` is the acting principal's id (a user id, an API-key id or
+    `break-glass`, as in `audit_log.actor_id`; asks V2-16-9).
     """
     db.add(
         AgentConfigVersion(
             agent_id=row.id,
             config_version=row.config_version,
             config=row.config,
+            created_by=created_by,
             note=note,
         )
     )
@@ -237,10 +240,25 @@ async def load_scoped_agent(db: AsyncSession, ctx: WorkspaceContext, id_or_slug:
 
 
 async def validate_stored_config(
-    db: AsyncSession, config: AgentConfig, *, workspace_id: str, connection_id: str | None
+    db: AsyncSession,
+    config: AgentConfig,
+    *,
+    workspace_id: str,
+    connection_id: str | None,
+    pack_id: str | None = None,
 ) -> ValidationResult:
-    """Validate a configuration against its workspace's rows and its connection (asks #20)."""
-    return await validate_in_db(db, config, workspace_id=workspace_id, connection_id=connection_id)
+    """Validate a configuration against its workspace's rows and its connection (asks #20).
+
+    ``pack_id`` limits flow node tool references to the agent's own pack's tools
+    (asks V2-16-2); ``None`` falls back to every installed pack's.
+    """
+    return await validate_in_db(
+        db,
+        config,
+        workspace_id=workspace_id,
+        connection_id=connection_id,
+        pack_tool_names=pack_tool_names_for(pack_id),
+    )
 
 
 async def _workspace_connection_id(
@@ -367,7 +385,9 @@ async def create_agent(
         manifest = get_manifest(settings.packs_list, payload.pack_id)
         panel_id = manifest.ui_panel_id if manifest else "generic"
     _raise_if_invalid(
-        await validate_stored_config(db, config, workspace_id=ctx.workspace_id, connection_id=connection_id)
+        await validate_stored_config(
+            db, config, workspace_id=ctx.workspace_id, connection_id=connection_id, pack_id=payload.pack_id
+        )
     )
 
     row = Agent(
@@ -386,7 +406,7 @@ async def create_agent(
     )
     db.add(row)
     await db.flush()
-    _snapshot_version(db, row, note="created")
+    _snapshot_version(db, row, created_by=ctx.actor.id, note="created")
     await db.flush()
     log.info("agent_created", agent_id=row.id, slug=row.slug, pack_id=row.pack_id)
     return to_out(row)
@@ -495,7 +515,11 @@ async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: Admi
     if payload.config is not None:
         _raise_if_invalid(
             await validate_stored_config(
-                db, payload.config, workspace_id=row.workspace_id, connection_id=row.connection_id
+                db,
+                payload.config,
+                workspace_id=row.workspace_id,
+                connection_id=row.connection_id,
+                pack_id=row.pack_id,
             )
         )
         new_config: dict[str, Any] = payload.config.model_dump(mode="json")
@@ -503,7 +527,7 @@ async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: Admi
         if new_config != row.config:
             row.config = new_config
             row.config_version += 1
-            _snapshot_version(db, row)
+            _snapshot_version(db, row, created_by=ctx.actor.id)
     if payload.published is not None:
         row.published = payload.published
     row.updated_at = utcnow()
@@ -681,7 +705,7 @@ async def restore_version(agent_id: str, config_version: int, db: DbDep, ctx: Ad
     restored = AgentConfig.model_validate(version_row.config)
     _raise_if_invalid(
         await validate_stored_config(
-            db, restored, workspace_id=row.workspace_id, connection_id=row.connection_id
+            db, restored, workspace_id=row.workspace_id, connection_id=row.connection_id, pack_id=row.pack_id
         )
     )
     new_config = restored.model_dump(mode="json")
@@ -690,7 +714,7 @@ async def restore_version(agent_id: str, config_version: int, db: DbDep, ctx: Ad
         row.mode = derived_mode(restored)
         row.config_version += 1
         row.updated_at = utcnow()
-        _snapshot_version(db, row, note=f"restored from version {config_version}")
+        _snapshot_version(db, row, created_by=ctx.actor.id, note=f"restored from version {config_version}")
         await db.flush()
     log.info(
         "agent_version_restored",
@@ -711,5 +735,9 @@ async def validate_agent(agent_id: str, db: DbDep, ctx: AdminCtxDep) -> Validati
     """Validate the agent's stored configuration."""
     row = await load_scoped_agent(db, ctx, agent_id)
     return await validate_stored_config(
-        db, agent_config_of(row), workspace_id=row.workspace_id, connection_id=row.connection_id
+        db,
+        agent_config_of(row),
+        workspace_id=row.workspace_id,
+        connection_id=row.connection_id,
+        pack_id=row.pack_id,
     )

@@ -11,9 +11,12 @@ Capability-gated the same way as `pin_frame`.
   On a model the registry knows is text-only (`vision_support(...) is False`,
   DECISIONS-W2 §D-W2-10) the tool refuses with a `ToolError` before touching
   a frame; unknown (free-text) model ids are tried.
-- **Realtime**: Gemini Live / OpenAI Realtime already receive live frames via
-  `RoomOptions(video_input=True)` (ARCHITECTURE §8), so this just confirms a
-  frame exists and how old it is, rather than describing it a second time.
+- **Realtime and half-cascade**: Gemini Live / OpenAI Realtime already
+  receive live frames via `RoomOptions(video_input=True)` (ARCHITECTURE §8;
+  V2-07 enables it for `half_cascade` too), so this just confirms a frame
+  exists and how old it is, rather than describing it a second time. In
+  half-cascade the realtime model owns video input, exactly as in realtime
+  (the architect's vision rule, asks #54); there is no cascaded LLM to ask.
 """
 
 from __future__ import annotations
@@ -28,6 +31,9 @@ from packs.base import PackSessionContext
 DESCRIBE_FRAME_MAX_AGE_S = 12.0
 
 _DEFAULT_QUESTION = "Describe what is visible in this image."
+
+#: Pipeline modes whose realtime model sees the video itself (asks #54).
+_REALTIME_VISION_MODES: frozenset[str] = frozenset({"realtime", "half_cascade"})
 
 TEXT_ONLY_MODEL_ERROR = (
     "The configured language model cannot see images; ask an admin to switch it to a vision-capable model."
@@ -44,7 +50,7 @@ def build_describe_current_frame_tool(ctx: PackSessionContext) -> FunctionTool[.
         Args:
             question: Optional specific question about the current frame.
         """
-        if ctx.pipeline_mode == "realtime":
+        if ctx.pipeline_mode in _REALTIME_VISION_MODES:
             snapshot = ctx.frames.latest()
             if snapshot is None:
                 return "No camera or screen frame is currently available."

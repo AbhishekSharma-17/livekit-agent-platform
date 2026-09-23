@@ -98,6 +98,7 @@ function LoginCard({ next }: { next: string }) {
             />
             <Input
               id="login-email"
+              aria-describedby="login-email-hint"
               type="email"
               autoComplete="email"
               required
@@ -117,6 +118,7 @@ function LoginCard({ next }: { next: string }) {
             />
             <Input
               id="login-password"
+              aria-describedby="login-password-hint"
               type="password"
               autoComplete="current-password"
               required

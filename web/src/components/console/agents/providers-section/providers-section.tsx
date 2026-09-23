@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { EditorSectionProps } from "@/components/console/agents/editor/types";
 import type { ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
+import { LoadingRegion } from "@/components/shared/loading-state";
 
 type SlotKey = "stt" | "llm" | "tts" | "realtime" | "avatar" | "image_gen" | "workflow_llm" | "vad" | "turn_detection" | "noise_cancellation";
 type PipelineMode = AgentEditorForm["config"]["pipeline"]["mode"];
@@ -525,7 +526,7 @@ function AvatarOptionsFields() {
 
 function ProvidersSkeleton() {
   return (
-    <div className="flex flex-col gap-8" aria-busy="true" aria-label="Loading providers">
+    <LoadingRegion label="Loading providers" className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
         <Skeleton className="h-6 w-32" />
         <div className="grid gap-2 sm:grid-cols-3">
@@ -540,6 +541,6 @@ function ProvidersSkeleton() {
           <Skeleton key={i} className="h-28 w-full" />
         ))}
       </div>
-    </div>
+    </LoadingRegion>
   );
 }

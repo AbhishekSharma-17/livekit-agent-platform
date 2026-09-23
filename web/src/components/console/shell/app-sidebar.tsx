@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useHealth } from "@/components/console/lib/api-hooks";
 import { NAV_GROUPS, isNavItemActive } from "./nav-config";
+import { AccountMenu } from "./account-menu";
 import { ThemeMenu } from "./theme-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -38,7 +39,7 @@ export function AppSidebar() {
   const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL;
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" role="navigation" aria-label="Console">
       <SidebarHeader>
         <Link
           href="/console"
@@ -86,6 +87,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <WorkspaceSwitcher />
+        <AccountMenu />
         <SidebarSeparator className="my-1" />
         <ThemeMenu />
         {docsUrl ? (

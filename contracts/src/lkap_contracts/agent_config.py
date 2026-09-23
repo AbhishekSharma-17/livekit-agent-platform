@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
+from lkap_contracts.telephony import TelephonyConfig
 from lkap_contracts.tools import ToolDefinition
 from lkap_contracts.ui_protocol import BlockSpec
 
@@ -46,6 +47,7 @@ __all__ = [
     "RecordingConfig",
     "ResolvedAgentConfig",
     "ResolvedProvider",
+    "TelephonyConfig",
     "ToolsConfig",
     "VoiceConfig",
     "pipeline_issues",
@@ -175,6 +177,8 @@ class AgentConfig(BaseModel):
     recording: RecordingConfig = RecordingConfig()
     qa: QaConfig = QaConfig()
     flow: FlowSpec | None = None
+    #: R-V2-21: the transfer destinations (``transfer_call`` registers only when non-empty).
+    telephony: TelephonyConfig = TelephonyConfig()
     pack_settings: dict[str, Any] = {}
     timezone: str = "UTC"
 
@@ -216,6 +220,10 @@ class ResolvedAgentConfig(BaseModel):
     recording: RecordingConfig = RecordingConfig()
     panel: PanelLayout = PanelLayout()
     installed_provider_ids: list[str] | None = None
+    #: R-V2-22: the session's seed variables (``sessions.variables``; an outbound call's
+    #: ``CallCreate.variables``). Flow agents start their ``FlowState.variables`` with them;
+    #: prompt agents get them appended to ``config.instructions`` by the worker.
+    variables: dict[str, Any] = {}
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

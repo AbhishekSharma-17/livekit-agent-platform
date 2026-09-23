@@ -47,6 +47,12 @@ export interface AgentStageProps {
   failureReasons?: string[] | null;
   onRetry?: () => void;
   onLeave?: () => void;
+  /**
+   * R-V2-16: a panel `video` block with `source: "agent_avatar"` already
+   * draws the avatar, so the stage shows its meter instead of decoding the
+   * same track a second time.
+   */
+  suppressAgentVideo?: boolean;
 }
 
 export function AgentStage({
@@ -59,6 +65,7 @@ export function AgentStage({
   failureReasons,
   onRetry,
   onLeave,
+  suppressAgentVideo = false,
 }: AgentStageProps) {
   const { audioTrack, videoTrack } = useVoiceAssistant();
   const cameraTrack = useLocalTrackRef(Track.Source.Camera);
@@ -75,7 +82,7 @@ export function AgentStage({
     <StageView
       agentState={agentState}
       agentName={agentName}
-      videoTrack={videoTrack}
+      videoTrack={suppressAgentVideo ? undefined : videoTrack}
       audioTrack={audioTrack}
       localTrack={localTrack}
       localLabel={screenTrack ? "Screen" : "You"}

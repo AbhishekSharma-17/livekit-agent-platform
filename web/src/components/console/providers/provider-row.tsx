@@ -16,14 +16,6 @@ import { useUpdateProviderSettings } from "@/hooks/useProviders";
 import type { ConnectionOut, ProviderOut } from "@/contracts/lkap-contracts";
 
 /** A one-sentence badge for capabilities `CapabilityBadge` (WP-0's `shared/capability-badge.tsx`) doesn't have a kind for yet — `text_modality`/`cloud_only` (UI_UX_SPEC-V2-AMENDMENTS §2.2). Flagged in the V2-13 report as a follow-up ask to extend `CAPABILITY_BADGE_META` instead of duplicating this locally. */
-function ExtraBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <StatusChip tone="neutral" size="sm">
-      {children}
-    </StatusChip>
-  );
-}
-
 export function ProviderRow({ provider, connections }: { provider: ProviderOut; connections: ConnectionOut[] }) {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const updateSettings = useUpdateProviderSettings();
@@ -60,9 +52,9 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
           </div>
           <div className="flex flex-wrap gap-1">
             {caps.video_input ? <CapabilityBadge kind="vision" /> : null}
-            {caps.text_modality ? <ExtraBadge>Text modality</ExtraBadge> : null}
+            {caps.text_modality ? <CapabilityBadge kind="text-modality" /> : null}
             {caps.tool_calling ? <CapabilityBadge kind="tools" /> : null}
-            {caps.cloud_only ? <ExtraBadge>Cloud only</ExtraBadge> : null}
+            {caps.cloud_only ? <CapabilityBadge kind="cloud-only" /> : null}
             {provider.requires_credential === false ? <CapabilityBadge kind="no-key" /> : null}
           </div>
           <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">

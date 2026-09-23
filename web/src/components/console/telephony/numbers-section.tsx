@@ -18,13 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import type { AgentOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, PhoneNumberOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 import { useCreateNumber, useDeleteNumber, usePhoneNumbers, useTrunks, useUpdateNumber } from "./hooks";
-import { normalizeE164 } from "./model";
+import { E164_PATTERN, normalizeE164 } from "./model";
 import { NativeSelect } from "./native-select";
-import { E164_PATTERN, type PhoneNumberOut, type TrunkOut } from "./types";
-
 /**
  * Numbers (V2-17): the number → agent map. Picking an inbound agent creates
  * (or replaces) the number's own dispatch rule on LiveKit; "Nobody" removes it.

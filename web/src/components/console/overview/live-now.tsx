@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Section, SectionRow } from "@/components/shared/section";
 import { StatusChip } from "@/components/shared/status-chip";
 import { useAgents } from "@/components/console/lib/api-hooks";
+import { SkeletonRows } from "@/components/shared/loading-state";
 
 function publicUrl(slug: string): string {
   if (typeof window === "undefined") return `/s/${slug}`;
@@ -22,7 +23,9 @@ export function LiveNow() {
   return (
     <Section id="live-now" title="Live now">
       {isLoading ? (
-        <SectionRow className="text-sm text-muted-foreground">Loading…</SectionRow>
+        <SectionRow>
+          <SkeletonRows label="Loading live sessions" rows={2} rowClassName="h-8" />
+        </SectionRow>
       ) : published.length === 0 ? (
         <SectionRow>
           <EmptyState compact icon={RadioIcon} title="No agents are published" description="Publish one to get a shareable link." />

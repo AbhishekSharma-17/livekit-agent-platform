@@ -27,6 +27,8 @@ from lkap_contracts.agent_config import (
     VoiceConfig,
 )
 from lkap_contracts.api_models import (
+    CallReportIn,
+    InternalTransferOut,
     KbHit,
     SessionEventIn,
     SessionMetricsIn,
@@ -152,6 +154,7 @@ class FakeApi:
         hits: list[KbHit] | None = None,
         recording_error: Exception | None = None,
         egress_id: str = "EG_test",
+        transfer_result: InternalTransferOut | None = None,
     ) -> None:
         self.config = config or resolved_config()
         self.resolve_error = resolve_error
@@ -169,6 +172,10 @@ class FakeApi:
         self.events: list[SessionEventIn] = []
         self.summaries: list[SessionSummaryIn] = []
         self.kb_queries: list[tuple[list[str], str, int]] = []
+        #: Telephony (R-V2-20): every call report, and every transfer request.
+        self.call_reports: list[CallReportIn] = []
+        self.transfers: list[tuple[str, str, str | None]] = []
+        self.transfer_result = transfer_result or InternalTransferOut(ok=True, status="transferred")
         self.closed = False
 
     async def resolve(self, session_id: str) -> ResolvedAgentConfig:
@@ -220,6 +227,18 @@ class FakeApi:
         """Record the query and return the canned hits."""
         self.kb_queries.append((list(kb_ids), query, k))
         return self.hits[:k]
+
+    async def report_call(self, report: CallReportIn) -> None:
+        """Record a SIP leg report (`call_log` entry `call_report:<status>`)."""
+        self.call_reports.append(report)
+        self.call_log.append(f"call_report:{report.status}")
+
+    async def transfer_call(
+        self, session_id: str, to: str, participant_identity: str | None
+    ) -> InternalTransferOut:
+        """Record a transfer request and return the canned result."""
+        self.transfers.append((session_id, to, participant_identity))
+        return self.transfer_result
 
     async def aclose(self) -> None:
         """Mark the client closed."""

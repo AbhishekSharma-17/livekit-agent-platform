@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "PhoneNumberOut": {
+      "description": "A number owned by the workspace and the agent its inbound calls reach.",
+      "properties": {
+        "dispatch_rule_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dispatch Rule Id"
+        },
+        "e164": {
+          "title": "E164",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "inbound_agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inbound Agent Id"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "trunk_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trunk Id"
+        }
+      },
+      "required": [
+        "id",
+        "e164"
+      ],
+      "title": "PhoneNumberOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/PhoneNumberPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/PhoneNumberOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "PhoneNumberPage",
+  "type": "object"
+}

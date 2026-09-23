@@ -1,6 +1,6 @@
 # Telephony live test (stage L12b, V2-17)
 
-V2-17 was built and unit-tested with LiveKit mocked at the boundary: there is no SIP trunk yet, and nothing was created on the LiveKit Cloud project. Run this procedure once you have a carrier trunk and a phone number. It proves PLAN-V2 stage **L12b**:
+V2-17 was built and unit-tested with LiveKit mocked at the boundary: there is no SIP trunk yet, and nothing was created on the LiveKit Cloud project. V2-19 wired the worker side (R-V2-20), moved transfer destinations into `config.telephony` (R-V2-21) and added the workspace's outbound dialing policy (R-V2-23, default deny). Run this procedure once you have a carrier trunk and a phone number. It proves PLAN-V2 stage **L12b**:
 
 - an inbound call reaches the agent, and a session with `channel=sip_in` appears;
 - an outbound call from the console rings your phone;
@@ -18,8 +18,8 @@ Record the results in `docs/v2/LIVE-RESULTS.md` (V2-20).
 | Two phones you can answer | **Phone 1** is you. **Phone 2** is the transfer target (a colleague, or a second SIM). |
 | The LiveKit Cloud project's **SIP URI** | Find it under LiveKit Cloud → Project settings → SIP (`sip:<id>.sip.livekit.cloud`). |
 | The connection in LKAP shows `SIP` | Console → Connections → the connection → **Test**. The capability chips must include SIP (`sip_enabled=true`). It was probed true on 2026-09-23. |
-| The worker wiring asks applied | `docs/v2/_asks.md` **V2-17-2**. Without it, inbound and outbound calls still reach the agent, but four things are missing: the worker's caller/status reports, keypad (DTMF) handling, the `send_dtmf`/`transfer_call` tools, and the outbound "wait for answer" (the agent may greet while the phone is still ringing). |
-| Webhooks (recommended) | LiveKit Cloud → Settings → Webhooks → `https://<LKAP_PUBLIC_BASE_URL>/hooks/livekit/<connection_id>`, signed with the connection's API key. In dev, expose `:8080` with a tunnel. Without webhooks the calls log relies only on the worker's reports (V2-17-2) and the dial result. |
+| A worker on V2-19 code | The worker must run a build that includes V2-19's telephony wiring (restart `lkap-agent` after pulling it). It reports the caller and call status, handles the keypad (DTMF), offers the `send_dtmf`/`transfer_call` tools and waits for the callee to answer before speaking. |
+| Webhooks (recommended) | LiveKit Cloud → Settings → Webhooks → `https://<LKAP_PUBLIC_BASE_URL>/hooks/livekit/<connection_id>`, signed with the connection's API key. In dev, expose `:8080` with a tunnel. Without webhooks the calls log relies only on the worker's reports and the dial result. |
 
 Safety:
 
@@ -38,6 +38,12 @@ Follow your carrier's docs; the values below are the ones LKAP needs.
 
 ## 2. Create the LKAP objects (Console → Telephony)
 
+0. **Set the outbound dialing policy** (Console → Telephony → **Outbound dialing policy**; admins and owners only). Until `allowed_prefixes` is set, every outbound call, console transfer and `transfer_call` is refused (422 `destination_not_allowed`), and an agent with transfer destinations can't be saved.
+   - Allowed number prefixes: the narrowest prefixes that cover phone 1 and phone 2, for example `+1555` or the full numbers.
+   - Allowed SIP hosts: leave empty unless you transfer to a `sip:name@host` address.
+   - Keep the defaults for calls per minute (10) and outbound calls at once (5).
+   - Check: the card shows **Outbound calls on**. The same policy is `settings.telephony` in `GET /v1/workspaces`.
+   - Premium-rate and satellite ranges (`+1900`, `+1976`, `+449`, `+881`, `+882`, `+870`, `+979`, …) stay blocked whatever you list.
 1. **Add trunk → Inbound**:
    - Connection: the Cloud connection.
    - Name: `carrier-in`.
@@ -58,9 +64,10 @@ Follow your carrier's docs; the values below are the ones LKAP needs.
    - Check `lk sip dispatch list`. The rule must have `numbers: [A]` (the **called**-number filter), `trunk_ids: [ST_…]`, and `room_config.agents[0].agent_name` equal to the connection's agent name.
    - Its metadata must be `{"v":2,"session_id":null,"agent_id":"…","config_version":0,"participant_identity":"","channel":"sip_in",…}`.
    - If `lk` prints the filter as `inbound_numbers` instead, stop. That field is the *caller* filter, so the rule would only accept calls *from* A. Report it.
-4. On the test agent, set a transfer allowlist and turn keypad input on:
-   - In `pack_settings`, add `"transfer_targets": {"Phone 2": "+1…"}` (with PUT `/v1/agents/{id}` until the editor exposes it; see asks V2-17-8).
-   - Turn on `capabilities.dtmf`.
+4. On the test agent, set a transfer destination and turn keypad input on:
+   - Agent editor → **Tools** → **Phone calls** → **Transfer destinations**: add `Phone 2` → phone 2's number. This is `config.telephony.transfer_targets` (`[{"label": "Phone 2", "to": "+1…"}]`). Save; a number outside the dialing policy is refused at `telephony.transfer_targets[0].to`.
+   - Leave **Transfer calls** and **Press phone keys** on (they are `tools.builtin_disabled` switches).
+   - Turn on `capabilities.dtmf` (PUT `/v1/agents/{id}`; the editor does not show it yet).
 
 ## 3. Inbound call (L12b.1)
 
@@ -68,7 +75,7 @@ Call number A from phone 1. The agent should greet you. Then check:
 
 - **Sessions.** A new row with `channel = sip_in`. The room is named like `call-_+1…_xxxx`.
   - `caller` is filled in: `{"direction":"inbound","from":"<phone 1>","to":"<A>","trunk_id":"ST_…","call_id":"SCL_…"}`.
-  - With neither webhooks nor V2-17-2, `caller` stays empty. That is the known gap.
+  - The worker's `POST /internal/v1/telephony/calls/report` fills it even without webhooks.
 - **Telephony → Calls.** One inbound row, `In call`, from phone 1 to A.
   - After you hang up, it shows `Completed` with a duration.
   - The session's timeline has `sip_answered`.
@@ -98,11 +105,12 @@ Call number A from phone 1. The agent should greet you. Then check:
 2. Enter phone 1 and press Call. The dialog shows `Dialing`, then `Ringing` (webhook), then `In call` when you pick up.
 3. Check:
    - Phone 1 shows number A as the caller ID.
-   - The agent speaks **after** you answer, not while it rings. This needs V2-17-2's `wait_for_answer`.
+   - The agent speaks **after** you answer, not while it rings (the worker's `wait_for_answer`).
    - Sessions has a row with `channel = sip_out`.
    - `GET /v1/calls/{id}` returns `answered` and a `sip_call_id`.
 4. Hang up from the dialog. The call shows `Completed` and the agent leaves.
-5. Repeat, and this time decline on phone 1. The call shows `Busy` (SIP 486/600) or `No answer` (408/480/487), and the agent is dismissed (its room is deleted).
+5. Repeat, and this time decline on phone 1. The call shows `Busy` (SIP 486/600) or `No answer` (408/480/487), and the agent is dismissed (its room is deleted). The worker ends the job without speaking and posts a `failed` summary.
+6. Refusal: call a number outside the policy (for example `+1900…`). The dialog shows the `destination_not_allowed` error and nothing rings. `GET /v1/audit` has a `call.placed` row for each successful dial.
 
 ## 6. Cold transfer (L12b.4)
 
@@ -120,7 +128,9 @@ Try the transfer two ways.
 1. The agent says "Please hold while I transfer your call."
 2. The `transfer_call` tool calls `POST /internal/v1/telephony/sessions/{id}/transfer`.
 3. The timeline gets `transfer {ok: true}` and the job ends.
-4. Then check the refusal: ask for a number that is not on the allowlist. The model is told the destination is unknown, and nothing is dialled.
+4. Then check the refusals:
+   - Ask for a number that is not on the destination list. The model is told the destination is unknown, and nothing is dialled.
+   - Remove phone 2's prefix from the dialing policy and ask again. The api answers `refused` ("destination not allowed by the dialing policy"), the call continues, and `GET /v1/audit` shows `call.transfer_refused`.
 
 ## 7. Clean up (optional)
 
@@ -135,4 +145,6 @@ Telephony → delete the number, then both trunks. This deletes the LiveKit rule
 | Outbound dial and status | `telephony/calls.py::run_dial` (dispatch first, `wait_until_answered`, `failover=False`) |
 | Status transitions | `telephony/calls.py::advance` (forward-only), fed by webhooks, the dial result and worker reports |
 | DTMF | Worker `DtmfCollector` / `sip_dtmf_received`; console → `RoomService.SendData` on topic `lkap.telephony.dtmf` → `publish_dtmf` |
-| Transfer | `SipService.transfer_sip_participant` (SIP REFER) via the api, from the console or the worker tool |
+| Transfer | `SipService.transfer_sip_participant` (SIP REFER) via the api, from the console or the worker tool; destinations from `config.telephony.transfer_targets` |
+| Dialing policy | `api/src/lkap_api/telephony/policy.py::check_destination` on every dial, transfer and save; per-minute bucket and open-call caps on `POST /v1/calls`; `call.*` audit rows |
+| Stuck calls | `telephony/calls.py::sweep_stuck_calls` from `sessions_sweep.sweep_loop`: an outbound dial older than 195 s → `failed` |

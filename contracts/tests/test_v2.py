@@ -116,12 +116,15 @@ def test_the_mvp_id_set_is_byte_identical_to_the_v1_registry() -> None:
     assert [spec.id for spec in mvp_providers()] == V1_MVP_ID_ORDER
 
 
-def test_only_the_four_live_verified_providers_are_marked_verified() -> None:
+def test_only_the_live_verified_providers_are_marked_verified() -> None:
+    """v1's four plus the two V2-20 saw serve a live session (LIVE-RESULTS.md L5)."""
     assert {s.id for s in REGISTRY if s.verification == "verified"} == {
         "livekit-inference-stt",
         "livekit-inference-llm",
         "livekit-inference-tts",
         "fastembed-embedding",
+        "inference-vad",
+        "inference-turn-detector",
     }
 
 

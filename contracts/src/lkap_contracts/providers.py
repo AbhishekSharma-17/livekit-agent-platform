@@ -2541,7 +2541,21 @@ _DEFERRED: list[ProviderSpec] = [
     ),
 ]
 
-REGISTRY: list[ProviderSpec] = [*_MVP, *_FULL, *_NEW, *_DEFERRED]
+#: Providers V2-20 saw serve a passing live session on LiveKit Cloud
+#: (docs/v2/LIVE-RESULTS.md, stage L5: explicit `vad`/`turn_detection` slots
+#: built from these entries on an audio round trip). Only ever grows from
+#: recorded live evidence; ``status`` is unaffected (R-V2-1).
+LIVE_VERIFIED_IDS: frozenset[str] = frozenset({"inference-vad", "inference-turn-detector"})
+
+
+def _live_verified(spec: ProviderSpec) -> ProviderSpec:
+    """Return ``spec`` with ``verification="verified"`` when V2-20 verified it live."""
+    if spec.id not in LIVE_VERIFIED_IDS or spec.verification == "verified":
+        return spec
+    return ProviderSpec.model_validate({**spec.model_dump(exclude={"status"}), "verification": "verified"})
+
+
+REGISTRY: list[ProviderSpec] = [_live_verified(spec) for spec in [*_MVP, *_FULL, *_NEW, *_DEFERRED]]
 
 _BY_ID: dict[str, ProviderSpec] = {spec.id: spec for spec in REGISTRY}
 

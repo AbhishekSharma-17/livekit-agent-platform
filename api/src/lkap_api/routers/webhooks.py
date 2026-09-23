@@ -41,6 +41,7 @@ from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 from lkap_api.webhooks.delivery import deliver_once
+from lkap_api.webhooks.events import KNOWN_EVENTS
 from lkap_api.webhooks.signing import generate_secret, secret_prefix
 
 log = get_logger(__name__)
@@ -81,6 +82,24 @@ def _check_url(settings: Settings, url: str) -> None:
     if not url.startswith(allowed):
         raise UnprocessableEntityError(
             f"webhook url must start with {' or '.join(allowed)}", details={"url": url}
+        )
+
+
+def _check_events(events: list[str]) -> None:
+    """Refuse event names the api never emits (an empty list still means "every event").
+
+    Without this an endpoint subscribed to a misspelt name (``qa.completed``
+    for ``session.qa_completed``) saved fine and then silently never fired
+    (V2-20 live finding).
+
+    Raises:
+        UnprocessableEntityError: If any name is not in :data:`KNOWN_EVENTS`.
+    """
+    unknown = sorted({event for event in events if event not in KNOWN_EVENTS})
+    if unknown:
+        raise UnprocessableEntityError(
+            f"unknown webhook event(s): {', '.join(unknown)}",
+            details={"unknown": unknown, "known": list(KNOWN_EVENTS)},
         )
 
 
@@ -171,6 +190,7 @@ async def create_webhook(
 ) -> WebhookEndpointCreated:
     """Create a webhook endpoint with a freshly generated signing secret."""
     _check_url(settings, payload.url)
+    _check_events(payload.events)
     secret = generate_secret()
     row = WebhookEndpoint(
         workspace_id=ctx.workspace_id,
@@ -236,6 +256,7 @@ async def update_webhook(
 ) -> WebhookEndpointOut:
     """Update a webhook endpoint's url/events/description/enabled. Never rotates the secret."""
     _check_url(settings, payload.url)
+    _check_events(payload.events)
     row = await _load_endpoint(db, ctx, endpoint_id)
     row.url = payload.url
     row.events = list(payload.events)

@@ -35,7 +35,10 @@ from lkap_api.settings import Settings, get_settings
 from lkap_api.vault import Vault
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-DbDep = Annotated[AsyncSession, Depends(get_db)]
+#: ``scope="function"``: `get_db` commits in its exit code, which must run before the
+#: response is sent, or a client can act on a ``2xx`` before the write is visible
+#: (V2-20: a revoked API key kept authenticating on the next request).
+DbDep = Annotated[AsyncSession, Depends(get_db, scope="function")]
 
 ServiceTokenHeader = Annotated[str | None, Header(alias=SERVICE_HEADER, description="Worker service token")]
 
@@ -87,7 +90,9 @@ async def admin_context(
     record_route_mutation(request, db, ctx)
 
 
-AdminCtxDep = Annotated[WorkspaceContext, Depends(admin_context)]
+#: ``scope="function"`` like `DbDep`: its exit code writes the audit row with the
+#: request's session, before that session commits and before the response is sent.
+AdminCtxDep = Annotated[WorkspaceContext, Depends(admin_context, scope="function")]
 
 
 async def require_admin(_ctx: AdminCtxDep) -> bool:

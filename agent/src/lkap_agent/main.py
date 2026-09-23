@@ -1585,7 +1585,34 @@ def install_worker_registration(agent_server: Any, settings: Settings) -> Worker
     return registration
 
 
-server = AgentServer(setup_fnc=prewarm)
+#: Port of the SDK's worker HTTP (health) server. Unset keeps the SDK default
+#: (ephemeral in `dev`, 8081 in `start`); the supervisor's subprocess backend
+#: sets `0` so replicas on one host never collide on 8081 (V2-20).
+WORKER_HTTP_PORT_ENV = "LKAP_WORKER_HTTP_PORT"
+
+
+def worker_http_port(environ: Mapping[str, str]) -> int | None:
+    """The worker HTTP server port from `LKAP_WORKER_HTTP_PORT`, or `None` for the SDK default.
+
+    Raises:
+        ValueError: If `LKAP_WORKER_HTTP_PORT` is not an integer in 0..65535.
+    """
+    raw = environ.get(WORKER_HTTP_PORT_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError:
+        raise ValueError(f"{WORKER_HTTP_PORT_ENV} must be an integer, got {raw!r}") from None
+    if not 0 <= port <= 65535:
+        raise ValueError(f"{WORKER_HTTP_PORT_ENV} must be within 0..65535, got {port}")
+    return port
+
+
+_http_port = worker_http_port(os.environ)
+server = (
+    AgentServer(setup_fnc=prewarm) if _http_port is None else AgentServer(setup_fnc=prewarm, port=_http_port)
+)
 
 
 @server.rtc_session(agent_name=AGENT_NAME, on_request=only_lkap_jobs)

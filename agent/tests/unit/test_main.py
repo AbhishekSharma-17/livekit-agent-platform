@@ -1498,3 +1498,27 @@ async def test_a_flow_agent_starts_its_flow_state_with_the_call_variables() -> N
     assert state.variables == {"claim_id": "C-1", "n": 2}
     assert "claim_id" not in resolved.config.instructions  # flows render it themselves
     await ctx.fire_shutdown("done")
+
+
+# ---------------------------------------------------------------- worker HTTP port (V2-20)
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({}, None),
+        ({"LKAP_WORKER_HTTP_PORT": ""}, None),
+        ({"LKAP_WORKER_HTTP_PORT": "0"}, 0),
+        ({"LKAP_WORKER_HTTP_PORT": " 9123 "}, 9123),
+    ],
+)
+def test_worker_http_port_from_env(environ: dict[str, str], expected: int | None) -> None:
+    from lkap_agent.main import worker_http_port  # noqa: PLC0415
+
+    assert worker_http_port(environ) == expected
+
+
+@pytest.mark.parametrize("raw", ["abc", "-1", "65536"])
+def test_worker_http_port_invalid_value_raises(raw: str) -> None:
+    from lkap_agent.main import worker_http_port  # noqa: PLC0415
+
+    with pytest.raises(ValueError, match="LKAP_WORKER_HTTP_PORT"):
+        worker_http_port({"LKAP_WORKER_HTTP_PORT": raw})

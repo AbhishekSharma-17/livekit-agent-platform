@@ -4139,7 +4139,7 @@
       "test": null,
       "v": 2,
       "vendor": "LiveKit",
-      "verification": "unverified",
+      "verification": "verified",
       "verified_at": null,
       "verified_note": null,
       "worker_image": "full"
@@ -4276,7 +4276,7 @@
       "test": null,
       "v": 2,
       "vendor": "LiveKit",
-      "verification": "unverified",
+      "verification": "verified",
       "verified_at": null,
       "verified_note": null,
       "worker_image": "full"

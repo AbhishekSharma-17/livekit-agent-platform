@@ -47,6 +47,7 @@ Secrets come from your shell, or from the launch config outside the repo. Never 
 | `LKAP_CONNECTION_ID` | | optional | | | the connection a worker serves. Unset means the default connection. |
 | `LKAP_AGENT_NAME` | | optional | | | must equal the connection's `agent_name` (default `lkap-agent`) |
 | `LKAP_INSTANCE_KEY`, `LKAP_MANAGED_BY` | | set by the supervisor | | | leave unset for a hand-started worker |
+| `LKAP_WORKER_HTTP_PORT` | | optional | | | port of the SDK's worker HTTP server. Unset keeps the SDK default (ephemeral in `dev`, 8081 in `start`). The supervisor's `subprocess` backend sets `0`, so replicas on one host never collide on 8081 (V2-20). |
 | `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | | optional | | | comma list. A tool's hosts must be in it **and** in its own `allowed_hosts`, and private ranges are refused (F-14). |
 | `LKAP_VISION_MAX_FRAME_AGE_S`, `LKAP_IDLE_HANGUP_S` | | optional | | | default `8` / `120` |
 | `NEXT_PUBLIC_API_BASE_URL` | | | | ✓ | `http://localhost:8080` |

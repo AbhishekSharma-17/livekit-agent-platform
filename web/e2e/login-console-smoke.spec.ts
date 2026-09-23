@@ -25,10 +25,20 @@ const EMAIL = process.env.LKAP_E2E_EMAIL;
 const PASSWORD = process.env.LKAP_E2E_PASSWORD;
 const AGENT_SLUG = process.env.LKAP_E2E_AGENT_SLUG ?? "e2e-insurance-7c593e";
 
+// The call leg needs a (fake) microphone: the pre-call card asks for it on Start call.
+// (Top level: `launchOptions` cannot be set inside a describe group.)
+test.use({
+  permissions: ["microphone"],
+  launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] },
+});
+
 test.describe("login → console → test call → transcript", () => {
   test.skip(!EMAIL || !PASSWORD, "set LKAP_E2E_EMAIL / LKAP_E2E_PASSWORD to run this against a real account");
 
   test("signs in, reaches the console, and a test call produces a transcript", async ({ page }) => {
+    // Login + first-compile under `next dev` + a best-effort 45 s transcript wait
+    // do not fit the 30 s default (V2-20: the old test always timed out here).
+    test.setTimeout(120_000);
     await page.goto("/console/agents");
     await expect(page).toHaveURL(/\/login\?next=/);
 
@@ -40,14 +50,28 @@ test.describe("login → console → test call → transcript", () => {
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
 
     await page.goto(`/s/${AGENT_SLUG}?mode=test`);
-    const transcriptLine = page.locator("[data-testid='transcript-line'], [data-slot='transcript-turn']").first();
-    await transcriptLine
-      .waitFor({ timeout: 30_000 })
-      .catch(() => {
-        // Best-effort: a live worker on the bound connection is not this
-        // card's responsibility to guarantee. Reaching the session page
-        // itself (no redirect back to /login) is the part this smoke test
-        // owns.
-      });
+    await expect(page).not.toHaveURL(/\/login/);
+    // Without Start call no room is ever joined, so no transcript could appear.
+    await page.getByRole("button", { name: "Start call" }).click();
+    const transcript = page.locator("[data-testid='session-transcript']");
+    const toggle = page.getByRole("button", { name: /toggle transcript/i });
+    const sawTranscript = await expect
+      .poll(
+        async () => {
+          if (!(await transcript.isVisible()) && (await toggle.isVisible())) await toggle.click();
+          const text = (await transcript.innerText().catch(() => "")).replace(/transcript/i, "").trim();
+          return text.length;
+        },
+        { timeout: 45_000 },
+      )
+      .toBeGreaterThan(0)
+      .then(() => true)
+      .catch(() => false); // best-effort: a live worker is not this card's to guarantee
+    test.info().annotations.push({ type: "transcript", description: sawTranscript ? "seen" : "not seen" });
+    await page
+      .getByRole("button", { name: /end call|hang up|leave/i })
+      .first()
+      .click({ timeout: 5_000 })
+      .catch(() => {});
   });
 });

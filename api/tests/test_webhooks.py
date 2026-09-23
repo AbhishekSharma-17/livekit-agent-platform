@@ -462,3 +462,28 @@ async def test_app_closes_the_lazily_started_jobs_service_without_error(
     service: JobsService | None = getattr(app.state, "jobs", None)
     assert service is not None
     await service.aclose()
+
+
+@pytest.mark.parametrize("events", [["qa.completed"], ["session.ended", "flow.ended"]])
+async def test_create_webhook_with_an_unknown_event_is_422(
+    admin_client: httpx.AsyncClient, events: list[str]
+) -> None:
+    """V2-20: a misspelt subscription used to save and then never fire."""
+    response = await admin_client.post("/v1/webhooks", json={"url": WEBHOOK_URL, "events": events})
+
+    assert response.status_code == 422, response.text
+    details = response.json()["error"]["details"]
+    assert "session.qa_completed" in details["known"]
+    assert all(name not in details["known"] for name in details["unknown"])
+
+
+async def test_update_webhook_with_an_unknown_event_is_422(admin_client: httpx.AsyncClient) -> None:
+    created = await admin_client.post("/v1/webhooks", json={"url": WEBHOOK_URL, "events": ["session.ended"]})
+    assert created.status_code == 201, created.text
+
+    response = await admin_client.put(
+        f"/v1/webhooks/{created.json()['id']}", json={"url": WEBHOOK_URL, "events": ["session.ended", "nope"]}
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["details"]["unknown"] == ["nope"]

@@ -28,7 +28,10 @@ def write(event):
     with out.open("a") as f:
         f.write(json.dumps(event) + "\\n")
 
-keys = ("LIVEKIT_URL", "LIVEKIT_API_SECRET", "LKAP_CONNECTION_ID", "LKAP_MANAGED_BY", "LEAK_ME")
+keys = (
+    "LIVEKIT_URL", "LIVEKIT_API_SECRET", "LKAP_CONNECTION_ID", "LKAP_MANAGED_BY", "LEAK_ME",
+    "LKAP_WORKER_HTTP_PORT",
+)
 write({
     "event": "started",
     "pid": os.getpid(),
@@ -121,6 +124,8 @@ async def test_child_gets_the_worker_env_and_only_allowlisted_parent_env(
     assert started["env"]["LKAP_CONNECTION_ID"] == "conn-a"
     assert started["env"]["LKAP_MANAGED_BY"] == "supervisor"
     assert started["env"]["LEAK_ME"] is None
+    # V2-20: replicas share the host network, so each worker HTTP server takes an ephemeral port.
+    assert started["env"]["LKAP_WORKER_HTTP_PORT"] == "0"
     assert started["has_path"] is True
     assert handle.instance_key == f"{socket.gethostname()}:{started['pid']}"
     assert handle.pid_or_container == str(started["pid"])

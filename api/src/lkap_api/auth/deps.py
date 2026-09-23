@@ -51,7 +51,7 @@ from lkap_api.settings import Settings, get_settings
 
 log = get_logger(__name__)
 
-_Db = Annotated[AsyncSession, Depends(get_db)]
+_Db = Annotated[AsyncSession, Depends(get_db, scope="function")]  # same scope as `deps.DbDep`
 _Settings = Annotated[Settings, Depends(get_settings)]
 _Limiter = Annotated[RateLimiter, Depends(get_rate_limiter)]
 

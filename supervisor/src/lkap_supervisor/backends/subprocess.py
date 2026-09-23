@@ -38,6 +38,9 @@ from lkap_supervisor.logging import get_logger
 
 log = get_logger(__name__)
 
+#: Read by `lkap_agent.main.worker_http_port` (the worker HTTP server port).
+WORKER_HTTP_PORT_ENV = "LKAP_WORKER_HTTP_PORT"
+
 #: Parent environment variables a worker may inherit (everything else is dropped).
 BASE_ENV_KEYS: tuple[str, ...] = (
     "PATH",
@@ -215,7 +218,10 @@ class SubprocessBackend:
             log_file = await asyncio.to_thread(
                 _open_log, self._log_dir / f"{desired.connection_id}-{index}.log"
             )
-        child_env = worker_environment(env, base=self._base_env())
+        # Every replica shares this host's network: let the SDK's worker HTTP
+        # server take an ephemeral port instead of `start` mode's fixed 8081,
+        # or a second replica (rolling restart, replicas > 1) dies on bind (V2-20).
+        child_env = worker_environment(env, base=self._base_env(), extra={WORKER_HTTP_PORT_ENV: "0"})
         try:
             process = await asyncio.create_subprocess_exec(
                 self._python,

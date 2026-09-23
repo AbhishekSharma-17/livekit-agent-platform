@@ -125,6 +125,24 @@
       },
       "title": "Instances",
       "type": "array"
+    },
+    "restart_generation": {
+      "default": 0,
+      "title": "Restart Generation",
+      "type": "integer"
+    },
+    "restart_requested_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Restart Requested At"
     }
   },
   "title": "FleetStatus",

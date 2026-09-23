@@ -9,7 +9,8 @@
 # script only fills in the non-secret dev defaults documented in
 # docs/CONTRACTS.md §3 when they're unset.
 #
-# Usage: scripts/dev.sh
+# Usage: scripts/dev.sh               (api + worker + web)
+#        LKAP_SUPERVISOR=1 scripts/dev.sh   (api + supervisor + web; pools for supervised connections)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,17 +91,32 @@ log "api: starting on :${PORT_API}"
 (cd "${ROOT_DIR}/api" && exec uv run uvicorn lkap_api.main:app --reload --host 127.0.0.1 --port "${PORT_API}") &
 pids+=("$!")
 
-# --- agent: worker in `dev` mode --------------------------------------------
-log "agent: starting (dispatch name ${LIVEKIT_AGENT_NAME})"
-(cd "${ROOT_DIR}/agent" && exec uv run python -m lkap_agent.main dev) &
-pids+=("$!")
+# --- agent: a direct worker, or the supervisor (LKAP_SUPERVISOR=1) ----------
+# With LKAP_SUPERVISOR=1 the supervisor (V2-04) runs one pool per *supervised*
+# connection (subprocess backend: `python -m lkap_agent.main start` children
+# with each connection's own env). The direct worker is then NOT started, so
+# two pools can never serve one agent name on one project (PLAN-V2 §7 risk).
+# Switch a connection to `deployment_mode=supervised` to give it a pool.
+if [[ "${LKAP_SUPERVISOR:-0}" == "1" ]]; then
+  export LKAP_SUPERVISOR_BACKEND="${LKAP_SUPERVISOR_BACKEND:-subprocess}"
+  log "supervisor: uv sync"
+  (cd "${ROOT_DIR}/supervisor" && uv sync --quiet)
+  (cd "${ROOT_DIR}/agent" && uv sync --quiet)
+  log "supervisor: starting (${LKAP_SUPERVISOR_BACKEND} backend; direct worker skipped)"
+  (cd "${ROOT_DIR}/supervisor" && exec uv run python -m lkap_supervisor) &
+  pids+=("$!")
+else
+  log "agent: starting (dispatch name ${LIVEKIT_AGENT_NAME})"
+  (cd "${ROOT_DIR}/agent" && exec uv run python -m lkap_agent.main dev) &
+  pids+=("$!")
+fi
 
 # --- web: next dev -----------------------------------------------------------
 log "web: starting on :${PORT_WEB}"
 (cd "${ROOT_DIR}/web" && exec pnpm dev --port "${PORT_WEB}") &
 pids+=("$!")
 
-log "api :${PORT_API}  web :${PORT_WEB}  agent (worker, no port)"
+log "api :${PORT_API}  web :${PORT_WEB}  worker/supervisor (no port)"
 log "press Ctrl+C to stop all three"
 
 # Exit (and take the others down via the trap) as soon as any one process

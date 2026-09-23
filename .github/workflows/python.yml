@@ -1,0 +1,122 @@
+# Per-package Python gate (PLAN-V2 §V2-09 scope: "python.yml (matrix
+# api/agent/packs/supervisor × sqlite/postgres for api)"): ruff, ruff
+# format, mypy --strict, pytest -m "not live" for every Python package, plus
+# the api's Postgres leg (migrations + full suite against a real server) —
+# folded in from the V2-01 stub `.github/workflows/api-postgres.yml`, which
+# this workflow replaces (docs/v2/_asks.md #18).
+#
+# Known (as of V2-09, 2026-09-23): `api`'s suite has 2 pre-existing failures
+# unrelated to this package — `test_health.py::test_migration_head_is_the_latest_v2_revision`
+# and `test_tools.py::test_update_replaces_the_definition` — in files owned by
+# V2-02/V2-08, not V2-09. This workflow reports them as real failures rather
+# than masking them; they are not new and not caused by anything here.
+name: python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "api/**"
+      - "agent/**"
+      - "packs/**"
+      - "supervisor/**"
+      - "contracts/**"
+      - ".github/workflows/python.yml"
+
+jobs:
+  # sqlite (or no-db) leg: one job per package, each with its own venv via
+  # `uv sync --frozen` (path deps on ../contracts / ../packs resolve
+  # directly against the checked-out tree here — no vendoring needed outside
+  # a Docker build context).
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [api, agent, packs, supervisor]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        working-directory: ${{ matrix.package }}
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        working-directory: ${{ matrix.package }}
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Type check (mypy --strict)
+        working-directory: ${{ matrix.package }}
+        run: uv run mypy --strict src
+
+      # No LIVEKIT_*/LKAP_* env needed: verified empirically (V2-09, run
+      # against each package's real venv) that every suite's fixtures build
+      # their own Settings with explicit test values rather than reading the
+      # process environment — 692 agent / 189 packs / 51 supervisor / 584 api
+      # tests all pass with a bare `uv run pytest`.
+      - name: Test
+        working-directory: ${{ matrix.package }}
+        run: uv run pytest -q -m "not live"
+
+  # Postgres leg (api only): the only place the v2 migration chain and full
+  # api suite run against a real server (docs/v2/_asks.md #18). Sequence and
+  # env var names kept verbatim from the V2-01 stub this replaces.
+  test-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lkap
+          POSTGRES_PASSWORD: lkap
+          POSTGRES_DB: lkap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lkap"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Used by `tests/conftest.py::postgres_url` to point the whole suite at Postgres.
+      LKAP_TEST_DATABASE_URL: postgresql+asyncpg://lkap:lkap@localhost:5432/lkap_test
+      LKAP_ENV: dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        working-directory: api
+        run: uv sync --frozen
+
+      - name: Migrate up, down and up again on Postgres
+        working-directory: api
+        env:
+          LKAP_DATABASE_URL: postgresql+asyncpg://lkap:lkap@localhost:5432/lkap_test
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade 4135323c6ecc
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+
+      - name: Run the api suite against Postgres
+        working-directory: api
+        run: uv run pytest -q -m "not live"

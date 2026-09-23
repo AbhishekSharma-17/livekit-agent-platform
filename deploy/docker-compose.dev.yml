@@ -1,0 +1,177 @@
+# v2 local development stack: api + web + supervisor, with postgres/redis/
+# minio available behind profiles (PLAN-V2 §V2-09: "docker-compose.dev.yml
+# (api, web, supervisor, minio, redis optional, postgres optional)").
+#
+# Superset of v1's deploy/docker-compose.yml — that file still works
+# unmodified for a v1-only checkout; this one is additive, not a replacement,
+# so no v1 workflow breaks by this file's existence.
+#
+# Secrets are never committed. Copy the *.env.example templates next to this
+# file to real, human-created *.env files before running (gitignored,
+# read only at container start — Claude never creates or reads these files):
+#   cp deploy/api.env.example deploy/api.env       # fill in real values
+#   cp deploy/web.env.example deploy/web.env
+#   cp deploy/supervisor.env.example deploy/supervisor.env
+#
+# Default (sqlite + local storage, external/subprocess-capable supervisor,
+# no Redis/Postgres/MinIO):
+#   docker compose -f deploy/docker-compose.dev.yml up --build
+#   docker compose -f deploy/docker-compose.dev.yml run --rm api alembic upgrade head
+#
+# With Postgres and/or Redis and/or MinIO (each is an independent profile —
+# combine as many as you need):
+#   docker compose -f deploy/docker-compose.dev.yml --profile postgres --profile redis --profile minio up --build
+# Postgres profile additionally needs `LKAP_DATABASE_URL` set in
+# deploy/api.env to point at the `postgres` service (see api.env.example).
+#
+# NEXT_PUBLIC_API_BASE_URL must be one URL reachable from both the host
+# browser and the web container's server-side proxy. Like v1's compose file,
+# `web` shares `api`'s network namespace (`network_mode: "service:api"`) so
+# "http://localhost:8080" resolves correctly from both — see
+# deploy/docker-compose.yml's comment for the full rationale. Because of
+# that, `web`'s `ports:` is omitted; 3000 is published from `api` instead.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    image: lkap-api:dev
+    ports:
+      - "8080:8080" # api
+      - "3000:3000" # web (published here — see network_mode note above)
+    env_file:
+      - path: ./api.env
+        required: false
+    environment:
+      LKAP_ENV: dev
+      LKAP_DATA_DIR: /data
+      LKAP_LOG_JSON: "true"
+      LKAP_CORS_ORIGINS: ${LKAP_CORS_ORIGINS:-http://localhost:3000}
+      LKAP_REDIS_URL: ${LKAP_REDIS_URL:-} # set to redis://redis:6379/0 with --profile redis
+      LKAP_JOBS_BACKEND: ${LKAP_JOBS_BACKEND:-inline}
+      LKAP_STORAGE_KIND: ${LKAP_STORAGE_KIND:-local}
+      LKAP_STORAGE_ENDPOINT_URL: ${LKAP_STORAGE_ENDPOINT_URL:-} # http://minio:9000 with --profile minio
+      PORT: "8080"
+    volumes:
+      - api-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+    image: lkap-web:dev
+    network_mode: "service:api" # local-smoke-test only; see note above
+    env_file:
+      - path: ./web.env
+        required: false
+    environment:
+      PORT: "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  supervisor:
+    build:
+      context: ..
+      dockerfile: supervisor/Dockerfile
+    image: lkap-supervisor:dev
+    env_file:
+      - path: ./supervisor.env
+        required: false
+    environment:
+      LKAP_API_BASE_URL: http://api:8080
+      # `docker` backend so a connection later switched to `supervised` in
+      # the console can start real `lkap-agent` containers (D-V2-3); it does
+      # nothing until a connection's `fleet_desired` row is non-empty (D-V2-6:
+      # the v1 default connection starts `external`, served by the operator's
+      # own `.claude/launch.json` worker, unaffected by this service running).
+      LKAP_SUPERVISOR_BACKEND: docker
+      LKAP_AGENT_IMAGE_SLIM: lkap-agent:slim-dev
+      LKAP_AGENT_IMAGE_FULL: lkap-agent:full-dev
+      LKAP_SUPERVISOR_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-deploy}_default
+      LKAP_LOG_JSON: "true"
+    volumes:
+      # Docker backend only: talks to the *host's* Docker Engine to start
+      # sibling `lkap-agent` containers (D-V2-2). Never mount this in an
+      # image an untrusted party can reach — it is root-equivalent access to
+      # the host.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- optional: --profile postgres ---------------------------------------
+  postgres:
+    image: postgres:16
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: lkap
+      POSTGRES_PASSWORD: lkap
+      POSTGRES_DB: lkap
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "lkap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # --- optional: --profile redis ------------------------------------------
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # --- optional: --profile minio -------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    profiles: ["minio"]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${LKAP_STORAGE_ACCESS_KEY:-lkap-dev}
+      MINIO_ROOT_PASSWORD: ${LKAP_STORAGE_SECRET_KEY:-lkap-dev-secret}
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # `agent` is intentionally absent here, same as v1: the worker is either
+  # the operator's own `.claude/launch.json` process (external mode, the
+  # default) or a pool the `supervisor` service above starts dynamically via
+  # the docker backend once a connection is switched to `supervised`. To run
+  # one manually against this stack: `scripts/vendor_agent_deps.sh &&
+  # docker build --build-arg LKAP_IMAGE_FLAVOR=slim -f agent/Dockerfile
+  # -t lkap-agent:slim-dev agent`, then either `docker run` it by hand with
+  # LIVEKIT_*/LKAP_API_BASE_URL=http://localhost:8080/LKAP_SERVICE_TOKEN set,
+  # or let the supervisor start it once `LKAP_AGENT_IMAGE_SLIM` (set above)
+  # matches the tag you built.
+
+volumes:
+  api-data:
+  postgres-data:
+  minio-data:

@@ -10,6 +10,16 @@ import { agentEditorFormSchema } from "@/components/console/lib/schemas";
  * satisfies react-hook-form's submit gate but leaves every field-level error
  * invisible — this was caught by review, not by the four build gates.
  */
+const LIMITS = {
+  max_concurrent_sessions: 5,
+  max_session_duration_s: 1800,
+  rate_per_ip_per_min: 6,
+  rate_per_agent_per_min: 60,
+};
+const RECORDING = { enabled: false, audio_only: true, storage_config_id: null, retention_days: null };
+const AVATAR_OPTIONS = { participant_name: "Avatar", video_quality: null, idle_timeout_s: null, max_duration_s: null };
+const PANEL = { panel_id: "composite", layout: "side" as const, blocks: [] };
+
 describe("zodResolver", () => {
   it("builds a nested error tree matching the form shape", async () => {
     const resolver = zodResolver(agentEditorFormSchema);
@@ -18,15 +28,21 @@ describe("zodResolver", () => {
         name: "",
         description: "",
         ui_panel_id: "generic",
+        mode: "prompt",
+        connection_id: null,
+        limits: LIMITS,
+        allowed_origins: [],
         config: {
           instructions: "",
-          pipeline: { mode: "cascaded", stt: null, llm: null, tts: null, turn_handling: {} },
+          pipeline: { mode: "cascaded", stt: null, llm: null, tts: null, avatar_options: AVATAR_OPTIONS, turn_handling: {} },
           voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true },
           capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
           tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
           knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
           pack_settings: {},
           timezone: "UTC",
+          recording: RECORDING,
+          panel: PANEL,
         },
       },
       undefined,
@@ -52,6 +68,10 @@ describe("zodResolver", () => {
         name: "Claims intake",
         description: "",
         ui_panel_id: "generic",
+        mode: "prompt",
+        connection_id: null,
+        limits: LIMITS,
+        allowed_origins: [],
         config: {
           instructions: "You are a helpful assistant.",
           pipeline: {
@@ -59,6 +79,7 @@ describe("zodResolver", () => {
             stt: { provider_id: "livekit-inference-stt", credential_id: null, model: null, fields: {} },
             llm: { provider_id: "livekit-inference-llm", credential_id: null, model: null, fields: {} },
             tts: { provider_id: "livekit-inference-tts", credential_id: null, model: null, fields: {} },
+            avatar_options: AVATAR_OPTIONS,
             turn_handling: {},
           },
           voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true },
@@ -67,6 +88,8 @@ describe("zodResolver", () => {
           knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
           pack_settings: {},
           timezone: "UTC",
+          recording: RECORDING,
+          panel: PANEL,
         },
       },
       undefined,
@@ -74,5 +97,93 @@ describe("zodResolver", () => {
     );
 
     expect(Object.keys(result.errors)).toHaveLength(0);
+  });
+
+  describe("v2 editor fields", () => {
+    const ref = (provider_id: string) => ({ provider_id, credential_id: null, model: null, fields: {} });
+
+    function form(overrides: { pipeline?: Record<string, unknown>; limits?: Record<string, unknown>; allowed_origins?: string[]; recording?: Record<string, unknown> } = {}) {
+      return {
+        name: "Claims intake",
+        description: "",
+        ui_panel_id: "generic",
+        mode: "prompt" as const,
+        connection_id: null,
+        limits: { ...LIMITS, ...overrides.limits },
+        allowed_origins: overrides.allowed_origins ?? [],
+        config: {
+          instructions: "Help.",
+          pipeline: {
+            mode: "cascaded",
+            stt: ref("livekit-inference-stt"),
+            llm: ref("livekit-inference-llm"),
+            tts: ref("livekit-inference-tts"),
+            avatar_options: AVATAR_OPTIONS,
+            turn_handling: {},
+            ...overrides.pipeline,
+          },
+          voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true },
+          capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
+          tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+          knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
+          pack_settings: {},
+          timezone: "UTC",
+          recording: { ...RECORDING, ...overrides.recording },
+          panel: PANEL,
+        },
+      };
+    }
+
+    async function errorsFor(values: ReturnType<typeof form>) {
+      const resolver = zodResolver(agentEditorFormSchema);
+      const result = await resolver(values as never, undefined, { shouldUseNativeValidation: false, fields: {} });
+      return result.errors as unknown;
+    }
+
+    /** The error message at a dotted path of the nested error tree (`limits.rate_per_ip_per_min`). */
+    function messageAt(tree: unknown, path: string): string | undefined {
+      let node: unknown = tree;
+      for (const key of path.split(".")) {
+        node = node && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined;
+      }
+      return node && typeof node === "object" ? ((node as { message?: string }).message ?? undefined) : undefined;
+    }
+
+    it("requires a realtime model and a voice in half-cascade mode, but not stt/llm", async () => {
+      const errors = await errorsFor(form({ pipeline: { mode: "half_cascade", stt: null, llm: null, tts: null, realtime: null } }));
+      expect(messageAt(errors, "config.pipeline.realtime")).toBe("Choose a realtime model.");
+      expect(messageAt(errors, "config.pipeline.tts")).toBe("Choose a text-to-speech provider.");
+      expect(messageAt(errors, "config.pipeline.stt")).toBeUndefined();
+      expect(messageAt(errors, "config.pipeline.llm")).toBeUndefined();
+    });
+
+    it("accepts a complete half-cascade pipeline", async () => {
+      const errors = await errorsFor(
+        form({ pipeline: { mode: "half_cascade", stt: null, llm: null, realtime: ref("google-realtime"), tts: ref("livekit-inference-tts") } }),
+      );
+      expect(Object.keys(errors as object)).toHaveLength(0);
+    });
+
+    it.each([
+      ["max_concurrent_sessions", Number.NaN, "Enter a number"],
+      ["max_concurrent_sessions", 0, "At least 1"],
+      ["max_session_duration_s", 30, "At least 60 seconds"],
+      ["rate_per_ip_per_min", 1.5, "Whole numbers only"],
+    ])("rejects limits.%s = %s", async (key, value, message) => {
+      const errors = await errorsFor(form({ limits: { [key]: value } }));
+      expect(messageAt(errors, `limits.${key}`)).toBe(message);
+    });
+
+    it("validates allowed origins", async () => {
+      expect(Object.keys((await errorsFor(form({ allowed_origins: ["https://example.com", "*", "http://localhost:3000"] }))) as object)).toHaveLength(0);
+      const errors = await errorsFor(form({ allowed_origins: ["example.com/path"] }));
+      expect(messageAt(errors, "allowed_origins.0")).toMatch(/origin like https:\/\/example.com/);
+    });
+
+    it("allows an empty retention but not zero days", async () => {
+      expect(Object.keys((await errorsFor(form({ recording: { retention_days: null } }))) as object)).toHaveLength(0);
+      const errors = await errorsFor(form({ recording: { retention_days: 0 } }));
+      expect(messageAt(errors, "config.recording.retention_days")).toBe("At least 1 day");
+    });
   });
 });

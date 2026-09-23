@@ -40,7 +40,7 @@ export interface UiStateStore {
   state: Required<
     Pick<
       UiState,
-      "notes" | "checklist" | "assets" | "activity" | "custom" | "v"
+      "notes" | "checklist" | "assets" | "activity" | "blocks" | "custom" | "v"
     >
   > &
     UiState;
@@ -61,13 +61,14 @@ export type UiStateAction =
 
 export function emptyUiState(): UiStateStore["state"] {
   return {
-    v: 1,
+    v: 2,
     status: null,
     progress: null,
     notes: [],
     checklist: [],
     assets: [],
     activity: [],
+    blocks: {},
     custom: {},
   };
 }
@@ -84,18 +85,23 @@ export function initialUiStateStore(): UiStateStore {
 
 /**
  * Fill in the optional slots of a wire `UiState` so consumers never have to
- * null-check. Unknown extra keys are preserved.
+ * null-check. Unknown extra keys are preserved; `v` passes through (the v2
+ * worker sends `2`, v1 producers `1`) and defaults to `2`.
+ *
+ * `blocks` (v2, asks #68) is `{}` when missing — the seq-1 snapshot always
+ * carries it, but a v1 producer or a panel test may not.
  */
 export function normalizeUiState(state: UiState): UiStateStore["state"] {
   return {
     ...state,
-    v: 1,
+    v: state.v ?? 2,
     status: state.status ?? null,
     progress: state.progress ?? null,
     notes: state.notes ?? [],
     checklist: state.checklist ?? [],
     assets: state.assets ?? [],
     activity: capActivity(state.activity ?? []),
+    blocks: isRecord(state.blocks) ? state.blocks : {},
     custom: state.custom ?? {},
   };
 }
@@ -230,6 +236,11 @@ function asList(current: unknown): unknown[] {
 
 /** Apply one patch op to a state tree, returning a new tree. */
 export function applyOp(state: unknown, op: UiPatchOp): unknown {
+  const blockSegments = blockPathSegments(op.path);
+  if (blockSegments !== null) {
+    const root = isRecord(state) ? state : {};
+    return { ...root, blocks: applyBlocksOp(root.blocks, blockSegments, op) };
+  }
   const segments = splitPath(op.path);
   const value = op.value;
 
@@ -268,6 +279,136 @@ export function applyOp(state: unknown, op: UiPatchOp): unknown {
     default:
       return state;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* `/blocks/...` — mirrors the agent's `_apply_tree_op`                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The segments after `/blocks` when `path` targets the v2 block tree, else
+ * `null`. Empty segments are dropped and nothing is unescaped, exactly like the agent's `_segments`
+ * (`agent/src/lkap_agent/ui/channel.py`), so `/blocks//t/rows` and
+ * `/blocks/t/rows` address the same list on both sides.
+ */
+export function blockPathSegments(path: string): string[] | null {
+  // No `~1`/`~0` unescaping: the agent's `_segments` does none, and block ids
+  // never contain `/`.
+  const segments = path.split("/").filter((segment) => segment !== "");
+  return segments[0] === "blocks" ? segments.slice(1) : null;
+}
+
+/** Python's `str.isdigit()` for the list-index segments the agent accepts. */
+function isIndex(segment: string): boolean {
+  return /^\d+$/.test(segment);
+}
+
+/** `_tree_item_matches`: a dict whose `key` or `id` equals `key`. */
+function blockItemMatches(item: unknown, key: unknown): boolean {
+  return isRecord(item) && (item.key === key || item.id === key);
+}
+
+/** `_apply_tree_list_op` on a copy of `items`. */
+function blockListOp(items: unknown[], op: UiPatchOp): unknown[] {
+  const value = op.value;
+  switch (op.op) {
+    case "append":
+      return [...items, value];
+    case "upsert": {
+      // `candidate = key`, else the value's truthy `key`, else its `id`.
+      let candidate: unknown = op.key ?? null;
+      if (candidate === null && isRecord(value)) {
+        candidate = value.key || value.id || null;
+      }
+      if (candidate !== null && candidate !== undefined) {
+        const index = items.findIndex((item) => blockItemMatches(item, candidate));
+        if (index !== -1) {
+          const next = [...items];
+          next[index] = value;
+          return next;
+        }
+      }
+      return [...items, value];
+    }
+    case "remove":
+      return typeof op.key === "string"
+        ? items.filter((item) => !blockItemMatches(item, op.key as string))
+        : items;
+    default:
+      return items;
+  }
+}
+
+/**
+ * Immutable twin of the agent's `_apply_tree_op` + `_tree_child`
+ * (`agent/src/lkap_agent/ui/channel.py`), so a block patch lands identically
+ * in the worker's `UiState` and in the browser:
+ *
+ * - intermediate dict segments that are missing (or hold a scalar) become
+ *   `{}`; a numeric segment indexes a list, and an out-of-range or
+ *   non-numeric index into a list makes the whole op a **no-op**;
+ * - a list leaf: `set` replaces the item (out of range → no-op), an unkeyed
+ *   `remove` deletes it, `append`/`upsert`/keyed `remove` act on the list
+ *   stored at that index;
+ * - a dict leaf: `set` writes, an unkeyed `remove` deletes the key,
+ *   `append`/`upsert`/keyed `remove` act on the list stored there (a
+ *   non-list is treated as `[]`);
+ * - `upsert`/keyed `remove` match items by `key` or `id`.
+ * - `set /blocks` replaces the whole tree; any other op on the root is
+ *   ignored (the agent raises).
+ */
+export function applyBlocksOp(blocks: unknown, segments: string[], op: UiPatchOp): Record<string, unknown> {
+  const root: Record<string, unknown> = isRecord(blocks) ? blocks : {};
+  if (segments.length === 0) {
+    if (op.op !== "set") return root;
+    return isRecord(op.value) ? { ...op.value } : {};
+  }
+  const next = writeBlockTree(root, segments, op);
+  return next === NO_OP ? root : (next as Record<string, unknown>);
+}
+
+const NO_OP: unique symbol = Symbol("no-op");
+
+function writeBlockTree(container: unknown, segments: string[], op: UiPatchOp): unknown {
+  const [head, ...rest] = segments;
+
+  if (Array.isArray(container)) {
+    if (!isIndex(head) || Number(head) >= container.length) return NO_OP;
+    const index = Number(head);
+    const next = [...container];
+    if (rest.length === 0) {
+      if (op.op === "remove" && typeof op.key !== "string") {
+        next.splice(index, 1);
+      } else if (op.op === "set") {
+        next[index] = op.value;
+      } else {
+        next[index] = blockListOp(asList(next[index]), op);
+      }
+      return next;
+    }
+    const child = next[index];
+    const written = writeBlockTree(isRecord(child) || Array.isArray(child) ? child : {}, rest, op);
+    if (written === NO_OP) return NO_OP;
+    next[index] = written;
+    return next;
+  }
+
+  const base: Record<string, unknown> = isRecord(container) ? { ...container } : {};
+  if (rest.length === 0) {
+    if (op.op === "set") {
+      base[head] = op.value;
+    } else if (op.op === "remove" && typeof op.key !== "string") {
+      delete base[head];
+    } else {
+      base[head] = blockListOp(asList(base[head]), op);
+    }
+    return base;
+  }
+  const child = base[head];
+  const written = writeBlockTree(isRecord(child) || Array.isArray(child) ? child : {}, rest, op);
+  if (written === NO_OP) return NO_OP;
+  base[head] = written;
+  return base;
 }
 
 export function applyOps(

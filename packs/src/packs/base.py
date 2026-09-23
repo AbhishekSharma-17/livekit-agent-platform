@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 __all__ = [
     "BackgroundRunner",
+    "BlockActionPack",
     "FrameBufferProto",
     "FrameSnapshot",
     "ImageGen",
@@ -95,6 +96,42 @@ class UiChannel(Protocol):
 
     async def request_ui(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         """RPC `lkap.ui.request` (agent -> UI); returns the UI's response payload."""
+        ...
+
+    # --- v2 panel blocks (CONTRACTS-V2 §4.4) ------------------------------------
+
+    async def set_block(self, block_id: str, state: dict[str, Any]) -> None:
+        """Replace the state of block `block_id` (`set /blocks/<block_id>`).
+
+        `state` is validated against the block type's state model when the block
+        is part of the session's panel layout.
+        """
+        ...
+
+    async def patch_block(self, block_id: str, ops: list[UiPatchOp]) -> None:
+        """Apply `ops` to block `block_id` in one `UiPatch`.
+
+        Each op's `path` is relative to the block (`"/rows"` becomes
+        `"/blocks/<block_id>/rows"`; `""` or `"/"` is the block itself).
+        """
+        ...
+
+    async def request_form(
+        self,
+        block_id: str,
+        schema: dict[str, Any],
+        prefill: dict[str, Any] | None = None,
+        timeout_s: float = 120,
+    ) -> dict[str, Any] | None:
+        """Show a JSON-schema form in block `block_id` and wait for the user.
+
+        Returns the submitted values, or `None` when the user cancels, the
+        timeout expires, or the session closes first.
+        """
+        ...
+
+    async def cite(self, block_id: str, hits: list[KbHit]) -> None:
+        """Replace the citations shown by `kb_citations` block `block_id`."""
         ...
 
 
@@ -233,4 +270,23 @@ class Pack(Protocol):
 
     async def on_session_end(self, ctx: PackSessionContext, reason: str) -> None:
         """Called once, right before the session tears down."""
+        ...
+
+
+class BlockActionPack(Protocol):
+    """The optional `on_block_action` hook a `Pack` may add (CONTRACTS-V2 §4.4).
+
+    Kept out of `Pack` itself so every existing pack still satisfies `Pack`
+    structurally: the worker looks the method up with `getattr`, and a pack
+    that does not define it gets the default no-op (the action is acknowledged
+    with an empty payload).
+    """
+
+    async def on_block_action(
+        self, ctx: PackSessionContext, block_id: str, name: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle `AgentAction(action="block_action", payload={block_id, name, data})`.
+
+        Returns the RPC result payload for the browser.
+        """
         ...

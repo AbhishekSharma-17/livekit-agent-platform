@@ -35,6 +35,7 @@ const AGENT: AgentPublicOut = {
   name: "Claims assistant",
   description: "Takes first notice of loss.",
   ui_panel_id: "insurance_notebook",
+  panel: { panel_id: "insurance_notebook", layout: "wide", blocks: [] },
   pipeline_mode: "cascaded",
   capabilities: {
     camera: true,

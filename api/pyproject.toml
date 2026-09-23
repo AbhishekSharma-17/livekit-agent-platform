@@ -22,6 +22,9 @@ dependencies = [
   "structlog>=25.4,<26",
   "lkap-contracts",
   "lkap-packs",
+  "argon2-cffi>=23.1,<26",
+  "arq>=0.26,<1",
+  "boto3>=1.35,<2",
 ]
 
 [dependency-groups]
@@ -31,6 +34,10 @@ dev = [
   "pytest-timeout>=2.4",
   "ruff>=0.13",
   "mypy>=1.18",
+  "fakeredis>=2.26,<3",
+  "moto[s3]>=5.0,<6",
+  "respx>=0.21,<1",
+  "boto3-stubs[s3]>=1.35,<2",
 ]
 
 [tool.uv.sources]

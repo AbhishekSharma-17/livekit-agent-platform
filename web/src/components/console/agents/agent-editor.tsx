@@ -1,75 +1,115 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormProvider, useForm, type FieldErrors } from "react-hook-form";
 import { toast } from "sonner";
-import { ExternalLinkIcon, Trash2Icon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAgent, useUpdateAgent, useValidateAgent, useDeleteAgent } from "@/components/console/lib/api-hooks";
-import { zodResolver } from "@/components/console/lib/zod-resolver";
-import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
-import { DEFAULT_CAPABILITIES, DEFAULT_KNOWLEDGE, DEFAULT_TOOLS, DEFAULT_VOICE } from "@/components/console/agents/defaults";
-import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { ValidationBanner } from "@/components/console/shared/validation-banner";
+import { useAgent, useDeleteAgent, useUpdateAgent, useValidateAgent } from "@/components/console/lib/api-hooks";
 import { firstErrorMessage } from "@/components/console/lib/form-errors";
-import { ProvidersTab } from "@/components/console/agents/tabs/providers-tab";
-import { InstructionsTab } from "@/components/console/agents/tabs/instructions-tab";
-import { PanelTab } from "@/components/console/agents/tabs/panel-tab";
-import { ToolsTab } from "@/components/console/agents/tabs/tools-tab";
-import { KnowledgeTab } from "@/components/console/agents/tabs/knowledge-tab";
+import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
+import { zodResolver } from "@/components/console/lib/zod-resolver";
+import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
+import { pluralize } from "@/lib/format";
 
-function toFormValues(agent: AgentOut): AgentEditorForm {
-  return {
-    name: agent.name,
-    description: agent.description,
-    ui_panel_id: agent.ui_panel_id,
-    config: {
-      instructions: agent.config.instructions,
-      pipeline: { ...agent.config.pipeline, mode: agent.config.pipeline.mode ?? "cascaded" },
-      voice: { ...DEFAULT_VOICE, ...agent.config.voice },
-      capabilities: { ...DEFAULT_CAPABILITIES, ...agent.config.capabilities },
-      tools: { ...DEFAULT_TOOLS, ...agent.config.tools },
-      knowledge: { ...DEFAULT_KNOWLEDGE, ...agent.config.knowledge },
-      pack_settings: agent.config.pack_settings ?? {},
-      timezone: agent.config.timezone ?? "UTC",
-    },
-  };
+import { EditorContextProvider, type EditorContextValue } from "./editor/editor-context";
+import { EditorShell } from "./editor/editor-shell";
+import { buildAgentUpdate, toFormValues, unappliedFields } from "./editor/form-values";
+import type { SaveOutcome } from "./editor/publish-popover";
+import { visibleSections } from "./editor/registry";
+import { DEFAULT_SECTION_ID, EDITOR_SECTIONS, EDITOR_SLOTS } from "./editor/sections";
+import type { EditorSectionDef } from "./editor/types";
+import { UnsavedGuard } from "./editor/unsaved-guard";
+import {
+  firstSectionWithIssues,
+  formPathForIssue,
+  GENERAL_SECTION,
+  issuesFromApiError,
+  issuesFromFieldErrors,
+  issuesFromValidation,
+  summarizeIssues,
+  validationMessages,
+  type EditorIssue,
+} from "./editor/validation-map";
+
+/** How long the quiet "Configuration looks good" line stays (docs/UI_UX_SPEC.md §6). */
+const LOOKS_GOOD_MS = 6000;
+
+export interface AgentEditorProps {
+  agentId: string;
+  /** Section list override (tests); defaults to the registry (`editor/sections.ts`). */
+  sections?: EditorSectionDef[];
 }
 
-export function AgentEditor({ agentId }: { agentId: string }) {
+export function AgentEditor({ agentId, sections = EDITOR_SECTIONS }: AgentEditorProps) {
   const { data: agent, isLoading, isError, error, refetch } = useAgent(agentId);
+  // Top bar trail "Agents / <name>" (docs/UI_UX_SPEC.md §3.2); a no-op outside the console shell.
+  useSetBreadcrumbs([{ label: "Agents", href: "/console/agents" }, { label: agent?.name ?? "Agent" }]);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    );
-  }
+  if (isLoading) return <EditorSkeleton />;
 
   if (isError || !agent) {
-    return <ErrorBanner message={`Could not load this agent: ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner message={`Couldn't load this agent — ${errorMessage(error)}`} onRetry={() => refetch()} />;
   }
 
-  return <AgentEditorFormBody agent={agent} />;
+  return <AgentEditorFormBody agent={agent} allSections={sections} />;
 }
 
-function AgentEditorFormBody({ agent }: { agent: AgentOut }) {
+function EditorSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading agent" className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2 border-b border-border pb-4">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-7 w-64" />
+        <Skeleton className="h-5 w-80" />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)_280px]">
+        <Skeleton className="hidden h-72 lg:block" />
+        <Skeleton className="h-96" />
+        <Skeleton className="hidden h-96 lg:block" />
+      </div>
+    </div>
+  );
+}
+
+function focusFieldFor(issue: EditorIssue, setFocus: (path: string) => void): boolean {
+  const formPath = formPathForIssue(issue.path);
+  if (!formPath || !issue.path) return false;
+  const before = document.activeElement;
+  try {
+    setFocus(formPath);
+  } catch {
+    // Not a registered field (a Controller without a ref); fall back to the DOM.
+  }
+  if (document.activeElement !== before && document.activeElement !== document.body) return true;
+  const selectors = [
+    `[data-issue-path="${issue.path}"]`,
+    `[name="${formPath}"]`,
+    `[data-issue-path^="${issue.path}."]`,
+    `[name^="${formPath}."]`,
+  ];
+  for (const selector of selectors) {
+    const node = document.querySelector<HTMLElement>(selector);
+    if (node && !node.hasAttribute("disabled")) {
+      node.focus();
+      node.scrollIntoView?.({ block: "center" });
+      return true;
+    }
+  }
+  return false;
+}
+
+function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSections: EditorSectionDef[] }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const updateAgent = useUpdateAgent(agent.id);
   const validateAgent = useValidateAgent(agent.id);
   const deleteAgent = useDeleteAgent();
-  const [validation, setValidation] = React.useState<ValidationResult | null>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   const form = useForm<AgentEditorForm>({
     resolver: zodResolver(agentEditorFormSchema),
@@ -78,150 +118,246 @@ function AgentEditorFormBody({ agent }: { agent: AgentOut }) {
 
   React.useEffect(() => {
     form.reset(toFormValues(agent));
+    // Reset only when a different agent or a new config version arrives, not on every refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id, agent.config_version]);
 
-  async function onSubmit(values: AgentEditorForm) {
-    // The inactive mode's slots (e.g. leftover `stt`/`llm`/`tts` after
-    // switching to realtime) stay in form state so a user can switch back
-    // without re-configuring them, but the api validates every non-null
-    // `ProviderRef` at save (docs/CONTRACTS.md §6) — a half-configured
-    // provider left over from the other mode would fail validation with no
-    // way for the user to see why. Null them out only in the payload we
-    // send, not in the form itself.
-    const pipeline = { ...values.config.pipeline };
-    if (pipeline.mode === "cascaded") {
-      pipeline.realtime = null;
-    } else {
-      pipeline.stt = null;
-      pipeline.llm = null;
-      pipeline.tts = null;
+  // ---- sections and ?section= ----
+  const mode = form.watch("mode");
+  const sections = React.useMemo(() => visibleSections(allSections, { agent, mode }), [allSections, agent, mode]);
+  const sectionParam = searchParams.get("section");
+  const [requested, setRequested] = React.useState<string>(sectionParam ?? DEFAULT_SECTION_ID);
+  const lastParam = React.useRef(sectionParam);
+  React.useEffect(() => {
+    // Back/forward (or a link) changed ?section=; follow it.
+    if (sectionParam !== lastParam.current) {
+      lastParam.current = sectionParam;
+      if (sectionParam) setRequested(sectionParam);
     }
+  }, [sectionParam]);
+  const active =
+    sections.find((section) => section.id === requested) ??
+    sections.find((section) => section.id === DEFAULT_SECTION_ID) ??
+    sections[0];
 
-    try {
-      const updated = await updateAgent.mutateAsync({
-        name: values.name,
-        description: values.description,
-        ui_panel_id: values.ui_panel_id,
-        config: { v: 1, ...values.config, pipeline },
+  const goToSection = React.useCallback(
+    (id: string) => {
+      setRequested(id);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("section", id);
+      lastParam.current = id;
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      const top = contentRef.current?.getBoundingClientRect().top;
+      if (top !== undefined && top < 0) window.scrollTo({ top: 0 });
+    },
+    [pathname, router, searchParams],
+  );
+
+  // ---- issues ----
+  const [lastResult, setLastResult] = React.useState<Partial<ValidationResult> | null>(
+    null,
+  );
+  // Client (zod) errors come from the live `formState.errors`, so a fixed field
+  // clears its dot as soon as RHF re-validates; server issues come from the
+  // last validate call or failed save.
+  const computedIssues = [
+    ...issuesFromFieldErrors(form.formState.errors, sections),
+    ...issuesFromValidation(lastResult, sections),
+  ];
+  const issuesKey = JSON.stringify(computedIssues);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const issues = React.useMemo(() => computedIssues, [issuesKey]);
+  const summary = React.useMemo(() => summarizeIssues(issues), [issues]);
+  const sectionOrder = React.useMemo(() => sections.map((section) => section.id), [sections]);
+
+  const focusIssue = React.useCallback(
+    (issue: EditorIssue) => {
+      if (issue.section !== GENERAL_SECTION) goToSection(issue.section);
+      let attempts = 0;
+      const tryFocus = () => {
+        attempts += 1;
+        if (focusFieldFor(issue, (path) => form.setFocus(path as never)) || attempts >= 10) return;
+        window.setTimeout(tryFocus, 50);
+      };
+      window.setTimeout(tryFocus, 0);
+    },
+    [form, goToSection],
+  );
+
+  const goToFirstIssue = React.useCallback(() => {
+    const target = firstSectionWithIssues(issues, sectionOrder, "error") ?? firstSectionWithIssues(issues, sectionOrder, "warning");
+    if (target) goToSection(target);
+  }, [issues, sectionOrder, goToSection]);
+
+  // ---- "Configuration looks good" ----
+  const [looksGood, setLooksGood] = React.useState(false);
+  React.useEffect(() => {
+    if (!looksGood) return;
+    const timer = window.setTimeout(() => setLooksGood(false), LOOKS_GOOD_MS);
+    return () => window.clearTimeout(timer);
+  }, [looksGood]);
+
+  // Validate the saved config once on open so the section dots are meaningful before the first save.
+  React.useEffect(() => {
+    let cancelled = false;
+    validateAgent
+      .mutateAsync()
+      .then((result) => {
+        if (!cancelled) setLastResult(result);
+      })
+      .catch(() => {
+        // Best effort; dots simply stay empty.
       });
-      form.reset(toFormValues(updated));
-      toast.success("Saved.");
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id]);
+
+  // ---- save ----
+  const [saving, setSaving] = React.useState(false);
+
+  const persist = React.useCallback(
+    async (values: AgentEditorForm): Promise<SaveOutcome | null> => {
+      const body = buildAgentUpdate(agent, values);
+      setSaving(true);
+      setLooksGood(false);
       try {
-        const result = await validateAgent.mutateAsync();
-        setValidation(result);
-      } catch {
-        // validation is best-effort; a failed validate call shouldn't hide a successful save
+        const updated = await updateAgent.mutateAsync(body);
+        form.reset(toFormValues(updated));
+        const unapplied = unappliedFields(body, updated);
+        let validation: ValidationResult | null = null;
+        try {
+          validation = await validateAgent.mutateAsync();
+          setLastResult(validation);
+        } catch {
+          // Validation is best effort; a failed validate call must not hide a successful save.
+          setLastResult(null);
+        }
+        const { errors, warnings } = validationMessages(validation);
+        if (errors.length > 0) toast.success(`Saved with ${pluralize(errors.length, "error", "errors")}`);
+        else if (warnings.length > 0) toast.success(`Saved with ${pluralize(warnings.length, "warning", "warnings")}`);
+        else {
+          toast.success("Saved");
+          if (validation) setLooksGood(true);
+        }
+        if (unapplied.length > 0) {
+          toast.warning(`Not saved: ${unapplied.join(", ")}`, {
+            description: "This version of the API doesn't store these settings yet.",
+          });
+        }
+        return { agent: updated, validation };
+      } catch (error) {
+        const serverIssues = issuesFromApiError(error, sections);
+        if (serverIssues) {
+          setLastResult((error as { details?: ValidationResult }).details ?? null);
+          const errorCount = serverIssues.filter((issue) => issue.severity === "error").length;
+          toast.error(`Couldn't save — fix ${pluralize(errorCount || serverIssues.length, "issue", "issues")} first`);
+          const target = firstSectionWithIssues(serverIssues, sectionOrder, "error");
+          if (target) goToSection(target);
+        } else {
+          toast.error(`Couldn't save — ${errorMessage(error)}`);
+        }
+        return null;
+      } finally {
+        setSaving(false);
       }
-    } catch (error) {
-      toast.error(errorMessage(error));
+    },
+    [agent, form, goToSection, sectionOrder, sections, updateAgent, validateAgent],
+  );
+
+  const onInvalid = React.useCallback(
+    (errors: FieldErrors<AgentEditorForm>) => {
+      const clientIssues = issuesFromFieldErrors(errors, sections);
+      toast.error(firstErrorMessage(errors) ?? "Fix the highlighted fields before saving.");
+      const first = clientIssues[0];
+      if (first) focusIssue(first);
+    },
+    [focusIssue, sections],
+  );
+
+  const saveNow = React.useCallback(
+    () =>
+      new Promise<SaveOutcome | null>((resolve) => {
+        void form.handleSubmit(
+          async (values) => resolve(await persist(values)),
+          (errors) => {
+            onInvalid(errors);
+            resolve(null);
+          },
+        )();
+      }),
+    [form, onInvalid, persist],
+  );
+
+  const dirty = form.formState.isDirty;
+
+  // ⌘S / Ctrl+S saves.
+  const saveRef = React.useRef({ dirty, saving, saveNow });
+  saveRef.current = { dirty, saving, saveNow };
+  React.useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        const current = saveRef.current;
+        if (current.dirty && !current.saving) void current.saveNow();
+      }
     }
-  }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
-  function onInvalid(errors: FieldErrors<AgentEditorForm>) {
-    toast.error(firstErrorMessage(errors) ?? "Fix the highlighted fields before saving.");
-  }
-
-  async function togglePublished(next: boolean) {
+  async function onDelete() {
     try {
-      const updated = await updateAgent.mutateAsync({ published: next });
-      form.setValue("name", updated.name);
-      toast.success(next ? "Published." : "Unpublished.");
+      await deleteAgent.mutateAsync(agent.id);
+      toast.success("Deleted");
+      router.push("/console/agents");
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(`Couldn't delete — ${errorMessage(error)}`);
+      throw error;
     }
   }
+
+  const contextValue = React.useMemo<EditorContextValue>(
+    () => ({ agent, sections, activeSection: active?.id ?? DEFAULT_SECTION_ID, goToSection, issues, focusIssue }),
+    [agent, sections, active, goToSection, issues, focusIssue],
+  );
+
+  if (!active) return null;
+  const ActiveComponent = active.Component;
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <Input
-              {...form.register("name")}
-              className="h-auto border-none bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
-              aria-label="Agent name"
-            />
-            {form.formState.errors.name ? (
-              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-            ) : null}
-            <p className="text-sm text-muted-foreground">/{agent.slug}</p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={agent.published} onCheckedChange={togglePublished} />
-              {agent.published ? "Published" : "Draft"}
-            </label>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/s/${agent.slug}?mode=test`} target="_blank" rel="noopener noreferrer">
-                Test call <ExternalLinkIcon className="size-3.5" />
-              </Link>
-            </Button>
-            <ConfirmDialog
-              trigger={
-                <Button type="button" variant="ghost" size="icon-sm" aria-label="Delete agent">
-                  <Trash2Icon className="size-3.5" />
-                </Button>
-              }
-              title={`Delete "${agent.name}"?`}
-              description="This permanently deletes the agent and its private tool bindings."
-              confirmLabel="Delete"
-              onConfirm={async () => {
-                try {
-                  await deleteAgent.mutateAsync(agent.id);
-                  toast.success("Agent deleted.");
-                  router.push("/console");
-                } catch (error) {
-                  toast.error(errorMessage(error));
-                }
-              }}
-            />
-            <Button type="submit" disabled={updateAgent.isPending}>
-              {updateAgent.isPending ? "Saving…" : "Save & validate"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="mb-1 text-xs text-muted-foreground">
-          Description
-          <Input
-            {...form.register("description")}
-            className="mt-1 h-8"
-            placeholder="What this agent is for (optional)"
-          />
-        </div>
-
-        {validation ? (
-          <div className="my-4">
-            <ValidationBanner result={validation} />
-          </div>
-        ) : null}
-
-        <Tabs defaultValue="providers" className="mt-4">
-          <TabsList>
-            <TabsTrigger value="providers">Providers</TabsTrigger>
-            <TabsTrigger value="instructions">Instructions &amp; voice</TabsTrigger>
-            <TabsTrigger value="panel">Panel</TabsTrigger>
-            <TabsTrigger value="tools">Tools</TabsTrigger>
-            <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
-          </TabsList>
-          <TabsContent value="providers" className="mt-4">
-            <ProvidersTab />
-          </TabsContent>
-          <TabsContent value="instructions" className="mt-4">
-            <InstructionsTab />
-          </TabsContent>
-          <TabsContent value="panel" className="mt-4">
-            <PanelTab />
-          </TabsContent>
-          <TabsContent value="tools" className="mt-4">
-            <ToolsTab agent={agent} />
-          </TabsContent>
-          <TabsContent value="knowledge" className="mt-4">
-            <KnowledgeTab />
-          </TabsContent>
-        </Tabs>
-      </form>
+      <EditorContextProvider value={contextValue}>
+        <form
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            // Enter in a field submits the form; a clean form has nothing to save.
+            if (dirty && !saving) void saveNow();
+          }}
+        >
+          <UnsavedGuard dirty={dirty} name={agent.name} />
+          <EditorShell
+            agent={agent}
+            sections={sections}
+            active={active}
+            onSelectSection={goToSection}
+            summary={summary}
+            slots={EDITOR_SLOTS}
+            dirty={dirty}
+            saving={saving}
+            looksGood={looksGood}
+            saveNow={saveNow}
+            onValidated={setLastResult}
+            goToFirstIssue={goToFirstIssue}
+            onDelete={onDelete}
+            contentRef={contentRef}
+          >
+            <ActiveComponent agent={agent} />
+          </EditorShell>
+        </form>
+      </EditorContextProvider>
     </FormProvider>
   );
 }

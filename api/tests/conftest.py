@@ -15,15 +15,18 @@ import types
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
+import greenlet
 import httpx
 import pytest
 from fastapi import FastAPI
 from lkap_contracts.agent_config import (
     AgentConfig,
     CapabilitiesConfig,
+    PanelLayout,
     PipelineConfig,
     ProviderRef,
 )
+from lkap_contracts.migrate import default_panel_for
 from lkap_contracts.packs import PackManifest
 
 from lkap_api.bootstrap import bootstrap
@@ -82,6 +85,10 @@ GENERIC_MANIFEST = PackManifest(
     name="Generic assistant",
     description="A pack with no code tools.",
     ui_panel_id="generic",
+    # Matches `packs/src/packs/generic/manifest.py`'s real default_panel (R-V2-7):
+    # the built-in composite panel with the four default blocks. Kept in sync by
+    # hand since this fake exists precisely so tests don't import the real pack.
+    default_panel=PanelLayout.model_validate(default_panel_for("generic")),
     default_instructions="You are a helpful assistant.",
     default_greeting="Hello! How can I help you today?",
     recommended_pipeline=PipelineConfig(
@@ -154,15 +161,60 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
         await db.dispose()
 
 
-@pytest.fixture
-def tenant_guard() -> Iterator[None]:
-    """Fail any ORM query on a tenant table that carries no `workspace_id` predicate.
+@pytest.fixture(autouse=True, scope="session")
+def _fast_password_hashing() -> Iterator[None]:
+    """Use minimal argon2id parameters in tests.
 
-    Opt-in for now: every v1 router still queries unscoped, so V2-02 flips this
-    to `autouse=True` once `WorkspaceContext` is wired into the admin routers
-    (CONTRACTS-V2 §3.1).
+    Production hashing costs ~50-200 ms per call by design; bootstrap hashes the
+    owner password for every test database, which alone added minutes to the
+    suite. The hash format (``$argon2id$``) and verification path are unchanged.
     """
-    with tenant_scope_guard():
+    from argon2 import PasswordHasher
+
+    from lkap_api.auth import passwords
+
+    fast = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+    patcher = pytest.MonkeyPatch()
+    patcher.setattr(passwords, "_hasher", lambda: fast)
+    passwords._dummy_hash.cache_clear()
+    try:
+        yield
+    finally:
+        patcher.undo()
+        passwords._dummy_hash.cache_clear()
+
+
+def _issued_by_test_code(_state: object) -> bool:
+    """True when the nearest application-or-test frame issuing the query is a test module.
+
+    Async sessions run the ORM inside a greenlet, so the caller's frames are
+    reached through the greenlet's parent. Application code (anything under
+    ``lkap_api/``) is always checked, however a test invokes it; a test's own
+    assertion reads are not application queries and are skipped.
+    """
+    current = greenlet.getcurrent()
+    frame = current.parent.gr_frame if current.parent is not None else sys._getframe(1)
+    while frame is not None:
+        filename = frame.f_code.co_filename
+        if "/lkap_api/" in filename and not filename.endswith("/db/guard.py"):
+            return False
+        if "/tests/" in filename and not filename.endswith("/conftest.py"):
+            return True
+        frame = frame.f_back
+    return False
+
+
+@pytest.fixture(autouse=True)
+def tenant_guard() -> Iterator[None]:
+    """Fail any application query on a tenant table without a `workspace_id` predicate.
+
+    Autouse since V2-02 scoped every admin router (asks #13/#25): the suite
+    fails on an unscoped tenant query anywhere in `lkap_api`, whether reached
+    through a route or called directly by a test. Reads issued by test code
+    itself are exempt; deliberate cross-workspace application reads opt out
+    with `.execution_options(lkap_cross_workspace=True)`.
+    """
+    with tenant_scope_guard(exempt=_issued_by_test_code):
         yield
 
 

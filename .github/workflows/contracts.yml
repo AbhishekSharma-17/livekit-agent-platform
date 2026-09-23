@@ -1,0 +1,77 @@
+# Contracts gate (PLAN-V2 §1 "Contracts gate", §V2-09 scope): the registry,
+# generated exports and the derived agent requirements files must always be
+# in sync with contracts/src/lkap_contracts/*.py.
+name: contracts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "packs/src/packs/*/manifest.py"
+      - "web/src/contracts/**"
+      - "agent/requirements/**"
+      - "scripts/gen_plugin_requirements.py"
+      - "scripts/check_installed_providers.py"
+      - ".github/workflows/contracts.yml"
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Needed by contracts/src/lkap_contracts/export.py's TypeScript step
+      # (`pnpm dlx json-schema-to-typescript`, unpinned — see the export
+      # diff check below and this run's summary if that step is what drifts).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web deps (for pnpm dlx json-schema-to-typescript)
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync contracts deps
+        working-directory: contracts
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        working-directory: contracts
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Type check (mypy --strict)
+        working-directory: contracts
+        run: uv run mypy --strict src
+
+      - name: Test
+        working-directory: contracts
+        run: uv run pytest -q -m "not live"
+
+      # PLAN-V2 §1: "the export diff test must pass" — regenerate everything
+      # the registry feeds and fail if the working tree would change.
+      - name: Export diff check
+        run: |
+          cd contracts && uv run python -m lkap_contracts.export && cd ..
+          scripts/export_contracts.sh
+          git diff --exit-code -- contracts/generated web/src/contracts
+
+      # docs/v2/_asks.md #32 / PLAN-V2 §8 R-V2-1: agent/requirements/{slim,full}.txt
+      # and their mirrored check_installed_providers.py must be regenerated
+      # whenever the registry changes — this is the only place that's checked.
+      - name: Agent requirements in sync with the registry
+        run: contracts/.venv/bin/python scripts/gen_plugin_requirements.py --check

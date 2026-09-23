@@ -25,8 +25,8 @@ from lkap_contracts.dispatch import DispatchMetadata
 from lkap_agent.config_client import ConfigUnavailableError, SessionEndedError, SessionNotFoundError
 from lkap_agent.main import (
     CONFIG_UNAVAILABLE_LINE,
+    DEFAULT_AGENT_NAME,
     FALLBACK_TTS_MODEL,
-    REQUIRED_AGENT_NAME,
     START_FAILED_LINE,
     WORKFLOW_FALLBACK_LLM_MODEL,
     Deps,
@@ -64,11 +64,12 @@ def _inference_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class FakeJob:
-    """The `ctx.job` fields `run_session` reads."""
+    """The `ctx.job` fields `run_session` reads (`room.name` comes from the job proto)."""
 
-    def __init__(self, metadata: str, job_id: str = "job-1") -> None:
+    def __init__(self, metadata: str, job_id: str = "job-1", room_name: str = "lkap-room-1") -> None:
         self.metadata = metadata
         self.id = job_id
+        self.room = SimpleNamespace(name=room_name)
 
 
 class FakeProc:
@@ -194,11 +195,11 @@ def _deps(api: FakeApi, *, factory: ProviderFactory | None = None, **overrides: 
     overrides.setdefault("ui_channel_factory", lambda **kw: NoopUiChannel(kw.get("session_id", "")))
     overrides.setdefault("frame_buffer_factory", lambda **kw: NoopFrameBuffer())
     overrides.setdefault("background_runner_factory", lambda **kw: NoopBackgroundRunner())
+    overrides.setdefault("turn_detector_factory", lambda _mode: None)
     return Deps(
         settings=_settings(),
         config_client=cast(Any, api),
         provider_factory=factory or _RecordingFactory(),
-        turn_detector_factory=lambda: None,
         **overrides,
     )
 
@@ -841,7 +842,7 @@ def test_sdk_rtc_session_precedence_still_matches_our_assumptions() -> None:
 def test_livekit_toml_agent_name_equals_required_agent_name() -> None:
     toml_path = Path(__file__).resolve().parents[2] / "livekit.toml"
     data = tomllib.loads(toml_path.read_text())
-    assert data["agent"]["name"] == REQUIRED_AGENT_NAME
+    assert data["agent"]["name"] == DEFAULT_AGENT_NAME
 
 
 # ------------------------------------------------------------- noop fallbacks

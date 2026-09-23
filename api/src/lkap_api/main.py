@@ -39,13 +39,13 @@ from lkap_api.routers import (
     calls,
     connect,
     connections,
-    credentials,
     fleet,
     fleet_internal,
     flows,
     health,
     hooks,
     internal,
+    provider_keys,
     providers,
     sessions,
     telephony,
@@ -54,7 +54,7 @@ from lkap_api.routers import (
     webhooks,
     workspaces,
 )
-from lkap_api.routers.credentials import seed_bootstrap_credentials
+from lkap_api.routers.provider_keys import seed_bootstrap_credentials
 from lkap_api.sessions_sweep import sweep_loop
 from lkap_api.settings import Settings, get_settings
 from lkap_api.vault import Vault
@@ -125,7 +125,7 @@ def _include_routers(app: FastAPI) -> None:
     """
     app.include_router(providers.router)
     app.include_router(packs_router)
-    app.include_router(credentials.router)
+    app.include_router(provider_keys.router)
     app.include_router(tools.router)
     app.include_router(agents.router)
     app.include_router(connect.router)

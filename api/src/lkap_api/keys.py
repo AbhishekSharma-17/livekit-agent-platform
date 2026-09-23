@@ -29,6 +29,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Table, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Base
 from lkap_api.db.session import Database
 from lkap_api.logging import get_logger
@@ -96,7 +97,13 @@ async def rotate_column(session: AsyncSession, spec: CipherColumn, old: Fernet, 
     table = _table(spec.table)
     key_cols = [table.c[name] for name in spec.key_columns]
     value_col = table.c[spec.column]
-    rows = (await session.execute(select(*key_cols, value_col).where(value_col.is_not(None)))).all()
+    # Key rotation re-encrypts every workspace's rows (operator CLI).
+    stmt = (
+        select(*key_cols, value_col)
+        .where(value_col.is_not(None))
+        .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+    )
+    rows = (await session.execute(stmt)).all()
     rewritten = 0
     for row in rows:
         ciphertext = row[-1]

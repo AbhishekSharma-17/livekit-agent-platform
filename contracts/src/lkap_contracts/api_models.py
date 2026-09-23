@@ -14,6 +14,7 @@ from lkap_contracts.agent_config import (
     AgentConfig,
     AgentLimits,
     CapabilitiesConfig,
+    PanelLayout,
     PipelineMode,
 )
 from lkap_contracts.common import Issue as Issue
@@ -55,25 +56,25 @@ class ErrorResponse(BaseModel):
 
 
 # ------------------------------------------------------------------------ providers
-class ProvidersResponse(BaseModel):
-    """``GET /v1/providers``.
-
-    ``providers`` stays ``list[ProviderSpec]``; V2-06 serves the enriched
-    :class:`ProviderOut` (a superset) through the same field and bumps ``v`` to
-    ``2`` then — the payload is still v1-shaped, so ``2`` is accepted but not
-    yet emitted.
-    """
-
-    v: Literal[1, 2] = 1
-    providers: list[ProviderSpec]
-
-
 class ProviderOut(ProviderSpec):
     """A registry entry plus this workspace's settings (``GET /v1/providers``)."""
 
     enabled: bool = True
     installed_on: list[str] = Field(default_factory=list)
     default_credential_id: str | None = None
+
+
+class ProvidersResponse(BaseModel):
+    """``GET /v1/providers``.
+
+    ``v=2`` (V2-06): ``providers`` carries the enriched :class:`ProviderOut`
+    (a superset of ``ProviderSpec`` with this workspace's ``enabled``,
+    ``installed_on`` and ``default_credential_id``), not the bare registry
+    entry.
+    """
+
+    v: Literal[1, 2] = 2
+    providers: list[ProviderOut]
 
 
 class ProviderSettingsIn(BaseModel):
@@ -92,12 +93,19 @@ class CatalogItem(BaseModel):
 
 
 class CatalogResponse(BaseModel):
-    """``GET /v1/providers/{id}/catalog``."""
+    """``GET /v1/providers/{id}/catalog``.
+
+    ``error`` (V2-06, additive) carries a short, secret-free note when the
+    live vendor call failed and ``items``/``source`` fell back to a cached or
+    static list instead — the endpoint always returns ``200`` (CONTRACTS-V2
+    "a failed vendor call must never break the providers page").
+    """
 
     kind: CatalogKind
     items: list[CatalogItem] = []
     fetched_at: datetime | None = None
     source: Literal["vendor", "static"] = "static"
+    error: str | None = None
 
 
 # ---------------------------------------------------------------------- credentials
@@ -189,13 +197,22 @@ class AgentOut(BaseModel):
 
 
 class AgentPublicOut(BaseModel):
-    """What an unauthenticated browser may see about a published agent."""
+    """What an unauthenticated browser may see about a published agent.
+
+    ``panel`` (R-V2-7, CONTRACTS-V2 §4.4 "Layout delivery") is the
+    *effective* layout — ``lkap_api.panels.effective_layout(agent, pack)`` —
+    not necessarily ``AgentConfig.panel`` verbatim: it carries the block list
+    the session actually renders, resolved the same way for ``connect`` and
+    for the worker's ``/internal/v1/sessions/{id}/resolved``. ``ui_panel_id``
+    stays as the mirror of ``panel.panel_id`` for one release.
+    """
 
     id: str
     slug: str
     name: str
     description: str
     ui_panel_id: str
+    panel: PanelLayout
     capabilities: CapabilitiesConfig
     pipeline_mode: PipelineMode
 
@@ -421,13 +438,14 @@ class SessionCost(BaseModel):
 class QaOut(BaseModel):
     """LLM-judge scoring of a finished session."""
 
-    status: Literal["pending", "done", "failed"] = "pending"
+    status: Literal["pending", "done", "failed", "skipped"] = "pending"
     score: int | None = None
     sentiment: Literal["positive", "neutral", "negative"] | None = None
     tags: list[str] = []
     summary: str | None = None
     scored_at: datetime | None = None
     model: str | None = None
+    scored_by: Literal["worker", "api"] | None = None
 
 
 class RecordingOut(BaseModel):
@@ -526,6 +544,10 @@ class SessionSummaryIn(BaseModel):
     transcript: list[TranscriptTurn]
     final_ui_state: UiState | None = None
     error: str | None = None
+    #: R-V2-8: a flow session's end-node disposition and extracted variables
+    #: (from ``FlowState``); prompt agents send the defaults.
+    disposition: str | None = None
+    variables: dict[str, Any] = {}
 
 
 class InternalKbSearchRequest(BaseModel):
@@ -538,13 +560,20 @@ class InternalKbSearchRequest(BaseModel):
 
 # --------------------------------------------------------------------------- health
 class HealthResponse(BaseModel):
-    """``GET /v1/health``."""
+    """``GET /v1/health``.
+
+    ``db`` is ``ok`` only when the database answers *and* its Alembic revision
+    equals the migration head, so an un-migrated or half-migrated schema reports
+    ``error``. ``agents_unbound`` counts agents with no LiveKit connection
+    (CONTRACTS-V2 §1.3); it should be 0 once bootstrap has run.
+    """
 
     ok: bool
     version: str
     livekit_url: str
     packs: list[str]
     db: Literal["ok", "error"]
+    agents_unbound: int = 0
 
 
 # ----------------------------------------------------------------------- auth/team
@@ -608,6 +637,9 @@ class FleetStatus(BaseModel):
     """``GET /v1/connections/{id}/fleet``."""
 
     desired_replicas: int = 0
+    #: R-V2-4: how many config-less restarts were requested, and when the last one was.
+    restart_generation: int = 0
+    restart_requested_at: datetime | None = None
     instances: list[WorkerInstanceOut] = []
     installed_provider_ids: list[str] = []
     image: Literal["slim", "full"] = "slim"

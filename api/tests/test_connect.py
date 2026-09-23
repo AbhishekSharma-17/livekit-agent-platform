@@ -16,6 +16,10 @@ from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.settings import Settings
 
+#: The platform's own web origin (`LKAP_CORS_ORIGINS` default): the public session
+#: page `/s/[slug]` calls connect from it, so it is allowed for every agent.
+WEB = {"Origin": "http://localhost:3000"}
+
 
 def _claims(token: str, settings: Settings) -> dict[str, Any]:
     decoded: dict[str, Any] = jwt.decode(
@@ -29,14 +33,18 @@ async def test_connect_returns_token_source_compatible_fields(
 ) -> None:
     agent = await create_agent(admin_client, name="Public agent")
 
-    response = await client.post(f"/v1/agents/{agent['slug']}/connect", json={"participant_name": "Ada"})
+    response = await client.post(
+        f"/v1/agents/{agent['slug']}/connect", json={"participant_name": "Ada"}, headers=WEB
+    )
 
     body = response.json()
     assert response.status_code == 200, response.text
     assert body["serverUrl"] == settings.livekit_url
     assert body["participantName"] == "Ada"
     assert body["roomName"] == f"lkap-{body['sessionId'][:8]}"
-    assert body["uiPanelId"] == agent["ui_panel_id"]
+    # `uiPanelId` mirrors `agent.panel.panel_id` for one release (R-V2-7), not
+    # the stored `agents.ui_panel_id` column ("generic") returned by create.
+    assert body["uiPanelId"] == body["agent"]["panel"]["panel_id"] == "composite"
     assert body["protocolVersion"] == 1
     assert body["agent"]["slug"] == agent["slug"]
 
@@ -46,7 +54,7 @@ async def test_connect_creates_a_session_row(
 ) -> None:
     agent = await create_agent(admin_client)
 
-    body = (await client.post(f"/v1/agents/{agent['id']}/connect", json={})).json()
+    body = (await client.post(f"/v1/agents/{agent['id']}/connect", json={}, headers=WEB)).json()
 
     async with database.session() as session:
         row = (await session.execute(select(SessionRow))).scalar_one()
@@ -62,7 +70,7 @@ async def test_minted_token_dispatches_the_platform_agent_with_id_only_metadata(
 ) -> None:
     agent = await create_agent(admin_client)
 
-    body = (await client.post(f"/v1/agents/{agent['id']}/connect", json={})).json()
+    body = (await client.post(f"/v1/agents/{agent['id']}/connect", json={}, headers=WEB)).json()
 
     claims = _claims(body["participantToken"], settings)
     agents = claims["roomConfig"]["agents"]
@@ -91,6 +99,7 @@ async def test_client_supplied_room_config_is_ignored(
                 "roomConfig": {"agents": [{"agentName": "other-project-agent"}]},
                 "agentName": "other-project-agent",
             },
+            headers=WEB,
         )
     ).json()
 
@@ -125,21 +134,38 @@ async def test_connect_to_an_unknown_agent_is_404(client: httpx.AsyncClient) -> 
     assert response.status_code == 404
 
 
-async def test_caller_supplied_identity_and_attributes_are_honoured(
+async def test_connect_public_caller_identity_is_ignored_but_attributes_kept(
     client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
 ) -> None:
+    # F-13: a public caller may not pick its participant identity.
     agent = await create_agent(admin_client)
 
     body = (
         await client.post(
             f"/v1/agents/{agent['id']}/connect",
             json={"participant_identity": "customer-7", "participant_metadata": {"tier": "gold"}},
+            headers=WEB,
         )
     ).json()
 
     claims = _claims(body["participantToken"], settings)
-    assert claims["sub"] == "customer-7"
+    assert claims["sub"] != "customer-7"
+    assert claims["sub"].startswith("user-")
     assert claims["attributes"] == {"tier": "gold"}
+
+
+async def test_connect_privileged_caller_identity_is_honoured(
+    admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    body = (
+        await admin_client.post(
+            f"/v1/agents/{agent['id']}/connect", json={"participant_identity": "customer-7"}
+        )
+    ).json()
+
+    assert _claims(body["participantToken"], settings)["sub"] == "customer-7"
 
 
 async def test_connect_never_logs_or_returns_configuration(
@@ -151,7 +177,7 @@ async def test_connect_never_logs_or_returns_configuration(
     config = json.loads(inference_config(instructions=marker).model_dump_json())
     agent = await create_agent(admin_client, name="Confidential agent", config=config)
 
-    response = await client.post(f"/v1/agents/{agent['id']}/connect", json={})
+    response = await client.post(f"/v1/agents/{agent['id']}/connect", json={}, headers=WEB)
 
     assert response.status_code == 200
     assert marker not in response.text

@@ -1,15 +1,21 @@
 """Runtime settings for the `lkap-agent` worker.
 
-Shapes and env var names follow docs/CONTRACTS.md §3. `.env` is optional and
-human-created; ship `env.example` only. Never read `.env*` from tooling.
+Shapes and env var names follow docs/CONTRACTS.md §3 and CONTRACTS-V2 §5/§6.
+`.env` is optional and human-created; ship `env.example` only. Never read
+`.env*` from tooling.
 """
 
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: The dispatch name a worker registers under when `LKAP_AGENT_NAME` is unset
+#: (CONTRACTS-V2 §6; `livekit_connections.agent_name` defaults to the same value).
+DEFAULT_AGENT_NAME = "lkap-agent"
 
 
 class Settings(BaseSettings):
@@ -33,9 +39,40 @@ class Settings(BaseSettings):
     livekit_url: str = Field(validation_alias="LIVEKIT_URL")
     livekit_api_key: str = Field(validation_alias="LIVEKIT_API_KEY")
     livekit_api_secret: str = Field(validation_alias="LIVEKIT_API_SECRET")
-    livekit_agent_name: str = Field(default="lkap-agent", validation_alias="LIVEKIT_AGENT_NAME")
+    #: `LIVEKIT_AGENT_NAME`: optional and informational only. The worker
+    #: registers under `agent_name`; a *set* value that differs from it is
+    #: refused at start-up (D-W2-11), because it means the process was launched
+    #: from another agent's environment.
+    livekit_agent_name: str | None = Field(default=None, validation_alias="LIVEKIT_AGENT_NAME")
 
     # --- LKAP_-prefixed ---
+    #: `LKAP_AGENT_NAME`: the dispatch name this worker registers under and the
+    #: only one its job filter accepts (CONTRACTS-V2 §5). One per connection;
+    #: the supervisor (or the operator, in `external` mode) sets it.
+    agent_name: str = DEFAULT_AGENT_NAME
+    #: `LKAP_CONNECTION_ID`: the connection this worker serves; unset ⇒ the api
+    #: attributes the worker to the default connection when it registers.
+    connection_id: str | None = None
+    #: `LKAP_INSTANCE_KEY`: override for the `worker_instances.instance_key`
+    #: this process registers under; unset ⇒ `hostname:pid`.
+    instance_key: str | None = None
+    #: `LKAP_MANAGED_BY`: who started this process, reported at registration;
+    #: the supervisor sets `supervisor` (docs/v2/_asks.md #46).
+    managed_by: Literal["external", "supervisor", "cloud"] = "external"
+    #: `LKAP_IMAGE_FLAVOR`: which worker image this process runs (the build
+    #: arg of `agent/Dockerfile`); a dev venv counts as `slim`.
+    image_flavor: Literal["slim", "full"] = "slim"
+    #: `LKAP_INSTALLED_PROVIDERS_FILE`: the build-time import check's output
+    #: (CONTRACTS-V2 §7). When absent, installed providers are derived from the
+    #: distributions present in this environment.
+    installed_providers_file: str = "/app/installed_providers.json"
+    #: `LKAP_HEARTBEAT_INTERVAL_S`: seconds between `workers/{key}/heartbeat` posts.
+    heartbeat_interval_s: float = 30.0
+    #: `LKAP_RECONNECT_GRACE_S`: how long a job survives its caller dropping off
+    #: the room before it shuts down (REVIEW-FINAL F-33). `None`/`0` ends the
+    #: job as soon as the caller leaves.
+    reconnect_grace_s: float | None = 60.0
+
     service_token: str
     api_base_url: str
     packs: str = "packs.insurance_claim,packs.generic"

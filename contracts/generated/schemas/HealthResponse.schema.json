@@ -1,8 +1,13 @@
 {
   "$id": "lkap-contracts/HealthResponse.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``GET /v1/health``.",
+  "description": "``GET /v1/health``.\n\n``db`` is ``ok`` only when the database answers *and* its Alembic revision\nequals the migration head, so an un-migrated or half-migrated schema reports\n``error``. ``agents_unbound`` counts agents with no LiveKit connection\n(CONTRACTS-V2 §1.3); it should be 0 once bootstrap has run.",
   "properties": {
+    "agents_unbound": {
+      "default": 0,
+      "title": "Agents Unbound",
+      "type": "integer"
+    },
     "db": {
       "enum": [
         "ok",

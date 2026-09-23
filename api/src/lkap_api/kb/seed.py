@@ -17,6 +17,7 @@ from lkap_contracts.packs import KbSeed
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.models import KbDocument, KnowledgeBase
 from lkap_api.kb.embed import Embedder
 from lkap_api.kb.ingest import ingest_into_session
@@ -73,13 +74,24 @@ def _guess_mime(filename: str) -> str:
     return mimetypes.guess_type(filename)[0] or "text/plain"
 
 
-async def _get_or_create_kb(db: AsyncSession, *, name: str, embedder_id: str) -> KnowledgeBase:
+async def _get_or_create_kb(
+    db: AsyncSession, *, workspace_id: str, name: str, embedder_id: str
+) -> KnowledgeBase:
+    """Reuse the workspace's knowledge base called ``name`` or create it there."""
     existing = (
-        await db.execute(select(KnowledgeBase).where(KnowledgeBase.name == name))
-    ).scalar_one_or_none()
+        (
+            await db.execute(
+                select(KnowledgeBase).where(
+                    KnowledgeBase.workspace_id == workspace_id, KnowledgeBase.name == name
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
     if existing is not None:
         return existing
-    row = KnowledgeBase(name=name, embedder_id=embedder_id)
+    row = KnowledgeBase(workspace_id=workspace_id, name=name, embedder_id=embedder_id)
     db.add(row)
     await db.flush()
     log.info("kb_seed_kb_created", kb_id=row.id, name=name)
@@ -104,6 +116,7 @@ async def import_pack_kb_seeds(
     pack_id: str,
     seeds: list[KbSeed],
     embedder_id: str = DEFAULT_SEED_EMBEDDER_ID,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
 ) -> list[str]:
     """Create/reuse knowledge bases from a pack's `kb_seeds` and ingest their files.
 
@@ -117,6 +130,8 @@ async def import_pack_kb_seeds(
         pack_id: The pack's manifest id.
         seeds: `PackManifest.kb_seeds` to import.
         embedder_id: Recorded on newly created knowledge bases (metadata only).
+        workspace_id: The workspace of the agent being created; seed knowledge
+            bases are created in (and reused only from) that workspace.
 
     Returns:
         The ids of every knowledge base referenced by ``seeds`` (created or reused),
@@ -128,7 +143,9 @@ async def import_pack_kb_seeds(
 
     kb_ids: list[str] = []
     for seed in seeds:
-        kb = await _get_or_create_kb(db, name=seed.kb_name, embedder_id=embedder_id)
+        kb = await _get_or_create_kb(
+            db, workspace_id=workspace_id, name=seed.kb_name, embedder_id=embedder_id
+        )
         kb_ids.append(kb.id)
         if module_path is None:
             continue

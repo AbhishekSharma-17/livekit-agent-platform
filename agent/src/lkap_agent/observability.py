@@ -17,12 +17,22 @@ Two deviations from the plan text, both verified against livekit-agents 1.8.2:
   exists but warns on construction, and subscribing to `metrics_collected` makes
   `AgentSession` log a deprecation warning on every session, so neither is used;
   per-turn latency rides along on `ChatMessage.metrics` instead.
+
+The v2 per-session latency (`SessionLatency`, CONTRACTS-V2 §4.6; PLAN-V2 V2-07
+names it "metrics_collected latency") is therefore computed from the same
+`ChatMessage.metrics` of every assistant turn — `AgentSession.on` in 1.8.2
+itself says "Use ... ChatMessage.metrics for per-turn latency":
+`e2e_latency` (end of user speech → agent starts responding) is the
+EOU-to-first-audio figure, `llm_node_ttft` the LLM time to first token and
+`tts_node_ttfb` the TTS time to first byte. p50/p95 are posted to
+`POST /internal/v1/sessions/{id}/metrics` just before the summary.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import math
 import time
 from typing import Any, Final
 
@@ -36,13 +46,25 @@ from livekit.agents import (
     ToolExecutionUpdatedEvent,
 )
 from livekit.agents import llm as lk_llm
-from lkap_contracts.api_models import SessionEventIn, SessionSummaryIn, TranscriptTurn
+from lkap_contracts.api_models import (
+    SessionEventIn,
+    SessionLatency,
+    SessionMetricsIn,
+    SessionSummaryIn,
+    TranscriptTurn,
+)
 from lkap_contracts.ui_protocol import UiState
 
 from lkap_agent.config_client import ConfigClientProtocol
 from lkap_agent.logging import get_logger
 
-__all__ = ["SessionObserver", "bind_session_context", "transcript_from_history"]
+__all__ = [
+    "LatencyCollector",
+    "SessionObserver",
+    "bind_session_context",
+    "percentile",
+    "transcript_from_history",
+]
 
 logger = get_logger(__name__)
 
@@ -56,6 +78,60 @@ _RESULT_PREVIEW_CHARS: Final[int] = 240
 _REDACTED_ARG_KEYS: Final[frozenset[str]] = frozenset(
     {"api_key", "apikey", "authorization", "password", "secret", "token"}
 )
+
+
+#: `ChatMessage.metrics` keys (seconds) → the `SessionLatency` figure they feed.
+_LATENCY_KEYS: Final[dict[str, str]] = {
+    "e2e_latency": "eou_to_first_audio_ms",
+    "llm_node_ttft": "llm_ttft_ms",
+    "tts_node_ttfb": "tts_ttfb_ms",
+}
+
+
+def percentile(values: list[float], q: float) -> float | None:
+    """The `q` quantile (0–1) of `values` by linear interpolation, `None` when empty."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = (len(ordered) - 1) * q
+    low = math.floor(rank)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (rank - low)
+
+
+class LatencyCollector:
+    """Accumulates per-turn latency from assistant `ChatMessage.metrics`."""
+
+    def __init__(self) -> None:
+        self._samples: dict[str, list[float]] = {name: [] for name in _LATENCY_KEYS.values()}
+        self._turns = 0
+
+    def add(self, metrics: Any) -> None:
+        """Record one assistant turn's metrics (a `MetricsReport` dict, possibly empty)."""
+        if not isinstance(metrics, dict):
+            return
+        seen = False
+        for key, name in _LATENCY_KEYS.items():
+            value = metrics.get(key)
+            if isinstance(value, int | float) and value >= 0:
+                self._samples[name].append(float(value) * 1000.0)
+                seen = True
+        if seen:
+            self._turns += 1
+
+    @property
+    def turns(self) -> int:
+        """How many assistant turns carried at least one latency figure."""
+        return self._turns
+
+    def summary(self) -> SessionLatency:
+        """p50/p95 in milliseconds, `None` where no turn reported the figure."""
+        values: dict[str, Any] = {"turns": self._turns}
+        for name, samples in self._samples.items():
+            p50, p95 = percentile(samples, 0.5), percentile(samples, 0.95)
+            values[f"{name}_p50"] = round(p50, 1) if p50 is not None else None
+            values[f"{name}_p95"] = round(p95, 1) if p95 is not None else None
+        return SessionLatency(**values)
 
 
 def bind_session_context(*, session_id: str, agent_id: str, job_id: str) -> None:
@@ -132,7 +208,10 @@ class SessionObserver:
         self._usage: dict[str, Any] = {}
         self._tool_started_at: dict[str, float] = {}
         self._tool_names: dict[str, str] = {}
+        self._latency = LatencyCollector()
         self._closed = False
+        #: The transcript posted with the summary (the QA judge scores exactly this).
+        self.transcript: list[TranscriptTurn] = []
 
     # ------------------------------------------------------------------ events
 
@@ -209,6 +288,7 @@ class SessionObserver:
             payload: dict[str, Any] = {"text": text, "interrupted": bool(item.interrupted)}
             if item.metrics is not None:
                 payload["metrics"] = _dump(item.metrics)
+                self._latency.add(item.metrics)
             self.record("agent_turn", payload)
 
     def _on_tool_execution(self, ev: ToolExecutionUpdatedEvent) -> None:
@@ -262,6 +342,11 @@ class SessionObserver:
         """The latest `AgentSessionUsage` snapshot, as a plain dict."""
         return dict(self._usage)
 
+    @property
+    def latency(self) -> SessionLatency:
+        """The session's latency percentiles so far."""
+        return self._latency.summary()
+
     async def shutdown(
         self,
         *,
@@ -287,9 +372,15 @@ class SessionObserver:
                 transcript = transcript_from_history(self._session.history)
             except Exception:
                 logger.warning("could not build the transcript from session history", exc_info=True)
+        self.transcript = transcript
 
         self._buffer.append(SessionEventIn(ts=time.time(), type="session_ended", payload={"reason": reason}))
         await self.flush()
+
+        if self._latency.turns:
+            # Cost lines are computed by the api from `usage` (V2-12), so none are sent here.
+            metrics = SessionMetricsIn(latency=self._latency.summary())
+            await self._client.post_metrics(self._session_id, metrics)
 
         summary = SessionSummaryIn(
             status="failed" if status == "failed" else "ended",
@@ -308,7 +399,10 @@ class SessionObserver:
 
 
 def _dump(obj: Any) -> dict[str, Any]:
-    """Best-effort JSON-safe dict for a metrics/usage dataclass or model."""
+    """Best-effort JSON-safe dict for a metrics/usage dataclass, model or TypedDict."""
+    if isinstance(obj, dict):
+        # `ChatMessage.metrics` is a `MetricsReport` TypedDict of floats/strings.
+        return dict(obj)
     dump = getattr(obj, "model_dump", None)
     if callable(dump):
         result = dump(mode="json")

@@ -1,0 +1,60 @@
+# Live verification (PLAN-V2 §V2-09 scope: "live.yml (manual dispatch,
+# secrets from repo settings)"). Runs the `pytest.mark.live` suites — real
+# calls to LiveKit Cloud and vendor APIs (docs/RUNBOOK.md, docs/v2/PLAN-V2.md
+# §6) — against `agent/tests/live/`. Never runs on push/PR: these tests cost
+# quota (the Google key is free-tier — PLAN-V2 §6 caps live stages at ≤5
+# short sessions each) and must never fire on every commit.
+#
+# Configure these repository secrets before dispatching this workflow
+# (Settings → Secrets and variables → Actions):
+#   LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET   — required (the Cloud project's own creds)
+#   LKAP_MASTER_KEY                                     — required (credential vault key; generate with
+#                                                          `cd api && uv run python -m lkap_api.keys generate`)
+#   GOOGLE_API_KEY                                       — required for the Gemini-backed live tests
+#                                                          (test_inference_smoke, test_e2e_insurance text mode)
+#   OPENAI_API_KEY, DEEPGRAM_API_KEY, ELEVENLABS_API_KEY, CARTESIA_API_KEY   — optional, only needed if
+#                                                          you widen `pytest -k` beyond the default suite
+#
+# This workflow never runs `other-project-agent`'s dispatch name or touches its
+# room — every test here dispatches to `lkap-agent` only (RUNBOOK precondition).
+name: live
+
+on:
+  workflow_dispatch:
+    inputs:
+      pytest_args:
+        description: 'Extra pytest args (e.g. "-k text_mode" to narrow the suite)'
+        required: false
+        default: ""
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: live # optional protection rule (required reviewers) — configure under repo Settings → Environments
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync agent dependencies
+        working-directory: agent
+        run: uv sync --frozen
+
+      - name: Run live suite
+        working-directory: agent
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          LKAP_MASTER_KEY: ${{ secrets.LKAP_MASTER_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
+        run: uv run pytest -m live -v tests/live/ ${{ inputs.pytest_args }}

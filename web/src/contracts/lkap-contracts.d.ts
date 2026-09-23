@@ -101,6 +101,7 @@ export interface LkapContracts {
   QaConfig?: QaConfig;
   QaNode?: QaNode;
   QaOut?: QaOut;
+  QaVerdict?: QaVerdict;
   RecordingConfig?: RecordingConfig;
   RecordingOut?: RecordingOut;
   RecordingStartOut?: RecordingStartOut;
@@ -116,6 +117,7 @@ export interface LkapContracts {
   SessionMetricsIn?: SessionMetricsIn;
   SessionOut?: SessionOut;
   SessionPage?: SessionPage;
+  SessionQaIn?: SessionQaIn;
   SessionRecordingIn?: SessionRecordingIn;
   SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
@@ -615,6 +617,13 @@ export interface AgentPage {
 /**
  * What an unauthenticated browser may see about a published agent.
  *
+ * ``panel`` (R-V2-7, CONTRACTS-V2 §4.4 "Layout delivery") is the
+ * *effective* layout — ``lkap_api.panels.effective_layout(agent, pack)`` —
+ * not necessarily ``AgentConfig.panel`` verbatim: it carries the block list
+ * the session actually renders, resolved the same way for ``connect`` and
+ * for the worker's ``/internal/v1/sessions/{id}/resolved``. ``ui_panel_id``
+ * stays as the mirror of ``panel.panel_id`` for one release.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AgentPublicOut".
  */
@@ -623,6 +632,7 @@ export interface AgentPublicOut {
   description: string;
   id: string;
   name: string;
+  panel: PanelLayout;
   pipeline_mode: "realtime" | "cascaded" | "half_cascade";
   slug: string;
   ui_panel_id: string;
@@ -733,10 +743,16 @@ export interface CatalogItem {
 /**
  * ``GET /v1/providers/{id}/catalog``.
  *
+ * ``error`` (V2-06, additive) carries a short, secret-free note when the
+ * live vendor call failed and ``items``/``source`` fell back to a cached or
+ * static list instead — the endpoint always returns ``200`` (CONTRACTS-V2
+ * "a failed vendor call must never break the providers page").
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "CatalogResponse".
  */
 export interface CatalogResponse {
+  error?: string | null;
   fetched_at?: string | null;
   items?: CatalogItem[];
   kind: "models" | "voices" | "avatars" | "personas";
@@ -1006,11 +1022,11 @@ export interface CredentialUpdate {
  * instructions or resolved provider configuration.
  *
  * Rooms the platform did not create (inbound SIP) have no session row yet, so
- * v2 adds ``channel`` and ``connection_id`` and the worker calls
- * ``POST /internal/v1/sessions/start`` when ``session_id`` is empty. The field
- * stays a ``str`` (empty means "no session yet") rather than ``str | None``
- * while the v1 worker still passes it straight to ``resolve()``; V2-07 widens
- * it once the worker branches on it.
+ * v2 adds ``channel`` and ``connection_id`` and makes ``session_id`` optional:
+ * the worker (V2-07) calls ``POST /internal/v1/sessions/start`` when
+ * ``session_id`` is ``None`` **or empty** (the v1-era "no session yet"
+ * spelling is still honoured), and ``GET /internal/v1/sessions/{id}/resolved``
+ * otherwise.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "DispatchMetadata".
@@ -1021,7 +1037,7 @@ export interface DispatchMetadata {
   config_version: number;
   connection_id?: string;
   participant_identity: string;
-  session_id: string;
+  session_id?: string | null;
   v?: 2;
 }
 /**
@@ -1095,6 +1111,7 @@ export interface FleetDesired {
   desired_replicas?: number;
   image?: "slim" | "full";
   packs?: string[];
+  restart_generation?: number;
 }
 /**
  * ``GET /v1/connections/{id}/fleet``.
@@ -1107,6 +1124,8 @@ export interface FleetStatus {
   image?: "slim" | "full";
   installed_provider_ids?: string[];
   instances?: WorkerInstanceOut[];
+  restart_generation?: number;
+  restart_requested_at?: string | null;
 }
 /**
  * One registered worker process of a connection's pool.
@@ -1177,10 +1196,16 @@ export interface GalleryBlockState {
 /**
  * ``GET /v1/health``.
  *
+ * ``db`` is ``ok`` only when the database answers *and* its Alembic revision
+ * equals the migration head, so an un-migrated or half-migrated schema reports
+ * ``error``. ``agents_unbound`` counts agents with no LiveKit connection
+ * (CONTRACTS-V2 §1.3); it should be 0 once bootstrap has run.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "HealthResponse".
  */
 export interface HealthResponse {
+  agents_unbound?: number;
   db: "ok" | "error";
   livekit_url: string;
   ok: boolean;
@@ -1692,16 +1717,16 @@ export interface ProviderSpec {
 /**
  * ``GET /v1/providers``.
  *
- * ``providers`` stays ``list[ProviderSpec]``; V2-06 serves the enriched
- * :class:`ProviderOut` (a superset) through the same field and bumps ``v`` to
- * ``2`` then — the payload is still v1-shaped, so ``2`` is accepted but not
- * yet emitted.
+ * ``v=2`` (V2-06): ``providers`` carries the enriched :class:`ProviderOut`
+ * (a superset of ``ProviderSpec`` with this workspace's ``enabled``,
+ * ``installed_on`` and ``default_credential_id``), not the bare registry
+ * entry.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ProvidersResponse".
  */
 export interface ProvidersResponse {
-  providers: ProviderSpec[];
+  providers: ProviderOut[];
   v?: 1 | 2;
 }
 /**
@@ -1714,9 +1739,22 @@ export interface QaOut {
   model?: string | null;
   score?: number | null;
   scored_at?: string | null;
+  scored_by?: ("worker" | "api") | null;
   sentiment?: ("positive" | "neutral" | "negative") | null;
-  status?: "pending" | "done" | "failed";
+  status?: "pending" | "done" | "failed" | "skipped";
   summary?: string | null;
+  tags?: string[];
+}
+/**
+ * The judge LLM's expected JSON reply, asked for by :data:`DEFAULT_RUBRIC_PROMPT`.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "QaVerdict".
+ */
+export interface QaVerdict {
+  score: number;
+  sentiment: "positive" | "neutral" | "negative";
+  summary?: string;
   tags?: string[];
 }
 /**
@@ -2043,6 +2081,29 @@ export interface SessionOut {
 export interface SessionPage {
   items: SessionOut[];
   total: number;
+}
+/**
+ * ``PUT /internal/v1/sessions/{id}/qa`` (CONTRACTS-V2 §3.4, R-V2-5).
+ *
+ * Posted by the worker after it runs the judge (or decides not to);
+ * ``status="skipped"`` when ``AgentConfig.qa.enabled`` is false,
+ * ``"failed"`` when no judge could be built or the judge call/JSON-repair
+ * both failed, ``"done"`` with a full :class:`QaVerdict` otherwise.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionQaIn".
+ */
+export interface SessionQaIn {
+  error?: string | null;
+  model?: string | null;
+  raw?: {
+    [k: string]: unknown;
+  } | null;
+  score?: number | null;
+  sentiment?: ("positive" | "neutral" | "negative") | null;
+  status: "done" | "failed" | "skipped";
+  summary?: string | null;
+  tags?: string[];
 }
 /**
  * ``POST /internal/v1/sessions/{id}/recording`` — worker-side finalisation.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -27,8 +28,24 @@ HTTP_DEFINITION: dict[str, Any] = {
 }
 
 
+async def _default_credential(admin_client: httpx.AsyncClient) -> str:
+    """A `http-tool-secret` credential whose bag covers `HTTP_DEFINITION`'s `WEATHER_KEY`."""
+    response = await admin_client.post(
+        "/v1/credentials",
+        json={"provider_id": "http-tool-secret", "label": "Weather", "secrets": {"WEATHER_KEY": TOOL_SECRET}},
+    )
+    assert response.status_code == 201, response.text
+    credential_id: str = response.json()["id"]
+    return credential_id
+
+
 async def _create_tool(admin_client: httpx.AsyncClient, **overrides: Any) -> dict[str, Any]:
     definition = {**HTTP_DEFINITION, **overrides.pop("definition", {})}
+    # F-15: a `{{ secret.NAME }}` placeholder needs a credential to resolve against;
+    # `HTTP_DEFINITION`'s default header references one, so attach a matching
+    # credential unless the caller already set (or deliberately omitted/broke) one.
+    if definition.get("credential_id") is None and "{{ secret." in json.dumps(definition):
+        definition["credential_id"] = await _default_credential(admin_client)
     payload: dict[str, Any] = {
         "kind": definition["kind"],
         "name": definition["name"],
@@ -140,6 +157,90 @@ async def test_unknown_agent_or_credential_is_rejected(admin_client: httpx.Async
     assert bad_credential.status_code == 422
 
 
+# ------------------------------------------------------------------------------ F-15
+async def test_a_secret_placeholder_with_no_credential_id_is_rejected(
+    admin_client: httpx.AsyncClient,
+) -> None:
+    """F-15: `{{ secret.NAME }}` needs a `credential_id` to resolve against."""
+    response = await admin_client.post(
+        "/v1/tools",
+        json={"kind": "http", "name": "x", "definition": {**HTTP_DEFINITION, "credential_id": None}},
+    )
+
+    assert response.status_code == 422
+    assert "WEATHER_KEY" in response.json()["error"]["message"]
+
+
+async def test_an_unknown_secret_name_is_rejected(admin_client: httpx.AsyncClient) -> None:
+    """F-15: `{{ secret.MISSING }}` → 422 when the credential's bag has no such key."""
+    credential = (
+        await admin_client.post(
+            "/v1/credentials",
+            json={"provider_id": "http-tool-secret", "label": "Weather", "secrets": {"OTHER_KEY": "x"}},
+        )
+    ).json()
+
+    response = await admin_client.post(
+        "/v1/tools",
+        json={
+            "kind": "http",
+            "name": "x",
+            "definition": {**HTTP_DEFINITION, "credential_id": credential["id"]},
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert "WEATHER_KEY" in body["error"]["message"]
+    assert "x" not in body["error"]["message"], "the secret value itself must never be echoed"
+
+
+async def test_a_resolvable_secret_placeholder_is_accepted(admin_client: httpx.AsyncClient) -> None:
+    credential = (
+        await admin_client.post(
+            "/v1/credentials",
+            json={"provider_id": "http-tool-secret", "label": "Weather", "secrets": {"WEATHER_KEY": "k"}},
+        )
+    ).json()
+
+    response = await admin_client.post(
+        "/v1/tools",
+        json={
+            "kind": "http",
+            "name": "x",
+            "definition": {**HTTP_DEFINITION, "credential_id": credential["id"]},
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+
+async def test_a_definition_with_no_secret_placeholder_needs_no_credential(
+    admin_client: httpx.AsyncClient,
+) -> None:
+    response = await admin_client.post(
+        "/v1/tools",
+        json={"kind": "http", "name": "x", "definition": {**HTTP_DEFINITION, "headers": {}}},
+    )
+
+    assert response.status_code == 201, response.text
+
+
+async def test_update_also_enforces_f15(admin_client: httpx.AsyncClient) -> None:
+    tool = await _create_tool(admin_client, definition={"headers": {}})  # no placeholder, no credential
+
+    response = await admin_client.put(
+        f"/v1/tools/{tool['id']}",
+        json={
+            "kind": "http",
+            "name": tool["name"],
+            "definition": {**HTTP_DEFINITION, "credential_id": None},
+        },
+    )
+
+    assert response.status_code == 422
+
+
 async def test_list_filters_by_agent_and_kind(admin_client: httpx.AsyncClient) -> None:
     agent = await create_agent(admin_client, published=False)
     await _create_tool(admin_client)
@@ -161,7 +262,9 @@ async def test_update_replaces_the_definition(admin_client: httpx.AsyncClient) -
             "kind": "http",
             "name": "get_weather",
             "enabled": False,
-            "definition": {**HTTP_DEFINITION, "method": "POST"},
+            # Keep the credential `_create_tool` attached (F-15: the header's
+            # `{{ secret.WEATHER_KEY }}` placeholder needs one to resolve against).
+            "definition": {**tool["definition"], "method": "POST"},
         },
     )
 

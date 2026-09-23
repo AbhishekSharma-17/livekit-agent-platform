@@ -16,7 +16,11 @@ def test_settings_reads_required_env_no_dotenv(settings: Settings) -> None:
 
 
 def test_settings_defaults_are_documented_in_contracts(settings: Settings) -> None:
-    assert settings.livekit_agent_name == "lkap-agent"
+    assert settings.agent_name == "lkap-agent"
+    assert settings.livekit_agent_name is None
+    assert settings.connection_id is None
+    assert settings.heartbeat_interval_s == 30.0
+    assert settings.reconnect_grace_s == 60.0
     assert settings.packs == "packs.insurance_claim,packs.generic"
     assert settings.log_level == "INFO"
     assert settings.log_json is False

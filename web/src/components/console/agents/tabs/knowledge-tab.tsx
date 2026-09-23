@@ -3,27 +3,34 @@
 import * as React from "react";
 import Link from "next/link";
 import { Controller, useFormContext } from "react-hook-form";
-import { ExternalLinkIcon } from "lucide-react";
+import { BookOpenIcon, SearchIcon } from "lucide-react";
 
+import { Field } from "@/components/shared/field";
+import { Icon } from "@/components/shared/icon";
+import { Section, SectionRow } from "@/components/shared/section";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useKbs } from "@/components/console/lib/api-hooks";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
+import { pluralize } from "@/lib/format";
 
 /**
- * "Knowledge (attach KBs; KB pages under `/console/knowledge` with upload +
- * status polling + test search)" (IMPLEMENTATION_PLAN W1-WEB-CONSOLE).
- * Uploading/searching documents happens on the dedicated `/console/knowledge`
- * pages; this tab only attaches existing knowledge bases to the agent.
+ * "Knowledge (section)" (docs/UI_UX_SPEC.md §4.7, §7.6). Unchanged by the v2
+ * amendments. Uploading/searching documents happens on the dedicated
+ * `/console/knowledge` pages; this tab only attaches existing knowledge
+ * bases to the agent and sets retrieval behaviour.
  */
 export function KnowledgeTab() {
   const topKId = React.useId();
   const { control, watch, setValue } = useFormContext<AgentEditorForm>();
   const kbIds = watch("config.knowledge.kb_ids");
   const kbsQuery = useKbs();
+  const [query, setQuery] = React.useState("");
 
   function toggle(id: string, attached: boolean) {
     const current = kbIds ?? [];
@@ -34,70 +41,138 @@ export function KnowledgeTab() {
     );
   }
 
+  const allKbs = kbsQuery.data?.items ?? [];
+  const filteredKbs =
+    query.trim() === ""
+      ? allKbs
+      : allKbs.filter((kb) => kb.name.toLowerCase().includes(query.trim().toLowerCase()));
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Attached knowledge bases</h3>
-          <Link href="/console/knowledge" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
-            Manage knowledge bases <ExternalLinkIcon className="size-3" />
-          </Link>
-        </div>
+    <div className="flex flex-col gap-6">
+      <Section
+        id="knowledge-attached"
+        title="Attached knowledge bases"
+        description="The agent can search these during a call."
+      >
+        {allKbs.length > 0 ? (
+          <SectionRow>
+            <InputGroup className="max-w-sm">
+              <InputGroupAddon>
+                <Icon as={SearchIcon} size="sm" />
+              </InputGroupAddon>
+              <InputGroupInput
+                placeholder="Search knowledge bases"
+                aria-label="Search knowledge bases"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </InputGroup>
+          </SectionRow>
+        ) : null}
 
         {kbsQuery.isLoading ? (
-          <Skeleton className="h-16 w-full" />
+          <SectionRow>
+            <Skeleton className="h-10 w-full" />
+          </SectionRow>
         ) : kbsQuery.isError ? (
-          <ErrorBanner message={errorMessage(kbsQuery.error)} onRetry={() => kbsQuery.refetch()} />
-        ) : (kbsQuery.data?.items.length ?? 0) === 0 ? (
-          <EmptyState
-            title="No knowledge bases yet"
-            description="Create one under Knowledge, upload documents, then attach it here."
-          />
+          <SectionRow>
+            <ErrorBanner message={errorMessage(kbsQuery.error)} onRetry={() => kbsQuery.refetch()} />
+          </SectionRow>
+        ) : allKbs.length === 0 ? (
+          <SectionRow>
+            <EmptyState
+              icon={BookOpenIcon}
+              title="No knowledge bases yet"
+              description="Create one under Knowledge, upload documents, then attach it here."
+              action={
+                <Link href="/console/knowledge" className="text-sm font-medium text-brand-text hover:underline">
+                  Go to Knowledge
+                </Link>
+              }
+            />
+          </SectionRow>
+        ) : filteredKbs.length === 0 ? (
+          <SectionRow>
+            <p className="text-sm text-muted-foreground">No knowledge bases match &quot;{query}&quot;.</p>
+          </SectionRow>
         ) : (
-          <div className="space-y-2">
-            {kbsQuery.data?.items.map((kb) => (
-              <div key={kb.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{kb.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {kb.chunk_count} chunks · {kb.document_count} documents · {kb.embedder_id}
-                  </p>
-                </div>
-                <Switch checked={(kbIds ?? []).includes(kb.id)} onCheckedChange={(checked) => toggle(kb.id, checked)} />
-              </div>
-            ))}
-          </div>
+          filteredKbs.map((kb) => (
+            <SectionRow key={kb.id}>
+              <Field
+                inline
+                label={kb.name}
+                htmlFor={`kb-${kb.id}`}
+                hint={`${pluralize(kb.document_count, "document", "documents")} · ${pluralize(kb.chunk_count, "chunk", "chunks")} · ${embedderLabel(kb.embedder_id)}`}
+              >
+                <Switch
+                  id={`kb-${kb.id}`}
+                  checked={(kbIds ?? []).includes(kb.id)}
+                  onCheckedChange={(checked) => toggle(kb.id, checked)}
+                  data-issue-path="knowledge.kb_ids"
+                />
+              </Field>
+            </SectionRow>
+          ))
         )}
-      </div>
 
-      <div className="grid gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
-        <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-          <span className="text-sm font-medium">Auto-inject on each turn</span>
-          <Controller
-            control={control}
-            name="config.knowledge.auto_inject"
-            render={({ field }) => <Switch checked={field.value} onCheckedChange={field.onChange} />}
-          />
-        </div>
-        <div>
-          <label htmlFor={topKId} className="mb-1 block text-sm font-medium">
-            Top K
-          </label>
-          <Controller
-            control={control}
-            name="config.knowledge.top_k"
-            render={({ field }) => (
-              <Input
-                id={topKId}
-                type="number"
-                className="w-24"
-                value={field.value}
-                onChange={(event) => field.onChange(Number(event.target.value))}
-              />
-            )}
-          />
-        </div>
-      </div>
+        <SectionRow>
+          <Link
+            href="/console/knowledge"
+            className="text-[0.8125rem] font-medium text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Manage knowledge bases
+          </Link>
+        </SectionRow>
+      </Section>
+
+      <Section
+        id="knowledge-retrieval"
+        title="Retrieval"
+        description="How attached knowledge is used during a call."
+      >
+        <SectionRow>
+          <Field
+            inline
+            label="Add the best matches to every turn"
+            htmlFor="knowledge-auto-inject"
+            hint="Sends the closest matches with each reply, in addition to the explicit search tool."
+          >
+            <Controller
+              control={control}
+              name="config.knowledge.auto_inject"
+              render={({ field }) => (
+                <Switch
+                  id="knowledge-auto-inject"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  data-issue-path="knowledge.auto_inject"
+                />
+              )}
+            />
+          </Field>
+        </SectionRow>
+        <SectionRow>
+          <Field label="Matches per turn" htmlFor={topKId} hint="Higher finds more but costs tokens.">
+            <Controller
+              control={control}
+              name="config.knowledge.top_k"
+              render={({ field }) => (
+                <Input
+                  id={topKId}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={10}
+                  className="w-24"
+                  value={field.value}
+                  onChange={(event) => field.onChange(Number(event.target.value))}
+                  data-issue-path="knowledge.top_k"
+                />
+              )}
+            />
+          </Field>
+        </SectionRow>
+      </Section>
     </div>
   );
 }

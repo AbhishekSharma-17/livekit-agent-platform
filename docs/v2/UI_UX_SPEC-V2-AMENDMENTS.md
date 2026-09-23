@@ -1,6 +1,6 @@
 # UI/UX Spec — v2 Amendments
 
-Status: **decided** (Fable 5.1, 2026-09-19). Deltas against `../UI_UX_SPEC.md`. Everything not mentioned here is unchanged: the design system, tokens, WP-0 primitives (`web/src/components/shared/`), motion, type, the session surface rules, the ≤400 kB session bundle budget, and the error channels. Reuse WP-0 primitives everywhere; no new colour tokens.
+Status: **decided** (Fable 5.1, 2026-09-19). Deltas against `../UI_UX_SPEC.md`. Everything not mentioned here is unchanged: the design system, tokens, WP-0 primitives (`web/src/components/shared/`), motion, type, the session surface rules, the session bundle budget (now **First Load JS ≤ 620 kB** for `/s/[slug]`, ruling R-V2-18 in PLAN-V2 §8; the v1 "≤400 kB" figure was Next's Size column), and the error channels. Reuse WP-0 primitives everywhere; no new colour tokens.
 
 ## 1. Information architecture v2
 
@@ -53,7 +53,8 @@ Workspace switcher: a compact popover in the sidebar footer (name + role chip), 
 
 ### 2.6 Session surface
 - `embed=1` (stretch): no top strip, compact control bar, 100% height inside the iframe, `postMessage` state events. Text mode: transcript-first layout, composer pinned, no mic controls.
-- Video block and avatar stage: when an avatar is configured the stage shows the avatar track full-well with the user PiP; when a `video` block is present in a `wide` layout the stage moves into the panel column.
+- Video block and avatar stage: when an avatar is configured the stage shows the avatar track full-well with the user PiP; when a `video` block is present in a `wide` layout the video block is the primary view and the stage stays in its compact strip/rail (R-V2-16; the earlier "stage moves into the panel column" is withdrawn for Phase 1).
+- Reconnecting (amends v1 §5.4): only the stage **media** (video, meter) dims to 60 %; the agent name and the "Reconnecting…" caption keep full contrast (R-V2-19, WCAG 1.4.3).
 
 ## 3. On-hold WP-1..WP-12 — proceed unchanged vs change
 

@@ -1,0 +1,286 @@
+# v2 production stack (PLAN-V2 §V2-09: "docker-compose.prod.yml (api ×2
+# behind Caddy, web, supervisor, postgres, redis, minio) with env_file and
+# health checks"). Single-VM / single-host deployment; multi-host is out of
+# scope for Phase 1 (docs/v2/ARCHITECTURE-V2.md's deferred list).
+#
+# Secrets: never committed, human-created only, read at container start —
+# Claude never creates or reads these files.
+#   cp deploy/prod.env.example deploy/prod.env             # shared: LKAP_PUBLIC_DOMAIN, LKAP_MASTER_KEY, ...
+#   cp deploy/api.env.example deploy/api.env               # api + jobs + migrate (same secrets)
+#   cp deploy/web.env.example deploy/web.env
+#   cp deploy/supervisor.env.example deploy/supervisor.env
+#
+# Bring up (migrations run automatically via the `migrate` one-shot service's
+# `depends_on: condition: service_completed_successfully` — no separate
+# manual step, unlike deploy/docker-compose.yml's v1 instructions):
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env up -d --build
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env up -d --build --scale api=2   # HA
+#
+# LanceDB / SQLite caveat (carried from v1 docs/ARCHITECTURE.md §14, not
+# solved here): `api` is "uvicorn --workers 1" and LanceDB is a single-writer
+# store. Running `--scale api=2` against the SAME `/data` volume is safe for
+# the SQL tables (Postgres, when `LKAP_DATABASE_URL` is set — see below) but
+# NOT verified safe for concurrent LanceDB (KB) writes from two replicas.
+# Until KB storage moves off single-writer LanceDB, treat `--scale api=2`
+# as HA for read/session traffic, not for concurrent KB ingestion; a real
+# fix is out of this package's scope. Postgres is effectively required
+# (not optional, unlike the dev compose file) once you scale past one
+# replica — two `api` processes both writing SQLite from two containers is
+# not the same "single-writer" story sqlite+aiosqlite has in dev.
+#
+# `--forwarded-allow-ips`: the `backend` network below is pinned to a fixed
+# subnet precisely so this value is a stable CIDR, not a container IP that
+# changes on every recreate. `api` and `jobs` publish no host ports — Caddy
+# is the only path in from outside the network — so trusting the whole
+# subnet here does not let an external caller spoof its own IP via
+# X-Forwarded-For (auth/deps.py's per-IP rate limit reads `request.client.host`,
+# which uvicorn's ProxyHeadersMiddleware only rewrites for a trusted peer).
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.28.238.0/24
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    networks: [backend]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      LKAP_PUBLIC_DOMAIN: ${LKAP_PUBLIC_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    image: lkap-api:${LKAP_IMAGE_TAG:-prod}
+    networks: [backend]
+    # No published host ports in prod — Caddy is the only ingress (see the
+    # `--forwarded-allow-ips` note above).
+    command:
+      - sh
+      - -c
+      - "exec uvicorn lkap_api.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --proxy-headers --forwarded-allow-ips=172.28.238.0/24"
+    env_file:
+      - ./api.env
+    environment:
+      LKAP_ENV: prod
+      LKAP_DATA_DIR: /data
+      LKAP_LOG_JSON: "true"
+      LKAP_PUBLIC_BASE_URL: https://${LKAP_PUBLIC_DOMAIN:?set LKAP_PUBLIC_DOMAIN in deploy/prod.env}
+      LKAP_WEB_BASE_URL: https://${LKAP_PUBLIC_DOMAIN:?set LKAP_PUBLIC_DOMAIN in deploy/prod.env}
+      LKAP_CORS_ORIGINS: https://${LKAP_PUBLIC_DOMAIN:?set LKAP_PUBLIC_DOMAIN in deploy/prod.env}
+      LKAP_DATABASE_URL: ${LKAP_DATABASE_URL:-postgresql+asyncpg://lkap:${LKAP_POSTGRES_PASSWORD:?set in deploy/prod.env}@postgres:5432/lkap}
+      LKAP_REDIS_URL: redis://redis:6379/0
+      LKAP_JOBS_BACKEND: arq
+      LKAP_STORAGE_KIND: s3
+      LKAP_STORAGE_ENDPOINT_URL: http://minio:9000
+      LKAP_STORAGE_BUCKET: ${LKAP_STORAGE_BUCKET:-lkap}
+      LKAP_STORAGE_ACCESS_KEY: ${LKAP_STORAGE_ACCESS_KEY:?set in deploy/prod.env}
+      LKAP_STORAGE_SECRET_KEY: ${LKAP_STORAGE_SECRET_KEY:?set in deploy/prod.env}
+      PORT: "8080"
+    volumes:
+      - api-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # One-shot migration gate: `condition: service_completed_successfully`
+  # above is what makes plain `docker compose up` boot with the schema
+  # already at head, unlike deploy/docker-compose.yml's v1 "run this
+  # yourself before first boot" instructions. `restart: "no"` — a failed
+  # migration must stop the rollout, not loop.
+  migrate:
+    image: lkap-api:${LKAP_IMAGE_TAG:-prod}
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    networks: [backend]
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - ./api.env
+    environment:
+      LKAP_DATABASE_URL: ${LKAP_DATABASE_URL:-postgresql+asyncpg://lkap:${LKAP_POSTGRES_PASSWORD:?set in deploy/prod.env}@postgres:5432/lkap}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # arq worker process (CONTRACTS-V2 §6 `LKAP_JOBS_BACKEND=arq`):
+  # `arq lkap_api.jobs.arq_worker.WorkerSettings` (api/src/lkap_api/jobs/arq_worker.py).
+  # Same image as `api`, different command — KB ingest, webhook delivery,
+  # QA scoring, catalog refresh and rollup jobs all run here instead of
+  # in-process once the api itself uses the `arq` backend.
+  jobs:
+    image: lkap-api:${LKAP_IMAGE_TAG:-prod}
+    networks: [backend]
+    command: ["arq", "lkap_api.jobs.arq_worker.WorkerSettings"]
+    env_file:
+      - ./api.env
+    environment:
+      LKAP_ENV: prod
+      LKAP_DATA_DIR: /data
+      LKAP_LOG_JSON: "true"
+      LKAP_DATABASE_URL: ${LKAP_DATABASE_URL:-postgresql+asyncpg://lkap:${LKAP_POSTGRES_PASSWORD:?set in deploy/prod.env}@postgres:5432/lkap}
+      LKAP_REDIS_URL: redis://redis:6379/0
+      LKAP_JOBS_BACKEND: arq
+      LKAP_STORAGE_KIND: s3
+      LKAP_STORAGE_ENDPOINT_URL: http://minio:9000
+      LKAP_STORAGE_BUCKET: ${LKAP_STORAGE_BUCKET:-lkap}
+      LKAP_STORAGE_ACCESS_KEY: ${LKAP_STORAGE_ACCESS_KEY:?set in deploy/prod.env}
+      LKAP_STORAGE_SECRET_KEY: ${LKAP_STORAGE_SECRET_KEY:?set in deploy/prod.env}
+    volumes:
+      - api-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${LKAP_PUBLIC_DOMAIN:-localhost}
+    image: lkap-web:${LKAP_IMAGE_TAG:-prod}
+    networks: [backend]
+    env_file:
+      - ./web.env
+    environment:
+      PORT: "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  supervisor:
+    build:
+      context: ..
+      dockerfile: supervisor/Dockerfile
+    image: lkap-supervisor:${LKAP_IMAGE_TAG:-prod}
+    networks: [backend]
+    env_file:
+      - ./supervisor.env
+    environment:
+      LKAP_API_BASE_URL: http://api:8080
+      LKAP_SUPERVISOR_BACKEND: docker
+      LKAP_AGENT_IMAGE_SLIM: lkap-agent:slim-${LKAP_IMAGE_TAG:-prod}
+      LKAP_AGENT_IMAGE_FULL: lkap-agent:full-${LKAP_IMAGE_TAG:-prod}
+      LKAP_SUPERVISOR_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-deploy}_backend
+      LKAP_LOG_JSON: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Non-root (Dockerfile USER lkap) needs membership in the group that
+    # owns the mounted socket's GID on the HOST, not a GID guessed here —
+    # set LKAP_DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) in
+    # deploy/prod.env before `up`. Falls back to GID 999, the debian/ubuntu
+    # convention, when unset; verify it matches your host.
+    group_add:
+      - "${LKAP_DOCKER_GID:-999}"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    networks: [backend]
+    environment:
+      POSTGRES_USER: lkap
+      POSTGRES_DB: lkap
+      # Single source for this value: deploy/prod.env (`--env-file`), the
+      # same file `api`/`jobs`/`migrate` build their `LKAP_DATABASE_URL`
+      # default from below — never duplicated into a second secret file.
+      POSTGRES_PASSWORD: ${LKAP_POSTGRES_PASSWORD:?set in deploy/prod.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "lkap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks: [backend]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    networks: [backend]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${LKAP_STORAGE_ACCESS_KEY:?set in deploy/api.env}
+      MINIO_ROOT_PASSWORD: ${LKAP_STORAGE_SECRET_KEY:?set in deploy/api.env}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: create the bucket `api`/`jobs` write to (`LKAP_STORAGE_BUCKET`,
+  # default `lkap`) if it does not already exist. `restart: "no"` — this is
+  # not a long-running process.
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-08T15-39-49Z
+    networks: [backend]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing "local/${LKAP_STORAGE_BUCKET:-lkap}"
+    environment:
+      MINIO_ROOT_USER: ${LKAP_STORAGE_ACCESS_KEY:?set in deploy/api.env}
+      MINIO_ROOT_PASSWORD: ${LKAP_STORAGE_SECRET_KEY:?set in deploy/api.env}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  api-data:
+  postgres-data:
+  redis-data:
+  minio-data:
+  caddy-data:
+  caddy-config:

@@ -1,5 +1,61 @@
 {
   "$defs": {
+    "BlockSpec": {
+      "description": "One block of a composite panel (CONTRACTS-V2 §4.4).\n\n``id`` keys the block's state in :attr:`UiState.blocks`; ``config`` is\nblock-type specific and rendered by the matching React component.",
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Config",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "type": {
+          "enum": [
+            "status",
+            "notes",
+            "checklist",
+            "activity",
+            "form",
+            "document",
+            "gallery",
+            "table",
+            "transcript",
+            "video",
+            "kb_citations",
+            "custom"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "BlockSpec",
+      "type": "object"
+    },
     "CapabilitiesConfig": {
       "description": "Which input affordances the session page offers.",
       "properties": {
@@ -31,11 +87,40 @@
       },
       "title": "CapabilitiesConfig",
       "type": "object"
+    },
+    "PanelLayout": {
+      "description": "Which panel renders the session, and (for ``composite``) its blocks.",
+      "properties": {
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BlockSpec"
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "layout": {
+          "default": "side",
+          "enum": [
+            "side",
+            "wide"
+          ],
+          "title": "Layout",
+          "type": "string"
+        },
+        "panel_id": {
+          "default": "composite",
+          "title": "Panel Id",
+          "type": "string"
+        }
+      },
+      "title": "PanelLayout",
+      "type": "object"
     }
   },
   "$id": "lkap-contracts/AgentPublicOut.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "What an unauthenticated browser may see about a published agent.",
+  "description": "What an unauthenticated browser may see about a published agent.\n\n``panel`` (R-V2-7, CONTRACTS-V2 §4.4 \"Layout delivery\") is the\n*effective* layout — ``lkap_api.panels.effective_layout(agent, pack)`` —\nnot necessarily ``AgentConfig.panel`` verbatim: it carries the block list\nthe session actually renders, resolved the same way for ``connect`` and\nfor the worker's ``/internal/v1/sessions/{id}/resolved``. ``ui_panel_id``\nstays as the mirror of ``panel.panel_id`` for one release.",
   "properties": {
     "capabilities": {
       "$ref": "#/$defs/CapabilitiesConfig"
@@ -51,6 +136,9 @@
     "name": {
       "title": "Name",
       "type": "string"
+    },
+    "panel": {
+      "$ref": "#/$defs/PanelLayout"
     },
     "pipeline_mode": {
       "enum": [
@@ -76,6 +164,7 @@
     "name",
     "description",
     "ui_panel_id",
+    "panel",
     "capabilities",
     "pipeline_mode"
   ],

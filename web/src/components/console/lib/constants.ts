@@ -38,16 +38,6 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
   { name: "current_time", label: "Current time", help: "Returns the current date/time in the agent's timezone." },
 ];
 
-/**
- * Known `PackManifest.ui_panel_id` values shipped by packs in this
- * repository (docs/IMPLEMENTATION_PLAN.md `generic`, `insurance_claim`).
- * The panel select offers these plus free text so a future pack's panel id
- * isn't blocked on this console being redeployed — W1-WEB-SESSION's
- * `web/src/panels/registry.ts` (built in parallel) is the runtime source of
- * truth and falls back to `generic` for anything it doesn't recognise.
- */
-export const KNOWN_PANEL_IDS = ["generic", "insurance_notebook"] as const;
-
 export const PROVIDER_KIND_LABELS: Record<string, string> = {
   realtime: "Realtime model",
   stt: "Speech-to-text",
@@ -71,27 +61,25 @@ export const TONE_BADGE_CLASSES: Record<string, string> = {
   danger: "bg-danger-soft text-danger-text",
 };
 
-export interface PanelMeta {
-  label: string;
-  description: string;
-  /** Session layout the panel asks for (`PanelDefinition.layout`). */
-  layout: "side" | "wide";
-}
-
-/** Human metadata for the known `ui_panel_id`s (§4.7). Unknown ids fall back to `generic`. */
-export const PANEL_META: Record<string, PanelMeta> = {
-  generic: {
-    label: "Session panel",
-    description: "Status, notes, checklist, attachments and activity. Works with every pack.",
-    layout: "side",
+/**
+ * Panel-block tools (agent `tools/builtin/__init__.py::BLOCK_TOOL_NAMES`,
+ * asks #69). The worker registers each only when the panel has a block it
+ * writes (see `BLOCK_TOOL_TYPES` in `@/panels/blocks/catalog`), so the panel
+ * composer shows these switches next to the blocks rather than in the Tools
+ * section; `config.tools.builtin_disabled` turns them off like any built-in.
+ * Deliberately not in `BUILTIN_TOOLS` (the worker keeps them out of
+ * `BUILTIN_TOOL_NAMES` too).
+ */
+export const BLOCK_TOOLS: BuiltinToolInfo[] = [
+  {
+    name: "update_block",
+    label: "Update blocks",
+    help: "Lets the agent change what a table, document, gallery, sources, transcript, video or pack block shows.",
   },
-  insurance_notebook: {
-    label: "Claim notebook",
-    description:
-      "The adjuster's notebook: handwritten notes, taped photos, sketch and stamp. Needs the insurance pack's tools.",
-    layout: "wide",
-  },
-};
+  { name: "show_document", label: "Show documents", help: "Lets the agent open a document on a page and highlight it." },
+  { name: "table_append", label: "Add table rows", help: "Lets the agent add rows to a table as it collects them." },
+  { name: "request_form", label: "Ask with a form", help: "Lets the agent ask the caller to fill in a form and wait for it." },
+];
 
 export type CapabilityKey = "camera" | "screen_share" | "chat_input" | "vision_inject_per_turn";
 

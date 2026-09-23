@@ -25,7 +25,7 @@ Unit = Literal[
 
 #: Bumped whenever :data:`PRICES` changes; stored on every costed line so old
 #: sessions keep the price they were costed with.
-PRICE_VERSION = "2026-09-19"
+PRICE_VERSION = "2026-09-23"
 
 
 class Price(BaseModel):
@@ -44,7 +44,117 @@ class Price(BaseModel):
 
 
 #: Every known price, in registry order. Filled by V2-05.
-PRICES: list[Price] = []
+#:
+#: Only prices read directly off a vendor's own current pricing page this pass
+#: (2026-09-23) are listed; every other provider intentionally has no entry —
+#: :func:`lookup` returning ``None`` and the caller recording ``note="no
+#: price"`` is the designed safe path (module docstring), so an unverifiable
+#: number is never guessed in to avoid a "no price" line. Notably absent
+#: despite being named in PLAN-V2's V2-05 card: LiveKit Inference (per-model
+#: per-minute pricing exists at livekit.com/pricing/inference but varies
+#: 0.0002-0.0676 $/min per model with no single verifiable figure fetched this
+#: pass), Cartesia and ElevenLabs (both plan/credit-based on their public pages,
+#: no disclosed pay-as-you-go per-unit USD rate), Beyond Presence and Tavus
+#: (tiered monthly plans, no per-minute API rate disclosed) — all four stay
+#: unpriced rather than estimated from a subscription tier.
+PRICES: list[Price] = [
+    # ---------------------------------------------------------------- OpenAI LLM
+    Price(
+        provider_id="openai-llm",
+        model="gpt-4.1",
+        unit="tokens_in",
+        usd_per_unit=Decimal("0.000002"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="openai-llm",
+        model="gpt-4.1",
+        unit="tokens_out",
+        usd_per_unit=Decimal("0.000008"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="openai-llm",
+        model="gpt-4o",
+        unit="tokens_in",
+        usd_per_unit=Decimal("0.0000025"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="openai-llm",
+        model="gpt-4o",
+        unit="tokens_out",
+        usd_per_unit=Decimal("0.00001"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="openai-llm",
+        model="gpt-4o-mini",
+        unit="tokens_in",
+        usd_per_unit=Decimal("0.00000015"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="openai-llm",
+        model="gpt-4o-mini",
+        unit="tokens_out",
+        usd_per_unit=Decimal("0.0000006"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    # ---------------------------------------------------------------- OpenAI TTS
+    # `tts-1` is priced per character on the vendor page; `gpt-4o-mini-tts` (the
+    # registry default) is priced per audio *token* there instead, a different
+    # unit our `Unit` literal has no slot for — left unpriced rather than
+    # converted with an assumed tokens-per-character ratio.
+    Price(
+        provider_id="openai-tts",
+        model="tts-1",
+        unit="chars",
+        usd_per_unit=Decimal("0.000015"),
+        source_url="https://developers.openai.com/api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    # ---------------------------------------------------------------- Google Gemini LLM
+    Price(
+        provider_id="google-llm",
+        model="gemini-2.5-flash",
+        unit="tokens_in",
+        usd_per_unit=Decimal("0.0000003"),
+        source_url="https://ai.google.dev/gemini-api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="google-llm",
+        model="gemini-2.5-flash",
+        unit="tokens_out",
+        usd_per_unit=Decimal("0.0000025"),
+        source_url="https://ai.google.dev/gemini-api/docs/pricing",
+        as_of="2026-09-23",
+    ),
+    # ---------------------------------------------------------------- Deepgram
+    Price(
+        provider_id="deepgram-stt",
+        model="nova-3",
+        unit="audio_s_in",
+        usd_per_unit=Decimal("0.00008"),
+        source_url="https://deepgram.com/pricing",
+        as_of="2026-09-23",
+    ),
+    Price(
+        provider_id="deepgram-tts",
+        model=None,
+        unit="chars",
+        usd_per_unit=Decimal("0.00003"),
+        source_url="https://deepgram.com/pricing",
+        as_of="2026-09-23",
+    ),
+]
 
 
 def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:

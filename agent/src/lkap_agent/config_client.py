@@ -1,8 +1,12 @@
 """Worker → api client for the `/internal/v1` surface (docs/CONTRACTS.md §7).
 
 The worker never reads the database or the credential vault. It fetches one
-`ResolvedAgentConfig` per job with the static service token, posts session
-events, and pushes a final summary from its shutdown callback.
+`ResolvedAgentConfig` per job with the static service token — through
+`GET /internal/v1/sessions/{id}/resolved` when the dispatch named a session, or
+by creating the session with `POST /internal/v1/sessions/start` when it did not
+(server-created rooms such as inbound SIP, CONTRACTS-V2 D-V2-5) — posts session
+events, asks the api to start an Egress recording, and pushes latency metrics
+and a final summary from its shutdown callback.
 
 Nothing in this module logs a response body: `ResolvedAgentConfig` carries
 decrypted vendor keys and substituted tool secrets.
@@ -11,7 +15,7 @@ decrypted vendor keys and substituted tool secrets.
 from __future__ import annotations
 
 from types import TracebackType
-from typing import Protocol, Self
+from typing import TYPE_CHECKING, Protocol, Self
 
 import httpx
 from lkap_contracts.agent_config import ResolvedAgentConfig
@@ -19,18 +23,26 @@ from lkap_contracts.api_models import (
     InternalKbSearchRequest,
     KbHit,
     KbSearchResponse,
+    RecordingStartOut,
     SessionEventIn,
     SessionEventsIn,
+    SessionMetricsIn,
+    SessionRecordingIn,
+    SessionStartIn,
     SessionSummaryIn,
 )
 
 from lkap_agent.logging import get_logger
+
+if TYPE_CHECKING:
+    from lkap_agent.qa import SessionQaIn
 
 __all__ = [
     "ApiKbClient",
     "ConfigClient",
     "ConfigClientProtocol",
     "ConfigUnavailableError",
+    "RecordingUnavailableError",
     "SessionEndedError",
     "SessionNotFoundError",
 ]
@@ -49,7 +61,15 @@ class SessionNotFoundError(ConfigUnavailableError):
 
 
 class SessionEndedError(ConfigUnavailableError):
-    """The session row is already `ended` (409) — a replayed dispatch."""
+    """The session row is already `ended` (409) — a replayed dispatch.
+
+    `sessions/start` raises it too when the room already has a session: a
+    second job for a room the platform already knows is a duplicate dispatch.
+    """
+
+
+class RecordingUnavailableError(RuntimeError):
+    """The api could not start an Egress recording (not installed, or it failed)."""
 
 
 class ConfigClientProtocol(Protocol):
@@ -57,6 +77,26 @@ class ConfigClientProtocol(Protocol):
 
     async def resolve(self, session_id: str) -> ResolvedAgentConfig:
         """Fetch the resolved config, marking the session active."""
+        ...
+
+    async def start_session(self, request: SessionStartIn) -> ResolvedAgentConfig:
+        """Create the session row for a room the platform did not create, and resolve it."""
+        ...
+
+    async def start_recording(self, session_id: str) -> str:
+        """Ask the api to start the session's Egress recording; returns the egress id."""
+        ...
+
+    async def post_recording(self, session_id: str, recording: SessionRecordingIn) -> None:
+        """Report the recording's state from the worker (best effort)."""
+        ...
+
+    async def post_metrics(self, session_id: str, metrics: SessionMetricsIn) -> None:
+        """Post per-session latency (best effort)."""
+        ...
+
+    async def put_qa(self, session_id: str, qa: SessionQaIn) -> None:
+        """Store the worker-side QA verdict (best effort, R-V2-5)."""
         ...
 
     async def post_events(self, session_id: str, events: list[SessionEventIn]) -> None:
@@ -160,6 +200,97 @@ class ConfigClient:
             raise ConfigUnavailableError(
                 f"resolved config for session {session_id!r} failed validation"
             ) from exc
+
+    async def start_session(self, request: SessionStartIn) -> ResolvedAgentConfig:
+        """Post `POST /internal/v1/sessions/start` for a dispatch without a session.
+
+        Args:
+            request: The agent, room, channel and caller the dispatch carried.
+
+        Returns:
+            The validated `ResolvedAgentConfig` of the new session. Never log it.
+
+        Raises:
+            SessionNotFoundError: The api returned 404 (unknown agent).
+            SessionEndedError: The api returned 409 (the room already has a
+                session, or the agent is archived).
+            ConfigUnavailableError: Any transport error, other HTTP error status,
+                or a payload that fails `ResolvedAgentConfig` validation.
+        """
+        url = self._url("/internal/v1/sessions/start")
+        try:
+            response = await self._client.post(
+                url, content=request.model_dump_json(), headers={"content-type": "application/json"}
+            )
+        except httpx.HTTPError as exc:
+            raise ConfigUnavailableError(f"api unreachable at {url}: {exc}") from exc
+
+        if response.status_code == httpx.codes.NOT_FOUND:
+            raise SessionNotFoundError(f"unknown agent {request.agent_id!r}")
+        if response.status_code == httpx.codes.CONFLICT:
+            raise SessionEndedError(
+                f"room {request.room_name!r} already has a session or agent {request.agent_id!r} is archived"
+            )
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise ConfigUnavailableError(
+                f"sessions/start failed for room {request.room_name!r}: HTTP {response.status_code}"
+            )
+        try:
+            return ResolvedAgentConfig.model_validate_json(response.content)
+        except ValueError as exc:
+            # Message only: the body holds decrypted credentials.
+            raise ConfigUnavailableError(
+                f"resolved config for room {request.room_name!r} failed validation"
+            ) from exc
+
+    async def start_recording(self, session_id: str) -> str:
+        """Post `POST /internal/v1/sessions/{id}/recording/start`.
+
+        Returns:
+            The Egress id the api started.
+
+        Raises:
+            RecordingUnavailableError: On any failure, including the 501 the api
+                answers until its recordings package is installed.
+        """
+        url = self._url(f"/internal/v1/sessions/{session_id}/recording/start")
+        try:
+            response = await self._client.post(url)
+        except httpx.HTTPError as exc:
+            raise RecordingUnavailableError(f"api unreachable at {url}: {exc}") from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise RecordingUnavailableError(f"recording/start answered HTTP {response.status_code}")
+        try:
+            return RecordingStartOut.model_validate_json(response.content).egress_id
+        except ValueError as exc:
+            raise RecordingUnavailableError("recording/start returned an unparseable payload") from exc
+
+    async def post_recording(self, session_id: str, recording: SessionRecordingIn) -> None:
+        """Post `POST /internal/v1/sessions/{id}/recording`, swallowing failures."""
+        await self._post_best_effort(
+            f"/internal/v1/sessions/{session_id}/recording", recording.model_dump_json(), what="recording"
+        )
+
+    async def post_metrics(self, session_id: str, metrics: SessionMetricsIn) -> None:
+        """Post `POST /internal/v1/sessions/{id}/metrics`, swallowing failures."""
+        await self._post_best_effort(
+            f"/internal/v1/sessions/{session_id}/metrics", metrics.model_dump_json(), what="metrics"
+        )
+
+    async def put_qa(self, session_id: str, qa: SessionQaIn) -> None:
+        """Put `PUT /internal/v1/sessions/{id}/qa`, swallowing failures."""
+        await self._post_best_effort(
+            f"/internal/v1/sessions/{session_id}/qa", qa.model_dump_json(), what="qa", method="PUT"
+        )
+
+    async def _post_best_effort(self, path: str, body: str, *, what: str, method: str = "POST") -> None:
+        try:
+            response = await self._client.request(
+                method, self._url(path), content=body, headers={"content-type": "application/json"}
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning(f"failed to post session {what}", path=path, error=str(exc))
 
     async def post_events(self, session_id: str, events: list[SessionEventIn]) -> None:
         """Post `POST /internal/v1/sessions/{id}/events`, swallowing failures.

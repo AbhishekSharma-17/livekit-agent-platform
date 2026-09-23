@@ -10,6 +10,7 @@ from lkap_contracts.providers import (
     FieldType,
     ProviderKind,
     ProviderSpec,
+    available_providers,
     by_kind,
     get,
     mvp_providers,
@@ -37,33 +38,27 @@ EXPECTED_MVP_IDS = [
     "http-tool-secret",
 ]
 
-EXPECTED_DEFERRED_IDS = [
-    "azure-openai-realtime",
-    "xai-realtime",
-    "assemblyai-stt",
-    "google-stt",
-    "openai-stt",
-    "speechmatics-stt",
-    "elevenlabs-stt",
-    "cartesia-stt",
-    "groq-stt",
-    "azure-stt",
-    "anthropic-llm",
-    "groq-llm",
-    "cerebras-llm",
-    "openai-compatible-llm",
-    "aws-bedrock-llm",
-    "google-tts",
-    "deepgram-tts",
-    "rime-tts",
-    "inworld-tts",
-    "hume-tts",
-    "azure-tts",
-    "simli-avatar",
-    "anam-avatar",
-    "bithuman-avatar",
-    "liveavatar-avatar",
+#: V2-05 (PLAN-V2 §4 card, ruling R-V2-1): every entry it adds or promotes
+#: carries ``worker_image="full"``, so the ``status`` alias is ``"deferred"``
+#: for all of them regardless of ``availability`` — the alias is now a
+#: slim-vs-full signal, not an availability signal, until V2-03/V2-13 migrate
+#: their consumers off it. `test_registry_contains_expected_mvp_entries`
+#: (byte-identical to the v1 set) is the test that actually guards R-V2-1;
+#: this file instead asserts each of the four `Availability` outcomes by id,
+#: which is the meaningful post-V2-05 invariant.
+EXPECTED_DEFERRED_AVAILABILITY_IDS = [
+    "playai-tts",
+    "nvidia-personaplex-realtime",
+    "legacy-noise-cancellation",
+    "ai-coustics-noise-cancellation",
+    "rtzr-stt",
+    "spitch-stt",
+    "spitch-tts",
 ]
+
+EXPECTED_INCOMPATIBLE_IDS = ["minimax-tts"]
+
+EXPECTED_REMOVED_IDS: list[str] = []
 
 
 def test_registry_ids_are_unique() -> None:
@@ -79,9 +74,52 @@ def test_registry_has_at_least_seventeen_mvp_providers() -> None:
     assert len(mvp_providers()) >= 17
 
 
-def test_registry_contains_expected_deferred_entries() -> None:
-    deferred = [spec.id for spec in REGISTRY if spec.status == "deferred"]
-    assert deferred == EXPECTED_DEFERRED_IDS
+def test_registry_has_at_least_eighty_five_available_providers() -> None:
+    """V2-05 card acceptance: "≥ 85 `available` entries"."""
+    assert len(available_providers()) >= 85
+
+
+def test_status_alias_is_deferred_for_every_full_image_entry() -> None:
+    """R-V2-1: `status` derives from availability + image, not from being offered.
+
+    Every entry V2-05 added or promoted is `worker_image="full"`, so it must
+    report `status == "deferred"` no matter its `availability` — `"mvp"` is
+    reserved for the untouched v1 slim set.
+    """
+    for spec in REGISTRY:
+        if spec.id in EXPECTED_MVP_IDS:
+            continue
+        assert spec.status == "deferred", f"{spec.id} should still alias to 'deferred' (worker_image=full)"
+
+
+def test_registry_contains_expected_deferred_availability_entries() -> None:
+    deferred = [spec.id for spec in REGISTRY if spec.availability == "deferred"]
+    assert deferred == EXPECTED_DEFERRED_AVAILABILITY_IDS
+
+
+def test_registry_contains_expected_incompatible_entries() -> None:
+    incompatible = [spec.id for spec in REGISTRY if spec.availability == "incompatible"]
+    assert incompatible == EXPECTED_INCOMPATIBLE_IDS
+
+
+def test_registry_contains_expected_removed_entries() -> None:
+    removed = [spec.id for spec in REGISTRY if spec.availability == "removed"]
+    assert removed == EXPECTED_REMOVED_IDS
+
+
+def test_hedra_is_not_registered() -> None:
+    """Vendor-disabled plugin (its AvatarSession.__init__ unconditionally raises): never selectable."""
+    assert all("hedra" not in spec.id for spec in REGISTRY)
+
+
+def test_minimax_is_marked_incompatible_not_merely_deferred() -> None:
+    assert get("minimax-tts").availability == "incompatible"
+
+
+def test_every_new_full_image_entry_carries_worker_image_full() -> None:
+    for spec in REGISTRY:
+        if spec.id not in EXPECTED_MVP_IDS:
+            assert spec.worker_image == "full", spec.id
 
 
 @pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)

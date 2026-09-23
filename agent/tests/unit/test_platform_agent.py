@@ -653,14 +653,14 @@ async def test_room_options_enable_video_input_only_for_realtime_models(
     assert plan.room_options.video_input is expected
 
 
-async def test_room_options_link_the_dispatched_participant_and_close_on_disconnect() -> None:
-    """RoomIO must follow the browser participant, not a stray avatar participant."""
+async def test_room_options_link_the_dispatched_participant_and_leave_disconnects_to_the_worker() -> None:
+    """RoomIO follows the browser participant; the worker's reconnect grace (F-33) ends the job."""
     providers = BuiltProviders(llm=object(), stt=object(), tts=object())
 
     plan = SessionBuilder().build(resolved_config(participant_identity="user-abc"), providers)
 
     assert plan.room_options.participant_identity == "user-abc"
-    assert plan.room_options.close_on_disconnect is True
+    assert plan.room_options.close_on_disconnect is False
 
 
 @pytest.mark.parametrize(

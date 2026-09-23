@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/DispatchMetadata.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Serialised as JSON into ``RoomAgentDispatch.metadata``.\n\nIDs ONLY. The browser can read this, so it must never contain secrets,\ninstructions or resolved provider configuration.\n\nRooms the platform did not create (inbound SIP) have no session row yet, so\nv2 adds ``channel`` and ``connection_id`` and the worker calls\n``POST /internal/v1/sessions/start`` when ``session_id`` is empty. The field\nstays a ``str`` (empty means \"no session yet\") rather than ``str | None``\nwhile the v1 worker still passes it straight to ``resolve()``; V2-07 widens\nit once the worker branches on it.",
+  "description": "Serialised as JSON into ``RoomAgentDispatch.metadata``.\n\nIDs ONLY. The browser can read this, so it must never contain secrets,\ninstructions or resolved provider configuration.\n\nRooms the platform did not create (inbound SIP) have no session row yet, so\nv2 adds ``channel`` and ``connection_id`` and makes ``session_id`` optional:\nthe worker (V2-07) calls ``POST /internal/v1/sessions/start`` when\n``session_id`` is ``None`` **or empty** (the v1-era \"no session yet\"\nspelling is still honoured), and ``GET /internal/v1/sessions/{id}/resolved``\notherwise.",
   "properties": {
     "agent_id": {
       "title": "Agent Id",
@@ -35,8 +35,16 @@
       "type": "string"
     },
     "session_id": {
-      "title": "Session Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
     },
     "v": {
       "const": 2,
@@ -46,7 +54,6 @@
     }
   },
   "required": [
-    "session_id",
     "agent_id",
     "config_version",
     "participant_identity"

@@ -26,7 +26,14 @@ from lkap_contracts.agent_config import (
     ToolsConfig,
     VoiceConfig,
 )
-from lkap_contracts.api_models import KbHit, SessionEventIn, SessionSummaryIn
+from lkap_contracts.api_models import (
+    KbHit,
+    SessionEventIn,
+    SessionMetricsIn,
+    SessionRecordingIn,
+    SessionStartIn,
+    SessionSummaryIn,
+)
 
 __all__ = ["FakeApi", "resolved_config"]
 
@@ -55,6 +62,7 @@ def resolved_config(
     participant_identity: str = "user-guest",
     llm_model: str | None = None,
     chat_input: bool = True,
+    channel: str = "web",
 ) -> ResolvedAgentConfig:
     """Build a valid `ResolvedAgentConfig` for tests.
 
@@ -66,7 +74,7 @@ def resolved_config(
     resolved: dict[ProviderSlot, ResolvedProvider] = {}
     pipeline_kwargs: dict[str, Any] = {"mode": mode}
 
-    if mode == "realtime":
+    if mode in ("realtime", "half_cascade"):
         resolved["realtime"] = _provider(
             "google-realtime",
             "livekit.plugins.google.realtime.RealtimeModel",
@@ -129,6 +137,7 @@ def resolved_config(
         tools=tools or [],
         kb_ids=kb_ids or [],
         participant_identity=participant_identity,
+        channel=channel,  # type: ignore[arg-type]
     )
 
 
@@ -141,11 +150,22 @@ class FakeApi:
         *,
         resolve_error: Exception | None = None,
         hits: list[KbHit] | None = None,
+        recording_error: Exception | None = None,
+        egress_id: str = "EG_test",
     ) -> None:
         self.config = config or resolved_config()
         self.resolve_error = resolve_error
+        self.recording_error = recording_error
+        self.egress_id = egress_id
         self.hits = hits or []
         self.resolve_calls: list[str] = []
+        self.start_calls: list[SessionStartIn] = []
+        self.recording_starts: list[str] = []
+        self.recordings: list[SessionRecordingIn] = []
+        self.metrics: list[SessionMetricsIn] = []
+        self.qa: list[Any] = []
+        #: Every write, in order (`"summary"`, `"qa"`, `"metrics"`, ...).
+        self.call_log: list[str] = []
         self.events: list[SessionEventIn] = []
         self.summaries: list[SessionSummaryIn] = []
         self.kb_queries: list[tuple[list[str], str, int]] = []
@@ -158,6 +178,35 @@ class FakeApi:
             raise self.resolve_error
         return self.config
 
+    async def start_session(self, request: SessionStartIn) -> ResolvedAgentConfig:
+        """Record the request and return the canned config, or raise the configured error."""
+        self.start_calls.append(request)
+        if self.resolve_error is not None:
+            raise self.resolve_error
+        return self.config
+
+    async def start_recording(self, session_id: str) -> str:
+        """Record the request and return the canned egress id, or raise the configured error."""
+        self.recording_starts.append(session_id)
+        if self.recording_error is not None:
+            raise self.recording_error
+        return self.egress_id
+
+    async def post_recording(self, session_id: str, recording: SessionRecordingIn) -> None:
+        """Record the posted recording state."""
+        self.recordings.append(recording)
+        self.call_log.append("recording")
+
+    async def post_metrics(self, session_id: str, metrics: SessionMetricsIn) -> None:
+        """Record the posted metrics."""
+        self.metrics.append(metrics)
+        self.call_log.append("metrics")
+
+    async def put_qa(self, session_id: str, qa: Any) -> None:
+        """Record the posted QA verdict."""
+        self.qa.append(qa)
+        self.call_log.append("qa")
+
     async def post_events(self, session_id: str, events: list[SessionEventIn]) -> None:
         """Record the posted events."""
         self.events.extend(events)
@@ -165,6 +214,7 @@ class FakeApi:
     async def put_summary(self, session_id: str, summary: SessionSummaryIn) -> None:
         """Record the posted summary."""
         self.summaries.append(summary)
+        self.call_log.append("summary")
 
     async def kb_search(self, kb_ids: list[str], query: str, k: int = 4) -> list[KbHit]:
         """Record the query and return the canned hits."""

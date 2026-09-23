@@ -21,6 +21,7 @@ from lkap_contracts.agent_config import (
     ResolvedProvider,
     ToolsConfig,
     VoiceConfig,
+    effective_qa,
     pipeline_issues,
 )
 from lkap_contracts.api_models import (
@@ -162,6 +163,14 @@ from lkap_contracts.providers import (
     mvp_providers,
     vision_support,
 )
+from lkap_contracts.qa import (
+    DEFAULT_RUBRIC_PROMPT,
+    DEFAULT_TAGS,
+    QaScoredBy,
+    QaStatus,
+    QaVerdict,
+    SessionQaIn,
+)
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
@@ -202,6 +211,8 @@ from lkap_contracts.ui_protocol import (
 
 __all__ = [
     "ACTIVITY_RING_SIZE",
+    "DEFAULT_RUBRIC_PROMPT",
+    "DEFAULT_TAGS",
     "PRICES",
     "PRICE_VERSION",
     "REGISTRY",
@@ -317,6 +328,9 @@ __all__ = [
     "QaConfig",
     "QaNode",
     "QaOut",
+    "QaScoredBy",
+    "QaStatus",
+    "QaVerdict",
     "RecordingConfig",
     "RecordingOut",
     "RecordingStartOut",
@@ -334,6 +348,7 @@ __all__ = [
     "SessionMetricsIn",
     "SessionOut",
     "SessionPage",
+    "SessionQaIn",
     "SessionRecordingIn",
     "SessionStartIn",
     "SessionSummaryIn",
@@ -391,6 +406,7 @@ __all__ = [
     "get",
     "lookup",
     "mvp_providers",
+    "effective_qa",
     "pipeline_issues",
     "vision_support",
 ]

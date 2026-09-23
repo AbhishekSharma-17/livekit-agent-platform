@@ -14,15 +14,15 @@ class DispatchMetadata(BaseModel):
     instructions or resolved provider configuration.
 
     Rooms the platform did not create (inbound SIP) have no session row yet, so
-    v2 adds ``channel`` and ``connection_id`` and the worker calls
-    ``POST /internal/v1/sessions/start`` when ``session_id`` is empty. The field
-    stays a ``str`` (empty means "no session yet") rather than ``str | None``
-    while the v1 worker still passes it straight to ``resolve()``; V2-07 widens
-    it once the worker branches on it.
+    v2 adds ``channel`` and ``connection_id`` and makes ``session_id`` optional:
+    the worker (V2-07) calls ``POST /internal/v1/sessions/start`` when
+    ``session_id`` is ``None`` **or empty** (the v1-era "no session yet"
+    spelling is still honoured), and ``GET /internal/v1/sessions/{id}/resolved``
+    otherwise.
     """
 
     v: Literal[2] = 2
-    session_id: str
+    session_id: str | None = None
     agent_id: str
     config_version: int
     participant_identity: str

@@ -1,0 +1,1706 @@
+{
+ "start": {
+  "t": {
+   "columns": [
+    {
+     "key": "item",
+     "label": "Item",
+     "type": "string"
+    }
+   ],
+   "rows": [
+    {
+     "id": "r1",
+     "item": "a"
+    },
+    {
+     "id": "r2",
+     "item": "b"
+    }
+   ],
+   "selected_row": null
+  },
+  "g": {
+   "asset_ids": [
+    "a1"
+   ],
+   "selected": null
+  },
+  "f": {
+   "schema": {},
+   "values": {},
+   "status": "idle",
+   "submitted_at": null
+  },
+  "k": {
+   "items": []
+  },
+  "nested": {
+   "lists": [
+    [
+     1,
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "scalar": 5
+  }
+ },
+ "cases": [
+  {
+   "name": "set whole block",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/d",
+     "value": {
+      "asset_id": null,
+      "url": "https://x/y.pdf",
+      "page": 2,
+      "highlights": []
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    },
+    "d": {
+     "asset_id": null,
+     "url": "https://x/y.pdf",
+     "page": 2,
+     "highlights": []
+    }
+   }
+  },
+  {
+   "name": "set field",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/selected_row",
+     "value": "r2"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": "r2"
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "table_append",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/columns",
+     "value": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      },
+      {
+       "key": "qty",
+       "label": "Qty",
+       "type": "number"
+      }
+     ]
+    },
+    {
+     "op": "append",
+     "path": "/blocks/t/rows",
+     "value": {
+      "id": "r3",
+      "item": "c",
+      "qty": 2
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      },
+      {
+       "key": "qty",
+       "label": "Qty",
+       "type": "number"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      },
+      {
+       "id": "r3",
+       "item": "c",
+       "qty": 2
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "gallery append",
+   "ops": [
+    {
+     "op": "append",
+     "path": "/blocks/g/asset_ids",
+     "value": "a2"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1",
+      "a2"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "form submit",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/f/values",
+     "value": {
+      "name": "x"
+     }
+    },
+    {
+     "op": "set",
+     "path": "/blocks/f/status",
+     "value": "submitted"
+    },
+    {
+     "op": "set",
+     "path": "/blocks/f/submitted_at",
+     "value": 12.5
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {
+      "name": "x"
+     },
+     "status": "submitted",
+     "submitted_at": 12.5
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "citations replace",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/k/items",
+     "value": [
+      {
+       "chunk_id": "c1",
+       "filename": "f",
+       "score": 0.5,
+       "text": "t"
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": [
+      {
+       "chunk_id": "c1",
+       "filename": "f",
+       "score": 0.5,
+       "text": "t"
+      }
+     ]
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "upsert by id replaces",
+   "ops": [
+    {
+     "op": "upsert",
+     "path": "/blocks/t/rows",
+     "value": {
+      "id": "r1",
+      "item": "A"
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "A"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "upsert new appends",
+   "ops": [
+    {
+     "op": "upsert",
+     "path": "/blocks/t/rows",
+     "value": {
+      "id": "r9",
+      "item": "Z"
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      },
+      {
+       "id": "r9",
+       "item": "Z"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "upsert with op.key",
+   "ops": [
+    {
+     "op": "upsert",
+     "path": "/blocks/t/rows",
+     "key": "r2",
+     "value": {
+      "id": "r2",
+      "item": "B"
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "B"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "upsert by key field",
+   "ops": [
+    {
+     "op": "upsert",
+     "path": "/blocks/x/list",
+     "value": {
+      "key": "k1",
+      "v": 1
+     }
+    },
+    {
+     "op": "upsert",
+     "path": "/blocks/x/list",
+     "value": {
+      "key": "k1",
+      "v": 2
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    },
+    "x": {
+     "list": [
+      {
+       "key": "k1",
+       "v": 2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "keyed remove",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/blocks/t/rows",
+     "key": "r1"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "unkeyed remove leaf",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/blocks/t/selected_row"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ]
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "unkeyed remove block",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/blocks/g"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "numeric index set",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/rows/1",
+     "value": {
+      "id": "r2",
+      "item": "bee"
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "bee"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "numeric index nested set",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/rows/0/item",
+     "value": "aye"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "aye"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "numeric index unkeyed remove",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/blocks/t/rows/0"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "numeric index out of range set is a no-op",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/rows/9",
+     "value": {
+      "id": "rx"
+     }
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "numeric index out of range intermediate is a no-op",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/rows/9/item",
+     "value": "x"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "non-numeric index into a list is a no-op",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/t/rows/first/item",
+     "value": "x"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "append into a list item",
+   "ops": [
+    {
+     "op": "append",
+     "path": "/blocks/nested/lists/1",
+     "value": 4
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3,
+       4
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "append onto a scalar replaces it with a list",
+   "ops": [
+    {
+     "op": "append",
+     "path": "/blocks/nested/scalar",
+     "value": 1
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": [
+      1
+     ]
+    }
+   }
+  },
+  {
+   "name": "missing intermediates are created",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/new/a/b",
+     "value": 1
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    },
+    "new": {
+     "a": {
+      "b": 1
+     }
+    }
+   }
+  },
+  {
+   "name": "scalar intermediate becomes a dict",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/nested/scalar/deep",
+     "value": 1
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": {
+      "deep": 1
+     }
+    }
+   }
+  },
+  {
+   "name": "empty segments are ignored",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks//t//selected_row",
+     "value": "r1"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": "r1"
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  },
+  {
+   "name": "set root blocks",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks",
+     "value": {
+      "only": {}
+     }
+    }
+   ],
+   "expected": {
+    "only": {}
+   }
+  },
+  {
+   "name": "no ~1 unescaping in block paths",
+   "ops": [
+    {
+     "op": "set",
+     "path": "/blocks/new/a~1b",
+     "value": 1
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    },
+    "new": {
+     "a~1b": 1
+    }
+   }
+  },
+  {
+   "name": "keyed remove on missing list makes an empty list",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/blocks/g/nothing",
+     "key": "x"
+    }
+   ],
+   "expected": {
+    "t": {
+     "columns": [
+      {
+       "key": "item",
+       "label": "Item",
+       "type": "string"
+      }
+     ],
+     "rows": [
+      {
+       "id": "r1",
+       "item": "a"
+      },
+      {
+       "id": "r2",
+       "item": "b"
+      }
+     ],
+     "selected_row": null
+    },
+    "g": {
+     "asset_ids": [
+      "a1"
+     ],
+     "selected": null,
+     "nothing": []
+    },
+    "f": {
+     "schema": {},
+     "values": {},
+     "status": "idle",
+     "submitted_at": null
+    },
+    "k": {
+     "items": []
+    },
+    "nested": {
+     "lists": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "scalar": 5
+    }
+   }
+  }
+ ]
+}

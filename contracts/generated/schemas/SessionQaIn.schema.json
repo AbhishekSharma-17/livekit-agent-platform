@@ -1,0 +1,107 @@
+{
+  "$id": "lkap-contracts/SessionQaIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PUT /internal/v1/sessions/{id}/qa`` (CONTRACTS-V2 §3.4, R-V2-5).\n\nPosted by the worker after it runs the judge (or decides not to);\n``status=\"skipped\"`` when ``AgentConfig.qa.enabled`` is false,\n``\"failed\"`` when no judge could be built or the judge call/JSON-repair\nboth failed, ``\"done\"`` with a full :class:`QaVerdict` otherwise.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "raw": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Score"
+    },
+    "sentiment": {
+      "anyOf": [
+        {
+          "enum": [
+            "positive",
+            "neutral",
+            "negative"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sentiment"
+    },
+    "status": {
+      "enum": [
+        "done",
+        "failed",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Summary"
+    },
+    "tags": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "SessionQaIn",
+  "type": "object"
+}

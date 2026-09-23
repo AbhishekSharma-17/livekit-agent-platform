@@ -2,8 +2,11 @@
 
 import * as React from "react";
 import { Controller, useFormContext } from "react-hook-form";
-import { PlusIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon } from "lucide-react";
 
+import { Field } from "@/components/shared/field";
+import { Section, SectionRow } from "@/components/shared/section";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,19 +19,37 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePacks, useProviders, useTools } from "@/components/console/lib/api-hooks";
-import { BUILTIN_TOOLS } from "@/components/console/lib/constants";
+import { BUILTIN_TOOLS, type BuiltinToolInfo } from "@/components/console/lib/constants";
+import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ToolRow } from "@/components/console/tools/tool-row";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
+import { cn } from "@/lib/utils";
 import type { AgentOut, ToolOut } from "@/contracts/lkap-contracts";
+
+/**
+ * Built-in tool groups (§4.7): the tool names come from WP-0's
+ * `BUILTIN_TOOLS` (`constants.ts`, not owned by this package), grouped here
+ * since the contract carries no grouping of its own.
+ */
+const BUILTIN_GROUPS: { label: string; tools: string[] }[] = [
+  { label: "Conversation", tools: ["end_call", "current_time"] },
+  { label: "Knowledge", tools: ["search_knowledge"] },
+  { label: "Vision", tools: ["describe_current_frame", "pin_frame"] },
+  { label: "Panel", tools: ["push_note", "set_status"] },
+  { label: "Escalation", tools: ["escalate_to_human"] },
+];
 
 export function ToolsTab({ agent }: { agent: AgentOut }) {
   const maxToolStepsId = React.useId();
   const { control, watch, setValue } = useFormContext<AgentEditorForm>();
   const toolIds = watch("config.tools.tool_ids");
   const builtinDisabled = watch("config.tools.builtin_disabled");
+  const kbIds = watch("config.knowledge.kb_ids");
+  const camera = watch("config.capabilities.camera");
+  const screenShare = watch("config.capabilities.screen_share");
 
   const ownToolsQuery = useTools(agent.id);
   const allToolsQuery = useTools();
@@ -56,6 +77,10 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
     );
   }
 
+  const byName = new Map(BUILTIN_TOOLS.map((t) => [t.name, t]));
+  const hasKnowledge = (kbIds ?? []).length > 0;
+  const hasVision = Boolean(camera || screenShare);
+
   const ownTools = ownToolsQuery.data?.items ?? [];
   const httpTools = ownTools.filter((t) => t.kind === "http");
   const mcpTools = ownTools.filter((t) => t.kind === "mcp");
@@ -65,61 +90,106 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
   const [sharedToAttach, setSharedToAttach] = React.useState("");
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <h3 className="text-sm font-semibold">Built-in tools</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {BUILTIN_TOOLS.map((tool) => (
-            <div key={tool.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-              <div className="min-w-0 pr-2">
-                <p className="text-sm font-medium">{tool.label}</p>
-                <p className="truncate text-xs text-muted-foreground">{tool.help}</p>
-              </div>
-              <Switch
-                checked={!(builtinDisabled ?? []).includes(tool.name)}
-                onCheckedChange={(checked) => toggleBuiltin(tool.name, checked)}
+    <div className="flex flex-col gap-6">
+      <Section
+        id="tools-builtin"
+        title="Built-in tools"
+        description="Available to every agent; turn off the ones this agent shouldn't use."
+      >
+        {BUILTIN_GROUPS.map((group) => {
+          const disabledReason =
+            group.label === "Knowledge" && !hasKnowledge
+              ? "Attach a knowledge base first"
+              : group.label === "Vision" && !hasVision
+                ? "Turn on camera or screen share first"
+                : null;
+          return (
+            <React.Fragment key={group.label}>
+              <SectionRow compact className="bg-muted/40">
+                <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+              </SectionRow>
+              {group.tools.map((name) => {
+                const tool = byName.get(name);
+                if (!tool) return null;
+                return (
+                  <BuiltinToolRow
+                    key={name}
+                    tool={tool}
+                    checked={!(builtinDisabled ?? []).includes(name)}
+                    disabledReason={disabledReason}
+                    onCheckedChange={(checked) => toggleBuiltin(name, checked)}
+                  />
+                );
+              })}
+            </React.Fragment>
+          );
+        })}
+
+        <SectionRow compact className="bg-muted/40">
+          <p className="text-xs font-medium text-muted-foreground">Network</p>
+        </SectionRow>
+        <SectionRow>
+          <Field
+            inline
+            label="Make HTTP requests"
+            htmlFor="http-request-enabled"
+            hint="Lets the model make ad-hoc outbound calls, only to hosts allowed by the worker's LKAP_HTTP_TOOL_ALLOWED_HOSTS."
+          >
+            <Controller
+              control={control}
+              name="config.tools.http_request_enabled"
+              render={({ field }) => (
+                <Switch id="http-request-enabled" checked={field.value} onCheckedChange={field.onChange} />
+              )}
+            />
+          </Field>
+        </SectionRow>
+
+        <SectionRow>
+          <Collapsible>
+            <CollapsibleTrigger
+              className={cn(
+                "group/more inline-flex items-center gap-1 rounded-xs text-[0.8125rem] font-medium text-muted-foreground outline-none",
+                "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <ChevronRightIcon
+                className="size-3.5 transition-transform duration-(--dur-2) group-data-[state=open]/more:rotate-90"
+                aria-hidden="true"
               />
-            </div>
-          ))}
-        </div>
+              Advanced
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <Field
+                label="Tool steps per turn"
+                htmlFor={maxToolStepsId}
+                hint="How many tool calls the model may chain before it must reply."
+              >
+                <Controller
+                  control={control}
+                  name="config.tools.max_tool_steps"
+                  render={({ field }) => (
+                    <Input
+                      id={maxToolStepsId}
+                      type="number"
+                      inputMode="numeric"
+                      className="w-32"
+                      value={field.value}
+                      onChange={(event) => field.onChange(Number(event.target.value))}
+                    />
+                  )}
+                />
+              </Field>
+            </CollapsibleContent>
+          </Collapsible>
+        </SectionRow>
+      </Section>
 
-        <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-          <div>
-            <p className="text-sm font-medium">HTTP request tool</p>
-            <p className="text-xs text-muted-foreground">
-              Lets the model make ad-hoc outbound HTTP calls (separate from the declared HTTP tools below).
-            </p>
-          </div>
-          <Controller
-            control={control}
-            name="config.tools.http_request_enabled"
-            render={({ field }) => <Switch checked={field.value} onCheckedChange={field.onChange} />}
-          />
-        </div>
-
-        <div>
-          <label htmlFor={maxToolStepsId} className="mb-1 block text-sm font-medium">
-            Max tool steps per turn
-          </label>
-          <Controller
-            control={control}
-            name="config.tools.max_tool_steps"
-            render={({ field }) => (
-              <Input
-                id={maxToolStepsId}
-                type="number"
-                className="w-32"
-                value={field.value}
-                onChange={(event) => field.onChange(Number(event.target.value))}
-              />
-            )}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">HTTP tools</h3>
+      <Section
+        id="tools-http"
+        title="HTTP tools"
+        description="Custom calls to an external API, exposed to the model as a function."
+        aside={
           <HttpToolEditorDialog
             agentId={agent.id}
             secretBagSpec={secretBagSpec}
@@ -129,44 +199,49 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             }}
             trigger={
               <Button type="button" variant="outline" size="sm">
-                <PlusIcon className="size-3.5" /> HTTP tool
+                <PlusIcon className="size-3.5" /> Add HTTP tool
               </Button>
             }
           />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          New tools are attached to this agent when you click Save &amp; validate.
-        </p>
-        {ownToolsQuery.isError ? (
-          <ErrorBanner message={errorMessage(ownToolsQuery.error)} onRetry={() => ownToolsQuery.refetch()} />
-        ) : ownToolsQuery.isLoading ? (
-          <Skeleton className="h-10 w-full" />
-        ) : httpTools.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No HTTP tools yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {httpTools.map((tool) => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                agentId={agent.id}
-                attached={(toolIds ?? []).includes(tool.id)}
-                onToggleAttach={(attached) => setAttached(tool.id, attached)}
-                onSaved={() => void ownToolsQuery.refetch()}
-                onDeleted={() => {
-                  setAttached(tool.id, false);
-                  void ownToolsQuery.refetch();
-                }}
-                secretBagSpec={secretBagSpec}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        }
+      >
+        <SectionRow>
+          {ownToolsQuery.isError ? (
+            <ErrorBanner message={errorMessage(ownToolsQuery.error)} onRetry={() => ownToolsQuery.refetch()} />
+          ) : ownToolsQuery.isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : httpTools.length === 0 ? (
+            <EmptyState compact title="No HTTP tools yet" description="Connect an API the agent can call." />
+          ) : (
+            <div className="space-y-2">
+              {httpTools.map((tool) => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  agentId={agent.id}
+                  attached={(toolIds ?? []).includes(tool.id)}
+                  onToggleAttach={(attached) => setAttached(tool.id, attached)}
+                  onSaved={() => void ownToolsQuery.refetch()}
+                  onDeleted={() => {
+                    setAttached(tool.id, false);
+                    void ownToolsQuery.refetch();
+                  }}
+                  secretBagSpec={secretBagSpec}
+                />
+              ))}
+            </div>
+          )}
+          {httpTools.length > 0 ? (
+            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Saved automatically to this agent.</p>
+          ) : null}
+        </SectionRow>
+      </Section>
 
-      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">MCP servers</h3>
+      <Section
+        id="tools-mcp"
+        title="MCP servers"
+        description="A remote MCP server whose tools become available to the model."
+        aside={
           <McpToolEditorDialog
             agentId={agent.id}
             secretBagSpec={secretBagSpec}
@@ -176,41 +251,43 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             }}
             trigger={
               <Button type="button" variant="outline" size="sm">
-                <PlusIcon className="size-3.5" /> MCP server
+                <PlusIcon className="size-3.5" /> Add MCP server
               </Button>
             }
           />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          New tools are attached to this agent when you click Save &amp; validate.
-        </p>
-        {mcpTools.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No MCP servers yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {mcpTools.map((tool: ToolOut) => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                agentId={agent.id}
-                attached={(toolIds ?? []).includes(tool.id)}
-                onToggleAttach={(attached) => setAttached(tool.id, attached)}
-                onSaved={() => void ownToolsQuery.refetch()}
-                onDeleted={() => {
-                  setAttached(tool.id, false);
-                  void ownToolsQuery.refetch();
-                }}
-                secretBagSpec={secretBagSpec}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        }
+      >
+        <SectionRow>
+          {mcpTools.length === 0 ? (
+            <EmptyState compact title="No MCP servers yet" description="Connect an MCP server the agent can use." />
+          ) : (
+            <div className="space-y-2">
+              {mcpTools.map((tool: ToolOut) => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  agentId={agent.id}
+                  attached={(toolIds ?? []).includes(tool.id)}
+                  onToggleAttach={(attached) => setAttached(tool.id, attached)}
+                  onSaved={() => void ownToolsQuery.refetch()}
+                  onDeleted={() => {
+                    setAttached(tool.id, false);
+                    void ownToolsQuery.refetch();
+                  }}
+                  secretBagSpec={secretBagSpec}
+                />
+              ))}
+            </div>
+          )}
+          {mcpTools.length > 0 ? (
+            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Saved automatically to this agent.</p>
+          ) : null}
+        </SectionRow>
+      </Section>
 
       {sharedAttachable.length > 0 ? (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h3 className="mb-2 text-sm font-semibold">Attach a shared tool</h3>
-          <div className="flex gap-2">
+        <Section id="tools-shared" title="Attach a shared tool" description="Tools created from the shared list.">
+          <SectionRow className="flex gap-2">
             <Select value={sharedToAttach} onValueChange={setSharedToAttach}>
               <SelectTrigger className="w-full flex-1">
                 <SelectValue placeholder="Choose a shared tool" />
@@ -234,27 +311,61 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             >
               Attach
             </Button>
-          </div>
-        </div>
+          </SectionRow>
+        </Section>
       ) : null}
 
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="mb-2 text-sm font-semibold">Pack tools (read-only)</h3>
-        {packsQuery.isLoading ? (
-          <Skeleton className="h-6 w-48" />
-        ) : (pack?.tool_names.length ?? 0) === 0 ? (
-          <p className="text-sm text-muted-foreground">This pack registers no code tools.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {pack?.tool_names.map((name) => (
-              <li key={name} className="rounded-full bg-secondary px-2.5 py-0.5 font-mono text-xs text-secondary-foreground">
-                {name}
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-xs text-muted-foreground">Provided by the &quot;{agent.pack_id}&quot; pack&apos;s code; not editable here.</p>
-      </div>
+      <Section id="tools-pack" title="Pack tools" description="Provided by the agent's pack; not editable here.">
+        <SectionRow>
+          {packsQuery.isLoading ? (
+            <Skeleton className="h-6 w-48" />
+          ) : (pack?.tool_names.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">This pack registers no code tools.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {pack?.tool_names.map((name) => (
+                <li
+                  key={name}
+                  className="rounded-full bg-secondary px-2.5 py-0.5 font-mono text-xs text-secondary-foreground"
+                >
+                  {name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionRow>
+      </Section>
     </div>
+  );
+}
+
+function BuiltinToolRow({
+  tool,
+  checked,
+  disabledReason,
+  onCheckedChange,
+}: {
+  tool: BuiltinToolInfo;
+  checked: boolean;
+  disabledReason: string | null;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const id = `builtin-tool-${tool.name}`;
+  return (
+    <SectionRow>
+      <Field
+        inline
+        label={tool.label}
+        htmlFor={id}
+        hint={disabledReason ?? tool.help}
+      >
+        <Switch
+          id={id}
+          checked={checked && !disabledReason}
+          disabled={Boolean(disabledReason)}
+          onCheckedChange={onCheckedChange}
+        />
+      </Field>
+    </SectionRow>
   );
 }

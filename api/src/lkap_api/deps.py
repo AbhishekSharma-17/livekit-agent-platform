@@ -3,6 +3,12 @@
 Routers depend on the ``*Dep`` aliases declared here rather than importing the
 concrete objects, so tests can override any of them with
 ``app.dependency_overrides``.
+
+``AdminDep``/``OptionalAdminDep`` keep their v1 names so the v1 routers need no
+edit, but since V2-02 they authenticate through :mod:`lkap_api.auth.deps`
+(cookie session, API key or break-glass admin token) and enforce the role
+matrix. New routers depend on :data:`lkap_api.auth.deps.WorkspaceCtxDep` or
+:func:`lkap_api.auth.deps.require` directly.
 """
 
 from __future__ import annotations
@@ -12,10 +18,17 @@ from functools import lru_cache
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api.auth import ADMIN_HEADER, SERVICE_HEADER, bearer_value, token_matches
+from lkap_api.auth import SERVICE_HEADER, token_matches
+from lkap_api.auth.deps import (
+    OptionalWorkspaceCtxDep,
+    WorkspaceContext,
+    record_route_mutation,
+    route_policy_context,
+)
+from lkap_api.auth.roles import policy_for
 from lkap_api.db.session import get_db
 from lkap_api.errors import UnauthorizedError
 from lkap_api.settings import Settings, get_settings
@@ -24,9 +37,7 @@ from lkap_api.vault import Vault
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
-AdminTokenHeader = Annotated[str | None, Header(alias=ADMIN_HEADER, description="Static admin token")]
 ServiceTokenHeader = Annotated[str | None, Header(alias=SERVICE_HEADER, description="Worker service token")]
-AuthorizationHeader = Annotated[str | None, Header(alias="Authorization", include_in_schema=False)]
 
 
 @lru_cache(maxsize=4)
@@ -55,31 +66,51 @@ async def get_http_client() -> AsyncIterator[httpx.AsyncClient]:
 HttpClientDep = Annotated[httpx.AsyncClient, Depends(get_http_client)]
 
 
-def is_admin(
-    settings: SettingsDep,
-    x_admin_token: AdminTokenHeader = None,
-    authorization: AuthorizationHeader = None,
-) -> bool:
-    """Return whether the caller presented a valid admin token."""
-    return token_matches(x_admin_token, settings.admin_token) or token_matches(
-        bearer_value(authorization), settings.admin_token
-    )
+async def admin_context(
+    request: Request,
+    db: DbDep,
+    ctx: Annotated[WorkspaceContext, Depends(route_policy_context)],
+) -> AsyncIterator[WorkspaceContext]:
+    """The :class:`WorkspaceContext` of a v1 admin route, role-checked and audited.
 
-
-def optional_admin(admin: Annotated[bool, Depends(is_admin)]) -> bool:
-    """Admin detection that never rejects — used by dual-audience routes."""
-    return admin
-
-
-def require_admin(admin: Annotated[bool, Depends(is_admin)]) -> bool:
-    """Reject the request unless a valid admin token is present.
+    The caller must be authenticated — cookie session, API key or break-glass
+    admin token (:mod:`lkap_api.auth.deps`) — and meet the route's entry in
+    :data:`lkap_api.auth.roles.ROUTE_POLICY` (e.g. ``viewer`` may read agents,
+    ``builder`` may edit them). A successful mutating call is audit-logged once
+    per request, however many of the guards below a handler declares.
 
     Raises:
-        UnauthorizedError: When the token is missing or wrong.
+        UnauthorizedError: When no valid credential is present.
+        ForbiddenError: When the role or API-key scope is insufficient.
     """
-    if not admin:
-        raise UnauthorizedError(f"a valid {ADMIN_HEADER} header is required")
+    yield ctx
+    record_route_mutation(request, db, ctx)
+
+
+AdminCtxDep = Annotated[WorkspaceContext, Depends(admin_context)]
+
+
+async def require_admin(_ctx: AdminCtxDep) -> bool:
+    """Guard of every v1 admin route (V2-02: now role- and workspace-aware).
+
+    Kept for the v1 ``_admin: AdminDep`` parameters; scoping a handler means
+    swapping it for ``ctx: AdminCtxDep`` and filtering on ``ctx.workspace_id``.
+    """
     return True
+
+
+def optional_admin(request: Request, ctx: OptionalWorkspaceCtxDep) -> bool:
+    """Privileged-caller detection that never rejects — used by dual-audience routes.
+
+    True when the caller is authenticated and would pass this route's policy
+    (for ``GET /v1/agents/{id}``: at least ``viewer``); anonymous callers get
+    the public view.
+    """
+    if ctx is None:
+        return False
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", request.url.path)
+    return ctx.allows(policy_for(request.method, str(route_path)))
 
 
 def require_service(settings: SettingsDep, x_service_token: ServiceTokenHeader = None) -> bool:

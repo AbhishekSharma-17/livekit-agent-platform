@@ -339,6 +339,7 @@ async def test_public_get_returns_the_public_projection(
         "name",
         "description",
         "ui_panel_id",
+        "panel",
         "capabilities",
         "pipeline_mode",
     }

@@ -1,27 +1,59 @@
 """Agent configuration services: validation, pack seeding and resolution.
 
-Three jobs, all pure functions over :mod:`lkap_contracts` models so they can be
-unit-tested without a database:
+Three jobs over :mod:`lkap_contracts` models:
 
-* :func:`validate_agent_config` — checks an ``AgentConfig`` against the provider
-  registry and the credentials that actually exist (CONTRACTS §6).
+* :func:`validate_agent_config` / :func:`validate` — check an ``AgentConfig``
+  against the provider registry, the stored credentials and the LiveKit
+  connection the agent runs on (CONTRACTS §6, CONTRACTS-V2 §4.1, ARCHITECTURE-V2
+  D-V2-4/D-V2-8). :func:`validate_in_db` builds the :class:`ValidationContext`
+  from the database.
 * :func:`seed_config_from_manifest` — turns a ``PackManifest`` into a runnable
-  ``AgentConfig``, substituting LiveKit Inference for providers whose credential
-  is missing or ambiguous (CONTRACTS §8, "Seeding rule").
+  ``AgentConfig``, substituting LiveKit Inference for providers that are not
+  constructible on the connection or whose credential is missing or ambiguous
+  (CONTRACTS §8, "Seeding rule").
 * :func:`resolve_providers` / :func:`resolve_tool_definition` — merge decrypted
   secrets into constructor kwargs and tool templates for the worker's
   ``ResolvedAgentConfig``. **Their output contains secrets and must never be
   logged or returned to an admin/browser caller.**
+
+Provider gate (ruling R-V2-2, replacing v1's ``status == "mvp"``)
+------------------------------------------------------------------
+A slot's provider is usable when all of these hold:
+
+1. ``availability == "available"`` (``verification`` never gates, R-V2-1);
+2. it is **installed on the agent's connection**: in the union of
+   ``installed_provider_ids`` its registered workers report, or — until any
+   worker of that connection has registered — its ``worker_image`` is carried
+   by the connection's image (``slim`` ⊂ ``full``; ``isolated`` never);
+3. the connection's capability flags allow it (LiveKit Inference needs
+   ``inference_available``; Krisp noise cancellation needs a Cloud connection);
+4. the workspace has not disabled it — enforced by V2-06's validator, which
+   reads :attr:`ValidationContext.disabled_provider_ids`.
+
+Without a connection (the v1 call signature) rule 2 assumes the ``slim`` image
+and rule 3 is skipped, which is exactly the v1 ``mvp`` set.
+
+Extension point
+---------------
+:data:`VALIDATORS` is a list of ``Callable[[ValidationContext], list[Issue]]``.
+Other packages append to it from their own modules (for example
+``lkap_api.catalogs.validation`` registers the workspace-enablement check)
+instead of editing this file; every registered validator runs after the
+built-in checks, and its issues appear in ``issues`` and in the flat
+``errors``/``warnings`` lists as ``"<path>: <message>"``.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import quote, urlparse
 
 from lkap_contracts.agent_config import (
+    REQUIRED_SLOTS,
     AgentConfig,
     PipelineConfig,
     ProviderRef,
@@ -29,13 +61,30 @@ from lkap_contracts.agent_config import (
     ResolvedProvider,
     ToolsConfig,
     VoiceConfig,
+    effective_qa,
 )
-from lkap_contracts.api_models import ValidationResult
+from lkap_contracts.api_models import Issue, Severity, ValidationResult
+from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
 from lkap_contracts.packs import PackManifest
-from lkap_contracts.providers import ProviderKind, ProviderSpec, get, vision_support
+from lkap_contracts.providers import ProviderKind, ProviderSpec, WorkerImage, get, vision_support
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from lkap_api.connections.probe import effective_capabilities
+from lkap_api.db.models import (
+    Credential,
+    KnowledgeBase,
+    LiveKitConnection,
+    Tool,
+    WorkerInstance,
+    WorkspaceProvider,
+)
 
 #: Which registry `kind` may fill each pipeline slot. `workflow_llm` takes an llm.
+#: `qa_llm` (R-V2-6) also takes an llm, but is resolved from `config.qa.model`, not
+#: from a `pipeline.*` attribute — `_slots_in_use` (below) never sees it, and
+#: `routers/internal.py::_credential_ids` collects its credential separately.
 SLOT_KIND: dict[ProviderSlot, ProviderKind] = {
     "realtime": "realtime",
     "stt": "stt",
@@ -44,6 +93,10 @@ SLOT_KIND: dict[ProviderSlot, ProviderKind] = {
     "avatar": "avatar",
     "image_gen": "image_gen",
     "workflow_llm": "llm",
+    "qa_llm": "llm",
+    "vad": "vad",
+    "turn_detection": "turn_detection",
+    "noise_cancellation": "noise_cancellation",
 }
 
 #: The credential-free LiveKit Inference provider for each cascaded slot.
@@ -53,8 +106,20 @@ INFERENCE_DEFAULT: dict[str, str] = {
     "tts": "livekit-inference-tts",
 }
 
+#: Registry id prefix of the LiveKit Inference providers (Cloud-only).
+INFERENCE_PREFIX = "livekit-inference-"
+
 #: Slots that make up a cascaded pipeline, in construction order.
 CASCADED_SLOTS: tuple[ProviderSlot, ...] = ("stt", "llm", "tts")
+
+#: Optional slots resolved for the worker whenever they are configured.
+OPTIONAL_SLOTS: tuple[ProviderSlot, ...] = (
+    "avatar",
+    "image_gen",
+    "vad",
+    "turn_detection",
+    "noise_cancellation",
+)
 
 #: Keys accepted by `TurnHandlingOptions` (livekit-agents 1.8.2).
 TURN_HANDLING_KEYS: frozenset[str] = frozenset(
@@ -64,8 +129,96 @@ TURN_HANDLING_KEYS: frozenset[str] = frozenset(
 #: Field names that carry a voice selection, for `PackManifest.default_voice`.
 VOICE_FIELD_NAMES: tuple[str, ...] = ("voice", "voice_id")
 
+#: Which provider images a worker image carries (`slim` ⊂ `full`; `isolated` stands alone).
+IMAGE_CARRIES: dict[str, frozenset[str]] = {
+    "slim": frozenset({"slim"}),
+    "full": frozenset({"slim", "full"}),
+    "isolated": frozenset({"isolated"}),
+}
+
+#: Worker statuses whose `installed_provider_ids` count towards a connection's pool.
+LIVE_WORKER_STATUSES: tuple[str, ...] = ("starting", "ready")
+
 _SECRET_RE = re.compile(r"\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 _ARG_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+# ------------------------------------------------------------------------- context
+@dataclass(frozen=True, slots=True)
+class ConnectionContext:
+    """What validation and seeding need to know about the agent's connection."""
+
+    connection_id: str
+    name: str = ""
+    deployment_type: DeploymentType = "cloud"
+    worker_image: WorkerImage = "slim"
+    capabilities: ConnectionCapabilities = dataclasses.field(default_factory=ConnectionCapabilities)
+    installed_provider_ids: frozenset[str] | None = None
+    """Union reported by the pool's registered workers; ``None`` until one registers."""
+
+    @classmethod
+    def from_row(
+        cls, row: LiveKitConnection, installed_provider_ids: frozenset[str] | None = None
+    ) -> ConnectionContext:
+        """Build the context from a stored connection."""
+        return cls(
+            connection_id=row.id,
+            name=row.name,
+            deployment_type=cast(DeploymentType, row.deployment_type),
+            worker_image=cast(WorkerImage, row.worker_image),
+            capabilities=effective_capabilities(
+                row.deployment_type, bool(row.use_inference), row.capabilities
+            ),
+            installed_provider_ids=installed_provider_ids,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationContext:
+    """Everything a validator may look at. Validators never touch the database."""
+
+    config: AgentConfig
+    credential_providers: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    """``{credential_id: provider_id}`` for every credential of the workspace."""
+    connection: ConnectionContext | None = None
+    workspace_id: str | None = None
+    disabled_provider_ids: frozenset[str] = frozenset()
+    """Providers the workspace switched off (``workspace_providers.enabled = 0``)."""
+    known_tool_ids: frozenset[str] | None = None
+    known_kb_ids: frozenset[str] | None = None
+    tool_names_by_id: Mapping[str, str] | None = None
+    """``{tool_id: name}`` for every tool row of the workspace (R-V2-10: flow nodes reference
+    tools by name); ``None`` skips the flow tool-reference check."""
+
+    def slots(self) -> list[tuple[ProviderSlot, ProviderRef]]:
+        """The (slot, ref) pairs the pipeline declares, plus `qa.model` when set (R-V2-6).
+
+        `qa.model` is not a `pipeline.*` field, so it never comes out of
+        `_slots_in_use`; folding it in here means every check that walks
+        `ctx.slots()` — `_validate_slot` below and any `VALIDATORS`-registered
+        check (e.g. V2-06's workspace-disabled check) — validates it exactly
+        like a pipeline slot (kind, credential, availability, installed-on,
+        enabled) for free. QA counts as on when ``effective_qa`` says so (R-V2-11:
+        a flow ``qa`` node turns it on).
+        """
+        pairs = _slots_in_use(self.config.pipeline)
+        qa = effective_qa(self.config)
+        if qa.enabled and qa.model is not None:
+            pairs.append(("qa_llm", qa.model))
+        return pairs
+
+
+Validator = Callable[[ValidationContext], list[Issue]]
+
+#: Extra checks registered by other packages; each runs after the built-in ones.
+VALIDATORS: list[Validator] = []
+
+
+def register_validator(validator: Validator) -> Validator:
+    """Append ``validator`` to :data:`VALIDATORS` once (usable as a decorator)."""
+    if validator not in VALIDATORS:
+        VALIDATORS.append(validator)
+    return validator
 
 
 # --------------------------------------------------------------------------- helpers
@@ -104,10 +257,61 @@ def _spec_or_none(provider_id: str) -> ProviderSpec | None:
 
 def _voice_field_name(spec: ProviderSpec) -> str | None:
     """Return the spec field that selects a voice, if it has one."""
-    for field in spec.fields:
-        if field.name in VOICE_FIELD_NAMES:
-            return field.name
+    for field_spec in spec.fields:
+        if field_spec.name in VOICE_FIELD_NAMES:
+            return field_spec.name
     return None
+
+
+def image_carries(image: str, spec: ProviderSpec) -> bool:
+    """Whether a worker image of flavour ``image`` ships ``spec``'s plugin."""
+    return spec.worker_image in IMAGE_CARRIES.get(image, frozenset())
+
+
+def installed_on(spec: ProviderSpec, connection: ConnectionContext | None) -> bool:
+    """Whether the connection's worker pool can construct ``spec`` (rule 2 above).
+
+    Registered workers' ``installed_provider_ids`` win; until one has
+    registered the connection's ``worker_image`` decides (``slim`` without a
+    connection, the v1 behaviour).
+    """
+    if connection is not None and connection.installed_provider_ids is not None:
+        return spec.id in connection.installed_provider_ids
+    return image_carries(connection.worker_image if connection else "slim", spec)
+
+
+def requires_inference(spec: ProviderSpec) -> bool:
+    """Whether ``spec`` only works through LiveKit Inference (a Cloud feature)."""
+    if spec.id.startswith(INFERENCE_PREFIX):
+        return True
+    return spec.capabilities.cloud_only and spec.kind != "noise_cancellation"
+
+
+def _connection_label(connection: ConnectionContext) -> str:
+    return f"connection '{connection.name or connection.connection_id}'"
+
+
+class _Findings:
+    """Collects issues and the flat v1 ``errors``/``warnings`` strings in one pass."""
+
+    def __init__(self) -> None:
+        self.issues: list[Issue] = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+
+    def add(self, severity: Severity, path: str, message: str, *, flat: str | None = None) -> None:
+        self.issues.append(Issue(path=path, message=message, severity=severity))
+        text = flat if flat is not None else (f"{path}: {message}" if path else message)
+        (self.errors if severity == "error" else self.warnings).append(text)
+
+    def extend(self, issues: list[Issue]) -> None:
+        for issue in issues:
+            self.add(issue.severity, issue.path, issue.message)
+
+    def result(self) -> ValidationResult:
+        return ValidationResult(
+            ok=not self.errors, errors=self.errors, warnings=self.warnings, issues=self.issues
+        )
 
 
 # ------------------------------------------------------------------------ validation
@@ -117,89 +321,171 @@ def validate_agent_config(
     credential_providers: Mapping[str, str],
     known_tool_ids: set[str] | None = None,
     known_kb_ids: set[str] | None = None,
+    connection: ConnectionContext | None = None,
+    workspace_id: str | None = None,
+    disabled_provider_ids: frozenset[str] = frozenset(),
 ) -> ValidationResult:
-    """Validate an ``AgentConfig`` against the registry and stored credentials.
+    """Validate an ``AgentConfig`` against the registry, credentials and connection.
 
     Args:
         config: The configuration an admin is trying to save.
         credential_providers: ``{credential_id: provider_id}`` for every stored credential.
         known_tool_ids: Existing tool row ids; skipped when ``None``.
         known_kb_ids: Existing knowledge-base ids; skipped when ``None``.
+        connection: The agent's connection; ``None`` assumes the ``slim``
+            image and skips capability checks (the v1 behaviour).
+        workspace_id: The agent's workspace, for registered validators.
+        disabled_provider_ids: Providers the workspace switched off.
 
     Returns:
         A :class:`ValidationResult`; ``ok`` is false when ``errors`` is non-empty.
     """
-    errors: list[str] = []
-    warnings: list[str] = []
+    return validate(
+        ValidationContext(
+            config=config,
+            credential_providers=credential_providers,
+            connection=connection,
+            workspace_id=workspace_id,
+            disabled_provider_ids=disabled_provider_ids,
+            known_tool_ids=frozenset(known_tool_ids) if known_tool_ids is not None else None,
+            known_kb_ids=frozenset(known_kb_ids) if known_kb_ids is not None else None,
+        )
+    )
+
+
+def validate(ctx: ValidationContext) -> ValidationResult:
+    """Run the built-in checks, the connection checks and every registered validator."""
+    findings = _Findings()
+    config = ctx.config
     pipeline = config.pipeline
 
-    if pipeline.mode == "realtime":
-        if pipeline.realtime is None:
-            errors.append("pipeline.realtime is required when mode is 'realtime'")
-    else:
-        for slot in CASCADED_SLOTS:
-            if getattr(pipeline, slot) is None:
-                errors.append(f"pipeline.{slot} is required when mode is 'cascaded'")
-
-    for slot, ref in _slots_in_use(pipeline):
-        label = f"pipeline.{slot}"
-        spec = _spec_or_none(ref.provider_id)
-        if spec is None:
-            errors.append(f"{label}: unknown provider '{ref.provider_id}'")
-            continue
-        if spec.kind != SLOT_KIND[slot]:
-            errors.append(
-                f"{label}: provider '{spec.id}' is a {spec.kind} provider, expected {SLOT_KIND[slot]}"
+    for slot in REQUIRED_SLOTS[pipeline.mode]:
+        if getattr(pipeline, slot) is None:
+            findings.add(
+                "error",
+                f"pipeline.{slot}",
+                f"a {slot} provider is required in {pipeline.mode} mode",
+                flat=f"pipeline.{slot} is required when mode is '{pipeline.mode}'",
             )
-            continue
-        if spec.status != "mvp":
-            errors.append(f"{label}: provider '{spec.id}' is not available yet (status={spec.status})")
 
-        _validate_credential(label, ref, spec, credential_providers, errors, warnings)
-        _validate_model(label, ref, spec, warnings)
-        _validate_fields(label, ref, spec, errors, warnings)
+    for slot, ref in ctx.slots():
+        _validate_slot(ctx, slot, ref, findings)
 
-    if pipeline.mode == "realtime" and pipeline.realtime is not None:
-        spec = _spec_or_none(pipeline.realtime.provider_id)
-        if spec is not None and not spec.capabilities.video_input:
-            if config.capabilities.camera or config.capabilities.screen_share:
-                warnings.append(
-                    f"pipeline.realtime: '{spec.id}' cannot see video frames; camera/screen share "
-                    "still reach the UI and the pin/describe tools, but not the model"
-                )
+    _validate_modes(config, findings)
 
-    if pipeline.mode == "cascaded" and pipeline.llm is not None:
-        if config.capabilities.camera or config.capabilities.screen_share:
-            llm_spec = _spec_or_none(pipeline.llm.provider_id)
-            if llm_spec is not None and vision_support(pipeline.llm.provider_id, pipeline.llm.model) is False:
-                model = pipeline.llm.model or llm_spec.default_model
-                warnings.append(
-                    f"pipeline.llm: '{model}' cannot see images; camera/screen share still "
-                    "reach the UI and pin_frame, but per-turn vision and describe_current_frame "
-                    "are disabled — pick a model marked 'supports video' (e.g. google/gemini-3.5-flash)"
-                )
-
-    for key in config.pipeline.turn_handling:
+    for key in pipeline.turn_handling:
         if key == "turn_detection":
-            errors.append(
-                "pipeline.turn_handling: 'turn_detection' is set by the platform and cannot be overridden"
+            findings.add(
+                "error",
+                "pipeline.turn_handling",
+                "'turn_detection' is set by the platform and cannot be overridden",
             )
         elif key not in TURN_HANDLING_KEYS:
-            warnings.append(f"pipeline.turn_handling: unknown key '{key}' will be ignored")
+            findings.add("warning", "pipeline.turn_handling", f"unknown key '{key}' will be ignored")
 
-    if known_tool_ids is not None:
+    if ctx.known_tool_ids is not None:
         for tool_id in config.tools.tool_ids:
-            if tool_id not in known_tool_ids:
-                errors.append(f"tools.tool_ids: unknown tool '{tool_id}'")
-    if known_kb_ids is not None:
+            if tool_id not in ctx.known_tool_ids:
+                findings.add("error", "tools.tool_ids", f"unknown tool '{tool_id}'")
+    if ctx.known_kb_ids is not None:
         for kb_id in config.knowledge.kb_ids:
-            if kb_id not in known_kb_ids:
-                errors.append(f"knowledge.kb_ids: unknown knowledge base '{kb_id}'")
+            if kb_id not in ctx.known_kb_ids:
+                findings.add("error", "knowledge.kb_ids", f"unknown knowledge base '{kb_id}'")
 
     if not config.instructions.strip():
-        warnings.append("instructions are empty; the agent will rely on the model's defaults")
+        findings.add(
+            "warning",
+            "instructions",
+            "instructions are empty; the agent will rely on the model's defaults",
+            flat="instructions are empty; the agent will rely on the model's defaults",
+        )
 
-    return ValidationResult(ok=not errors, errors=errors, warnings=warnings)
+    findings.extend(connection_flag_issues(ctx))
+    for validator in list(VALIDATORS):
+        findings.extend(validator(ctx))
+    return findings.result()
+
+
+def _slot_path(slot: ProviderSlot) -> str:
+    """The config path a slot's issues are addressed at.
+
+    `qa_llm` (R-V2-6) is `config.qa.model`, not `pipeline.qa_llm` — no such
+    field exists, since it is resolved from `AgentConfig.qa`, not the pipeline.
+    """
+    return "qa.model" if slot == "qa_llm" else f"pipeline.{slot}"
+
+
+def _validate_slot(ctx: ValidationContext, slot: ProviderSlot, ref: ProviderRef, findings: _Findings) -> None:
+    label = _slot_path(slot)
+    spec = _spec_or_none(ref.provider_id)
+    if spec is None:
+        findings.add("error", label, f"unknown provider '{ref.provider_id}'")
+        return
+    if spec.kind != SLOT_KIND[slot]:
+        findings.add(
+            "error", label, f"provider '{spec.id}' is a {spec.kind} provider, expected {SLOT_KIND[slot]}"
+        )
+        return
+    if spec.availability != "available":
+        findings.add(
+            "error", label, f"provider '{spec.id}' is not available yet (availability={spec.availability})"
+        )
+    elif not installed_on(spec, ctx.connection):
+        findings.add("error", label, _not_installed_message(spec, ctx.connection))
+
+    _validate_credential(label, ref, spec, ctx.credential_providers, findings)
+    _validate_model(label, ref, spec, findings)
+    _validate_fields(label, ref, spec, findings)
+
+
+def _not_installed_message(spec: ProviderSpec, connection: ConnectionContext | None) -> str:
+    if connection is None:
+        return (
+            f"provider '{spec.id}' is not available yet on the default worker pool "
+            f"(it needs the '{spec.worker_image}' worker image; the pool runs 'slim')"
+        )
+    where = _connection_label(connection)
+    if connection.installed_provider_ids is not None:
+        return f"provider '{spec.id}' is not installed on {where}'s worker pool"
+    return (
+        f"provider '{spec.id}' needs the '{spec.worker_image}' worker image; "
+        f"{where} runs '{connection.worker_image}'"
+    )
+
+
+def _validate_modes(config: AgentConfig, findings: _Findings) -> None:
+    pipeline = config.pipeline
+    wants_video = config.capabilities.camera or config.capabilities.screen_share
+
+    if pipeline.mode in ("realtime", "half_cascade") and pipeline.realtime is not None:
+        spec = _spec_or_none(pipeline.realtime.provider_id)
+        if spec is not None and spec.kind == "realtime":
+            if pipeline.mode == "half_cascade" and not spec.capabilities.text_modality:
+                findings.add(
+                    "error",
+                    "pipeline.realtime",
+                    f"'{spec.id}' cannot produce text-only output, so it cannot drive half-cascade "
+                    "mode; pick a realtime model with text output, or use realtime or cascaded mode",
+                )
+            if not spec.capabilities.video_input and wants_video:
+                findings.add(
+                    "warning",
+                    "pipeline.realtime",
+                    f"'{spec.id}' cannot see video frames; camera/screen share "
+                    "still reach the UI and the pin/describe tools, but not the model",
+                )
+
+    if pipeline.mode == "cascaded" and pipeline.llm is not None and wants_video:
+        llm_spec = _spec_or_none(pipeline.llm.provider_id)
+        if llm_spec is not None and vision_support(pipeline.llm.provider_id, pipeline.llm.model) is False:
+            model = pipeline.llm.model or llm_spec.default_model
+            findings.add(
+                "warning",
+                "pipeline.llm",
+                f"'{model}' cannot see images; camera/screen share still "
+                "reach the UI and pin_frame, but per-turn vision and describe_current_frame "
+                "are disabled — pick a model marked 'supports video' (e.g. google/gemini-3.5-flash)",
+            )
 
 
 def _validate_credential(
@@ -207,54 +493,244 @@ def _validate_credential(
     ref: ProviderRef,
     spec: ProviderSpec,
     credential_providers: Mapping[str, str],
-    errors: list[str],
-    warnings: list[str],
+    findings: _Findings,
 ) -> None:
     if spec.requires_credential:
         if not ref.credential_id:
-            errors.append(f"{label}: provider '{spec.id}' requires a credential")
+            findings.add("error", label, f"provider '{spec.id}' requires a credential")
             return
     elif ref.credential_id:
-        warnings.append(f"{label}: provider '{spec.id}' needs no credential; the reference is ignored")
+        findings.add("warning", label, f"provider '{spec.id}' needs no credential; the reference is ignored")
         return
     if ref.credential_id:
         owner = credential_providers.get(ref.credential_id)
         if owner is None:
-            errors.append(f"{label}: unknown credential '{ref.credential_id}'")
+            findings.add("error", label, f"unknown credential '{ref.credential_id}'")
         elif owner != spec.id:
-            errors.append(
-                f"{label}: credential '{ref.credential_id}' belongs to provider '{owner}', not '{spec.id}'"
+            findings.add(
+                "error",
+                label,
+                f"credential '{ref.credential_id}' belongs to provider '{owner}', not '{spec.id}'",
             )
 
 
-def _validate_model(label: str, ref: ProviderRef, spec: ProviderSpec, warnings: list[str]) -> None:
+def _validate_model(label: str, ref: ProviderRef, spec: ProviderSpec, findings: _Findings) -> None:
     if ref.model and spec.models and ref.model not in {m.id for m in spec.models}:
-        warnings.append(
-            f"{label}: model '{ref.model}' is not in the suggestion list for '{spec.id}' "
-            "(free text is allowed; vendor model lists change often)"
+        findings.add(
+            "warning",
+            label,
+            f"model '{ref.model}' is not in the suggestion list for '{spec.id}' "
+            "(free text is allowed; vendor model lists change often)",
         )
 
 
-def _validate_fields(
-    label: str,
-    ref: ProviderRef,
-    spec: ProviderSpec,
-    errors: list[str],
-    warnings: list[str],
-) -> None:
+def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings: _Findings) -> None:
     by_name = {f.name: f for f in spec.fields}
     for name, value in ref.fields.items():
-        field = by_name.get(name)
-        if field is None:
-            warnings.append(f"{label}: unknown field '{name}' for provider '{spec.id}'")
+        field_spec = by_name.get(name)
+        if field_spec is None:
+            findings.add("warning", label, f"unknown field '{name}' for provider '{spec.id}'")
             continue
-        if field.type == "enum" and field.options and str(value) not in field.options:
-            errors.append(
-                f"{label}: field '{name}' must be one of {', '.join(field.options)} (got '{value}')"
+        if field_spec.type == "enum" and field_spec.options and str(value) not in field_spec.options:
+            findings.add(
+                "error",
+                label,
+                f"field '{name}' must be one of {', '.join(field_spec.options)} (got '{value}')",
             )
-    for field in spec.fields:
-        if field.required and field.default is None and field.name not in ref.fields:
-            errors.append(f"{label}: field '{field.name}' is required for provider '{spec.id}'")
+    for field_spec in spec.fields:
+        if field_spec.required and field_spec.default is None and field_spec.name not in ref.fields:
+            findings.add("error", label, f"field '{field_spec.name}' is required for provider '{spec.id}'")
+
+
+def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
+    """Capability-flag checks against the agent's connection (ARCHITECTURE-V2 D-V2-4).
+
+    Flags gate validation, not just the UI: LiveKit Inference providers need
+    ``inference_available``; Krisp noise cancellation needs a Cloud connection;
+    DTMF needs ``sip_enabled``. Recording without Egress and an implicit
+    Inference workflow LLM on a connection without Inference are warnings.
+
+    Args:
+        ctx: The validation context; nothing is checked without a connection.
+
+    Returns:
+        Issues addressed at the offending config path.
+    """
+    connection = ctx.connection
+    if connection is None:
+        return []
+    caps = connection.capabilities
+    where = _connection_label(connection)
+    no_inference_reason = (
+        "self-hosted connections cannot use LiveKit Inference — use your own STT/LLM/TTS keys"
+        if connection.deployment_type == "self_hosted"
+        else "its 'Use LiveKit Inference' setting is off"
+    )
+    issues: list[Issue] = []
+    for slot, ref in ctx.slots():
+        spec = _spec_or_none(ref.provider_id)
+        if spec is None or spec.kind != SLOT_KIND[slot]:
+            continue
+        if requires_inference(spec) and not caps.inference_available:
+            issues.append(
+                Issue(
+                    path=_slot_path(slot),
+                    message=f"'{spec.id}' needs LiveKit Inference, which {where} does not offer "
+                    f"({no_inference_reason})",
+                )
+            )
+        if (
+            spec.kind == "noise_cancellation"
+            and spec.capabilities.cloud_only
+            and caps.noise_cancellation_tier != "krisp"
+        ):
+            issues.append(
+                Issue(
+                    path=_slot_path(slot),
+                    message=f"'{spec.id}' needs a LiveKit Cloud connection; {where} is self-hosted",
+                )
+            )
+
+    pipeline = ctx.config.pipeline
+    if pipeline.workflow_llm is None and pipeline.mode != "cascaded" and not caps.inference_available:
+        issues.append(
+            Issue(
+                path="pipeline.workflow_llm",
+                message=f"defaults to LiveKit Inference, which {where} does not offer; "
+                "set a workflow LLM with your own key or tools that need it will fail",
+                severity="warning",
+            )
+        )
+    if ctx.config.capabilities.dtmf and not caps.sip_enabled:
+        issues.append(
+            Issue(path="capabilities.dtmf", message=f"DTMF needs SIP, which is not reachable on {where}")
+        )
+    if ctx.config.recording.enabled and not caps.egress_enabled:
+        issues.append(
+            Issue(
+                path="recording.enabled",
+                message=f"recording needs Egress, which is not reachable on {where}; "
+                "sessions will not be recorded",
+                severity="warning",
+            )
+        )
+    return issues
+
+
+# ------------------------------------------------------------------ database helper
+async def installed_provider_ids(db: AsyncSession, connection_id: str) -> frozenset[str] | None:
+    """Union of the ``installed_provider_ids`` the connection's live workers reported.
+
+    Returns ``None`` when no worker has registered (or none reported a list),
+    which makes validation fall back to the connection's ``worker_image``.
+    """
+    rows = (
+        await db.execute(
+            select(WorkerInstance.installed_provider_ids).where(
+                WorkerInstance.connection_id == connection_id,
+                WorkerInstance.status.in_(LIVE_WORKER_STATUSES),
+            )
+        )
+    ).scalars()
+    installed: set[str] = set()
+    for ids in rows:
+        if isinstance(ids, list):
+            installed.update(str(i) for i in ids)
+    return frozenset(installed) if installed else None
+
+
+async def connection_context_for(
+    db: AsyncSession, *, workspace_id: str, connection_id: str | None
+) -> ConnectionContext | None:
+    """Load the :class:`ConnectionContext` of a connection (or the workspace default).
+
+    Returns ``None`` when neither exists, which keeps the v1 behaviour.
+    """
+    stmt = select(LiveKitConnection).where(LiveKitConnection.workspace_id == workspace_id)
+    stmt = (
+        stmt.where(LiveKitConnection.id == connection_id)
+        if connection_id
+        else stmt.where(LiveKitConnection.is_default == 1)
+    )
+    row = await db.scalar(stmt)
+    if row is None:
+        return None
+    return ConnectionContext.from_row(row, await installed_provider_ids(db, row.id))
+
+
+async def validation_context_for(
+    db: AsyncSession,
+    config: AgentConfig,
+    *,
+    workspace_id: str,
+    connection_id: str | None = None,
+) -> ValidationContext:
+    """Build a :class:`ValidationContext` from the database.
+
+    Args:
+        db: Open session.
+        config: The configuration to validate.
+        workspace_id: The agent's workspace; every lookup is scoped to it.
+        connection_id: The agent's connection; ``None`` means the workspace default.
+
+    Returns:
+        A context with credentials, tools, knowledge bases, disabled providers
+        and the connection (with its pool's installed providers).
+    """
+    credential_providers = dict(
+        (
+            await db.execute(
+                select(Credential.id, Credential.provider_id).where(Credential.workspace_id == workspace_id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    tool_names_by_id = dict(
+        (await db.execute(select(Tool.id, Tool.name).where(Tool.workspace_id == workspace_id))).tuples().all()
+    )
+    tool_ids = frozenset(tool_names_by_id)
+    kb_ids = frozenset(
+        (
+            await db.execute(select(KnowledgeBase.id).where(KnowledgeBase.workspace_id == workspace_id))
+        ).scalars()
+    )
+    disabled = frozenset(
+        (
+            await db.execute(
+                select(WorkspaceProvider.provider_id).where(
+                    WorkspaceProvider.workspace_id == workspace_id, WorkspaceProvider.enabled == 0
+                )
+            )
+        ).scalars()
+    )
+    return ValidationContext(
+        config=config,
+        credential_providers=credential_providers,
+        connection=await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id),
+        workspace_id=workspace_id,
+        disabled_provider_ids=disabled,
+        known_tool_ids=tool_ids,
+        known_kb_ids=kb_ids,
+        tool_names_by_id=tool_names_by_id,
+    )
+
+
+async def validate_in_db(
+    db: AsyncSession,
+    config: AgentConfig,
+    *,
+    workspace_id: str,
+    connection_id: str | None = None,
+) -> ValidationResult:
+    """Validate a configuration against everything stored for its workspace and connection.
+
+    This is the call the agents router should use on save/publish/validate
+    (it replaces the v1 ``validate_stored_config`` helper there).
+    """
+    return validate(
+        await validation_context_for(db, config, workspace_id=workspace_id, connection_id=connection_id)
+    )
 
 
 # --------------------------------------------------------------------------- seeding
@@ -262,36 +738,44 @@ def seed_config_from_manifest(
     manifest: PackManifest,
     *,
     credentials_by_provider: Mapping[str, list[str]],
+    connection: ConnectionContext | None = None,
 ) -> AgentConfig:
     """Build a runnable ``AgentConfig`` from a pack manifest.
 
-    Applies the CONTRACTS §8 seeding rule: a slot whose provider needs a
-    credential keeps it when **exactly one** credential exists for that
-    provider; otherwise the slot falls back to the credential-free LiveKit
-    Inference provider of the same kind (``avatar``/``image_gen`` are dropped,
-    a ``realtime`` slot switches the pipeline to cascaded). The result always
-    passes :func:`validate_agent_config`.
+    Applies the CONTRACTS §8 seeding rule, migrated per R-V2-2: a slot keeps
+    its recommended provider when that provider is ``available``, installed on
+    the connection (``worker_image`` ≤ the connection's image until workers
+    register) and — if it needs one — has **exactly one** credential; otherwise
+    the slot falls back to the credential-free LiveKit Inference provider of
+    the same kind (``avatar``/``image_gen`` are dropped, a ``realtime`` or
+    ``half_cascade`` pipeline whose realtime model is unusable switches to
+    cascaded). Without a connection the ``slim`` image is assumed, which is the
+    v1 ``mvp`` set.
 
     Args:
         manifest: The pack's manifest.
         credentials_by_provider: ``{provider_id: [credential_id, ...]}``.
+        connection: The connection the new agent will be bound to.
 
     Returns:
         A complete configuration ready to store.
     """
     pipeline = manifest.recommended_pipeline.model_copy(deep=True)
 
-    if pipeline.mode == "realtime":
+    if pipeline.mode in ("realtime", "half_cascade"):
         credential = _unambiguous_credential(pipeline.realtime, credentials_by_provider)
-        if pipeline.realtime is None or (_needs_credential(pipeline.realtime) and credential is None):
+        if pipeline.realtime is None or not _usable(pipeline.realtime, credential, connection):
             pipeline.mode = "cascaded"
             pipeline.realtime = None
-        elif pipeline.realtime is not None:
+        else:
             pipeline.realtime.credential_id = credential
 
     if pipeline.mode == "cascaded":
         for slot in CASCADED_SLOTS:
-            pipeline = _seed_cascaded_slot(pipeline, slot, credentials_by_provider)
+            pipeline = _seed_cascaded_slot(pipeline, slot, credentials_by_provider, connection)
+    elif pipeline.mode == "half_cascade":
+        pipeline.stt = pipeline.llm = None
+        pipeline = _seed_cascaded_slot(pipeline, "tts", credentials_by_provider, connection)
     else:
         pipeline.stt = pipeline.llm = pipeline.tts = None
 
@@ -300,14 +784,14 @@ def seed_config_from_manifest(
         if ref is None:
             continue
         credential = _unambiguous_credential(ref, credentials_by_provider)
-        if _needs_credential(ref) and credential is None:
+        if not _usable(ref, credential, connection):
             setattr(pipeline, slot, None)
         else:
             ref.credential_id = credential
 
     if pipeline.workflow_llm is not None:
         credential = _unambiguous_credential(pipeline.workflow_llm, credentials_by_provider)
-        if _needs_credential(pipeline.workflow_llm) and credential is None:
+        if not _usable(pipeline.workflow_llm, credential, connection):
             pipeline.workflow_llm = ProviderRef(provider_id=INFERENCE_DEFAULT["llm"])
         else:
             pipeline.workflow_llm.credential_id = credential
@@ -323,9 +807,16 @@ def seed_config_from_manifest(
     )
 
 
-def _needs_credential(ref: ProviderRef) -> bool:
+def seedable(spec: ProviderSpec, connection: ConnectionContext | None) -> bool:
+    """Whether seeding may keep ``spec``: available and installed on the connection."""
+    return spec.availability == "available" and installed_on(spec, connection)
+
+
+def _usable(ref: ProviderRef, credential: str | None, connection: ConnectionContext | None) -> bool:
     spec = _spec_or_none(ref.provider_id)
-    return spec is None or spec.requires_credential
+    if spec is None or not seedable(spec, connection):
+        return False
+    return not (spec.requires_credential and credential is None)
 
 
 def _unambiguous_credential(
@@ -342,13 +833,14 @@ def _seed_cascaded_slot(
     pipeline: PipelineConfig,
     slot: ProviderSlot,
     credentials_by_provider: Mapping[str, list[str]],
+    connection: ConnectionContext | None = None,
 ) -> PipelineConfig:
     ref = cast(ProviderRef | None, getattr(pipeline, slot))
     if ref is None:
         setattr(pipeline, slot, ProviderRef(provider_id=INFERENCE_DEFAULT[slot]))
         return pipeline
     credential = _unambiguous_credential(ref, credentials_by_provider)
-    if _needs_credential(ref) and credential is None:
+    if not _usable(ref, credential, connection):
         setattr(pipeline, slot, ProviderRef(provider_id=INFERENCE_DEFAULT[slot]))
     else:
         ref.credential_id = credential
@@ -409,8 +901,9 @@ def resolve_providers(
     """Resolve every slot the pipeline needs for the worker.
 
     Only the slots the selected mode uses are resolved: ``realtime`` for realtime
-    mode, ``stt``/``llm``/``tts`` for cascaded, plus ``avatar``/``image_gen`` when
-    configured. ``workflow_llm`` defaults to the cascaded ``llm`` or, in realtime
+    mode, ``realtime``/``tts`` for half-cascade, ``stt``/``llm``/``tts`` for
+    cascaded, plus ``avatar``/``image_gen``/``vad``/``turn_detection``/
+    ``noise_cancellation`` when configured. ``workflow_llm`` defaults to the cascaded ``llm`` or, in realtime
     mode, to the LiveKit Inference LLM.
 
     Args:
@@ -421,8 +914,15 @@ def resolve_providers(
         The ``ResolvedAgentConfig.resolved`` mapping. **Contains secrets.**
     """
     pipeline = config.pipeline
-    wanted: list[ProviderSlot] = ["realtime"] if pipeline.mode == "realtime" else list(CASCADED_SLOTS)
-    wanted += ["avatar", "image_gen"]
+    wanted: list[ProviderSlot]
+    match pipeline.mode:
+        case "realtime":
+            wanted = ["realtime"]
+        case "half_cascade":
+            wanted = ["realtime", "tts"]
+        case _:
+            wanted = list(CASCADED_SLOTS)
+    wanted += list(OPTIONAL_SLOTS)
 
     resolved: dict[ProviderSlot, ResolvedProvider] = {}
     for slot in wanted:
@@ -441,6 +941,15 @@ def resolve_providers(
         )
     secrets = secrets_by_credential.get(workflow_ref.credential_id or "", {})
     resolved["workflow_llm"] = resolve_provider_ref(workflow_ref, secrets)
+
+    if effective_qa(config).enabled:
+        # R-V2-11: a flow `qa` node turns QA on even when `qa.enabled` is false.
+        # R-V2-6: qa.model -> workflow_llm -> llm (cascaded only) -> Inference default.
+        # `workflow_ref` above already implements exactly that fallback (and already
+        # skips `pipeline.llm` outside cascaded mode), so reuse it verbatim.
+        qa_ref = config.qa.model or workflow_ref
+        qa_secrets = secrets_by_credential.get(qa_ref.credential_id or "", {})
+        resolved["qa_llm"] = resolve_provider_ref(qa_ref, qa_secrets)
     return resolved
 
 

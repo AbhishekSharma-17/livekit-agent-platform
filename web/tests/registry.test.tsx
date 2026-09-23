@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { sessionLayoutModel } from "@/components/session/session-layout";
 import { SessionShell } from "@/components/session/session-shell";
+import { PANEL_META } from "@/components/shared/panel-meta";
 import {
   GENERIC_PANEL_ID,
   PANELS,
@@ -32,6 +33,13 @@ describe("panel registry", () => {
     expect(generic.id).toBe(GENERIC_PANEL_ID);
     expect(generic.layout).toBe("side");
     expect(typeof generic.Component).toBe("function");
+  });
+
+  it("has console metadata for exactly the registered panels (F-30: no separate id list)", () => {
+    expect(Object.keys(PANEL_META).sort()).toEqual(Object.keys(PANELS).sort());
+    for (const [id, meta] of Object.entries(PANEL_META)) {
+      expect(meta.layout).toBe(PANELS[id].layout ?? "side");
+    }
   });
 
   it("every registered panel is keyed by its own id", () => {

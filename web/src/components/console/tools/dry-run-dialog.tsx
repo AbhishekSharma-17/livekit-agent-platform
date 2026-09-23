@@ -4,6 +4,8 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/shared/field";
+import { StatusChip } from "@/components/shared/status-chip";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -57,22 +59,22 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
         </DialogHeader>
 
         <div className="space-y-3 py-2">
-          <div>
-            <label htmlFor={argsId} className="mb-1 block text-sm font-medium">
-              Arguments (JSON)
-            </label>
+          <Field label="Arguments (JSON)" htmlFor={argsId}>
             <Textarea
               id={argsId}
               className="min-h-24 font-mono text-xs"
               value={argsJson}
               onChange={(e) => setArgsJson(e.target.value)}
             />
-          </div>
+          </Field>
           {result ? (
             <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs">
-              <p className="mb-1 font-medium">
-                {result.ok ? "OK" : "Failed"} · {result.status_code ?? "—"} · {result.duration_ms}ms
-              </p>
+              <div className="mb-1.5 flex items-center gap-2">
+                <StatusChip tone={result.ok ? "success" : "danger"}>{result.ok ? "OK" : "Failed"}</StatusChip>
+                <span className="text-muted-foreground">
+                  {result.status_code ?? "—"} · {result.duration_ms}ms
+                </span>
+              </div>
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono">{result.result}</pre>
             </div>
           ) : null}

@@ -1,8 +1,13 @@
-"""Declarative tool CRUD plus the HTTP dry run used by the console editor."""
+"""Declarative tool CRUD plus the HTTP dry run used by the console editor.
+
+Workspace scoping (V2-02, asks #25): every admin handler takes ``ctx: AdminCtxDep``;
+reads filter on ``ctx.workspace_id``, inserts set it, and a row of another
+workspace is a 404."""
 
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 
@@ -14,9 +19,10 @@ from pydantic import TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.config_service import host_allowed, render_arguments, resolve_tool_definition
 from lkap_api.db.models import Agent, Credential, Tool, utcnow
-from lkap_api.deps import AdminDep, DbDep, HttpClientDep, VaultDep
+from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, VaultDep
 from lkap_api.errors import BadRequestError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
 from lkap_api.vault import Vault
@@ -29,6 +35,22 @@ _TOOL_ADAPTER: TypeAdapter[ToolDefinition] = TypeAdapter(ToolDefinition)
 
 #: Dry-run responses are truncated to keep the console payload small.
 DRY_RUN_MAX_CHARS = 8000
+
+#: Matches `{{ secret.NAME }}` placeholders (F-15); mirrors
+#: `lkap_api.config_service._SECRET_RE`, kept local so this file's one
+#: F-15 change never has to touch `config_service.py` (owned by V2-03).
+_SECRET_RE = re.compile(r"\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def _referenced_secret_names(definition: ToolDefinition) -> set[str]:
+    """Every `{{ secret.NAME }}` name the tool's url/headers/body reference."""
+    texts: list[str] = [definition.url, *definition.headers.values()]
+    if isinstance(definition, HttpToolDefinition) and definition.body_template:
+        texts.append(definition.body_template)
+    names: set[str] = set()
+    for text in texts:
+        names.update(_SECRET_RE.findall(text))
+    return names
 
 
 def _definition_of(row: Tool) -> ToolDefinition:
@@ -49,24 +71,59 @@ def _to_out(row: Tool) -> ToolOut:
     )
 
 
-async def _load(db: AsyncSession, tool_id: str) -> Tool:
-    row = await db.get(Tool, tool_id)
+async def _load(db: AsyncSession, ctx: WorkspaceContext, tool_id: str) -> Tool:
+    """Load a tool of the caller's workspace (404 for any other workspace)."""
+    row = await db.scalar(select(Tool).where(Tool.id == tool_id, Tool.workspace_id == ctx.workspace_id))
     if row is None:
         raise NotFoundError(f"unknown tool '{tool_id}'")
     return row
 
 
-async def _check_payload(db: AsyncSession, payload: ToolCreate) -> None:
-    """Validate cross-references and kind/definition agreement."""
+async def _workspace_credential(db: AsyncSession, workspace_id: str, credential_id: str) -> Credential | None:
+    """A credential of the given workspace, or ``None``."""
+    stmt = select(Credential).where(Credential.id == credential_id, Credential.workspace_id == workspace_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _check_payload(db: AsyncSession, vault: Vault, ctx: WorkspaceContext, payload: ToolCreate) -> None:
+    """Validate cross-references, kind/definition agreement and secret placeholders.
+
+    F-15: every `{{ secret.NAME }}` the definition's url/headers/body
+    reference must resolve — either the tool has no `credential_id` at all
+    (error: nothing to substitute from) or `NAME` is a key of that
+    credential's decrypted secret bag (error otherwise, naming only the
+    unresolved names, never a value).
+    """
     if payload.definition.kind != payload.kind:
         raise UnprocessableEntityError(
             f"kind '{payload.kind}' does not match definition kind '{payload.definition.kind}'"
         )
-    if payload.agent_id is not None and await db.get(Agent, payload.agent_id) is None:
+    if (
+        payload.agent_id is not None
+        and await db.scalar(
+            select(Agent.id).where(Agent.id == payload.agent_id, Agent.workspace_id == ctx.workspace_id)
+        )
+        is None
+    ):
         raise UnprocessableEntityError(f"unknown agent '{payload.agent_id}'")
     credential_id = payload.definition.credential_id
-    if credential_id is not None and await db.get(Credential, credential_id) is None:
-        raise UnprocessableEntityError(f"unknown credential '{credential_id}'")
+    credential: Credential | None = None
+    if credential_id is not None:
+        credential = await _workspace_credential(db, ctx.workspace_id, credential_id)
+        if credential is None:
+            raise UnprocessableEntityError(f"unknown credential '{credential_id}'")
+    referenced = _referenced_secret_names(payload.definition)
+    if referenced:
+        if credential is None:
+            raise UnprocessableEntityError(
+                f"references {{{{ secret.{sorted(referenced)[0]} }}}} but has no credential_id"
+            )
+        known = set(vault.decrypt(credential.ciphertext))
+        unknown = sorted(referenced - known)
+        if unknown:
+            raise UnprocessableEntityError(
+                f"unknown secret name(s) for credential '{credential_id}': {', '.join(unknown)}"
+            )
 
 
 @router.post(
@@ -76,10 +133,11 @@ async def _check_payload(db: AsyncSession, payload: ToolCreate) -> None:
     summary="Create a tool",
     description="Stores an HTTP tool or MCP server definition, shared or owned by one agent.",
 )
-async def create_tool(payload: ToolCreate, db: DbDep, _admin: AdminDep) -> ToolOut:
-    """Create a declarative tool row."""
-    await _check_payload(db, payload)
+async def create_tool(payload: ToolCreate, db: DbDep, vault: VaultDep, ctx: AdminCtxDep) -> ToolOut:
+    """Create a declarative tool row in the caller's workspace."""
+    await _check_payload(db, vault, ctx, payload)
     row = Tool(
+        workspace_id=ctx.workspace_id,
         agent_id=payload.agent_id,
         kind=payload.kind,
         name=payload.name,
@@ -100,13 +158,13 @@ async def create_tool(payload: ToolCreate, db: DbDep, _admin: AdminDep) -> ToolO
 )
 async def list_tools(
     db: DbDep,
-    _admin: AdminDep,
+    ctx: AdminCtxDep,
     agent_id: str | None = Query(default=None, description="Only tools owned by this agent"),
     kind: str | None = Query(default=None, description="http | mcp"),
 ) -> ToolPage:
-    """Return every tool row, newest first."""
-    stmt = select(Tool)
-    count_stmt = select(func.count()).select_from(Tool)
+    """Return the workspace's tool rows, newest first."""
+    stmt = select(Tool).where(Tool.workspace_id == ctx.workspace_id)
+    count_stmt = select(func.count()).select_from(Tool).where(Tool.workspace_id == ctx.workspace_id)
     if agent_id:
         stmt = stmt.where(Tool.agent_id == agent_id)
         count_stmt = count_stmt.where(Tool.agent_id == agent_id)
@@ -124,9 +182,9 @@ async def list_tools(
     summary="Get a tool",
     description="One tool definition. Secret placeholders are returned unsubstituted.",
 )
-async def get_tool(tool_id: str, db: DbDep, _admin: AdminDep) -> ToolOut:
+async def get_tool(tool_id: str, db: DbDep, ctx: AdminCtxDep) -> ToolOut:
     """Return one tool row."""
-    return _to_out(await _load(db, tool_id))
+    return _to_out(await _load(db, ctx, tool_id))
 
 
 @router.put(
@@ -135,10 +193,12 @@ async def get_tool(tool_id: str, db: DbDep, _admin: AdminDep) -> ToolOut:
     summary="Update a tool",
     description="Replaces the tool definition, its name, owner and enabled flag.",
 )
-async def update_tool(tool_id: str, payload: ToolCreate, db: DbDep, _admin: AdminDep) -> ToolOut:
+async def update_tool(
+    tool_id: str, payload: ToolCreate, db: DbDep, vault: VaultDep, ctx: AdminCtxDep
+) -> ToolOut:
     """Replace a tool definition."""
-    row = await _load(db, tool_id)
-    await _check_payload(db, payload)
+    row = await _load(db, ctx, tool_id)
+    await _check_payload(db, vault, ctx, payload)
     row.agent_id = payload.agent_id
     row.kind = payload.kind
     row.name = payload.name
@@ -156,9 +216,9 @@ async def update_tool(tool_id: str, payload: ToolCreate, db: DbDep, _admin: Admi
     summary="Delete a tool",
     description="Removes the tool row; agents referencing it fail validation until updated.",
 )
-async def delete_tool(tool_id: str, db: DbDep, _admin: AdminDep) -> Response:
+async def delete_tool(tool_id: str, db: DbDep, ctx: AdminCtxDep) -> Response:
     """Delete a tool row."""
-    row = await _load(db, tool_id)
+    row = await _load(db, ctx, tool_id)
     await db.delete(row)
     log.info("tool_deleted", tool_id=tool_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -194,7 +254,7 @@ async def _resolved_http_definition(db: AsyncSession, vault: Vault, row: Tool) -
         raise BadRequestError("dry run is only available for http tools")
     secrets: dict[str, str] = {}
     if definition.credential_id:
-        credential = await db.get(Credential, definition.credential_id)
+        credential = await _workspace_credential(db, row.workspace_id, definition.credential_id)
         if credential is None:
             raise UnprocessableEntityError(f"unknown credential '{definition.credential_id}'")
         secrets = vault.decrypt(credential.ciphertext)
@@ -219,10 +279,10 @@ async def dry_run_tool(
     db: DbDep,
     vault: VaultDep,
     client: HttpClientDep,
-    _admin: AdminDep,
+    ctx: AdminCtxDep,
 ) -> ToolDryRunResult:
     """Run an HTTP tool once and report what the model would have seen."""
-    row = await _load(db, tool_id)
+    row = await _load(db, ctx, tool_id)
     definition = await _resolved_http_definition(db, vault, row)
 
     url = render_arguments(definition.url, payload.arguments, url_encode=True)

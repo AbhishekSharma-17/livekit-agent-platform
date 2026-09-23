@@ -373,6 +373,15 @@ def test_dispatch_metadata_v2_carries_channel_and_connection() -> None:
     assert meta.model_dump()["channel"] == "sip_in"
 
 
+def test_dispatch_metadata_session_id_is_optional_for_worker_created_sessions() -> None:
+    """D-V2-5: server-created rooms (inbound SIP) dispatch without a session; the worker starts one."""
+    meta = DispatchMetadata.model_validate(
+        {"agent_id": "a1", "config_version": 1, "participant_identity": "", "channel": "sip_in"}
+    )
+    assert meta.session_id is None
+    assert DispatchMetadata.model_validate_json(meta.model_dump_json()).session_id is None
+
+
 def test_dispatch_metadata_defaults_channel_to_web_for_v1_producers() -> None:
     meta = DispatchMetadata.model_validate(
         {"session_id": "s1", "agent_id": "a1", "config_version": 1, "participant_identity": "u"}
@@ -736,9 +745,18 @@ def test_agent_action_accepts_the_new_v2_actions(action: str) -> None:
 # ---------------------------------------------------------------------------- pricing
 
 
-def test_price_table_starts_empty_until_v2_05_fills_it() -> None:
-    assert pricing.PRICES == []
+def test_price_table_filled_by_v2_05_with_sourced_entries() -> None:
+    """V2-05 fills `PRICES`; every entry must carry a verifiable source and date."""
+    assert pricing.PRICES, "V2-05 should have added at least one sourced price"
     assert pricing.PRICE_VERSION
+    for price in pricing.PRICES:
+        assert price.source_url.startswith("https://")
+        assert price.as_of
+
+
+def test_every_price_provider_id_is_a_known_registry_entry() -> None:
+    for price in pricing.PRICES:
+        assert price.provider_id in {spec.id for spec in REGISTRY}
 
 
 def test_lookup_returns_none_for_an_unknown_price() -> None:

@@ -343,6 +343,9 @@ class FleetDesiredState(Base):
         String(32), ForeignKey("livekit_connections.id", ondelete="CASCADE"), primary_key=True
     )
     desired_replicas: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # R-V2-4 (v2_009_fleet_restart): bumped by `fleet {action: restart}`, part of the desired hash.
+    restart_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    restart_requested_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     desired_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
@@ -630,7 +633,14 @@ class SessionEvent(Base):
 
 # ------------------------------------------------------- session QA, cost, rollups
 class SessionQa(Base):
-    """LLM quality scoring of one finished session (CONTRACTS-V2 §1.4)."""
+    """LLM quality scoring of one finished session (CONTRACTS-V2 §1.4, R-V2-5).
+
+    `status`/`scored_by` per `v2_010_qa_status` (PLAN-V2 §8 ruling R-V2-5): the
+    worker scores at session end via `PUT /internal/v1/sessions/{id}/qa`
+    (`scored_by="worker"`, `status="skipped"` when `qa.enabled` is false); the
+    api's `qa/scorer.py` only re-scores (`scored_by="api"`), and only when the
+    resolved judge is an OpenAI-compatible vendor-key provider.
+    """
 
     __tablename__ = "session_qa"
 
@@ -638,6 +648,7 @@ class SessionQa(Base):
         String(32), ForeignKey("sessions.id", ondelete="CASCADE"), primary_key=True
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    scored_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sentiment: Mapped[str | None] = mapped_column(String(16), nullable=True)
     tags: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
@@ -648,11 +659,12 @@ class SessionQa(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        CheckConstraint("status IN ('pending','done','failed')", name="status_valid"),
+        CheckConstraint("status IN ('pending','done','failed','skipped')", name="status_valid"),
         CheckConstraint(
             "sentiment IS NULL OR sentiment IN ('positive','neutral','negative')",
             name="sentiment_valid",
         ),
+        CheckConstraint("scored_by IS NULL OR scored_by IN ('worker','api')", name="scored_by_valid"),
     )
 
 

@@ -127,16 +127,17 @@ async def test_bootstrap_binds_agents_left_unbound_by_the_migration(
     assert agent.connection_id == connection.id
 
 
-async def test_bootstrap_owner_has_no_password_until_the_auth_package_lands(
+async def test_bootstrap_owner_gets_an_argon2id_hash_once_the_auth_package_exists(
     settings: Settings, database: Database
 ) -> None:
     async with database.session() as session:
         owner = await session.scalar(select(User))
 
     assert owner is not None
-    # V2-02 owns `lkap_api.auth.passwords`; until it exists the owner cannot sign
-    # in and carries a NULL hash rather than one V2-01 invented.
-    assert owner.password_hash is None
+    # V2-02 shipped `lkap_api.auth.passwords`, so bootstrap now hashes the
+    # generated owner password instead of leaving the hash NULL.
+    assert owner.password_hash is not None
+    assert owner.password_hash.startswith("$argon2id$")
 
 
 async def test_bootstrap_hashes_the_owner_password_when_the_hasher_is_available(

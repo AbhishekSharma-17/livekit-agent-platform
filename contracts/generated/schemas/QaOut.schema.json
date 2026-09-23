@@ -40,6 +40,22 @@
       "default": null,
       "title": "Scored At"
     },
+    "scored_by": {
+      "anyOf": [
+        {
+          "enum": [
+            "worker",
+            "api"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scored By"
+    },
     "sentiment": {
       "anyOf": [
         {
@@ -62,7 +78,8 @@
       "enum": [
         "pending",
         "done",
-        "failed"
+        "failed",
+        "skipped"
       ],
       "title": "Status",
       "type": "string"

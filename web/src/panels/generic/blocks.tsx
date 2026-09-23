@@ -81,15 +81,20 @@ export function PanelBlock({
   count,
   children,
   className,
+  action,
+  ...rest
 }: {
   title: string;
   count?: number;
   children: React.ReactNode;
   className?: string;
-}) {
+  /** Optional control at the end of the heading row (v2 blocks: page nav, "Open"). */
+  action?: React.ReactNode;
+} & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children" | "className">) {
   return (
     <section
       data-slot="panel-block"
+      {...rest}
       className={cn("border-border border-t px-4 py-4 first:border-t-0", className)}
     >
       <h3 className="mb-2.5 flex items-center gap-2 text-sm font-semibold">
@@ -99,6 +104,7 @@ export function PanelBlock({
             {count}
           </span>
         )}
+        {action && <span className="ml-auto flex items-center gap-1 font-normal">{action}</span>}
       </h3>
       {children}
     </section>

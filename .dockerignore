@@ -1,9 +1,11 @@
 # Root .dockerignore — applies to any build whose context is the platform
-# root (currently: api/Dockerfile via deploy/docker-compose.yml). Keeps the
-# "sending build context to daemon" step fast; the final images only ever
-# COPY the specific paths they need (see api/Dockerfile), so this is a speed
-# and hygiene measure, not a security boundary on its own — never rely on it
-# to keep secrets out of an image, keep those out of the tree entirely.
+# root (api/Dockerfile and, since V2-09, supervisor/Dockerfile — both depend
+# on ../contracts as a local path dep, see each Dockerfile's own header).
+# Keeps the "sending build context to daemon" step fast; the final images
+# only ever COPY the specific paths they need (see each Dockerfile), so this
+# is a speed and hygiene measure, not a security boundary on its own — never
+# rely on it to keep secrets out of an image, keep those out of the tree
+# entirely.
 
 # secrets — never sent to the daemon, never baked into a layer
 .env

@@ -28,8 +28,20 @@
   },
   "$id": "lkap-contracts/CatalogResponse.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``GET /v1/providers/{id}/catalog``.",
+  "description": "``GET /v1/providers/{id}/catalog``.\n\n``error`` (V2-06, additive) carries a short, secret-free note when the\nlive vendor call failed and ``items``/``source`` fell back to a cached or\nstatic list instead — the endpoint always returns ``200`` (CONTRACTS-V2\n\"a failed vendor call must never break the providers page\").",
   "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
     "fetched_at": {
       "anyOf": [
         {

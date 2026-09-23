@@ -28,6 +28,9 @@ class FleetDesired(BaseModel):
     connection_id: str
     agent_name: str = "lkap-agent"
     desired_replicas: int = 0
+    #: Bumped by ``POST /v1/connections/{id}/fleet {action: "restart"}``; part of
+    #: ``desired_hash``, so a bump rolls the pool (R-V2-4).
+    restart_generation: int = 0
     desired_hash: str
     image: WorkerImageFlavor = "slim"
     packs: list[str] = []

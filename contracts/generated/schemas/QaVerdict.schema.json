@@ -1,0 +1,41 @@
+{
+  "$id": "lkap-contracts/QaVerdict.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The judge LLM's expected JSON reply, asked for by :data:`DEFAULT_RUBRIC_PROMPT`.",
+  "properties": {
+    "score": {
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Score",
+      "type": "integer"
+    },
+    "sentiment": {
+      "enum": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "title": "Sentiment",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    },
+    "tags": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    }
+  },
+  "required": [
+    "score",
+    "sentiment"
+  ],
+  "title": "QaVerdict",
+  "type": "object"
+}

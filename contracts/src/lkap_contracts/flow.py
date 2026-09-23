@@ -4,7 +4,7 @@ A flow is stored inside ``AgentConfig.flow`` and executed by the worker
 (V2-15): each agent node is one LiveKit ``Agent`` whose outgoing edges become
 handoff tools named ``go_to_{target_id}``. Structural rules that can be checked
 without the database are enforced here; reference resolution (tool ids, kb ids)
-happens at api validation time.
+happens at api validation time (``lkap_api.flows.validation``).
 """
 
 import re
@@ -69,6 +69,8 @@ class GlobalNode(NodeBase):
 
     kind: Literal["global"] = "global"
     instructions: str = ""
+    #: Tool names (R-V2-10): builtin, block, pack, or the ``name`` of a tool in
+    #: ``config.tools.tool_ids``.
     tools: list[str] = []
     kb_ids: list[str] = []
 
@@ -78,6 +80,8 @@ class AgentNode(NodeBase):
 
     kind: Literal["agent"] = "agent"
     instructions: str = ""
+    #: Tool names (R-V2-10): builtin, block, pack, or the ``name`` of a tool in
+    #: ``config.tools.tool_ids``.
     tools: list[str] = []
     kb_ids: list[str] = []
     extract: list[str] = []

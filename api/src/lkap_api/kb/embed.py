@@ -25,8 +25,10 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Credential
 from lkap_api.errors import UnprocessableEntityError
 from lkap_api.logging import get_logger
@@ -218,7 +220,15 @@ async def resolve_embedder(settings: Settings, db: AsyncSession, vault: Vault) -
         return get_fastembed_embedder(settings.data_dir)
     if spec.startswith("openai:"):
         credential_id = spec.split(":", 1)[1]
-        credential = await db.get(Credential, credential_id)
+        # LKAP_EMBEDDER is platform configuration, so the credential it names is
+        # looked up by id in whichever workspace holds it (deliberately cross-workspace).
+        credential = (
+            await db.execute(
+                select(Credential)
+                .where(Credential.id == credential_id)
+                .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+            )
+        ).scalar_one_or_none()
         if credential is None:
             raise UnprocessableEntityError(f"LKAP_EMBEDDER references unknown credential '{credential_id}'")
         secrets = vault.decrypt(credential.ciphertext)

@@ -261,7 +261,7 @@ def test_build_all_downgrades_optional_slots_and_raises_on_required_ones(
     config = resolved_config(with_avatar=True)
     factory = ProviderFactory()
 
-    def _build(slot: ProviderSlot, provider: ResolvedProvider) -> Any:
+    def _build(slot: ProviderSlot, provider: ResolvedProvider, *, mode: str = "cascaded") -> Any:
         if slot == "avatar":
             raise ProviderBuildError("avatar vendor unavailable")
         return _Recorder(slot=slot)
@@ -272,7 +272,7 @@ def test_build_all_downgrades_optional_slots_and_raises_on_required_ones(
     assert built.avatar is None
     assert built.llm is not None
 
-    def _always_fail(slot: ProviderSlot, provider: ResolvedProvider) -> Any:
+    def _always_fail(slot: ProviderSlot, provider: ResolvedProvider, *, mode: str = "cascaded") -> Any:
         raise ProviderBuildError("boom")
 
     monkeypatch.setattr(factory, "build", _always_fail)

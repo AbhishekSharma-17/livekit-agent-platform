@@ -5,6 +5,11 @@ The same `PackSessionContext.kb` (`KbClient` over
 `PlatformAgent.on_user_turn_completed` (W1-AGENT-CORE, gated by
 `AgentConfig.knowledge.auto_inject`); this module is only the explicit
 tool-call surface.
+
+v2 (CONTRACTS-V2 §4.4, implicit `cite_sources`): when the panel has a
+`kb_citations` block, every non-empty result also replaces that block's
+citations, so the user sees what the answer is based on. Citing is best
+effort and never changes what the model receives.
 """
 
 from __future__ import annotations
@@ -13,7 +18,30 @@ import json
 from typing import Any
 
 from livekit.agents import FunctionTool, RunContext, function_tool
+from lkap_contracts.api_models import KbHit
 from packs.base import PackSessionContext
+
+from lkap_agent.ui.blocks import block_ids_of_type, session_block_specs
+
+__all__ = ["build_search_knowledge_tool", "cite_sources"]
+
+
+async def cite_sources(ctx: PackSessionContext, hits: list[KbHit]) -> None:
+    """Show `hits` in every `kb_citations` block of the panel; never raises.
+
+    Channels without block support (the no-op channel, v1 test doubles) and
+    panels without a `kb_citations` block are skipped silently.
+    """
+    if not hits:
+        return
+    cite = getattr(ctx.ui, "cite", None)
+    if not callable(cite):
+        return
+    for block_id in block_ids_of_type(session_block_specs(ctx.ui, ctx.config.panel), "kb_citations"):
+        try:
+            await cite(block_id, hits)
+        except Exception:  # noqa: BLE001 - citations are decoration; the answer must not fail
+            ctx.log.debug("cite_sources failed", block_id=block_id, exc_info=True)
 
 
 def build_search_knowledge_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
@@ -31,6 +59,7 @@ def build_search_knowledge_tool(ctx: PackSessionContext) -> FunctionTool[..., An
         hits = await ctx.kb.search(query, k=ctx.config.knowledge.top_k)
         if not hits:
             return "No relevant knowledge found."
+        await cite_sources(ctx, hits)
         return json.dumps(
             [{"source": hit.filename, "text": hit.text, "score": round(hit.score, 3)} for hit in hits]
         )

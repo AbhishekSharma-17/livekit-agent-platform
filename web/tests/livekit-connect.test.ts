@@ -22,6 +22,7 @@ const CONNECT_RESPONSE: ConnectResponse = {
     pipeline_mode: "cascaded",
     capabilities: {},
     ui_panel_id: "generic",
+    panel: { panel_id: "generic", layout: "side", blocks: [] },
   },
   participantName: "Guest",
   participantToken: "token-abc",
@@ -67,6 +68,42 @@ describe("toPublicAgent", () => {
       ui_panel_id: "generic",
       capabilities: { camera: true, screen_share: false },
       pipeline_mode: "realtime",
+      // R-V2-7: the stored layout; a block panel with no blocks shows the default four.
+      panel: {
+        panel_id: "composite",
+        layout: "side",
+        blocks: [
+          { id: "status", type: "status", title: null, config: {}, order: 0 },
+          { id: "notes", type: "notes", title: "Notes", config: {}, order: 1 },
+          { id: "checklist", type: "checklist", title: "Still needed", config: {}, order: 2 },
+          { id: "activity", type: "activity", title: "Activity", config: {}, order: 3 },
+        ],
+      },
+    });
+  });
+
+  it("passes a saved panel layout through (R-V2-7)", () => {
+    const agent = {
+      id: "agent-2",
+      slug: "claims",
+      name: "Claims",
+      description: "",
+      pack_id: "insurance_claim",
+      ui_panel_id: "composite",
+      published: false,
+      config_version: 1,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      config: {
+        instructions: "x",
+        pipeline: {},
+        panel: { panel_id: "composite", layout: "wide", blocks: [{ id: "t", type: "table", config: {}, order: 0 }] },
+      },
+    } as AgentOut;
+    expect(toPublicAgent(agent).panel).toEqual({
+      panel_id: "composite",
+      layout: "wide",
+      blocks: [{ id: "t", type: "table", config: {}, order: 0 }],
     });
   });
 

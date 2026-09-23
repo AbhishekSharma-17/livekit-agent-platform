@@ -1,25 +1,36 @@
-"""The `lkap-agent` worker: one `AgentServer`, one `rtc_session` (D1).
+"""The LKAP worker: one `AgentServer`, one `rtc_session` (D1).
 
 The decorated entrypoint is deliberately three lines long. Everything that can
 go wrong lives in :func:`run_session`, which takes a `JobContextLike` and a
 :class:`Deps` bundle, so the whole session lifecycle is exercisable offline with
 fakes — no LiveKit connection, no api, no vendor keys.
 
-The agent name is fixed by construction (DECISIONS-W2 §D-W2-11): the worker
-registers with `rtc_session(agent_name="lkap-agent", on_request=only_lkap_jobs)`,
-so the SDK's precedence (`LIVEKIT_AGENT_NAME_OVERRIDE` env -> explicit argument ->
-`LIVEKIT_AGENT_NAME` env -> "") can never yield an unnamed worker that would take
-automatic dispatch for every room in the shared project (including the
-unrelated `other-project-agent`'s). `require_agent_name` only refuses a *set* source
-that contradicts that name, and `only_lkap_jobs` rejects any job whose
-`JobRequest.agent_name` is not `lkap-agent`. `livekit.toml`'s `[agent] name`
-must equal `REQUIRED_AGENT_NAME` (a unit test parses it).
+**Agent name (D-W2-11, CONTRACTS-V2 §5).** One worker pool serves one
+connection under that connection's agent name, handed to the process as
+`LKAP_AGENT_NAME` (default `lkap-agent`). The name is read from the process
+environment when this module is imported, because `rtc_session` resolves it at
+decoration time, and the worker registers with an explicit
+`rtc_session(agent_name=AGENT_NAME, on_request=only_lkap_jobs)`, so the SDK's
+precedence (`LIVEKIT_AGENT_NAME_OVERRIDE` env -> explicit argument ->
+`LIVEKIT_AGENT_NAME` env -> "") can never yield an unnamed worker that would
+take automatic dispatch for every room in a shared project (including the
+unrelated `other-project-agent`'s). `require_agent_name` refuses an empty name and
+any *set* source that contradicts it, and `only_lkap_jobs` rejects any job
+whose `JobRequest.agent_name` is not this worker's name. `livekit.toml`'s
+`[agent] name` must equal `DEFAULT_AGENT_NAME` (a unit test parses it).
+
+**Dispatch v2 (D-V2-5).** A dispatch that names a session is resolved with
+`GET /internal/v1/sessions/{id}/resolved`; one that does not (a room the
+platform did not create, e.g. inbound SIP) creates its session with
+`POST /internal/v1/sessions/start`, using the job's room name and the
+metadata's `agent_id`/`channel`.
 
 Start-up order (docs/ARCHITECTURE.md §4, adjusted for two verified SDK constraints):
 
     resolve config -> build providers/session/tools -> ctx.connect()
       -> avatar.start() + avatar.wait_for_join() (when configured)
       -> session.start(room=..., room_options=...)
+      -> recording/start in the background (when `recording.enabled`)
 
 Both constraints force `ctx.connect()` ahead of the rest, where the common
 LiveKit template puts it last:
@@ -35,6 +46,13 @@ The rule §4 actually states still holds: the config is fetched **before**
 connecting, so a bad config fails the job before the user hears anything. The
 cost is the client's pre-connect audio buffer, which only helps agents that
 connect lazily.
+
+**End of call.** `RoomOptions.close_on_disconnect` is off; `_ReconnectGrace`
+owns it (REVIEW-FINAL F-33). A caller who leaves deliberately (client hang-up,
+room deleted, call rejected — the SDK's own close-on-disconnect reasons) ends
+the job at once, as before. Any other drop (network, signal loss) keeps the
+job alive for `LKAP_RECONNECT_GRACE_S` (60 s) and cancels the shutdown if the
+same identity rejoins. A session `close` still ends the job (D-W2-9e).
 """
 
 from __future__ import annotations
@@ -54,19 +72,22 @@ from livekit.agents.voice.events import UserStateChangedEvent
 from livekit.agents.voice.room_io import TextInputOptions
 from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import ResolvedAgentConfig
-from lkap_contracts.api_models import SessionSummaryIn
+from lkap_contracts.api_models import SessionRecordingIn, SessionStartIn, SessionSummaryIn
+from lkap_contracts.connections import TurnDetectorMode
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.ui_protocol import ActivityEvent, ChecklistItem, Tone, UiPatchOp, UiState
-from packs.base import FrameSnapshot, Pack
+from packs.base import FrameSnapshot, Pack, StructuredLLM
 
 from lkap_agent.config_client import (
     ApiKbClient,
     ConfigClient,
     ConfigClientProtocol,
     ConfigUnavailableError,
+    RecordingUnavailableError,
     SessionEndedError,
     SessionNotFoundError,
 )
+from lkap_agent.flow import FlowServices, build_flow_agent, is_flow, prepare_flow_resolved
 from lkap_agent.logging import configure_logging, get_logger
 from lkap_agent.observability import SessionObserver, bind_session_context
 from lkap_agent.packs.loader import PackLoader
@@ -77,15 +98,21 @@ from lkap_agent.platform_agent import (
     platform_text_input_cb,
 )
 from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
-from lkap_agent.session_builder import SessionBuilder, SessionPlan
-from lkap_agent.settings import Settings, get_settings
+from lkap_agent.qa import build_judge, score_session
+from lkap_agent.registration import FleetClient, WorkerRegistration
+from lkap_agent.session_builder import SessionBuilder, SessionPlan, factory_view, prepare_resolved
+from lkap_agent.settings import DEFAULT_AGENT_NAME, Settings, get_settings
 from lkap_agent.workflow_llm import PromptJsonStructuredLLM
 
 __all__ = [
-    "REQUIRED_AGENT_NAME",
+    "AGENT_NAME",
+    "DEFAULT_AGENT_NAME",
     "Deps",
     "JobContextLike",
+    "configured_agent_name",
+    "default_turn_detector",
     "effective_agent_name",
+    "install_worker_registration",
     "only_lkap_jobs",
     "prewarm",
     "require_agent_name",
@@ -125,6 +152,20 @@ FALLBACK_TTS_MODEL = _registry_default_model("livekit-inference-tts")
 WORKFLOW_FALLBACK_LLM_MODEL = _registry_default_model("livekit-inference-llm")
 
 _VAD_USERDATA_KEY = "vad"
+
+#: Disconnect reasons that mean the caller left on purpose: the job ends at
+#: once, with no reconnect grace. The same set the SDK closes a session on
+#: (`room_io.DEFAULT_CLOSE_ON_DISCONNECT_REASONS` in livekit-agents 1.8.2).
+_DELIBERATE_LEAVE_REASONS: frozenset[int] = frozenset(
+    {
+        rtc.DisconnectReason.CLIENT_INITIATED,
+        rtc.DisconnectReason.ROOM_DELETED,
+        rtc.DisconnectReason.USER_REJECTED,
+    }
+)
+
+#: How long the shutdown callback waits for LiveKit's `list_egress` answer.
+_EGRESS_POLL_TIMEOUT_S = 5.0
 
 
 # --------------------------------------------------------------------- context
@@ -284,6 +325,63 @@ async def _sleep(delay_s: float) -> None:
     await asyncio.sleep(delay_s)
 
 
+def default_turn_detector(mode: TurnDetectorMode) -> Any:
+    """The turn detector a cascaded / half-cascade session gets when its slot is empty.
+
+    A connection without hosted Inference (`turn_detector_mode == "local"`)
+    gets the local `v1-mini` model explicitly (ARCHITECTURE-V2 D-V2-4), so the
+    SDK never tries the hosted `v1` first; otherwise the SDK chooses (hosted
+    `v1` on LiveKit Cloud and in dev mode, `v1-mini` elsewhere).
+    """
+    if mode == "local":
+        return inference.TurnDetector(version="v1-mini")
+    return inference.TurnDetector()
+
+
+#: Snapshot of an Egress as LiveKit reports it: `(status, duration_s)`.
+EgressSnapshot = tuple[str, float | None]
+
+_EGRESS_STATUS: dict[int, str] = {
+    0: "active",  # EGRESS_STARTING
+    1: "active",  # EGRESS_ACTIVE
+    2: "active",  # EGRESS_ENDING
+    3: "ready",  # EGRESS_COMPLETE
+    4: "failed",  # EGRESS_FAILED
+    5: "failed",  # EGRESS_ABORTED
+    6: "ready",  # EGRESS_LIMIT_REACHED: the file up to the limit is complete
+}
+
+
+async def livekit_egress_status(settings: Settings, egress_id: str) -> EgressSnapshot | None:
+    """Ask LiveKit (`list_egress`) for one Egress's state with the worker's own credentials.
+
+    The api normally learns an Egress finished from the `egress_ended` webhook;
+    without a public webhook URL it never does, so the worker reports what it
+    sees at shutdown (ARCHITECTURE-V2 D-V2-16).
+
+    Returns:
+        `(status, duration_s)` with the status mapped onto `recording_status`
+        values, or `None` when LiveKit does not know the id.
+    """
+    from livekit import api as lk_api  # noqa: PLC0415  (shutdown-path only)
+
+    client = lk_api.LiveKitAPI(settings.livekit_url, settings.livekit_api_key, settings.livekit_api_secret)
+    try:
+        response = await asyncio.wait_for(
+            client.egress.list_egress(lk_api.ListEgressRequest(egress_id=egress_id)),
+            _EGRESS_POLL_TIMEOUT_S,
+        )
+    finally:
+        await client.aclose()
+    for info in response.items:
+        if info.egress_id != egress_id:
+            continue
+        durations = [f.duration for f in info.file_results if f.duration]
+        duration_s = max(durations) / 1e9 if durations else None
+        return _EGRESS_STATUS.get(int(info.status), "active"), duration_s
+    return None
+
+
 @dataclass(slots=True)
 class Deps:
     """Everything `run_session` needs, injected so tests can replace any of it."""
@@ -294,8 +392,10 @@ class Deps:
     provider_factory: ProviderFactory = field(default_factory=ProviderFactory)
     session_builder: SessionBuilder = field(default_factory=SessionBuilder)
     vad: Any | None = None
-    #: Built per session; `None` in realtime mode (the model detects turns itself).
-    turn_detector_factory: Callable[[], Any | None] = lambda: inference.TurnDetector()
+    #: Builds the default turn detector per session from the connection's
+    #: `turn_detector_mode`; not called in realtime mode, on the text channel, or
+    #: when the `turn_detection` slot is filled.
+    turn_detector_factory: Callable[[TurnDetectorMode], Any | None] = default_turn_detector
     ui_channel_factory: Callable[..., Any] = lambda **kw: NoopUiChannel(kw.get("session_id", ""))
     frame_buffer_factory: Callable[..., Any] = lambda **kw: NoopFrameBuffer()
     background_runner_factory: Callable[..., Any] = lambda **kw: NoopBackgroundRunner()
@@ -305,8 +405,10 @@ class Deps:
     fallback_speaker: Callable[[JobContextLike, str], Awaitable[None]] | None = None
     #: Seam for `session.start`, so a unit test can run a session without a room.
     session_starter: Callable[..., Awaitable[None]] = field(default=lambda **kw: _start_session(**kw))
-    #: Clock seam for the idle hangup timer (F-02); tests inject a controllable sleep.
+    #: Clock seam for the idle hangup timer (F-02) and the reconnect grace (F-33).
     sleep: Callable[[float], Awaitable[None]] = _sleep
+    #: Reads an Egress's state from LiveKit at shutdown; `None` disables the poll.
+    egress_status: Callable[[str], Awaitable[EgressSnapshot | None]] | None = None
 
     @classmethod
     def from_env(cls, proc_userdata: dict[Any, Any] | None = None) -> Deps:
@@ -324,6 +426,7 @@ class Deps:
             pack_loader=PackLoader(settings.packs_list),
             vad=(proc_userdata or {}).get(_VAD_USERDATA_KEY),
             fallback_speaker=speak_fixed_line,
+            egress_status=lambda egress_id: livekit_egress_status(settings, egress_id),
         )
         _wire_optional_modules(deps)
         return deps
@@ -456,25 +559,31 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
             a user-visible failure worth speaking.
     """
     meta = _parse_dispatch_metadata(ctx)
-    bind_session_context(
-        session_id=meta.session_id,
-        agent_id=meta.agent_id,
-        job_id=str(getattr(ctx.job, "id", "")),
+    job_id = str(getattr(ctx.job, "id", ""))
+    bind_session_context(session_id=meta.session_id or "", agent_id=meta.agent_id, job_id=job_id)
+    logger.info(
+        "job accepted",
+        config_version=meta.config_version,
+        channel=meta.channel,
+        has_session=bool(meta.session_id),
     )
-    logger.info("job accepted", config_version=meta.config_version)
+    _warn_on_connection_mismatch(meta, deps.settings)
 
     try:
-        resolved = await deps.config_client.resolve(meta.session_id)
+        resolved = await _resolve_or_start(ctx, deps, meta)
     except ConfigUnavailableError as exc:
         logger.error("could not resolve the agent config", error=str(exc))
-        if not isinstance(exc, SessionNotFoundError | SessionEndedError):
+        if meta.session_id and not isinstance(exc, SessionNotFoundError | SessionEndedError):
             # F-09: the api may already have flipped the row to `active`.
             await _report_resolve_failure(deps, meta.session_id, exc)
         await _fail_cleanly(ctx, deps, reason="configuration unavailable")
         return
+    if not meta.session_id:
+        bind_session_context(session_id=resolved.session_id, agent_id=resolved.agent_id, job_id=job_id)
 
-    observer = SessionObserver(session_id=meta.session_id, client=deps.config_client)
+    observer = SessionObserver(session_id=resolved.session_id, client=deps.config_client)
     try:
+        resolved = prepare_flow_resolved(prepare_resolved(resolved))
         plan, agent = _assemble(ctx, deps, resolved, record_event=observer.record)
     except Exception as exc:
         logger.error("could not build the session", error=str(exc), exc_info=True)
@@ -484,23 +593,107 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
 
     observer.attach(plan.session)
     idle = _IdleHangup(ctx=ctx, session=plan.session, delay_s=deps.settings.idle_hangup_s, sleep=deps.sleep)
+    grace = _ReconnectGrace(
+        ctx=ctx,
+        identity=resolved.participant_identity,
+        delay_s=deps.settings.reconnect_grace_s,
+        sleep=deps.sleep,
+        record_event=observer.record,
+    )
+    recording = _Recording(deps=deps, session_id=resolved.session_id, record_event=observer.record)
     plan.session.on("user_state_changed", idle.on_user_state_changed)
     plan.session.on("function_tools_executed", agent.on_function_tools_executed)
     # F-03: drives the pack's `on_agent_turn_completed` hook.
     plan.session.on("conversation_item_added", agent.on_conversation_item)
     plan.session.on("error", _vision_degrade_handler(agent, observer))
-    # D-W2-9e: `close_on_disconnect` only closes the AgentSession; the job (and
-    # with it the shutdown callback that posts the summary) must be ended here.
+    # D-W2-9e: a closed AgentSession (end_call, an error) must end the job too;
+    # the shutdown callback posts the summary.
     plan.session.on("close", _job_shutdown_handler(ctx))
-    ctx.add_shutdown_callback(_shutdown_callback(agent, observer, idle))
+    grace.attach(ctx.room)
+    ctx.add_shutdown_callback(
+        _shutdown_callback(
+            agent,
+            observer,
+            idle,
+            grace,
+            recording,
+            quality=lambda: _score_quality(deps, resolved, observer),
+        )
+    )
 
     try:
         await _start(ctx, plan, agent, deps)
     except Exception as exc:
+        grace.close()
         await _abort_start(ctx, deps, plan, agent, observer, idle, exc)
         return
-    observer.record("session_started", {"pipeline_mode": resolved.config.pipeline.mode})
-    logger.info("session started", pack_id=resolved.pack_id, ui_panel_id=resolved.ui_panel_id)
+    observer.record(
+        "session_started",
+        {
+            "pipeline_mode": resolved.config.pipeline.mode,
+            "channel": resolved.channel,
+            "connection_id": resolved.connection.connection_id,
+        },
+    )
+    if resolved.recording.enabled and not plan.text_only:
+        recording.start()
+    logger.info(
+        "session started",
+        pack_id=resolved.pack_id,
+        ui_panel_id=resolved.ui_panel_id,
+        mode=resolved.config.pipeline.mode,
+        channel=resolved.channel,
+    )
+
+
+def _warn_on_connection_mismatch(meta: DispatchMetadata, settings: Settings) -> None:
+    """Log a dispatch minted for another connection than the one this worker serves."""
+    if meta.connection_id and settings.connection_id and meta.connection_id != settings.connection_id:
+        logger.warning(
+            "job dispatched for another connection than this worker's",
+            dispatch_connection_id=meta.connection_id,
+            worker_connection_id=settings.connection_id,
+        )
+
+
+def _job_room_name(ctx: JobContextLike) -> str:
+    """The job's room name, available before `ctx.connect()` (from the job proto)."""
+    job_room = getattr(ctx.job, "room", None)
+    name = getattr(job_room, "name", "") or ""
+    if not name:
+        name = getattr(ctx.room, "name", "") or ""
+    return str(name)
+
+
+async def _resolve_or_start(ctx: JobContextLike, deps: Deps, meta: DispatchMetadata) -> ResolvedAgentConfig:
+    """Resolve the dispatched session, or create it when the dispatch named none (D-V2-5).
+
+    Raises:
+        ConfigUnavailableError: If either call fails (subclasses for 404 / 409).
+        ValueError: If a session-less dispatch carries no room name.
+    """
+    if meta.session_id:
+        return await deps.config_client.resolve(meta.session_id)
+
+    room_name = _job_room_name(ctx)
+    if not room_name:
+        raise ValueError("a dispatch without session_id needs the job's room name to start a session")
+    logger.info("dispatch carries no session; creating one", room=room_name, channel=meta.channel)
+    resolved = await deps.config_client.start_session(
+        SessionStartIn(
+            agent_id=meta.agent_id,
+            room_name=room_name,
+            channel=meta.channel,
+            participant_identity=meta.participant_identity,
+            caller=None,
+            dispatch_metadata=meta.model_dump(mode="json"),
+        )
+    )
+    if not meta.participant_identity:
+        # The api names a placeholder identity for the row; nobody joins under it,
+        # so link to the first caller instead (the SDK's default behaviour).
+        resolved = resolved.model_copy(update={"participant_identity": ""})
+    return resolved
 
 
 async def _report_resolve_failure(deps: Deps, session_id: str, exc: ConfigUnavailableError) -> None:
@@ -618,6 +811,180 @@ class _IdleHangup:
         self._cancel()
 
 
+class _ReconnectGrace:
+    """Ends the job when the caller leaves, after a grace period for drops (F-33).
+
+    `RoomOptions.close_on_disconnect` is off, so this watcher is what ends a
+    job whose caller is gone. The caller is `identity` (the participant the api
+    minted the token for) or, when that is empty (a worker-created session),
+    the first participant that is neither an agent nor published on an agent's
+    behalf (an avatar).
+
+    A deliberate leave (:data:`_DELIBERATE_LEAVE_REASONS`) shuts the job down at
+    once, which keeps the summary within seconds of a hang-up. Any other
+    disconnect starts a `delay_s` timer that the same identity rejoining
+    cancels; RoomIO re-links a rejoining participant by itself.
+    """
+
+    def __init__(
+        self,
+        *,
+        ctx: JobContextLike,
+        identity: str,
+        delay_s: float | None,
+        sleep: Callable[[float], Awaitable[None]],
+        record_event: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> None:
+        self._ctx = ctx
+        self._identity = identity or None
+        self._delay_s = delay_s
+        self._sleep = sleep
+        self._record_event = record_event
+        self._task: asyncio.Task[None] | None = None
+        self._closed = False
+
+    @property
+    def pending(self) -> bool:
+        """Whether a reconnect grace timer is running."""
+        return self._task is not None and not self._task.done()
+
+    def attach(self, room: rtc.Room) -> None:
+        """Subscribe to the room's participant events."""
+        room.on("participant_disconnected", self.on_participant_disconnected)
+        room.on("participant_connected", self.on_participant_connected)
+
+    @staticmethod
+    def _is_caller(participant: Any) -> bool:
+        if getattr(participant, "kind", None) == rtc.ParticipantKind.PARTICIPANT_KIND_AGENT:
+            return False
+        attributes = getattr(participant, "attributes", None) or {}
+        return not attributes.get("lk.publish_on_behalf")
+
+    def _matches(self, participant: Any) -> bool:
+        if self._identity is not None:
+            return bool(participant.identity == self._identity)
+        if not self._is_caller(participant):
+            return False
+        self._identity = participant.identity
+        return True
+
+    def on_participant_disconnected(self, participant: Any) -> None:
+        """Synchronous room handler: shut down now, or start the grace timer."""
+        if self._closed or not self._matches(participant):
+            return
+        reason = getattr(participant, "disconnect_reason", None)
+        reason_name = (
+            rtc.DisconnectReason.Name(cast(rtc.DisconnectReason.ValueType, reason))
+            if isinstance(reason, int) and reason in rtc.DisconnectReason.values()
+            else "UNKNOWN_REASON"
+        )
+        if reason in _DELIBERATE_LEAVE_REASONS or not self._delay_s:
+            logger.info("caller left, ending the job", identity=participant.identity, reason=reason_name)
+            self._ctx.shutdown(reason=f"participant left: {reason_name}")
+            return
+        if self.pending:
+            return
+        logger.info(
+            "caller dropped, waiting for a reconnect",
+            identity=participant.identity,
+            reason=reason_name,
+            grace_s=self._delay_s,
+        )
+        if self._record_event is not None:
+            self._record_event(
+                "info", {"message": "caller disconnected; waiting to reconnect", "reason": reason_name}
+            )
+        self._task = asyncio.create_task(self._fire(self._delay_s))
+
+    def on_participant_connected(self, participant: Any) -> None:
+        """Synchronous room handler: a rejoining caller cancels the pending shutdown."""
+        if self._identity is None or participant.identity != self._identity or not self.pending:
+            return
+        logger.info("caller reconnected", identity=participant.identity)
+        if self._record_event is not None:
+            self._record_event("info", {"message": "caller reconnected"})
+        self._cancel()
+
+    async def _fire(self, delay_s: float) -> None:
+        await self._sleep(delay_s)
+        if self._closed:
+            return
+        logger.info("caller did not reconnect, ending the job", grace_s=delay_s)
+        self._ctx.shutdown(reason="participant did not reconnect")
+
+    def _cancel(self) -> None:
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+        self._task = None
+
+    def close(self) -> None:
+        """Cancel any pending timer and ignore later events (session shutdown)."""
+        self._closed = True
+        self._cancel()
+
+
+class _Recording:
+    """Starts the session's Egress through the api and reports its end (D-V2-16).
+
+    `start()` runs in the background once the session is up — the api's Egress
+    call must not delay the greeting. The `recording` session event is recorded
+    once the api confirms an egress id (or with `status="failed"` if it cannot
+    start one). At shutdown, when an Egress was started, the worker reads its
+    state from LiveKit (`list_egress`) and posts it to the api, which covers
+    deployments where LiveKit's `egress_ended` webhook cannot reach the api.
+    """
+
+    def __init__(self, *, deps: Deps, session_id: str, record_event: Callable[[str, dict[str, Any]], None]):
+        self._deps = deps
+        self._session_id = session_id
+        self._record_event = record_event
+        self._task: asyncio.Task[None] | None = None
+        self.egress_id: str | None = None
+
+    def start(self) -> None:
+        """Ask the api for the recording without blocking the caller."""
+        self._task = asyncio.create_task(self._start())
+
+    async def _start(self) -> None:
+        try:
+            egress_id = await self._deps.config_client.start_recording(self._session_id)
+        except RecordingUnavailableError as exc:
+            logger.warning("could not start the session recording", error=str(exc))
+            self._record_event("recording", {"status": "failed", "error": str(exc)})
+            return
+        self.egress_id = egress_id
+        logger.info("session recording started", egress_id=egress_id)
+        self._record_event("recording", {"status": "active", "egress_id": egress_id})
+
+    async def finalize(self) -> None:
+        """Report the Egress state LiveKit sees now; best effort, never raises."""
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._task
+        if self.egress_id is None or self._deps.egress_status is None:
+            return
+        try:
+            snapshot = await self._deps.egress_status(self.egress_id)
+        except Exception:
+            logger.warning("could not read the egress status at shutdown", exc_info=True)
+            return
+        if snapshot is None:
+            return
+        status, duration_s = snapshot
+        try:
+            await self._deps.config_client.post_recording(
+                self._session_id,
+                SessionRecordingIn(
+                    egress_id=self.egress_id,
+                    status=cast(Any, status),
+                    duration_s=duration_s,
+                ),
+            )
+        except Exception:
+            logger.warning("could not post the recording status", exc_info=True)
+
+
 def _vision_degrade_handler(agent: PlatformAgent, observer: SessionObserver) -> Callable[[Any], None]:
     """Build the synchronous `error` handler for D-W2-8 R5 (vision auto-degrade)."""
 
@@ -663,14 +1030,31 @@ def _assemble(
     The `UiChannel` needs a `on_ui_action` callback that reaches the pack *with*
     the session context, but the context needs the channel — so the callbacks
     close over a one-slot cell that is filled as soon as the context exists.
+
+    `resolved` is expected to have been through `session_builder.prepare_resolved`
+    (text-channel slots dropped, avatar options and connection flags applied).
     """
-    providers: BuiltProviders = deps.provider_factory.build_all(resolved)
-    is_realtime = resolved.config.pipeline.mode == "realtime"
+    # `qa_llm` (R-V2-6) is built separately by `qa.build_judge` at session end,
+    # never through `build_all`: `BuiltProviders` has no `qa_llm` field, so
+    # passing it through here would raise a `TypeError` the moment `qa.enabled`
+    # attaches the slot to `resolved.resolved`.
+    session_view = factory_view(resolved)
+    build_all_input = session_view.model_copy(
+        update={"resolved": {k: v for k, v in session_view.resolved.items() if k != "qa_llm"}}
+    )
+    providers: BuiltProviders = deps.provider_factory.build_all(build_all_input)
+    mode = resolved.config.pipeline.mode
+    client_side_turns = mode != "realtime" and resolved.channel != "text"
+    default_detector = (
+        deps.turn_detector_factory(resolved.connection.capabilities.turn_detector_mode)
+        if client_side_turns and providers.turn_detection is None
+        else None
+    )
     plan = deps.session_builder.build(
         resolved,
         providers,
-        vad=None if is_realtime else deps.vad,
-        turn_detector=None if is_realtime else deps.turn_detector_factory(),
+        vad=deps.vad if client_side_turns else None,
+        turn_detector=default_detector,
     )
 
     if plan.room_options.text_input is not False:
@@ -701,9 +1085,14 @@ def _assemble(
         on_ui_action=_on_ui_action,
         on_set_video_source=_on_set_video_source,
         log=log,
-        ui_identity=resolved.participant_identity,
+        # "" (a worker-created session with no dispatched identity) means "not
+        # known yet": the channel and the frame buffer then fall back to the
+        # first caller, as RoomIO does.
+        ui_identity=resolved.participant_identity or None,
     )
-    frames = deps.frame_buffer_factory(room=ctx.room, participant_identity=resolved.participant_identity)
+    frames = deps.frame_buffer_factory(
+        room=ctx.room, participant_identity=resolved.participant_identity or None
+    )
     session_ctx = SessionContext(
         session_id=resolved.session_id,
         agent_id=resolved.agent_id,
@@ -739,15 +1128,34 @@ def _assemble(
     ]
     mcp_servers = deps.mcp_servers_builder([t for t in resolved.tools if t.kind == "mcp"])
 
-    agent = PlatformAgent(
-        ctx=session_ctx,
-        pack=pack,
-        tools=tools,
-        mcp_servers=mcp_servers or None,
-        has_tts=plan.has_tts,
-        vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
-        record_event=record_event,
-    )
+    agent: PlatformAgent
+    if is_flow(resolved):
+        # V2-15: a flow agent starts at its first node; nodes pick their tools from this pool.
+        agent = build_flow_agent(
+            FlowServices(
+                resolved=resolved,
+                ctx=session_ctx,
+                pack=pack,
+                tool_pool=tools,
+                provider_factory=deps.provider_factory,
+                has_tts=plan.has_tts,
+                mcp_definitions=[t for t in resolved.tools if t.kind == "mcp"],
+                mcp_servers_builder=deps.mcp_servers_builder,
+                vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
+                record_event=record_event,
+                shutdown=lambda reason: ctx.shutdown(reason=reason),
+            )
+        )
+    else:
+        agent = PlatformAgent(
+            ctx=session_ctx,
+            pack=pack,
+            tools=tools,
+            mcp_servers=mcp_servers or None,
+            has_tts=plan.has_tts,
+            vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
+            record_event=record_event,
+        )
     return plan, agent
 
 
@@ -819,10 +1227,17 @@ def _deactivate(agent: PlatformAgent) -> None:
 
 
 def _shutdown_callback(
-    agent: PlatformAgent, observer: SessionObserver, idle: _IdleHangup
+    agent: PlatformAgent,
+    observer: SessionObserver,
+    idle: _IdleHangup,
+    grace: _ReconnectGrace,
+    recording: _Recording,
+    *,
+    quality: Callable[[], Awaitable[None]] | None = None,
 ) -> Callable[[str], Awaitable[None]]:
     async def _on_shutdown(reason: str) -> None:
         idle.close()
+        grace.close()
         # F-11: in-flight workflows must not outlive the hangup.
         cancel_all = getattr(agent.context.background, "cancel_all", None)
         if callable(cancel_all):
@@ -833,8 +1248,41 @@ def _shutdown_callback(
         await agent.on_pack_session_end(reason)
         _deactivate(agent)
         await observer.shutdown(reason=reason, final_ui_state=agent.context.ui.state)
+        # Everything below runs after the summary is posted, so neither the
+        # Egress poll (up to 5 s) nor the QA judge (R-V2-5, up to 30 s) delays
+        # the ≤10 s summary target.
+        await recording.finalize()
+        if quality is not None:
+            try:
+                await quality()
+            except Exception:
+                logger.warning("qa scoring failed", exc_info=True)
 
     return _on_shutdown
+
+
+async def _score_quality(deps: Deps, resolved: ResolvedAgentConfig, observer: SessionObserver) -> None:
+    """Judge the finished session and `PUT` the verdict (R-V2-5/R-V2-6); best effort.
+
+    The judge is built from the api-resolved `qa_llm` slot
+    (`qa.build_judge`) — the api already walked `qa.model -> workflow_llm ->
+    llm -> Inference default` and attached secrets at
+    `GET .../resolved` / `POST .../sessions/start` time (R-V2-6); the worker
+    no longer walks that chain itself (`_qa_judge` used to live here).
+    """
+    qa = resolved.config.qa
+    judge: StructuredLLM | None = None
+    label: str | None = None
+    error: str | None = None
+    if qa.enabled:
+        judge, label, error = build_judge(deps.provider_factory, resolved)
+    verdict = await score_session(
+        qa=qa, transcript=observer.transcript, judge=judge, model_label=label, judge_error=error
+    )
+    await deps.config_client.put_qa(resolved.session_id, verdict)
+    logger.info(
+        "qa verdict sent (best effort)", status=verdict.status, score=verdict.score, model=verdict.model
+    )
 
 
 async def _fail_cleanly(
@@ -857,69 +1305,101 @@ async def _fail_cleanly(
 # -------------------------------------------------------------------- worker
 
 
-#: The only dispatch name this worker may register under (DECISIONS-W2 §D-W2-11).
-REQUIRED_AGENT_NAME = "lkap-agent"
+def configured_agent_name(environ: Mapping[str, str]) -> str:
+    """`LKAP_AGENT_NAME`, stripped, or `DEFAULT_AGENT_NAME` when unset or blank.
+
+    A blank value must never become the registration name: an unnamed worker
+    takes automatic dispatch for every room in the project. `require_agent_name`
+    refuses a blank `LKAP_AGENT_NAME` outright; this fallback only keeps the
+    import-time decorator safe until that check runs.
+    """
+    return (environ.get("LKAP_AGENT_NAME") or "").strip() or DEFAULT_AGENT_NAME
+
+
+#: The dispatch name this worker registers under and the only one it accepts
+#: (D-W2-11, CONTRACTS-V2 §5). Read once, at import, because `rtc_session`
+#: resolves its name at decoration time.
+AGENT_NAME = configured_agent_name(os.environ)
 
 
 def require_agent_name(environ: Mapping[str, str], settings: Settings) -> str:
-    """Refuse to run when any *set* name source contradicts `lkap-agent`.
+    """Refuse to run unless every *set* name source agrees with `LKAP_AGENT_NAME`.
 
-    The worker registers with an explicit `agent_name=REQUIRED_AGENT_NAME`, so an
-    unset `LIVEKIT_AGENT_NAME` is fine (DECISIONS-W2 §D-W2-11). What is refused:
-    a `LIVEKIT_AGENT_NAME_OVERRIDE` that differs (the SDK would register under
-    it), a `LIVEKIT_AGENT_NAME` that differs (ignored by the SDK, but it means
-    the process was launched from another agent's environment), or a settings
-    value that differs.
+    The worker registers with an explicit `agent_name=AGENT_NAME`, so an unset
+    `LIVEKIT_AGENT_NAME` is fine (DECISIONS-W2 §D-W2-11). What is refused:
+
+    * an empty `LKAP_AGENT_NAME` (`settings.agent_name`);
+    * a `settings.agent_name` that differs from the name the module registered
+      under — e.g. `LKAP_AGENT_NAME` only in a `.env` file the decorator never
+      saw;
+    * a `LIVEKIT_AGENT_NAME_OVERRIDE` that differs (the SDK would register
+      under it);
+    * a `LIVEKIT_AGENT_NAME` (process env or settings) that differs (ignored
+      by the SDK, but it means the process was launched from another agent's
+      environment).
 
     Args:
         environ: The process environment (`os.environ`).
         settings: The worker settings.
 
     Returns:
-        The agent name, always `REQUIRED_AGENT_NAME`.
+        The agent name.
 
     Raises:
         RuntimeError: Naming the offending source when one disagrees.
     """
+    expected = settings.agent_name.strip()
+    if not expected:
+        raise RuntimeError(
+            "refusing to start: LKAP_AGENT_NAME is empty; an unnamed worker would take automatic "
+            "dispatch for every room in the project"
+        )
+    registered = configured_agent_name(environ)
+    if expected != registered:
+        raise RuntimeError(
+            f"refusing to start: settings.agent_name={expected!r} differs from the name the worker "
+            f"registers under ({registered!r}, from the process environment); set LKAP_AGENT_NAME "
+            "in the environment, not only in a .env file"
+        )
     override = environ.get("LIVEKIT_AGENT_NAME_OVERRIDE")
-    if override and override != REQUIRED_AGENT_NAME:
+    if override and override != expected:
         raise RuntimeError(
             f"LIVEKIT_AGENT_NAME_OVERRIDE={override!r} would register the worker under the wrong "
-            f"name; this worker must register as {REQUIRED_AGENT_NAME!r}"
+            f"name; this worker must register as {expected!r}"
         )
-    env_name = environ.get("LIVEKIT_AGENT_NAME")
-    if env_name and env_name != REQUIRED_AGENT_NAME:
-        raise RuntimeError(
-            f"refusing to start: LIVEKIT_AGENT_NAME={env_name!r} contradicts the worker's name "
-            f"{REQUIRED_AGENT_NAME!r}; this process looks like it was launched with another agent's env"
-        )
-    if settings.livekit_agent_name != REQUIRED_AGENT_NAME:
-        raise RuntimeError(
-            f"refusing to start: settings.livekit_agent_name={settings.livekit_agent_name!r} "
-            f"must be {REQUIRED_AGENT_NAME!r}"
-        )
-    return REQUIRED_AGENT_NAME
+    for source, value in (
+        ("LIVEKIT_AGENT_NAME", environ.get("LIVEKIT_AGENT_NAME")),
+        ("settings.livekit_agent_name", settings.livekit_agent_name),
+    ):
+        if value and value != expected:
+            raise RuntimeError(
+                f"refusing to start: {source}={value!r} contradicts the worker's name {expected!r}; "
+                "this process looks like it was launched with another agent's env"
+            )
+    return expected
 
 
 def effective_agent_name(environ: Mapping[str, str]) -> str:
     """The name the SDK registers under, given the explicit `agent_name` argument.
 
     Mirrors `AgentServer.rtc_session`'s precedence: a set
-    `LIVEKIT_AGENT_NAME_OVERRIDE` wins, otherwise the explicit argument.
+    `LIVEKIT_AGENT_NAME_OVERRIDE` wins, otherwise the explicit argument
+    (`LKAP_AGENT_NAME`, default `lkap-agent`).
     """
-    return environ.get("LIVEKIT_AGENT_NAME_OVERRIDE") or REQUIRED_AGENT_NAME
+    return environ.get("LIVEKIT_AGENT_NAME_OVERRIDE") or configured_agent_name(environ)
 
 
 async def only_lkap_jobs(req: JobRequest) -> None:
-    """Accept only jobs dispatched to `lkap-agent`; reject everything else loudly.
+    """Accept only jobs dispatched to this worker's name; reject everything else loudly.
 
     Automatic-dispatch jobs carry `agent_name == ""`; a job for another agent
     name can only reach this worker if it was mis-registered.
     """
-    if req.agent_name != REQUIRED_AGENT_NAME:
+    if req.agent_name != AGENT_NAME:
         logger.error(
             "rejecting job dispatched to the wrong agent name",
             job_agent_name=req.agent_name,
+            worker_agent_name=AGENT_NAME,
             room=req.room.name,
         )
         await req.reject()
@@ -942,14 +1422,31 @@ def prewarm(proc: JobProcess) -> None:
     logger.info(
         "worker process prewarmed",
         agent_name=effective_agent_name(os.environ),
-        settings_agent_name=settings.livekit_agent_name,
+        settings_agent_name=settings.agent_name,
+        connection_id=settings.connection_id,
     )
+
+
+def install_worker_registration(agent_server: Any, settings: Settings) -> WorkerRegistration:
+    """Register this worker with the api once LiveKit has accepted it (CONTRACTS-V2 §5).
+
+    Runs in the main (server) process only: job processes never import the
+    `__main__` block that calls this.
+    """
+    registration = WorkerRegistration(
+        client=FleetClient(settings.api_base_url, settings.service_token),
+        settings=settings,
+        server=agent_server,
+        pack_ids=lambda: sorted(PackLoader(settings.packs_list).discover()),
+    )
+    registration.attach()
+    return registration
 
 
 server = AgentServer(setup_fnc=prewarm)
 
 
-@server.rtc_session(agent_name=REQUIRED_AGENT_NAME, on_request=only_lkap_jobs)
+@server.rtc_session(agent_name=AGENT_NAME, on_request=only_lkap_jobs)
 async def entrypoint(ctx: Any) -> None:
     """The one registered `rtc_session`; all logic lives in :func:`run_session`."""
     await run_session(ctx, Deps.from_env(ctx.proc.userdata))
@@ -958,5 +1455,7 @@ async def entrypoint(ctx: Any) -> None:
 if __name__ == "__main__":  # pragma: no cover - process entry
     from livekit.agents import cli  # noqa: PLC0415
 
-    require_agent_name(os.environ, get_settings())
+    _settings = get_settings()
+    require_agent_name(os.environ, _settings)
+    _registration = install_worker_registration(server, _settings)
     cli.run_app(server)

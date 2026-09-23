@@ -319,8 +319,8 @@
       "title": "ProviderCapabilities",
       "type": "object"
     },
-    "ProviderSpec": {
-      "description": "Everything the platform needs to offer, configure and construct a provider.\n\n``v`` accepts ``1`` for one release so v1 documents (a stored\n``providers.json`` snapshot, console test fixtures) keep validating; the\nregistry itself always emits ``2``.",
+    "ProviderOut": {
+      "description": "A registry entry plus this workspace's settings (``GET /v1/providers``).",
       "properties": {
         "availability": {
           "default": "available",
@@ -360,6 +360,18 @@
           ],
           "default": null
         },
+        "default_credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Credential Id"
+        },
         "default_model": {
           "anyOf": [
             {
@@ -384,6 +396,11 @@
           "default": null,
           "title": "Docs Url"
         },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
         "fields": {
           "default": [],
           "items": {
@@ -407,6 +424,13 @@
         "id": {
           "title": "Id",
           "type": "string"
+        },
+        "installed_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Installed On",
+          "type": "array"
         },
         "kind": {
           "enum": [
@@ -568,23 +592,23 @@
         "package",
         "python_class"
       ],
-      "title": "ProviderSpec",
+      "title": "ProviderOut",
       "type": "object"
     }
   },
   "$id": "lkap-contracts/ProvidersResponse.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``GET /v1/providers``.\n\n``providers`` stays ``list[ProviderSpec]``; V2-06 serves the enriched\n:class:`ProviderOut` (a superset) through the same field and bumps ``v`` to\n``2`` then — the payload is still v1-shaped, so ``2`` is accepted but not\nyet emitted.",
+  "description": "``GET /v1/providers``.\n\n``v=2`` (V2-06): ``providers`` carries the enriched :class:`ProviderOut`\n(a superset of ``ProviderSpec`` with this workspace's ``enabled``,\n``installed_on`` and ``default_credential_id``), not the bare registry\nentry.",
   "properties": {
     "providers": {
       "items": {
-        "$ref": "#/$defs/ProviderSpec"
+        "$ref": "#/$defs/ProviderOut"
       },
       "title": "Providers",
       "type": "array"
     },
     "v": {
-      "default": 1,
+      "default": 2,
       "enum": [
         1,
         2

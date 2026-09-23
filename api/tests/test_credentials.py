@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from lkap_api.db.models import Credential
 from lkap_api.db.session import Database
-from lkap_api.routers.credentials import seed_bootstrap_credentials
+from lkap_api.routers.provider_keys import seed_bootstrap_credentials
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 
@@ -214,8 +214,14 @@ async def test_credential_test_calls_the_vendor_once(
 async def test_credential_test_reports_not_implemented_providers(
     admin_client: httpx.AsyncClient, mock_http: list[httpx.Request]
 ) -> None:
+    # `did-avatar` (not `bey-avatar`): V2-06 built a real `credential_tests`
+    # adapter for `bey-avatar` (`spec.test="bey_avatars"`), but this router
+    # (`_TEST_CALLS`) is not wired to it yet (docs/v2/_asks.md #38) — `bey-avatar`
+    # would still hit this "not implemented" path today, but `did-avatar` (whose
+    # registry entry has no `test=` at all) stays a "not implemented" case even
+    # after that patch lands, which is what this test is meant to prove.
     created = await _create(
-        admin_client, provider_id="bey-avatar", label="Beyond", secrets={"api_key": "bey-1"}
+        admin_client, provider_id="did-avatar", label="D-ID", secrets={"api_key": "did-1"}
     )
 
     response = await admin_client.post(f"/v1/credentials/{created['id']}/test")
@@ -224,8 +230,30 @@ async def test_credential_test_reports_not_implemented_providers(
     # Subset comparison: `CredentialTestResult` keeps gaining optional fields
     # (v2 added `checked_at`/`catalog_preview`), and this test is about the message.
     assert body["ok"] is True
-    assert body["message"] == "no automated test implemented for 'bey-avatar'"
+    assert body["message"] == "no automated test implemented for 'did-avatar'"
     assert mock_http == []
+
+
+async def test_credential_test_uses_the_new_adapter_and_caches_for_ten_minutes(
+    admin_client: httpx.AsyncClient, mock_http: list[httpx.Request]
+) -> None:
+    """V2-06: a wired provider (`bey-avatar`) goes through `credential_tests.run`,
+    gets a `catalog_preview`, and a second call within the 10-minute window is
+    served from `credentials.last_test_*` with no vendor call at all."""
+    created = await _create(
+        admin_client, provider_id="bey-avatar", label="Beyond", secrets={"api_key": "bey-1"}
+    )
+
+    first = (await admin_client.post(f"/v1/credentials/{created['id']}/test")).json()
+    second = (await admin_client.post(f"/v1/credentials/{created['id']}/test")).json()
+
+    assert len(mock_http) == 1, "the second call must hit the 10-minute cache, not the vendor again"
+    assert first["ok"] is True
+    assert first["catalog_preview"], "a fresh test result carries a catalog preview"
+    assert first["checked_at"] is not None
+    assert second["catalog_preview"] is None, "a cached result replays no preview (not stored on the row)"
+    assert second["checked_at"] == first["checked_at"]
+    assert second["ok"] == first["ok"]
 
 
 async def test_bootstrap_seeding_is_idempotent(

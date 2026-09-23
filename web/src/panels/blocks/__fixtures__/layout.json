@@ -1,0 +1,18 @@
+{
+  "panel_id": "composite",
+  "layout": "side",
+  "blocks": [
+    { "id": "status", "type": "status", "title": null, "config": {}, "order": 0 },
+    { "id": "intake", "type": "form", "title": "Your details", "config": {}, "order": 1 },
+    { "id": "items", "type": "table", "title": "Damaged items", "config": {}, "order": 2 },
+    { "id": "claim_form", "type": "document", "title": "Claim form", "config": {}, "order": 3 },
+    { "id": "photos", "type": "gallery", "title": "Photos", "config": {}, "order": 4 },
+    { "id": "sources", "type": "kb_citations", "title": "Sources", "config": {}, "order": 5 },
+    { "id": "notes", "type": "notes", "title": "Notes", "config": {}, "order": 6 },
+    { "id": "checklist", "type": "checklist", "title": "Still needed", "config": {}, "order": 7 },
+    { "id": "camera", "type": "video", "title": "Your camera", "config": { "source": "user_camera" }, "order": 8 },
+    { "id": "transcript", "type": "transcript", "title": "Transcript", "config": { "show_tools": true }, "order": 9 },
+    { "id": "activity", "type": "activity", "title": "Activity", "config": {}, "order": 10 },
+    { "id": "pack", "type": "custom", "title": "Pack data", "config": {}, "order": 11 }
+  ]
+}

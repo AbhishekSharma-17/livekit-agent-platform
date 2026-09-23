@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { WORKSPACE_HEADER, activeWorkspace, adminBypassEnabled } from "@/lib/auth";
+
 /**
  * Server-side proxy for the console: forwards `/api/console/*` to the
- * `lkap_api` admin API, attaching `X-Admin-Token` from the server-only env
- * var `LKAP_ADMIN_TOKEN` (never sent to the browser bundle). See
- * docs/CONTRACTS.md §3, §7.
+ * `lkap_api` admin API. See docs/CONTRACTS.md §3, §7 and
+ * docs/v2/CONTRACTS-V2.md §3.1.
  *
- * Always dynamic (no caching): every call carries admin auth and often
- * mutates server state.
+ * Auth (V2-14, closing ask #37's hand-off from V2-02):
+ * - Every request header except hop-by-hop ones is forwarded, so the
+ *   browser's `lkap_session` cookie reaches the api, and the api's
+ *   `Set-Cookie` (login, logout, session rotation) comes back unchanged.
+ *   The api prefers the cookie when one is valid.
+ * - `X-Admin-Token` from the server-only `LKAP_ADMIN_TOKEN` is attached only
+ *   while `adminBypassEnabled()` is on (break-glass, and only actually
+ *   honoured by the api while its own `LKAP_ALLOW_ADMIN_TOKEN` is also on —
+ *   two independent gates, see `lib/auth.ts`'s docstring). Signing in with a
+ *   real password is now the only supported path once either gate is off.
+ * - The active workspace chosen in the sidebar switcher (WP-1's
+ *   `lkap_workspace` cookie) is sent as `X-Workspace`; without it the api
+ *   uses the caller's only (or, for the admin token, the `default`) workspace.
+ *
+ * Always dynamic (no caching): every call carries auth and often mutates
+ * server state.
  */
 export const dynamic = "force-dynamic";
 
@@ -25,14 +40,8 @@ function apiBaseUrl(): string {
   return base.replace(/\/+$/, "");
 }
 
-function adminToken(): string {
-  const token = process.env.LKAP_ADMIN_TOKEN;
-  if (!token) {
-    throw new Error(
-      "LKAP_ADMIN_TOKEN is not set (server-only; console proxy cannot authenticate)",
-    );
-  }
-  return token;
+function adminToken(): string | undefined {
+  return process.env.LKAP_ADMIN_TOKEN;
 }
 
 async function proxy(
@@ -48,7 +57,14 @@ async function proxy(
       headers.set(key, value);
     }
   });
-  headers.set("X-Admin-Token", adminToken());
+  if (adminBypassEnabled()) {
+    const token = adminToken();
+    if (token) headers.set("X-Admin-Token", token);
+  }
+  const workspace = activeWorkspace(request);
+  if (workspace && !headers.has(WORKSPACE_HEADER)) {
+    headers.set(WORKSPACE_HEADER, workspace);
+  }
 
   const hasBody = !["GET", "HEAD"].includes(request.method);
   const upstreamResponse = await fetch(upstreamUrl, {

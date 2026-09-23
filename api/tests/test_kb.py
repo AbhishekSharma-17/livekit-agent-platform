@@ -15,12 +15,21 @@ import pytest
 from fastapi import FastAPI
 
 from lkap_api.kb.embed import FakeEmbedder
-from lkap_api.routers.knowledge import get_embedder
+from lkap_api.routers.knowledge import MAX_UPLOAD_BYTES, get_embedder
+
+
+async def _fake_resolve_embedder(*args: object, **kwargs: object) -> FakeEmbedder:
+    return FakeEmbedder()
 
 
 @pytest.fixture(autouse=True)
-def _fake_embedder(app: FastAPI) -> Iterator[None]:
+def _fake_embedder(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    # `search_kb`/`internal_search_kb` resolve the embedder through FastAPI DI.
     app.dependency_overrides[get_embedder] = lambda: FakeEmbedder()
+    # The `kb_ingest` job (V2-08) resolves it directly (no request in flight),
+    # so it needs its own seam: `run_ingestion_job` calls the name bound in its
+    # own module's namespace, which this patches.
+    monkeypatch.setattr("lkap_api.kb.ingest.resolve_embedder", _fake_resolve_embedder)
     yield
     app.dependency_overrides.pop(get_embedder, None)
 
@@ -79,6 +88,32 @@ async def _upload(
     )
     assert response.status_code == 202, response.text
     return response.json()
+
+
+async def test_upload_over_25mb_is_rejected_with_413(admin_client: httpx.AsyncClient) -> None:
+    """REVIEW-FINAL F-29 / PLAN-V2 V2-08: KB uploads are capped, not read unbounded."""
+    created = await admin_client.post("/v1/knowledge-bases", json={"name": "Cap test"})
+    kb_id = created.json()["id"]
+
+    oversized = b"x" * (MAX_UPLOAD_BYTES + 1)
+    response = await admin_client.post(
+        f"/v1/knowledge-bases/{kb_id}/documents", files={"file": ("big.txt", oversized, "text/plain")}
+    )
+    assert response.status_code == 413, response.text
+
+    listed = await admin_client.get(f"/v1/knowledge-bases/{kb_id}/documents")
+    assert listed.json()["items"] == []
+
+
+async def test_upload_at_exactly_the_cap_is_accepted(admin_client: httpx.AsyncClient) -> None:
+    created = await admin_client.post("/v1/knowledge-bases", json={"name": "Cap test 2"})
+    kb_id = created.json()["id"]
+
+    exact = b"x" * MAX_UPLOAD_BYTES
+    response = await admin_client.post(
+        f"/v1/knowledge-bases/{kb_id}/documents", files={"file": ("exact.txt", exact, "text/plain")}
+    )
+    assert response.status_code == 202, response.text
 
 
 async def test_upload_ingests_synchronously_under_the_asgi_transport(admin_client: httpx.AsyncClient) -> None:

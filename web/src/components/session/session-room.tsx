@@ -48,7 +48,13 @@ import { useAgentRpc } from "@/hooks/useAgentRpc";
 import { useUiRequests } from "@/hooks/useUiRequests";
 import { useUiState } from "@/hooks/useUiState";
 import { toPanelConnectionState } from "@/lib/livekit";
-import { resolvePanel, type PanelDefinition, type PanelUiAction } from "@/panels/registry";
+import {
+  agentActionFor,
+  panelLayoutFor,
+  resolvePanel,
+  type PanelAction,
+  type PanelDefinition,
+} from "@/panels/registry";
 
 type VideoSource = "camera" | "screen" | "none";
 type DeviceKey = "microphone" | "camera" | "screenShare";
@@ -96,7 +102,7 @@ export function SessionRoom({
   const agentInfo = useAgent(session);
   const { messages } = useSessionMessages(session);
   const { localParticipant } = useLocalParticipant();
-  const { perform, performUiAction, ready: rpcReady } = useAgentRpc();
+  const { perform, ready: rpcReady } = useAgentRpc();
   const ui = useUiState(sessionId);
   const { mergedProps: startAudioProps, canPlayAudio } = useStartAudio({
     room: session.room,
@@ -264,10 +270,11 @@ export function SessionRoom({
 
   /* ------------------------------- panel -------------------------------- */
 
+  // `ui_action` keeps its v1 shape; the v2 block actions (`form_submit`,
+  // `block_action`) are their own `lkap.agent.action` (V2-11).
   const panelPerform = useCallback(
-    (action: PanelUiAction) =>
-      performUiAction(action.payload.name, action.payload.data),
-    [performUiAction],
+    (action: PanelAction) => perform(agentActionFor(action)),
+    [perform],
   );
 
   const PanelComponent = panel.Component;
@@ -313,7 +320,8 @@ export function SessionRoom({
     [],
   );
 
-  const layout = panel.layout ?? "side";
+  // The composite panel's layout is per agent (`PanelLayout.layout`, V2-11).
+  const layout = panelLayoutFor(panel, agent);
   const status = ui.state.status;
 
   return (

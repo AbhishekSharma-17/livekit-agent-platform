@@ -14,6 +14,13 @@
 # both the end user's browser and this container: point it at the api's
 # public HTTPS origin, not an internal/compose-only hostname. See
 # deploy/README.md for the local docker-compose workaround.
+#
+# F-21 (docs/REVIEW-FINAL.md): `corepack prepare pnpm@9.15.9` was unverifiable
+# without Docker; confirmed live by V2-09 (2026-09-23) against both the npm
+# registry (the version exists) and `web/package.json`'s own
+# `"packageManager": "pnpm@9.15.9"` (matches — corepack will not warn/fail on
+# a mismatch). Still unverified: an actual `docker build` of this file (no
+# Docker daemon on this host either).
 
 # --- deps ----------------------------------------------------------------
 FROM node:24-alpine AS deps

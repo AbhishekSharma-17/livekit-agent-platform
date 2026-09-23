@@ -25,7 +25,7 @@ Every v1 tenant table (`agents`, `credentials`, `tools`, `knowledge_bases`, `ses
 |---|---|---|
 | `livekit_connections` | `id`, `workspace_id` FK, `slug` UNIQUE per workspace, `name`, `deployment_type` CHECK IN (`cloud`,`self_hosted`), `url`, `api_key_ct` BLOB, `api_secret_ct` BLOB, `credentials_version` INT default 1, `agent_name` default `lkap-agent`, `deployment_mode` CHECK IN (`external`,`supervised`,`cloud_hosted`), `replicas` INT default 1, `worker_image` CHECK IN (`slim`,`full`), `region`, `use_inference` BOOL default 1, `storage_config_id` FK NULL, `is_default` BOOL, `status` CHECK IN (`unverified`,`ok`,`error`), `capabilities` JSON (`ConnectionCapabilities`), `last_checked_at`, `last_error`, `created_at`, `updated_at` | Secrets Fernet-encrypted with `LKAP_MASTER_KEY`; `fingerprint` derived (`…` + last 4 of api_key). One `is_default=1` per workspace (partial unique index). |
 | `worker_instances` | `id`, `connection_id` FK CASCADE, `instance_key` (hostname:pid or container id) UNIQUE, `image` (`slim`,`full`), `sdk_version`, `installed_provider_ids` JSON, `pack_ids` JSON, `registered_at`, `last_heartbeat_at`, `status` (`starting`,`ready`,`draining`,`gone`), `managed_by` (`external`,`supervisor`,`cloud`) | Rows older than 3 heartbeats are marked `gone` by the sweep. |
-| `fleet_desired` | `connection_id` PK FK CASCADE, `desired_replicas`, `desired_hash` (sha256 of url+credentials_version+agent_name+image+packs), `updated_at` | Written by the api on any connection change; read by the supervisor. |
+| `fleet_desired` | `connection_id` PK FK CASCADE, `desired_replicas`, `restart_generation` INT NOT NULL default 0, `restart_requested_at` NULL, `desired_hash` (sha256 of url+credentials_version+agent_name+image+packs+restart_generation), `updated_at` | Written by the api on any connection change; read by the supervisor. `POST …/fleet {action: restart}` bumps `restart_generation` (R-V2-4), which changes the hash and triggers the supervisor's existing rolling replacement. |
 | `storage_configs` | `id`, `workspace_id`, `name`, `kind` (`s3`,`local`), `bucket`, `region`, `endpoint_url`, `prefix`, `access_key_ct`, `secret_key_ct`, `public_base_url`, `is_default`, timestamps | Used by Egress and KB uploads. Local kind is dev-only. |
 
 ### 1.3 Agents, versions, provider settings
@@ -45,7 +45,7 @@ Every v1 tenant table (`agents`, `credentials`, `tools`, `knowledge_bases`, `ses
 | Table | Change |
 |---|---|
 | `sessions` | += `workspace_id`, `connection_id`, `channel` CHECK IN (`web`,`test`,`text`,`sip_in`,`sip_out`,`widget`,`api`), `caller` JSON (SIP: from/to/trunk_id/call_id; widget: origin), `recording_status` (`none`,`requested`,`active`,`ready`,`failed`), `recording_egress_id`, `recording_object_key`, `recording_duration_s`, `cost_usd` NUMERIC(12,6) NULL, `latency` JSON (`SessionLatency`), `disposition` (flow end-node value), `variables` JSON (flow extraction), `deleted_at` NULL. |
-| `session_qa` | NEW: `session_id` PK FK CASCADE, `status` (`pending`,`done`,`failed`), `score` INT NULL (1–10), `sentiment` (`positive`,`neutral`,`negative`), `tags` JSON, `summary`, `raw` JSON, `model`, `scored_at`, `error`. |
+| `session_qa` | NEW: `session_id` PK FK CASCADE, `status` (`pending`,`done`,`failed`,`skipped`), `scored_by` (`worker`,`api`), `score` INT NULL (1–10), `sentiment` (`positive`,`neutral`,`negative`), `tags` JSON, `summary`, `raw` JSON, `model`, `scored_at`, `error`. |
 | `session_costs` | NEW: `id`, `session_id` FK CASCADE, `provider_id`, `model`, `unit` (`tokens_in`,`tokens_out`,`audio_s_in`,`audio_s_out`,`chars`,`minutes`,`images`), `quantity` NUMERIC, `unit_price_usd` NUMERIC, `cost_usd` NUMERIC, `price_version`. |
 | `usage_daily` | NEW: (`workspace_id`,`day`,`agent_id`) PK, `sessions`, `minutes`, `cost_usd`, `failed`. Rolled up by a nightly job for the analytics page. |
 
@@ -80,6 +80,8 @@ All migrations must run on SQLite (dev) and Postgres (CI matrix). SQLite `ALTER 
 | `v2_005_sessions_ext` | `sessions` new columns; create `session_qa`, `session_costs`, `usage_daily`. Backfill `channel='web'`, `connection_id` = agent's connection. |
 | `v2_006_webhooks_jobs` | `webhook_endpoints`, `webhook_deliveries`, `jobs`. |
 | `v2_007_telephony` | `sip_trunks`, `sip_dispatch_rules`, `phone_numbers`, `calls`. |
+| `v2_009_fleet_restart` (R-V2-4, owner V2-04 follow-up) | `fleet_desired` += `restart_generation` INT NOT NULL DEFAULT 0, `restart_requested_at` NULL. |
+| `v2_010_qa_status` (R-V2-5, owner V2-08 follow-up) | `session_qa.status` CHECK += `skipped`; `session_qa` += `scored_by`. |
 | `v2_008_agentconfig_v2` | Data migration: rewrite every `agents.config` and `agent_config_versions.config` from `AgentConfig` v1 to v2 using `lkap_contracts.migrate.agent_config_v1_to_v2` (pure function, unit-tested); sets `ui_panel_id` mirror. Reversible (`v2_to_v1` drops v2-only fields). |
 
 Rollback: each revision has a `downgrade()`; V2-19 rehearses `upgrade head` + `downgrade 4135323c6ecc` on a copy of the live SQLite file and on Postgres.
@@ -134,7 +136,7 @@ Telephony (stretch): `GET/POST /v1/telephony/trunks`, `PUT/DELETE /v1/telephony/
 
 Webhooks: `GET/POST /v1/webhooks`, `PUT/DELETE /v1/webhooks/{id}`, `POST /v1/webhooks/{id}/test`, `GET /v1/webhooks/{id}/deliveries`, `POST /v1/webhooks/deliveries/{id}/redeliver`. Inbound LiveKit webhooks: `POST /hooks/livekit/{connection_id}` verified with that connection's key/secret (`WebhookReceiver`), handles `egress_ended`, `room_finished`, `participant_joined/left`, SIP events.
 
-Internal (service token): `GET /internal/v1/sessions/{id}/resolved` (unchanged), **`POST /internal/v1/sessions/start`** `{agent_id, room_name, channel, participant_identity, caller?, dispatch_metadata}` → `ResolvedAgentConfig` (creates the row, 409 if room already has a live session), `POST /internal/v1/workers/register` `{connection_id?, instance_key, image, sdk_version, installed_provider_ids, pack_ids, managed_by}` → `{connection_id, agent_name}`, `POST /internal/v1/workers/{instance_key}/heartbeat {status, active_jobs}`, `GET /internal/v1/fleet/desired` → `FleetDesired[]`, `GET /internal/v1/connections/{id}/worker-env` → `WorkerEnv{env: dict[str,str], image, agent_name, packs}` (decrypted; supervisor only), `POST /internal/v1/sessions/{id}/metrics {latency, usage_lines}`, **`POST /internal/v1/sessions/{id}/recording/start`** (worker → api after `ctx.connect()`; api starts `RoomCompositeEgress` with the connection's client and returns `{egress_id}`), `POST /internal/v1/sessions/{id}/recording {egress_id, status, duration_s?}` (worker-side finalisation when no public webhook URL). Router ownership: `sessions/start`, `sessions/*`, `worker-env` live in `routers/internal.py` (V2-03); `workers/register`, `workers/{key}/heartbeat`, `fleet/desired` live in `routers/fleet_internal.py` (V2-04). Events and summary routes unchanged; new event types: `block_update`, `form_submitted`, `handoff` (flow node change), `dtmf`, `transfer`, `recording`.
+Internal (service token): `GET /internal/v1/sessions/{id}/resolved` (unchanged), **`POST /internal/v1/sessions/start`** `{agent_id, room_name, channel, participant_identity, caller?, dispatch_metadata}` → `ResolvedAgentConfig` (creates the row, 409 if room already has a live session), `POST /internal/v1/workers/register` `{connection_id?, instance_key, image, sdk_version, installed_provider_ids, pack_ids, managed_by}` → `{connection_id, agent_name}`, `POST /internal/v1/workers/{instance_key}/heartbeat {status, active_jobs}`, `GET /internal/v1/fleet/desired` → `FleetDesired[]`, `GET /internal/v1/connections/{id}/worker-env` → `WorkerEnv{env: dict[str,str], image, agent_name, packs}` (decrypted; supervisor only), **`PUT /internal/v1/sessions/{id}/qa`** `{status: done|failed|skipped, score?, sentiment?, tags?, summary?, raw?, model?, error?}` (worker-side judge result, R-V2-5; posted after the summary), `POST /internal/v1/sessions/{id}/metrics {latency, usage_lines}`, **`POST /internal/v1/sessions/{id}/recording/start`** (worker → api after `ctx.connect()`; api starts `RoomCompositeEgress` with the connection's client and returns `{egress_id}`), `POST /internal/v1/sessions/{id}/recording {egress_id, status, duration_s?}` (worker-side finalisation when no public webhook URL). Router ownership: `sessions/start`, `sessions/*`, `worker-env` live in `routers/internal.py` (V2-03); `workers/register`, `workers/{key}/heartbeat`, `fleet/desired` live in `routers/fleet_internal.py` (V2-04). Events and summary routes unchanged; new event types: `block_update`, `form_submitted`, `handoff` (flow node change), `dtmf`, `transfer`, `recording`.
 
 Public API = the same `/v1` routes with an API key; `/v1/openapi-public.json` filters to routes tagged `public` (Dograh's `x-sdk-method` idea).
 
@@ -199,8 +201,10 @@ class ProviderSpec(BaseModel):
 
 ```python
 PipelineMode = Literal["cascaded","realtime","half_cascade"]
-ProviderSlot = Literal["realtime","stt","llm","tts","avatar","image_gen","workflow_llm",
+ProviderSlot = Literal["realtime","stt","llm","tts","avatar","image_gen","workflow_llm","qa_llm",
                        "vad","turn_detection","noise_cancellation"]
+# qa_llm (R-V2-6): resolved by the api from qa.model → workflow_llm → llm → Inference LLM default, present in
+# ResolvedAgentConfig.resolved only when qa.enabled. The worker never resolves qa.model itself.
 
 class AvatarOptions(BaseModel):
     participant_name: str = "Avatar"
@@ -286,6 +290,7 @@ class ResolvedAgentConfig(BaseModel):              # v1 fields +
 - `UiChannel` protocol (packs.base) += `set_block(block_id, state: dict)`, `patch_block(block_id, ops)`, `request_form(block_id, schema, prefill=None, timeout_s=120) -> dict | None`, `cite(block_id, hits)`.
 - Built-in tools (worker): `update_block(block_id, patch: dict)`, `show_document(asset_id|url, page?, note?)`, `table_append(block_id, row)`, `request_form(block_id, fields: list[{name,label,type,required}]) -> values` (blocking with timeout; realtime mode returns `None` and the result arrives as an urgent background result), `cite_sources` (implicit).
 - Pack manifest += `default_panel: PanelLayout | None`, `blocks: list[BlockSpec]` (blocks a custom panel expects).
+- **Layout delivery (R-V2-7)**: the block list is configuration, not state. `AgentPublicOut.panel: PanelLayout` and therefore `ConnectResponse.agent.panel` carry the effective layout (agent `config.panel` → pack `default_panel` → `{panel_id: "composite", blocks: []}`), resolved by the api with the same function the resolve endpoint uses (`lkap_api.panels.effective_layout(agent, pack)`) at the session's pinned `config_version`. `uiPanelId` stays as the mirror of `panel.panel_id`. `UiState` carries block **state** only; snapshots never carry the layout. `BlockSpec.config` is public by definition: it is validated against the block type's config schema (`contracts/blocks.py`), which has no secret-typed fields, and `custom` block config is pack-declared and public.
 - Web `PanelDefinition` += `handleRequest?(req: UiRequest) => Promise<UiRequestResult>` and `blocksAware?: boolean`. New registry entry `composite`.
 
 ### 4.5 FlowSpec (`flow.py`, new)
@@ -352,6 +357,7 @@ class FleetDesired(BaseModel):            # contracts/fleet.py
     connection_id: str
     agent_name: str
     desired_replicas: int                 # 0 = stopped
+    restart_generation: int = 0           # bumped by fleet {action: restart}; part of desired_hash (R-V2-4)
     desired_hash: str
     image: Literal["slim","full"]
     packs: list[str]

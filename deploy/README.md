@@ -201,3 +201,70 @@ preview tool would try (and fail) to load a browser tab against a port
 nothing listens on. Run it as a plain background command instead (this is
 exactly what `scripts/dev.sh` does; the launch entry exists so its command
 + env are recorded in one place, matching the other two).
+
+---
+
+## 4. v2: images, dev/prod compose, supervisor (V2-09)
+
+Additive to sections 1–3 above, which still work unmodified for a v1-only
+checkout. See `docs/v2/CONTRACTS-V2.md` §7 (images/manifest), §5
+(supervisor), §6 (env vars) and `docs/v2/PLAN-V2.md` §8 R-V2-1 (why the four
+slim-shipped VAD/turn-detector ids don't come from `worker_image` alone) for
+the binding design; this section is operational, not a second spec.
+
+### Worker images (`slim` / `full`)
+
+```bash
+scripts/vendor_agent_deps.sh   # as in §2 above — still required first, every time
+contracts/.venv/bin/python scripts/gen_plugin_requirements.py   # regenerate agent/requirements/*.txt after any registry change; --check for CI
+
+docker build --build-arg LKAP_IMAGE_FLAVOR=slim -f agent/Dockerfile -t lkap-agent:slim agent
+docker build --build-arg LKAP_IMAGE_FLAVOR=full -f agent/Dockerfile -t lkap-agent:full agent   # several GB; several native wheels (bithuman, Krisp, Azure Speech, awscrt) may need fixing — the import check names exactly which
+```
+
+Either build writes `/app/installed_providers.json` (the import-check
+manifest) into the image; inspect it with
+`docker run --rm --entrypoint cat lkap-agent:slim cat installed_providers.json`
+(actually `docker create` + `docker cp`, since there's no shell entrypoint —
+see `.github/workflows/docker.yml`'s own extraction step for the exact
+commands). A non-empty `"failed"` array fails the build — CONTRACTS-V2 §7's
+"the build is the gate", not a post-hoc report.
+
+### supervisor image
+
+```bash
+docker build -f supervisor/Dockerfile -t lkap-supervisor .   # from livekit_agent_platform/ — root context, like api/Dockerfile
+```
+
+### dev / prod compose
+
+```bash
+# dev: sqlite + local storage by default; add postgres/redis/minio profiles as needed
+cp deploy/api.env.example deploy/api.env
+cp deploy/web.env.example deploy/web.env
+cp deploy/supervisor.env.example deploy/supervisor.env
+docker compose -f deploy/docker-compose.dev.yml up --build
+docker compose -f deploy/docker-compose.dev.yml run --rm api alembic upgrade head
+
+# prod: api x2 behind Caddy, web, supervisor, postgres, redis, minio
+cp deploy/prod.env.example deploy/prod.env   # LKAP_PUBLIC_DOMAIN, LKAP_POSTGRES_PASSWORD, LKAP_STORAGE_*, LKAP_DOCKER_GID
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env up -d --build
+```
+
+Read the header comments in `deploy/docker-compose.dev.yml` and
+`deploy/docker-compose.prod.yml` before running either — in particular the
+prod file's LanceDB/SQLite single-writer caveat under `--scale api=2`, and
+the `--forwarded-allow-ips` note on why `api`/`jobs` publish no host ports in
+prod (Caddy is the only ingress; see `api/Dockerfile`'s own comment on the
+same topic). `deploy/Caddyfile` is the reverse-proxy config; its own header
+comment covers the untested multi-replica load-balancing caveat.
+
+### Backups
+
+```bash
+LKAP_BACKUP_S3_BUCKET=lkap-backups scripts/backup.sh   # pg_dump (if Postgres is configured) + LKAP_DATA_DIR tar, both to S3
+```
+Needs the `aws` CLI on whatever host runs it (not installed by any image
+here) and `pg_dump` for the Postgres leg (skipped with a warning, not a
+failure, on a sqlite-only deployment). See the script's own header for every
+env var it reads and the restore commands it prints.

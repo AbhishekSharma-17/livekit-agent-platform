@@ -5,22 +5,36 @@ Per docs/ARCHITECTURE.md §7.4: ``.md``/``.txt``/``.pdf`` -> chunks (800 chars,
 public function here takes an already-open :class:`~sqlalchemy.ext.asyncio.AsyncSession`
 and never commits it — the caller (a request handler or a background task
 owning its own session) controls the transaction boundary.
+
+PLAN-V2 V2-08 moves ingestion "onto jobs": the router
+(:mod:`lkap_api.routers.knowledge`) uploads the raw bytes to the platform
+:mod:`~lkap_api.storage` backend first (so the job payload stays JSON-only —
+required for the ``arq`` backend, whose queue is Redis, not an in-process
+call) and enqueues :data:`~lkap_api.jobs.kinds.KB_INGEST` with the storage key
+instead of calling straight into :func:`ingest_into_session`. The `inline`
+backend still runs it via the caller's ``BackgroundTasks`` when given one, so
+the existing "ingestion is done by the time ``POST .../documents`` returns
+under ``ASGITransport``" test behaviour is unchanged.
 """
 
 from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase
-from lkap_api.db.session import Database
-from lkap_api.kb.embed import Embedder
-from lkap_api.kb.store import VectorRecord, VectorStore
+from lkap_api.jobs.context import JobContext
+from lkap_api.jobs.kinds import KB_INGEST
+from lkap_api.jobs.registry import job
+from lkap_api.kb.embed import Embedder, resolve_embedder
+from lkap_api.kb.store import VectorRecord, VectorStore, get_lancedb_store
 from lkap_api.logging import get_logger
+from lkap_api.storage.resolve import default_storage
 
 log = get_logger(__name__)
 
@@ -119,7 +133,14 @@ async def _finish_document(
     document.chunk_count = chunk_count
     document.error = error
     await session.flush()
-    kb = await session.get(KnowledgeBase, kb_id)
+    # Ingestion runs as a job that carries only the ids (deliberately cross-workspace).
+    kb = (
+        await session.execute(
+            select(KnowledgeBase)
+            .where(KnowledgeBase.id == kb_id)
+            .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+        )
+    ).scalar_one_or_none()
     if kb is not None:
         total = (
             await session.execute(
@@ -205,24 +226,54 @@ async def ingest_into_session(
     return outcome
 
 
-async def run_ingestion_task(
-    database: Database,
-    *,
-    store: VectorStore,
-    embedder: Embedder,
-    kb_id: str,
-    document_id: str,
-    filename: str,
-    mime: str,
-    data: bytes,
-) -> None:
-    """Ingest one document in its own session (the ``BackgroundTasks`` entry point).
+def upload_storage_key(kb_id: str, document_id: str, filename: str) -> str:
+    """Return the storage key a KB source upload is written to.
 
-    The request handler that schedules this must have already committed the
-    ``pending`` document row (a separate connection needs it to exist before
-    the chunk rows' foreign key can be inserted).
+    Shared by the router (writes the object) and :func:`run_ingestion_job`
+    (reads it back), so the layout only needs to change in one place.
     """
-    async with database.session() as session:
+    return f"kb/{kb_id}/{document_id}_{filename}"
+
+
+@job(KB_INGEST)
+async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
+    """Job handler: fetch the uploaded bytes from storage, then ingest them.
+
+    Args:
+        ctx: The job context (``database``, ``settings``, ``vault``).
+        payload: ``{"kb_id", "document_id", "storage_key", "filename", "mime"}``,
+            JSON-serialisable so this also works through the ``arq`` backend.
+
+    The request handler that enqueued this must have already committed the
+    ``pending`` document row (a separate connection needs it to exist before
+    the chunk rows' foreign key can be inserted) and the uploaded bytes to
+    storage (this handler cannot read a request body).
+    """
+    kb_id = str(payload["kb_id"])
+    document_id = str(payload["document_id"])
+    storage_key = str(payload["storage_key"])
+    filename = str(payload["filename"])
+    mime = str(payload["mime"])
+
+    storage = default_storage(ctx.settings)
+    try:
+        data = await storage.get(storage_key)
+    except FileNotFoundError:
+        log.warning("kb_ingest_upload_missing", kb_id=kb_id, document_id=document_id, storage_key=storage_key)
+        async with ctx.database.session() as session:
+            await _finish_document(
+                session,
+                document_id=document_id,
+                kb_id=kb_id,
+                status="failed",
+                chunk_count=0,
+                error="uploaded file missing from storage",
+            )
+        return
+
+    async with ctx.database.session() as session:
+        store = get_lancedb_store(ctx.settings.data_dir)
+        embedder = await resolve_embedder(ctx.settings, session, ctx.vault)
         await ingest_into_session(
             session,
             store=store,

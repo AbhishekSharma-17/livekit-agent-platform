@@ -1,0 +1,202 @@
+# Image builds (PLAN-V2 §V2-09 scope: "docker.yml (build api/web/agent
+# slim/supervisor on PR; `full` nightly with the import check)").
+#
+# Every job here builds with `push: false` — no registry secrets are
+# required or used. The point of this workflow is "does the Dockerfile still
+# build", not distribution; wire up a registry push (see the commented
+# `# push:` lines) once the user decides where images should live.
+name: docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "api/**"
+      - "web/**"
+      - "agent/**"
+      - "supervisor/**"
+      - "contracts/**"
+      - "packs/**"
+      - ".github/workflows/docker.yml"
+  schedule:
+    # Nightly full-image build (UTC). CONTRACTS-V2 §7 / PLAN-V2 §8 risk
+    # table: the full image is several GB and its import check is the
+    # acceptance gate for ~90 provider packages — deliberately not run on
+    # every PR.
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  build-simple-images:
+    # api/web/supervisor: no repo-specific prep beyond checkout (contracts/
+    # and packs/ are already inside the root build context these three use).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: api/Dockerfile
+            context: .
+          - name: web
+            dockerfile: web/Dockerfile
+            context: web
+          - name: supervisor
+            dockerfile: supervisor/Dockerfile
+            context: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: lkap-${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          build-args: |
+            ${{ matrix.name == 'web' && 'NEXT_PUBLIC_API_BASE_URL=http://localhost:8080' || '' }}
+
+  build-agent-slim:
+    # PR gate: only the slim flavor (the full flavor is nightly-only, below).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Vendor lkap-contracts / lkap-packs wheels
+        run: scripts/vendor_agent_deps.sh
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build agent (slim)
+        uses: docker/build-push-action@v6
+        with:
+          context: agent
+          file: agent/Dockerfile
+          push: false
+          load: true
+          tags: lkap-agent:slim-ci
+          build-args: LKAP_IMAGE_FLAVOR=slim
+          cache-from: type=gha,scope=agent-slim
+          cache-to: type=gha,mode=max,scope=agent-slim
+
+      # Acceptance (PLAN-V2 §V2-09): "installed_providers.json lists exactly
+      # the slim set" — extract the manifest the build produced and diff its
+      # provider_ids against `selected_ids("slim")`, computed straight from
+      # the registry on the runner (a *plain* import: this only needs
+      # lkap-contracts, never the ~70 plugin packages the image installs, so
+      # it is safe to run outside the image).
+      - name: Verify installed_providers.json matches the registry's slim set
+        run: |
+          set -euo pipefail
+          container_id="$(docker create lkap-agent:slim-ci)"
+          docker cp "${container_id}:/app/installed_providers.json" ./installed_providers.slim.json
+          docker rm "${container_id}" >/dev/null
+          cat installed_providers.slim.json
+
+          contracts/.venv/bin/python - <<'PY'
+          import json
+          import sys
+
+          sys.path.insert(0, "scripts")
+          sys.path.insert(0, "contracts/src")
+          import check_installed_providers as cip
+
+          manifest = json.load(open("installed_providers.slim.json"))
+          if manifest["failed"]:
+              print("FAIL: import failures baked into the slim image:", manifest["failed"], file=sys.stderr)
+              sys.exit(1)
+
+          expected = sorted(cip.selected_ids("slim"))
+          actual = sorted(manifest["provider_ids"])
+          if actual != expected:
+              print(f"FAIL: slim installed_providers.json provider_ids mismatch\n  expected={expected}\n  actual={actual}", file=sys.stderr)
+              sys.exit(1)
+          print(f"OK: {len(actual)} provider ids match the registry's slim set")
+          PY
+
+  build-agent-full:
+    # Nightly / manual only — several GB, ~90 provider packages, native
+    # wheels (bithuman, Krisp, Azure Speech, awscrt) that may not resolve on
+    # this runner (PLAN-V2 §7 risk table); a failure here is informative, not
+    # a merge blocker, since PRs never depend on this job.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space for the full build
+        # The full image's ~90 plugin packages (several GB of wheels/native
+        # libs) do not reliably fit in a stock GitHub-hosted runner's free
+        # space alongside the pre-installed Android/.NET/GHC toolchains.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          docker system prune -af || true
+          df -h
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Vendor lkap-contracts / lkap-packs wheels
+        run: scripts/vendor_agent_deps.sh
+
+      - uses: docker/setup-buildx-action@v3
+
+      # linux/amd64 only: CONTRACTS-V2 §7 also asks for linux/arm64, but
+      # emulating a multi-GB native-wheel build under QEMU on a free runner
+      # is exactly the wrong place to discover an arm64-only failure — do
+      # that on real arm64 hardware (e.g. a self-hosted runner or Cloud
+      # Build) if/when the user needs an arm64 image.
+      - name: Build agent (full)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: agent
+          file: agent/Dockerfile
+          push: false
+          load: true
+          tags: lkap-agent:full-ci
+          platforms: linux/amd64
+          build-args: LKAP_IMAGE_FLAVOR=full
+          cache-from: type=gha,scope=agent-full
+          cache-to: type=gha,mode=max,scope=agent-full
+
+      - name: Extract installed_providers.json
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          container_id="$(docker create lkap-agent:full-ci)"
+          docker cp "${container_id}:/app/installed_providers.json" ./installed_providers.full.json
+          docker rm "${container_id}" >/dev/null
+          python3 -c "
+          import json
+          m = json.load(open('installed_providers.full.json'))
+          print(f\"flavor={m['flavor']} sdk={m['sdk_version']} ok={len(m['provider_ids'])} skipped={len(m['skipped'])} failed={len(m['failed'])}\")
+          for f in m['failed']:
+              print('FAILED:', f['id'], f['python_class'], f['error'])
+          "
+
+      - name: Upload installed_providers.json (full)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-providers-full
+          path: installed_providers.full.json
+          if-no-files-found: warn

@@ -1,2 +1,8 @@
 api.env
 web.env
+prod.env
+supervisor.env
+postgres.env
+agent.env
+*.env
+!*.env.example

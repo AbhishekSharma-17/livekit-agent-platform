@@ -13,6 +13,21 @@
 # python3.12-bookworm-slim"; docs/ARCHITECTURE.md §14: "api needs a
 # persistent volume for LKAP_DATA_DIR", "uvicorn --workers 1" (LanceDB is a
 # single-writer store).
+#
+# F-21 (docs/REVIEW-FINAL.md): the `ghcr.io/astral-sh/uv:0.12.15` pin below
+# was unverifiable without Docker; confirmed live by V2-09 (2026-09-23) —
+# that tag exists as a multi-arch image index on ghcr.io. Still unverified:
+# an actual `docker build` of this file (no Docker daemon on this host either).
+#
+# In production, this process runs behind a reverse proxy (Caddy —
+# deploy/docker-compose.prod.yml) that terminates TLS and forwards
+# `X-Forwarded-For`/`-Proto`. The prod compose file's `command:` override adds
+# `--proxy-headers --forwarded-allow-ips=<proxy-network-cidr>` so
+# `Request.client.host` (used for per-IP rate limiting, `auth/deps.py`)
+# reflects the real client instead of the proxy — not baked into this image's
+# default CMD because the dev compose file talks to this container directly
+# (no proxy in front) and a wrong `--forwarded-allow-ips` would let a
+# non-proxy caller spoof its own IP. See deploy/docker-compose.prod.yml.
 
 # --- builder -----------------------------------------------------------
 FROM python:3.12-bookworm-slim AS builder

@@ -2,13 +2,15 @@
 
 CONTRACTS-V2 §3.1 requires that "tests include a guard that fails any query on a
 tenant table without a ``workspace_id`` predicate". The listener is installed on
-a :class:`~sqlalchemy.ext.asyncio.AsyncSession` factory and inspects each ORM
-``select()`` before it is executed.
+every ORM :class:`~sqlalchemy.orm.Session` and inspects each ``select()`` before
+it is executed.
 
-It ships **opt-in** (the ``tenant_guard`` fixture) rather than autouse, because
-every v1 router still queries unscoped: V2-02 adds the ``WorkspaceContext``
-dependency and flips the guard on for the whole suite at that point. Until then
-the guard is what V2-02's own tests assert against.
+``api/tests/conftest.py`` turns it on for the whole suite (autouse, V2-02), with
+an ``exempt`` callback that skips statements issued by test code itself (a
+test's own assertion reads are not application queries). Deliberate
+cross-workspace reads in the application — authentication lookups, worker
+``/internal`` routes, sweeps, jobs, the key-rotation CLI — carry
+``.execution_options(lkap_cross_workspace=True)``.
 
 Implementation note: SQLAlchemy 2's hook for this is ``do_orm_execute`` on the
 session, not the legacy ``before_compile`` on ``Query``, which 2.0-style
@@ -17,7 +19,7 @@ session, not the legacy ``before_compile`` on ``Query``, which 2.0-style
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -46,6 +48,12 @@ TENANT_TABLES: frozenset[str] = frozenset(
         "workspace_providers",
     }
 )
+
+
+#: Execution option that marks a deliberate cross-workspace read (authentication
+#: lookups by token hash, the session sweep, worker-facing internal routes).
+#: Usage: ``select(ApiKey).where(...).execution_options(lkap_cross_workspace=True)``.
+CROSS_WORKSPACE_OPTION = "lkap_cross_workspace"
 
 
 class UnscopedTenantQuery(AssertionError):
@@ -90,15 +98,31 @@ def check_statement(statement: Select[Any]) -> None:
 
 
 def _listener(state: ORMExecuteState) -> None:
-    if state.is_select and isinstance(state.statement, Select):
-        check_statement(state.statement)
+    if not state.is_select or not isinstance(state.statement, Select):
+        return
+    if state.execution_options.get(CROSS_WORKSPACE_OPTION) or state.statement.get_execution_options().get(
+        CROSS_WORKSPACE_OPTION
+    ):
+        return
+    check_statement(state.statement)
 
 
 @contextmanager
-def tenant_scope_guard() -> Iterator[None]:
-    """Fail every unscoped tenant-table ORM query for the duration of the block."""
-    event.listen(Session, "do_orm_execute", _listener)
+def tenant_scope_guard(exempt: Callable[[ORMExecuteState], bool] | None = None) -> Iterator[None]:
+    """Fail every unscoped tenant-table ORM query for the duration of the block.
+
+    Args:
+        exempt: Optional predicate; statements it returns ``True`` for are not
+            checked (the test suite exempts reads issued by test code).
+    """
+
+    def listener(state: ORMExecuteState) -> None:
+        if exempt is not None and exempt(state):
+            return
+        _listener(state)
+
+    event.listen(Session, "do_orm_execute", listener)
     try:
         yield
     finally:
-        event.remove(Session, "do_orm_execute", _listener)
+        event.remove(Session, "do_orm_execute", listener)

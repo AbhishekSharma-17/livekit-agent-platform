@@ -22,9 +22,33 @@
 #
 # Same two steps before `lk agent create --secrets-file secrets.env` / `lk
 # agent deploy` from `agent/` — see deploy/README.md §2.
+#
+# --- image flavors (CONTRACTS-V2 §7, D-V2-8) --------------------------------
+#
+# `LKAP_IMAGE_FLAVOR` (`slim` default, or `full`) selects
+# `requirements/{flavor}.txt` — the provider-plugin packages CONTRACTS-V2 §7
+# assigns to that flavor, generated from the registry by
+# `scripts/gen_plugin_requirements.py` (run it after any registry change; CI
+# checks the two are in sync via `--check`). They are layered on top of
+# `uv sync --frozen`'s own v1 baseline via a plain `uv pip install`, one
+# package at a time so a single failing wheel (e.g. an out-of-tree native
+# package) is reported without aborting before every other package is tried
+# — CONTRACTS-V2 §7 / PLAN-V2 §8 risk table: "the build gate is the import
+# check; failures ... must either be fixed or the entry flipped to deferred".
+# `requirements/check_installed_providers.py` is a build-context-local mirror
+# of `scripts/check_installed_providers.py` (this directory has no visibility
+# outside itself — see the build-context note above); it imports every
+# selected provider's `python_class` for real and writes
+# `/app/installed_providers.json`, which the worker reads at start and sends
+# in `POST /internal/v1/workers/register` (CONTRACTS-V2 §5).
+#
+#   docker build --build-arg LKAP_IMAGE_FLAVOR=slim -f agent/Dockerfile -t lkap-agent:slim agent
+#   docker build --build-arg LKAP_IMAGE_FLAVOR=full -f agent/Dockerfile -t lkap-agent:full agent
 
 # --- builder ---------------------------------------------------------------
 FROM python:3.12-bookworm-slim AS builder
+
+ARG LKAP_IMAGE_FLAVOR=slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.15 /uv /uvx /usr/local/bin/
 
@@ -39,8 +63,11 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src/ src/
 COPY vendor/ vendor/
+COPY requirements/ requirements/
 RUN test -n "$(ls -A vendor/*.whl 2>/dev/null)" || \
     { echo "agent/vendor/*.whl missing — run scripts/vendor_agent_deps.sh first" >&2; exit 1; }
+RUN test -f "requirements/${LKAP_IMAGE_FLAVOR}.txt" || \
+    { echo "agent/requirements/${LKAP_IMAGE_FLAVOR}.txt missing — run scripts/gen_plugin_requirements.py first" >&2; exit 1; }
 
 # `--no-install-package`: lkap-contracts/lkap-packs are path deps
 # (`../contracts`, `../packs`) this context doesn't have; skip them here and
@@ -63,14 +90,40 @@ RUN uv pip install --python /app/.venv/bin/python --no-deps vendor/*.whl
 # `../packs`, which this build context doesn't have (verified empirically).
 RUN uv run --no-sync python -c "import lkap_agent, lkap_contracts, packs"
 
+# Install this flavor's provider-plugin packages one at a time (not a single
+# `uv pip install -r`, which resolves-then-aborts on the first bad
+# requirement and would hide every other package's status): every attempt is
+# logged, and any failure fails the build only after every package has been
+# tried, per CONTRACTS-V2 §7's "any failure is listed in the build log".
+RUN set -eu; \
+    fail=0; \
+    while IFS= read -r requirement; do \
+      case "${requirement}" in ''|'#'*) continue ;; esac; \
+      echo "install: ${requirement}"; \
+      if ! uv pip install --python /app/.venv/bin/python "${requirement}"; then \
+        echo "FAILED: ${requirement}" >&2; \
+        fail=1; \
+      fi; \
+    done < "requirements/${LKAP_IMAGE_FLAVOR}.txt"; \
+    exit "${fail}"
+
+# The build-time import gate (D-V2-8): import every selected provider's
+# `python_class` for real and write the manifest the worker reports at start.
+# uv/pip resolving a package above is not the acceptance criterion; this is.
+RUN uv run --no-sync python requirements/check_installed_providers.py \
+    --flavor "${LKAP_IMAGE_FLAVOR}" --out /app/installed_providers.json
+
 # Silero VAD weights (and any other plugin download_files step) are written
 # straight into the installed packages under .venv/ — running this after
-# `uv sync` populates site-packages, so the files exist in the layer this
-# stage hands to the runtime stage below.
+# `uv sync` *and* the flavor's extra installs (turn-detector's model is a
+# `download_files` step too) populates site-packages, so the files exist in
+# the layer this stage hands to the runtime stage below.
 RUN uv run --module livekit.agents download-files
 
 # --- runtime -----------------------------------------------------------------
 FROM python:3.12-bookworm-slim AS runtime
+
+ARG LKAP_IMAGE_FLAVOR=slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.15 /uv /uvx /usr/local/bin/
 
@@ -81,14 +134,19 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     UV_NO_SYNC=1 \
-    LKAP_LOG_JSON=true
+    LKAP_LOG_JSON=true \
+    LKAP_IMAGE_FLAVOR=${LKAP_IMAGE_FLAVOR}
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/installed_providers.json /app/installed_providers.json
 COPY pyproject.toml uv.lock ./
 COPY src/ src/
 COPY livekit.toml ./
 
+# LKAP_IMAGE_FLAVOR is also baked in as a runtime env var (not just a build
+# ARG) so the worker process can log/report which flavor it is without
+# re-deriving it from installed_providers.json.
 USER lkap
 
 # No exposed port — this is a worker, not a server (docs/CONTRACTS.md §12).

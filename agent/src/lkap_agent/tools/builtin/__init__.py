@@ -21,10 +21,15 @@ from .escalate_to_human import build_escalate_to_human_tool
 from .http_request import build_http_request_tool
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
+from .request_form import build_request_form_tool
 from .search_knowledge import build_search_knowledge_tool
 from .set_status import build_set_status_tool
+from .show_document import build_show_document_tool
+from .table_append import build_table_append_tool
+from .update_block import UPDATABLE_BLOCK_TYPES, build_update_block_tool
 
 __all__ = [
+    "BLOCK_TOOL_NAMES",
     "BUILTIN_TOOL_NAMES",
     "build_builtin_tools",
     "build_current_time_tool",
@@ -34,8 +39,12 @@ __all__ = [
     "build_http_request_tool",
     "build_pin_frame_tool",
     "build_push_note_tool",
+    "build_request_form_tool",
     "build_search_knowledge_tool",
     "build_set_status_tool",
+    "build_show_document_tool",
+    "build_table_append_tool",
+    "build_update_block_tool",
 ]
 
 #: Every built-in tool name, in the order `build_builtin_tools` considers
@@ -51,6 +60,16 @@ BUILTIN_TOOL_NAMES: tuple[str, ...] = (
     "set_status",
     "escalate_to_human",
     "current_time",
+)
+
+#: Panel-block tools (CONTRACTS-V2 §4.4, V2-10). Kept out of
+#: `BUILTIN_TOOL_NAMES` because each is registered only when the agent's
+#: panel has a block it can write; `builtin_disabled` still switches them off.
+BLOCK_TOOL_NAMES: tuple[str, ...] = (
+    "update_block",
+    "show_document",
+    "table_append",
+    "request_form",
 )
 
 
@@ -80,7 +99,11 @@ def build_builtin_tools(
         The enabled tools. `describe_current_frame` and `pin_frame` are
         omitted unless the agent has `capabilities.camera` or
         `capabilities.screen_share` (docs/ARCHITECTURE.md §8) — they have
-        nothing to encode otherwise.
+        nothing to encode otherwise. The `BLOCK_TOOL_NAMES` tools are
+        registered only when `AgentConfig.panel.blocks` has a block they
+        write: `update_block` for any non-envelope block, `show_document` /
+        `table_append` / `request_form` for a `document` / `table` / `form`
+        block.
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -107,5 +130,15 @@ def build_builtin_tools(
         tools.append(build_escalate_to_human_tool(ctx))
     if _want("current_time"):
         tools.append(build_current_time_tool(ctx))
+
+    block_types = {spec.type for spec in ctx.config.panel.blocks}
+    if block_types & UPDATABLE_BLOCK_TYPES and _want("update_block"):
+        tools.append(build_update_block_tool(ctx))
+    if "document" in block_types and _want("show_document"):
+        tools.append(build_show_document_tool(ctx))
+    if "table" in block_types and _want("table_append"):
+        tools.append(build_table_append_tool(ctx))
+    if "form" in block_types and _want("request_form"):
+        tools.append(build_request_form_tool(ctx))
 
     return tools

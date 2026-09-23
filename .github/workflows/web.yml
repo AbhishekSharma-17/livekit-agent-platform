@@ -1,0 +1,58 @@
+# Web gate (PLAN-V2 §V2-09 scope): lint, typecheck, test, build.
+#
+# Known: at the time this workflow was written, `pnpm typecheck` reports 3
+# errors from docs/v2/_asks.md asks #5/#6 (`web/src/components/console/agents/defaults.ts`
+# missing `first_speaker`/`dtmf` defaults, `schemas.ts` missing the
+# `"half_cascade"` mode) — open web-package asks, not something this
+# workflow should paper over by skipping typecheck. This job runs the real
+# command and reports the real result; it goes green once WP-2/V2-13 apply
+# those asks.
+name: web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/web.yml"
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        working-directory: web
+        run: pnpm lint
+
+      - name: Type check
+        working-directory: web
+        run: pnpm typecheck
+
+      - name: Test
+        working-directory: web
+        run: pnpm test
+
+      - name: Build
+        working-directory: web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        run: pnpm build

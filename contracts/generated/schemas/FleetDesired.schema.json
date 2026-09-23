@@ -43,6 +43,11 @@
       },
       "title": "Packs",
       "type": "array"
+    },
+    "restart_generation": {
+      "default": 0,
+      "title": "Restart Generation",
+      "type": "integer"
     }
   },
   "required": [

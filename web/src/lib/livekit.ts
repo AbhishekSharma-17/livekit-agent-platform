@@ -33,6 +33,7 @@ import type {
   ConnectRequest,
   ConnectResponse,
 } from "@/contracts/lkap-contracts";
+import { storedPanelLayout } from "@/panels/composite/layout";
 
 /* -------------------------------------------------------------------------- */
 /* Topics and RPC methods (CONTRACTS §10 `lkap_contracts.ui_protocol.TOPICS`)  */
@@ -158,6 +159,10 @@ export async function fetchConnect(
  * Maps the admin-only `AgentOut` down to the browser-safe `AgentPublicOut`
  * shape, for the test-mode pre-call card (which loads the agent via the
  * admin proxy server-side and must not leak the rest of `config`).
+ *
+ * `panel` is the stored `config.panel` (public by construction, R-V2-7) so
+ * the panel skeleton renders before the call; once connected, the session
+ * uses `ConnectResponse.agent.panel` — the api's effective layout — instead.
  */
 export function toPublicAgent(agent: AgentOut): AgentPublicOut {
   return {
@@ -168,6 +173,7 @@ export function toPublicAgent(agent: AgentOut): AgentPublicOut {
     ui_panel_id: agent.ui_panel_id,
     capabilities: agent.config.capabilities ?? {},
     pipeline_mode: agent.config.pipeline.mode ?? "cascaded",
+    panel: storedPanelLayout(agent.config.panel, agent.ui_panel_id),
   };
 }
 

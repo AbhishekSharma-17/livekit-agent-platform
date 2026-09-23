@@ -9,7 +9,13 @@
   per user turn before delegating to the pack hook,
 * speaks the greeting on enter, choosing `say()` or `generate_reply()` by what
   the configured pipeline can actually do (ARCHITECTURE §15.9),
-* cancels the model's tool reply for tools a pack marked `silent_reply`.
+* cancels the model's tool reply for tools a pack marked `silent_reply`
+  (and for the built-in `request_form` on realtime models, D-W2-9i),
+* seeds the v2 panel blocks (`UiState.blocks`) from `AgentConfig.panel` and
+  the pack's `default_panel`, and binds the block callbacks on the UI channel:
+  `block_action` → the pack's optional `on_block_action`, a form submitted
+  after its tool stopped waiting → a reply, and `block_update` /
+  `form_submitted` session events (CONTRACTS-V2 §4.4).
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -19,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal
@@ -35,6 +42,7 @@ from livekit.agents import (
 )
 from livekit.agents import llm as lk_llm
 from lkap_contracts.agent_config import AgentConfig, PipelineMode
+from lkap_contracts.api_models import KbHit
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import vision_support
 from packs.base import (
@@ -48,6 +56,7 @@ from packs.base import (
 )
 
 from lkap_agent.logging import get_logger
+from lkap_agent.ui.blocks import block_ids_of_type, initial_block_states, resolve_block_specs
 from lkap_agent.vision import encode_jpeg_data_url
 
 __all__ = [
@@ -78,7 +87,17 @@ PIPELINE_NOTES: Final[dict[PipelineMode, str]] = {
         "background and return nothing; stay silent after those and continue the "
         "conversation naturally. Results will appear in your context when ready."
     ),
+    "half_cascade": (
+        "Pipeline notes: you hear the user directly and your text replies are spoken "
+        "by a separate voice, so write the way you would talk: no markdown, lists or "
+        "symbols. Some tools finish in the background and return nothing; stay silent "
+        "after those and continue the conversation naturally. Results will appear in "
+        "your context when ready."
+    ),
 }
+
+#: Pipeline modes whose conversational model is a `RealtimeModel`.
+_REALTIME_MODEL_MODES: Final[frozenset[PipelineMode]] = frozenset({"realtime", "half_cascade"})
 
 #: Longest side of an injected frame (DECISIONS-W2 D-W2-8 R3).
 _VISION_MAX_PX: Final[int] = 512
@@ -88,6 +107,10 @@ _KB_INJECT_TIMEOUT_S: Final[float] = 3.0
 
 #: How the retrieved knowledge is framed for the model.
 _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
+
+#: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form`
+#: returns `None` and its result arrives later as a background result.
+_REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset({"request_form"})
 
 
 def compose_instructions(
@@ -177,6 +200,8 @@ class PlatformAgent(Agent):
         has_tts: bool,
         vision_max_frame_age_s: float = 8.0,
         record_event: Callable[[str, dict[str, Any]], None] | None = None,
+        instructions: str | None = None,
+        agent_options: dict[str, Any] | None = None,
     ) -> None:
         """Create the agent for one session.
 
@@ -190,6 +215,12 @@ class PlatformAgent(Agent):
             record_event: Records a session event (the worker passes
                 `SessionObserver.record`); used for the one-off `info` event
                 when per-turn vision is skipped on a text-only model.
+            instructions: Hook point for flow nodes (V2-15): the fully composed
+                system prompt, used instead of composing one from
+                `AgentConfig.instructions`.
+            agent_options: Hook point for flow nodes (V2-15): extra
+                `livekit.agents.Agent` constructor kwargs (`id`, `chat_ctx`,
+                `llm`, `tts`, `turn_handling`).
         """
         self._ctx = ctx
         self._pack = pack
@@ -202,18 +233,93 @@ class PlatformAgent(Agent):
         self._hook_tasks: set[asyncio.Task[None]] = set()
         # D-W2-10: True/False for a registry model, None for a free-text id or no LLM slot.
         self._model_vision = model_vision_support(ctx.config)
-        self._silent_reply_tools = frozenset(meta.name for meta in pack.tool_meta() if meta.silent_reply)
+        silent = {meta.name for meta in pack.tool_meta() if meta.silent_reply}
+        if ctx.pipeline_mode in _REALTIME_MODEL_MODES:
+            silent |= _REALTIME_SILENT_BUILTINS
+        self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
-        instructions = compose_instructions(
-            ctx.config.instructions,
-            mode=ctx.pipeline_mode,
-            manifest=pack.manifest,
-        )
+        if instructions is None:
+            instructions = compose_instructions(
+                ctx.config.instructions,
+                mode=ctx.pipeline_mode,
+                manifest=pack.manifest,
+            )
         super().__init__(
             instructions=instructions,
             tools=tools or [],
             mcp_servers=mcp_servers,
+            **(agent_options or {}),
         )
+        self._init_blocks()
+
+    # ----------------------------------------------------------------- blocks
+
+    def _init_blocks(self) -> None:
+        """Seed `UiState.blocks` and bind the channel's block callbacks.
+
+        Runs in the constructor, i.e. before `on_enter`, so both the pack's
+        `on_session_start` and the seq-1 platform snapshot see the blocks
+        (D-W2-9a keeps its order: nothing is sent here). A channel without
+        v2 support (the worker's no-op channel, v1 test doubles) just gets
+        `state.blocks` assigned.
+        """
+        specs = resolve_block_specs(self._ctx.config.panel, self._pack.manifest)
+        ui = self._ctx.ui
+        init_blocks = getattr(ui, "init_blocks", None)
+        try:
+            if callable(init_blocks):
+                init_blocks(specs)
+            elif not ui.state.blocks:
+                ui.state.blocks = initial_block_states(specs)
+        except Exception:
+            logger.warning("panel blocks could not be initialised", exc_info=True)
+        bind = getattr(ui, "bind", None)
+        if callable(bind):
+            bind(
+                on_block_action=self._on_block_action,
+                on_unsolicited_form=self._on_unsolicited_form,
+                record_event=self._ctx.record_event,
+            )
+        logger.debug(
+            "panel blocks initialised",
+            panel_id=self._ctx.config.panel.panel_id,
+            blocks=[f"{spec.id}:{spec.type}" for spec in specs],
+        )
+
+    async def _on_block_action(self, block_id: str, name: str, data: dict[str, Any]) -> dict[str, Any]:
+        """`block_action` → the pack's optional `on_block_action` (default no-op).
+
+        `on_block_action` is not part of the structural `Pack` Protocol (see
+        `packs.base.BlockActionPack`), so it is looked up here.
+        """
+        handler = getattr(self._pack, "on_block_action", None)
+        if not callable(handler):
+            return {}
+        result = await handler(self._ctx, block_id, name, data)
+        return dict(result or {})
+
+    async def _on_unsolicited_form(self, block_id: str, values: dict[str, Any]) -> None:
+        """A form arrived after its tool stopped waiting: let the model react to it."""
+        instructions = (
+            f"The user just submitted the {block_id} form with these values: {json.dumps(values)}. "
+            "Acknowledge them briefly and continue."
+        )
+        try:
+            self.session.generate_reply(instructions=instructions)
+        except Exception:
+            logger.warning("could not reply to a late form submission", block_id=block_id, exc_info=True)
+
+    async def _cite(self, hits: list[KbHit]) -> None:
+        """Implicit `cite_sources` for auto-injected knowledge (best effort)."""
+        cite = getattr(self._ctx.ui, "cite", None)
+        specs = getattr(self._ctx.ui, "block_specs", None)
+        if not callable(cite) or not isinstance(specs, dict):
+            return
+        for block_id in block_ids_of_type(specs.values(), "kb_citations"):
+            try:
+                await cite(block_id, hits)
+            except Exception:
+                logger.debug("could not cite knowledge", block_id=block_id, exc_info=True)
 
     # ------------------------------------------------------------------ hooks
 
@@ -226,14 +332,27 @@ class PlatformAgent(Agent):
         applied: if the pack already snapshotted, this one repeats the full state
         at the same seq (harmless); if it sent nothing, this one is seq 1.
         """
-        greeting = self._ctx.config.voice.greeting.strip()
-        if greeting:
+        self._speak_greeting()
+        await self._publish_initial_ui()
+
+    def _greeting_text(self) -> str:
+        """The greeting to speak on enter (hook point: flow nodes render variables into it)."""
+        return self._ctx.config.voice.greeting.strip()
+
+    def _speak_greeting(self) -> None:
+        """Speak the configured greeting, if any, with the pipeline's greeting mechanism."""
+        greeting = self._greeting_text()
+        # CONTRACTS-V2 §4.3: `first_speaker="user"` waits for the caller to speak first.
+        if greeting and self._ctx.config.voice.first_speaker == "agent":
             if self._greeting_mode == "say":
                 self.session.say(greeting)
             else:
                 self.session.generate_reply(
                     instructions=f"Greet the user. Say exactly this and nothing more: {greeting}"
                 )
+
+    async def _publish_initial_ui(self) -> None:
+        """Seed `UiState.custom`, run the pack's start hook, then snapshot (D-W2-9a order)."""
         try:
             self._ctx.ui.state.custom = dict(self._pack.initial_state(self._ctx))
         except Exception:
@@ -293,9 +412,13 @@ class PlatformAgent(Agent):
 
     # --------------------------------------------------------------- internals
 
+    def _auto_inject_kb_ids(self) -> list[str]:
+        """The knowledge bases auto-inject searches (hook point: a flow node's KB subset)."""
+        return list(self._ctx.config.knowledge.kb_ids)
+
     async def _inject_knowledge(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
         knowledge = self._ctx.config.knowledge
-        if not knowledge.auto_inject or not knowledge.kb_ids:
+        if not knowledge.auto_inject or not self._auto_inject_kb_ids():
             return
         query = new_message.text_content
         if not query:
@@ -315,6 +438,7 @@ class PlatformAgent(Agent):
         body = "\n\n".join(f"[{hit.filename}] {hit.text}" for hit in hits)
         turn_ctx.add_message(role="assistant", content=f"{_KB_PREFIX}\n{body}")
         logger.debug("injected knowledge", hits=len(hits), top_k=knowledge.top_k)
+        await self._cite(hits)
 
     async def _inject_vision(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
         """Attach one recent frame to the user's message in cascaded mode (D-W2-8).
@@ -408,11 +532,12 @@ class PlatformAgent(Agent):
         `has_tool_reply` immediately after emitting the event, so a coroutine
         handler would run after the decision has already been made.
 
-        `reply_required` is only honoured by realtime models; cascaded LLMs
-        always answer a tool output, which is why the cascaded pipeline note
-        tells the model to keep acknowledgements short instead.
+        `reply_required` is only honoured by realtime models — which both the
+        `realtime` and the `half_cascade` pipeline run; cascaded LLMs always
+        answer a tool output, which is why the cascaded pipeline note tells the
+        model to keep acknowledgements short instead.
         """
-        if self._ctx.pipeline_mode != "realtime" or not self._silent_reply_tools:
+        if self._ctx.pipeline_mode not in _REALTIME_MODEL_MODES or not self._silent_reply_tools:
             return
         names = {call.name for call in ev.function_calls}
         if names and names <= self._silent_reply_tools:

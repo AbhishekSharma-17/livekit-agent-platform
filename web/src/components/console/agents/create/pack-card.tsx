@@ -2,7 +2,8 @@
 
 import * as React from "react";
 
-import { CAPABILITY_META, PANEL_META } from "@/components/console/lib/constants";
+import { CAPABILITY_META } from "@/components/console/lib/constants";
+import { PANEL_META } from "@/components/shared/panel-meta";
 import { Icon, VendorMark } from "@/components/shared";
 import { RadioGroupItem } from "@/components/ui/radio-group";
 import type { PackManifest } from "@/contracts/lkap-contracts";
@@ -39,10 +40,13 @@ export function PackCard({ manifest, vendors, selected, className }: PackCardPro
   const isBlank = manifest.id === GENERIC_PACK_ID;
   const title = isBlank ? "Blank agent" : manifest.name;
   const description = isBlank
-    ? "Cascaded pipeline on LiveKit Inference; generic panel; no code tools."
+    ? "Cascaded pipeline on LiveKit Inference; block panel; no code tools."
     : manifest.description;
   const providerIds = pipelineProviderIds(manifest);
-  const panel = PANEL_META[manifest.ui_panel_id];
+  // The panel a new agent actually gets: the pack's v2 `default_panel` (the
+  // generic pack's is the block panel), else its v1 `ui_panel_id`.
+  const panelId = manifest.default_panel?.panel_id ?? manifest.ui_panel_id;
+  const panel = PANEL_META[panelId];
   const activeCapabilities = (
     Object.entries(manifest.capabilities ?? {}) as [keyof typeof CAPABILITY_META, boolean | undefined][]
   ).filter(([, on]) => on);
@@ -84,7 +88,7 @@ export function PackCard({ manifest, vendors, selected, className }: PackCardPro
         </div>
         <div>
           <dt className="font-medium text-foreground">Panel</dt>
-          <dd className="mt-1">{panel?.label ?? manifest.ui_panel_id}</dd>
+          <dd className="mt-1">{panel?.label ?? panelId}</dd>
         </div>
         {toolCount > 0 || kbCount > 0 ? (
           <div>

@@ -1,0 +1,17 @@
+{
+  "schema": {
+    "type": "object",
+    "properties": {
+      "full_name": { "title": "Full name", "type": "string" },
+      "email": { "title": "Email", "type": "string", "format": "email" },
+      "date_of_loss": { "title": "Date of loss", "type": "string", "format": "date" },
+      "rooms": { "title": "Rooms affected", "type": "integer" },
+      "cause": { "title": "Cause", "type": "string", "enum": ["Fire", "Water", "Storm", "Theft"] },
+      "tenant": { "title": "I rent this home", "type": "boolean" }
+    },
+    "required": ["full_name", "email", "date_of_loss"]
+  },
+  "values": { "full_name": "Priya Raman", "cause": "Fire" },
+  "status": "requested",
+  "submitted_at": null
+}

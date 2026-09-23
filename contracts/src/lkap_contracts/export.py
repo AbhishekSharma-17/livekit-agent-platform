@@ -58,6 +58,7 @@ from lkap_contracts.flow import (
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price
 from lkap_contracts.providers import ProviderSpec
+from lkap_contracts.qa import QaVerdict, SessionQaIn
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
 from lkap_contracts.ui_protocol import (
     ActivityEvent,
@@ -202,6 +203,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "RecordingStartOut": api_models.RecordingStartOut,
     "SessionRecordingIn": api_models.SessionRecordingIn,
     "HealthResponse": api_models.HealthResponse,
+    # QA (R-V2-5): the judge verdict schema and the worker's PUT body
+    "QaVerdict": QaVerdict,
+    "SessionQaIn": SessionQaIn,
     # auth, team and connections
     "UserOut": api_models.UserOut,
     "WorkspaceMembership": api_models.WorkspaceMembership,
@@ -261,10 +265,17 @@ def build_providers_document() -> dict[str, Any]:
     strict parse of the file against the generated type succeeds. Topic
     constants live in :mod:`lkap_contracts.ui_protocol`, not here.
 
+    ``ProvidersResponse.providers`` is ``ProviderOut`` (V2-06): this static,
+    workspace-free export wraps every registry entry with the default
+    settings (``enabled=True``, no installed connections, no default
+    credential) rather than any one workspace's actual settings, which only
+    ``GET /v1/providers`` (backed by the database) can know.
+
     Returns:
         A mapping with the protocol version and every registry entry, in registry order.
     """
-    return api_models.ProvidersResponse(providers=providers.REGISTRY).model_dump(mode="json")
+    out = [api_models.ProviderOut(**spec.model_dump()) for spec in providers.REGISTRY]
+    return api_models.ProvidersResponse(providers=out).model_dump(mode="json")
 
 
 def _schema_for(name: str) -> dict[str, Any]:

@@ -1,0 +1,46 @@
+# Reverse proxy for deploy/docker-compose.prod.yml (PLAN-V2 §V2-09: "api ×2
+# behind Caddy"). Caddy terminates TLS (automatic via ACME/Let's Encrypt for
+# a real domain, or the internal CA for `LKAP_PUBLIC_DOMAIN=localhost`/an IP)
+# and forwards to the `web`/`api` services over the compose-internal network.
+#
+# Set LKAP_PUBLIC_DOMAIN in the environment before `docker compose up`
+# (see deploy/prod.env.example); Caddy reads it via `{$LKAP_PUBLIC_DOMAIN}`.
+# For a bare-IP / no-DNS dev-prod smoke test, set it to `:80` and Caddy skips
+# TLS entirely (documented below) rather than failing to obtain a cert.
+#
+# `/v1/*`, `/hooks/*` and `/internal/*` go straight to the api — these are
+# the api's own public surface (agent connect/session endpoints, LiveKit/
+# webhook receivers, and the internal worker API that cloud-hosted or
+# externally-run workers reach over the public HTTPS origin per D-V2-3/§6
+# `LKAP_PUBLIC_BASE_URL`, protected by the service token header, not network
+# isolation). Everything else goes to `web` (the console, session pages, the
+# widget), which itself proxies `/api/console/*` to the api server-side
+# (web/src/app/api/console/[...path]/route.ts) — that hop never touches
+# Caddy, it is container-to-container inside `web`'s own outbound call.
+#
+# api ×2 (`docker compose ... up --scale api=2`): `reverse_proxy api:8080`
+# resolves the `api` service name via Docker's embedded DNS, which returns
+# one A record per running replica; Caddy re-resolves on its own schedule.
+# NOT verified here (no Docker daemon on this host) that Caddy actually
+# load-balances across both — if it pins to the first-resolved address for
+# the life of the process, restart Caddy after scaling, or add an explicit
+# `reverse_proxy api-1:8080 api-2:8080` two-service pair instead. See the
+# report for the exact caveat.
+
+{$LKAP_PUBLIC_DOMAIN:localhost} {
+	encode zstd gzip
+
+	@apiPaths path /v1/* /hooks/* /internal/*
+	handle @apiPaths {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -20,6 +20,7 @@ const AGENT: AgentPublicOut = {
   name: "Smoke Generic",
   description: "A draft agent used for smoke testing.",
   ui_panel_id: "generic",
+  panel: { panel_id: "generic", layout: "side", blocks: [] },
   pipeline_mode: "cascaded",
   capabilities: { camera: false, screen_share: false, chat_input: false },
 };

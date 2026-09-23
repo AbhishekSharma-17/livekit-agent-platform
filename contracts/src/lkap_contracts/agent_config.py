@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.connections import ConnectionInfo
-from lkap_contracts.flow import FlowSpec
+from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.tools import ToolDefinition
 from lkap_contracts.ui_protocol import BlockSpec
 
@@ -21,10 +21,14 @@ ProviderSlot = Literal[
     "avatar",
     "image_gen",
     "workflow_llm",
+    "qa_llm",
     "vad",
     "turn_detection",
     "noise_cancellation",
 ]
+#: qa_llm (R-V2-6): resolved by the api from qa.model -> workflow_llm -> llm -> Inference LLM
+#: default, present in ``resolved`` only when ``AgentConfig.qa.enabled``. The worker builds
+#: its judge from this slot and never walks the chain itself.
 
 __all__ = [
     "AgentConfig",
@@ -247,3 +251,29 @@ def pipeline_issues(pipeline: PipelineConfig) -> list[Issue]:
                 )
             )
     return issues
+
+
+def effective_qa(config: AgentConfig) -> QaConfig:
+    """The QA settings a session actually runs with (ruling R-V2-11).
+
+    A flow ``qa`` node is the author's intent to score the call, so it turns QA
+    on without anybody also flipping ``qa.enabled``. The node's
+    ``rubric_prompt`` (when set) replaces ``qa.rubric_prompt``; ``qa.model`` is
+    unchanged. Prompt agents (and flows without a ``qa`` node) get
+    ``config.qa`` back as-is. The api (provider resolution, validation slots)
+    and the worker (``prepare_flow_resolved``) both call this one definition.
+
+    Args:
+        config: The agent configuration.
+
+    Returns:
+        The effective :class:`QaConfig`; ``config.qa`` itself when nothing changes.
+    """
+    flow = config.flow
+    qa_node = next((n for n in flow.nodes if isinstance(n, QaNode)), None) if flow is not None else None
+    if qa_node is None:
+        return config.qa
+    update: dict[str, Any] = {"enabled": True}
+    if qa_node.rubric_prompt:
+        update["rubric_prompt"] = qa_node.rubric_prompt
+    return config.qa.model_copy(update=update)

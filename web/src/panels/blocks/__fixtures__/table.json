@@ -1,0 +1,15 @@
+{
+  "columns": [
+    { "key": "item", "label": "Item", "type": "string" },
+    { "key": "qty", "label": "Qty", "type": "number" },
+    { "key": "estimate", "label": "Estimate (EUR)", "type": "number" },
+    { "key": "receipt", "label": "Receipt", "type": "boolean" },
+    { "key": "bought", "label": "Bought", "type": "date" }
+  ],
+  "rows": [
+    { "id": "r1", "item": "Induction hob", "qty": 1, "estimate": 640, "receipt": true, "bought": "2023-04-02" },
+    { "id": "r2", "item": "Extractor hood", "qty": 1, "estimate": 310, "receipt": false, "bought": "2021-11-18" },
+    { "id": "r3", "item": "Wall cabinets", "qty": 3, "estimate": 1450.5, "receipt": true, "bought": "2019-06-30" }
+  ],
+  "selected_row": "r2"
+}

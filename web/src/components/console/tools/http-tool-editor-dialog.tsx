@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/shared/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,14 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
@@ -45,7 +46,7 @@ function hostnameOf(url: string): string | null {
   }
 }
 
-function draftFromTool(tool: ToolOut | undefined): {
+interface Draft {
   name: string;
   description: string;
   method: HttpMethod;
@@ -60,7 +61,9 @@ function draftFromTool(tool: ToolOut | undefined): {
   result_path: string;
   silent_reply: boolean;
   enabled: boolean;
-} {
+}
+
+function draftFromTool(tool: ToolOut | undefined): Draft {
   const def = tool?.definition.kind === "http" ? tool.definition : undefined;
   return {
     name: tool?.name ?? "",
@@ -80,11 +83,21 @@ function draftFromTool(tool: ToolOut | undefined): {
   };
 }
 
+interface DraftErrors {
+  name?: string;
+  parametersJson?: string;
+  headersJson?: string;
+  allowed_hosts?: string;
+}
+
 /**
  * "HTTP tool editor with JSON Schema textarea + dry-run" (IMPLEMENTATION_PLAN
- * W1-WEB-CONSOLE). Builds an `HttpToolDefinition` (docs/CONTRACTS.md §9) and
+ * W1-WEB-CONSOLE), now a `Sheet` with sections (docs/UI_UX_SPEC.md §7.6 item
+ * 4: Basics, Request, Auth, Response, Safety) and inline validation instead
+ * of toasts. Builds an `HttpToolDefinition` (docs/CONTRACTS.md §9) and
  * posts/updates the `tools` row; the caller attaches the returned id to
- * `AgentConfig.tools.tool_ids`.
+ * `AgentConfig.tools.tool_ids`. `agentId: null` attaches nothing — used by
+ * the shared `/console/tools` list.
  */
 export function HttpToolEditorDialog({
   agentId,
@@ -93,7 +106,7 @@ export function HttpToolEditorDialog({
   trigger,
   onSaved,
 }: {
-  agentId: string;
+  agentId: string | null;
   tool?: ToolOut;
   secretBagSpec: ProviderSpec | undefined;
   trigger: React.ReactNode;
@@ -102,34 +115,39 @@ export function HttpToolEditorDialog({
   const uid = React.useId();
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState(() => draftFromTool(tool));
+  const [errors, setErrors] = React.useState<DraftErrors>({});
   const createTool = useCreateTool();
   const updateTool = useUpdateTool();
 
   React.useEffect(() => {
-    if (open) setDraft(draftFromTool(tool));
+    if (open) {
+      setDraft(draftFromTool(tool));
+      setErrors({});
+    }
   }, [open, tool]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     event.stopPropagation();
 
-    let parameters: Record<string, unknown>;
-    let headers: Record<string, string>;
+    const nextErrors: DraftErrors = {};
+
+    let parameters: Record<string, unknown> | undefined;
     try {
       parameters = JSON.parse(draft.parametersJson) as Record<string, unknown>;
     } catch {
-      toast.error("Parameters must be valid JSON Schema.");
-      return;
+      nextErrors.parametersJson = "Must be valid JSON Schema.";
     }
+
+    let headers: Record<string, string> | undefined;
     try {
       headers = draft.headersJson.trim() === "" ? {} : (JSON.parse(draft.headersJson) as Record<string, string>);
     } catch {
-      toast.error("Headers must be valid JSON.");
-      return;
+      nextErrors.headersJson = "Must be valid JSON.";
     }
+
     if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(draft.name)) {
-      toast.error("Name must start with a letter/underscore and contain only letters, numbers, underscore.");
-      return;
+      nextErrors.name = "Use letters, numbers or underscore; start with a letter or underscore.";
     }
 
     const allowedHosts = draft.allowed_hosts
@@ -137,9 +155,11 @@ export function HttpToolEditorDialog({
       .map((h) => h.trim())
       .filter(Boolean);
     if (allowedHosts.length === 0) {
-      toast.error("Allowed hosts is required — an empty list blocks every call (F-05).");
-      return;
+      nextErrors.allowed_hosts = "Required — an empty list blocks every call.";
     }
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0 || !parameters || !headers) return;
 
     const definition: HttpToolDefinition = {
       kind: "http",
@@ -182,194 +202,213 @@ export function HttpToolEditorDialog({
   const pending = createTool.isPending || updateTool.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>{tool ? "Edit HTTP tool" : "New HTTP tool"}</DialogTitle>
-            <DialogDescription>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>{trigger}</SheetTrigger>
+      <SheetContent
+        side="right"
+        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
+        aria-describedby={`${uid}-description`}
+      >
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <SheetHeader className="border-b border-border px-5 py-4 pr-12">
+            <SheetTitle className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">
+              {tool ? "Edit HTTP tool" : "New HTTP tool"}
+            </SheetTitle>
+            <SheetDescription id={`${uid}-description`}>
               Exposed to the model as a function tool. Arguments are validated against the JSON Schema below.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="grid gap-4 py-2 sm:grid-cols-2">
-            <div>
-              <label htmlFor={`${uid}-name`} className="mb-1 block text-sm font-medium">
-                Name
-              </label>
-              <Input
-                id={`${uid}-name`}
-                className="font-mono text-sm"
-                value={draft.name}
-                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder="lookup_weather"
-              />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-method`} className="mb-1 block text-sm font-medium">
-                Method
-              </label>
-              <Select value={draft.method} onValueChange={(v) => setDraft((d) => ({ ...d, method: v as HttpMethod }))}>
-                <SelectTrigger id={`${uid}-method`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {METHODS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor={`${uid}-description`} className="mb-1 block text-sm font-medium">
-                Description (shown to the model)
-              </label>
-              <Textarea
-                id={`${uid}-description`}
-                rows={2}
-                value={draft.description}
-                onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor={`${uid}-url`} className="mb-1 block text-sm font-medium">
-                URL template
-              </label>
-              <Input
-                id={`${uid}-url`}
-                className="font-mono text-sm"
-                value={draft.url}
-                onChange={(e) => {
-                  const url = e.target.value;
-                  setDraft((d) => {
-                    if (d.allowed_hosts.trim() !== "") return { ...d, url };
-                    const host = hostnameOf(url);
-                    return host ? { ...d, url, allowed_hosts: host } : { ...d, url };
-                  });
-                }}
-                placeholder="https://api.example.com/items/{{ item_id }}"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor={`${uid}-parameters`} className="mb-1 block text-sm font-medium">
-                Parameters (JSON Schema)
-              </label>
-              <Textarea
-                id={`${uid}-parameters`}
-                className="min-h-32 font-mono text-xs"
-                value={draft.parametersJson}
-                onChange={(e) => setDraft((d) => ({ ...d, parametersJson: e.target.value }))}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor={`${uid}-headers`} className="mb-1 block text-sm font-medium">
-                Headers (JSON; values may use {"{{ secret.NAME }}"})
-              </label>
-              <Textarea
-                id={`${uid}-headers`}
-                className="min-h-20 font-mono text-xs"
-                value={draft.headersJson}
-                onChange={(e) => setDraft((d) => ({ ...d, headersJson: e.target.value }))}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor={`${uid}-body-template`} className="mb-1 block text-sm font-medium">
-                Body template (optional; JSON with {"{{ arg }}"})
-              </label>
-              <Textarea
-                id={`${uid}-body-template`}
-                className="min-h-20 font-mono text-xs"
-                value={draft.body_template}
-                onChange={(e) => setDraft((d) => ({ ...d, body_template: e.target.value }))}
-                placeholder="Default: JSON of all arguments"
-              />
-            </div>
-            {secretBagSpec ? (
-              <div className="sm:col-span-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-5">
+            <section className="flex flex-col gap-4">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Basics</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
+                  <Input
+                    id={`${uid}-name`}
+                    className="font-mono text-sm"
+                    value={draft.name}
+                    onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="lookup_weather"
+                  />
+                </Field>
+                <Field inline label="Enabled" htmlFor={`${uid}-enabled`}>
+                  <Switch
+                    id={`${uid}-enabled`}
+                    checked={draft.enabled}
+                    onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
+                  />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Field label="Description (shown to the model)" htmlFor={`${uid}-description`}>
+                    <Textarea
+                      id={`${uid}-description`}
+                      rows={2}
+                      value={draft.description}
+                      onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                    />
+                  </Field>
+                </div>
+              </div>
+            </section>
+
+            <section className="flex flex-col gap-4 border-t border-border pt-5">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Request</h3>
+              <Field label="Method" htmlFor={`${uid}-method`}>
+                <Select value={draft.method} onValueChange={(v) => setDraft((d) => ({ ...d, method: v as HttpMethod }))}>
+                  <SelectTrigger id={`${uid}-method`} className="w-full sm:w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METHODS.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="URL template" htmlFor={`${uid}-url`}>
+                <Input
+                  id={`${uid}-url`}
+                  className="font-mono text-sm"
+                  value={draft.url}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    setDraft((d) => {
+                      if (d.allowed_hosts.trim() !== "") return { ...d, url };
+                      const host = hostnameOf(url);
+                      return host ? { ...d, url, allowed_hosts: host } : { ...d, url };
+                    });
+                  }}
+                  placeholder="https://api.example.com/items/{{ item_id }}"
+                />
+              </Field>
+              <Field label="Parameters (JSON Schema)" htmlFor={`${uid}-parameters`} error={errors.parametersJson}>
+                <Textarea
+                  id={`${uid}-parameters`}
+                  className="min-h-32 font-mono text-xs"
+                  value={draft.parametersJson}
+                  onChange={(e) => setDraft((d) => ({ ...d, parametersJson: e.target.value }))}
+                />
+              </Field>
+              <Field
+                label="Body template"
+                htmlFor={`${uid}-body-template`}
+                optional
+                hint={"JSON with {{ arg }} placeholders. Default: JSON of all arguments."}
+              >
+                <Textarea
+                  id={`${uid}-body-template`}
+                  className="min-h-20 font-mono text-xs"
+                  value={draft.body_template}
+                  onChange={(e) => setDraft((d) => ({ ...d, body_template: e.target.value }))}
+                />
+              </Field>
+            </section>
+
+            <section className="flex flex-col gap-4 border-t border-border pt-5">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Auth</h3>
+              <Field
+                label="Headers"
+                htmlFor={`${uid}-headers`}
+                hint={"JSON; values may use {{ secret.NAME }}."}
+                error={errors.headersJson}
+              >
+                <Textarea
+                  id={`${uid}-headers`}
+                  className="min-h-20 font-mono text-xs"
+                  value={draft.headersJson}
+                  onChange={(e) => setDraft((d) => ({ ...d, headersJson: e.target.value }))}
+                />
+              </Field>
+              {secretBagSpec ? (
                 <CredentialPicker
                   spec={secretBagSpec}
                   value={draft.credential_id}
                   onChange={(id) => setDraft((d) => ({ ...d, credential_id: id }))}
                 />
+              ) : null}
+            </section>
+
+            <section className="flex flex-col gap-4 border-t border-border pt-5">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Response</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Result JSON pointer"
+                  htmlFor={`${uid}-result-path`}
+                  optional
+                  hint="Narrows the result to a nested field."
+                >
+                  <Input
+                    id={`${uid}-result-path`}
+                    className="font-mono text-sm"
+                    value={draft.result_path}
+                    onChange={(e) => setDraft((d) => ({ ...d, result_path: e.target.value }))}
+                    placeholder="/data/summary"
+                  />
+                </Field>
+                <Field label="Max result characters" htmlFor={`${uid}-max-result-chars`}>
+                  <Input
+                    id={`${uid}-max-result-chars`}
+                    type="number"
+                    inputMode="numeric"
+                    value={draft.max_result_chars}
+                    onChange={(e) => setDraft((d) => ({ ...d, max_result_chars: Number(e.target.value) }))}
+                  />
+                </Field>
+                <Field inline label="Silent reply" htmlFor={`${uid}-silent-reply`} hint="Realtime mode only.">
+                  <Switch
+                    id={`${uid}-silent-reply`}
+                    checked={draft.silent_reply}
+                    onCheckedChange={(v) => setDraft((d) => ({ ...d, silent_reply: v }))}
+                  />
+                </Field>
               </div>
-            ) : null}
-            <div>
-              <label htmlFor={`${uid}-allowed-hosts`} className="mb-1 block text-sm font-medium">
-                Allowed hosts (comma-separated)
-                <span className="ml-0.5 text-destructive">*</span>
-              </label>
-              <Input
-                id={`${uid}-allowed-hosts`}
-                value={draft.allowed_hosts}
-                onChange={(e) => setDraft((d) => ({ ...d, allowed_hosts: e.target.value }))}
-                placeholder="api.example.com"
-                required
-                aria-required="true"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Hosts the worker may call for this tool. Required: an empty list blocks every call.
-              </p>
-            </div>
-            <div>
-              <label htmlFor={`${uid}-result-path`} className="mb-1 block text-sm font-medium">
-                Result JSON pointer (optional)
-              </label>
-              <Input
-                id={`${uid}-result-path`}
-                className="font-mono text-sm"
-                value={draft.result_path}
-                onChange={(e) => setDraft((d) => ({ ...d, result_path: e.target.value }))}
-                placeholder="/data/summary"
-              />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-timeout`} className="mb-1 block text-sm font-medium">
-                Timeout (seconds)
-              </label>
-              <Input
-                id={`${uid}-timeout`}
-                type="number"
-                value={draft.timeout_s}
-                onChange={(e) => setDraft((d) => ({ ...d, timeout_s: Number(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-max-result-chars`} className="mb-1 block text-sm font-medium">
-                Max result characters
-              </label>
-              <Input
-                id={`${uid}-max-result-chars`}
-                type="number"
-                value={draft.max_result_chars}
-                onChange={(e) => setDraft((d) => ({ ...d, max_result_chars: Number(e.target.value) }))}
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-              <span className="text-sm font-medium">Silent reply (realtime)</span>
-              <Switch
-                checked={draft.silent_reply}
-                onCheckedChange={(v) => setDraft((d) => ({ ...d, silent_reply: v }))}
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-              <span className="text-sm font-medium">Enabled</span>
-              <Switch checked={draft.enabled} onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))} />
-            </div>
+            </section>
+
+            <section className="flex flex-col gap-4 border-t border-border pt-5">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Safety</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Allowed hosts"
+                  htmlFor={`${uid}-allowed-hosts`}
+                  required
+                  hint="Hosts the worker may call for this tool, comma-separated."
+                  error={errors.allowed_hosts}
+                >
+                  <Input
+                    id={`${uid}-allowed-hosts`}
+                    value={draft.allowed_hosts}
+                    onChange={(e) => setDraft((d) => ({ ...d, allowed_hosts: e.target.value }))}
+                    placeholder="api.example.com"
+                    required
+                    aria-required="true"
+                  />
+                </Field>
+                <Field label="Timeout" htmlFor={`${uid}-timeout`} hint="Seconds.">
+                  <Input
+                    id={`${uid}-timeout`}
+                    type="number"
+                    inputMode="numeric"
+                    value={draft.timeout_s}
+                    onChange={(e) => setDraft((d) => ({ ...d, timeout_s: Number(e.target.value) }))}
+                  />
+                </Field>
+              </div>
+            </section>
           </div>
 
-          <DialogFooter>
+          <SheetFooter className="flex-row justify-end border-t border-border px-5 py-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save tool"}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

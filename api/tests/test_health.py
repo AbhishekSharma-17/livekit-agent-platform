@@ -2,14 +2,41 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from lkap_contracts.packs import PackManifest
+from sqlalchemy import text, update
 
 from lkap_api import __version__
+from lkap_api.db.models import Agent
+from lkap_api.db.session import Database
+from lkap_api.routers.health import migration_head
+
+API_ROOT = Path(__file__).resolve().parents[1]
+
+
+async def _stamp(database: Database, revision: str | None) -> None:
+    """Write `alembic_version` the way `alembic upgrade` would (tests build the schema with create_all)."""
+    async with database.engine.begin() as conn:
+        await conn.execute(
+            text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
+        )
+        await conn.execute(text("DELETE FROM alembic_version"))
+        if revision is not None:
+            await conn.execute(text("INSERT INTO alembic_version (version_num) VALUES (:v)"), {"v": revision})
+
+
+@pytest.fixture(autouse=True)
+async def _at_head(database: Database) -> None:
+    """Every health test starts from a schema stamped at the migration head."""
+    migration_head.cache_clear()
+    await _stamp(database, migration_head())
 
 
 async def test_health_is_public_and_reports_db_ok(client: httpx.AsyncClient) -> None:
@@ -23,7 +50,60 @@ async def test_health_is_public_and_reports_db_ok(client: httpx.AsyncClient) -> 
         "livekit_url": "wss://example.livekit.cloud",
         "packs": ["insurance_claim", "generic"],
         "db": "ok",
+        "agents_unbound": 0,
     }
+
+
+async def test_migration_head_matches_the_script_directory() -> None:
+    # Order-independent (asks #58): compare against a head computed afresh from
+    # `api/alembic`, not a hard-coded revision or a value cached by an earlier test.
+    config = Config(str(API_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(API_ROOT / "alembic"))
+    expected = ScriptDirectory.from_config(config).get_current_head()
+
+    migration_head.cache_clear()
+
+    assert expected is not None and expected.startswith("v2_")
+    assert migration_head() == expected
+
+
+@pytest.mark.parametrize("revision", [None, "4135323c6ecc", "v2_003_scope_tables"])
+async def test_health_reports_db_error_unless_the_schema_is_at_head(
+    client: httpx.AsyncClient, database: Database, revision: str | None
+) -> None:
+    await _stamp(database, revision)
+
+    body = (await client.get("/v1/health")).json()
+
+    assert (body["ok"], body["db"]) == (False, "error")
+
+
+async def test_health_reports_db_error_without_an_alembic_version_table(
+    client: httpx.AsyncClient, database: Database
+) -> None:
+    async with database.engine.begin() as conn:
+        await conn.execute(text("DROP TABLE alembic_version"))
+
+    body = (await client.get("/v1/health")).json()
+
+    assert (body["ok"], body["db"]) == (False, "error")
+
+
+async def test_health_counts_agents_without_a_connection(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    from conftest import create_agent
+
+    agent = await create_agent(admin_client, published=False)
+    bound = (await client.get("/v1/health")).json()["agents_unbound"]
+    async with database.session() as session:
+        await session.execute(update(Agent).where(Agent.id == agent["id"]).values(connection_id=None))
+
+    body = (await client.get("/v1/health")).json()
+
+    assert bound == 0
+    assert body["agents_unbound"] == 1
+    assert body["db"] == "ok"
 
 
 async def test_health_lists_discovered_packs(
@@ -74,7 +154,7 @@ async def test_providers_endpoint_lists_the_whole_registry(admin_client: httpx.A
 
     body = (await admin_client.get("/v1/providers")).json()
 
-    assert body["v"] == 1
+    assert body["v"] == 2, "V2-06 bumped ProvidersResponse to v=2 (ProviderOut)"
     assert len(body["providers"]) == len(REGISTRY)
     assert len([p for p in body["providers"] if p["status"] == "mvp"]) == len(mvp_providers()) == 18
     assert {p["id"] for p in body["providers"]} >= {
@@ -82,6 +162,12 @@ async def test_providers_endpoint_lists_the_whole_registry(admin_client: httpx.A
         "google-realtime",
         "http-tool-secret",
     }
+    # Regression: `providers` must be genuine `ProviderOut` objects (this
+    # broke the live endpoint with a 500 the moment `ProvidersResponse` was
+    # retyped ahead of this router being updated to match).
+    assert all(
+        "enabled" in p and "installed_on" in p and "default_credential_id" in p for p in body["providers"]
+    )
 
 
 async def test_provider_detail_and_404(admin_client: httpx.AsyncClient) -> None:

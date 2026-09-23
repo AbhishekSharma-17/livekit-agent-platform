@@ -1713,6 +1713,7 @@
           "avatar",
           "image_gen",
           "workflow_llm",
+          "qa_llm",
           "vad",
           "turn_detection",
           "noise_cancellation"

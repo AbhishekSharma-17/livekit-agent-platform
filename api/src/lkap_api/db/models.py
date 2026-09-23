@@ -193,8 +193,19 @@ class ApiKey(Base):
     last_used_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     revoked_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     expires_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    #: v3 (D-V3-9, migration ``v3_001_agent_keys``): ``agent`` keys are minted for AI coding agents.
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="standard", server_default="standard"
+    )
+    #: The client chosen when the key was minted (``claude-code``, ``codex`` …).
+    client: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: The product of the last ``X-LKAP-Client`` header seen (60 s resolution).
+    last_client: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    __table_args__ = (Index("ix_api_keys_workspace", "workspace_id"),)
+    __table_args__ = (
+        Index("ix_api_keys_workspace", "workspace_id"),
+        CheckConstraint("kind IN ('standard','agent')", name="kind_valid"),
+    )
 
 
 class AuditLog(Base):

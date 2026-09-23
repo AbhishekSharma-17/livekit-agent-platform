@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, HttpUrl, StringConstraints, field_validator
 
 from lkap_contracts.agent_config import (
     AgentConfig,
@@ -354,6 +354,22 @@ class KbDocumentOut(BaseModel):
     error: str | None = None
     chunk_count: int
     created_at: datetime
+
+
+class KbImportIn(BaseModel):
+    """``POST /v1/knowledge-bases/{id}/documents/import`` (v3, R-V3-14).
+
+    The api fetches ``url`` itself, through its outbound network guard, and
+    ingests the body like an upload (25 MB cap; text, markdown, JSON or PDF).
+    """
+
+    url: HttpUrl = Field(description="A public http(s) url of the source document")
+    filename: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="The stored document name; defaults to the url's last path segment",
+    )
 
 
 class KbSearchRequest(BaseModel):

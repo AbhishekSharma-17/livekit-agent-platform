@@ -2,11 +2,15 @@
 
 Managing keys needs the ``admin`` role (§3.2). An API key can manage keys only
 if it carries the ``*`` scope. Keys of another workspace are a 404.
+
+``GET /v1/api-keys/self`` (v3, D-V3-6) is the exception: any API key may read
+its own id, scopes and workspace, whatever its scopes, so an MCP server can
+shape its tool list to what the key allows (R-V3-13).
 """
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from lkap_contracts.api_models import Page
@@ -14,11 +18,18 @@ from sqlalchemy import func, select
 
 from lkap_api.auth.api_keys import generate_api_key
 from lkap_api.auth.audit import record
-from lkap_api.auth.deps import WorkspaceContext, require
-from lkap_api.auth.models import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
-from lkap_api.db.models import ApiKey, new_id, utcnow
+from lkap_api.auth.deps import PrincipalDep, WorkspaceContext, require
+from lkap_api.auth.models import (
+    ApiKeyCreate,
+    ApiKeyCreated,
+    ApiKeyKind,
+    ApiKeyOut,
+    ApiKeySelfOut,
+    ApiKeySelfWorkspace,
+)
+from lkap_api.db.models import ApiKey, Workspace, new_id, utcnow
 from lkap_api.deps import DbDep
-from lkap_api.errors import NotFoundError, UnprocessableEntityError
+from lkap_api.errors import NotFoundError, UnauthorizedError, UnprocessableEntityError
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -40,6 +51,9 @@ def _to_out(row: ApiKey) -> ApiKeyOut:
         last_used_at=row.last_used_at,
         revoked_at=row.revoked_at,
         expires_at=row.expires_at,
+        kind=cast(ApiKeyKind, row.kind),  # CHECK constraint guarantees the value
+        client=row.client,
+        last_client=row.last_client,
     )
 
 
@@ -78,7 +92,8 @@ async def list_api_keys(
     description=(
         "Returns the raw key (`lkap_…`) exactly once; only its sha256 is stored. Scopes: "
         "`agents:read|write`, `sessions:read|write`, `calls:write`, `connections:read|write`, "
-        "`providers:read|write`, `webhooks:write` or `*`. Needs `admin`."
+        "`providers:read|write`, `webhooks:write`, `audit:read` or `*`. `kind=agent` with a "
+        "`client` marks a key minted for an AI coding agent. Needs `admin`."
     ),
 )
 async def create_api_key(payload: ApiKeyCreate, ctx: KeyAdminDep, db: DbDep) -> ApiKeyCreated:
@@ -101,6 +116,8 @@ async def create_api_key(payload: ApiKeyCreate, ctx: KeyAdminDep, db: DbDep) -> 
         created_by=ctx.actor.id,
         created_at=now,
         expires_at=payload.expires_at,
+        kind=payload.kind,
+        client=payload.client,
     )
     db.add(row)
     await db.flush()
@@ -112,10 +129,50 @@ async def create_api_key(payload: ApiKeyCreate, ctx: KeyAdminDep, db: DbDep) -> 
         action="api_key.create",
         target_type="api_key",
         target_id=row.id,
-        payload={"name": row.name, "scopes": row.scopes, "prefix": prefix},
+        payload={
+            "name": row.name,
+            "scopes": row.scopes,
+            "prefix": prefix,
+            "kind": row.kind,
+            "key_client": row.client,
+        },
     )
     log.info("api_key_created", workspace_id=ctx.workspace_id, api_key_id=row.id, prefix=prefix)
     return ApiKeyCreated(**_to_out(row).model_dump(), key=raw)
+
+
+@router.get(
+    "/self",
+    response_model=ApiKeySelfOut,
+    summary="The calling API key",
+    description=(
+        "The key presented as `Authorization: Bearer lkap_…`: its id, name, prefix, kind, client, "
+        "scopes, expiry and workspace. Any API key may call it, whatever its scopes; a signed-in "
+        "user or the admin token gets 401 (they are not keys). Never returns secret material."
+    ),
+)
+async def get_own_api_key(principal: PrincipalDep, db: DbDep) -> ApiKeySelfOut:
+    """Describe the API key that authenticated this request.
+
+    Raises:
+        UnauthorizedError: The caller is not an API key, or its workspace is gone.
+    """
+    key = principal.api_key
+    if principal.kind != "api_key" or key is None:
+        raise UnauthorizedError("this route describes an API key: send 'Authorization: Bearer lkap_…'")
+    workspace = await db.get(Workspace, key.workspace_id)
+    if workspace is None:
+        raise UnauthorizedError("the workspace of this API key no longer exists")
+    return ApiKeySelfOut(
+        id=key.id,
+        name=key.name,
+        prefix=key.prefix,
+        kind=cast(ApiKeyKind, key.kind),
+        client=key.client,
+        scopes=[str(scope) for scope in key.scopes],
+        expires_at=key.expires_at,
+        workspace=ApiKeySelfWorkspace(id=workspace.id, slug=workspace.slug, name=workspace.name),
+    )
 
 
 @router.delete(

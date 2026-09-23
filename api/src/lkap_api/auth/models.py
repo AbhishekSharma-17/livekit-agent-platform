@@ -131,12 +131,24 @@ class MemberUpdate(BaseModel):
     role: Role
 
 
+#: ``standard`` keys are for scripts and integrations; ``agent`` keys are minted
+#: for AI coding agents from the console's "Connect an AI agent" dialog (v3).
+ApiKeyKind = Literal["standard", "agent"]
+
+
 class ApiKeyCreate(BaseModel):
     """``POST /v1/api-keys``."""
 
     name: str = Field(min_length=1, max_length=200)
     scopes: list[Scope] = Field(min_length=1)
     expires_at: datetime | None = None
+    kind: ApiKeyKind = "standard"
+    client: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        description="The AI client the key is for (`claude-code`, `codex`, `cursor` …); informational",
+    )
 
 
 class ApiKeyOut(BaseModel):
@@ -152,12 +164,38 @@ class ApiKeyOut(BaseModel):
     last_used_at: datetime | None = None
     revoked_at: datetime | None = None
     expires_at: datetime | None = None
+    kind: ApiKeyKind = "standard"
+    client: str | None = None
+    last_client: str | None = Field(
+        default=None, description="Product of the last `X-LKAP-Client` header this key was used with"
+    )
 
 
 class ApiKeyCreated(ApiKeyOut):
     """The response of ``POST /v1/api-keys``: the only time ``key`` is ever returned."""
 
     key: str
+
+
+class ApiKeySelfWorkspace(BaseModel):
+    """The workspace an API key is bound to."""
+
+    id: str
+    slug: str
+    name: str
+
+
+class ApiKeySelfOut(BaseModel):
+    """``GET /v1/api-keys/self``: the calling key as it sees itself (no secret material)."""
+
+    id: str
+    name: str
+    prefix: str
+    kind: ApiKeyKind
+    client: str | None = None
+    scopes: list[str]
+    expires_at: datetime | None = None
+    workspace: ApiKeySelfWorkspace
 
 
 class AuditOut(BaseModel):

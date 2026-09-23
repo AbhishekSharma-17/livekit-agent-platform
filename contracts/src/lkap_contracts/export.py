@@ -185,6 +185,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "KbCreate": api_models.KbCreate,
     "KbOut": api_models.KbOut,
     "KbDocumentOut": api_models.KbDocumentOut,
+    "KbImportIn": api_models.KbImportIn,
     "KbSearchRequest": api_models.KbSearchRequest,
     "KbHit": api_models.KbHit,
     "KbSearchResponse": api_models.KbSearchResponse,

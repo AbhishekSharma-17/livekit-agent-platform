@@ -38,11 +38,26 @@ def looks_like_api_key(value: str | None) -> bool:
     return bool(value) and str(value).startswith(KEY_PREFIX)
 
 
-async def resolve_api_key(db: AsyncSession, raw: str, *, now: dt.datetime | None = None) -> ApiKey | None:
+async def resolve_api_key(
+    db: AsyncSession,
+    raw: str,
+    *,
+    now: dt.datetime | None = None,
+    client_product: str | None = None,
+) -> ApiKey | None:
     """Return the live key for a raw value, or ``None`` if unknown, revoked or expired.
 
     The lookup is by hash across every workspace (the key *is* what selects the
     workspace), hence the explicit cross-workspace marker for the tenancy guard.
+
+    Args:
+        db: The request session.
+        raw: The presented ``lkap_…`` value.
+        now: The clock, for tests.
+        client_product: The product of the request's ``X-LKAP-Client`` header
+            (v3, D-V3-9); written to ``last_client`` together with
+            ``last_used_at``, at the same 60 s resolution. ``None`` (no header)
+            leaves ``last_client`` as it was.
     """
     current = now or utcnow()
     row = (
@@ -58,4 +73,6 @@ async def resolve_api_key(db: AsyncSession, raw: str, *, now: dt.datetime | None
         return None
     if row.last_used_at is None or current - row.last_used_at >= LAST_USED_RESOLUTION:
         row.last_used_at = current
+        if client_product is not None:
+            row.last_client = client_product
     return row

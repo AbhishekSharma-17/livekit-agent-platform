@@ -68,7 +68,8 @@ async def path_workspace(
 
 
 PathWorkspaceDep = Annotated[WorkspaceContext, Depends(path_workspace)]
-AuditReaderDep = Annotated[WorkspaceContext, Depends(require("admin", "*"))]
+#: v3 (D-V3-9): ``audit:read`` lets an agent key read its own activity without ``*``.
+AuditReaderDep = Annotated[WorkspaceContext, Depends(require("admin", "audit:read"))]
 
 
 def _workspace_out(workspace: Workspace, role: str) -> WorkspaceOut:
@@ -385,7 +386,11 @@ async def create_invite(
     "/audit",
     response_model=Page[AuditOut],
     summary="Audit log",
-    description="Mutating admin calls in the current workspace, newest first. Needs `admin`.",
+    description=(
+        "Mutating admin calls in the current workspace, newest first. Rows written while an "
+        "`X-LKAP-Client` header was sent carry `payload.client`. Needs `admin`; an API key "
+        "needs the `audit:read` scope."
+    ),
 )
 async def list_audit(
     ctx: AuditReaderDep, db: DbDep, limit: LimitQuery = 25, offset: OffsetQuery = 0

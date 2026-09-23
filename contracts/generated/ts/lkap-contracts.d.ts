@@ -88,6 +88,7 @@ export interface LkapContracts {
   KbDocumentOut?: KbDocumentOut;
   KbDocumentPage?: KbDocumentPage;
   KbHit?: KbHit;
+  KbImportIn?: KbImportIn;
   KbOut?: KbOut;
   KbPage?: KbPage;
   KbSearchRequest?: KbSearchRequest;
@@ -1509,6 +1510,25 @@ export interface KbHit {
   filename: string;
   score: number;
   text: string;
+}
+/**
+ * ``POST /v1/knowledge-bases/{id}/documents/import`` (v3, R-V3-14).
+ *
+ * The api fetches ``url`` itself, through its outbound network guard, and
+ * ingests the body like an upload (25 MB cap; text, markdown, JSON or PDF).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbImportIn".
+ */
+export interface KbImportIn {
+  /**
+   * The stored document name; defaults to the url's last path segment
+   */
+  filename?: string | null;
+  /**
+   * A public http(s) url of the source document
+   */
+  url: string;
 }
 /**
  * A knowledge base with its current counts.

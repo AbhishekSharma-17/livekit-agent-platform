@@ -38,7 +38,15 @@ from lkap_api.auth import (
     token_matches,
 )
 from lkap_api.auth.api_keys import looks_like_api_key, resolve_api_key
-from lkap_api.auth.audit import MUTATING_METHODS, ActorType, record, route_target
+from lkap_api.auth.audit import (
+    CLIENT_HEADER,
+    CLIENT_INFO,
+    MUTATING_METHODS,
+    ActorType,
+    parse_client_header,
+    record,
+    route_target,
+)
 from lkap_api.auth.ratelimit import RateLimiter, enforce, get_rate_limiter
 from lkap_api.auth.roles import API_KEY_ROLE, Requirement, Role, policy_for, role_at_least, scope_allows
 from lkap_api.auth.sessions import ResolvedSession, refresh_if_due, resolve_session, set_session_cookie
@@ -178,17 +186,25 @@ async def resolve_principal(
 ) -> Principal | None:
     """Authenticate the request; ``None`` means anonymous.
 
+    Also parses ``X-LKAP-Client`` (R-V3-11) into
+    :data:`~lkap_api.auth.audit.CLIENT_INFO`, which the audit writer merges into
+    every row of this request. It is set on every call — to ``None`` when the
+    header is absent or malformed — so a value can never carry over from an
+    earlier request that ran in the same context.
+
     Raises:
         UnauthorizedError: For an unknown, revoked or expired API key.
         RateLimitedError: When an API key exceeds ``LKAP_API_KEY_RATE_PER_MIN``.
     """
+    client = parse_client_header(request.headers.get(CLIENT_HEADER))
+    CLIENT_INFO.set(client)
     principal = await _principal_from_session(request, response, db, settings)
     if principal is not None:
         return principal
 
     bearer = bearer_value(authorization)
     if bearer is not None and looks_like_api_key(bearer):
-        key = await resolve_api_key(db, bearer)
+        key = await resolve_api_key(db, bearer, client_product=client.product if client else None)
         if key is None:
             raise UnauthorizedError("invalid, revoked or expired API key")
         if settings.rate_limit_enabled:

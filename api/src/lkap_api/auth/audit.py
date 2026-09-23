@@ -7,11 +7,21 @@ identifiers only — never request bodies, which may hold secrets.
 ``actor_type`` is ``user`` for a cookie session, ``api_key`` for a key and
 ``system`` for the break-glass admin token (``actor_id="break-glass"``) and for
 work the platform does on its own.
+
+Client attribution (v3, D-V3-9, R-V3-11): an AI coding agent's MCP server sends
+``X-LKAP-Client: lkap-mcp/0.1; client=claude-code; tool=agent_create; call=<id>``
+on every request. :func:`lkap_api.auth.deps.resolve_principal` parses it with
+:func:`parse_client_header` into :data:`CLIENT_INFO`, and :func:`record` merges
+``{"client": {"product", "name", "tool", "call"}}`` into the payload of every
+row written while it is set. A missing or malformed header sets nothing.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import re
+from contextvars import ContextVar
+from dataclasses import dataclass
+from typing import Any, Final, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +31,72 @@ ActorType = Literal["user", "api_key", "system"]
 
 #: HTTP methods that change state and are therefore audited.
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+#: The attribution header an agent client sends (R-V3-11).
+CLIENT_HEADER: Final = "X-LKAP-Client"
+#: Longest value any one field of the header may carry.
+CLIENT_VALUE_MAX: Final = 64
+#: Longest header the parser looks at; anything longer is ignored whole.
+_CLIENT_HEADER_MAX: Final = 512
+_PRODUCT = re.compile(r"^(?P<product>[A-Za-z0-9._-]{1,64})(?:/(?P<version>[A-Za-z0-9._+-]{1,64}))?$")
+_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
+#: Printable, no separators: a value can never forge another field or a log line.
+_VALUE = re.compile(r"^[^\x00-\x1f\x7f;=]{1,64}$")
+#: Header keys and the :class:`ClientInfo` field each one fills.
+_CLIENT_FIELDS: Final[dict[str, str]] = {"client": "name", "tool": "tool", "call": "call"}
+
+
+@dataclass(frozen=True, slots=True)
+class ClientInfo:
+    """The parsed ``X-LKAP-Client`` header of the current request."""
+
+    product: str
+    version: str | None = None
+    name: str | None = None
+    tool: str | None = None
+    call: str | None = None
+
+    def as_payload(self) -> dict[str, str | None]:
+        """The ``payload.client`` object of an audit row."""
+        return {"product": self.product, "name": self.name, "tool": self.tool, "call": self.call}
+
+
+#: The current request's client attribution; ``None`` when absent or malformed.
+CLIENT_INFO: ContextVar[ClientInfo | None] = ContextVar("lkap_client_info", default=None)
+
+
+def parse_client_header(value: str | None) -> ClientInfo | None:
+    """Parse ``product/version; client=…; tool=…; call=…``.
+
+    Unknown keys are ignored. Anything malformed — an empty or invalid product,
+    a segment that is not ``key=value``, a value over :data:`CLIENT_VALUE_MAX`
+    characters or holding a control character — makes the whole header count
+    as absent, so a bad header never changes what is recorded.
+
+    Args:
+        value: The raw header value, or ``None``.
+
+    Returns:
+        The parsed :class:`ClientInfo`, or ``None``.
+    """
+    if not value or len(value) > _CLIENT_HEADER_MAX:
+        return None
+    head, *rest = value.split(";")
+    match = _PRODUCT.match(head.strip())
+    if match is None:
+        return None
+    fields: dict[str, str] = {}
+    for segment in rest:
+        if not segment.strip():
+            continue
+        key, sep, raw = segment.partition("=")
+        key, item = key.strip().lower(), raw.strip()
+        if not sep or not _KEY.match(key) or not _VALUE.match(item):
+            return None
+        target = _CLIENT_FIELDS.get(key)
+        if target is not None and target not in fields:
+            fields[target] = item
+    return ClientInfo(product=match["product"], version=match["version"], **fields)
 
 
 def record(
@@ -44,11 +120,16 @@ def record(
         action: A stable verb, e.g. ``api_key.create`` or ``PUT /v1/agents/{agent_id}``.
         target_type: The kind of object acted on (``agent``, ``member`` …).
         target_id: Its id, when there is one.
-        payload: Small, non-secret details.
+        payload: Small, non-secret details. While :data:`CLIENT_INFO` is set,
+            its ``client`` object is merged in (and wins over a ``client`` key).
 
     Returns:
         The pending row.
     """
+    body = dict(payload or {})
+    client = CLIENT_INFO.get()
+    if client is not None:
+        body["client"] = client.as_payload()
     row = AuditLog(
         workspace_id=workspace_id,
         actor_type=actor_type,
@@ -56,7 +137,7 @@ def record(
         action=action[:128],
         target_type=target_type[:64],
         target_id=target_id[:64] if target_id else None,
-        payload=payload or {},
+        payload=body,
         ts=utcnow(),
     )
     db.add(row)

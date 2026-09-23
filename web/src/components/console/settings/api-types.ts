@@ -37,6 +37,7 @@ export type Scope =
   | "providers:read"
   | "providers:write"
   | "webhooks:write"
+  | "audit:read"
   | "*";
 
 export const SCOPES: Scope[] = [
@@ -50,6 +51,7 @@ export const SCOPES: Scope[] = [
   "providers:read",
   "providers:write",
   "webhooks:write",
+  "audit:read",
   "*",
 ];
 

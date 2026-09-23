@@ -5,7 +5,8 @@ Two audiences share this module and are combined into the single `router`
 
 * ``/v1/knowledge-bases/...`` — admin surface (``WorkspaceContext``; scoped to
   the caller's workspace, another workspace's knowledge base is a 404): CRUD,
-  document upload (ingested as a job, poll for status) and test search.
+  document upload or url import (v3, R-V3-14: the api fetches through
+  ``net_guard``; either way ingested as a job, poll for status) and test search.
 * ``/internal/v1/kb/search`` — worker surface (`X-Service-Token`): the RAG
   lookup the agent calls for `search_knowledge` and auto-injection.
 """
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 from pathlib import PurePosixPath
 from typing import Annotated
+from urllib.parse import unquote, urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Response, UploadFile, status
 from lkap_contracts import providers
@@ -22,6 +24,7 @@ from lkap_contracts.api_models import (
     KbCreate,
     KbDocumentOut,
     KbDocumentPage,
+    KbImportIn,
     KbOut,
     KbPage,
     KbSearchRequest,
@@ -30,18 +33,25 @@ from lkap_contracts.api_models import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.db.models import KbDocument, KnowledgeBase, utcnow
-from lkap_api.deps import AdminCtxDep, DbDep, ServiceDep, SettingsDep, VaultDep
+from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, ServiceDep, SettingsDep, VaultDep
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.jobs.kinds import KB_INGEST
+from lkap_api.jobs.service import JobsService
 from lkap_api.kb.embed import Embedder, resolve_embedder
-from lkap_api.kb.ingest import upload_storage_key
+from lkap_api.kb.ingest import (
+    IMPORT_SUFFIX,
+    fetch_import_source,
+    import_policy,
+    upload_storage_key,
+)
 from lkap_api.kb.search import search_kbs
 from lkap_api.kb.store import VectorStore, get_lancedb_store
 from lkap_api.logging import get_logger
-from lkap_api.storage.base import UploadTooLargeError
+from lkap_api.storage.base import StorageBackend, UploadTooLargeError
 from lkap_api.storage.deps import StorageDep
 
 log = get_logger(__name__)
@@ -196,6 +206,59 @@ def upload_basename(filename: str | None) -> str:
     return base if base.strip(".") else "document"
 
 
+def import_filename(url: str, filename: str | None, mime: str) -> str:
+    """The stored name of a url-imported document (v3).
+
+    ``filename`` when given, else the url's last path segment, both reduced by
+    :func:`upload_basename`. A name without an extension gets its media type's
+    (``.md``, ``.txt``, ``.pdf``, ``.json``) so the console can tell them apart.
+    """
+    name = upload_basename(filename if filename else unquote(urlsplit(url).path))
+    if "." not in name.strip("."):
+        name += IMPORT_SUFFIX.get(mime, "")
+    return name
+
+
+async def _store_and_enqueue(
+    db: AsyncSession,
+    storage: StorageBackend,
+    jobs: JobsService,
+    background_tasks: BackgroundTasks,
+    *,
+    kb: KnowledgeBase,
+    filename: str,
+    mime: str,
+    data: bytes,
+) -> KbDocument:
+    """Create the ``pending`` document row, store the bytes and enqueue ingestion.
+
+    Shared by the multipart upload and the url import.
+    """
+    document = KbDocument(kb_id=kb.id, filename=filename, mime=mime, bytes=len(data), status="pending")
+    db.add(document)
+    # Committed explicitly (not just flushed): the job below opens a *new*
+    # connection and, with `PRAGMA foreign_keys=ON`, needs this row to already
+    # be durable before it can insert chunks that reference it.
+    await db.commit()
+    await db.refresh(document)
+
+    storage_key = upload_storage_key(kb.id, document.id, filename)
+    await storage.put(storage_key, data, content_type=mime)
+
+    await jobs.enqueue(
+        KB_INGEST,
+        {
+            "kb_id": kb.id,
+            "document_id": document.id,
+            "storage_key": storage_key,
+            "filename": filename,
+            "mime": mime,
+        },
+        background_tasks=background_tasks,
+    )
+    return document
+
+
 # --------------------------------------------------------------------------- knowledge bases
 @admin_router.post(
     "",
@@ -328,29 +391,61 @@ async def upload_document(
     filename = upload_basename(file.filename)
     mime = file.content_type or "application/octet-stream"
 
-    document = KbDocument(kb_id=kb.id, filename=filename, mime=mime, bytes=len(data), status="pending")
-    db.add(document)
-    # Committed explicitly (not just flushed): the job below opens a *new*
-    # connection and, with `PRAGMA foreign_keys=ON`, needs this row to already
-    # be durable before it can insert chunks that reference it.
-    await db.commit()
-    await db.refresh(document)
-
-    storage_key = upload_storage_key(kb.id, document.id, filename)
-    await storage.put(storage_key, data, content_type=mime)
-
-    await jobs.enqueue(
-        KB_INGEST,
-        {
-            "kb_id": kb.id,
-            "document_id": document.id,
-            "storage_key": storage_key,
-            "filename": filename,
-            "mime": mime,
-        },
-        background_tasks=background_tasks,
+    document = await _store_and_enqueue(
+        db, storage, jobs, background_tasks, kb=kb, filename=filename, mime=mime, data=data
     )
     log.info("kb_document_uploaded", kb_id=kb.id, document_id=document.id, filename=filename, bytes=len(data))
+    return _document_out(document)
+
+
+@admin_router.post(
+    "/{kb_id}/documents/import",
+    response_model=KbDocumentOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Import a document from a url",
+    description=(
+        "The api fetches `url` itself — never the caller — through its outbound network guard: "
+        "private, loopback, link-local and metadata destinations are refused (422, "
+        "`details.reason=blocked_destination`) and redirects are not followed. The body is capped "
+        "at 25 MB (413) and must be `text/*`, `application/json` or `application/pdf` (415). The "
+        "document is stored `pending` and ingested as a job exactly like an upload; poll "
+        "`GET .../documents` for `status`."
+    ),
+)
+async def import_document(
+    kb_id: str,
+    payload: KbImportIn,
+    db: DbDep,
+    storage: StorageDep,
+    jobs: JobsDep,
+    client: HttpClientDep,
+    background_tasks: BackgroundTasks,
+    ctx: AdminCtxDep,
+) -> KbDocumentOut:
+    """Fetch a public url and ingest it like an uploaded document (R-V3-14).
+
+    Raises:
+        UnprocessableEntityError: A refused destination or a failed fetch.
+        UnsupportedMediaTypeError: 415 for a content type the ingester cannot read.
+        UploadTooLargeError: 413 when the body exceeds `MAX_UPLOAD_BYTES`.
+    """
+    kb = await _load_kb(db, ctx, kb_id)
+    url = str(payload.url)
+    net_guard.validate_url(url, import_policy(), field_name="url")
+    source = await fetch_import_source(client, url, max_bytes=MAX_UPLOAD_BYTES)
+    filename = import_filename(url, payload.filename, source.mime)
+
+    document = await _store_and_enqueue(
+        db, storage, jobs, background_tasks, kb=kb, filename=filename, mime=source.mime, data=source.data
+    )
+    log.info(
+        "kb_document_imported",
+        kb_id=kb.id,
+        document_id=document.id,
+        filename=filename,
+        host=urlsplit(url).hostname,
+        bytes=len(source.data),
+    )
     return _document_out(document)
 
 

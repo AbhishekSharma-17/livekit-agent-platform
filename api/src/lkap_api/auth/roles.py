@@ -23,6 +23,7 @@ ROLES: tuple[Role, ...] = get_args(Role)
 _RANK: dict[str, int] = {role: rank for rank, role in enumerate(ROLES)}
 
 #: Every scope an API key may carry (CONTRACTS-V2 §3.1); ``*`` grants all.
+#: ``audit:read`` (v3, D-V3-9) reads ``GET /v1/audit`` without the ``*`` scope.
 Scope = Literal[
     "agents:read",
     "agents:write",
@@ -34,6 +35,7 @@ Scope = Literal[
     "providers:read",
     "providers:write",
     "webhooks:write",
+    "audit:read",
     "*",
 ]
 SCOPES: frozenset[str] = frozenset(get_args(Scope))

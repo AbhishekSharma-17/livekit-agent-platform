@@ -21,19 +21,23 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase
+from lkap_api.errors import ApiError, UnprocessableEntityError
 from lkap_api.jobs.context import JobContext
 from lkap_api.jobs.kinds import KB_INGEST
 from lkap_api.jobs.registry import job
 from lkap_api.kb.embed import Embedder, resolve_embedder
 from lkap_api.kb.store import VectorRecord, VectorStore, get_lancedb_store
 from lkap_api.logging import get_logger
+from lkap_api.storage.base import UploadTooLargeError
 from lkap_api.storage.resolve import default_storage
 
 log = get_logger(__name__)
@@ -284,3 +288,117 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
             mime=mime,
             data=data,
         )
+
+
+# --------------------------------------------------------------------------- url import (v3)
+#: Media types a url import accepts (``text/*`` covers markdown and plain text).
+IMPORT_MEDIA_TYPES: Final[frozenset[str]] = frozenset({"application/pdf", "application/json"})
+#: How long one url import may take end to end.
+IMPORT_TIMEOUT_S: Final = 30.0
+#: The extension a stored name gets when the url's last segment has none.
+IMPORT_SUFFIX: Final[dict[str, str]] = {
+    "text/markdown": ".md",
+    "text/plain": ".txt",
+    "application/pdf": ".pdf",
+    "application/json": ".json",
+}
+
+
+class UnsupportedMediaTypeError(ApiError):
+    """415 — a url import answered with a content type the knowledge base cannot ingest."""
+
+    status_code = 415
+    code = "unsupported_media_type"
+
+
+@dataclass(slots=True, frozen=True)
+class ImportedSource:
+    """The fetched body of a url import."""
+
+    data: bytes
+    mime: str
+
+
+def import_policy() -> net_guard.NetPolicy:
+    """The network policy of a knowledge-base url import: no private destination, ever.
+
+    The fetched body is stored and later served back through search, so, like
+    an HTTP-tool dry run, an import must never read a loopback, private or
+    metadata address. That is why the offline request-time check ignores both
+    the ``LKAP_ENV=dev`` loopback default and ``LKAP_NET_ALLOW_PRIVATE_HOSTS``
+    (which exist for self-hosted LiveKit servers).
+    """
+    return net_guard.NetPolicy()
+
+
+def media_type(content_type: str | None) -> str:
+    """``text/markdown; charset=utf-8`` → ``text/markdown`` (lower-cased; ``""`` when absent)."""
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
+def import_media_type_allowed(mime: str) -> bool:
+    """Whether a url import may ingest a body of media type ``mime``."""
+    return mime.startswith("text/") or mime in IMPORT_MEDIA_TYPES
+
+
+async def fetch_import_source(client: httpx.AsyncClient, url: str, *, max_bytes: int) -> ImportedSource:
+    """Fetch a url import's body through the guarded client, enforcing type and size.
+
+    The caller has already run :func:`lkap_api.net_guard.validate_url` with
+    :func:`import_policy`; the client's own transport re-checks every resolved
+    address at connect time and never follows a redirect.
+
+    Args:
+        client: The outbound client (``deps.get_http_client``).
+        url: The validated url.
+        max_bytes: The size cap (the upload cap, 25 MB).
+
+    Returns:
+        The body and its bare media type.
+
+    Raises:
+        UnprocessableEntityError: The destination was refused at connect time
+            (``reason="blocked_destination"``), or the fetch failed or answered
+            with a non-2xx status (``reason="fetch_failed"``).
+        UnsupportedMediaTypeError: The content type is not text, markdown, JSON or PDF.
+        UploadTooLargeError: ``Content-Length`` or the streamed body exceeds ``max_bytes``.
+    """
+    too_large = UploadTooLargeError(
+        f"the document exceeds the {max_bytes} byte limit", details={"max_bytes": max_bytes}
+    )
+    try:
+        async with client.stream("GET", url, timeout=IMPORT_TIMEOUT_S) as response:
+            if not 200 <= response.status_code < 300:
+                raise UnprocessableEntityError(
+                    f"the url answered HTTP {response.status_code}; redirects are not followed",
+                    details={"field": "url", "reason": "fetch_failed", "status_code": response.status_code},
+                )
+            mime = media_type(response.headers.get("content-type"))
+            if not import_media_type_allowed(mime):
+                raise UnsupportedMediaTypeError(
+                    f"cannot ingest content type {mime or 'unknown'!r}; "
+                    "text, markdown, JSON and PDF documents are accepted",
+                    details={"content_type": mime or None},
+                )
+            declared = response.headers.get("content-length", "")
+            if declared.isdigit() and int(declared) > max_bytes:
+                raise too_large
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > max_bytes:
+                    raise too_large
+                chunks.append(chunk)
+    except httpx.HTTPError as exc:
+        blocked = net_guard.blocked_cause(exc)
+        if blocked is not None:
+            raise UnprocessableEntityError(
+                f"{blocked}; outbound requests to private or local networks are refused",
+                details={"field": "url", "reason": "blocked_destination"},
+            ) from exc
+        raise UnprocessableEntityError(
+            f"could not fetch the url ({type(exc).__name__})",
+            details={"field": "url", "reason": "fetch_failed"},
+        ) from exc
+    return ImportedSource(data=b"".join(chunks), mime=mime)

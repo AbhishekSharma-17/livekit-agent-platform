@@ -33,7 +33,7 @@ import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context
 import { useAgents, useCredentials, useDeleteCredential, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import { CredentialDialog, type CredentialDialogMode } from "@/components/console/registry/credential-dialog";
 import { OUTCOME_LABEL, OUTCOME_TONE, useCredentialTest } from "@/components/console/registry/credential-test";
-import { KIND_LABEL, kindRank } from "@/components/console/registry/provider-meta";
+import { KIND_LABEL, credentialDisplay, kindRank } from "@/components/console/registry/provider-meta";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { pluralize } from "@/lib/format";
@@ -118,11 +118,13 @@ export function CredentialList() {
   const { canWrite } = useWriteAccess("admin");
   const writeReason = writeAccessReason("admin");
 
+  const registry = React.useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data]);
+
   const specs = React.useMemo(() => {
     const map = new Map<string, ProviderSpec>();
-    for (const spec of providersQuery.data?.providers ?? []) map.set(spec.id, spec);
+    for (const spec of registry) map.set(spec.id, spec);
     return map;
-  }, [providersQuery.data]);
+  }, [registry]);
 
   const usage = React.useMemo(
     () => credentialUsage(agentsQuery.data?.items ?? [], toolsQuery.data?.items ?? []),
@@ -131,15 +133,17 @@ export function CredentialList() {
 
   const rows = React.useMemo(() => {
     const items = [...(credentialsQuery.data?.items ?? [])];
+    const titleFor = (spec: ProviderSpec | undefined, providerId: string) =>
+      spec ? credentialDisplay(spec, registry).title : providerId;
     return items.sort((a, b) => {
       const sa = specs.get(a.provider_id);
       const sb = specs.get(b.provider_id);
       const byKind = kindRank(sa?.kind ?? "secret_bag") - kindRank(sb?.kind ?? "secret_bag");
       if (byKind !== 0) return byKind;
-      const byProvider = (sa?.label ?? a.provider_id).localeCompare(sb?.label ?? b.provider_id);
+      const byProvider = titleFor(sa, a.provider_id).localeCompare(titleFor(sb, b.provider_id));
       return byProvider !== 0 ? byProvider : a.label.localeCompare(b.label);
     });
-  }, [credentialsQuery.data, specs]);
+  }, [credentialsQuery.data, specs, registry]);
 
   const addButton = (
     <Button
@@ -184,15 +188,12 @@ export function CredentialList() {
       {
         id: "credential",
         header: "Credential",
-        cell: (row) => <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} />,
+        cell: (row) => <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} />,
       },
       {
         id: "kind",
         header: "Kind",
-        cell: (row) => {
-          const spec = specs.get(row.provider_id);
-          return <span className="text-[0.8125rem] text-muted-foreground">{spec ? KIND_LABEL[spec.kind] : "—"}</span>;
-        },
+        cell: (row) => <CredentialKind spec={specs.get(row.provider_id)} registry={registry} />,
       },
       {
         id: "fingerprint",
@@ -234,10 +235,11 @@ export function CredentialList() {
         renderCard={(row) => (
           <div className="flex flex-col gap-2 p-4">
             <div className="flex items-start justify-between gap-2">
-              <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} />
+              <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} />
               <RowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-[0.8125rem] text-muted-foreground">
+              <CredentialKind spec={specs.get(row.provider_id)} registry={registry} />
               <Fingerprint value={row.fingerprint} />
               <UsageCell usage={usage.get(row.id) ?? NO_USAGE} />
             </div>
@@ -276,14 +278,53 @@ export function CredentialList() {
   );
 }
 
-function CredentialIdentity({ credential, spec }: { credential: CredentialOut; spec: ProviderSpec | undefined }) {
+/**
+ * "OpenRouter", not "OpenRouter (LLM)" (R-V4-7's follow-up, `credentialDisplay`
+ * in `provider-meta.ts`): a key stored under a credential home reads as a
+ * vendor-level key everywhere — the narrower kind-scoped label made it look
+ * like the key only worked for that one kind. The "used by" kinds themselves
+ * live in the "Kind" column (`CredentialKind` below), not here.
+ */
+function CredentialIdentity({
+  credential,
+  spec,
+  registry,
+}: {
+  credential: CredentialOut;
+  spec: ProviderSpec | undefined;
+  registry: ProviderSpec[];
+}) {
+  const title = spec ? credentialDisplay(spec, registry).title : credential.provider_id;
   return (
     <div className="flex min-w-0 items-start gap-2.5">
       <VendorMark vendor={spec?.vendor ?? credential.provider_id} size="md" className="mt-0.5" />
       <div className="flex min-w-0 flex-col">
         <span className="truncate font-medium text-foreground">{credential.label}</span>
-        <span className="truncate text-xs text-muted-foreground">{spec?.label ?? credential.provider_id}</span>
+        <span className="truncate text-xs text-muted-foreground">{title}</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The "Kind" column / mobile-card kind line. A shared credential home (e.g.
+ * the OpenRouter key) shows a chip per kind it covers instead of the single
+ * kind its own registry entry happens to carry — that single-kind label is
+ * exactly what made the key look LLM-only.
+ */
+function CredentialKind({ spec, registry }: { spec: ProviderSpec | undefined; registry: ProviderSpec[] }) {
+  if (!spec) return <span className="text-[0.8125rem] text-muted-foreground">—</span>;
+  const { usedBy } = credentialDisplay(spec, registry);
+  if (usedBy.length <= 1) {
+    return <span className="text-[0.8125rem] text-muted-foreground">{KIND_LABEL[spec.kind]}</span>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1" aria-label={`Used by ${usedBy.join(", ")}`}>
+      {usedBy.map((kind) => (
+        <StatusChip key={kind} tone="neutral" size="sm">
+          {kind}
+        </StatusChip>
+      ))}
     </div>
   );
 }

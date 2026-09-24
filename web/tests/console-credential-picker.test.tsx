@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
@@ -110,6 +110,22 @@ const openrouterImageGen: ProviderSpec = {
   get_key_url: "https://openrouter.ai/settings/keys",
 };
 
+const openrouterEmbedding: ProviderSpec = {
+  v: 2,
+  id: "openrouter-embedding",
+  kind: "embedding",
+  label: "OpenRouter embeddings",
+  vendor: "OpenRouter",
+  package: "openai",
+  python_class: "lkap_agent.providers.embedding.OpenRouterEmbedding",
+  credential_provider: "openrouter-llm",
+  secret_fields: [OPENROUTER_KEY_FIELD],
+  fields: [],
+  models: [],
+  default_model: "openai/text-embedding-3-small",
+  get_key_url: "https://openrouter.ai/settings/keys",
+};
+
 const deepgramStt: ProviderSpec = {
   v: 2,
   id: "deepgram-stt",
@@ -124,7 +140,7 @@ const deepgramStt: ProviderSpec = {
   default_model: null,
 };
 
-const REGISTRY = [openrouterLlm, openrouterStt, openrouterTts, openrouterImageGen, deepgramStt];
+const REGISTRY = [openrouterLlm, openrouterStt, openrouterTts, openrouterImageGen, openrouterEmbedding, deepgramStt];
 
 const HOME_CREDENTIAL: CredentialOut = {
   id: "cred_or",
@@ -165,6 +181,12 @@ function stubApi(options: { credentialsByHome?: Record<string, CredentialOut[]> 
       if (url.includes("/auth/me")) {
         const me: Me = { user: { id: "u1", email: "owner@example.com" }, workspaces: [{ id: "w1", name: "Test", slug: "test", role: "admin" }] };
         return respond(me);
+      }
+      if (url.includes("/providers")) {
+        // The dialog fetches the full registry whenever it's opened from an
+        // aliased slot (R-V4-7's follow-up) to enumerate every sibling kind
+        // a shared credential home covers — see `credentialDisplay`.
+        return respond({ providers: REGISTRY });
       }
       if (url.includes("/credentials") && method === "GET") {
         const match = /provider_id=([^&]+)/.exec(url);
@@ -239,7 +261,10 @@ describe("CredentialPicker — the shared OpenRouter key (R-V4-7, V4-04)", () =>
   it("a key added from an alias slot (openrouter-tts) appears selected without a reload", async () => {
     stubApi({ credentialsByHome: {} });
     renderWithClient(<ControlledPicker spec={openrouterTts} />);
-    expect(await screen.findByText(/No OpenRouter \(TTS\) keys yet/)).toBeTruthy();
+    // "No OpenRouter keys yet", not "No OpenRouter (TTS) keys yet" — the
+    // empty-state hint reads at the vendor level too (`credentialDisplay`),
+    // since this is the shared OpenRouter key, not a TTS-only one.
+    expect(await screen.findByText(/No OpenRouter keys yet/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Test key" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Add key/ }));
@@ -255,17 +280,35 @@ describe("CredentialPicker — the shared OpenRouter key (R-V4-7, V4-04)", () =>
     // own, for the now-selected key — proof the refetch-on-save fix picked
     // up the credential the alias's own POST created (stored under the home).
     expect(await screen.findByRole("button", { name: "Test key" })).toBeTruthy();
-    expect(screen.queryByText(/No OpenRouter \(TTS\) keys yet/)).toBeNull();
+    expect(screen.queryByText(/No OpenRouter keys yet/)).toBeNull();
   });
 });
 
-describe("CredentialDialog — the shared-key notice (V4-04)", () => {
-  it("names the arrangement for an aliased provider (openrouter-tts)", async () => {
+describe("CredentialDialog — the shared-key notice (V4-04, R-V4-7 follow-up)", () => {
+  it("names the arrangement for an aliased provider (openrouter-tts): title and the full service list", async () => {
     stubApi();
     renderWithClient(<CredentialDialog spec={openrouterTts} trigger={<button type="button">Open</button>} />);
     fireEvent.click(screen.getByText("Open"));
-    expect(await screen.findByText(/Stored as your OpenRouter key/)).toBeTruthy();
-    expect(screen.getByText(/shared by every OpenRouter provider/)).toBeTruthy();
+    // "Add OpenRouter key", not "Add OpenRouter (TTS) key" — opened from any
+    // OpenRouter slot this should read the same, since the key it saves
+    // works for every one of them.
+    expect(await screen.findByRole("heading", { name: "Add OpenRouter key" })).toBeTruthy();
+    // Kinds are listed in `KIND_ORDER` (stt, llm, tts, image_gen, embedding
+    // among this registry's kinds), not alphabetically or by alias order.
+    // `findByText` (not `getByText`): the full sibling list only arrives
+    // once the registry fetch this notice depends on resolves.
+    // Kinds are listed in `KIND_ORDER` (stt, llm, tts, image_gen, embedding
+    // among this registry's kinds), not alphabetically or by alias order.
+    // `findByText` (not `getByText`): the full sibling list only arrives
+    // once the registry fetch this notice depends on resolves.
+    // The sentence is split across several text nodes (one JSX expression
+    // each), so it's asserted against the dialog's own text content rather
+    // than `getByText`, which can't match a string split across siblings.
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="dialog-body"]')?.textContent).toContain(
+        "One key for all OpenRouter services: Speech-to-text, Language models, Text-to-speech, Image generation, Embeddings.",
+      ),
+    );
   });
 
   it("says nothing for the credential home itself (openrouter-llm)", async () => {

@@ -9,6 +9,7 @@ import { Field, fieldIds } from "@/components/shared/field";
 import { useCredentials } from "@/components/console/lib/api-hooks";
 import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { CredentialTestResultView, useCredentialTest } from "@/components/console/registry/credential-test";
+import { credentialDisplay } from "@/components/console/registry/provider-meta";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import type { ProviderSpec } from "@/contracts/lkap-contracts";
 
@@ -53,6 +54,13 @@ export function CredentialPicker({
   const { data, isLoading, isError, error: loadError, refetch } = useCredentials(spec.id);
   const items = data?.items ?? [];
   const selected = items.find((item) => item.id === value);
+  // `registry` is left at its default ([]): this component only has its own
+  // `spec`, not the full provider list, but `credentialDisplay` still
+  // resolves an aliased spec (e.g. `openrouter-tts`) to the vendor title
+  // from its own `vendor` field (R-V4-7's follow-up) — a key stored under a
+  // shared credential home should read "OpenRouter", not "OpenRouter (TTS)",
+  // everywhere, including this empty-state hint.
+  const { title: credentialTitle } = credentialDisplay(spec);
 
   let hint: React.ReactNode;
   if (isError) {
@@ -69,7 +77,7 @@ export function CredentialPicker({
       </>
     );
   } else if (!isLoading && items.length === 0) {
-    hint = `No ${spec.label} keys yet. Add one to use this provider.`;
+    hint = `No ${credentialTitle} keys yet. Add one to use this provider.`;
   }
 
   return (

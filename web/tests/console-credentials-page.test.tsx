@@ -163,6 +163,41 @@ describe("CredentialList", () => {
     expect(within(rows[0]).getByRole("button", { name: "Copy fingerprint" })).toBeTruthy();
   });
 
+  it("shows the shared OpenRouter key as a vendor-level key with a 'Used by' chip per kind it covers", async () => {
+    // R-V4-7's follow-up (see `credentialDisplay` in `provider-meta.ts`): a
+    // key stored under `openrouter-llm` (the credential home for
+    // `openrouter-stt`/`-tts`/`-embedding`/`-image-gen`) used to read as
+    // "OpenRouter" filed under "Language models" — indistinguishable from
+    // an ordinary LLM-only key, which is exactly the bug report ("it still
+    // registers it as a language model").
+    const openrouterCredential: CredentialOut = {
+      id: "cred_or",
+      provider_id: "openrouter-llm",
+      label: "OpenRouter key",
+      fingerprint: "…or01",
+      created_at: "2026-09-04T10:00:00Z",
+      updated_at: "2026-09-04T10:00:00Z",
+    };
+    stubApi((call) =>
+      call.url.includes("/credentials") && call.method === "GET"
+        ? { status: 200, body: { items: [openrouterCredential], total: 1 } }
+        : undefined,
+    );
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row")[1];
+    // The credential's own name stays as given; the subtitle beneath it is
+    // the vendor ("OpenRouter"), not the home's own kind-scoped label.
+    expect(within(row).getByText("OpenRouter key")).toBeTruthy();
+    expect(within(row).getByText("OpenRouter")).toBeTruthy();
+    // The Kind column shows a chip per kind the shared key actually covers
+    // — not just "Language models", the literal kind of its own registry
+    // entry, which is what made it look LLM-only.
+    for (const kind of ["Speech-to-text", "Language models", "Text-to-speech", "Image generation", "Embeddings"]) {
+      expect(within(row).getByText(kind)).toBeTruthy();
+    }
+  });
+
   it("shows an empty state with the add action when there are no keys", async () => {
     stubApi((call) => (call.url.includes("/credentials") ? { status: 200, body: { items: [], total: 0 } } : undefined));
     renderPage();

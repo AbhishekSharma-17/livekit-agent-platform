@@ -27,6 +27,7 @@ import { CredentialTestResultView, useCredentialTest } from "@/components/consol
 import {
   KIND_LABEL,
   KIND_ORDER,
+  credentialDisplay,
   isSelectableForCredentials,
   suggestedCredentialLabel,
 } from "@/components/console/registry/provider-meta";
@@ -89,12 +90,27 @@ export function CredentialDialog({
 }: CredentialDialogProps) {
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
-  const needsRegistry = !specProp;
+  // Fetched whenever the provider isn't locked (the vendor picker needs the
+  // full list) *and* whenever a locked `specProp` is itself an alias
+  // (`credential_provider` set): only then can `credentialDisplay` below
+  // enumerate every sibling kind a shared credential home covers — the
+  // whole point of R-V4-7's follow-up fix (a key added from `openrouter-tts`
+  // read as LLM-only because the dialog only ever saw that one alias's own
+  // spec). A locked spec that is itself a credential home (e.g. opened from
+  // the LLM slot) needs no extra fetch: it already reads correctly as
+  // itself, `credentialDisplay` degrades to "keep today's label" without
+  // the registry, and the home's own dialog intentionally says nothing
+  // about sharing (there is nothing to add from behind that slot).
+  const needsRegistry = !specProp || Boolean(specProp.credential_provider);
   const providersQuery = useProviders({ enabled: needsRegistry });
-  const registry = React.useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data]);
+  const registry = React.useMemo(
+    () => providersQuery.data?.providers ?? (specProp ? [specProp] : []),
+    [providersQuery.data, specProp],
+  );
 
   const [providerId, setProviderId] = React.useState<string>(specProp?.id ?? credential?.provider_id ?? "");
   const spec = specProp ?? registry.find((p) => p.id === (credential?.provider_id ?? providerId));
+  const display = spec ? credentialDisplay(spec, registry) : null;
 
   const [label, setLabel] = React.useState("");
   const [labelTouched, setLabelTouched] = React.useState(false);
@@ -230,7 +246,11 @@ export function CredentialDialog({
       : mode === "rename"
         ? `Rename ${credential?.label ?? "key"}`
         : spec && specProp
-          ? `Add ${spec.label} key`
+          ? // "Add OpenRouter key", not "Add OpenRouter (TTS) key" (R-V4-7's
+            // follow-up): opened from any OpenRouter slot — LLM, STT, TTS,
+            // embeddings or image generation — this should read the same,
+            // since the key it saves works for all of them.
+            `Add ${display!.title} key`
           : "Add credential";
 
   const pickable = React.useMemo(
@@ -253,7 +273,7 @@ export function CredentialDialog({
 
         <DialogBody>
           {saved ? (
-            <SavedView credential={saved} spec={spec} />
+            <SavedView credential={saved} title={display?.title ?? spec?.label} />
           ) : (
             <>
               {mode === "create" && !specProp ? (
@@ -284,15 +304,15 @@ export function CredentialDialog({
                 <div className="flex items-center gap-2.5">
                   <VendorMark vendor={spec.vendor} size="md" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{spec.label}</p>
+                    <p className="text-sm font-medium text-foreground">{display!.title}</p>
                     <p className="text-xs text-muted-foreground">{KIND_LABEL[spec.kind]}</p>
                   </div>
                 </div>
               ) : null}
 
-              {spec?.credential_provider ? (
+              {display && display.usedBy.length > 1 ? (
                 <p className="text-[0.8125rem] text-pretty text-muted-foreground">
-                  Stored as your {spec.vendor} key — shared by every {spec.vendor} provider.
+                  One key for all {display.title} services: {display.usedBy.join(", ")}.
                 </p>
               ) : null}
 
@@ -371,13 +391,13 @@ export function CredentialDialog({
 }
 
 /** After save: what was stored (never the secret) + "Test key". */
-function SavedView({ credential, spec }: { credential: CredentialOut; spec: ProviderSpec | undefined }) {
+function SavedView({ credential, title }: { credential: CredentialOut; title: string | undefined }) {
   return (
     <>
       <DescriptionList
         columns={1}
         items={[
-          { term: "Provider", detail: spec?.label ?? credential.provider_id },
+          { term: "Provider", detail: title ?? credential.provider_id },
           { term: "Name", detail: credential.label },
           {
             term: "Fingerprint",

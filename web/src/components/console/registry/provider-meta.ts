@@ -177,6 +177,61 @@ export function isVerified(spec: ProviderSpec): boolean {
   return spec.verification === "verified";
 }
 
+/** The vendor name for a shared key's title: `spec.vendor`, else the label with a trailing "(Kind)"-style suffix stripped. */
+function vendorTitle(spec: Pick<ProviderSpec, "vendor" | "label">): string {
+  return spec.vendor?.trim() || spec.label.replace(/\s*\([^()]*\)\s*$/, "").trim();
+}
+
+export interface CredentialDisplay {
+  /** The vendor name for a shared credential home ("OpenRouter"); the spec's own label otherwise. */
+  title: string;
+  /** Human kind labels this key covers, in `KIND_ORDER` — the home's own kind plus every aliased entry's. A single entry for a spec that isn't a credential home. */
+  usedBy: string[];
+}
+
+/**
+ * How a stored key should read everywhere it appears — the credentials
+ * list, the key dialog, the picker, the providers catalog (R-V4-7's
+ * follow-up: a key added from an aliased slot, e.g. `openrouter-stt`, read
+ * as LLM-only because the console showed the credential *home*'s own
+ * label/kind, e.g. "OpenRouter" filed under "Language models", with no sign
+ * it also covers STT/TTS/embeddings/image generation).
+ *
+ * Accepts either the home spec or any alias — both resolve to the same
+ * answer. When the resolved home is genuinely shared (another registry
+ * entry names it as `credential_provider`, or `spec` itself is an alias),
+ * the title becomes the vendor name and `usedBy` lists every kind it
+ * covers, home included, in `KIND_ORDER`. Otherwise (an ordinary
+ * single-kind provider, e.g. Deepgram) today's label and kind are
+ * unchanged — `usedBy` is just that one kind.
+ *
+ * `registry` is optional: without it (e.g. `CredentialPicker`, which only
+ * has its own `spec`, not the full list), a spec that is itself an alias
+ * (`credential_provider` set) still resolves to the vendor title from its
+ * own `vendor` field — just with a `usedBy` limited to what's knowable
+ * without the registry (its own kind). Pass the full registry wherever it's
+ * already in hand (the credentials list, the dialog, the catalog) for the
+ * complete `usedBy` list.
+ */
+export function credentialDisplay(
+  spec: Pick<ProviderSpec, "id" | "label" | "vendor" | "kind" | "credential_provider">,
+  registry: ProviderSpec[] = [],
+): CredentialDisplay {
+  const homeId = spec.credential_provider ?? spec.id;
+  const home = registry.find((p) => p.id === homeId) ?? (homeId === spec.id ? spec : undefined);
+  const aliases = home ? registry.filter((p) => p.credential_provider === home.id) : [];
+  const isShared = Boolean(spec.credential_provider) || aliases.length > 0;
+
+  if (!isShared) {
+    return { title: spec.label, usedBy: [KIND_LABEL[spec.kind]] };
+  }
+
+  const baseline = home ?? spec;
+  const kinds = new Set<ProviderKind>([baseline.kind, spec.kind, ...aliases.map((a) => a.kind)]);
+  const ordered = Array.from(kinds).sort((a, b) => kindRank(a) - kindRank(b));
+  return { title: vendorTitle(baseline), usedBy: ordered.map((k) => KIND_LABEL[k]) };
+}
+
 /** LiveKit Inference entries (`livekit-inference-stt|llm|tts`): no key, billed through LiveKit Cloud. */
 export function isInferenceProvider(spec: ProviderSpec): boolean {
   return spec.id.startsWith("livekit-inference-");

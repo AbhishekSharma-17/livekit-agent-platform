@@ -1,0 +1,116 @@
+# Catalog drift (docs/v4/CUSTOM-MODELS.md D-V4-27, PLAN-V4 V4-10): once a week,
+# compare the provider registry's model ids with every vendor's live list and
+# keep ONE open issue titled "Catalog drift" (label `registry`) up to date with
+# the report. `api/src/lkap_api/catalogs/drift.py` does the work;
+# `scripts/catalog_drift.py` runs the same thing locally.
+#
+# This workflow never fails a build: the fetch step and both jobs are
+# `continue-on-error`, and the module itself always exits 0 (a vendor error or
+# a missing secret is a `skipped` line in the report).
+#
+# Keyless lists always run: OpenRouter, Deepgram and Rime. Keyed lists run
+# only when their repository secret is set (Settings → Secrets and variables →
+# Actions); every one is optional:
+#   OPENAI_API_KEY, GOOGLE_API_KEY (the names live.yml already declares),
+#   ANTHROPIC_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY, MISTRAL_API_KEY, XAI_API_KEY.
+# Only the entries whose catalog is a *model* list are compared, so the voice
+# and avatar vendors' keys (ElevenLabs, Cartesia, Hume, Inworld, Deepgram's
+# public list, OpenRouter's public list) are not needed and not passed.
+# `api/tests/test_catalog_drift.py` keeps this list equal to what the module reads.
+name: catalog-drift
+
+on:
+  schedule:
+    - cron: "23 6 * * 1" # Mondays 06:23 UTC
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated provider ids and/or "keyless" (empty: every entry)'
+        required: false
+        default: ""
+
+# V2-21: least-privilege GITHUB_TOKEN. Only the `report` job may write issues.
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync api dependencies
+        working-directory: api
+        run: uv sync --frozen
+
+      - name: Fetch the vendor lists and compare
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          # V2-21: the free-text input is data, never script (no ${{ }} inside `run`);
+          # the module keeps only tokens shaped like a registry id.
+          DRIFT_ONLY: ${{ inputs.only }}
+        run: uv run --project api python -m lkap_api.catalogs.drift --only "$DRIFT_ONLY" --out drift-report
+
+      - name: Upload the report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-drift
+          path: drift-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+  report:
+    needs: drift
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    # The one job with a write scope; it checks nothing out and runs no repo code.
+    permissions:
+      issues: write
+    steps:
+      - name: Download the report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: catalog-drift
+          path: drift-report
+
+      - name: Create or update the "Catalog drift" issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          body="drift-report/catalog-drift.md"
+          if [ ! -s "$body" ]; then
+            echo "::warning::no drift report was produced; the issue is left as it is"
+            exit 0
+          fi
+          gh label create registry --color 5319e7 --description "Provider registry upkeep" --force >/dev/null 2>&1 || true
+          number="$(gh issue list --label registry --state open --limit 50 \
+            --json number,title --jq '[.[] | select(.title == "Catalog drift")][0].number // empty')"
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$body"
+          else
+            gh issue create --title "Catalog drift" --label registry --body-file "$body"
+          fi

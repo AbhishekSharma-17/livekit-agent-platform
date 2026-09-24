@@ -104,6 +104,12 @@ receiving camera frames. `lkap_describe("model", "openrouter-llm/openai/gpt-4.1-
 shows the merged view: registry entry, workspace record, catalog item and
 capabilities.
 
+A model that disappears upstream becomes a warning, never an error.
+`agent_validate` warns that a custom id "no longer appears in the vendor's
+catalog (last seen <date>)", or that the vendor has retired it. The warning
+clears when the id reappears. Registry defaults are checked weekly by the
+catalog drift job instead.
+
 ## Related tools
 
 `provider_list`, `provider_catalog`, `provider_settings`,

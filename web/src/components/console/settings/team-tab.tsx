@@ -5,8 +5,10 @@ import { MailPlusIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -132,14 +134,35 @@ export function TeamTab() {
             label="Team members"
             getRowKey={(member) => member.user_id}
             renderCard={(member) => (
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate font-medium text-foreground">{member.name || member.email}</div>
-                  <div className="truncate font-mono text-xs text-muted-foreground">{member.email}</div>
+              // Phones get the same role and remove controls as the table (no
+              // table-only actions).
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-foreground">{member.name || member.email}</div>
+                    <div className="truncate font-mono text-xs text-muted-foreground">{member.email}</div>
+                  </div>
+                  {canManage ? null : (
+                    <StatusChip tone="neutral" size="sm">
+                      {ROLE_LABEL[member.role]}
+                    </StatusChip>
+                  )}
                 </div>
-                <StatusChip tone="neutral" size="sm">
-                  {ROLE_LABEL[member.role]}
-                </StatusChip>
+                {canManage ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <RoleSelect
+                      workspaceId={membership!.id}
+                      userId={member.user_id}
+                      role={member.role}
+                      onChanged={() => invalidate(membership!.id)}
+                    />
+                    <RemoveMemberButton
+                      workspaceId={membership!.id}
+                      member={member}
+                      onRemoved={() => invalidate(membership!.id)}
+                    />
+                  </div>
+                ) : null}
               </div>
             )}
           />
@@ -215,9 +238,17 @@ function RemoveMemberButton({
   }
 
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={onClick} disabled={busy}>
-      Remove
-    </Button>
+    <ConfirmDialog
+      trigger={
+        <Button type="button" variant="ghost" size="sm" disabled={busy}>
+          Remove
+        </Button>
+      }
+      title={`Remove ${member.email}?`}
+      description="They lose access to this workspace. You can invite them again later."
+      confirmLabel="Remove member"
+      onConfirm={onClick}
+    />
   );
 }
 
@@ -272,7 +303,7 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
           Invite
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Invite someone</DialogTitle>
           <DialogDescription>
@@ -281,43 +312,48 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
           </DialogDescription>
         </DialogHeader>
         {invite ? (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Send this link to <span className="font-medium text-foreground">{invite.email}</span>:
-            </p>
-            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
-              <code className="min-w-0 flex-1 truncate font-mono text-xs">{invite.url}</code>
-              <CopyButton value={invite.url} label="Copy invite link" />
-            </div>
-            <p className="text-xs text-muted-foreground">This link won&apos;t be shown again.</p>
-          </div>
+          <>
+            <DialogBody className="gap-3">
+              <p className="text-sm text-muted-foreground">
+                Send this link to <span className="font-medium text-foreground">{invite.email}</span>:
+              </p>
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
+                <code className="min-w-0 flex-1 font-mono text-xs break-all">{invite.url}</code>
+                <CopyButton value={invite.url} label="Copy invite link" />
+              </div>
+              <p className="text-xs text-muted-foreground">This link won&apos;t be shown again.</p>
+            </DialogBody>
+            <DialogFooter showCloseButton />
+          </>
         ) : (
-          <form onSubmit={onSubmit} className="space-y-4">
-            {error ? <ErrorBanner message={error} /> : null}
-            <Field label="Email" htmlFor="invite-email" required>
-              <Input
-                id="invite-email"
-                type="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                disabled={sending}
-              />
-            </Field>
-            <Field label="Role" htmlFor="invite-role" required>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)} disabled={sending}>
-                <SelectTrigger id="invite-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROLE_LABEL[r]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+          <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+            <DialogBody className="gap-4">
+              {error ? <ErrorBanner message={error} /> : null}
+              <Field label="Email" htmlFor="invite-email" required>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={sending}
+                />
+              </Field>
+              <Field label="Role" htmlFor="invite-role" required>
+                <Select value={role} onValueChange={(v) => setRole(v as Role)} disabled={sending}>
+                  <SelectTrigger id="invite-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABEL[r]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </DialogBody>
             <DialogFooter>
               <Button type="submit" disabled={sending}>
                 Send invite

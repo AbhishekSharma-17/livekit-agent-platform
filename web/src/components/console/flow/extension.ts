@@ -10,9 +10,11 @@ import { VersionHistory } from "./version-history";
 /**
  * V2-16's `EditorExtension` (`agents/editor/README.md`):
  *
- * - replaces the built-in `flow` placeholder with the builder (same id, order,
- *   visibility and issue routing; `layout: "full"`); the canvas inside is a
- *   lazily loaded chunk (`flow-section.tsx`);
+ * - replaces the built-in `flow` placeholder with the builder (same id, order
+ *   and issue routing; `layout: "full"`). Unlike the placeholder it is visible
+ *   in both modes, so prompt agents can find it: in prompt mode it shows an
+ *   explainer with a "Switch to flow" button that opens the header chip's
+ *   dialog. The canvas inside is a lazily loaded chunk (`flow-section.tsx`);
  * - fills the `modeChip` slot with the prompt ↔ flow switch dialog and the
  *   `versionHistory` slot with the history dialog (diff + restore);
  * - introduces the Instructions section as the base instructions in flow
@@ -27,7 +29,6 @@ export const flowBuilderExtension: EditorExtension = {
       icon: WorkflowIcon,
       order: 30,
       Component: FlowSection,
-      visible: ({ mode }) => mode === "flow",
       layout: "full",
       issuePaths: ["flow"],
       issueKeywords: /\b(flow|node|edge|path|variable)\b/i,

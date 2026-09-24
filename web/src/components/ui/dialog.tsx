@@ -64,9 +64,12 @@ type DialogSize = keyof typeof DIALOG_PANEL_WIDTH
 
 /**
  * Without `size` this is the stock compact dialog (confirmations, short
- * forms). With `size` it becomes a panel: a flex column capped at 85 % of the
- * viewport with a sticky `DialogHeader`/`DialogFooter` and a scrolling
- * `DialogBody` in between, and full-screen below `sm` (phones).
+ * forms): 24 rem wide, one shrinkable grid column, and it scrolls as a whole
+ * if it is ever taller than the viewport. With `size` it becomes a panel: a
+ * flex column capped at 85 % of the viewport with a sticky
+ * `DialogHeader`/`DialogFooter` and a scrolling `DialogBody` in between, and
+ * full-screen below `sm` (phones). Anything with code, a long list or more
+ * than a few fields belongs in a panel (`md` for forms).
  */
 /**
  * Records what had focus when the dialog opened, so closing can hand focus
@@ -110,6 +113,11 @@ function DialogContent({
         data-layout={panel ? "panel" : undefined}
         className={cn(
           "group/dialog fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // Compact layout guards: one `minmax(0,1fr)` column so a long `<pre>`,
+          // URL or code line can't widen the grid past the box (grid items
+          // default to `min-width: auto`), and a viewport-capped height that
+          // scrolls instead of pushing the header/footer off a short screen.
+          !panel && "grid-cols-[minmax(0,1fr)] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           panel &&
             "flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 max-sm:top-0 max-sm:left-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:ring-0",
           panel && DIALOG_PANEL_WIDTH[size],
@@ -191,7 +199,7 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-body"
-      className={cn("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 py-5", className)}
+      className={cn("relative flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 py-5", className)}
       {...props}
     />
   )

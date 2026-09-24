@@ -133,7 +133,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             inline
             label="Make HTTP requests"
             htmlFor="http-request-enabled"
-            hint="Lets the model make ad-hoc outbound calls, only to hosts allowed by the worker's LKAP_HTTP_TOOL_ALLOWED_HOSTS."
+            hint="Lets the model call web addresses on its own, limited to the hosts the worker allows (LKAP_HTTP_TOOL_ALLOWED_HOSTS)."
           >
             <Controller
               control={control}

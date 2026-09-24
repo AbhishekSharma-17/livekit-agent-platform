@@ -3,11 +3,35 @@
 import * as React from "react"
 import { cn } from "cn"
 
+/**
+ * The container scrolls sideways when a table is wider than its column; only
+ * then does it join the tab order, so keyboard users can scroll it (axe
+ * `scrollable-region-focusable`) without every fitting table adding a stop.
+ */
+function useHorizontallyScrollable(ref: React.RefObject<HTMLDivElement | null>) {
+  const [scrollable, setScrollable] = React.useState(false)
+  React.useEffect(() => {
+    const node = ref.current
+    if (!node || typeof ResizeObserver === "undefined") return
+    const measure = () => setScrollable(node.scrollWidth > node.clientWidth + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    if (node.firstElementChild) observer.observe(node.firstElementChild)
+    return () => observer.disconnect()
+  }, [ref])
+  return scrollable
+}
+
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const scrollable = useHorizontallyScrollable(containerRef)
   return (
     <div
+      ref={containerRef}
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      tabIndex={scrollable ? 0 : undefined}
+      className="relative w-full overflow-x-auto rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <table
         data-slot="table"

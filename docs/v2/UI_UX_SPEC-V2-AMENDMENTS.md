@@ -9,7 +9,7 @@ The console sidebar gains groups (Lucide icons in parentheses). Routes are addit
 | Group | Screen | Route | Notes |
 |---|---|---|---|
 | — | Overview | `/console` | Setup checklist grows to 8 rows: sign in ✓, connection tested, provider key added, agent created, test call, panel added, recording on, webhook added. "Live now" lists sessions by connection. |
-| Build (`bot`) | Agents | `/console/agents`, `/console/agents/new`, `/console/agents/[id]?section=providers\|instructions\|flow\|panel\|tools\|knowledge\|recording\|limits` | `flow` section only when `mode=flow`; `recording` and `limits` are new sections. |
+| Build (`bot`) | Agents | `/console/agents`, `/console/agents/new`, `/console/agents/[id]?section=providers\|instructions\|flow\|panel\|tools\|knowledge\|recording\|limits` | `flow` is always in the nav (2026-09-24): in prompt mode it explains flows and its "Switch to flow" button opens the mode chip's switch dialog; `recording` and `limits` are new sections. |
 | Build | Knowledge | `/console/knowledge`, `/console/knowledge/[id]` | Unchanged. |
 | Build | Tools (P1 → now P0) | `/console/tools` | Shared tools list (was out of scope in v1; needed because tools are referenced by flows and multiple agents). Sonnet, part of WP-5. |
 | Connect (`plug`) | Connections | `/console/connections`, `/console/connections/new`, `/console/connections/[id]?tab=overview\|fleet\|storage\|deploy` | New. |
@@ -105,3 +105,12 @@ The user's rule: **no side drawers anywhere in the web app; use modals.** This s
 - the `/s/[slug]` mobile transcript bottom sheet (§5.3; a bottom sheet on the session surface);
 - the vendored `agent-popup-01` corner popup;
 - popovers, dropdowns and tooltips, which use `data-side` for positioning only.
+
+## 6. Dialog content and copy rules (UI polish pass, 2026-09-24)
+
+- **Compact vs panel.** A `DialogContent` without `size` is only for confirmations and forms of one to three short fields. Anything with a code snippet, a list, a secret reveal or more fields is a panel (`size="md"` for forms, `lg`/`xl` for rich content) with `DialogBody` and a sticky `DialogFooter`. A form panel wraps header, body and footer in `<form className="flex min-h-0 flex-1 flex-col">`.
+- **Compact guards.** The compact layout has a single `minmax(0,1fr)` column and a viewport-capped height that scrolls, so nothing can push the box, its divider or its buttons off screen. Don't hand-roll `sm:max-w-*` or `max-h-*` on `DialogContent`; pick a `size`.
+- **Code and snippets.** A `<pre>` scrolls inside its box (`overflow-x-auto`, or `whitespace-pre-wrap break-all` for one-line secrets and URLs), is focusable (`tabIndex={0}`) when it can scroll, and carries its `CopyButton` inside the box. For a snippet that scrolls sideways, the box is a flex row with the button in its own gutter (`shrink-0 p-1.5`) so text never slides under it; a wrapping snippet can overlay the button (`absolute top-2 right-2`, `pr-10` on the `<pre>`).
+- **Destructive actions** always confirm first (`ConfirmDialog`), including revoke, remove and delete buttons in table rows. A solid destructive confirm button sets both `bg-destructive` and `dark:bg-destructive`, because the variant's `dark:bg-destructive/20` otherwise wins in dark mode.
+- **No internal vocabulary in the UI.** Rendered text never contains package or ruling ids (`V2-18`, `WP-3`, `R-V2-12`), ask numbers, doc paths (`docs/…`, `PLAN-V2 §7`, `RUNBOOK §1`), file names of our own source, or roadmap phases ("Phase 1", "until X ships"). Env var names appear only where an operator sets them, after a plain-language label. Code comments may keep ids.
+- **Identify things by name.** Tables and chips show a connection's, agent's or key's name, never its raw id; a truncated value has a `title` with the full text.

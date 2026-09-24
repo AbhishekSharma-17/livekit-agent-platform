@@ -23,13 +23,17 @@ export function StorageTab({ connection }: { connection: ConnectionOut }) {
     <div className="flex flex-col gap-4">
       <Alert>
         <AlertDescription>
-          Storage configs aren&apos;t available to create yet — <span className="font-mono">/v1/storage-configs</span>{" "}
-          has no CRUD endpoints (docs/v2/_asks.md #24), and Settings → Storage is a placeholder pending V2-14. Once a
-          config exists it can be assigned here with <span className="font-mono">PUT /v1/connections/&#123;id&#125;</span>.
+          Custom storage for recordings can&apos;t be set up from the console yet. Until it can, this connection uses
+          the platform&apos;s default storage.
         </AlertDescription>
       </Alert>
       <p className="text-sm text-muted-foreground">
-        Current storage config: <span className="font-mono">{connection.storage_config_id ?? "none (platform default)"}</span>
+        Storage for this connection:{" "}
+        {connection.storage_config_id ? (
+          <span className="font-mono text-foreground">{connection.storage_config_id}</span>
+        ) : (
+          <span className="font-medium text-foreground">Platform default</span>
+        )}
       </p>
     </div>
   );

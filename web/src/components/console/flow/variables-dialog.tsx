@@ -7,6 +7,7 @@ import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -58,7 +59,7 @@ export function VariablesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Flow variables</DialogTitle>
           <DialogDescription>
@@ -66,7 +67,7 @@ export function VariablesDialog({
             @. They end up on the session and in the session.ended webhook.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
+        <DialogBody className="gap-3">
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No variables yet.</p>
           ) : (
@@ -169,7 +170,7 @@ export function VariablesDialog({
               );
             })
           )}
-        </div>
+        </DialogBody>
         <DialogFooter className="sm:justify-between">
           <Button
             type="button"

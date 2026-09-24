@@ -74,6 +74,11 @@ const PACKS: PacksResponse = {
   ],
 };
 
+const CONNECTIONS = {
+  items: [{ id: "conn-1", name: "Cloud A", deployment_type: "cloud", is_default: true }],
+  total: 1,
+};
+
 function stubFetch(agents: AgentOut[], role: "owner" | "admin" | "builder" | "viewer" = "admin") {
   const page: AgentPage = { items: agents, total: agents.length };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -93,6 +98,9 @@ function stubFetch(agents: AgentOut[], role: "owner" | "admin" | "builder" | "vi
     }
     if (url.startsWith("/api/console/providers")) {
       return { ok: true, status: 200, json: async () => PROVIDERS } as Response;
+    }
+    if (url.startsWith("/api/console/connections")) {
+      return { ok: true, status: 200, json: async () => CONNECTIONS } as Response;
     }
     if (url.startsWith("/api/console/packs")) {
       return { ok: true, status: 200, json: async () => PACKS } as Response;
@@ -154,6 +162,16 @@ describe("AgentsTable", () => {
     expect(table.getByText("Insurance claim intake")).toBeTruthy();
     expect(table.getByText("Live")).toBeTruthy();
     expect(table.getAllByRole("img", { name: "Deepgram" }).length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    [undefined, "Cloud A (default)"],
+    ["conn-1", "Cloud A · Cloud"],
+    ["conn-gone", "Unknown connection"],
+  ])("labels the connection by name, never its id (connection_id=%s)", async (connectionId, label) => {
+    renderTable([agent({ id: "a-1", name: "Claims intake", slug: "claims-intake", connection_id: connectionId })]);
+    await waitFor(() => expect(tableScope().getByText(label)).toBeTruthy());
+    if (connectionId) expect(tableScope().queryByText(connectionId)).toBeNull();
   });
 
   it("has no publish switch in the row (row menu only, per §7.3 acceptance)", async () => {

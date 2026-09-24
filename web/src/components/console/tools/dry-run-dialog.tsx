@@ -9,6 +9,7 @@ import { StatusChip } from "@/components/shared/status-chip";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -52,13 +53,13 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Dry run</DialogTitle>
           <DialogDescription>Calls the tool with these arguments and shows the raw result.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-2">
+        <DialogBody className="gap-3">
           <Field label="Arguments (JSON)" htmlFor={argsId}>
             <Textarea
               id={argsId}
@@ -75,10 +76,10 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
                   {result.status_code ?? "—"} · {result.duration_ms}ms
                 </span>
               </div>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono">{result.result}</pre>
+              <pre tabIndex={0} className="max-h-72 overflow-auto font-mono break-all whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring">{result.result}</pre>
             </div>
           ) : null}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>

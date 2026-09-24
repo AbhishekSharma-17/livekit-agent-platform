@@ -5,9 +5,11 @@ import { KeyRoundIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -71,6 +73,8 @@ export function ApiKeysTab() {
     {
       id: "scopes",
       header: "Scopes",
+      // Scope lists run long (an agent key has a dozen): wrap instead of widening the page.
+      className: "min-w-48 whitespace-normal",
       cell: (key) => <span className="text-xs text-muted-foreground">{key.scopes.join(", ")}</span>,
     },
     {
@@ -130,9 +134,14 @@ export function ApiKeysTab() {
                     <div className="truncate font-medium text-foreground">{key.name}</div>
                     <div className="truncate font-mono text-xs text-muted-foreground">{key.prefix}…</div>
                   </div>
-                  <StatusChip tone={status.tone} size="sm">
-                    {status.label}
-                  </StatusChip>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <StatusChip tone={status.tone} size="sm">
+                      {status.label}
+                    </StatusChip>
+                    {key.revoked_at ? null : (
+                      <RevokeButton apiKey={key} onRevoked={() => invalidate(membership?.id)} />
+                    )}
+                  </div>
                 </div>
               );
             }}
@@ -161,16 +170,23 @@ function RevokeButton({ apiKey, onRevoked }: { apiKey: ApiKeyOut; onRevoked: () 
   }
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={onClick}
-      disabled={!canWrite || busy}
-      title={canWrite ? undefined : writeAccessReason("admin")}
-    >
-      Revoke
-    </Button>
+    <ConfirmDialog
+      trigger={
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!canWrite || busy}
+          title={canWrite ? undefined : writeAccessReason("admin")}
+        >
+          Revoke
+        </Button>
+      }
+      title={`Revoke "${apiKey.name}"?`}
+      description="Anything using this key stops working right away. Revoking can't be undone."
+      confirmLabel="Revoke key"
+      onConfirm={onClick}
+    />
   );
 }
 
@@ -234,36 +250,41 @@ function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
           Create key
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Create an API key</DialogTitle>
           <DialogDescription>The raw key is shown once, right after creation — copy it now.</DialogDescription>
         </DialogHeader>
         {created ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
-              <code className="min-w-0 flex-1 truncate font-mono text-xs">{created.key}</code>
-              <CopyButton value={created.key} label="Copy API key" />
-            </div>
-            <p className="text-xs text-muted-foreground">This key won&apos;t be shown again.</p>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="space-y-4">
-            {error ? <ErrorBanner message={error} /> : null}
-            <Field label="Name" htmlFor="api-key-name" required hint="What is this key for?">
-              <Input id="api-key-name" required value={name} onChange={(event) => setName(event.target.value)} disabled={creating} />
-            </Field>
-            <div className="space-y-2">
-              <Label>Scopes</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {SCOPES.map((scope) => (
-                  <label key={scope} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={scopes.has(scope)} onCheckedChange={() => toggleScope(scope)} disabled={creating} />
-                    <span className="font-mono text-xs">{scope}</span>
-                  </label>
-                ))}
+          <>
+            <DialogBody className="gap-3">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
+                <code className="min-w-0 flex-1 font-mono text-xs break-all">{created.key}</code>
+                <CopyButton value={created.key} label="Copy API key" />
               </div>
-            </div>
+              <p className="text-xs text-muted-foreground">This key won&apos;t be shown again.</p>
+            </DialogBody>
+            <DialogFooter showCloseButton />
+          </>
+        ) : (
+          <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+            <DialogBody className="gap-4">
+              {error ? <ErrorBanner message={error} /> : null}
+              <Field label="Name" htmlFor="api-key-name" required hint="What is this key for?">
+                <Input id="api-key-name" required value={name} onChange={(event) => setName(event.target.value)} disabled={creating} />
+              </Field>
+              <div className="space-y-2">
+                <Label>Scopes</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {SCOPES.map((scope) => (
+                    <label key={scope} className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={scopes.has(scope)} onCheckedChange={() => toggleScope(scope)} disabled={creating} />
+                      <span className="font-mono text-xs">{scope}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </DialogBody>
             <DialogFooter>
               <Button type="submit" disabled={creating}>
                 Create

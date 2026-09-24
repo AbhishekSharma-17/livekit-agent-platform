@@ -83,10 +83,14 @@ function WorkerEnvSnippets({ connectionId }: { connectionId: string }) {
               </Alert>
             ) : (
               <div className="relative">
-                <pre className="max-h-96 overflow-auto rounded-md border border-border bg-muted/40 p-4 font-mono text-xs leading-5 text-foreground">
+                <pre
+                  tabIndex={0}
+                  aria-label={`${f.label} snippet`}
+                  className="max-h-96 overflow-auto rounded-md border border-border bg-muted/40 p-4 pr-12 font-mono text-xs leading-5 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   {text ?? ""}
                 </pre>
-                <CopyButton value={text ?? ""} label="Copy snippet" className="absolute top-2 right-2" />
+                <CopyButton value={text ?? ""} label={`Copy the ${f.label} snippet`} className="absolute top-2 right-2" />
               </div>
             )}
           </TabsContent>

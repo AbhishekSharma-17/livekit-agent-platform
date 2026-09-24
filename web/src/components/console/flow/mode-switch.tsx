@@ -21,6 +21,32 @@ import type { AgentOut, FlowSpec } from "@/contracts/lkap-contracts";
 import { normalizeFlow, seedFlow } from "./flow-model";
 
 /**
+ * Which agent's switch dialog is open. Module state (like
+ * `test-chat/add-to-website-dialog.tsx`) so the Flow section's empty state can
+ * open the one dialog the header chip renders instead of duplicating it.
+ */
+type Listener = () => void;
+let openFor: string | null = null;
+const listeners = new Set<Listener>();
+
+function setOpenFor(agentId: string | null) {
+  openFor = agentId;
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: Listener) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Opens `agentId`'s prompt ↔ flow switch dialog (rendered by `ModeSwitchChip`). */
+export function openModeSwitch(agentId: string) {
+  setOpenFor(agentId);
+}
+
+/**
  * The header's mode chip with the prompt ↔ flow switch (V2-16, UI_UX_SPEC-V2
  * §2.3). The api derives `mode` from `config.flow` (R-V2-12), so the switch
  * always changes both: to flow it restores the agent's saved flow or seeds a
@@ -32,7 +58,15 @@ export function ModeSwitchChip({ agent }: { agent: AgentOut }) {
   const { control, getValues, setValue } = useFormContext<AgentEditorForm>();
   const mode = useWatch({ control, name: "mode" }) ?? "prompt";
   const editor = useEditorContext();
-  const [open, setOpen] = React.useState(false);
+  const open = React.useSyncExternalStore(
+    subscribe,
+    () => openFor === agent.id,
+    () => false,
+  );
+  const setOpen = React.useCallback((next: boolean) => setOpenFor(next ? agent.id : null), [agent.id]);
+  React.useEffect(() => () => {
+    if (openFor === agent.id) openFor = null;
+  }, [agent.id]);
   const toFlow = mode !== "flow";
   const stepCount = normalizeFlow(getValues("config.flow") ?? null).nodes.length;
 

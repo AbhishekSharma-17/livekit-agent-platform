@@ -6,6 +6,7 @@ import { PlusIcon, SendIcon, WebhookIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -264,40 +265,45 @@ function CreateEndpointDialog({ onCreated }: { onCreated: () => void }) {
           Add webhook
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Add a webhook endpoint</DialogTitle>
           <DialogDescription>The signing secret is shown once, right after creation.</DialogDescription>
         </DialogHeader>
         {created ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
-              <code className="min-w-0 flex-1 truncate font-mono text-xs">{created.secret}</code>
-              <CopyButton value={created.secret} label="Copy signing secret" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Verify deliveries with the <code className="font-mono">X-LKAP-Signature</code> header and this secret.
-              It won&apos;t be shown again.
-            </p>
-          </div>
+          <>
+            <DialogBody className="gap-3">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
+                <code className="min-w-0 flex-1 font-mono text-xs break-all">{created.secret}</code>
+                <CopyButton value={created.secret} label="Copy signing secret" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Verify deliveries with the <code className="font-mono">X-LKAP-Signature</code> header and this secret.
+                It won&apos;t be shown again.
+              </p>
+            </DialogBody>
+            <DialogFooter showCloseButton />
+          </>
         ) : (
-          <form onSubmit={onSubmit} className="space-y-4">
-            {error ? <ErrorBanner message={error} /> : null}
-            <Field label="URL" htmlFor="webhook-url" required hint="https:// (http:// only in dev).">
-              <Input
-                id="webhook-url"
-                type="url"
-                required
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/hooks/lkap"
-                disabled={saving}
-              />
-            </Field>
-            <Field label="Description" htmlFor="webhook-description" optional>
-              <Input id="webhook-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={saving} />
-            </Field>
-            <EventsPicker selected={events} onChange={setEvents} disabled={saving} />
+          <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+            <DialogBody className="gap-4">
+              {error ? <ErrorBanner message={error} /> : null}
+              <Field label="URL" htmlFor="webhook-url" required hint="https:// (http:// only in dev).">
+                <Input
+                  id="webhook-url"
+                  type="url"
+                  required
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://example.com/hooks/lkap"
+                  disabled={saving}
+                />
+              </Field>
+              <Field label="Description" htmlFor="webhook-description" optional>
+                <Input id="webhook-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={saving} />
+              </Field>
+              <EventsPicker selected={events} onChange={setEvents} disabled={saving} />
+            </DialogBody>
             <DialogFooter>
               <Button type="submit" disabled={saving}>
                 Create
@@ -416,9 +422,17 @@ function DeleteButton({ endpoint, onDeleted }: { endpoint: WebhookEndpointOut; o
   }
 
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={onClick} disabled={busy}>
-      Delete
-    </Button>
+    <ConfirmDialog
+      trigger={
+        <Button type="button" variant="ghost" size="sm" disabled={busy}>
+          Delete
+        </Button>
+      }
+      title="Delete this webhook?"
+      description={`${endpoint.url} stops receiving events. Its delivery history is deleted too.`}
+      confirmLabel="Delete webhook"
+      onConfirm={onClick}
+    />
   );
 }
 

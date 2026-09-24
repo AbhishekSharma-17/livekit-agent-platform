@@ -7,6 +7,7 @@ import { PlusIcon, SplitIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -217,46 +218,48 @@ function RuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <form onSubmit={submit} className="flex flex-col gap-4">
+      <DialogContent size="md">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>Add dispatch rule</DialogTitle>
             <DialogDescription>Calls on the trunk (optionally only to some numbers) reach this agent.</DialogDescription>
           </DialogHeader>
-          <Field label="Inbound trunk" htmlFor="rule-trunk" required>
-            <NativeSelect id="rule-trunk" value={chosenTrunk} onChange={(e) => setTrunkId(e.target.value)}>
-              {trunks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Agent" htmlFor="rule-agent" required>
-            <NativeSelect id="rule-agent" value={chosenAgent} onChange={(e) => setAgentId(e.target.value)}>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Called numbers" htmlFor="rule-numbers" optional hint="Empty = every number on the trunk">
-            <Input id="rule-numbers" value={numbers} onChange={(e) => setNumbers(e.target.value)} />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Room prefix" htmlFor="rule-prefix">
-              <Input id="rule-prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
+          <DialogBody className="gap-4">
+            <Field label="Inbound trunk" htmlFor="rule-trunk" required>
+              <NativeSelect id="rule-trunk" value={chosenTrunk} onChange={(e) => setTrunkId(e.target.value)}>
+                {trunks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </NativeSelect>
             </Field>
-            <Field label="PIN" htmlFor="rule-pin" optional hint="Callers must enter it first">
-              <Input id="rule-pin" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} />
+            <Field label="Agent" htmlFor="rule-agent" required>
+              <NativeSelect id="rule-agent" value={chosenAgent} onChange={(e) => setAgentId(e.target.value)}>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </NativeSelect>
             </Field>
-          </div>
-          {error ? (
-            <p role="alert" className="text-sm text-danger-text">
-              {error}
-            </p>
-          ) : null}
+            <Field label="Called numbers" htmlFor="rule-numbers" optional hint="Empty = every number on the trunk">
+              <Input id="rule-numbers" value={numbers} onChange={(e) => setNumbers(e.target.value)} />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Room prefix" htmlFor="rule-prefix">
+                <Input id="rule-prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
+              </Field>
+              <Field label="PIN" htmlFor="rule-pin" optional hint="Callers must enter it first">
+                <Input id="rule-pin" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} />
+              </Field>
+            </div>
+            {error ? (
+              <p role="alert" className="text-sm text-danger-text">
+                {error}
+              </p>
+            ) : null}
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

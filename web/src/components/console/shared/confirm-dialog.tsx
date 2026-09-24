@@ -52,7 +52,7 @@ export function ConfirmDialog({
             type="button"
             variant={destructive ? "destructive" : "default"}
             // §6: the confirm button is a solid destructive fill and says the verb.
-            className={destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+            className={destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90" : undefined}
             disabled={pending}
             onClick={async () => {
               setPending(true);

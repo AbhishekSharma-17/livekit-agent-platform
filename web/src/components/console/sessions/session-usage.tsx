@@ -147,7 +147,7 @@ export function UsageGroups({ groups }: { groups: UsageGroup[] }) {
     <div className="space-y-4">
       {groups.map((group) => (
         <div key={group.key}>
-          <h3 className="mb-2 text-xs font-medium text-muted-foreground">{group.label}</h3>
+          <h2 className="mb-2 text-xs font-medium text-muted-foreground">{group.label}</h2>
           <ul className="divide-y divide-border rounded-md border border-border">
             {group.rows.map((row) => (
               <li key={row.key} className="px-3 py-2.5">

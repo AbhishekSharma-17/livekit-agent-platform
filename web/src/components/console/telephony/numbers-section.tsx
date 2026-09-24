@@ -7,6 +7,7 @@ import { HashIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -255,48 +256,50 @@ function NumberDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <form onSubmit={submit} className="flex flex-col gap-4">
+      <DialogContent size="md">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>Add phone number</DialogTitle>
             <DialogDescription>A number you own at your carrier. It is added to the trunk you pick.</DialogDescription>
           </DialogHeader>
-          <Field label="Number" htmlFor="number-e164" required>
-            <Input id="number-e164" value={e164} placeholder="+15551234567" onChange={(e) => setE164(e.target.value)} />
-          </Field>
-          <Field label="Trunk" htmlFor="number-trunk" optional>
-            <NativeSelect id="number-trunk" value={trunkId} onChange={(e) => setTrunkId(e.target.value)}>
-              <option value="">None</option>
-              {trunks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.direction})
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Inbound agent" htmlFor="number-agent" optional hint="Needs an inbound trunk">
-            <NativeSelect
-              id="number-agent"
-              value={agentId}
-              disabled={trunk?.direction !== "inbound"}
-              onChange={(e) => setAgentId(e.target.value)}
-            >
-              <option value="">Nobody</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Label" htmlFor="number-label" optional>
-            <Input id="number-label" value={label} onChange={(e) => setLabel(e.target.value)} />
-          </Field>
-          {error ? (
-            <p role="alert" className="text-sm text-danger-text">
-              {error}
-            </p>
-          ) : null}
+          <DialogBody className="gap-4">
+            <Field label="Number" htmlFor="number-e164" required>
+              <Input id="number-e164" value={e164} placeholder="+15551234567" onChange={(e) => setE164(e.target.value)} />
+            </Field>
+            <Field label="Trunk" htmlFor="number-trunk" optional>
+              <NativeSelect id="number-trunk" value={trunkId} onChange={(e) => setTrunkId(e.target.value)}>
+                <option value="">None</option>
+                {trunks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.direction})
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Inbound agent" htmlFor="number-agent" optional hint="Needs an inbound trunk">
+              <NativeSelect
+                id="number-agent"
+                value={agentId}
+                disabled={trunk?.direction !== "inbound"}
+                onChange={(e) => setAgentId(e.target.value)}
+              >
+                <option value="">Nobody</option>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Label" htmlFor="number-label" optional>
+              <Input id="number-label" value={label} onChange={(e) => setLabel(e.target.value)} />
+            </Field>
+            {error ? (
+              <p role="alert" className="text-sm text-danger-text">
+                {error}
+              </p>
+            ) : null}
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

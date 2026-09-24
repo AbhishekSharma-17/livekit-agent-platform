@@ -108,7 +108,7 @@ export function ModelCombobox({
           <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-72 p-0">
+      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-72 p-0" aria-label="Choose a model">
         <Command shouldFilter={false} label="Models">
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search models or type an id" />
           {hasVision ? (

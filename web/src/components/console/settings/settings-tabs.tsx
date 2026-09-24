@@ -61,7 +61,7 @@ export function SettingsTabs() {
         router.replace(`/console/settings?tab=${next}`, { scroll: false });
       }}
     >
-      <TabsList className="flex-wrap">
+      <TabsList className="h-auto flex-wrap justify-start group-data-horizontal/tabs:h-auto">
         {TABS.map((tab) => (
           <TabsTrigger key={tab.id} value={tab.id}>
             {tab.label}

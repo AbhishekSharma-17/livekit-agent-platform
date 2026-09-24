@@ -27,7 +27,7 @@ export function ConnectionDetailTabs({ connection }: { connection: ConnectionOut
         router.replace(`/console/connections/${connection.id}?tab=${next}`, { scroll: false });
       }}
     >
-      <TabsList className="flex-wrap">
+      <TabsList className="h-auto flex-wrap justify-start group-data-horizontal/tabs:h-auto">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="fleet">Fleet</TabsTrigger>
         <TabsTrigger value="storage">Storage</TabsTrigger>

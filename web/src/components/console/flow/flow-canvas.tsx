@@ -574,7 +574,7 @@ function IssuesButton({
           {label}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-1">
+      <PopoverContent align="start" className="w-80 p-1" aria-label="Flow issues">
         <ul className="flex max-h-72 flex-col overflow-y-auto">
           {issues.map((issue) => {
             const target = issueTarget(issue.path, draft);

@@ -7,6 +7,7 @@ import { GlobeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -97,38 +98,42 @@ export function AddToWebsiteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Add to website</DialogTitle>
           <DialogDescription>
-            Paste this on any page to embed {agent.name} as a floating chat widget (`widget.js`,
-            V2-18).
+            Paste this snippet into any page to add {agent.name} as a floating chat widget.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-start gap-2">
-          <pre className="bg-muted flex-1 overflow-x-auto rounded-md p-3 font-mono text-xs">
-            <code>{snippet}</code>
-          </pre>
-          <CopyButton value={snippet} label="Copy the widget snippet" />
-        </div>
-        <p className="text-muted-foreground text-sm">
-          {hasOrigins
-            ? "This site is already in the agent's allowed origins."
-            : "The embedding site must be added to this agent's allowed origins first, or the widget's session will be refused."}{" "}
-          <Link
-            href={`/console/agents/${agent.id}?section=limits`}
-            className="underline underline-offset-4"
-            onClick={() => onOpenChange(false)}
-          >
-            Manage allowed origins
-          </Link>
-          .
-        </p>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
+        <DialogBody className="gap-4">
+          {/* The copy button has its own gutter inside the box, so the scrolling
+              snippet never slides underneath it. */}
+          <div className="flex min-w-0 items-start rounded-md border border-border bg-muted/40">
+            <pre
+              tabIndex={0}
+              aria-label="Widget snippet"
+              className="min-w-0 flex-1 overflow-x-auto rounded-l-md py-3 pr-2 pl-3 font-mono text-xs leading-5 whitespace-pre text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            >
+              <code>{snippet}</code>
+            </pre>
+            <div className="shrink-0 p-1.5">
+              <CopyButton value={snippet} label="Copy the widget snippet" />
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {hasOrigins
+              ? "This site is already in the agent's allowed origins."
+              : "Add the website's address to this agent's allowed origins first, or the widget won't be able to start a chat."}{" "}
+            <Link
+              href={`/console/agents/${agent.id}?section=limits`}
+              className="font-medium text-foreground underline underline-offset-4"
+              onClick={() => onOpenChange(false)}
+            >
+              Manage allowed origins
+            </Link>
+          </p>
+        </DialogBody>
+        <DialogFooter showCloseButton />
       </DialogContent>
     </Dialog>
   );

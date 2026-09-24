@@ -73,8 +73,8 @@ export function SetupChecklist() {
       help: connections.available
         ? "At least one connection has been tested and can host agents."
         : health?.livekit_url
-          ? `Using ${health.livekit_url} until connections ship.`
-          : "Set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET for the API and the worker (RUNBOOK §1).",
+          ? `Using ${health.livekit_url} from the server's settings.`
+          : "Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the API and the worker.",
       done: connections.available && connections.total > 0,
       action: connections.available ? (
         <Button asChild size="sm" variant="outline">
@@ -210,7 +210,7 @@ export function SetupChecklist() {
       }
     >
       {rows.map((row) => (
-        <SectionRow key={row.id} className="flex items-start gap-3">
+        <SectionRow key={row.id} className="flex flex-wrap items-start gap-x-3 gap-y-2">
           <Icon
             as={row.done ? CheckCircle2Icon : CircleIcon}
             size="md"
@@ -220,7 +220,8 @@ export function SetupChecklist() {
             <p className="text-sm font-medium text-foreground">{row.title}</p>
             <p className="mt-0.5 text-sm text-muted-foreground">{row.help}</p>
           </div>
-          {!row.done && row.action ? <div className="shrink-0">{row.action}</div> : null}
+          {/* Phones: the action drops under the text instead of squeezing it into a narrow column. */}
+          {!row.done && row.action ? <div className="shrink-0 max-sm:basis-full max-sm:pl-8">{row.action}</div> : null}
         </SectionRow>
       ))}
     </Section>

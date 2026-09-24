@@ -578,7 +578,7 @@ function PrimitivesScene() {
           </Field>
         </SectionRow>
         <SectionRow>
-          <Field label="Recording" htmlFor="pv-recording" inline optional hint="Audio only in Phase 1.">
+          <Field label="Recording" htmlFor="pv-recording" inline optional hint="Audio only for now.">
             <Input id="pv-recording" defaultValue="On" />
           </Field>
         </SectionRow>

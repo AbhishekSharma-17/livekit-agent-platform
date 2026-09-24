@@ -60,7 +60,7 @@ export function ConnectionChip({ agent: _agent }: { agent: AgentOut }) {
           <Icon as={ChevronDownIcon} size="sm" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80">
+      <PopoverContent align="start" className="w-80" aria-label="Choose a connection">
         <p className="mb-2 text-xs font-medium text-muted-foreground">Run this agent on</p>
         <div className="flex flex-col gap-1" role="listbox" aria-label="Connections">
           <ConnectionOption

@@ -154,7 +154,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
               Unpublish
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">
+          <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0" aria-label="Published agent">
             <div className="flex flex-col gap-3 p-4">
               <p className="text-sm font-semibold">This agent is live</p>
               <PublicUrlRow url={url} />
@@ -195,7 +195,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
               <Button
                 type="button"
                 variant="destructive"
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
                 disabled={updateAgent.isPending}
                 onClick={() => void unpublish()}
               >
@@ -218,7 +218,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
           Publish
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-0">
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-0" aria-label="Publish this agent">
         {step === "unsaved" ? (
           <div className="flex flex-col gap-3 p-4">
             <p className="text-sm font-semibold">You have unsaved changes</p>

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiKeysTab } from "@/components/console/settings/api-keys-tab";
@@ -107,5 +107,21 @@ describe("ApiKeysTab", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
 
     expect(await within(dialog).findByText("Choose at least one scope.")).toBeTruthy();
+  });
+
+  it("asks before revoking, and only then sends the DELETE", async () => {
+    renderTab();
+    await screen.findAllByText("CI key");
+    const fetchMock = vi.mocked(fetch);
+    const deletes = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
+
+    // The table row and the phone card both carry the action.
+    fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]);
+    const dialog = await screen.findByRole("dialog", { name: 'Revoke "CI key"?' });
+    expect(deletes()).toHaveLength(0);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke key" }));
+    await waitFor(() => expect(deletes()).toHaveLength(1));
+    expect(String(deletes()[0][0])).toContain("/api-keys/k1");
   });
 });

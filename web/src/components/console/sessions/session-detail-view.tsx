@@ -289,7 +289,14 @@ export function SessionStats({ session }: { session: SessionDetailOut }) {
     { term: "Tool calls", detail: tools ?? pending, mono: true },
     { term: "Errors", detail: errors ?? pending, mono: true },
     ...latencyItems,
-    ...usage.pairs.map((pair) => ({ term: pair.label, detail: pair.value, mono: true })),
+    // The worker's `usage.turns` counts the replies that reported latency (the
+    // p50s' sample), not the conversation's turns — label it so the strip
+    // doesn't show two different "Turns".
+    ...usage.pairs.map((pair) => ({
+      term: pair.key === "turns" ? "Timed replies" : pair.label,
+      detail: pair.value,
+      mono: true,
+    })),
   ];
 
   return (

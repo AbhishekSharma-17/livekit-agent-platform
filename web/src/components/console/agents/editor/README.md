@@ -36,7 +36,7 @@ A section is an `EditorSectionDef`:
   icon: LucideIcon;
   order: number;          // built-ins: providers 10 · instructions 20 · flow 30 · panel 40 · tools 50 · knowledge 60 · recording 70 · limits 80
   Component: React.ComponentType<{ agent: AgentOut }>;
-  visible?: (ctx: { agent: AgentOut; mode: "prompt" | "flow" }) => boolean;   // flow: mode === "flow"
+  visible?: (ctx: { agent: AgentOut; mode: "prompt" | "flow" }) => boolean;   // built-in flow placeholder: mode === "flow" (the V2-16 builder drops it)
   issuePaths?: string[];  // config-relative prefixes whose issues this section owns ("pipeline", "voice", …)
   issueKeywords?: RegExp; // fallback for plain api strings with no path (§7.14 heuristic)
   issueKeywordPriority?: number;
@@ -90,7 +90,7 @@ Who plugs in where:
 | **WP-5** (sections) | Same for `tabs/{instructions,panel,tools,knowledge}-tab.tsx` (`ToolsTab` receives `{ agent }`; the others may ignore it). Replace the "Save & validate" copy in `tools-tab.tsx` (the button is now "Save"). |
 | **V2-11** (panel composer) | Replace `panel` via an extension from `components/console/agents/panel-section/**`. Once it edits `config.panel`, ask for `config.panel` in the form schema; until then `buildAgentUpdate` keeps `config.panel.panel_id` in step with `ui_panel_id`. |
 | **V2-13** (connections, modes, slots) | Replace `providers` from `components/console/agents/providers-section/**`; fill the `connectionChip` slot (change popover). `connection_id` is already a form field. |
-| **V2-16** (flow builder) | Replace `flow` (keep `visible: ({mode}) => mode === "flow"`, `layout: "full"`); fill `modeChip` (switch dialog; set the `mode` form field) and `versionHistory` (the rail's "History" link). |
+| **V2-16** (flow builder) | Replace `flow` (`layout: "full"`, visible in both modes — prompt mode shows an explainer whose "Switch to flow" opens the mode chip's dialog); fill `modeChip` (switch dialog; set the `mode` form field) and `versionHistory` (the rail's "History" link). |
 | **V2-17 / V2-18** | `testCallItems` ("Call a number", "Test chat"), `headerActions` ("Add to website"). V2-18's `allowed_origins` editor already exists in the `limits` section — patch or replace that section rather than adding a second editor. |
 
 ### Slots

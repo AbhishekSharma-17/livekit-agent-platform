@@ -75,7 +75,7 @@ export function FleetCard({ connection }: { connection: ConnectionOut }) {
           <AlertDescription>
             This pool has both <span className="font-mono">external</span> and{" "}
             <span className="font-mono">supervisor</span> workers registered — stop the external one before relying on
-            the supervised pool (PLAN-V2 §7).
+            the supervised pool, or the two will compete for calls.
           </AlertDescription>
         </Alert>
       ) : null}

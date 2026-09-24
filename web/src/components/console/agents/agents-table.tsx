@@ -36,7 +36,9 @@ import type { ResponsiveTableColumn } from "@/components/shared/responsive-table
 import { useAgents, useDeleteAgent, usePacks, useProviders, useUpdateAgent } from "@/components/console/lib/api-hooks";
 import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
+import type { AgentOut, ConnectionOut, ProviderSpec } from "@/contracts/lkap-contracts";
+import { connectionTypeLabel } from "@/components/console/agents/editor/use-connection";
+import { useConnections } from "@/hooks/useConnections";
 import { LoadingRegion } from "@/components/shared/loading-state";
 
 const PIPELINE_MODE_LABEL: Record<string, string> = {
@@ -54,15 +56,26 @@ const STATUS_FILTERS = [
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
 
 /**
- * `AgentOut.connection_id` (added by the v2 contracts regen) is just an id —
- * there is no `useConnections()` lookup yet (that's V2-13's `/console/
- * connections` work), and the v2 amendments say not to invent an API call
- * for this column. Render the id verbatim (mono, like every other id in the
- * console) when present, and a neutral "Default" placeholder otherwise.
+ * The Connection column: the bound connection's name and type, looked up in
+ * the workspace's connection list (`useConnections`). An agent with no
+ * `connection_id` runs on the workspace default. Never the raw id — people
+ * know their connections by name.
  */
-function agentConnectionLabel(agent: AgentOut): string {
-  const id = agent.connection_id;
-  return typeof id === "string" && id.trim().length > 0 ? id.trim() : "Default";
+function connectionLabels(connections: readonly ConnectionOut[] | undefined): Map<string | null, string> {
+  const labels = new Map<string | null, string>();
+  for (const connection of connections ?? []) {
+    labels.set(connection.id, `${connection.name} · ${connectionTypeLabel(connection)}`);
+    if (connection.is_default) labels.set(null, `${connection.name} (default)`);
+  }
+  if (!labels.has(null)) labels.set(null, "Workspace default");
+  return labels;
+}
+
+function agentConnectionLabel(agent: AgentOut, labels: Map<string | null, string>, loaded: boolean): string {
+  const id = typeof agent.connection_id === "string" && agent.connection_id.trim() ? agent.connection_id.trim() : null;
+  const label = labels.get(id);
+  if (label) return label;
+  return loaded ? "Unknown connection" : "—";
 }
 
 /** Non-null pipeline slots in display order, most agents show 1–3. */
@@ -121,7 +134,10 @@ export function AgentsTable() {
   const [status, setStatus] = useQueryParamState("status");
   const [pack, setPack] = useQueryParamState("pack");
 
+  const connectionsQuery = useConnections();
   const vendors = React.useMemo(() => vendorLookup(providersQuery.data?.providers), [providersQuery.data]);
+  const connections = React.useMemo(() => connectionLabels(connectionsQuery.data?.items), [connectionsQuery.data]);
+  const connectionLabel = (agent: AgentOut) => agentConnectionLabel(agent, connections, connectionsQuery.isSuccess);
   const packLabels = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const item of packsQuery.data?.items ?? []) map.set(item.manifest.id, item.manifest.name);
@@ -204,7 +220,7 @@ export function AgentsTable() {
     {
       id: "connection",
       header: "Connection",
-      cell: (agent) => <span className="text-[0.8125rem] text-muted-foreground">{agentConnectionLabel(agent)}</span>,
+      cell: (agent) => <span className="text-[0.8125rem] text-muted-foreground">{connectionLabel(agent)}</span>,
     },
     {
       id: "mode",
@@ -298,7 +314,15 @@ export function AgentsTable() {
         label="Agents"
         getRowKey={(agent) => agent.id}
         rowHref={(agent) => `/console/agents/${agent.id}`}
-        renderCard={(agent) => <AgentCard agent={agent} vendors={vendors} packLabels={packLabels} deleteAgent={deleteAgent} />}
+        renderCard={(agent) => (
+          <AgentCard
+            agent={agent}
+            vendors={vendors}
+            packLabels={packLabels}
+            connectionLabel={connectionLabel(agent)}
+            deleteAgent={deleteAgent}
+          />
+        )}
         empty={
           <EmptyState
             icon={BotIcon}
@@ -330,11 +354,13 @@ function AgentCard({
   agent,
   vendors,
   packLabels,
+  connectionLabel,
   deleteAgent,
 }: {
   agent: AgentOut;
   vendors: Map<string, string>;
   packLabels: Map<string, string>;
+  connectionLabel: string;
   deleteAgent: ReturnType<typeof useDeleteAgent>;
 }) {
   const ids = pipelineProviderIds(agent);
@@ -350,7 +376,7 @@ function AgentCard({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
         <span aria-hidden="true">·</span>
-        <span>{agentConnectionLabel(agent)}</span>
+        <span>{connectionLabel}</span>
         <span aria-hidden="true">·</span>
         <span>{PIPELINE_MODE_LABEL[agent.config.pipeline.mode ?? "cascaded"] ?? "Cascaded"}</span>
         {ids.length > 0 ? (
@@ -478,7 +504,7 @@ function AgentRowMenu({
               <Button
                 type="button"
                 variant="destructive"
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
                 disabled={deleteAgent.isPending}
                 onClick={() => void confirmDelete()}
               >
@@ -506,7 +532,7 @@ function AgentRowMenu({
                 type="button"
                 variant={agent.published ? "destructive" : "default"}
                 className={
-                  agent.published ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined
+                  agent.published ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90" : undefined
                 }
                 disabled={updateAgent.isPending}
                 onClick={() => void togglePublished()}

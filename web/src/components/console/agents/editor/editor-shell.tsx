@@ -310,7 +310,7 @@ export function EditorShell({
             <Button
               type="button"
               variant="destructive"
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
               disabled={deleting}
               onClick={async () => {
                 setDeleting(true);

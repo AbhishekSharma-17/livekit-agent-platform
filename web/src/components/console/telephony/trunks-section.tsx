@@ -7,6 +7,7 @@ import { MoreHorizontalIcon, PlusIcon, RefreshCwIcon, ServerIcon } from "lucide-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -291,8 +292,8 @@ export function TrunkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={submit} className="flex flex-col gap-4">
+      <DialogContent size="md">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>Add SIP trunk</DialogTitle>
             <DialogDescription>
@@ -301,92 +302,94 @@ export function TrunkDialog({
                 : "Calls leave through your carrier's SIP address; the first number is the caller ID."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Direction" htmlFor="trunk-direction">
-              <NativeSelect
-                id="trunk-direction"
-                value={direction}
-                onChange={(e) => setDirection(e.target.value as TrunkDirection)}
-              >
-                <option value="inbound">Inbound (receive calls)</option>
-                <option value="outbound">Outbound (place calls)</option>
-              </NativeSelect>
-            </Field>
-            <Field label="Connection" htmlFor="trunk-connection">
-              <NativeSelect
-                id="trunk-connection"
-                value={chosenConnection}
-                onChange={(e) => setConnectionId(e.target.value)}
-              >
-                {sipConnections.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="Name" htmlFor="trunk-name" required>
-              <Input id="trunk-name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </Field>
-            <Field label="Carrier" htmlFor="trunk-provider">
-              <NativeSelect
-                id="trunk-provider"
-                value={provider}
-                onChange={(e) => setProvider(e.target.value as ProviderHint)}
-              >
-                <option value="twilio">Twilio</option>
-                <option value="telnyx">Telnyx</option>
-                <option value="other">Other</option>
-              </NativeSelect>
-            </Field>
-          </div>
-          <Field
-            label="Numbers"
-            htmlFor="trunk-numbers"
-            hint="E.164, comma separated"
-            required={direction === "outbound"}
-            optional={direction === "inbound"}
-          >
-            <Input
-              id="trunk-numbers"
-              value={numbers}
-              placeholder="+15551234567"
-              onChange={(e) => setNumbers(e.target.value)}
-            />
-          </Field>
-          <Field
-            label={direction === "outbound" ? "SIP address" : "Allowed source address"}
-            htmlFor="trunk-address"
-            hint={direction === "outbound" ? "e.g. example.pstn.twilio.com" : "IP, CIDR or host; empty accepts any"}
-            required={direction === "outbound"}
-            optional={direction === "inbound"}
-          >
-            <Input id="trunk-address" value={address} onChange={(e) => setAddress(e.target.value)} />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Username" htmlFor="trunk-username" optional>
+          <DialogBody className="gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Direction" htmlFor="trunk-direction">
+                <NativeSelect
+                  id="trunk-direction"
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value as TrunkDirection)}
+                >
+                  <option value="inbound">Inbound (receive calls)</option>
+                  <option value="outbound">Outbound (place calls)</option>
+                </NativeSelect>
+              </Field>
+              <Field label="Connection" htmlFor="trunk-connection">
+                <NativeSelect
+                  id="trunk-connection"
+                  value={chosenConnection}
+                  onChange={(e) => setConnectionId(e.target.value)}
+                >
+                  {sipConnections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field label="Name" htmlFor="trunk-name" required>
+                <Input id="trunk-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              </Field>
+              <Field label="Carrier" htmlFor="trunk-provider">
+                <NativeSelect
+                  id="trunk-provider"
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as ProviderHint)}
+                >
+                  <option value="twilio">Twilio</option>
+                  <option value="telnyx">Telnyx</option>
+                  <option value="other">Other</option>
+                </NativeSelect>
+              </Field>
+            </div>
+            <Field
+              label="Numbers"
+              htmlFor="trunk-numbers"
+              hint="E.164, comma separated"
+              required={direction === "outbound"}
+              optional={direction === "inbound"}
+            >
               <Input
-                id="trunk-username"
-                autoComplete="off"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="trunk-numbers"
+                value={numbers}
+                placeholder="+15551234567"
+                onChange={(e) => setNumbers(e.target.value)}
               />
             </Field>
-            <Field label="Password" htmlFor="trunk-password" optional hint="Stored encrypted; never shown again">
-              <Input
-                id="trunk-password"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+            <Field
+              label={direction === "outbound" ? "SIP address" : "Allowed source address"}
+              htmlFor="trunk-address"
+              hint={direction === "outbound" ? "e.g. example.pstn.twilio.com" : "IP, CIDR or host; empty accepts any"}
+              required={direction === "outbound"}
+              optional={direction === "inbound"}
+            >
+              <Input id="trunk-address" value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
-          </div>
-          {error ? (
-            <p role="alert" className="text-sm text-danger-text">
-              {error}
-            </p>
-          ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Username" htmlFor="trunk-username" optional>
+                <Input
+                  id="trunk-username"
+                  autoComplete="off"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+              </Field>
+              <Field label="Password" htmlFor="trunk-password" optional hint="Stored encrypted; never shown again">
+                <Input
+                  id="trunk-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
+            </div>
+            {error ? (
+              <p role="alert" className="text-sm text-danger-text">
+                {error}
+              </p>
+            ) : null}
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

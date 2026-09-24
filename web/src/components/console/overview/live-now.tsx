@@ -37,7 +37,9 @@ export function LiveNow() {
               <Link href={`/console/agents/${agent.id}`} className="text-sm font-medium hover:underline">
                 {agent.name}
               </Link>
-              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{publicUrl(agent.slug)}</p>
+              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={publicUrl(agent.slug)}>
+                {publicUrl(agent.slug)}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <StatusChip tone="live">Live</StatusChip>

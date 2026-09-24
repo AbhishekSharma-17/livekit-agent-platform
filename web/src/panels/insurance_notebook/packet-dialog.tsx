@@ -23,6 +23,7 @@ import { DescriptionList } from "@/components/shared/description-list";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -95,7 +96,7 @@ export function PacketDialog({
           {ready ? "Read the adjuster packet" : "Packet not written yet"}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-3xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Adjuster packet</DialogTitle>
           <DialogDescription>
@@ -104,7 +105,7 @@ export function PacketDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[65vh] overflow-y-auto pr-1">
+        <DialogBody className="block">
           {entries.length > 0 && (
             <DescriptionList
               className="mb-5"
@@ -118,7 +119,7 @@ export function PacketDialog({
           >
             <Streamdown>{markdown}</Streamdown>
           </div>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

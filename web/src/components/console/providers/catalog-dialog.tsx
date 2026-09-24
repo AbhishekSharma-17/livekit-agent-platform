@@ -5,6 +5,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -57,7 +58,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
           Catalog
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{provider.label} catalog</DialogTitle>
           <DialogDescription>
@@ -66,7 +67,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
               : "No default key set — showing the static/cached list."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex max-h-96 flex-col gap-2 overflow-y-auto">
+        <DialogBody className="gap-2">
           {isLoading || refresh.isPending ? (
             <SkeletonRows label="Loading the catalog" rows={4} rowClassName="h-12" />
           ) : isError ? (
@@ -84,8 +85,8 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
                       <img src={preview} alt="" className="size-8 shrink-0 rounded-full border border-border object-cover" />
                     ) : null}
                     <div className="min-w-0">
-                      <p className="truncate text-sm text-foreground">{item.label}</p>
-                      <p className="truncate font-mono text-xs text-muted-foreground">{item.id}</p>
+                      <p className="truncate text-sm text-foreground" title={item.label}>{item.label}</p>
+                      <p className="truncate font-mono text-xs text-muted-foreground" title={item.id}>{item.id}</p>
                     </div>
                   </li>
                 );
@@ -100,7 +101,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
               {data.error}
             </p>
           ) : null}
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
             {refresh.isPending ? "Refreshing…" : "Refresh"}

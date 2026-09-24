@@ -9,7 +9,7 @@ v3 lets external AI coding agents (Claude Code, OpenAI Codex CLI, Cursor, any MC
 | File | What it is | Read when |
 |---|---|---|
 | [`AGENT-ACCESS.md`](AGENT-ACCESS.md) | The architecture: decisions D-V3-1…11 with justification, topology and sequence diagrams, the discoverability layer (resources, prompts, doc tools), the full tool catalog with input/output models, the console design, the package layout and test strategy, the additive api changes, the safety summary, the remote HTTP mode (§9) and the Claude Code skill (§10) | Before implementing anything |
-| [`PLAN-V3.md`](PLAN-V3.md) | Packages V3-00…V3-08 with owner, wave, dependencies, exclusive files, acceptance and live steps; the verification matrix; risks; **§8 rulings R-V3-1…17** | Orchestration and implementation |
+| [`PLAN-V3.md`](PLAN-V3.md) | Packages V3-00…V3-08 with owner, wave, dependencies, exclusive files, acceptance and live steps; the verification matrix; risks; **§8 rulings R-V3-1…38** (R-V3-28…38 are the wave-2 rulings and the headless V3-07 protocol) | Orchestration and implementation |
 | [`_asks.md`](_asks.md) | The cross-package change-request log; the coordinator's decisions there are binding | During implementation |
 | `LIVE-RESULTS-V3.md` | Written by V3-07: the Claude Code live run on a scratch api | After the live run |
 | `_briefs/migration-rehearsal-v3.md` | Written by V3-00: the `v3_001` rehearsal log | Before the coordinator migrates the live DB |

@@ -1,0 +1,57 @@
+{
+  "$id": "lkap-contracts/CatalogFilter.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).\n\nApplied by the api after the adapter fetch, so one vendor adapter can\nserve several entries (OpenAI's one ``/models`` list feeds six). Every\nset condition must hold: ``id_include`` must match, ``id_exclude`` must\nnot (both :func:`re.search`, case-insensitive), and the list at the dotted\n``meta_path`` must contain ``meta_contains``.",
+  "properties": {
+    "id_exclude": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id Exclude"
+    },
+    "id_include": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id Include"
+    },
+    "meta_contains": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Meta Contains"
+    },
+    "meta_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Meta Path"
+    }
+  },
+  "title": "CatalogFilter",
+  "type": "object"
+}

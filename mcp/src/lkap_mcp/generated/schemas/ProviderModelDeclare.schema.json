@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "ModelCapabilities": {
+      "description": "What one model can do, as far as the platform knows (D-V4-24, R-V4-23).\n\n``None`` means unknown. Resolved per field from, in order: the admin's\ndeclaration, the last \"Test model\" probe, the live catalog item's\nmetadata, the registry; ``source`` names the source of ``vision``.",
+      "properties": {
+        "audio_in": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio In"
+        },
+        "audio_out": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Out"
+        },
+        "context_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Tokens"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "declared",
+                "detected",
+                "catalog",
+                "registry"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "streaming": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Streaming"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        }
+      },
+      "title": "ModelCapabilities",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ProviderModelDeclare.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PUT /v1/providers/{id}/models/{model_id}``: what an admin says the model can do.",
+  "properties": {
+    "declared": {
+      "$ref": "#/$defs/ModelCapabilities"
+    }
+  },
+  "required": [
+    "declared"
+  ],
+  "title": "ProviderModelDeclare",
+  "type": "object"
+}

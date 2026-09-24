@@ -101,7 +101,7 @@ async def test_run_times_out_within_ten_seconds(monkeypatch: pytest.MonkeyPatch)
     from lkap_api.catalogs import adapters as adapters_module
 
     class _HangingAdapter:
-        async def fetch(self, *, client: object, secrets: object, kind: object) -> list[object]:
+        async def fetch(self, *, client: object, secrets: object, kind: object, **_: object) -> list[object]:
             await asyncio.sleep(10)
             return []
 

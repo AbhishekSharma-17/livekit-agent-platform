@@ -16,10 +16,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import parse_qsl
 
 import httpx
 from lkap_contracts.api_models import CatalogItem
-from lkap_contracts.providers import OPENROUTER_BASE_URL, CatalogKind
+from lkap_contracts.providers import OPENROUTER_BASE_URL, CatalogKind, PageSpec
 
 from lkap_api.catalogs.base import (
     DEFAULT_TIMEOUT_S,
@@ -60,6 +61,8 @@ class OpenRouterCatalogAdapter:
     voices: bool = False
     base_url: str = OPENROUTER_BASE_URL
     timeout_s: float = DEFAULT_TIMEOUT_S
+    public: bool = False
+    """``/models`` is public, but this adapter probes ``/key`` first, so it is keyed (R-V4-9)."""
 
     @property
     def models_url(self) -> str:
@@ -67,14 +70,38 @@ class OpenRouterCatalogAdapter:
         return f"{self.base_url}/models?{self.filter}" if self.filter else f"{self.base_url}/models"
 
     async def fetch(
-        self, *, client: httpx.AsyncClient, secrets: Mapping[str, str], kind: CatalogKind
+        self,
+        *,
+        client: httpx.AsyncClient,
+        secrets: Mapping[str, str],
+        kind: CatalogKind,
+        page: PageSpec | None = None,
+        first_page_only: bool = False,
     ) -> list[CatalogItem]:
         """Check the key, then return the models (or their voices) for ``kind``.
+
+        ``page``/``first_page_only`` are accepted for the adapter protocol and
+        ignored: ``/models`` answers the whole filtered list in one response.
 
         Raises:
             UnsupportedCatalogKind: For a kind this registration does not list.
             CatalogAdapterError: If the key is rejected, or either request fails.
         """
+        return await self._list(client=client, secrets=secrets, kind=kind, query=None)
+
+    async def search(
+        self, *, client: httpx.AsyncClient, secrets: Mapping[str, str], kind: CatalogKind, query: str
+    ) -> list[CatalogItem]:
+        """Vendor-side search: OpenRouter's own ``q`` over this registration's filtered list.
+
+        Used only on an explicit ``search_vendor=true`` (R-V4-28); the result is
+        a subset and is never written to the catalog cache.
+        """
+        return await self._list(client=client, secrets=secrets, kind=kind, query=query)
+
+    async def _list(
+        self, *, client: httpx.AsyncClient, secrets: Mapping[str, str], kind: CatalogKind, query: str | None
+    ) -> list[CatalogItem]:
         if kind != "models" and not (kind == "voices" and self.voices):
             raise UnsupportedCatalogKind(f"{self.vendor} has no '{kind}' catalog")
         headers = bearer_auth(secrets)
@@ -85,7 +112,14 @@ class OpenRouterCatalogAdapter:
         if not probe.is_success:
             raise CatalogAdapterError(f"{self.vendor} rejected the key (HTTP {probe.status_code})")
         try:
-            response = await client.get(self.models_url, headers=headers, timeout=self.timeout_s)
+            # httpx replaces a url's query string with `params`, so a search
+            # re-sends the registration's filter alongside `q`.
+            response = await client.get(
+                self.models_url,
+                headers=headers,
+                params=[*parse_qsl(self.filter), ("q", query)] if query else None,
+                timeout=self.timeout_s,
+            )
             response.raise_for_status()
             body = response.json()
         except httpx.HTTPError as exc:

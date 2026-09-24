@@ -6,13 +6,31 @@ V2-06 adds this workspace's enablement settings (`ProviderOut`, `PUT
 :mod:`lkap_api.catalogs` also registers the workspace-enablement validator
 into :mod:`lkap_api.config_service` (see that package's docstring) — this
 router is what pulls it into the running app.
+
+V4-07 (docs/v4/CUSTOM-MODELS.md D-V4-23…25): `GET /v1/providers` carries the
+model-id rule (`model_id_rules`); the catalog route searches and pages the
+cached list (`q`, `limit`, `offset`, `model`) and forwards a search to
+OpenRouter only on `search_vendor=true`; `GET/PUT .../models[/{model_id}]`
+read the workspace's `provider_models` records and store an admin's declared
+capabilities. Importing :mod:`lkap_api.custom_models.validation` registers the
+custom-model validator the same way.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
-from lkap_contracts.api_models import CatalogResponse, ProviderOut, ProviderSettingsIn, ProvidersResponse
+from fastapi import APIRouter, Path, Query
+from lkap_contracts.api_models import (
+    CatalogResponse,
+    ModelIdRules,
+    ProviderModelDeclare,
+    ProviderModelOut,
+    ProviderModelPage,
+    ProviderOut,
+    ProviderSettingsIn,
+    ProvidersResponse,
+)
 from lkap_contracts.providers import (
+    MODEL_KINDS,
     REGISTRY,
     Availability,
     CatalogKind,
@@ -20,11 +38,17 @@ from lkap_contracts.providers import (
     ProviderSpec,
     credential_home,
     get,
+    validate_model_id,
 )
 from sqlalchemy import select
 
 from lkap_api import catalogs
+from lkap_api.catalogs import service as catalog_service
 from lkap_api.config_service import ConnectionContext, installed_on, installed_provider_ids
+from lkap_api.custom_models import records
+from lkap_api.custom_models import (
+    validation as _custom_model_validation,  # noqa: F401 - registers the validator
+)
 from lkap_api.db.models import Credential, LiveKitConnection, WorkspaceProvider
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, VaultDep
 from lkap_api.errors import NotFoundError, UnprocessableEntityError
@@ -132,7 +156,7 @@ async def list_providers(
         if enabled is not None and is_enabled != enabled:
             continue
         out.append(_to_out(spec, row, installed_map.get(spec.id, [])))
-    return ProvidersResponse(providers=out)
+    return ProvidersResponse(providers=out, model_id_rules=ModelIdRules())
 
 
 @router.get(
@@ -239,7 +263,10 @@ async def _resolve_credential(
     description=(
         "Runs the registry's `catalog` adapter for this provider, cached for `CatalogSpec.ttl_s` "
         "(default 1 h). A failed or missing vendor call never 5xxs: it falls back to a cached or "
-        "static list and reports why in `error`. `refresh=true` bypasses a fresh cache entry."
+        "static list and reports why in `error`. `refresh=true` bypasses a fresh cache entry. "
+        "`q` searches the cached list by id and label, `model` keeps one model's voices, and "
+        "`limit`/`offset` page it (`total` counts the matches). `search_vendor=true` forwards `q` to "
+        "the vendor's own search for OpenRouter entries only; every other search reads the cache."
     ),
 )
 async def get_provider_catalog(
@@ -253,8 +280,24 @@ async def get_provider_catalog(
     ),
     credential_id: str | None = Query(default=None, description="Defaults to the workspace's default"),
     refresh: bool = Query(default=False, description="Bypass a fresh cache entry"),
+    q: str | None = Query(  # noqa: B008
+        default=None, max_length=200, description="Case-insensitive substring over item id and label"
+    ),
+    limit: int = Query(  # noqa: B008
+        default=catalog_service.DEFAULT_PAGE_LIMIT,
+        ge=1,
+        le=catalog_service.MAX_PAGE_LIMIT,
+        description="Page size",
+    ),
+    offset: int = Query(default=0, ge=0, description="Matches to skip"),  # noqa: B008
+    model: str | None = Query(  # noqa: B008
+        default=None, max_length=200, description="Keep only items whose `meta.model` is this id (voices)"
+    ),
+    search_vendor: bool = Query(  # noqa: B008
+        default=False, description="Forward `q` to the vendor's search (OpenRouter entries only)"
+    ),
 ) -> CatalogResponse:
-    """Return one vendor's catalog for this workspace."""
+    """Return one vendor's catalog for this workspace, searched and paged."""
     spec = _spec_or_404(provider_id)
     if spec.catalog is None:
         raise UnprocessableEntityError(f"provider '{spec.id}' has no catalog")
@@ -266,7 +309,13 @@ async def get_provider_catalog(
         db, workspace_id=ctx.workspace_id, spec=spec, credential_id=credential_id
     )
     secrets = vault.decrypt(credential.ciphertext) if credential is not None else None
-    return await catalogs.get_catalog(
+    if search_vendor and q:
+        searched = await catalog_service.search_vendor(
+            client, spec=spec, kind=resolved_kind, secrets=secrets, query=q
+        )
+        if searched is not None:
+            return catalog_service.page_catalog(searched, model=model, limit=limit, offset=offset)
+    full = await catalogs.get_catalog(
         db,
         client,
         spec=spec,
@@ -274,4 +323,103 @@ async def get_provider_catalog(
         credential_id=credential.id if credential is not None else None,
         secrets=secrets,
         refresh=refresh,
+        workspace_id=ctx.workspace_id,
     )
+    return catalog_service.page_catalog(full, query=q, model=model, limit=limit, offset=offset)
+
+
+# ------------------------------------------------------------------ model records (V4-07)
+def _model_spec_or_422(provider_id: str) -> ProviderSpec:
+    spec = _spec_or_404(provider_id)
+    if spec.kind not in MODEL_KINDS:
+        raise UnprocessableEntityError(
+            f"provider '{spec.id}' is a {spec.kind} provider and takes no model id"
+        )
+    return spec
+
+
+def _checked_model_id(model_id: str) -> str:
+    """``model_id`` if it passes the id rule; a 422 that never echoes it otherwise (R-V4-21)."""
+    reason = validate_model_id(model_id)
+    if reason is not None:
+        raise UnprocessableEntityError(f"the model id {reason}")
+    return model_id
+
+
+@router.get(
+    "/{provider_id}/models",
+    response_model=ProviderModelPage,
+    summary="List this workspace's model records for a provider",
+    description=(
+        "The workspace's `provider_models` rows for this provider's credential home and kind: "
+        "declared capabilities, the last Test model result and catalog sightings, most recently "
+        "tested first. `custom=true` leaves out the ids the registry itself suggests."
+    ),
+)
+async def list_provider_models(
+    provider_id: str,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    custom: bool = Query(default=False, description="Only ids the registry does not list"),  # noqa: B008
+    limit: int = Query(  # noqa: B008
+        default=records.DEFAULT_LIST_LIMIT, ge=1, le=records.MAX_LIST_LIMIT, description="At most this many"
+    ),
+) -> ProviderModelPage:
+    """Return the workspace's model records for one provider."""
+    spec = _model_spec_or_422(provider_id)
+    rows = await records.list_rows(
+        db, workspace_id=ctx.workspace_id, spec=spec, custom_only=custom, limit=limit
+    )
+    items = [records.to_out(row) for row in rows]
+    return ProviderModelPage(items=items, total=len(items))
+
+
+@router.get(
+    "/{provider_id}/models/{model_id:path}",
+    response_model=ProviderModelOut,
+    summary="Get this workspace's record of one model id",
+    description="404 when the workspace has no record of the id (it was never tested, declared or seen).",
+)
+async def get_provider_model(
+    provider_id: str,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    model_id: str = Path(description="The model id; may contain `/`"),  # noqa: B008
+) -> ProviderModelOut:
+    """Return one model record."""
+    spec = _model_spec_or_422(provider_id)
+    row = await records.get_row(
+        db, workspace_id=ctx.workspace_id, spec=spec, model_id=_checked_model_id(model_id)
+    )
+    if row is None:
+        raise NotFoundError(f"no record of this model id for provider '{spec.id}'")
+    return records.to_out(row)
+
+
+@router.put(
+    "/{provider_id}/models/{model_id:path}",
+    response_model=ProviderModelOut,
+    summary="Declare what a model can do",
+    description=(
+        "Stores an admin's `ModelCapabilities` for a (usually custom) model id; declared values win "
+        "over a probe's, the live catalog's and the registry's (R-V4-23). The id is checked by the "
+        "model-id rule (422 without echo)."
+    ),
+)
+async def declare_provider_model(
+    provider_id: str,
+    payload: ProviderModelDeclare,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    model_id: str = Path(description="The model id; may contain `/`"),  # noqa: B008
+) -> ProviderModelOut:
+    """Upsert the workspace's record with the declared capabilities."""
+    spec = _model_spec_or_422(provider_id)
+    row = await records.declare(
+        db,
+        workspace_id=ctx.workspace_id,
+        spec=spec,
+        model_id=_checked_model_id(model_id),
+        declared=payload.declared,
+    )
+    return records.to_out(row)

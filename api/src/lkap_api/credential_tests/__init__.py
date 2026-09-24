@@ -91,7 +91,13 @@ async def run(
     checked_at = utcnow()
     try:
         items = await asyncio.wait_for(
-            adapter.fetch(client=client, secrets=normalize_secrets(spec, secrets), kind=kind),
+            adapter.fetch(
+                client=client,
+                secrets=normalize_secrets(spec, secrets),
+                kind=kind,
+                page=spec.catalog.page if spec.catalog else None,
+                first_page_only=True,  # V4-07: a test reads page one only
+            ),
             timeout=TIMEOUT_S,
         )
     except (CatalogAdapterError, TimeoutError) as exc:

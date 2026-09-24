@@ -268,6 +268,16 @@ Check from the CLI with `lk number list` (the number's dispatch rule id) and `lk
 - The last rehearsal (copy and fresh DB, up/down/up) is `docs/v2/_briefs/migration-rehearsal.md`.
 - Postgres is exercised in CI (`python.yml`, job `test-postgres`).
 
+### 9.1 Custom model ids (V4-07)
+
+Any model id a vendor accepts can be typed into a slot; the registry's list is a suggestion, never an allowlist (design in `docs/v4/CUSTOM-MODELS.md`).
+
+- **The rule.** An id is 1–200 printable ASCII characters with no whitespace, no `? # & = < > " ' `` ` ``, no `://`, and it does not start with `http`. A value that looks like an API key (a known key prefix such as `sk-`, `AIza`, `xai-`, or 32+ characters of one class with no `/ . : -`) is refused first. Both are validation **errors**, and no message ever repeats the value. The same rule covers `type="model"`/`type="catalog"` fields and the id fields (`voice`, `voice_id`, `avatar_id`, `face_id`, `pal_id`, `persona_id`, `voice_name`, `emotion_id`). `GET /v1/providers` returns the rule as `model_id_rules`.
+- **Unknown is a warning.** An id outside the registry list is a warning ("not in the suggestion list or the live catalog … run Test model") unless the workspace's cached live catalog lists it, or a "Test model" run passed with the slot's **current** key in the last 30 days. Rotating the key brings the warning back.
+- **Where records live.** Table `provider_models` (migration `v4_002_provider_models`), one row per workspace, credential home, kind and model id: an admin's declared capabilities, the last test result (with the key's fingerprint) and catalog sightings (`catalog_seen_at`, `catalog_missing_since`). Read them with `GET /v1/providers/{id}/models` (`?custom=true` hides registry ids) and `GET /v1/providers/{id}/models/{model_id}`. An admin declares capabilities with `PUT /v1/providers/{id}/models/{model_id}` and a body `{"declared": {"vision": false, "tools": true}}`.
+- **Clearing one.** There is no delete route. To forget a record, back up the database (§6), then run `DELETE FROM provider_models WHERE workspace_id = '<ws>' AND provider_home = '<home>' AND kind = '<kind>' AND model_id = '<id>';`. To clear a stale "no longer in the catalog" warning without deleting, fetch the catalog again with `?refresh=true`; the flag clears when the vendor lists the id again.
+- **Live catalogs.** Deepgram's and Rime's lists are public and are fetched without a key (cached 24 h for everyone); OpenRouter's are cached 6 h, everything else 1 h. `GET /v1/providers/{id}/catalog` takes `q`, `limit` (≤ 1000, default 200), `offset` and `model` (a TTS model's voices) and searches the cached list; only OpenRouter entries forward `q` to the vendor, and only with `search_vendor=true`.
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:

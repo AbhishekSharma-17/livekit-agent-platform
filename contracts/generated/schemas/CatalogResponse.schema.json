@@ -81,6 +81,18 @@
       ],
       "title": "Source",
       "type": "string"
+    },
+    "total": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Total"
     }
   },
   "required": [

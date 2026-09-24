@@ -46,6 +46,7 @@ TENANT_TABLES: frozenset[str] = frozenset(
         "calls",
         "usage_daily",
         "workspace_providers",
+        "provider_models",  # V4-07 (asks #26)
     }
 )
 

@@ -38,6 +38,7 @@ export interface LkapContracts {
   CallPage?: CallPage;
   CallReportIn?: CallReportIn;
   CallTransferIn?: CallTransferIn;
+  CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
   ConfigVersionOut?: ConfigVersionOut;
@@ -96,6 +97,8 @@ export interface LkapContracts {
   KbSeed?: KbSeed;
   McpServerDefinition?: McpServerDefinition;
   Me?: Me;
+  ModelCapabilities?: ModelCapabilities;
+  ModelIdRules?: ModelIdRules;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
   NumbersRefreshIn?: NumbersRefreshIn;
@@ -104,12 +107,16 @@ export interface LkapContracts {
   PackOut?: PackOut;
   PacksResponse?: PacksResponse;
   Page?: Page;
+  PageSpec?: PageSpec;
   PanelLayout?: PanelLayout;
   PhoneNumberCreate?: PhoneNumberCreate;
   PhoneNumberOut?: PhoneNumberOut;
   PhoneNumberPage?: PhoneNumberPage;
   PhoneNumberUpdate?: PhoneNumberUpdate;
   Price?: Price;
+  ProviderModelDeclare?: ProviderModelDeclare;
+  ProviderModelOut?: ProviderModelOut;
+  ProviderModelPage?: ProviderModelPage;
   ProviderOut?: ProviderOut;
   ProviderSettingsIn?: ProviderSettingsIn;
   ProviderSpec?: ProviderSpec;
@@ -844,6 +851,24 @@ export interface CallTransferIn {
   to: string;
 }
 /**
+ * Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).
+ *
+ * Applied by the api after the adapter fetch, so one vendor adapter can
+ * serve several entries (OpenAI's one ``/models`` list feeds six). Every
+ * set condition must hold: ``id_include`` must match, ``id_exclude`` must
+ * not (both :func:`re.search`, case-insensitive), and the list at the dotted
+ * ``meta_path`` must contain ``meta_contains``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CatalogFilter".
+ */
+export interface CatalogFilter {
+  id_exclude?: string | null;
+  id_include?: string | null;
+  meta_contains?: string | null;
+  meta_path?: string | null;
+}
+/**
  * One model, voice, avatar or persona listed by a vendor catalog adapter.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -873,6 +898,7 @@ export interface CatalogResponse {
   items?: CatalogItem[];
   kind: "models" | "voices" | "avatars" | "personas";
   source?: "vendor" | "static";
+  total?: number | null;
 }
 /**
  * One row of ``GET /v1/agents/{id}/versions``.
@@ -1649,6 +1675,43 @@ export interface WorkspaceMembership {
   slug: string;
 }
 /**
+ * What one model can do, as far as the platform knows (D-V4-24, R-V4-23).
+ *
+ * ``None`` means unknown. Resolved per field from, in order: the admin's
+ * declaration, the last "Test model" probe, the live catalog item's
+ * metadata, the registry; ``source`` names the source of ``vision``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ModelCapabilities".
+ */
+export interface ModelCapabilities {
+  audio_in?: boolean | null;
+  audio_out?: boolean | null;
+  context_tokens?: number | null;
+  source?: ("declared" | "detected" | "catalog" | "registry") | null;
+  streaming?: boolean | null;
+  tools?: boolean | null;
+  vision?: boolean | null;
+}
+/**
+ * The model-id rule the console mirrors (docs/v4/CUSTOM-MODELS.md D-V4-23, R-V4-21).
+ *
+ * Defaults are the contracts' own constants, so ``ModelIdRules()`` is the
+ * live rule. ``pattern`` is the syntax rule as a JS-compatible regex; a value
+ * starting with one of ``secret_prefixes``, or a bare token of at least
+ * ``bare_token_min_len`` characters of one class with no ``/ . : -``, is
+ * refused as a secret first.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ModelIdRules".
+ */
+export interface ModelIdRules {
+  bare_token_min_len?: number;
+  max_len?: number;
+  pattern?: string;
+  secret_prefixes?: string[];
+}
+/**
  * The JSON schema of one flow node kind, for the flow builder's forms.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1764,6 +1827,32 @@ export interface Page {
   total: number;
 }
 /**
+ * How to follow a vendor list's pages (D-V4-25).
+ *
+ * * ``token`` / ``cursor``: send ``param=<value at next_path>`` until the
+ *   value is missing or empty (Gemini ``pageToken``/``nextPageToken``,
+ *   Anthropic ``after_id``/``last_id``, Cartesia ``starting_after``/``next_page``).
+ * * ``offset``: send ``param=<items so far>`` until a short or empty page.
+ * * ``page``: send ``param=<n>`` from 0 (``page_number``), stopping at the
+ *   total page count read from ``next_path`` or at an empty page (Hume).
+ *
+ * ``more_path`` (optional) names a boolean such as ``has_more``; ``false``
+ * stops the loop before another request. ``size_param=size`` rides on
+ * every request. The loop never exceeds ``max_pages``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PageSpec".
+ */
+export interface PageSpec {
+  kind: "cursor" | "token" | "offset" | "page";
+  max_pages?: number;
+  more_path?: string | null;
+  next_path?: string | null;
+  param: string;
+  size?: number | null;
+  size_param?: string | null;
+}
+/**
  * ``POST /v1/telephony/numbers``.
  *
  * Binding a number to a trunk adds it to the trunk's numbers. Setting
@@ -1847,6 +1936,67 @@ export interface Price {
   usd_per_unit: number | string;
 }
 /**
+ * ``PUT /v1/providers/{id}/models/{model_id}``: what an admin says the model can do.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderModelDeclare".
+ */
+export interface ProviderModelDeclare {
+  declared: ModelCapabilities;
+}
+/**
+ * One workspace's record of a model id (``provider_models``, D-V4-24, R-V4-24).
+ *
+ * Keyed by ``(provider_home, kind, model_id)``: ``provider_home`` is the
+ * entry's credential home, so an OpenRouter model tested from the STT entry
+ * and from the LLM entry is one row per kind. ``last_test_message`` is
+ * scrubbed of secrets and is vendor text: render it as data, never markup.
+ * ``last_test_fingerprint`` is the credential's display fingerprint at test
+ * time; a rotated key no longer matches it, which resets "Tested".
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderModelOut".
+ */
+export interface ProviderModelOut {
+  catalog_missing_since?: string | null;
+  catalog_seen_at?: string | null;
+  created_at: string;
+  declared?: ModelCapabilities | null;
+  detected?: ModelCapabilities | null;
+  id: string;
+  kind:
+    | "realtime"
+    | "stt"
+    | "llm"
+    | "tts"
+    | "avatar"
+    | "vad"
+    | "turn_detection"
+    | "noise_cancellation"
+    | "image_gen"
+    | "embedding"
+    | "secret_bag";
+  last_test_at?: string | null;
+  last_test_cost_usd?: number | string | null;
+  last_test_credential_id?: string | null;
+  last_test_fingerprint?: string | null;
+  last_test_latency_ms?: number | null;
+  last_test_message?: string | null;
+  last_test_ok?: boolean | null;
+  model_id: string;
+  provider_home: string;
+  provider_id: string;
+  updated_at: string;
+}
+/**
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderModelPage".
+ */
+export interface ProviderModelPage {
+  items: ProviderModelOut[];
+  total: number;
+}
+/**
  * A registry entry plus this workspace's settings (``GET /v1/providers``).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1885,6 +2035,10 @@ export interface ProviderOut {
   notes?: string | null;
   package: string;
   price_ref?: string | null;
+  /**
+   * The api's 'Test model' probe adapter for this entry (docs/v4/CUSTOM-MODELS.md D-V4-26): a capped POST with a payload, deliberately separate from `test` (a GET that lists). Unset means no model test; never set on vad, turn_detection or noise_cancellation.
+   */
+  probe?: string | null;
   python_class: string;
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
@@ -1919,12 +2073,18 @@ export interface ProviderCapabilities {
 /**
  * How to list a provider's models, voices, avatars or personas from the vendor.
  *
+ * ``filter`` and ``page`` (V4-07, D-V4-25) are registry data the api applies
+ * around the adapter: ``filter`` keeps this entry's items out of a shared
+ * vendor list, ``page`` follows the vendor's pagination.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "CatalogSpec".
  */
 export interface CatalogSpec {
   adapter: string;
+  filter?: CatalogFilter | null;
   kinds?: ("models" | "voices" | "avatars" | "personas")[];
+  page?: PageSpec | null;
   ttl_s?: number;
 }
 /**
@@ -2014,6 +2174,10 @@ export interface ProviderSpec {
   notes?: string | null;
   package: string;
   price_ref?: string | null;
+  /**
+   * The api's 'Test model' probe adapter for this entry (docs/v4/CUSTOM-MODELS.md D-V4-26): a capped POST with a payload, deliberately separate from `test` (a GET that lists). Unset means no model test; never set on vad, turn_detection or noise_cancellation.
+   */
+  probe?: string | null;
   python_class: string;
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
@@ -2034,10 +2198,14 @@ export interface ProviderSpec {
  * ``installed_on`` and ``default_credential_id``), not the bare registry
  * entry.
  *
+ * ``model_id_rules`` (V4-07, additive): the model-id rule for the console;
+ * filled by ``GET /v1/providers`` and by the ``providers.json`` export.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ProvidersResponse".
  */
 export interface ProvidersResponse {
+  model_id_rules?: ModelIdRules | null;
   providers: ProviderOut[];
   v?: 1 | 2;
 }

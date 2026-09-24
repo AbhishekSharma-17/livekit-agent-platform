@@ -104,6 +104,11 @@ class FakeJobContext:
         self.shutdown_reasons.append(reason)
 
     def add_shutdown_callback(self, callback: Any) -> None:
+        # Mirror livekit-agents' JobContext.add_shutdown_callback, which reads
+        # `callback.__code__.co_argcount`: a callable object without `__code__`
+        # crashes every real job (asks #54, B-12).
+        min_args = 2 if inspect.ismethod(callback) else 1
+        assert callback.__code__.co_argcount >= min_args, "shutdown callback must accept the reason"
         self.shutdown_callbacks.append(callback)
 
     async def fire_shutdown(self, reason: str = "user requested") -> None:

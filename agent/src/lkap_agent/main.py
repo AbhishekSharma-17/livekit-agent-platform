@@ -712,7 +712,13 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     )
     if eager is not None:
         eager.once = on_shutdown
-    ctx.add_shutdown_callback(on_shutdown)
+
+    # The SDK inspects `callback.__code__` (livekit-agents 1.8.2 job.py), so it
+    # must be a plain function, not a callable object like `_OnceShutdown`.
+    async def _run_shutdown(reason: str) -> None:
+        await on_shutdown(reason)
+
+    ctx.add_shutdown_callback(_run_shutdown)
 
     try:
         await _start(ctx, plan, agent, deps, resolved)

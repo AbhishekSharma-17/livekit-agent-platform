@@ -21,6 +21,7 @@ overwriting `/status` here would clobber a pack's own route/routing stamp
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import time
 from collections.abc import Callable
@@ -32,9 +33,17 @@ from packs.base import PackSessionContext
 
 _DEFAULT_GOODBYE = "Thanks for calling. Goodbye!"
 
+#: On the text channel the goodbye is text only; never let its playout hold the
+#: shutdown (and so the summary) for longer than this (asks #33).
+TEXT_GOODBYE_TIMEOUT_S = 5.0
+
 
 def _default_shutdown(reason: str) -> None:
     get_job_context().shutdown(reason=reason)
+
+
+async def _awaited(awaitable: Any) -> None:
+    await awaitable
 
 
 def build_end_call_tool(
@@ -47,10 +56,13 @@ def build_end_call_tool(
     Args:
         ctx: The session's `PackSessionContext`.
         shutdown: Called with a reason string to actually end the job.
-            Defaults to `get_job_context().shutdown(...)`; tests inject a
-            recorder since no real `JobContext` exists outside a job.
+            Defaults to the context's `request_shutdown` (the worker's
+            `SessionContext`, which lets a text session post its summary at
+            once, asks #33), then to `get_job_context().shutdown(...)`; tests
+            inject a recorder since no real `JobContext` exists outside a job.
     """
-    shutdown_fn = shutdown or _default_shutdown
+    shutdown_fn = shutdown or getattr(ctx, "request_shutdown", None) or _default_shutdown
+    text_channel = getattr(ctx, "channel", "web") == "text"
 
     @function_tool
     async def end_call(context: RunContext[Any], closing_message: str | None = None) -> None:
@@ -77,7 +89,13 @@ def build_end_call_tool(
             else:
                 result = ctx.session.say(text)
             if inspect.isawaitable(result):
-                await result
+                if text_channel:
+                    try:
+                        await asyncio.wait_for(_awaited(result), TEXT_GOODBYE_TIMEOUT_S)
+                    except TimeoutError:
+                        ctx.log.warning("end_call goodbye did not finish; ending anyway", call_id=call_id)
+                else:
+                    await result
         finally:
             ctx.log.debug("builtin_tool.end_call", call_id=call_id)
             shutdown_fn("end_call tool invoked")

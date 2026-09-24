@@ -43,6 +43,7 @@ from livekit.agents import (
 from livekit.agents import llm as lk_llm
 from lkap_contracts.agent_config import AgentConfig, PipelineMode
 from lkap_contracts.api_models import KbHit
+from lkap_contracts.common import SessionChannel
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import vision_support
 from packs.base import (
@@ -185,6 +186,13 @@ class SessionContext:
     pack_settings: dict[str, Any] = field(default_factory=dict)
     userdata: dict[str, Any] = field(default_factory=dict)
     record_event: Callable[[str, dict[str, Any]], None] = field(default=_noop_record_event)
+    #: The session's channel. Not part of `PackSessionContext`: built-in tools read
+    #: it with `getattr(ctx, "channel", "web")` (e.g. `request_form` on `text`, asks #30).
+    channel: SessionChannel = "web"
+    #: Ends the job through the worker's own context (`end_call` prefers it over
+    #: `get_job_context().shutdown`, so a text session posts its summary at once,
+    #: asks #33). `None` outside a worker job.
+    request_shutdown: Callable[[str], None] | None = None
 
 
 class PlatformAgent(Agent):
@@ -234,7 +242,9 @@ class PlatformAgent(Agent):
         # D-W2-10: True/False for a registry model, None for a free-text id or no LLM slot.
         self._model_vision = model_vision_support(ctx.config)
         silent = {meta.name for meta in pack.tool_meta() if meta.silent_reply}
-        if ctx.pipeline_mode in _REALTIME_MODEL_MODES:
+        if ctx.pipeline_mode in _REALTIME_MODEL_MODES and getattr(ctx, "channel", "web") != "text":
+            # On the text channel `request_form` answers at once with a line the
+            # model must act on (asks #30), so its reply is never suppressed there.
             silent |= _REALTIME_SILENT_BUILTINS
         self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
@@ -437,7 +447,8 @@ class PlatformAgent(Agent):
             return
         body = "\n\n".join(f"[{hit.filename}] {hit.text}" for hit in hits)
         turn_ctx.add_message(role="assistant", content=f"{_KB_PREFIX}\n{body}")
-        logger.debug("injected knowledge", hits=len(hits), top_k=knowledge.top_k)
+        # Info, counts only (asks #36): the one KB signal visible on an INFO worker.
+        logger.info("injected knowledge", hits=len(hits), top_k=knowledge.top_k)
         await self._cite(hits)
 
     async def _inject_vision(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:

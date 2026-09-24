@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import REQUIRED_ENV
 
-from lkap_agent.settings import Settings
+from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT, Settings
 
 
 def test_settings_reads_required_env_no_dotenv(settings: Settings) -> None:
@@ -53,3 +53,17 @@ def test_idle_hangup_reads_lkap_idle_hangup_s(
     monkeypatch.setenv("LKAP_IDLE_HANGUP_S", raw)
 
     assert Settings().idle_hangup_s == expected
+
+
+def test_http_tool_user_agent_defaults_to_a_contact_bearing_value(settings: Settings) -> None:
+    """Asks #29: a project URL in the User-Agent satisfies Wikimedia's robot policy."""
+    assert settings.http_tool_user_agent == DEFAULT_HTTP_TOOL_USER_AGENT
+    assert settings.http_tool_user_agent.startswith("LKAP/") and "(+https://" in settings.http_tool_user_agent
+
+
+def test_http_tool_user_agent_reads_lkap_http_tool_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in REQUIRED_ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("LKAP_HTTP_TOOL_USER_AGENT", "acme-voice/2 (ops@example.com)")
+
+    assert Settings().http_tool_user_agent == "acme-voice/2 (ops@example.com)"

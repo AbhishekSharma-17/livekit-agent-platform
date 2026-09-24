@@ -637,3 +637,16 @@ async def test_the_template_routes_need_a_signed_in_caller(anonymous: httpx.Asyn
     response = await anonymous.get(path)
 
     assert response.status_code == 401
+
+
+def test_insurance_sample_prompt_policy_numbers_exist_in_the_pack_directory() -> None:
+    """Asks #34 / B-9: a sample prompt's policy number must be one `lookup_policy` finds."""
+    import re  # noqa: PLC0415
+
+    from packs.insurance_claim.policy_directory import lookup_policy  # noqa: PLC0415
+
+    prompts = _template("insurance_claim").sample_prompts
+    numbers = [m for p in prompts for m in re.findall(r"\b[A-Z]{1,4}\d?[-\d]{3,}\b", p)]
+    assert numbers, "the insurance starter should show a policy-number sample prompt"
+    for number in numbers:
+        assert lookup_policy(number)["found"] is True, number

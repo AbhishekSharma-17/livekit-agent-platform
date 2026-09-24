@@ -5,6 +5,7 @@ keys, no network (HTTP calls go through `respx`).
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, cast
@@ -20,6 +21,7 @@ from lkap_contracts.agent_config import CapabilitiesConfig, KnowledgeConfig, Pip
 from lkap_contracts.api_models import KbHit
 from packs.base import FrameSnapshot
 
+from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
 from lkap_agent.tools.builtin import BUILTIN_TOOL_NAMES, build_builtin_tools
 from lkap_agent.tools.builtin.current_time import build_current_time_tool
 from lkap_agent.tools.builtin.describe_current_frame import build_describe_current_frame_tool
@@ -89,6 +91,38 @@ class TestEndCall:
         await tool(context=_run_ctx(), closing_message="Bye now")
 
         assert ctx.session.replies_generated == ["Say goodbye: Bye now"]  # type: ignore[attr-defined]
+        assert shutdown_calls == ["end_call tool invoked"]
+
+    async def test_prefers_the_contexts_request_shutdown(self) -> None:
+        """Asks #33: the worker routes `end_call` through its own context, not `get_job_context`."""
+        ctx = FakePackSessionContext()
+        requested: list[str] = []
+        ctx.request_shutdown = requested.append  # type: ignore[attr-defined]
+
+        await build_end_call_tool(ctx)(context=_run_ctx())
+
+        assert requested == ["end_call tool invoked"]
+
+    async def test_text_channel_does_not_wait_forever_for_the_goodbye(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Asks #33: a goodbye that never finishes playing must not hold the shutdown."""
+        from lkap_agent.tools.builtin import end_call as module  # noqa: PLC0415
+
+        monkeypatch.setattr(module, "TEXT_GOODBYE_TIMEOUT_S", 0.01)
+        ctx = FakePackSessionContext(pipeline_mode="cascaded")
+        ctx.channel = "text"  # type: ignore[attr-defined]
+
+        async def _never(text: str, **kwargs: Any) -> None:
+            await asyncio.Event().wait()
+
+        ctx.session.say = _never  # type: ignore[method-assign]
+        shutdown_calls: list[str] = []
+
+        await asyncio.wait_for(
+            build_end_call_tool(ctx, shutdown=shutdown_calls.append)(context=_run_ctx()), timeout=1
+        )
+
         assert shutdown_calls == ["end_call tool invoked"]
 
     async def test_defaults_to_get_job_context_shutdown(self) -> None:
@@ -385,6 +419,19 @@ class TestHttpRequestBuiltin:
         result = await tool(context=_run_ctx(), method="GET", url="https://api.example.com/status")
 
         assert result == "up"
+
+    @respx.mock
+    async def test_sends_the_configured_user_agent(self) -> None:
+        """Asks #29: `LKAP_HTTP_TOOL_USER_AGENT` reaches the wire."""
+        route = respx.get("https://api.example.com/status").mock(return_value=httpx.Response(200, text="up"))
+        ctx = FakePackSessionContext()
+        tool = build_http_request_tool(
+            ctx, platform_allowed_hosts=["api.example.com"], user_agent=DEFAULT_HTTP_TOOL_USER_AGENT
+        )
+
+        await tool(context=_run_ctx(), method="GET", url="https://api.example.com/status")
+
+        assert route.calls.last.request.headers["User-Agent"] == DEFAULT_HTTP_TOOL_USER_AGENT
 
     async def test_rejects_host_not_on_platform_allowlist(self) -> None:
         ctx = FakePackSessionContext()

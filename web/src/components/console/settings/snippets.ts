@@ -91,6 +91,8 @@ export const SNIPPET_TABS: { id: SnippetClientId; label: string }[] = [
 // ---------------------------------------------------------------- expiry
 
 export const AGENT_KEY_EXPIRY_OPTIONS: { days: number; label: string }[] = [
+  // 1 day: a key for one short, supervised run (asks #35, V4-06 step 10(e)).
+  { days: 1, label: "1 day" },
   { days: 7, label: "7 days" },
   { days: 30, label: "30 days" },
   { days: 90, label: "90 days" },

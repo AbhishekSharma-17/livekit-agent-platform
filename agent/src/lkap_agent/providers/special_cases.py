@@ -138,11 +138,12 @@ def unwrap_nested_fields(spec: ProviderSpec, kwargs: dict[str, Any]) -> dict[str
     both:
 
     - **Dotted, grouped** (Simli, Anam): fields named ``"<outer>.<inner>"``,
-      e.g. ``simli_config.face_id`` + ``simli_config.api_key``. The api
-      resolves these as flat keys because that is what the admin UI's form
-      paths look like; this collects every key sharing an ``<outer>``
-      prefix, drops the prefix, and constructs
-      ``nested_model(**inner_kwargs)``.
+      e.g. ``simli_config.face_id`` + ``simli_config.api_key``. The api's
+      resolver (``config_service._assign_nested``) sends them **pre-grouped**
+      as one plain ``<outer>`` key holding a dict; flat dotted keys (the
+      admin UI's form paths) are accepted too and layered on top. Either way
+      this builds ``nested_model(**inner_kwargs)``, dropping ``None`` inner
+      values so the dataclass defaults apply.
     - **Single field, whole value** (Synthesia): one field named
       ``avatar_config`` whose resolved value is already the complete
       ``{"avatar_ids": [...]}`` payload; this constructs
@@ -183,17 +184,28 @@ def unwrap_nested_fields(spec: ProviderSpec, kwargs: dict[str, Any]) -> dict[str
 
     grouped: dict[str, dict[str, Any]] = {}
     passthrough: dict[str, Any] = {}
+    # Pre-grouped first (asks #26 / B-1): the api's `config_service._assign_nested`
+    # resolves `simli_config.face_id` + `simli_config.api_key` into ONE plain key,
+    # `{"simli_config": {"face_id": …, "api_key": …}}`. Such a dict is the group
+    # itself; any dotted keys for the same outer are layered on top of it below.
+    for key, value in kwargs.items():
+        if key in dotted_outer_to_model and isinstance(value, dict):
+            grouped.setdefault(key, {}).update(value)
     for key, value in kwargs.items():
         outer, sep, inner = key.partition(".")
         if sep and outer in dotted_outer_to_model:
             grouped.setdefault(outer, {})[inner] = value
+        elif key in grouped:
+            continue  # consumed by the pre-grouped pass above
         else:
             passthrough[key] = value
 
     module_path = spec.python_class.rsplit(".", 1)[0]
     for outer, inner_kwargs in grouped.items():
         model_cls = import_target(f"{module_path}.{dotted_outer_to_model[outer]}")
-        passthrough[outer] = model_cls(**inner_kwargs)
+        # `_constructor_kwargs` drops `None` only at the top level; an unset inner
+        # field must fall back to the dataclass default, not arrive as `None`.
+        passthrough[outer] = model_cls(**{k: v for k, v in inner_kwargs.items() if v is not None})
 
     for name, model_name in plain_name_to_model.items():
         value = passthrough.get(name)

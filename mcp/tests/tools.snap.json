@@ -5959,7 +5959,7 @@
         "readOnlyHint": true
       },
       "data": "Me",
-      "description": "Who am I: workspace, key scopes, read-only and dial state, api health. Call before any write.",
+      "description": "Who am I: workspace, key scopes, read-only and dial state, api health, ready workers. Call before any write.",
       "gate": null,
       "inputSchema": {
         "properties": {},

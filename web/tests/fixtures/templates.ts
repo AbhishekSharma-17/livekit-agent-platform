@@ -1872,7 +1872,7 @@ export const TEMPLATES: TemplatesResponse = {
         "pack_settings": {},
         "sample_prompts": [
           "I had a small kitchen fire last night.",
-          "My policy number is HO-4471-2210.",
+          "My policy number is H0-44721.",
           "Can I show you the damage on camera?"
         ],
         "next_steps": [

@@ -33,6 +33,23 @@ set it to scope the tool to one agent. `tool_dry_run(tool_id, arguments)`
 re-runs the same probe later; `tool_update(tool_id, patch={...})` merge-
 patches the definition (and `name`/`enabled`/`agent_id`).
 
+## Redirects and the User-Agent
+
+The tool client never follows redirects, by design: a `301` or `302` comes
+back as the result, so check a dry run's `status_code` is `200`, not only
+`ok` (which is true below 400). Point `url` at the
+final address (for example `api.frankfurter.dev/v1/…`, not the old
+`api.frankfurter.app`, which now redirects).
+
+Every request carries a `User-Agent`. By default it is the platform's
+(`LKAP_HTTP_TOOL_USER_AGENT` on the worker and on the api for dry runs; the
+default is `LKAP/0.1` followed by the project's repository URL); a
+`User-Agent` in the tool's own `headers` wins. Some public APIs refuse clients
+without contact info: Wikimedia's REST API answers `403` ("Please respect our
+robot policy") unless the User-Agent names a URL or an email. A descriptive
+name alone is not enough there. Never invent a contact, and never put a
+person's email in a tool without their consent.
+
 ## Secrets for a tool
 
 A tool's own secrets are a separate credential of provider kind

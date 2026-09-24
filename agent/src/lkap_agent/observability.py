@@ -382,12 +382,20 @@ class SessionObserver:
         self.transcript = transcript
 
         self._buffer.append(SessionEventIn(ts=time.time(), type="session_ended", payload={"reason": reason}))
-        await self.flush()
+        # The summary is the one terminal write: a failed event or metrics post
+        # must not skip it (asks #33).
+        try:
+            await self.flush()
+        except Exception:
+            logger.warning("could not flush the last session events", exc_info=True)
 
         if self._latency.turns:
             # Cost lines are computed by the api from `usage` (V2-12), so none are sent here.
             metrics = SessionMetricsIn(latency=self._latency.summary())
-            await self._client.post_metrics(self._session_id, metrics)
+            try:
+                await self._client.post_metrics(self._session_id, metrics)
+            except Exception:
+                logger.warning("could not post the session metrics", exc_info=True)
 
         summary = SessionSummaryIn(
             status="failed" if status == "failed" else "ended",

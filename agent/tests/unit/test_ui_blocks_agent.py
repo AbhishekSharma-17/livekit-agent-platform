@@ -195,6 +195,35 @@ def test_request_form_reply_is_cancelled_on_realtime_models(mode: Any, silenced:
     assert event.has_tool_reply is not silenced
 
 
+@pytest.mark.parametrize("mode", ["realtime", "half_cascade"])
+def test_request_form_reply_is_kept_on_the_text_channel(mode: Any) -> None:
+    """Asks #30: on `text` the tool answers with a line the model must act on; never silence it."""
+    config = _config(GENERIC_PANEL, mode=mode)
+    agent, *_ = _agent(config)
+    agent.context.channel = "text"
+    text_agent = PlatformAgent(ctx=agent.context, pack=NullPack(), has_tts=True)
+    event = _tools_executed("request_form")
+    text_agent.on_function_tools_executed(event)
+    assert event.has_tool_reply is True
+
+
+async def test_injected_knowledge_is_logged_at_info_with_counts_only() -> None:
+    """Asks #36 / B-11: the KB signal must be visible on an INFO worker, without content."""
+    from structlog.testing import capture_logs  # noqa: PLC0415
+
+    hits = [KbHit(chunk_id="c1", document_id="d1", filename="policy.md", score=0.9, text="Flood is covered.")]
+    agent, _channel, _room, _ = _agent(_config(GENERIC_PANEL, kb_ids=["kb-1"]), kb=FakeKbClient(hits))
+    with capture_logs() as logs:
+        await agent.on_user_turn_completed(
+            ChatContext.empty(), llm.ChatMessage(role="user", content=["Flood?"])
+        )
+
+    [entry] = [e for e in logs if e["event"] == "injected knowledge"]
+    assert entry["log_level"] == "info"
+    assert entry["hits"] == 1
+    assert "Flood is covered." not in repr(entry) and "policy.md" not in repr(entry)
+
+
 async def test_auto_injected_knowledge_is_cited_into_the_citations_block() -> None:
     hits = [KbHit(chunk_id="c1", document_id="d1", filename="policy.md", score=0.9, text="Flood is covered.")]
     panel = PanelLayout(blocks=[BlockSpec(id="sources", type="kb_citations")])

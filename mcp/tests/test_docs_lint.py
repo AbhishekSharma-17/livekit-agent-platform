@@ -365,6 +365,7 @@ ENV_VAR_ALLOWLIST: Final[frozenset[str]] = frozenset(
         "LKAP_MCP_HTTP_PORT",
         "LKAP_MCP_PUBLIC_URL",
         "LKAP_NET_ALLOW_PRIVATE_HOSTS",
+        "LKAP_HTTP_TOOL_USER_AGENT",
         "LIVEKIT_URL",
         "LIVEKIT_API_KEY",
         "LIVEKIT_API_SECRET",

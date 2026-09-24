@@ -21,7 +21,10 @@ skill deterministically every time (R-V3-41).
 2. Call `me` before your first write. It returns your workspace, your key's
    scopes (the tools you can even see are shaped by them — a tool that is
    not registered does not exist for you, that is intentional least
-   privilege, not a bug) and whether a worker is reachable.
+   privilege, not a bug) and whether a worker is ready: `health.workers.ready`
+   counts ready worker processes, while `health.connections.ok` only counts
+   connections whose credentials test passed (an `unverified` connection can
+   still have a ready worker).
 3. If a tool you expect is missing from your tool list, that is almost
    always a scope gap, not an error — say so rather than working around it.
    Test chat (`chat_start`/`chat_send`/`chat_rewind`/`chat_end`) needs the

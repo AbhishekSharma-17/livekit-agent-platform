@@ -72,6 +72,7 @@ def build_builtin_tools(
     *,
     platform_allowed_hosts: list[str] | None = None,
     shutdown: Callable[[str], None] | None = None,
+    http_user_agent: str | None = None,
 ) -> list[FunctionTool[..., Any]]:
     """Build every enabled built-in tool for one session.
 
@@ -86,6 +87,8 @@ def build_builtin_tools(
             stays test-friendly (docs/CONTRACTS.md §3).
         shutdown: Injected for `end_call`; defaults to
             `get_job_context().shutdown` when omitted.
+        http_user_agent: `LKAP_HTTP_TOOL_USER_AGENT`, the `User-Agent`
+            `http_request` sends (none when omitted).
 
     Returns:
         The enabled tools. `describe_current_frame` and `pin_frame` are
@@ -109,7 +112,11 @@ def build_builtin_tools(
     if _want("search_knowledge"):
         tools.append(build_search_knowledge_tool(ctx))
     if http_enabled and _want("http_request"):
-        tools.append(build_http_request_tool(ctx, platform_allowed_hosts=platform_allowed_hosts))
+        tools.append(
+            build_http_request_tool(
+                ctx, platform_allowed_hosts=platform_allowed_hosts, user_agent=http_user_agent
+            )
+        )
     if has_vision and _want("describe_current_frame"):
         tools.append(build_describe_current_frame_tool(ctx))
     if has_vision and _want("pin_frame"):

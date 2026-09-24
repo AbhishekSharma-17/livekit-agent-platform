@@ -104,7 +104,9 @@ def _reject_unresolved(rendered: str, *, where: str) -> None:
         raise ToolError(f"unresolved template in {where}")
 
 
-def _handler_for(definition: HttpToolDefinition, *, platform_allowed_hosts: list[str] | None) -> Handler:
+def _handler_for(
+    definition: HttpToolDefinition, *, platform_allowed_hosts: list[str] | None, user_agent: str | None = None
+) -> Handler:
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
         arguments: dict[str, Any] = dict(raw_arguments)
         url = _render_url(definition.url, arguments)
@@ -135,6 +137,9 @@ def _handler_for(definition: HttpToolDefinition, *, platform_allowed_hosts: list
         request_headers = dict(headers)
         if body is not None and not any(name.lower() == "content-type" for name in request_headers):
             request_headers["Content-Type"] = "application/json"
+        if user_agent and not any(name.lower() == "user-agent" for name in request_headers):
+            # asks #29: a tool's own `User-Agent` header wins over the platform default.
+            request_headers["User-Agent"] = user_agent
 
         try:
             async with httpx.AsyncClient(
@@ -170,6 +175,7 @@ def build_http_tools(
     defs: list[HttpToolDefinition],
     *,
     platform_allowed_hosts: list[str] | None = None,
+    user_agent: str | None = None,
 ) -> list[RawFunctionTool[..., Any]]:
     """Build one `@function_tool(raw_schema=...)` per `HttpToolDefinition`.
 
@@ -180,6 +186,8 @@ def build_http_tools(
             request must pass the intersection of this list with each
             definition's own `allowed_hosts`, plus a private-range deny-list,
             enforced in `_http_safety.check_url_allowed` (docs/CONTRACTS.md §3/§9).
+        user_agent: `LKAP_HTTP_TOOL_USER_AGENT`, sent as `User-Agent` unless the
+            definition's own headers set one (asks #29).
 
     Returns:
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.
@@ -190,7 +198,7 @@ def build_http_tools(
         if not isinstance(parameters, dict) or parameters.get("type") != "object":
             parameters = {"type": "object", "properties": {}, **(parameters or {})}
         tool = function_tool(
-            _handler_for(definition, platform_allowed_hosts=platform_allowed_hosts),
+            _handler_for(definition, platform_allowed_hosts=platform_allowed_hosts, user_agent=user_agent),
             raw_schema={
                 "name": definition.name,
                 "description": definition.description,

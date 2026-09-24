@@ -335,6 +335,33 @@ async def test_request_form_realtime_missed_form_is_a_routine_note(monkeypatch: 
     assert background.routine_notes == [("call-1", "The user did not submit the intake form.")]
 
 
+@pytest.mark.parametrize("mode", ["cascaded", "realtime", "half_cascade"])
+async def test_request_form_on_the_text_channel_answers_at_once_without_showing_a_form(mode: Any) -> None:
+    """Asks #30 / B-5: a typed chat cannot submit a form, so the turn must not wait on one."""
+    ctx, channel, room = _ctx(mode=mode)
+    ctx.channel = "text"  # type: ignore[attr-defined]
+    background = cast(FakeBackgroundRunner, ctx.background)
+    rpcs_before = len(room.local_participant.rpc_calls)
+
+    result = await asyncio.wait_for(
+        build_request_form_tool(ctx)(
+            context=_run_ctx(),
+            block_id="intake",
+            fields=[
+                FormField(name="name", label="Full name", required=True),
+                FormField(name="country", label="Country"),
+            ],
+        ),
+        timeout=1,
+    )
+
+    assert isinstance(result, str)
+    assert "text chat" in result and "Full name (required)" in result and "Country" in result
+    assert channel.state.blocks["intake"].get("status") != "requested"
+    assert list(background.jobs) == []
+    assert len(room.local_participant.rpc_calls) == rpcs_before  # no form RPC to the browser
+
+
 @pytest.mark.parametrize(
     ("fields", "message"),
     [

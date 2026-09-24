@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     #: Comma-separated host names / IPs / CIDRs exempt from the private-range
     #: block. Unset: ``localhost,127.0.0.1,::1`` in dev, nothing in prod.
     net_allow_private_hosts: str | None = None
+    #: ``LKAP_HTTP_TOOL_USER_AGENT``: the ``User-Agent`` an HTTP tool's dry run sends
+    #: when the tool sets none; the worker has the same setting (asks #29). Some
+    #: public APIs (Wikimedia) refuse clients whose User-Agent has no contact info.
+    http_tool_user_agent: str = "LKAP/0.1 (+https://github.com/AbhishekSharma-17/livekit-agent-platform)"
     api_key_rate_per_min: int = Field(default=600, ge=1)
     login_rate_per_min: int = Field(default=10, ge=1)
 

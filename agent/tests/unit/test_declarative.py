@@ -16,6 +16,7 @@ import respx
 from livekit.agents import RunContext, ToolError
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
 
+from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
 from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers
 
 
@@ -62,6 +63,32 @@ class TestBuildHttpToolsHappyPath:
 
         assert route.called
         assert result == "ok"
+
+    @respx.mock
+    async def test_sends_the_platform_user_agent_by_default(self) -> None:
+        """Asks #29 / B-4: Wikimedia refuses httpx without a contact-bearing User-Agent."""
+        route = respx.get("https://api.example.com/items/42").mock(
+            return_value=httpx.Response(200, text="ok")
+        )
+        (tool,) = build_http_tools([_base_def()], user_agent=DEFAULT_HTTP_TOOL_USER_AGENT)
+
+        await tool(raw_arguments={"item_id": "42"}, context=_run_ctx())
+
+        sent = route.calls.last.request.headers["User-Agent"]
+        assert sent == DEFAULT_HTTP_TOOL_USER_AGENT
+        assert "https://github.com/" in sent  # the contact URL Wikimedia's policy asks for
+
+    @respx.mock
+    async def test_a_tools_own_user_agent_header_wins(self) -> None:
+        route = respx.get("https://api.example.com/items/42").mock(
+            return_value=httpx.Response(200, text="ok")
+        )
+        definition = _base_def(headers={"user-agent": "weather-demo (ops@example.com)"})
+        (tool,) = build_http_tools([definition], user_agent=DEFAULT_HTTP_TOOL_USER_AGENT)
+
+        await tool(raw_arguments={"item_id": "42"}, context=_run_ctx())
+
+        assert route.calls.last.request.headers["User-Agent"] == "weather-demo (ops@example.com)"
 
     @respx.mock
     async def test_url_argument_is_url_encoded(self) -> None:

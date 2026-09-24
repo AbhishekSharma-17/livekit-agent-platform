@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AGENT_KEY_EXPIRY_OPTIONS,
   AGENT_KEY_PRESETS,
   CALLS_WRITE_SCOPE,
   claudeCodeSnippet,
@@ -159,6 +160,19 @@ describe("expiresAtIso", () => {
     const from = new Date("2026-01-01T00:00:00.000Z");
     expect(expiresAtIso(30, from)).toBe("2026-01-31T00:00:00.000Z");
     expect(expiresAtIso(7, from)).toBe("2026-01-08T00:00:00.000Z");
+    expect(expiresAtIso(1, from)).toBe("2026-01-02T00:00:00.000Z");
+  });
+});
+
+describe("AGENT_KEY_EXPIRY_OPTIONS", () => {
+  it("offers 1, 7, 30, 90 and 365 days, shortest first (asks #35)", () => {
+    expect(AGENT_KEY_EXPIRY_OPTIONS).toEqual([
+      { days: 1, label: "1 day" },
+      { days: 7, label: "7 days" },
+      { days: 30, label: "30 days" },
+      { days: 90, label: "90 days" },
+      { days: 365, label: "365 days" },
+    ]);
   });
 });
 

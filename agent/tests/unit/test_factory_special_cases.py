@@ -150,6 +150,96 @@ def test_build_constructs_anam_with_a_nested_persona_config(fake_plugin_module: 
     assert nested.kwargs == {"avatarId": "av-1", "name": "Rae"}
 
 
+def test_build_simli_from_the_api_resolved_shape_yields_a_real_simli_config(fake_plugin_module: Any) -> None:
+    """Asks #26 / B-1: the api's `_assign_nested` pre-groups dotted fields into one plain key.
+
+    `resolve_provider_ref` turns `simli_config.face_id` (a field) and
+    `simli_config.api_key` (the credential's secret) into
+    `{"simli_config": {"face_id": …, "api_key": …}}`; `session_builder` adds
+    `avatar_participant_name`. The installed plugin's real `SimliConfig` must come
+    out, because `AvatarSession.start()` calls `simli_config.create_json()`.
+    """
+    from livekit.plugins.simli import SimliConfig  # the real dataclass (agent/.venv, 1.8.2)
+
+    fake_plugin_module("livekit.plugins.simli", AvatarSession=_Recorder, SimliConfig=SimliConfig)
+    spec = get_spec("simli-avatar")
+    provider = ResolvedProvider(
+        provider_id=spec.id,
+        python_class=spec.python_class,
+        model=None,
+        kwargs={
+            "simli_config": {"face_id": "cace3ef7-face", "api_key": "sk-simli"},
+            "avatar_participant_name": "Demo avatar",
+        },
+    )
+
+    built = ProviderFactory().build("avatar", provider)
+
+    config = built.kwargs["simli_config"]
+    assert isinstance(config, SimliConfig)
+    assert config.api_key == "sk-simli"
+    assert config.face_id == "cace3ef7-face"
+    assert config.create_json()["faceId"].startswith("cace3ef7-face/")
+    assert "None" not in config.create_json()["faceId"]
+    assert built.kwargs["avatar_participant_name"] == "Demo avatar"
+    assert set(built.kwargs) == {"simli_config", "avatar_participant_name"}
+
+
+def test_build_anam_from_the_api_resolved_shape_yields_a_persona_config(fake_plugin_module: Any) -> None:
+    """The Anam analogue of B-1: flat `api_key` secret plus a pre-grouped `persona_config`.
+
+    `PersonaConfig` is not installed in this venv; the stand-in mirrors the
+    livekit-plugins-anam 1.8.2 dataclass (`name`, `avatarId` required;
+    `avatarModel`, `directorNotes` optional).
+    """
+    from dataclasses import dataclass
+
+    @dataclass
+    class PersonaConfig:
+        name: str
+        avatarId: str  # noqa: N815 - the plugin's own field name
+        avatarModel: str | None = None  # noqa: N815
+
+    fake_plugin_module("livekit.plugins.anam", AvatarSession=_Recorder, PersonaConfig=PersonaConfig)
+    spec = get_spec("anam-avatar")
+    provider = ResolvedProvider(
+        provider_id=spec.id,
+        python_class=spec.python_class,
+        model=None,
+        kwargs={
+            "api_key": "sk-anam",
+            "persona_config": {"avatarId": "av-1", "name": "Rae"},
+            "avatar_participant_name": "Demo avatar",
+        },
+    )
+
+    built = ProviderFactory().build("avatar", provider)
+
+    assert built.kwargs["api_key"] == "sk-anam"
+    assert built.kwargs["persona_config"] == PersonaConfig(name="Rae", avatarId="av-1")
+
+
+def test_unwrap_nested_fields_merges_dotted_keys_over_a_pre_grouped_dict_and_drops_none(
+    fake_plugin_module: Any,
+) -> None:
+    class SimliConfig:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    fake_plugin_module("livekit.plugins.simli", AvatarSession=_Recorder, SimliConfig=SimliConfig)
+
+    result = unwrap_nested_fields(
+        get_spec("simli-avatar"),
+        {
+            "simli_config": {"face_id": "old", "api_key": "sk", "emotion_id": None},
+            "simli_config.face_id": "new",
+        },
+    )
+
+    assert set(result) == {"simli_config"}
+    assert result["simli_config"].kwargs == {"face_id": "new", "api_key": "sk"}
+
+
 def test_unwrap_nested_fields_leaves_a_provider_with_no_nested_fields_untouched() -> None:
     spec = get_spec("bey-avatar")
     kwargs = {"api_key": "sk", "avatar_id": "a-1"}

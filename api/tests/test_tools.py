@@ -313,6 +313,27 @@ async def test_dry_run_renders_the_request_and_extracts_the_pointer(
     assert mock_http[0].headers["Authorization"] == f"Bearer {TOOL_SECRET}"
 
 
+async def test_dry_run_sends_the_platform_user_agent_unless_the_tool_sets_one(
+    admin_client: httpx.AsyncClient, mock_http: list[httpx.Request]
+) -> None:
+    """Asks #29 / B-4: `LKAP_HTTP_TOOL_USER_AGENT` (a contact URL) goes out on the dry run too."""
+    plain = await _create_tool(admin_client, definition={"headers": {}}, name="plain_tool")
+    own = await _create_tool(
+        admin_client, definition={"headers": {"user-agent": "demo (ops@example.com)"}}, name="own_ua_tool"
+    )
+
+    for tool in (plain, own):
+        response = await admin_client.post(
+            f"/v1/tools/{tool['id']}/dry-run", json={"arguments": {"city": "x"}}
+        )
+        assert response.status_code == 200, response.text
+
+    assert mock_http[0].headers["User-Agent"] == (
+        "LKAP/0.1 (+https://github.com/AbhishekSharma-17/livekit-agent-platform)"
+    )
+    assert mock_http[1].headers["User-Agent"] == "demo (ops@example.com)"
+
+
 async def test_dry_run_never_echoes_the_rendered_credential(
     admin_client: httpx.AsyncClient,
     mock_http: list[httpx.Request],

@@ -64,6 +64,7 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `LKAP_INSTANCE_KEY`, `LKAP_MANAGED_BY` | | set by the supervisor | | | leave unset for a hand-started worker |
 | `LKAP_WORKER_HTTP_PORT` | | optional | | | port of the SDK's worker HTTP server. Unset keeps the SDK default (ephemeral in `dev`, 8081 in `start`). The supervisor's `subprocess` backend sets `0`, so replicas on one host never collide on 8081 (V2-20). |
 | `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | | optional | | | comma list. A tool's hosts must be in it **and** in its own `allowed_hosts`, and private ranges are refused (F-14). |
+| `LKAP_HTTP_TOOL_USER_AGENT` | optional | optional | | | the `User-Agent` HTTP tools send (the worker's tool calls, the api's dry runs) when a tool's own `headers` set none. Default `LKAP/0.1 (+https://github.com/AbhishekSharma-17/livekit-agent-platform)`. Some APIs want a contact: Wikimedia answers 403 to a User-Agent with no URL or email, so an operator running their own deployment should put their own contact URL here. Set the same value on both. |
 | `LKAP_VISION_MAX_FRAME_AGE_S`, `LKAP_IDLE_HANGUP_S` | | optional | | | default `8` / `120` |
 | `NEXT_PUBLIC_API_BASE_URL` | | | | ✓ | `http://localhost:8080` |
 | `LKAP_WEB_ADMIN_BYPASS` | | | | ✓ | unset = on outside `NODE_ENV=production` (§2) |

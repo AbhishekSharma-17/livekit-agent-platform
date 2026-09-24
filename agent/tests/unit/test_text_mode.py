@@ -318,3 +318,92 @@ async def test_run_session_non_text_channel_does_not_wire_on_text_action() -> No
     result = AgentActionResult.model_validate_json(response)
     assert result.ok is False
     assert result.error is not None
+
+
+# ------------------------------------------------ asks #33: prompt summary on end
+
+
+class _Gate:
+    """An injected `Deps.sleep` that returns only when the test opens it."""
+
+    def __init__(self) -> None:
+        self.delays: list[float] = []
+        self._open = asyncio.Event()
+
+    async def sleep(self, delay_s: float) -> None:
+        self.delays.append(delay_s)
+        await self._open.wait()
+
+    def open(self) -> None:
+        self._open.set()
+
+
+async def _started_text_session(
+    channel: str, gate: _Gate | None = None
+) -> tuple[FakeApi, FakeJobContext, RoomlessStarter]:
+    api = FakeApi(resolved_config(channel=channel, greeting="Hi!"))
+    ctx = FakeJobContext(_metadata(), room=cast(rtc.Room, FakeRoom()))
+    starter = RoomlessStarter()
+    factory = _TextFactory(FakeLLM(["Hi!"])) if channel == "text" else None
+    gate = gate or _Gate()
+    gate.open()
+    deps = _deps(api, factory=factory, session_starter=starter, sleep=gate.sleep)
+    await run_session(ctx, deps)
+    await asyncio.sleep(0.05)
+    assert starter.agent is not None
+    return api, ctx, starter
+
+
+async def test_text_channel_end_call_posts_the_summary_before_the_sdk_teardown() -> None:
+    """V4-06 B-8: the summary came 51 s after `end_call`; it must not wait for the SDK's callbacks."""
+    api, ctx, starter = await _started_text_session("text")
+
+    # What `end_call` does in a worker job: `SessionContext.request_shutdown`.
+    starter.agent.context.request_shutdown("end_call tool invoked")
+    await asyncio.sleep(0.05)
+
+    assert ctx.shutdown_reasons == ["end_call tool invoked"]
+    assert [s.status for s in api.summaries] == ["ended"], "posted without waiting for the SDK"
+
+    # The SDK's own shutdown pass later runs the same callback: no second summary.
+    await ctx.fire_shutdown("end_call tool invoked")
+    assert len(api.summaries) == 1
+    assert api.event_types().count("session_ended") == 1
+
+
+async def test_voice_channels_keep_the_sdk_ordered_summary() -> None:
+    api, ctx, starter = await _started_text_session("web")
+
+    starter.agent.context.request_shutdown("end_call tool invoked")
+    await asyncio.sleep(0.05)
+
+    assert ctx.shutdown_reasons == ["end_call tool invoked"]
+    assert api.summaries == []
+    await ctx.fire_shutdown("end_call tool invoked")
+    assert [s.status for s in api.summaries] == ["ended"]
+
+
+async def test_text_channel_summary_waits_for_what_the_sdk_emits_right_after_end_call() -> None:
+    """The settle: `end_call`'s own `tool_call_ended` arrives after `request_shutdown` returns."""
+    gate = _Gate()
+    api = FakeApi(resolved_config(channel="text", greeting="Hi!"))
+    ctx = FakeJobContext(_metadata(), room=cast(rtc.Room, FakeRoom()))
+    starter = RoomlessStarter()
+    deps = _deps(api, factory=_TextFactory(FakeLLM(["Hi!"])), session_starter=starter, sleep=gate.sleep)
+    await run_session(ctx, deps)
+    await asyncio.sleep(0.05)
+    assert starter.agent is not None
+
+    starter.agent.context.request_shutdown("end_call tool invoked")
+    for _ in range(5):
+        await asyncio.sleep(0)  # the tool returns; the SDK then reports it ended
+    starter.agent.context.record_event("tool_call_ended", {"call_id": "c-end", "tool": "end_call"})
+    assert api.summaries == [], "the summary waits for the settle"
+    assert 1.5 in gate.delays
+
+    gate.open()
+    await asyncio.sleep(0.05)
+
+    assert [s.status for s in api.summaries] == ["ended"]
+    ended = [e for e in api.events if e.type == "tool_call_ended"]
+    assert [e.payload["tool"] for e in ended] == ["end_call"]

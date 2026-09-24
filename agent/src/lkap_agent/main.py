@@ -28,7 +28,8 @@ metadata's `agent_id`/`channel`.
 Start-up order (docs/ARCHITECTURE.md §4, adjusted for two verified SDK constraints):
 
     resolve config -> build providers/session/tools -> ctx.connect()
-      -> avatar.start() + avatar.wait_for_join() (when configured)
+      -> avatar.start() + avatar.wait_for_join() (when configured; a failure
+         degrades the call to voice-only with an `error` event, asks #26)
       -> session.start(room=..., room_options=...)
       -> recording/start in the background (when `recording.enabled`)
 
@@ -53,6 +54,12 @@ room deleted, call rejected — the SDK's own close-on-disconnect reasons) ends
 the job at once, as before. Any other drop (network, signal loss) keeps the
 job alive for `LKAP_RECONNECT_GRACE_S` (60 s) and cancels the shutdown if the
 same identity rejoins. A session `close` still ends the job (D-W2-9e).
+On the text channel (asks #33) any worker-owned shutdown request — `end_call`,
+a flow end node, the grace, the idle hangup, a session `close` — starts the
+shutdown callback `_TEXT_SHUTDOWN_SETTLE_S` later instead of after the SDK's
+`AgentSession.aclose()`, so the pack's `on_session_end`, the background
+cancel, the UI-channel close and the summary run while the session is still
+being torn down; the SDK's own pass then awaits the same run.
 
 **Phone calls (R-V2-20).** On `sip_in` / `sip_out` jobs `_assemble` builds a
 `telephony.TelephonySession` (kept in `SessionContext.userdata["telephony"]`)
@@ -155,7 +162,8 @@ CONFIG_UNAVAILABLE_LINE = (
     "could not be loaded. Please try again in a moment."
 )
 
-#: Spoken when the config resolved but the avatar or `session.start` failed (F-01).
+#: Spoken when the config resolved but `session.start` failed (F-01). An avatar that
+#: fails to start no longer ends the call: it degrades to voice-only (asks #26).
 START_FAILED_LINE = "Sorry, this assistant could not start. Please try again in a moment."
 
 
@@ -193,6 +201,11 @@ _DELIBERATE_LEAVE_REASONS: frozenset[int] = frozenset(
 
 #: How long the shutdown callback waits for LiveKit's `list_egress` answer.
 _EGRESS_POLL_TIMEOUT_S = 5.0
+
+#: On the text channel the summary starts this long after a shutdown request
+#: (asks #33) instead of after the SDK's teardown (up to ~60 s): enough for the
+#: SDK to deliver the triggering tool's `tool_call_ended` and a last reply.
+_TEXT_SHUTDOWN_SETTLE_S = 1.5
 
 #: How long the shutdown callback waits for the telephony teardown (R-V2-20: the
 #: summary must still land within ~10 s of a hang-up).
@@ -498,6 +511,7 @@ def _wire_optional_modules(deps: Deps) -> None:
     keep the conversation working with a dark panel instead of failing the job.
     """
     allowed_hosts = deps.settings.http_tool_allowed_hosts_list
+    user_agent = deps.settings.http_tool_user_agent
 
     try:
         from lkap_agent.ui.channel import UiChannel as UiChannelImpl  # noqa: PLC0415
@@ -556,7 +570,13 @@ def _wire_optional_modules(deps: Deps) -> None:
 
         def _make_builtin(ctx: Any, disabled: list[str], http_enabled: bool) -> list[Any]:
             return list(
-                build_builtin_tools(ctx, disabled, http_enabled, platform_allowed_hosts=allowed_hosts)
+                build_builtin_tools(
+                    ctx,
+                    disabled,
+                    http_enabled,
+                    platform_allowed_hosts=allowed_hosts,
+                    http_user_agent=user_agent,
+                )
             )
 
         deps.builtin_tools_builder = _make_builtin
@@ -567,7 +587,7 @@ def _wire_optional_modules(deps: Deps) -> None:
         from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers  # noqa: PLC0415
 
         def _make_http(defs: list[Any]) -> list[Any]:
-            return list(build_http_tools(defs, platform_allowed_hosts=allowed_hosts))
+            return list(build_http_tools(defs, platform_allowed_hosts=allowed_hosts, user_agent=user_agent))
 
         deps.declarative_tools_builder = _make_http
         deps.mcp_servers_builder = lambda defs, **kwargs: list(build_mcp_servers(defs, **kwargs))
@@ -640,6 +660,11 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         bind_session_context(session_id=resolved.session_id, agent_id=resolved.agent_id, job_id=job_id)
 
     observer = SessionObserver(session_id=resolved.session_id, client=deps.config_client)
+    eager: _EagerShutdownContext | None = None
+    if is_text_channel(resolved):
+        # asks #33: post a typed chat's summary as soon as it ends, not after the SDK's teardown.
+        eager = _EagerShutdownContext(ctx)
+        ctx = eager
     try:
         resolved = prepare_flow_resolved(prepare_resolved(resolved))
         # R-V2-22: a prompt agent hears an outbound call's variables (flows seed `FlowState`).
@@ -672,7 +697,7 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     # the shutdown callback posts the summary.
     plan.session.on("close", _job_shutdown_handler(ctx))
     grace.attach(ctx.room)
-    ctx.add_shutdown_callback(
+    on_shutdown = _OnceShutdown(
         _shutdown_callback(
             agent,
             observer,
@@ -681,8 +706,13 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
             recording,
             quality=lambda: _score_quality(deps, resolved, observer),
             telephony=telephony,
-        )
+        ),
+        sleep=deps.sleep,
+        settle_s=_TEXT_SHUTDOWN_SETTLE_S,
     )
+    if eager is not None:
+        eager.once = on_shutdown
+    ctx.add_shutdown_callback(on_shutdown)
 
     try:
         await _start(ctx, plan, agent, deps, resolved)
@@ -789,7 +819,7 @@ async def _abort_start(
     *,
     speak: bool = True,
 ) -> None:
-    """Tear down a session whose avatar or `session.start` failed (F-01).
+    """Tear down a session whose `session.start` failed (F-01; an avatar failure degrades instead).
 
     `speak=False` (an outbound call nobody answered, R-V2-20) ends the job
     without the fixed line.
@@ -1083,6 +1113,88 @@ def _vision_degrade_handler(agent: PlatformAgent, observer: SessionObserver) -> 
     return _on_error
 
 
+class _OnceShutdown:
+    """Runs the job's shutdown callback exactly once, possibly before the SDK asks (asks #33).
+
+    The SDK runs registered shutdown callbacks only after `AgentSession.aclose()`
+    (bounded at 60 s), the session-report upload and `room.disconnect()`. On the
+    text channel nothing else happens at the end of a call, so waiting for that
+    only delays the summary: V4-06 saw it posted 51 s after `end_call`.
+    :meth:`start` begins the callback at once; the SDK's later call awaits the
+    same task instead of running it twice.
+    """
+
+    def __init__(
+        self,
+        callback: Callable[[str], Awaitable[None]],
+        *,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        settle_s: float = 0.0,
+    ) -> None:
+        self._callback = callback
+        self._sleep = sleep
+        self._settle_s = settle_s
+        self._task: asyncio.Future[None] | None = None
+
+    def start(self, reason: str, *, early: bool = False) -> asyncio.Future[None]:
+        """Begin the shutdown callback (idempotent).
+
+        `early=True` (a shutdown *request*, not the SDK's own pass) first waits
+        `settle_s`, so what the SDK emits right after the triggering call — the
+        `tool_call_ended` of `end_call`, a last assistant item — still reaches
+        the observer before it closes.
+        """
+        if self._task is None:
+            self._task = asyncio.ensure_future(self._run(reason, settle=early))
+        return self._task
+
+    async def _run(self, reason: str, *, settle: bool) -> None:
+        if settle and self._settle_s > 0:
+            await self._sleep(self._settle_s)
+        await self._callback(reason)
+
+    async def __call__(self, reason: str) -> None:
+        await asyncio.shield(self.start(reason))
+
+
+class _EagerShutdownContext:
+    """A `JobContextLike` whose `shutdown()` starts the summary before the SDK tears down.
+
+    Used on the text channel only (asks #33). Every shutdown trigger the worker
+    owns — `end_call` (through `SessionContext.request_shutdown`), the flow's
+    end node, the reconnect grace, the idle hangup and the session `close`
+    handler — calls `shutdown()` on this object, so the summary goes out while
+    the room is still connected; everything else is delegated.
+    """
+
+    def __init__(self, inner: JobContextLike) -> None:
+        self._inner = inner
+        self.once: _OnceShutdown | None = None
+
+    @property
+    def job(self) -> Any:
+        return self._inner.job
+
+    @property
+    def proc(self) -> Any:
+        return self._inner.proc
+
+    @property
+    def room(self) -> rtc.Room:
+        return self._inner.room
+
+    async def connect(self) -> None:
+        await self._inner.connect()
+
+    def add_shutdown_callback(self, callback: Any) -> None:
+        self._inner.add_shutdown_callback(callback)
+
+    def shutdown(self, reason: str = "user requested") -> None:
+        if self.once is not None:
+            self.once.start(reason, early=True)
+        self._inner.shutdown(reason=reason)
+
+
 def _job_shutdown_handler(ctx: JobContextLike) -> Callable[[Any], None]:
     """Build the synchronous `close` handler that ends the job (D-W2-9e)."""
 
@@ -1212,6 +1324,8 @@ def _assemble(
         image_gen=providers.image_gen,
         log=log,
         record_event=record_event or _noop_record_event,
+        channel=resolved.channel,
+        request_shutdown=lambda reason: ctx.shutdown(reason=reason),
     )
     cell.append(session_ctx)
 
@@ -1336,11 +1450,55 @@ async def _start(
             raise CalleeNotAnsweredError("the callee never answered")
     _activate(agent)
     if plan.avatar is not None:
-        await plan.avatar.start(plan.session, room=ctx.room)
-        await plan.avatar.wait_for_join()
+        await _start_avatar_or_degrade(plan, ctx.room, agent, resolved)
     await deps.session_starter(
         session=plan.session, agent=agent, room=ctx.room, room_options=plan.room_options
     )
+
+
+async def _start_avatar_or_degrade(
+    plan: SessionPlan, room: rtc.Room, agent: PlatformAgent, resolved: ResolvedAgentConfig
+) -> None:
+    """Start the avatar; on any failure, continue voice-only with a session warning (asks #26).
+
+    A vendor outage or a bad avatar key used to fail the whole call (F-01). Now
+    the call goes on without video: the avatar is closed best-effort, and the
+    session's audio output is reset because a plugin that got as far as
+    `replace_audio_tail(DataStreamAudioOutput(...))` before failing (Simli, when
+    its avatar never joins) would otherwise make `AgentSession.start` skip
+    RoomIO's own audio track, leaving the caller in silence. Simli's `start()`
+    logs a token failure and returns; the failure then surfaces as
+    `wait_for_join()`'s 30 s `TimeoutError`, so both calls are guarded.
+    """
+    avatar: Any = plan.avatar
+    try:
+        await avatar.start(plan.session, room=room)
+        await avatar.wait_for_join()
+    except Exception as exc:
+        avatar_ref = resolved.config.pipeline.avatar
+        provider_id = avatar_ref.provider_id if avatar_ref is not None else ""
+        logger.warning(
+            "avatar failed to start; continuing voice-only",
+            avatar_provider=provider_id,
+            error=str(exc) or type(exc).__name__,
+        )
+        aclose = getattr(avatar, "aclose", None)
+        if callable(aclose):
+            with contextlib.suppress(Exception):
+                await aclose()
+        with contextlib.suppress(Exception):
+            plan.session.output.audio = None
+        plan.avatar = None
+        # CONTRACTS §7 has no `warning` type; `error {message}` is the one the
+        # console surfaces (the `_on_mcp_skipped` precedent in `_assemble`).
+        agent.context.record_event(
+            "error",
+            {
+                "message": "The avatar could not start; the call continues voice-only.",
+                "avatar_provider": provider_id,
+                "severity": "warning",
+            },
+        )
 
 
 def _activate(agent: PlatformAgent) -> None:

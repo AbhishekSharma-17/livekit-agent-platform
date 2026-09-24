@@ -17,6 +17,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: (CONTRACTS-V2 §6; `livekit_connections.agent_name` defaults to the same value).
 DEFAULT_AGENT_NAME = "lkap-agent"
 
+#: The `User-Agent` HTTP tools send when a tool sets none (asks #29 / B-4). Some
+#: public APIs refuse anonymous clients: Wikimedia answers 403 to httpx unless
+#: the User-Agent carries contact info, and a project URL counts as one.
+DEFAULT_HTTP_TOOL_USER_AGENT = "LKAP/0.1 (+https://github.com/AbhishekSharma-17/livekit-agent-platform)"
+
 
 class Settings(BaseSettings):
     """Agent worker settings.
@@ -83,6 +88,10 @@ class Settings(BaseSettings):
     api_base_url: str
     packs: str = "packs.insurance_claim,packs.generic"
     http_tool_allowed_hosts: str = ""
+    #: `LKAP_HTTP_TOOL_USER_AGENT`: the `User-Agent` declarative HTTP tools and the
+    #: built-in `http_request` send when the tool's own headers set none. Operators
+    #: should put their own contact URL or email here.
+    http_tool_user_agent: str = DEFAULT_HTTP_TOOL_USER_AGENT
     log_level: str = "INFO"
     log_json: bool = False
     vision_max_frame_age_s: float = 8.0

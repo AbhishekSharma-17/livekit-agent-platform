@@ -332,12 +332,17 @@ async def dry_run_tool(
         else:
             body = payload.arguments
 
+    headers = dict(definition.headers)
+    if settings.http_tool_user_agent and not any(name.lower() == "user-agent" for name in headers):
+        # asks #29: the same default User-Agent the worker sends; the tool's own wins.
+        headers["User-Agent"] = settings.http_tool_user_agent
+
     started = time.perf_counter()
     try:
         response = await client.request(
             definition.method,
             url,
-            headers=definition.headers or None,
+            headers=headers or None,
             json=body,
             timeout=definition.timeout_s,
         )

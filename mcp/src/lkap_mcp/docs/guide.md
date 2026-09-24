@@ -2,7 +2,9 @@
 
 Call `lkap_guide()` once per session — you are reading its output now. Then call
 `me` before your first write: it tells you your workspace, your key's scopes
-(which tools you can even see), and whether a worker is reachable.
+(which tools you can even see), and whether a worker is ready
+(`health.workers.ready`; `health.connections.ok` only counts connections whose
+credentials test passed).
 
 ## What this is
 

@@ -34,6 +34,7 @@ def build_http_request_tool(
     ctx: PackSessionContext,
     *,
     platform_allowed_hosts: list[str] | None = None,
+    user_agent: str | None = None,
 ) -> FunctionTool[..., Any]:
     """Build the generic `http_request` tool bound to `ctx`.
 
@@ -42,7 +43,9 @@ def build_http_request_tool(
         platform_allowed_hosts: `LKAP_HTTP_TOOL_ALLOWED_HOSTS`, injected so
             this module never reads `Settings` directly (keeps it
             test-friendly, per docs/CONTRACTS.md §3).
+        user_agent: `LKAP_HTTP_TOOL_USER_AGENT`, sent as `User-Agent` (asks #29).
     """
+    headers = {"User-Agent": user_agent} if user_agent else None
 
     @function_tool
     async def http_request(
@@ -64,7 +67,7 @@ def build_http_request_tool(
             async with httpx.AsyncClient(
                 follow_redirects=False, timeout=DEFAULT_TIMEOUT_S, transport=guarded_transport()
             ) as client:
-                response = await client.request(method, url, content=body)
+                response = await client.request(method, url, content=body, headers=headers)
         except httpx.HTTPError as exc:
             raise ToolError(f"HTTP request failed: {exc}") from exc
 

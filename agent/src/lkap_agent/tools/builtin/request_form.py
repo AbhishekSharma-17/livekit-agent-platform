@@ -10,6 +10,10 @@ The model describes the fields; the tool turns them into a JSON schema
   background result (the model is prompted to acknowledge it), a missed form
   as a routine note. `PlatformAgent` also cancels the tool's own reply in
   these modes (D-W2-9i), so the model does not talk over the form.
+* **text channel** (any mode; asks #30 / B-5): a typed chat has no form panel
+  it can submit, so the tool shows nothing and answers at once, telling the
+  model to ask for the fields in the conversation. Waiting would block the
+  turn until the form timed out.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ __all__ = [
     "FormField",
     "build_request_form_tool",
     "fields_to_schema",
+    "text_channel_form_note",
 ]
 
 #: How long the user has to submit (CONTRACTS-V2 §4.4 default).
@@ -80,6 +85,16 @@ def fields_to_schema(fields: list[FormField]) -> dict[str, Any]:
     return schema
 
 
+def text_channel_form_note(fields: list[FormField]) -> str:
+    """The tool result on the text channel: no form is shown, ask in the conversation."""
+    labels = ", ".join(f"{f.label}{' (required)' if f.required else ''}" for f in fields)
+    return (
+        "No form was shown: this is a text chat, and forms cannot be filled in here. "
+        "The answers will come by text in this conversation. "
+        f"Ask the user for these, one or a few at a time: {labels}."
+    )
+
+
 def _validate_fields(fields: list[FormField]) -> None:
     if not fields:
         raise ToolError("Pass at least one field.")
@@ -108,6 +123,15 @@ def build_request_form_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         except ValueError as exc:
             raise ToolError(str(exc)) from exc
         _validate_fields(fields)
+        if getattr(ctx, "channel", "web") == "text":
+            ctx.log.debug(
+                "builtin_tool.request_form",
+                call_id=context.function_call.call_id,
+                block_id=target,
+                fields=[f.name for f in fields],
+                text_channel=True,
+            )
+            return text_channel_form_note(fields)
         schema = fields_to_schema(fields)
         ctx.log.debug(
             "builtin_tool.request_form",

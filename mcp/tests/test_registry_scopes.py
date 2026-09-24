@@ -153,6 +153,49 @@ async def test_me_reports_scopes_workspace_and_dial_state(key: Any, mcp_session:
     assert raw not in result["_text"]
 
 
+async def test_me_reports_a_ready_worker_separately_from_tested_connections(
+    key: Any, mcp_session: Any, app: Any, api_settings: Any
+) -> None:
+    """Asks #32 / B-7: an untested connection with a ready worker must not read as "no worker"."""
+    import httpx  # noqa: PLC0415
+    from conftest import API_BASE  # noqa: PLC0415
+
+    raw = await key(READ_ONLY_SCOPES)
+    async with mcp_session(raw) as mcp:
+        before = (await mcp.call("me"))["data"]["health"]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url=API_BASE,
+        headers={"X-Service-Token": api_settings.service_token},
+    ) as service:
+        response = await service.post(
+            "/internal/v1/workers/register",
+            json={
+                "connection_id": None,
+                "instance_key": "host:101",
+                "image": "slim",
+                "sdk_version": "1.8.2",
+                "installed_provider_ids": [],
+                "pack_ids": ["generic"],
+                "managed_by": "external",
+            },
+        )
+        assert response.status_code in (200, 201), response.text
+
+    async with mcp_session(raw) as mcp:
+        after = (await mcp.call("me"))["data"]["health"]
+
+    assert before["workers"]["ready"] == 0
+    assert before["workers"]["connections_with_ready_worker"] == 0
+    assert after["workers"]["ready"] == 1
+    assert after["workers"]["connections_with_ready_worker"] == 1
+    assert after["workers"]["by_connection"] == [{"connection": "default", "ready": 1}]
+    # The tested-connection count is a separate signal and stays as it was.
+    assert after["connections"] == before["connections"]
+    assert after["connections"]["ok"] == 0
+
+
 async def test_revoked_key_sees_only_the_public_tools_and_me_relays_401(
     key: Any, mcp_session: Any, admin: Any
 ) -> None:

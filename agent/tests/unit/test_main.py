@@ -405,6 +405,22 @@ async def test_shutdown_posts_the_summary_with_the_transcript() -> None:
     assert "session_ended" in api.event_types()
 
 
+async def test_the_summary_still_posts_when_the_last_event_flush_fails() -> None:
+    """Asks #33: a closed transport or api hiccup on the events post must not drop the summary."""
+
+    class _EventsDownApi(FakeApi):
+        async def post_events(self, session_id: str, events: list[Any]) -> None:
+            raise RuntimeError("room session transport is closed")
+
+    api = _EventsDownApi(resolved_config())
+    observer = SessionObserver(session_id="sess-1", client=cast(Any, api))
+    observer.record("agent_state", {"state": "listening"})
+
+    await observer.shutdown(reason="end_call tool invoked")
+
+    assert [s.status for s in api.summaries] == ["ended"]
+
+
 async def test_shutdown_is_idempotent() -> None:
     """A double shutdown (job end plus close) must not post two summaries."""
     api = FakeApi(resolved_config())
@@ -1004,20 +1020,50 @@ class _TeardownUi(NoopUiChannel):
         self.closed += 1
 
 
-async def test_an_avatar_that_fails_to_start_records_the_session_failed_never_ended() -> None:
-    """F-01: the row is `failed` with the error, the user hears why, the job ends."""
-    avatar = _FailingAvatar()
+class _NeverJoiningAvatar(_FakeAvatar):
+    """The Simli shape: `start()` logs its own failure and returns; the avatar never joins."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closed = 0
+
+    async def start(self, session: AgentSession[Any], room: rtc.Room) -> None:
+        self.events.append("start")
+        # What a plugin does right before it waits on the vendor: its audio now
+        # goes to an avatar participant that will never arrive.
+        session.output.audio = cast(Any, _SinkStandIn())
+
+    async def wait_for_join(self) -> None:
+        self.events.append("wait_for_join")
+        raise TimeoutError
+
+    async def aclose(self) -> None:
+        self.closed += 1
+
+
+class _SinkStandIn:
+    """Enough of an `AudioOutput` for `AgentOutput.audio`'s setter."""
+
+    def on_attached(self) -> None:
+        pass
+
+    def on_detached(self) -> None:
+        pass
+
+
+@pytest.mark.parametrize(
+    "avatar_cls", [_FailingAvatar, _NeverJoiningAvatar], ids=["start-raises", "never-joins"]
+)
+async def test_an_avatar_that_fails_to_start_degrades_the_call_to_voice_only(avatar_cls: Any) -> None:
+    """Asks #26: a failing avatar no longer fails the call; it continues voice-only with a warning."""
+    avatar = avatar_cls()
     api = FakeApi(resolved_config(with_avatar=True))
     ctx = FakeJobContext(_metadata())
     spoken: list[str] = []
-    uis: list[_TeardownUi] = []
+    starter = RoomlessStarter()
 
     async def _speaker(job_ctx: Any, line: str) -> None:
         spoken.append(line)
-
-    def _ui(**kw: Any) -> _TeardownUi:
-        uis.append(_TeardownUi(kw.get("session_id", "")))
-        return uis[-1]
 
     await run_session(
         ctx,
@@ -1025,23 +1071,23 @@ async def test_an_avatar_that_fails_to_start_records_the_session_failed_never_en
             api,
             factory=_RecordingFactory(avatar=avatar),
             fallback_speaker=_speaker,
-            ui_channel_factory=_ui,
+            session_starter=starter,
         ),
     )
 
-    assert [s.status for s in api.summaries] == ["failed"]
-    assert api.summaries[0].error == "avatar rejected the api key"
-    assert spoken == [START_FAILED_LINE]
-    assert "start failed" in ctx.shutdown_reasons
+    assert spoken == []
+    assert ctx.shutdown_reasons == []
     assert avatar.closed == 1
-    assert uis[0].started == 1 and uis[0].closed == 1
-    assert "session_started" not in api.event_types()
-
-    # The shutdown callback registered before `_start` runs when the job ends:
-    # it must not overwrite `failed` with `ended` or post a second summary.
-    await ctx.fire_shutdown("start failed")
-    assert [s.status for s in api.summaries] == ["failed"]
-    assert api.event_types().count("session_ended") == 1
+    assert starter.session is not None
+    # RoomIO must publish the agent's own audio track again.
+    assert starter.session.output.audio is None
+    await ctx.fire_shutdown("done")
+    assert [s.status for s in api.summaries] == ["ended"]
+    assert "session_started" in api.event_types()
+    warnings = [e for e in api.events if e.type == "error" and e.payload.get("severity") == "warning"]
+    assert len(warnings) == 1
+    assert warnings[0].payload["avatar_provider"] == "bey-avatar"
+    assert "voice-only" in warnings[0].payload["message"]
 
 
 async def test_a_session_start_that_raises_records_failed_and_closes_the_session() -> None:
@@ -1062,11 +1108,20 @@ async def test_a_session_start_that_raises_records_failed_and_closes_the_session
     async def _speaker(job_ctx: Any, line: str) -> None:
         spoken.append(line)
 
-    await run_session(ctx, _deps(api, fallback_speaker=_speaker, session_starter=starter))
+    uis: list[_TeardownUi] = []
+
+    def _ui(**kw: Any) -> _TeardownUi:
+        uis.append(_TeardownUi(kw.get("session_id", "")))
+        return uis[-1]
+
+    await run_session(
+        ctx, _deps(api, fallback_speaker=_speaker, session_starter=starter, ui_channel_factory=_ui)
+    )
     await asyncio.sleep(0.05)
 
     assert [s.status for s in api.summaries] == ["failed"]
     assert api.summaries[0].error == "RoomIO could not publish the audio track"
+    assert uis[0].started == 1 and uis[0].closed == 1
     assert spoken == [START_FAILED_LINE]
     assert "start failed" in ctx.shutdown_reasons
     # `plan.session.aclose()` ran: its `close` event ended the job (D-W2-9e handler).
@@ -1084,16 +1139,20 @@ async def test_a_start_failure_still_speaks_and_shuts_down_when_the_summary_cann
         async def put_summary(self, session_id: str, summary: Any) -> None:
             raise ConfigUnavailableError("api unreachable")
 
-    api = _DownApi(resolved_config(with_avatar=True))
+    class _FailingStarter(RoomlessStarter):
+        async def __call__(
+            self, *, session: AgentSession[Any], agent: Any, room: Any, room_options: Any
+        ) -> None:
+            raise RuntimeError("RoomIO could not publish the audio track")
+
+    api = _DownApi(resolved_config())
     ctx = FakeJobContext(_metadata())
     spoken: list[str] = []
 
     async def _speaker(job_ctx: Any, line: str) -> None:
         spoken.append(line)
 
-    await run_session(
-        ctx, _deps(api, factory=_RecordingFactory(avatar=_FailingAvatar()), fallback_speaker=_speaker)
-    )
+    await run_session(ctx, _deps(api, fallback_speaker=_speaker, session_starter=_FailingStarter()))
 
     assert spoken == [START_FAILED_LINE]
     assert "start failed" in ctx.shutdown_reasons

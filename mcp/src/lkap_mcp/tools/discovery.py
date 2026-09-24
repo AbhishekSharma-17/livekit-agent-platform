@@ -225,7 +225,12 @@ def register(registry: Registry) -> None:
 
     @registry.tool(annotations=READ, data="Me")
     async def me() -> ToolResult:
-        """Who am I: workspace, key scopes, read-only and dial state, api health. Call before any write."""
+        """Who am I: workspace, key scopes, read-only and dial state, api health, ready workers. Call
+        before any write.
+
+        `health.workers.ready` counts ready worker processes (whether a chat or call can run now);
+        `health.connections.ok` only counts connections whose credentials test passed.
+        """
         try:
             body = await client.get("/v1/api-keys/self")
         except ApiFailure as failure:
@@ -244,9 +249,26 @@ def register(registry: Registry) -> None:
         if identity.allows("connections:read"):
             try:
                 rows = await client.items("/v1/connections")
+                # `ok` counts connections whose credentials test passed; it says
+                # nothing about workers (asks #32). Worker readiness is `workers`.
                 health["connections"] = {
                     "n": len(rows),
                     "ok": sum(1 for row in rows if row.get("status") == "ok"),
+                }
+                workers: list[dict[str, Any]] = []
+                for row in rows:
+                    fleet = await client.get(f"/v1/connections/{seg(str(row.get('id')))}/fleet")
+                    instances = (fleet or {}).get("instances") or []
+                    workers.append(
+                        {
+                            "connection": row.get("slug") or row.get("id"),
+                            "ready": sum(1 for i in instances if i.get("status") == "ready"),
+                        }
+                    )
+                health["workers"] = {
+                    "ready": sum(w["ready"] for w in workers),
+                    "connections_with_ready_worker": sum(1 for w in workers if w["ready"] > 0),
+                    "by_connection": workers,
                 }
             except ApiFailure as failure:
                 warnings.append(f"connections unavailable: {failure.code}")

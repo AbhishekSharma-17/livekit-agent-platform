@@ -1,6 +1,6 @@
 # V4 live recheck: the Simli avatar (B-1) and the LiveKit phone number
 
-**Date:** 2026-09-25, 03:55–04:05 IST (22:25–22:35 UTC).
+**Date:** 2026-09-25. First run 03:55–04:05 IST (22:25–22:35 UTC); second run 04:11–04:19 IST (22:41–22:49 UTC), after the B-12 fix.
 **Driver:** Opus 5.5, log-only (R-V4-20: no source edits, no commits, no restarts).
 **Target:** the user's dev stack:
 - api on `:8080`, the user's own DB;
@@ -13,12 +13,12 @@ The repo is public. This file contains no token, key, host or phone number.
 
 | # | Check | Result |
 |---|---|---|
-| 1 | Simli avatar on `/s/demo-survey-intake-form` | **FAIL.** The failure is a new regression, **B-12** (`_asks.md` #54), not B-1. B-1 and the voice-only fallback were **not exercised** |
+| 1 | Simli avatar on `/s/demo-survey-intake-form` | **PASS on the second run (04:12 IST).** Video **7.0 s** after Start call, at **360×360**; the agent greeted. The first run (03:59) failed on **B-12** (`_asks.md` #54, now resolved in `3d9b8c0`), not on B-1. See §1a |
 | 3 | LiveKit number: assign it to Demo — Phone agent | **Still OFFLINE.** One assignment attempt was made, and LiveKit refused it (422). LKAP rolled the attempt back cleanly |
 
-Check 2 (V4-11 live steps 1–7) is in `v4-11-live.md`. It is **blocked by B-12**; nothing was changed.
+Check 2 (V4-11 live steps 1–7) is in `v4-11-live.md`. It was blocked by B-12 on the first run and **passed all five checks** on the second. Check 3 was not re-run on the second pass: the number is still OFFLINE on LiveKit's side.
 
-## 1. Simli avatar (B-1 recheck)
+## 1. Simli avatar (B-1 recheck), first run: failed on B-12
 
 **Run.** The run reused V4-06's `avatar.mjs`: Playwright Chromium with `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`, one `Start call`, then a poll once a second for 60 s for a live remote `<video>`, then `END CALL`.
 
@@ -69,6 +69,29 @@ Add a test whose fake reproduces the SDK's `__code__` check.
 
 Rerun `node <scratchpad>/v411/avatar.mjs demo-survey-intake-form <out>`, which uses at most about 60 s of Simli time.
 
+## 1a. Simli avatar, second run: PASS
+
+- **Setup.** The coordinator fixed B-12 in `3d9b8c0`: `run_session` now registers a plain `async def _run_shutdown(reason)`. The worker was restarted by the coordinator (PID 30659, registered 04:10:29 IST, 33 providers). Before the avatar test, a text chat on Demo — Blank agent (`3b381f59…`) confirmed that jobs start and end.
+- **Run.** The same `avatar.mjs`, at 22:42:33Z.
+
+| Metric | Value |
+|---|---|
+| Time to video | **7.0 s** after Start call: clicked at 1.4 s, a live remote `<video>` at 8.4 s |
+| Resolution | **360×360** (`videoWidth`×`videoHeight` when first observed) |
+| Greeting | Spoken and transcribed: "Hi! This is a two-minute feedback survey — five …" (`session_get` transcript, 1 assistant turn) |
+| Session | `103dafd9c4a14fc495cda7012ef4cb2d`, `channel=web`, **ended**, 22:42:37–22:42:46Z (9.7 s) |
+| Simli time | about **10 s** (END CALL clicked at 12.5 s) |
+| Voice-only fallback | **Not triggered**, as expected: the avatar started. No `error`/warning event; the event types were `agent_state`, `session_started`, `metrics`, `agent_turn`, `session_ended` |
+| Worker log | No Simli or avatar error. The only warning: `resume_false_interruption is enabled but audio output does not support pause` (the avatar's audio sink) |
+
+Screenshot: `<scratchpad>/v411/out/c1b-simli-live.png`. It shows the Simli face "Tina", the **Live** chip and the greeting in the transcript. Not checked: the voice-only degrade path (asks #26) under a real avatar failure. It would take a deliberately broken avatar config on a demo agent, and nothing needed it.
+
+**B-1 is verified fixed live:** the nested `simli_config.face_id` reaches `SimliConfig`.
+
+Side notes, not bugs:
+- The session panel's Status block reads "Not started" while the call is live. V4-06 recorded the same on the Bey call.
+- The survey session's usage line shows STT/TTS usage only, costed at $0.0002.
+
 ## 3. The LiveKit phone number
 
 | Step | Result |
@@ -102,4 +125,13 @@ The run neither bought nor released anything, and placed no call.
   - Provider keys: +1 `openrouter-llm` key (`46d4cd09…`), created at 22:28:52Z through the console (break-glass audit row `POST /v1/credentials`). That was the **user**, during the run; this run didn't create it.
 - **Not touched:** no restart or signal to the worker (PID 20725), the api or web; no `.env` read; no path starting with "credentials"; `sqb-assistant` and every non-demo agent untouched.
 - **What stays in the user's DB:** web session `0e87a488…` (stuck `active`, B-13). The user's own sessions `9d151645…` and `f01a0a72…` are in the same state.
-- **Cost:** $0 of Claude; no `claude -p` run. LiveKit usage was one crashed web job, and the Simli usage was 0 s.
+- **Second run (04:11–04:19 IST).** The driver minted key `v411-live-2` (`47ce4e75…`, prefix `lkap_t2O`) and revoked it at the end (`revoked_at` 22:48:18Z); the MCP config was deleted.
+  - Before/after diff: only Demo — Receptionist and Demo — Lead qualification changed (`config_version` 6→7 and 5→7; V4-11 steps 1 and 3), plus the new revoked key. The `Demo — Router scratch` agent (`49b8eb3a…`) was created and purged inside the run.
+  - Nothing else changed: no restart or signal, no `.env` read, no `credentials*` path, and `sqb-assistant` and all non-demo objects untouched.
+- **#55 stuck sessions, checked 22:48Z and not modified.** **Seven** sessions from the crash window are still `status=active` with `ended_at=null`:
+  - web: `0e87a488…` (this run);
+  - console `test`, 22:27–22:28Z: `9d151645…` and `f01a0a72…`;
+  - console `test`, 22:36–22:39Z: `a6bb039c…`, `1e958d6a…`, `c0f8d39b…` and `9e4ca9c5…`. These four came from the user's own console tests after the first report and before the fixed worker registered at 22:40:29Z.
+
+  None has been reaped. Every session started on the fixed worker ended normally.
+- **Cost:** $0 of Claude in both runs; no `claude -p` run. First run: one crashed web job and 0 s of Simli. Second run: about 10 s of Simli and one web session ($0.0002). The V4-11 chats cost about $0.014 of LiveKit Inference, smoke chat included.

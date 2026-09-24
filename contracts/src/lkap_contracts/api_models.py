@@ -31,6 +31,7 @@ from lkap_contracts.packs import PackManifest
 from lkap_contracts.pricing import Unit as Unit
 from lkap_contracts.providers import CatalogKind, ProviderSpec
 from lkap_contracts.telephony import DTMF_PATTERN, E164_PATTERN, TRANSFER_TARGET_PATTERN
+from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tools import ToolDefinition
 from lkap_contracts.ui_protocol import UiState
 
@@ -149,11 +150,16 @@ class CredentialTestResult(BaseModel):
 
 # --------------------------------------------------------------------------- agents
 class AgentCreate(BaseModel):
-    """``POST /v1/agents``. ``config=None`` seeds from the pack manifest."""
+    """``POST /v1/agents``. ``config=None`` seeds from ``template_id`` or the pack manifest.
+
+    v4 (docs/v4/TEMPLATES.md D-V4-3): ``template_id`` wins over ``pack_id``
+    (the pack is the template's); sending it together with ``config`` is a 422.
+    """
 
     name: str
     description: str = ""
     pack_id: str = "generic"
+    template_id: str | None = None
     ui_panel_id: str | None = None
     config: AgentConfig | None = None
     connection_id: str | None = None
@@ -406,6 +412,20 @@ class PacksResponse(BaseModel):
     """``GET /v1/packs``."""
 
     items: list[PackOut]
+
+
+class TemplateOut(BaseModel):
+    """One starter, merged (``instructions.md`` folded in) plus the pack it layers on."""
+
+    template: StarterTemplate
+    pack: PackManifest
+    derived: bool = False
+
+
+class TemplatesResponse(BaseModel):
+    """``GET /v1/templates``: catalogue order, then derived pack entries."""
+
+    items: list[TemplateOut]
 
 
 # ------------------------------------------------------------------------- sessions

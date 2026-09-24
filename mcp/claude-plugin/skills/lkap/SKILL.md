@@ -40,7 +40,12 @@ direct database or file access to the platform.
    Prefer a `file:` reference when the user already keeps one (it never
    touches your own transcript at all); accept an inline paste without
    hesitation otherwise — that choice belongs to the user, not to you.
-2. **Build the agent.** From a pack — `agent_create(pack_id="insurance_claim"
+2. **Build the agent.** Start from a starter template: read
+   `lkap://templates` for the catalogue, then
+   `agent_create(template_id="receptionist")` (or `blank`,
+   `knowledge_assistant`, …) seeds a complete config with its knowledge
+   bases and tools — `lkap_describe("recipe", "start-from-template")`.
+   From a pack — `agent_create(pack_id="insurance_claim"
    )` or `agent_create(pack_id="generic")` — seeds a complete, working
    config; `agent_create(pack_id="generic")` plus `agent_update(patch={...})`
    builds one from scratch. `lkap_describe("recipe", "insurance-intake-agent"

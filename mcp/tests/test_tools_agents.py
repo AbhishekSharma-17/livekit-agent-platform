@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from conftest import BUILDER_SCOPES
+import pytest
+from conftest import BUILDER_SCOPES, READ_ONLY_SCOPES
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
+from lkap_api.kb.embed import FakeEmbedder
 from lkap_contracts.agent_config import AgentConfig
 
 
@@ -191,3 +194,106 @@ async def test_agent_versions_restore_needs_confirmation(key: Any, mcp_session: 
     assert len(versions["data"]) >= 2
     assert unconfirmed["error"]["code"] == "needs_confirmation"
     assert restored["ok"] is True and restored["data"]["config"]["instructions"] != "v2"
+
+
+# --------------------------------------------------------------------------- starter templates (V4-01)
+@pytest.fixture
+def fake_seed_embedder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Template knowledge seeds embed with ``FakeEmbedder`` (the agent router resolves its own)."""
+
+    async def _fake(*_args: object, **_kwargs: object) -> FakeEmbedder:
+        return FakeEmbedder()
+
+    monkeypatch.setattr("lkap_api.routers.agents.resolve_embedder", _fake)
+
+
+async def test_agent_create_from_a_template_plans_the_template_id(key: Any, mcp_session: Any) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call("agent_create", name="Support", template_id="knowledge_assistant", plan=True)
+        posts = mcp.transport.calls("POST", "/v1/agents")
+
+    assert result["ok"] is True, result
+    [step] = result["plan"]
+    assert (step["method"], step["path"]) == ("POST", "/v1/agents")
+    assert step["body"]["template_id"] == "knowledge_assistant"
+    assert posts == []
+
+
+async def test_agent_create_from_a_template_seeds_it_and_returns_its_next_steps(
+    key: Any, mcp_session: Any, admin: Any, fake_seed_embedder: None
+) -> None:
+    raw = await key(BUILDER_SCOPES)
+    template = (await admin.get("/v1/templates/knowledge_assistant")).json()["template"]
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call("agent_create", name="Support", template_id="knowledge_assistant")
+        [post] = mcp.transport.calls("POST", "/v1/agents")
+        sent = mcp.transport.bodies[post]
+
+    assert result["ok"] is True, result
+    agent = result["data"]["agent"]
+    assert sent["template_id"] == "knowledge_assistant" and sent["pack_id"] == "generic"
+    assert agent["pack_id"] == "generic"
+    assert agent["config"]["voice"]["greeting"] == template["greeting"]
+    assert len(agent["config"]["knowledge"]["kb_ids"]) == 2
+    assert result["data"]["validation"]["ok"] is True
+    labels = [step["label"] for step in template["next_steps"]]
+    assert result["next_steps"][: len(labels)] == labels
+
+
+async def test_agent_create_from_a_code_pack_template_ignores_the_default_pack_id(
+    key: Any, mcp_session: Any, fake_seed_embedder: None
+) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call("agent_create", name="Claims", template_id="insurance_claim")
+
+    assert result["ok"] is True, result
+    assert result["data"]["agent"]["pack_id"] == "insurance_claim"
+
+
+async def test_agent_create_relays_the_template_422_with_issues(key: Any, mcp_session: Any) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        agent = await _create(mcp)
+        both = await mcp.call("agent_create", name="Both", template_id="blank", config=agent["config"])
+        unknown = await mcp.call("agent_create", name="Nope", template_id="time_machine")
+
+    assert both["ok"] is False and both["error"]["status"] == 422
+    assert [issue["path"] for issue in both["issues"]] == ["template_id"]
+    assert unknown["ok"] is False and unknown["error"]["status"] == 422
+    assert "receptionist" in unknown["error"]["details"]["known"]
+
+
+async def test_lkap_describe_template_returns_the_template_out(key: Any, mcp_session: Any) -> None:
+    raw = await key(READ_ONLY_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        found = await mcp.call("lkap_describe", kind="template", id="receptionist")
+        missing = await mcp.call("lkap_describe", kind="template", id="time_machine")
+
+    assert found["ok"] is True, found
+    assert found["data"]["template"]["id"] == "receptionist"
+    assert found["data"]["pack"]["id"] == "generic" and found["data"]["derived"] is False
+    assert missing["ok"] is False and missing["error"]["code"] == "not_found"
+    assert "blank" in missing["error"]["details"]["known"]
+    assert "insurance_claim" in missing["error"]["details"]["known"]
+
+
+async def test_the_templates_resource_reads_live(key: Any, mcp_session: Any) -> None:
+    raw = await key(READ_ONLY_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        resources = {str(r.uri) for r in (await mcp.session.list_resources()).resources}
+        read = await mcp.session.read_resource("lkap://templates")  # type: ignore[arg-type]
+        gets = mcp.transport.calls("GET", "/v1/templates")
+
+    assert "lkap://templates" in resources
+    body = json.loads(getattr(read.contents[0], "text", "{}"))
+    ids = [item["template"]["id"] for item in body["items"]]
+    assert ids[0] == "blank" and ids[-1] == "insurance_claim" and "receptionist" in ids
+    assert gets, "the resource is a live api read"

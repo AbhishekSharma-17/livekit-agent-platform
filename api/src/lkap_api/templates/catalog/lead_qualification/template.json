@@ -1,0 +1,299 @@
+{
+  "id": "lead_qualification",
+  "name": "Lead qualification",
+  "tagline": "Qualifies inbound leads with a flow, routes them and posts the result to your CRM.",
+  "description": "Asks a fixed set of qualification questions, extracts the answers as flow variables, routes the lead to a demo or to nurture, and scores the call. The session.ended webhook carries the variables and the disposition to your CRM. Set up for a fictional product, Acme.",
+  "category": "sales",
+  "chips": [
+    "flow",
+    "variables",
+    "webhook",
+    "qa",
+    "rag"
+  ],
+  "requires": {
+    "webhook_endpoint": true
+  },
+  "order": 50,
+  "pack_id": "generic",
+  "builtin_tools_disabled": [
+    "pin_frame",
+    "describe_current_frame"
+  ],
+  "panel": {
+    "panel_id": "composite",
+    "layout": "side",
+    "blocks": [
+      {
+        "id": "status",
+        "type": "status",
+        "title": null,
+        "config": {},
+        "order": 0
+      },
+      {
+        "id": "notes",
+        "type": "notes",
+        "title": "Qualification notes",
+        "config": {},
+        "order": 1
+      },
+      {
+        "id": "offer",
+        "type": "kb_citations",
+        "title": "Offer details",
+        "config": {},
+        "order": 2
+      },
+      {
+        "id": "activity",
+        "type": "activity",
+        "title": "Activity",
+        "config": {},
+        "order": 3
+      }
+    ]
+  },
+  "flow": {
+    "v": 1,
+    "nodes": [
+      {
+        "id": "start",
+        "kind": "start",
+        "label": "Start",
+        "greeting": "Hi, thanks for your interest in Acme. I'll ask a few quick questions so the right person can follow up. Sound good?",
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "id": "global",
+        "kind": "global",
+        "label": "Global",
+        "instructions": "You qualify leads for Acme. One question at a time, acknowledge each answer, never pressure. Use search_knowledge when asked about pricing or features. push_note anything unusual.",
+        "tools": [
+          "search_knowledge",
+          "push_note",
+          "set_status"
+        ],
+        "position": [
+          0,
+          140
+        ]
+      },
+      {
+        "id": "company",
+        "kind": "agent",
+        "label": "Company",
+        "instructions": "Ask for the company name and the caller's role.",
+        "extract": [
+          "company",
+          "role"
+        ],
+        "position": [
+          0,
+          280
+        ]
+      },
+      {
+        "id": "needs",
+        "kind": "agent",
+        "label": "Needs",
+        "instructions": "Ask what they are trying to solve, how many people would use it, and when they want to start.",
+        "extract": [
+          "use_case",
+          "team_size",
+          "timeline"
+        ],
+        "position": [
+          0,
+          420
+        ]
+      },
+      {
+        "id": "budget",
+        "kind": "agent",
+        "label": "Budget",
+        "instructions": "Ask whether they have a budget range in mind; accept 'not sure'.",
+        "extract": [
+          "budget_range"
+        ],
+        "position": [
+          0,
+          560
+        ]
+      },
+      {
+        "id": "book_demo",
+        "kind": "agent",
+        "label": "Book a demo",
+        "instructions": "Offer a demo with a specialist; ask for the best email and a preferred day. Call set_status with qualified.",
+        "extract": [
+          "email"
+        ],
+        "position": [
+          0,
+          700
+        ]
+      },
+      {
+        "id": "qualified",
+        "kind": "end",
+        "label": "Qualified",
+        "farewell": "Perfect — a specialist will email you within one business day to confirm the demo.",
+        "disposition": "qualified",
+        "position": [
+          0,
+          840
+        ]
+      },
+      {
+        "id": "nurture",
+        "kind": "end",
+        "label": "Nurture",
+        "farewell": "Thanks — I'll send over some material and we can pick this up when the timing is right.",
+        "disposition": "nurture",
+        "position": [
+          0,
+          980
+        ]
+      },
+      {
+        "id": "qa",
+        "kind": "qa",
+        "label": "QA",
+        "rubric_prompt": "Score 1–5: were all qualification questions asked, was the routing decision consistent with the answers, was the tone consultative, did the agent avoid pressure.",
+        "position": [
+          0,
+          1120
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "start_company",
+        "source": "start",
+        "target": "company",
+        "condition": "the caller agrees"
+      },
+      {
+        "id": "company_needs",
+        "source": "company",
+        "target": "needs",
+        "condition": "the company name and role are known"
+      },
+      {
+        "id": "needs_budget",
+        "source": "needs",
+        "target": "budget",
+        "condition": "the use case, team size and timeline are known"
+      },
+      {
+        "id": "budget_book_demo",
+        "source": "budget",
+        "target": "book_demo",
+        "condition": "timeline is within 6 months and team_size is 5 or more"
+      },
+      {
+        "id": "budget_nurture",
+        "source": "budget",
+        "target": "nurture",
+        "condition": "timeline is later than 6 months, or team_size is under 5, or the caller is only researching"
+      },
+      {
+        "id": "book_demo_qualified",
+        "source": "book_demo",
+        "target": "qualified",
+        "condition": "email collected"
+      },
+      {
+        "id": "start_nurture",
+        "source": "start",
+        "target": "nurture",
+        "condition": "the caller declines to answer questions"
+      }
+    ],
+    "variables": [
+      {
+        "name": "company",
+        "type": "string",
+        "description": "The caller's company",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "description": "The caller's role"
+      },
+      {
+        "name": "use_case",
+        "type": "string",
+        "description": "What they are trying to solve"
+      },
+      {
+        "name": "team_size",
+        "type": "number",
+        "description": "How many people would use it"
+      },
+      {
+        "name": "timeline",
+        "type": "enum",
+        "description": "When they want to start",
+        "options": [
+          "now",
+          "1_3_months",
+          "3_6_months",
+          "later"
+        ]
+      },
+      {
+        "name": "budget_range",
+        "type": "enum",
+        "description": "Their budget range",
+        "options": [
+          "under_1k",
+          "1k_10k",
+          "over_10k",
+          "not_sure"
+        ]
+      },
+      {
+        "name": "email",
+        "type": "email",
+        "description": "The best email for the follow-up"
+      }
+    ]
+  },
+  "kb_seeds": [
+    {
+      "kb_name": "Lead qualification · Offer sheet",
+      "files": [
+        "offer_sheet.md"
+      ]
+    }
+  ],
+  "sample_prompts": [
+    "We're a 20-person team looking at this for Q4.",
+    "How much does it cost?",
+    "I'm just researching for now."
+  ],
+  "next_steps": [
+    {
+      "label": "Add a webhook for session.ended to receive the variables and disposition",
+      "href": "/console/settings?tab=webhooks"
+    },
+    {
+      "label": "Edit the questions in the flow",
+      "section": "flow"
+    },
+    {
+      "label": "Replace the offer sheet",
+      "section": "knowledge"
+    },
+    {
+      "label": "Make a test call",
+      "section": "providers"
+    }
+  ]
+}

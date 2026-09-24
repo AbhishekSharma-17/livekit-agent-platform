@@ -1,0 +1,43 @@
+{
+  "id": "insurance_claim",
+  "name": "Insurance claim intake",
+  "tagline": "The advanced example: a full code pack for first-notice-of-loss claim intake.",
+  "description": "The full insurance code pack: first-notice-of-loss intake with policy lookup, claim extraction and classification, a document checklist, camera evidence and an incident sketch in a custom notebook panel, plus two seeded knowledge bases. An example of what a code pack adds on top of configuration.",
+  "category": "example",
+  "chips": [
+    "code_tools",
+    "knowledge_seeds",
+    "camera",
+    "image_gen"
+  ],
+  "requires": {
+    "provider_keys": [
+      {
+        "provider_id": "google-image-gen",
+        "optional": true,
+        "purpose": "incident sketches"
+      }
+    ]
+  },
+  "order": 900,
+  "pack_id": "insurance_claim",
+  "sample_prompts": [
+    "I had a small kitchen fire last night.",
+    "My policy number is HO-4471-2210.",
+    "Can I show you the damage on camera?"
+  ],
+  "next_steps": [
+    {
+      "label": "Optional: add a Google key for incident sketches",
+      "section": "providers"
+    },
+    {
+      "label": "Read the pack's instructions",
+      "section": "instructions"
+    },
+    {
+      "label": "Make a test call with the camera on",
+      "section": "providers"
+    }
+  ]
+}

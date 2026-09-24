@@ -136,8 +136,11 @@ export interface LkapContracts {
   SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
   StartNode?: StartNode;
+  StarterTemplate?: StarterTemplate;
   TableBlockState?: TableBlockState;
   TelephonyConfig?: TelephonyConfig;
+  TemplateOut?: TemplateOut;
+  TemplatesResponse?: TemplatesResponse;
   ToolCreate?: ToolCreate;
   ToolDefinition?: ToolDefinition;
   ToolDryRunRequest?: ToolDryRunRequest;
@@ -603,7 +606,10 @@ export interface VoiceConfig {
   user_away_timeout_s?: number | null;
 }
 /**
- * ``POST /v1/agents``. ``config=None`` seeds from the pack manifest.
+ * ``POST /v1/agents``. ``config=None`` seeds from ``template_id`` or the pack manifest.
+ *
+ * v4 (docs/v4/TEMPLATES.md D-V4-3): ``template_id`` wins over ``pack_id``
+ * (the pack is the template's); sending it together with ``config`` is a 422.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AgentCreate".
@@ -615,6 +621,7 @@ export interface AgentCreate {
   mode?: "prompt" | "flow";
   name: string;
   pack_id?: string;
+  template_id?: string | null;
   ui_panel_id?: string | null;
 }
 /**
@@ -2416,6 +2423,117 @@ export interface SessionSummaryIn {
   };
 }
 /**
+ * One starter: gallery metadata, the overlay on the pack manifest, and extras on the seeded config.
+ *
+ * Overlay fields left ``None`` keep the pack manifest's value. ``voice`` and
+ * ``knowledge`` are merged over the seeded config with ``exclude_unset``, so
+ * they may not set ``greeting`` (use the ``greeting`` overlay) or ``kb_ids``
+ * (filled from ``kb_seeds`` at create time).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StarterTemplate".
+ */
+export interface StarterTemplate {
+  builtin_tools_disabled?: string[] | null;
+  capabilities?: CapabilitiesConfig | null;
+  category: "blank" | "support" | "scheduling" | "vision" | "phone" | "sales" | "forms" | "example";
+  chips?: (
+    | "rag"
+    | "citations"
+    | "http_tools"
+    | "forms"
+    | "table"
+    | "flow"
+    | "variables"
+    | "camera"
+    | "screen_share"
+    | "gallery"
+    | "telephony"
+    | "dtmf"
+    | "transfer"
+    | "webhook"
+    | "qa"
+    | "code_tools"
+    | "knowledge_seeds"
+    | "image_gen"
+  )[];
+  default_voice?: {
+    [k: string]: string;
+  };
+  description: string;
+  flow?: FlowSpec | null;
+  greeting?: string | null;
+  http_request_enabled?: boolean;
+  id: string;
+  instructions?: string | null;
+  kb_seeds?: KbSeed[];
+  knowledge?: KnowledgeConfig | null;
+  max_tool_steps?: number | null;
+  name: string;
+  next_steps?: NextStep[];
+  order?: number;
+  pack_id?: string;
+  pack_settings?: {
+    [k: string]: unknown;
+  };
+  panel?: PanelLayout | null;
+  pipeline?: PipelineConfig | null;
+  qa?: QaConfig | null;
+  recording?: RecordingConfig | null;
+  requires?: TemplateRequirements;
+  sample_prompts?: string[];
+  tagline: string;
+  telephony?: TelephonyConfig | null;
+  timezone?: string | null;
+  tool_seeds?: ToolSeed[];
+  v?: 1;
+  voice?: VoiceConfig | null;
+}
+/**
+ * One line of the post-create checklist; ``section`` deep-links into the editor, ``href`` elsewhere.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NextStep".
+ */
+export interface NextStep {
+  href?: string | null;
+  label: string;
+  section?: ("providers" | "instructions" | "flow" | "panel" | "tools" | "knowledge" | "recording" | "limits") | null;
+}
+/**
+ * What the workspace needs before the starter does everything it promises.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TemplateRequirements".
+ */
+export interface TemplateRequirements {
+  provider_keys?: RequiredKey[];
+  storage?: boolean;
+  telephony?: boolean;
+  webhook_endpoint?: boolean;
+}
+/**
+ * A vendor key the template uses; ``optional`` keys only unlock an extra.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RequiredKey".
+ */
+export interface RequiredKey {
+  optional?: boolean;
+  provider_id: string;
+  purpose?: string;
+}
+/**
+ * An HTTP tool row created for the new agent (``Tool(agent_id=…)``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolSeed".
+ */
+export interface ToolSeed {
+  definition: HttpToolDefinition;
+  enabled?: boolean;
+}
+/**
  * Tabular data the agent appends rows to.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -2438,6 +2556,26 @@ export interface TableColumn {
   key: string;
   label: string;
   type?: "string" | "number" | "boolean" | "date";
+}
+/**
+ * One starter, merged (``instructions.md`` folded in) plus the pack it layers on.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TemplateOut".
+ */
+export interface TemplateOut {
+  derived?: boolean;
+  pack: PackManifest;
+  template: StarterTemplate;
+}
+/**
+ * ``GET /v1/templates``: catalogue order, then derived pack entries.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TemplatesResponse".
+ */
+export interface TemplatesResponse {
+  items: TemplateOut[];
 }
 /**
  * ``POST /v1/tools``. ``agent_id=None`` makes the tool shared.

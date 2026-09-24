@@ -1,0 +1,108 @@
+{
+  "id": "phone_agent",
+  "name": "Phone agent",
+  "tagline": "Answers a phone number with a keypad menu, takes messages and scores every call.",
+  "description": "A telephony starter: a keypad menu, answers from a small FAQ, takes a message, transfers to a person once you add a destination, and scores every call with QA. Attach a number and a dispatch rule to put it on the phone; until then, try it in the browser or a text chat.",
+  "category": "phone",
+  "chips": [
+    "telephony",
+    "dtmf",
+    "transfer",
+    "qa"
+  ],
+  "requires": {
+    "telephony": true
+  },
+  "order": 40,
+  "pack_id": "generic",
+  "greeting": "Thanks for calling Acme. Press 1 for opening hours, 2 to leave a message, or just tell me what you need.",
+  "capabilities": {
+    "camera": false,
+    "screen_share": false,
+    "chat_input": true,
+    "vision_inject_per_turn": true,
+    "dtmf": true
+  },
+  "builtin_tools_disabled": [
+    "pin_frame",
+    "describe_current_frame"
+  ],
+  "panel": {
+    "panel_id": "composite",
+    "layout": "side",
+    "blocks": [
+      {
+        "id": "status",
+        "type": "status",
+        "title": null,
+        "config": {},
+        "order": 0
+      },
+      {
+        "id": "messages",
+        "type": "notes",
+        "title": "Messages",
+        "config": {},
+        "order": 1
+      },
+      {
+        "id": "transcript",
+        "type": "transcript",
+        "title": "Transcript",
+        "config": {
+          "show_tools": false
+        },
+        "order": 2
+      },
+      {
+        "id": "activity",
+        "type": "activity",
+        "title": "Activity",
+        "config": {},
+        "order": 3
+      }
+    ]
+  },
+  "voice": {
+    "user_away_timeout_s": 20,
+    "allow_interruptions": true
+  },
+  "kb_seeds": [
+    {
+      "kb_name": "Phone agent · FAQ",
+      "files": [
+        "phone_faq.md"
+      ]
+    }
+  ],
+  "qa": {
+    "enabled": true,
+    "rubric_prompt": "Score the call from 1 to 5 on each of: the greeting was given; the caller's need was identified; the need was resolved or routed (message taken or transfer offered); the tone was polite and concise; the call was closed properly. Give one sentence of evidence per item."
+  },
+  "telephony": {
+    "transfer_targets": []
+  },
+  "sample_prompts": [
+    "What time do you close today?",
+    "I want to leave a message for the manager.",
+    "Can I speak to someone?"
+  ],
+  "next_steps": [
+    {
+      "label": "Attach a number and a dispatch rule",
+      "href": "/console/telephony"
+    },
+    {
+      "label": "Add a transfer destination",
+      "href": "/console/telephony"
+    },
+    {
+      "label": "Add a storage config to record calls",
+      "section": "recording"
+    },
+    {
+      "label": "Test it in a text chat before calling",
+      "section": "providers"
+    }
+  ]
+}

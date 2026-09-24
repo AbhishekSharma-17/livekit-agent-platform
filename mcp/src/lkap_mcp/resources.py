@@ -92,6 +92,11 @@ def register_resources(server: FastMCP[Any], ctx: ServerContext) -> None:
         """The installed packs: ids, what they seed, tool names and default panel (live)."""
         return await _live(ctx, "packs", "/v1/packs")
 
+    @server.resource("lkap://templates", name="templates", mime_type="application/json")
+    async def templates() -> str:
+        """The starter templates for agent_create(template_id=...): gallery metadata, overlay, pack (live)."""
+        return await _live(ctx, "templates", "/v1/templates")
+
     @server.resource("lkap://openapi", name="openapi", mime_type="application/json")
     async def openapi() -> str:
         """The api's OpenAPI document (for api_request)."""

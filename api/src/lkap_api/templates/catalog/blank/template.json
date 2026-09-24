@@ -1,0 +1,29 @@
+{
+  "id": "blank",
+  "name": "Blank agent",
+  "tagline": "A plain voice assistant on LiveKit Inference. Start here and build it your way.",
+  "description": "Exactly what the generic pack seeds: a plain voice assistant on LiveKit Inference with the four default panel blocks and the built-in tools. The fastest path to a first test call.",
+  "category": "blank",
+  "chips": [],
+  "order": 0,
+  "pack_id": "generic",
+  "sample_prompts": [
+    "What can you help me with?",
+    "Tell me a fun fact.",
+    "Can you speak more slowly?"
+  ],
+  "next_steps": [
+    {
+      "label": "Write the instructions",
+      "section": "instructions"
+    },
+    {
+      "label": "Check providers",
+      "section": "providers"
+    },
+    {
+      "label": "Make a test call from the editor header",
+      "section": "providers"
+    }
+  ]
+}

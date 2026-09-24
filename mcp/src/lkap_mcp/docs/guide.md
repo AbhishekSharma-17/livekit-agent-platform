@@ -15,7 +15,8 @@ admin token (`me`'s `key.scopes` is the only privilege you have).
 
 `workspace` (one per API key) → **connections** (a LiveKit Cloud project or a
 self-hosted server; `connection_create`, `connection_list`) → **agents**
-(`agent_create`, one `pack_id` each: `insurance_claim` or `generic`) → each
+(`agent_create`, usually from a starter template; each runs on one pack,
+`generic` or `insurance_claim`) → each
 agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 `half_cascade` — see `lkap_explain("pipeline-modes")`), **providers and keys**
 (`provider_list`, `provider_key_create` — the registry has 121 provider
@@ -32,9 +33,11 @@ carry a transcript, QA score, cost lines and (if enabled) a recording.
    `default` one). `test_first=true` probes it before saving.
 2. **Keys.** `provider_key_create` any vendor credential you need (Deepgram,
    OpenAI, Google, an avatar vendor, …). LiveKit Inference needs none.
-3. **Build.** `agent_create(pack_id=...)` seeds a full config from the pack;
-   `agent_update(patch={...})` merges changes; `agent_attach` wires knowledge
-   bases and tools.
+3. **Build.** `agent_create(template_id=...)` seeds a full config from a
+   starter (`lkap://templates`: `blank`, `knowledge_assistant`,
+   `receptionist`, … — configuration layered on a pack, with its knowledge
+   bases and tools); `agent_update(patch={...})` merges changes;
+   `agent_attach` wires knowledge bases and tools.
 4. **Validate.** `agent_validate` before every save that matters; a flow gets
    `agent_flow_validate` first.
 5. **Test.** `chat_start` / `chat_send` / `chat_end` run a real text session
@@ -42,9 +45,9 @@ carry a transcript, QA score, cost lines and (if enabled) a recording.
 6. **Publish.** `agent_publish` makes the session URL live.
 
 Start with `lkap_explain("agents")` and `lkap_describe("recipe",
-"insurance-intake-agent")` or `lkap_describe("recipe", "generic-assistant")`
-for a full worked example. `lkap_search_docs(query)` finds anything by
-keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|
+"start-from-template")`, `lkap_describe("recipe", "insurance-intake-agent")`
+or `lkap_describe("recipe", "generic-assistant")` for a full worked example. `lkap_search_docs(query)` finds anything by
+keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 "builtin_tool"|"route", id)` looks up one exact spec.
 
 ## Safety rules — follow these on every call
@@ -82,7 +85,7 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|
 
 ## Recipes
 
-`connect-livekit`, `insurance-intake-agent`, `generic-assistant`,
+`connect-livekit`, `start-from-template`, `insurance-intake-agent`, `generic-assistant`,
 `add-http-tool`, `attach-mcp-server`, `knowledge-from-text`,
 `switch-to-flow`, `composite-panel`, `test-and-publish`,
 `diagnose-a-session` — each is a numbered, copy-pasteable tool sequence

@@ -51,6 +51,7 @@ CONCEPT_TOPICS: tuple[str, ...] = get_args(ConceptTopic)
 #: The recipes of ``AGENT-ACCESS.md`` §3.1.
 RECIPES: tuple[str, ...] = (
     "connect-livekit",
+    "start-from-template",
     "insurance-intake-agent",
     "generic-assistant",
     "add-http-tool",

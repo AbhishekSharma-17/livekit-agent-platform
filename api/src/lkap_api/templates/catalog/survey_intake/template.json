@@ -1,0 +1,94 @@
+{
+  "id": "survey_intake",
+  "name": "Survey / intake form",
+  "tagline": "Runs a short questionnaire by voice and confirms the answers on an on-screen form.",
+  "description": "Runs a fixed five-question feedback survey by voice, shows the answers as an on-screen form the respondent confirms, and appends one row per completed survey to a table. A prompt agent, so the questions live in the instructions.",
+  "category": "forms",
+  "chips": [
+    "forms",
+    "table"
+  ],
+  "order": 60,
+  "pack_id": "generic",
+  "greeting": "Hi! This is a two-minute feedback survey — five quick questions. Ready?",
+  "builtin_tools_disabled": [
+    "pin_frame",
+    "describe_current_frame",
+    "escalate_to_human"
+  ],
+  "panel": {
+    "panel_id": "composite",
+    "layout": "side",
+    "blocks": [
+      {
+        "id": "status",
+        "type": "status",
+        "title": null,
+        "config": {},
+        "order": 0
+      },
+      {
+        "id": "answers",
+        "type": "form",
+        "title": "Your answers",
+        "config": {},
+        "order": 1
+      },
+      {
+        "id": "responses",
+        "type": "table",
+        "title": "Responses",
+        "config": {
+          "columns": [
+            {
+              "key": "name",
+              "label": "Name"
+            },
+            {
+              "key": "satisfaction",
+              "label": "Satisfaction"
+            },
+            {
+              "key": "recommend",
+              "label": "Recommend"
+            },
+            {
+              "key": "comments",
+              "label": "Comments"
+            }
+          ]
+        },
+        "order": 2
+      },
+      {
+        "id": "activity",
+        "type": "activity",
+        "title": "Activity",
+        "config": {},
+        "order": 3
+      }
+    ]
+  },
+  "voice": {
+    "user_away_timeout_s": 25
+  },
+  "sample_prompts": [
+    "Sure, let's go.",
+    "I'd say four out of five.",
+    "The onboarding took too long."
+  ],
+  "next_steps": [
+    {
+      "label": "Change the questions",
+      "section": "instructions"
+    },
+    {
+      "label": "Adjust the response table's columns",
+      "section": "panel"
+    },
+    {
+      "label": "Make a test call",
+      "section": "providers"
+    }
+  ]
+}

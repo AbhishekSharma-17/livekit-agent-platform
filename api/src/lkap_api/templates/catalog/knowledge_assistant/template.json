@@ -1,0 +1,89 @@
+{
+  "id": "knowledge_assistant",
+  "name": "Knowledge assistant",
+  "tagline": "Answers from your documents, cites its sources and hands off when it can't help.",
+  "description": "A support agent that answers only from the knowledge bases you give it, names the source it used, admits what it does not know and offers a human handoff. Seeded with a sample product FAQ and a support playbook for a fictional product, Acme Meter.",
+  "category": "support",
+  "chips": [
+    "rag",
+    "citations"
+  ],
+  "order": 10,
+  "pack_id": "generic",
+  "greeting": "Hi, I'm the support assistant. Ask me anything about the product and I'll answer from our documentation.",
+  "builtin_tools_disabled": [
+    "pin_frame",
+    "describe_current_frame"
+  ],
+  "panel": {
+    "panel_id": "composite",
+    "layout": "side",
+    "blocks": [
+      {
+        "id": "status",
+        "type": "status",
+        "title": null,
+        "config": {},
+        "order": 0
+      },
+      {
+        "id": "sources",
+        "type": "kb_citations",
+        "title": "Sources",
+        "config": {},
+        "order": 1
+      },
+      {
+        "id": "notes",
+        "type": "notes",
+        "title": "Follow-ups",
+        "config": {},
+        "order": 2
+      },
+      {
+        "id": "activity",
+        "type": "activity",
+        "title": "Activity",
+        "config": {},
+        "order": 3
+      }
+    ]
+  },
+  "kb_seeds": [
+    {
+      "kb_name": "Knowledge assistant · Product FAQ",
+      "files": [
+        "product_faq.md"
+      ]
+    },
+    {
+      "kb_name": "Knowledge assistant · Support playbook",
+      "files": [
+        "support_playbook.md"
+      ]
+    }
+  ],
+  "knowledge": {
+    "auto_inject": true,
+    "top_k": 4
+  },
+  "sample_prompts": [
+    "What's your refund policy?",
+    "Which plan includes API access?",
+    "I need to talk to a person."
+  ],
+  "next_steps": [
+    {
+      "label": "Replace the sample FAQ with your documents",
+      "section": "knowledge"
+    },
+    {
+      "label": "Tune the instructions",
+      "section": "instructions"
+    },
+    {
+      "label": "Make a test call",
+      "section": "providers"
+    }
+  ]
+}

@@ -61,6 +61,7 @@ from lkap_contracts.pricing import Price
 from lkap_contracts.providers import ProviderSpec
 from lkap_contracts.qa import QaVerdict, SessionQaIn
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpServerDefinition,
@@ -148,6 +149,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PackManifest": PackManifest,
     "KbSeed": KbSeed,
     "ToolMeta": ToolMeta,
+    # starter templates (v4, docs/v4/TEMPLATES.md §2)
+    "StarterTemplate": StarterTemplate,
     # providers and pricing
     "ProviderSpec": ProviderSpec,
     "Price": Price,
@@ -191,6 +194,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "KbSearchResponse": api_models.KbSearchResponse,
     "PackOut": api_models.PackOut,
     "PacksResponse": api_models.PacksResponse,
+    "TemplateOut": api_models.TemplateOut,
+    "TemplatesResponse": api_models.TemplatesResponse,
     "TranscriptTurn": api_models.TranscriptTurn,
     "SessionOut": api_models.SessionOut,
     "SessionDetailOut": api_models.SessionDetailOut,

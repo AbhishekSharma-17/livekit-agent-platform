@@ -1338,7 +1338,7 @@
   },
   "$id": "lkap-contracts/AgentCreate.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /v1/agents``. ``config=None`` seeds from the pack manifest.",
+  "description": "``POST /v1/agents``. ``config=None`` seeds from ``template_id`` or the pack manifest.\n\nv4 (docs/v4/TEMPLATES.md D-V4-3): ``template_id`` wins over ``pack_id``\n(the pack is the template's); sending it together with ``config`` is a 422.",
   "properties": {
     "config": {
       "anyOf": [
@@ -1385,6 +1385,18 @@
       "default": "generic",
       "title": "Pack Id",
       "type": "string"
+    },
+    "template_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Template Id"
     },
     "ui_panel_id": {
       "anyOf": [

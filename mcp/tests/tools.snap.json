@@ -413,7 +413,7 @@
         "readOnlyHint": false
       },
       "data": "AgentOut",
-      "description": "Create an agent from a pack (config seeded from the pack unless given), then validate it.",
+      "description": "Create an agent from a starter template (lkap://templates) or a pack, then validate it.",
       "gate": null,
       "inputSchema": {
         "$defs": {
@@ -1764,7 +1764,7 @@
               }
             ],
             "default": null,
-            "description": "A whole config; omit to seed it from the pack"
+            "description": "A whole config; omit to seed it from the starter or the pack"
           },
           "connection_id": {
             "anyOf": [
@@ -1789,7 +1789,7 @@
           },
           "pack_id": {
             "default": "generic",
-            "description": "A pack id from lkap://packs, e.g. generic or insurance_claim",
+            "description": "A pack without a starter (rare); ignored when template_id is set",
             "title": "Pack Id",
             "type": "string"
           },
@@ -1811,6 +1811,19 @@
             "default": false,
             "title": "Plan",
             "type": "boolean"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A starter id from lkap://templates (blank, knowledge_assistant, receptionist, vision_assistant, phone_agent, lead_qualification, survey_intake, insurance_claim); it seeds the config, knowledge bases and HTTP tools and wins over pack_id",
+            "title": "Template Id"
           }
         },
         "required": [
@@ -5777,12 +5790,12 @@
         "readOnlyHint": true
       },
       "data": "JSON",
-      "description": "Describe one thing precisely: a JSON schema, provider spec, panel block, flow node, pack, built-in tool, recipe or api route.",
+      "description": "Describe one thing precisely: a JSON schema, provider spec, panel block, flow node, pack, starter template, built-in tool, recipe or api route.",
       "gate": null,
       "inputSchema": {
         "properties": {
           "id": {
-            "description": "Model name, provider id, block type, node kind, pack id, tool name, recipe name, or 'METHOD /v1/path' for a route",
+            "description": "Model name, provider id, block type, node kind, pack id, starter template id, tool name, recipe name, or 'METHOD /v1/path' for a route",
             "title": "Id",
             "type": "string"
           },
@@ -5793,6 +5806,7 @@
               "block",
               "node",
               "pack",
+              "template",
               "builtin_tool",
               "recipe",
               "route"

@@ -73,6 +73,9 @@ RECIPES_DIR = DOCS_DIR / "recipes"
 GENERATED_DIR = MCP_ROOT / "src" / "lkap_mcp" / "generated"
 CONTRACTS_GENERATED_DIR = REPO_ROOT / "contracts" / "generated"
 README_PATH = REPO_ROOT / "README.md"
+#: The api's starter-template catalogue (V4-01): its prose and JSON ship to every
+#: workspace, so they get the same sanitisation checks as the docs (R-V3-8).
+TEMPLATE_CATALOG_DIR = REPO_ROOT / "api" / "src" / "lkap_api" / "templates" / "catalog"
 
 #: Files outside `docs/` that must pass the same sanitisation and identifier
 #: checks (V3-08, R-V3-16, docs/v3/_asks.md): the packaged Claude Code skill,
@@ -109,6 +112,7 @@ import lkap_contracts.pricing as pricing  # noqa: E402
 import lkap_contracts.providers as providers_module  # noqa: E402
 import lkap_contracts.qa as qa_module  # noqa: E402
 import lkap_contracts.telephony as telephony  # noqa: E402
+import lkap_contracts.templates as templates_module  # noqa: E402
 import lkap_contracts.tools as tools_module  # noqa: E402
 import lkap_contracts.ui_protocol as ui_protocol  # noqa: E402
 
@@ -221,6 +225,7 @@ _CONTRACTS_MODULES = (
     migrate,
     pricing,
     qa_module,
+    templates_module,
 )
 
 
@@ -318,6 +323,9 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/telephony/trunks",
     "/v1/telephony/trunks/{trunk_id}",
     "/v1/telephony/trunks/{trunk_id}/sync",
+    # V4-01: the starter templates (`lkap_api/templates/router.py`).
+    "/v1/templates",
+    "/v1/templates/{template_id}",
     "/v1/tools",
     "/v1/tools/{tool_id}",
     "/v1/tools/{tool_id}/dry-run",
@@ -417,7 +425,9 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     # 4.4 agents
     "agent_list": frozenset({"query", "mode", "published", "archived", "connection_id", "limit"}),
     "agent_get": frozenset({"id_or_slug", "include_config", "include_validation"}),
-    "agent_create": frozenset({"name", "pack_id", "description", "connection_id", "config", "patch", "plan"}),
+    "agent_create": frozenset(
+        {"name", "template_id", "pack_id", "description", "connection_id", "config", "patch", "plan"}
+    ),
     "agent_update": frozenset(
         {
             "id_or_slug",
@@ -557,6 +567,14 @@ def _all_doc_paths() -> list[Path]:
 
 DOC_PATHS: Final[list[Path]] = _all_doc_paths()
 
+#: The starter catalogue's `instructions.md`, `seeds/*.md` and `template.json` files:
+#: sanitisation only (they are prompts and sample content, not docs, so the
+#: identifier checks do not apply — `check-up` is a service name, not a provider id).
+CATALOG_PATHS: Final[list[Path]] = sorted(
+    [*TEMPLATE_CATALOG_DIR.rglob("*.md"), *TEMPLATE_CATALOG_DIR.rglob("*.json")]
+)
+SANITISED_PATHS: Final[list[Path]] = [*DOC_PATHS, *CATALOG_PATHS]
+
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -565,21 +583,29 @@ def _read(path: Path) -> str:
 # --------------------------------------------------------------------------- sanitisation (R-V3-8)
 
 
-@pytest.mark.parametrize("path", DOC_PATHS, ids=lambda p: p.name)
+def _lint_id(path: Path) -> str:
+    return str(path.relative_to(TEMPLATE_CATALOG_DIR)) if TEMPLATE_CATALOG_DIR in path.parents else path.name
+
+
+def test_the_template_catalogue_is_linted() -> None:
+    assert {p.name for p in CATALOG_PATHS} >= {"template.json", "instructions.md", "product_faq.md"}
+
+
+@pytest.mark.parametrize("path", SANITISED_PATHS, ids=_lint_id)
 def test_no_forbidden_substrings(path: Path) -> None:
     text = _read(path)
     for needle in FORBIDDEN_SUBSTRINGS:
         assert needle not in text, f"{path.name} contains forbidden text {needle!r}"
 
 
-@pytest.mark.parametrize("path", DOC_PATHS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", SANITISED_PATHS, ids=_lint_id)
 def test_no_ip_literals(path: Path) -> None:
     text = _read(path)
     hits = _IPV4_RE.findall(text)
     assert not hits, f"{path.name} contains an IPv4 literal: {hits}"
 
 
-@pytest.mark.parametrize("path", DOC_PATHS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", SANITISED_PATHS, ids=_lint_id)
 def test_urls_use_only_placeholder_hosts(path: Path) -> None:
     text = _read(path)
     for host in _URL_RE.findall(text):
@@ -587,6 +613,55 @@ def test_urls_use_only_placeholder_hosts(path: Path) -> None:
             f"{path.name} references host {host!r}; only RFC 2606 placeholders "
             "(example.com, *.example, *.test, …) and the literal <project>.livekit.cloud are allowed"
         )
+
+
+_TOKEN_NAME_RE = re.compile(r"\b(?:LKAP|LIVEKIT)_[A-Z0-9_]+\b|\{\{\s*secret\.")
+
+
+@pytest.mark.parametrize("path", CATALOG_PATHS, ids=_lint_id)
+def test_catalogue_names_no_token_or_env_var(path: Path) -> None:
+    """Starter prose and tool seeds never name a platform env var, a token or a secret placeholder."""
+    hits = _TOKEN_NAME_RE.findall(_read(path))
+    assert not hits, f"{_lint_id(path)} names {hits}"
+
+
+# --------------------------------------------------------------------------- template ids (V4-01)
+
+_TEMPLATE_ID_RES: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r'"template_id"\s*:\s*"([^"]+)"'),
+    re.compile(r'template_id\s*=\s*"([^"]+)"'),
+)
+
+
+def _template_ids_mentioned() -> set[str]:
+    found: set[str] = set()
+    for path in DOC_PATHS:
+        text = _read(path)
+        for pattern in _TEMPLATE_ID_RES:
+            found.update(pattern.findall(text))
+    return found
+
+
+def test_recipes_mention_template_ids() -> None:
+    assert {"blank", "insurance_claim", "receptionist"} <= _template_ids_mentioned()
+
+
+@pytest.fixture
+def scratch_admin(request: pytest.FixtureRequest) -> Any:
+    """The scratch api's admin client from ``conftest.py``; skipped under ``--noconftest``."""
+    try:
+        return request.getfixturevalue("admin")
+    except pytest.FixtureLookupError:
+        pytest.skip("the scratch api fixtures (mcp/tests/conftest.py) are not loaded")
+
+
+async def test_every_template_id_in_the_docs_resolves_against_the_scratch_api(scratch_admin: Any) -> None:
+    response = await scratch_admin.get("/v1/templates")
+    assert response.status_code == 200, response.text
+    live = {item["template"]["id"] for item in response.json()["items"]}
+
+    unknown = _template_ids_mentioned() - live
+    assert not unknown, f"docs name template id(s) the api does not serve: {sorted(unknown)}"
 
 
 # --------------------------------------------------------------------------- identifier resolution (D-V3-10)

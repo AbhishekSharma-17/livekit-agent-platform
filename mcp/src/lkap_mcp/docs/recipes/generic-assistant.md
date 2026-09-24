@@ -9,14 +9,16 @@ good default when the user just says "build me a voice assistant".
 ```json
 {
   "name": "Front desk assistant",
-  "pack_id": "generic",
+  "template_id": "blank",
   "description": "General-purpose voice assistant"
 }
 ```
-The `generic` pack has no code tools and no custom UI: it seeds the
-built-in composite panel (`status`, `notes`, `checklist`, `activity`
-blocks), the cascaded LiveKit Inference pipeline, and a plain instructions
-string you can immediately overwrite.
+The `blank` starter is exactly what the `generic` pack seeds: no code tools
+and no custom UI, the built-in composite panel (`status`, `notes`,
+`checklist`, `activity` blocks), the cascaded LiveKit Inference pipeline,
+and a plain instructions string you can immediately overwrite. For a
+starter with more built in (knowledge, a booking flow, a phone menu), see
+`start-from-template`.
 
 ## 2. Adjust instructions and greeting
 

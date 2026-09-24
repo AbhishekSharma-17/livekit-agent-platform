@@ -4,22 +4,26 @@ Goal: a first-notice-of-loss voice agent from the `insurance_claim` pack,
 with a knowledge base and an HTTP tool, tested and published. Do
 `connect-livekit` first if there is no connection yet.
 
-## 1. Create the agent from the pack
+## 1. Create the agent from the starter
 
 `agent_create(...)`
 ```json
 {
   "name": "FNOL intake",
-  "pack_id": "insurance_claim",
+  "template_id": "insurance_claim",
   "description": "First notice of loss intake for home claims"
 }
 ```
-This seeds `config` from `PackManifest`: the cascaded LiveKit Inference
+The `insurance_claim` starter is the full `insurance_claim` code pack, so
+this seeds `config` from its `PackManifest`: the cascaded LiveKit Inference
 pipeline (works with no vendor key), the pack's default greeting and
 instructions, and the two knowledge bases from its `kb_seeds`
 ("Insurance policy lines", "Intake playbook"), created, attached and filled
-from the pack's `policy_lines.md` and `intake_playbook.md`. Their documents
-ingest in the background; check `kb_get` for `ready` before relying on them.
+from the pack's `policy_lines.md` and `intake_playbook.md`. Check `kb_get`
+for `ready` before relying on them. The pack's incident sketches need a
+Google key (`google-image-gen`); it is optional — without one the
+`image_gen` slot is left empty and everything else works. Add it later with
+`provider_key_create`.
 
 ## 2. Add knowledge
 

@@ -1,4 +1,4 @@
-"""Agent CRUD, pack seeding, publication and configuration validation.
+"""Agent CRUD, template and pack seeding, publication and configuration validation.
 
 Workspace scoping (V2-02): admin handlers take ``ctx: AdminCtxDep`` and every
 query filters on ``ctx.workspace_id``; an agent of another workspace is a 404.
@@ -6,6 +6,11 @@ query filters on ``ctx.workspace_id``; an agent of another workspace is a 404.
 routes (``GET /v1/agents/{slug}`` for published agents and ``connect``).
 Validation and seeding go through V2-03's workspace- and connection-aware
 ``config_service`` entry points (asks #20).
+
+v4 (docs/v4/TEMPLATES.md D-V4-3, R-V4-3): an agent is created from an explicit
+``config``, a starter ``template_id``, or a ``pack_id`` alone — which is the
+pack's derived ``pack:<id>`` starter, so both seeding paths run
+:func:`_seed_from`.
 """
 
 from __future__ import annotations
@@ -28,13 +33,15 @@ from lkap_contracts.api_models import (
     Page,
     ValidationResult,
 )
+from lkap_contracts.packs import PackManifest
+from lkap_contracts.templates import StarterTemplate
 from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext
 from lkap_api.auth.roles import Requirement
-from lkap_api.config_service import connection_context_for, seed_config_from_manifest, validate_in_db
+from lkap_api.config_service import connection_context_for, validate_in_db
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, AgentConfigVersion, Credential, LiveKitConnection, utcnow
@@ -48,12 +55,15 @@ from lkap_api.errors import (
 )
 from lkap_api.flows import derived_mode, pack_tool_names_for
 from lkap_api.kb.embed import resolve_embedder
-from lkap_api.kb.seed import import_pack_kb_seeds
+from lkap_api.kb.seed import import_kb_seeds, import_pack_kb_seeds
 from lkap_api.kb.store import get_lancedb_store
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.settings import Settings
+from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
+from lkap_api.templates.router import resolve_template
+from lkap_api.templates.seed import apply_tool_seeds, seed_from_template
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -304,6 +314,75 @@ async def _workspace_connection_id(
     return str(default) if default is not None else None
 
 
+async def _credentials_by_provider(db: AsyncSession, workspace_id: str) -> dict[str, list[str]]:
+    """``{provider_id: [credential_id, ...]}`` of the workspace (the seeding rule's input)."""
+    rows = (
+        await db.execute(
+            select(Credential.provider_id, Credential.id).where(Credential.workspace_id == workspace_id)
+        )
+    ).tuples()
+    by_provider: dict[str, list[str]] = {}
+    for provider_id, credential_id in rows:
+        by_provider.setdefault(provider_id, []).append(credential_id)
+    return by_provider
+
+
+async def _seed_from(
+    db: AsyncSession,
+    settings: Settings,
+    vault: Vault,
+    template: StarterTemplate,
+    manifest: PackManifest,
+    *,
+    workspace_id: str,
+    connection_id: str | None,
+) -> AgentConfig:
+    """Seed a config from a starter (catalogue or derived) and import its knowledge seeds.
+
+    TEMPLATES §4 steps 1–5: :func:`~lkap_api.templates.seed.seed_from_template`
+    builds the config; the pack's ``kb_seeds`` (read from the pack's package)
+    and then the template's (read from its catalogue directory) become the
+    config's ``knowledge.kb_ids``. Tool rows need the agent row and are created
+    by the caller.
+    """
+    connection = await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id)
+    config = seed_from_template(
+        template,
+        manifest,
+        credentials_by_provider=await _credentials_by_provider(db, workspace_id),
+        connection=connection,
+    )
+    if manifest.kb_seeds or template.kb_seeds:
+        embedder = await resolve_embedder(settings, db, vault)
+        store = get_lancedb_store(settings.data_dir)
+        kb_ids: list[str] = []
+        if manifest.kb_seeds:
+            kb_ids += await import_pack_kb_seeds(
+                db=db,
+                store=store,
+                embedder=embedder,
+                packs=settings.packs_list,
+                pack_id=manifest.id,
+                seeds=manifest.kb_seeds,
+                workspace_id=workspace_id,
+            )
+        if template.kb_seeds:
+            kb_ids += await import_kb_seeds(
+                db=db,
+                store=store,
+                embedder=embedder,
+                root=template_root(template.id),
+                source_label=f"template:{template.id}",
+                seeds=template.kb_seeds,
+                workspace_id=workspace_id,
+            )
+        config.knowledge.kb_ids = list(dict.fromkeys(kb_ids))
+        log.info(
+            "kb_seeds_imported", template_id=template.id, pack_id=manifest.id, kb_ids=config.knowledge.kb_ids
+        )
+    return config
+
+
 async def _seed_config(
     db: AsyncSession,
     settings: Settings,
@@ -313,37 +392,22 @@ async def _seed_config(
     workspace_id: str = DEFAULT_WORKSPACE_ID,
     connection_id: str | None = None,
 ) -> tuple[AgentConfig, str]:
-    """Build a config from a pack manifest; returns ``(config, ui_panel_id)``."""
+    """Build a config from a pack's derived starter (R-V4-3); returns ``(config, ui_panel_id)``."""
     manifest = get_manifest(settings.packs_list, pack_id)
     if manifest is None:
         raise UnprocessableEntityError(
             f"pack '{pack_id}' is not installed; send an explicit config or set LKAP_PACKS",
             details={"packs": settings.packs_list},
         )
-    rows = (
-        await db.execute(
-            select(Credential.provider_id, Credential.id).where(Credential.workspace_id == workspace_id)
-        )
-    ).tuples()
-    by_provider: dict[str, list[str]] = {}
-    for provider_id, credential_id in rows:
-        by_provider.setdefault(provider_id, []).append(credential_id)
-    connection = await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id)
-    config = seed_config_from_manifest(manifest, credentials_by_provider=by_provider, connection=connection)
-    if manifest.kb_seeds:
-        embedder = await resolve_embedder(settings, db, vault)
-        store = get_lancedb_store(settings.data_dir)
-        kb_ids = await import_pack_kb_seeds(
-            db=db,
-            store=store,
-            embedder=embedder,
-            packs=settings.packs_list,
-            pack_id=pack_id,
-            seeds=manifest.kb_seeds,
-            workspace_id=workspace_id,
-        )
-        config.knowledge.kb_ids = kb_ids
-        log.info("pack_kb_seeds_imported", pack_id=pack_id, kb_ids=kb_ids)
+    config = await _seed_from(
+        db,
+        settings,
+        vault,
+        derived_template(manifest),
+        manifest,
+        workspace_id=workspace_id,
+        connection_id=connection_id,
+    )
     return config, manifest.ui_panel_id
 
 
@@ -451,35 +515,71 @@ def _check_mode(requested: str | None, config: AgentConfig) -> None:
     )
 
 
+def derived_template_id(pack_id: str) -> str:
+    """The id of a pack's derived starter (``pack:<pack_id>``, D-V4-4)."""
+    return f"{DERIVED_PREFIX}{pack_id}"
+
+
+def _raise_template_with_config() -> None:
+    message = "send one of template_id, config: a template seeds the config"
+    issue = Issue(path="template_id", message=message)
+    raise UnprocessableEntityError(
+        message,
+        details={"errors": [f"template_id: {message}"], "warnings": [], "issues": [issue.model_dump()]},
+    )
+
+
 @router.post(
     "",
     response_model=AgentOut,
     status_code=status.HTTP_201_CREATED,
     summary="Create an agent",
     description=(
-        "Creates an agent. With `config` omitted the configuration is seeded from the pack "
-        "manifest, substituting LiveKit Inference for providers without a credential."
+        "Creates an agent. With `template_id` the configuration is seeded from that starter "
+        "template (`GET /v1/templates`; `pack_id` is then ignored, the pack is the template's) "
+        "and its knowledge bases and HTTP tools are created with it. With neither `template_id` "
+        "nor `config` it is seeded from the pack manifest. Seeding substitutes LiveKit Inference "
+        "for providers without a credential. `template_id` together with `config` is a 422."
     ),
 )
 async def create_agent(
     payload: AgentCreate, db: DbDep, settings: SettingsDep, vault: VaultDep, ctx: AdminCtxDep
 ) -> AgentOut:
-    """Create an agent from an explicit config or from its pack's defaults."""
+    """Create an agent from a starter template, an explicit config or its pack's defaults.
+
+    Resequenced for templates (D-V4-3): seed the config, create the row, flush,
+    create the template's tool rows (they are agent-scoped), point
+    ``tools.tool_ids`` at them, validate, then snapshot version 1. One
+    transaction: a validation failure rolls the row and its tools back.
+    """
     connection_id = await _workspace_connection_id(db, ctx.workspace_id, payload.connection_id)
-    if payload.config is None:
+    template: StarterTemplate | None = None
+    if payload.template_id is not None:
+        if payload.config is not None:
+            _raise_template_with_config()
+        template, manifest = resolve_template(settings.packs_list, payload.template_id)
+        pack_id = template.pack_id
+        config = await _seed_from(
+            db,
+            settings,
+            vault,
+            template,
+            manifest,
+            workspace_id=ctx.workspace_id,
+            connection_id=connection_id,
+        )
+        panel_id = manifest.ui_panel_id
+    elif payload.config is None:
+        pack_id = payload.pack_id
         config, panel_id = await _seed_config(
-            db, settings, vault, payload.pack_id, workspace_id=ctx.workspace_id, connection_id=connection_id
+            db, settings, vault, pack_id, workspace_id=ctx.workspace_id, connection_id=connection_id
         )
     else:
+        pack_id = payload.pack_id
         config = payload.config
         check_endpoint_overrides(ctx, {}, config.model_dump(mode="json"))
-        manifest = get_manifest(settings.packs_list, payload.pack_id)
-        panel_id = manifest.ui_panel_id if manifest else "generic"
-    _raise_if_invalid(
-        await validate_stored_config(
-            db, config, workspace_id=ctx.workspace_id, connection_id=connection_id, pack_id=payload.pack_id
-        )
-    )
+        pack = get_manifest(settings.packs_list, pack_id)
+        panel_id = pack.ui_panel_id if pack else "generic"
 
     row = Agent(
         workspace_id=ctx.workspace_id,
@@ -487,7 +587,7 @@ async def create_agent(
         slug=await unique_slug(db, slugify(payload.name)),
         name=payload.name,
         description=payload.description,
-        pack_id=payload.pack_id,
+        pack_id=pack_id,
         ui_panel_id=payload.ui_panel_id or panel_id,
         published=False,
         config=config.model_dump(mode="json"),
@@ -497,9 +597,23 @@ async def create_agent(
     )
     db.add(row)
     await db.flush()
-    _snapshot_version(db, row, created_by=ctx.actor.id, note="created")
+    if template is not None and template.tool_seeds:
+        tool_ids = await apply_tool_seeds(db, template, workspace_id=ctx.workspace_id, agent_id=row.id)
+        config.tools.tool_ids = [*config.tools.tool_ids, *tool_ids]
+        row.config = config.model_dump(mode="json")
+        row.mode = derived_mode(config)
+    _raise_if_invalid(
+        await validate_stored_config(
+            db, config, workspace_id=ctx.workspace_id, connection_id=connection_id, pack_id=pack_id
+        )
+    )
+    template_id = template.id if template is not None else None
+    if template_id is None and payload.config is None:
+        template_id = derived_template_id(pack_id)
+    note = f"created from template {template_id}" if template_id else "created"
+    _snapshot_version(db, row, created_by=ctx.actor.id, note=note)
     await db.flush()
-    log.info("agent_created", agent_id=row.id, slug=row.slug, pack_id=row.pack_id)
+    log.info("agent_created", agent_id=row.id, slug=row.slug, pack_id=row.pack_id, template_id=template_id)
     return to_out(row)
 
 

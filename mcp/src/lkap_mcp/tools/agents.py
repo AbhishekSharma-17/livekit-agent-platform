@@ -66,6 +66,23 @@ async def _update(client: LkapClient, agent_id: str, body: dict[str, Any]) -> di
     return dict(updated) if isinstance(updated, dict) else {}
 
 
+#: ``agent_create``'s next steps when no starter supplies its own.
+DEFAULT_CREATE_NEXT_STEPS = (
+    "Attach knowledge and tools with agent_attach, then agent_validate.",
+    "Test it with a chat before agent_publish.",
+)
+
+
+async def template_next_steps(client: LkapClient, template_id: str) -> list[str]:
+    """The starter's ``next_steps`` labels (``GET /v1/templates/{id}``), plus the test-first reminder."""
+    body = await client.get(f"/v1/templates/{seg(template_id)}")
+    steps = ((body or {}).get("template") or {}).get("next_steps") or []
+    labels = [str(step.get("label")) for step in steps if isinstance(step, dict) and step.get("label")]
+    if not labels:
+        return []
+    return [*labels, DEFAULT_CREATE_NEXT_STEPS[1]]
+
+
 def register(registry: Registry) -> None:
     """Declare the agent tools."""
     ctx = registry.ctx
@@ -116,13 +133,25 @@ def register(registry: Registry) -> None:
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="AgentOut")
     async def agent_create(
         name: str,
+        template_id: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "A starter id from lkap://templates (blank, knowledge_assistant, receptionist, "
+                    "vision_assistant, phone_agent, lead_qualification, survey_intake, insurance_claim); "
+                    "it seeds the config, knowledge bases and HTTP tools and wins over pack_id"
+                )
+            ),
+        ] = None,
         pack_id: Annotated[
-            str, Field(description="A pack id from lkap://packs, e.g. generic or insurance_claim")
+            str,
+            Field(description="A pack without a starter (rare); ignored when template_id is set"),
         ] = "generic",
         description: str = "",
         connection_id: str | None = None,
         config: Annotated[
-            AgentConfig | None, Field(description="A whole config; omit to seed it from the pack")
+            AgentConfig | None,
+            Field(description="A whole config; omit to seed it from the starter or the pack"),
         ] = None,
         patch: Annotated[
             dict[str, Any] | None,
@@ -130,8 +159,10 @@ def register(registry: Registry) -> None:
         ] = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Create an agent from a pack (config seeded from the pack unless given), then validate it."""
+        """Create an agent from a starter template (lkap://templates) or a pack, then validate it."""
         body: dict[str, Any] = {"name": name, "pack_id": pack_id, "description": description}
+        if template_id:
+            body["template_id"] = template_id
         if connection_id:
             body["connection_id"] = connection_id
         if config is not None:
@@ -162,14 +193,17 @@ def register(registry: Registry) -> None:
                     issues = failure.to_result().issues
                     warnings.append(f"the patch was not applied: {failure.message}")
         validation, more = await validate_saved(ctx, agent["id"])
+        next_steps = list(DEFAULT_CREATE_NEXT_STEPS)
+        if template_id:
+            try:
+                next_steps = await template_next_steps(client, template_id) or next_steps
+            except ApiFailure as failure:
+                more.append(f"the starter's next steps are unavailable: {failure.code}")
         return ToolResult.success(
             {"agent": agent, "validation": validation},
             warnings=warnings + more,
             issues=issues,
-            next_steps=[
-                "Attach knowledge and tools with agent_attach, then agent_validate.",
-                "Test it with a chat before agent_publish.",
-            ],
+            next_steps=next_steps,
         )
 
     @registry.tool(scopes={"agents:write"}, annotations=IDEMPOTENT_WRITE, data="AgentOut")

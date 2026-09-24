@@ -57,6 +57,7 @@ from lkap_api.routers import (
 from lkap_api.routers.provider_keys import seed_bootstrap_credentials
 from lkap_api.sessions_sweep import sweep_loop
 from lkap_api.settings import Settings, get_settings
+from lkap_api.templates.router import router as templates_router
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -149,6 +150,7 @@ def _include_routers(app: FastAPI) -> None:
     """
     app.include_router(providers.router)
     app.include_router(packs_router)
+    app.include_router(templates_router)
     app.include_router(provider_keys.router)
     app.include_router(tools.router)
     app.include_router(agents.router)

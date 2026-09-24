@@ -1,0 +1,363 @@
+{
+  "id": "receptionist",
+  "name": "Receptionist",
+  "tagline": "Books appointments through a flow, an on-screen form and two HTTP tools.",
+  "description": "Greets the caller, confirms their name and number, collects the booking with an on-screen form, checks availability and books through two HTTP tools you point at your own booking system, logs the booking in a table and confirms. Set up for a fictional practice, Acme Dental.",
+  "category": "scheduling",
+  "chips": [
+    "flow",
+    "variables",
+    "forms",
+    "table",
+    "http_tools"
+  ],
+  "order": 20,
+  "pack_id": "generic",
+  "builtin_tools_disabled": [
+    "pin_frame",
+    "describe_current_frame"
+  ],
+  "panel": {
+    "panel_id": "composite",
+    "layout": "side",
+    "blocks": [
+      {
+        "id": "status",
+        "type": "status",
+        "title": null,
+        "config": {},
+        "order": 0
+      },
+      {
+        "id": "booking",
+        "type": "form",
+        "title": "Booking details",
+        "config": {},
+        "order": 1
+      },
+      {
+        "id": "bookings",
+        "type": "table",
+        "title": "Bookings",
+        "config": {
+          "columns": [
+            {
+              "key": "name",
+              "label": "Name"
+            },
+            {
+              "key": "phone",
+              "label": "Phone"
+            },
+            {
+              "key": "service",
+              "label": "Service"
+            },
+            {
+              "key": "time",
+              "label": "Time"
+            }
+          ]
+        },
+        "order": 2
+      },
+      {
+        "id": "notes",
+        "type": "notes",
+        "title": "Notes",
+        "config": {},
+        "order": 3
+      },
+      {
+        "id": "activity",
+        "type": "activity",
+        "title": "Activity",
+        "config": {},
+        "order": 4
+      }
+    ]
+  },
+  "voice": {
+    "user_away_timeout_s": 20
+  },
+  "flow": {
+    "v": 1,
+    "nodes": [
+      {
+        "id": "start",
+        "kind": "start",
+        "label": "Start",
+        "greeting": "Thanks for calling Acme Dental. I can book, move or cancel an appointment — how can I help?",
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "id": "global",
+        "kind": "global",
+        "label": "Global",
+        "instructions": "You are the receptionist of Acme Dental. Be brief and warm. Use search_knowledge for opening hours, location and services. If the caller asks for a person, call escalate_to_human. Never invent availability: use the tools.",
+        "tools": [
+          "search_knowledge",
+          "escalate_to_human",
+          "current_time",
+          "push_note"
+        ],
+        "position": [
+          0,
+          140
+        ]
+      },
+      {
+        "id": "identify",
+        "kind": "agent",
+        "label": "Identify the caller",
+        "instructions": "Get the caller's full name and phone number; confirm the phone number back digit by digit.",
+        "extract": [
+          "caller_name",
+          "phone"
+        ],
+        "position": [
+          0,
+          280
+        ]
+      },
+      {
+        "id": "collect_booking",
+        "kind": "agent",
+        "label": "Collect the booking",
+        "instructions": "Ask which service they need and when they would like to come in. Then call request_form with fields service (enum: cleaning, check-up, filling, consultation), preferred_date (date), preferred_time (string) so the caller can confirm the details on screen.",
+        "tools": [
+          "request_form",
+          "current_time"
+        ],
+        "extract": [
+          "service",
+          "preferred_time"
+        ],
+        "position": [
+          0,
+          420
+        ]
+      },
+      {
+        "id": "book",
+        "kind": "agent",
+        "label": "Book",
+        "instructions": "Call check_availability with the requested slot. If free, call book_appointment, then table_append one row to the Bookings table and read the confirmation back. If not free, offer the two nearest alternatives the tool returned.",
+        "tools": [
+          "check_availability",
+          "book_appointment",
+          "table_append",
+          "set_status"
+        ],
+        "position": [
+          0,
+          560
+        ]
+      },
+      {
+        "id": "done",
+        "kind": "end",
+        "label": "Booked",
+        "farewell": "You're booked. We'll text a reminder the day before. Goodbye!",
+        "disposition": "booked",
+        "position": [
+          0,
+          700
+        ]
+      },
+      {
+        "id": "no_booking",
+        "kind": "end",
+        "label": "Not booked",
+        "farewell": "No problem — call back any time and we'll find a slot. Goodbye!",
+        "disposition": "not_booked",
+        "position": [
+          0,
+          840
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "start_identify",
+        "source": "start",
+        "target": "identify",
+        "condition": "the caller wants to book, move or cancel"
+      },
+      {
+        "id": "identify_collect",
+        "source": "identify",
+        "target": "collect_booking",
+        "condition": "name and phone are confirmed"
+      },
+      {
+        "id": "collect_book",
+        "source": "collect_booking",
+        "target": "book",
+        "condition": "the form was submitted or the service and time are confirmed verbally"
+      },
+      {
+        "id": "book_done",
+        "source": "book",
+        "target": "done",
+        "condition": "the booking is confirmed"
+      },
+      {
+        "id": "book_no_booking",
+        "source": "book",
+        "target": "no_booking",
+        "condition": "no slot works for the caller"
+      },
+      {
+        "id": "identify_no_booking",
+        "source": "identify",
+        "target": "no_booking",
+        "condition": "the caller does not want to book"
+      }
+    ],
+    "variables": [
+      {
+        "name": "caller_name",
+        "type": "string",
+        "description": "The caller's full name",
+        "required": true
+      },
+      {
+        "name": "phone",
+        "type": "phone",
+        "description": "The caller's phone number",
+        "required": true
+      },
+      {
+        "name": "service",
+        "type": "enum",
+        "description": "The service to book",
+        "options": [
+          "cleaning",
+          "check-up",
+          "filling",
+          "consultation"
+        ]
+      },
+      {
+        "name": "preferred_time",
+        "type": "string",
+        "description": "When the caller would like to come in"
+      }
+    ]
+  },
+  "tool_seeds": [
+    {
+      "enabled": true,
+      "definition": {
+        "kind": "http",
+        "name": "check_availability",
+        "description": "Check free slots for a service on a date; returns the nearest alternatives when the slot is taken",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string",
+              "description": "cleaning, check-up, filling or consultation"
+            },
+            "date": {
+              "type": "string",
+              "description": "The requested date, YYYY-MM-DD"
+            }
+          },
+          "required": [
+            "service",
+            "date"
+          ]
+        },
+        "method": "GET",
+        "url": "https://example.com/appointments/availability?service={{ service }}&date={{ date }}",
+        "allowed_hosts": [
+          "example.com"
+        ],
+        "timeout_s": 10,
+        "max_result_chars": 2000
+      }
+    },
+    {
+      "enabled": true,
+      "definition": {
+        "kind": "http",
+        "name": "book_appointment",
+        "description": "Book the appointment; returns the confirmation id",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The caller's full name"
+            },
+            "phone": {
+              "type": "string",
+              "description": "The caller's phone number"
+            },
+            "service": {
+              "type": "string",
+              "description": "The service to book"
+            },
+            "time": {
+              "type": "string",
+              "description": "The confirmed slot, ISO 8601"
+            }
+          },
+          "required": [
+            "name",
+            "phone",
+            "service",
+            "time"
+          ]
+        },
+        "method": "POST",
+        "url": "https://example.com/appointments",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body_template": "{\"name\": \"{{ name }}\", \"phone\": \"{{ phone }}\", \"service\": \"{{ service }}\", \"time\": \"{{ time }}\"}",
+        "allowed_hosts": [
+          "example.com"
+        ],
+        "timeout_s": 10,
+        "max_result_chars": 2000
+      }
+    }
+  ],
+  "kb_seeds": [
+    {
+      "kb_name": "Receptionist · Practice info",
+      "files": [
+        "practice_info.md"
+      ]
+    }
+  ],
+  "sample_prompts": [
+    "I'd like to book a cleaning next Tuesday morning.",
+    "What are your opening hours?",
+    "Can I cancel my appointment?"
+  ],
+  "next_steps": [
+    {
+      "label": "Point check_availability and book_appointment at your booking system",
+      "section": "tools"
+    },
+    {
+      "label": "Replace the practice info",
+      "section": "knowledge"
+    },
+    {
+      "label": "Review the flow",
+      "section": "flow"
+    },
+    {
+      "label": "Make a test call",
+      "section": "providers"
+    }
+  ]
+}

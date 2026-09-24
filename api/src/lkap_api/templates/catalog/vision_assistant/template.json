@@ -1,0 +1,91 @@
+{
+  "id": "vision_assistant",
+  "name": "Vision assistant",
+  "tagline": "Sees your camera or shared screen, reads it aloud and pins what matters.",
+  "description": "A multimodal assistant: describes what the camera shows, reads a shared screen, pins frames to a gallery with a caption and keeps notes. Runs on LiveKit Inference with a vision-capable model, so it needs no vendor key.",
+  "category": "vision",
+  "chips": [
+    "camera",
+    "screen_share",
+    "gallery"
+  ],
+  "order": 30,
+  "pack_id": "generic",
+  "greeting": "Hi! Turn on your camera or share your screen and I'll tell you what I see — or just ask.",
+  "pipeline": {
+    "mode": "cascaded",
+    "stt": {
+      "provider_id": "livekit-inference-stt",
+      "model": "deepgram/nova-3"
+    },
+    "llm": {
+      "provider_id": "livekit-inference-llm",
+      "model": "google/gemini-3.5-flash"
+    },
+    "tts": {
+      "provider_id": "livekit-inference-tts",
+      "model": "inworld/inworld-tts-2"
+    }
+  },
+  "capabilities": {
+    "camera": true,
+    "screen_share": true,
+    "chat_input": true,
+    "vision_inject_per_turn": true,
+    "dtmf": false
+  },
+  "builtin_tools_disabled": [],
+  "panel": {
+    "panel_id": "composite",
+    "layout": "side",
+    "blocks": [
+      {
+        "id": "status",
+        "type": "status",
+        "title": null,
+        "config": {},
+        "order": 0
+      },
+      {
+        "id": "frames",
+        "type": "gallery",
+        "title": "Pinned frames",
+        "config": {},
+        "order": 1
+      },
+      {
+        "id": "notes",
+        "type": "notes",
+        "title": "Observations",
+        "config": {},
+        "order": 2
+      },
+      {
+        "id": "activity",
+        "type": "activity",
+        "title": "Activity",
+        "config": {},
+        "order": 3
+      }
+    ]
+  },
+  "sample_prompts": [
+    "What's on my screen right now?",
+    "Read the error message to me.",
+    "Pin this and note the serial number."
+  ],
+  "next_steps": [
+    {
+      "label": "Optional: add a Google key and switch to Gemini Live for realtime video",
+      "section": "providers"
+    },
+    {
+      "label": "Tune what it should look for",
+      "section": "instructions"
+    },
+    {
+      "label": "Make a test call with the camera on",
+      "section": "providers"
+    }
+  ]
+}

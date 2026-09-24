@@ -18,8 +18,11 @@ from lkap_mcp.client import ApiFailure
 from lkap_mcp.content import ConceptTopic
 from lkap_mcp.registry import READ, KeyIdentity, Registry, ServerContext
 from lkap_mcp.results import ToolResult
+from lkap_mcp.tools._common import seg
 
-DescribeKind = Literal["schema", "provider", "block", "node", "pack", "builtin_tool", "recipe", "route"]
+DescribeKind = Literal[
+    "schema", "provider", "block", "node", "pack", "template", "builtin_tool", "recipe", "route"
+]
 
 #: The ``settings.telephony`` keys ``workspace_get`` shows (the policy is never writable here).
 TELEPHONY_POLICY_KEYS = (
@@ -117,14 +120,14 @@ def register(registry: Registry) -> None:
             str,
             Field(
                 description=(
-                    "Model name, provider id, block type, node kind, pack id, tool name, recipe name, "
-                    "or 'METHOD /v1/path' for a route"
+                    "Model name, provider id, block type, node kind, pack id, starter template id, tool "
+                    "name, recipe name, or 'METHOD /v1/path' for a route"
                 )
             ),
         ],  # noqa: A002
     ) -> ToolResult:
-        """Describe one thing precisely: a JSON schema, provider spec, panel block, flow node, pack, built-in
-        tool, recipe or api route.
+        """Describe one thing precisely: a JSON schema, provider spec, panel block, flow node, pack, starter
+        template, built-in tool, recipe or api route.
         """
         match kind:
             case "schema":
@@ -181,6 +184,24 @@ def register(registry: Registry) -> None:
                         return ToolResult.success(manifest)
                 return ToolResult.fail(
                     "not_found", f"no pack {id!r}", hint="lkap://packs lists the installed packs"
+                )
+            case "template":
+                try:
+                    return ToolResult.success(await client.get(f"/v1/templates/{seg(id)}"))
+                except ApiFailure as failure:
+                    if failure.status != 404:
+                        return failure.to_result()
+                listed = await client.get("/v1/templates")
+                known = [
+                    (item.get("template") or {}).get("id")
+                    for item in (listed or {}).get("items", [])
+                    if isinstance(item, dict)
+                ]
+                return ToolResult.fail(
+                    "not_found",
+                    f"no starter template {id!r}",
+                    details={"known": known},
+                    hint="lkap://templates lists the starters",
                 )
             case "builtin_tool":
                 for tool in content.builtin_tools().get("tools", []):

@@ -13,15 +13,31 @@ the workspace; `agent_get(id_or_slug)` reads one back.
 
 ## Creating one
 
-`agent_create(name, pack_id="generic", connection_id=None, config=None,
-patch=None)` seeds `config` from the pack's `PackManifest` when you omit it
+`agent_create(name, template_id=None, pack_id="generic", connection_id=None,
+config=None, patch=None)` seeds `config` when you omit it: from the starter
+`template_id` names (`lkap://templates`), or from the pack's `PackManifest`
 (`recommended_pipeline`, `default_instructions`, `default_greeting`,
 `default_panel`, `kb_seeds` created and ingested synchronously — the seeded
 knowledge bases are already `ready` with chunks by the time the call
 returns — `tool_names` wired in). Pass `patch` to adjust the seed in the
-same call. `connection_id`
+same call; `template_id` together with `config` is refused. `connection_id`
 picks which LiveKit deployment the agent's sessions run on; omit it to use
 the workspace's default connection.
+
+## Starters versus packs
+
+A **starter template** (`StarterTemplate`) is configuration layered on a
+pack: instructions, greeting, pipeline, capabilities, panel blocks, a flow,
+voice settings, QA, knowledge seeds and HTTP tool seeds, all things you
+could set by hand. A **pack** is code: its own tools, hooks and panel (the
+`insurance_claim` pack's policy lookup and notebook). Use `template_id`;
+the `insurance_claim` starter is how the code pack appears. `pack_id` alone
+creates from the pack's derived starter (`pack:<pack_id>` in
+`lkap://templates`), which is exactly what the manifest seeds. A starter
+never fails to create: what the connection cannot run (DTMF without SIP,
+recording without Egress) is switched off, and its `next_steps` say what to
+add. `lkap_describe("template", id)` shows one starter as a `TemplateOut`
+(the starter plus the pack it layers on).
 
 ## Editing
 
@@ -80,4 +96,4 @@ checks structure and references without writing anything.
 
 `AgentConfig`, `AgentCreate`, `AgentUpdate`, `AgentOut`, `AgentPublicOut`,
 `AgentLimits`, `ConfigVersionOut`, `ValidationResult`, `PackManifest`,
-`Issue`.
+`StarterTemplate`, `TemplateOut`, `TemplatesResponse`, `Issue`.

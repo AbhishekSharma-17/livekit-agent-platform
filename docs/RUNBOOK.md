@@ -4,6 +4,7 @@ This runbook covers running the LiveKit Agent Platform, operating it (sign-in, L
 
 - Sections 1–11 are v2, written by V2-19 on 2026-09-23.
 - Sections 12–19 are the v1 runbook, from live runs on 2026-09-18 and 2026-09-19. They still hold, except where a v2 section replaces them.
+- Section 20 is v3 (Remote MCP, the `lkap-mcp` service, V3-06).
 
 **Binding references:**
 - **v2:** `docs/v2/README.md`, which gives the precedence order: ARCHITECTURE-V2, CONTRACTS-V2, PLAN-V2 §8 rulings.
@@ -175,6 +176,7 @@ contracts/.venv/bin/python scripts/gen_plugin_requirements.py      # after any r
 docker build --build-arg LKAP_IMAGE_FLAVOR=slim -f agent/Dockerfile -t lkap-agent:slim agent
 docker build --build-arg LKAP_IMAGE_FLAVOR=full -f agent/Dockerfile -t lkap-agent:full agent
 docker build -f supervisor/Dockerfile -t lkap-supervisor .
+docker build -f mcp/Dockerfile -t lkap-mcp .   # from livekit_agent_platform/ — root context, like supervisor
 ```
 
 - **The import check.** Each worker image runs an import check at build time and writes `/app/installed_providers.json`. A provider that fails to import fails the build, and the fix is to mark it `deferred` in the registry. For example, Krisp is `deferred` because `livekit-plugins-krisp` has no 1.8.2 release (asks #56).
@@ -490,7 +492,7 @@ The remote MCP service is the platform's MCP server (`mcp/`, `lkap-mcp`) run as 
 **Prod** (`deploy/docker-compose.prod.yml`):
 - The `mcp` service is network-internal (no published port). Caddy proxies `https://$LKAP_PUBLIC_DOMAIN/mcp` to `mcp:8090/mcp` (`deploy/Caddyfile`).
 - The service runs with `LKAP_ENV=prod`, `LKAP_API_URL=http://api:8080` and `LKAP_MCP_PUBLIC_URL`. The public url defaults to `https://$LKAP_PUBLIC_DOMAIN/mcp`; override it in `deploy/prod.env` only for a different https url.
-- The console's Connect dialog offers **Remote (HTTP)** only when the web image was built with `NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL`. Both compose files pass it as a build arg, but `web/Dockerfile` must declare the `ARG` first (`docs/v3/_asks.md` V3-06-4).
+- The console's Connect dialog offers **Remote (HTTP)** only when the web image was built with `NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL`. `web/Dockerfile` declares it as a build arg (R-V3-31) and both compose files pass it; rebuild the web image after changing it.
 - **Check:**
   - `curl -si https://<domain>/mcp -X POST -H 'content-type: application/json' -d '{}'` answers `401` with `WWW-Authenticate: Bearer`: the route reaches the service, and the service wants a key.
   - `docker compose … exec mcp python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8090/healthz').read())"` prints `{"status":"ok"}`.
@@ -509,7 +511,13 @@ The remote MCP service is the platform's MCP server (`mcp/`, `lkap-mcp`) run as 
 - **Origin header.** An `Origin` header, when present, must be the public origin (`403 forbidden_origin`). Browsers are not clients of this endpoint: there are no cookies and no CORS.
 - **Caddy settings for `/mcp`.** `request_body max_size 1MB`, `flush_interval -1` (SSE events go out at once), `read_timeout 5m` (a dead upstream; the service pings open SSE streams every 15 s), and no `encode`.
 - **Access log.** Caddy's access log redacts `Authorization` by default. Never enable the `log_credentials` server option.
-- **Not validated locally.** `caddy validate` has not been run on this host (no `caddy` binary). Run `caddy validate --config deploy/Caddyfile --adapter caddyfile` with `LKAP_PUBLIC_DOMAIN` set before the first deploy.
+- **Validate the Caddyfile.** CI runs `caddy validate` in the `caddy-validate` job of `.github/workflows/docker.yml`, in the same `caddy:2-alpine` image the prod compose file uses (R-V3-33). Before the first prod deploy with `/mcp`, run it once yourself from `livekit_agent_platform/` and paste the last line of its output into the V3-06-8 row of `docs/v3/_asks.md`:
+  ```bash
+  docker run --rm -e LKAP_PUBLIC_DOMAIN=lkap.example.com -e LKAP_INTERNAL_ALLOWED_CIDRS=private_ranges \
+    -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
+    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+  ```
+  Without Docker: `brew install caddy`, then `LKAP_PUBLIC_DOMAIN=lkap.example.com LKAP_INTERNAL_ALLOWED_CIDRS=private_ranges caddy validate --config deploy/Caddyfile --adapter caddyfile`.
 
 ### 20.3 Connect a client
 
@@ -536,16 +544,18 @@ Mint an agent key in the console (Settings → AI agents), then use the Remote s
 
 | Limit | Default | Env on the `mcp` service | Answer |
 |---|---|---|---|
-| Sessions per key | 5 | `LKAP_MCP_MAX_SESSIONS_PER_KEY` | the 6th `initialize` gets `429` + `retry_after_s` |
-| Tool calls per session | 120 per rolling minute | `LKAP_MCP_CALLS_PER_MIN` | `429` + `retry_after_s`, `Retry-After` |
-| Requests in flight per session | 10 | `LKAP_MCP_MAX_IN_FLIGHT_PER_SESSION` | `429` |
+| Sessions per key | 5 | `LKAP_MCP_MAX_SESSIONS_PER_KEY` | the 6th `initialize` gets HTTP `429` + `retry_after_s`, `Retry-After` |
+| Tool calls per session | 120 per rolling minute | `LKAP_MCP_CALLS_PER_MIN` | tool result `rate_limited` (HTTP 200) with `details.retry_after_s`; the session stays open |
+| Tool calls in flight per session | 10 | `LKAP_MCP_MAX_IN_FLIGHT_PER_SESSION` | tool result `rate_limited` (HTTP 200) with `details.retry_after_s`; the session stays open |
 | Per tool call | 60 s, or the call's own `timeout_s` + 15 s | `LKAP_MCP_CALL_TIMEOUT_S` | tool result `call_timeout` |
 | Chats | 3 per session, 20 per service | `LKAP_MCP_MAX_CHATS`, `LKAP_MCP_MAX_CHATS_TOTAL` | tool result `too_many_chats` |
 | Request body | 1 MB | `LKAP_MCP_MAX_BODY_BYTES` (Caddy enforces it too) | `413` |
 | Idle session | 30 min without a request (an open `GET` stream does not count) | `LKAP_MCP_SESSION_IDLE_S` | the session and its chats are closed; the next request gets `404` |
 | Api calls per key | 600/min | the api's `LKAP_API_KEY_RATE_PER_MIN` | the api's `429` |
 
-Transport refusals (`401`, `403`, `404`, `413`, `429`) are JSON-RPC error bodies whose `error.data.code` names the reason: `unauthorized`, `forbidden_host`, `forbidden_origin`, `session_key_mismatch`, `session_not_found`, `payload_too_large` or `rate_limited`. A `429` on an open session can end some clients' sessions (the Python SDK client raises on it); they reconnect.
+Transport refusals (`401`, `403`, `404`, `413`, and `429` for a 6th session) are JSON-RPC error bodies whose `error.data.code` names the reason: `unauthorized`, `forbidden_host`, `forbidden_origin`, `session_key_mismatch`, `session_not_found`, `payload_too_large` or `rate_limited`.
+
+The per-call limits (calls per minute, calls in flight) count `tools/call` only and are answered in band (R-V3-28): the call's result is `ok=false, code="rate_limited", status=429` with `details.retry_after_s`, `details.limit` and `details.scope` (`calls_per_min` or `in_flight`), sent with HTTP 200. That is the same shape as the api's own `429`. A refused call does not count toward the window, so a client that waits `retry_after_s` always gets through. `tools/list`, `resources/read` and `prompts/get` are not metered.
 
 ### 20.5 Revoke a key
 
@@ -582,7 +592,7 @@ Console → Settings → AI agents → revoke. A key is also invalid after its e
 | 2 | Tenant isolation; unguessable, key-bound session ids | `test_two_workspaces_in_parallel_sessions_never_see_each_others_agents`, `test_session_ids_are_32_random_bytes_bound_to_the_key_hash`, `test_a_request_on_a_session_with_a_different_key_is_403`, the chat-ownership tests |
 | 3 | DNS rebinding / Origin | `test_foreign_origin_or_wrong_host_is_403`, `test_origin_policy_host_and_origin` |
 | 4 | Secrets | `test_file_ref_is_ref_unavailable_in_http_mode`, `test_inline_secret_creates_the_row_and_appears_in_no_log_or_result`, `test_inline_secrets_off_refuses_inline_values_on_the_service`, `test_webhook_create_is_unavailable_in_http_mode` |
-| 5 | Resource limits | `test_sixth_session_…_is_429…`, `test_the_121st_tool_call_…`, `test_an_eleventh_request_in_flight_…`, `test_a_2_mb_body_is_413`, `test_a_body_streamed_without_content_length_is_still_capped`, `test_a_call_over_the_cap_is_call_timeout`, `test_the_process_wide_chat_cap_spans_sessions`, `test_an_idle_session_is_closed_with_its_chats` |
+| 5 | Resource limits | `test_sixth_session_…_is_429…`, `test_a_rate_limited_call_is_in_band_and_the_same_client_session_recovers`, `test_the_121st_tool_call_…_in_band…`, `test_an_eleventh_tool_call_in_flight_…`, `test_session_meter_refusals_do_not_extend_the_window…`, `test_a_2_mb_body_is_413`, `test_a_body_streamed_without_content_length_is_still_capped`, `test_a_call_over_the_cap_is_call_timeout`, `test_the_process_wide_chat_cap_spans_sessions`, `test_an_idle_session_is_closed_with_its_chats` |
 | 6 | Outbound | Note: the service calls only `LKAP_API_URL` and the LiveKit urls the api returns in `text-sessions` responses (already `net_guard`-checked when the connection was saved). No code path fetches a user-supplied url; KB url import happens on the api (R-V3-14). |
 | 7 | Resumability | Note: no event store is configured, so there is no `Last-Event-ID` replay. SSE state is in memory, per session, and gone when the session ends. |
 | 8 | Image | Note: `mcp/Dockerfile` uses the pinned `python:3.12-bookworm-slim` and `uv` images, runs as non-root `lkap`, and has no `curl \| sh`. The builder stage fails unless the docs, generated resources and rtc wheel load. R2-21 digest pinning applies once the remote exists. The image is built by CI (`docker.yml`), not locally (no Docker daemon on the dev host). |

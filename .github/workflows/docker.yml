@@ -19,6 +19,8 @@ on:
       - "contracts/**"
       - "packs/**"
       - "mcp/**"
+      - "deploy/Caddyfile"
+      - "deploy/docker-compose.prod.yml"
       - ".github/workflows/docker.yml"
   schedule:
     # Nightly full-image build (UTC). CONTRACTS-V2 §7 / PLAN-V2 §8 risk
@@ -73,6 +75,28 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           build-args: |
             ${{ matrix.name == 'web' && 'NEXT_PUBLIC_API_BASE_URL=http://localhost:8080' || '' }}
+            ${{ matrix.name == 'web' && 'NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL=http://localhost:8090/mcp' || '' }}
+
+  caddy-validate:
+    # R-V3-33: `caddy validate` on deploy/Caddyfile (the /mcp route, V3-06) inside the
+    # same image tag deploy/docker-compose.prod.yml runs (`caddy:2-alpine`; keep the two
+    # in step). Both env vars the Caddyfile reads are set; LKAP_INTERNAL_ALLOWED_CIDRS
+    # must never be empty (the Caddyfile's own comment). RUNBOOK §20.2 has the same
+    # command for a local run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: caddy validate deploy/Caddyfile
+        run: |
+          docker run --rm \
+            -e LKAP_PUBLIC_DOMAIN=lkap.example.com \
+            -e LKAP_INTERNAL_ALLOWED_CIDRS=private_ranges \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
   build-agent-slim:
     # PR gate: only the slim flavor (the full flavor is nightly-only, below).

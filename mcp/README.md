@@ -309,10 +309,12 @@ forms above. `env_http_headers` (header name → env var name) also works.
 | `403` | A `Host` that is not the public host, an `Origin` that is not the public origin, or a key other than the one that opened the session. |
 | `404` | An unknown or ended session. Clients start a new session on this answer. |
 | `413` | A request body over 1 MB. |
-| `429` + `retry_after_s` | A 6th session for one key, a 121st `tools/call` in a minute on one session, or an 11th request in flight on one session. |
+| `429` + `retry_after_s`, `Retry-After` | A 6th session for one key (at `initialize`, before any session exists). |
+| tool result `rate_limited` | A 121st `tools/call` in a minute on one session, or an 11th tool call in flight on one session. Sent with HTTP 200 and the session stays open: `status` is `429`, `details.retry_after_s` says how long to wait, and `details.scope` is `calls_per_min` or `in_flight`. Wait, then retry the call. |
 | tool result `unauthorized` | The key was revoked or expired mid-session. The session is closed after that call; reconnect with a new key. |
 | tool result `call_timeout` | A call ran over 60 s, or over its own `timeout_s` plus 15 s. |
 | tool result `no_session` | A chat call that cannot be tied to a live session. Reconnect. |
+| tool result `unknown_chat` | A `chat_id` that is ended, idle-closed, never started, or owned by another session (of this key or another). Start a new chat. |
 
 A session with no request for 30 minutes is closed, together with its chats.
 An open `GET` stream does not count as a request. The settings are

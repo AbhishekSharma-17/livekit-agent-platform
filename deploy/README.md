@@ -234,6 +234,7 @@ commands). A non-empty `"failed"` array fails the build — CONTRACTS-V2 §7's
 
 ```bash
 docker build -f supervisor/Dockerfile -t lkap-supervisor .   # from livekit_agent_platform/ — root context, like api/Dockerfile
+docker build -f mcp/Dockerfile -t lkap-mcp .   # from livekit_agent_platform/ — root context, like supervisor
 ```
 
 ### dev / prod compose

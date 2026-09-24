@@ -20,7 +20,7 @@ import importlib
 import logging
 import time
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from types import ModuleType
 from typing import Any
 
@@ -191,6 +191,7 @@ def build_server(
     client: LkapClient | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     modules: Sequence[str] = TOOL_MODULES,
+    registry_factory: Callable[[ServerContext], Registry] = Registry,
 ) -> LkapServer:
     """Build the server: declare every module's tools, wire resources and prompts.
 
@@ -199,12 +200,14 @@ def build_server(
         client: An api client to use (tests pass one over an in-process transport).
         transport: An httpx transport for a client built here.
         modules: The hook list (defaults to :data:`TOOL_MODULES`).
+        registry_factory: Builds the registry from the context (the HTTP service passes
+            its per-session registry, R-V3-30).
     """
     from lkap_mcp.prompts import register_prompts
     from lkap_mcp.resources import register_resources
 
     api = client or LkapClient(settings, transport=transport)
-    registry = Registry(ServerContext(settings=settings, client=api))
+    registry = registry_factory(ServerContext(settings=settings, client=api))
     for module in load_tool_modules(modules):
         register = getattr(module, "register", None)
         if register is None:

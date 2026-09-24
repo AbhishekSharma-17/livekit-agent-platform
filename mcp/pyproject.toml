@@ -11,6 +11,9 @@ dependencies = [
   "lkap-contracts",
   # Declared here (V3-01) so the chat package (V3-02) adds no dependency.
   "livekit==1.1.18",
+  # http.py imports both (remote mode, V3-06); declared directly, not via mcp (R-V3-32).
+  "starlette>=1.7,<2",
+  "uvicorn>=0.53,<1",
 ]
 
 [project.scripts]

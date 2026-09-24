@@ -4,8 +4,10 @@ The service (:func:`lkap_mcp.http.build_app`) runs under a real uvicorn on a
 random loopback port; its sessions talk to the real scratch api in-process
 (``httpx.ASGITransport``, conftest's ``app``). Positive paths use the SDK's
 streamable-HTTP client (``mcp.client.streamable_http`` + ``ClientSession``);
-transport-level refusals (401/403/404/413/429) use raw ``httpx`` requests,
-because the SDK client raises out of its task group on a non-2xx answer.
+transport-level refusals (401/403/404/413, and the 429 of a 6th ``initialize``)
+use raw ``httpx`` requests, because the SDK client raises out of its task group
+on a non-2xx answer. That is also why the per-call limits are answered in band
+(R-V3-28): the ``ClientSession`` tests below prove a session survives them.
 
 Only external boundaries are faked: LiveKit (``connection_fakes.fake_livekit``
 for connection tests, ``FakeRoomTransport`` for the chat room).
@@ -52,6 +54,7 @@ from lkap_mcp.http import (
     NoSession,
     OriginPolicy,
     SessionClient,
+    SessionMeter,
     StartupRefused,
     _limited_call,
     build_app,
@@ -741,7 +744,45 @@ async def test_sixth_session_for_one_key_is_429_and_other_keys_are_unaffected(
     assert seventh.status_code == 200
 
 
-async def test_the_121st_tool_call_in_a_minute_is_429_with_retry_after_s(
+def in_band(response: httpx.Response) -> dict[str, Any]:
+    """The structured ``ToolResult`` of a raw ``tools/call`` answer."""
+    (message,) = sse_messages(response)
+    structured: dict[str, Any] = message["result"]["structuredContent"]
+    return structured
+
+
+def assert_rate_limited(result: dict[str, Any], *, scope: str, limit: int) -> None:
+    """R-V3-28's in-band shape (the one ``client.py`` gives an api ``429``)."""
+    assert result["ok"] is False, result
+    error = result["error"]
+    assert error["code"] == "rate_limited" and error["status"] == 429
+    assert error["details"]["scope"] == scope and error["details"]["limit"] == limit
+    assert 0 < error["details"]["retry_after_s"] <= 60
+    assert result["next_steps"] == ["wait retry_after_s seconds, then retry this call"]
+
+
+async def test_a_rate_limited_call_is_in_band_and_the_same_client_session_recovers(
+    service: ServiceFactory, database: Database
+) -> None:
+    _, raw_key = await builder_key(database)
+
+    async with service(calls_per_min=3) as svc, mcp_client(svc.url, raw_key) as session:
+        first = [await call(session, "lkap_guide") for _ in range(3)]
+        fourth = await call(session, "lkap_guide")
+        (record,) = svc.sessions.sessions
+        still_listed = await tool_names(session)  # tools/list is unmetered; the session is alive
+        svc.clock.now += 61  # the window slides
+        fifth = await call(session, "lkap_guide")
+        open_after = svc.sessions.get(record.id) is record
+
+    assert all(result["ok"] is True for result in first)
+    assert_rate_limited(fourth, scope="calls_per_min", limit=3)
+    assert "lkap_guide" in still_listed
+    assert fifth["ok"] is True, fifth
+    assert open_after
+
+
+async def test_the_121st_tool_call_in_a_minute_is_an_in_band_rate_limited_result(
     service: ServiceFactory, database: Database
 ) -> None:
     _, raw_key = await builder_key(database)
@@ -749,25 +790,26 @@ async def test_the_121st_tool_call_in_a_minute_is_429_with_retry_after_s(
     async with service() as svc:
         raw = Raw(svc.url, raw_key)
         session = await raw.initialize()
-        statuses = []
-        for _ in range(120):
-            statuses.append((await raw.call(session, "lkap_guide")).status_code)
+        answers = [await raw.call(session, "lkap_guide") for _ in range(120)]
         over = await raw.call(session, "lkap_guide")
         listing = await raw.post(raw.request("tools/list"), session=session)  # not a tool call
+        again = await raw.call(session, "lkap_guide")  # still refused: refusals do not extend the window
         svc.clock.now += 61  # the window slides
         after = await raw.call(session, "lkap_guide")
+        alive = svc.sessions.get(session) is not None
 
-    assert statuses == [200] * 120
-    assert over.status_code == 429
-    body = over.json()
-    assert body["error"]["data"]["code"] == "rate_limited"
-    assert 0 < body["error"]["data"]["retry_after_s"] <= 60
-    assert int(over.headers["retry-after"]) >= 1
+    assert [a.status_code for a in answers] == [200] * 120
+    assert all(in_band(a)["ok"] is True for a in answers)
+    assert over.status_code == 200  # never an HTTP 429 on an open session (R-V3-28)
+    assert "retry-after" not in over.headers
+    assert_rate_limited(in_band(over), scope="calls_per_min", limit=120)
     assert listing.status_code == 200
-    assert after.status_code == 200
+    assert_rate_limited(in_band(again), scope="calls_per_min", limit=120)
+    assert after.status_code == 200 and in_band(after)["ok"] is True
+    assert alive
 
 
-async def test_an_eleventh_request_in_flight_on_a_session_is_429(
+async def test_an_eleventh_tool_call_in_flight_is_an_in_band_rate_limited_result(
     service: ServiceFactory, database: Database
 ) -> None:
     _, raw_key = await builder_key(database)
@@ -777,13 +819,42 @@ async def test_an_eleventh_request_in_flight_on_a_session_is_429(
         session = await raw.initialize()
         record = svc.sessions.get(session)
         assert record is not None
-        record.in_flight = 10  # ten requests being served
+        record.meter.in_flight = 10  # ten tool calls running
         over = await raw.call(session, "lkap_guide")
-        record.in_flight = 9
+        listing = await raw.post(raw.request("tools/list"), session=session)  # not a tool call
+        record.meter.in_flight = 9
         under = await raw.call(session, "lkap_guide")
+        in_flight_after = record.meter.in_flight
 
-    assert over.status_code == 429 and refusal(over)["code"] == "rate_limited"
-    assert under.status_code == 200
+    assert over.status_code == 200 and "retry-after" not in over.headers
+    assert_rate_limited(in_band(over), scope="in_flight", limit=10)
+    assert listing.status_code == 200
+    assert under.status_code == 200 and in_band(under)["ok"] is True
+    assert in_flight_after == 9  # the admitted call was released; the refused one never counted
+
+
+def test_session_meter_refusals_do_not_extend_the_window_and_retry_after_tracks_the_oldest_call() -> None:
+    clock = Clock()
+    meter = SessionMeter(calls_per_min=2, max_in_flight=10, clock=clock)
+
+    assert meter.admit() is None
+    meter.release()
+    clock.now += 20
+    assert meter.admit() is None
+    meter.release()
+    clock.now += 10  # 30 s after the first call
+    refused = meter.admit()
+    clock.now += 10
+    refused_again = meter.admit()
+    clock.now += 21  # 61 s after the first call: it left the window, the refusals were never in it
+    admitted = meter.admit()
+
+    for result, wait in ((refused, 30.0), (refused_again, 20.0)):
+        assert result is not None and result.error is not None
+        assert result.error.code == "rate_limited" and result.error.status == 429
+        assert result.error.details == {"retry_after_s": wait, "limit": 2, "scope": "calls_per_min"}
+    assert admitted is None
+    assert list(meter.calls) == [1020.0, 1061.0] and meter.in_flight == 1
 
 
 @pytest.mark.parametrize("with_session", [False, True])

@@ -38,6 +38,10 @@ COPY . .
 
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+# The remote MCP url the Connect dialog offers (https://<api origin>/mcp); inlined
+# at build time like the one above. Empty means no "Remote (HTTP)" option (R-V3-31).
+ARG NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL=
+ENV NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL=${NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN pnpm build

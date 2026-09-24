@@ -22,12 +22,21 @@ session's key, so the tool list is shaped by that key's scopes, R-V3-13):
 
 Checks on every ``/mcp`` request, in this order: ``Host``/``Origin`` (``403``;
 §9.5 item 3), the bearer (``401``), the 1 MB body (``413``), the session binding
-(unknown ``404``, other key ``403``), then the limits (``429`` with
-``retry_after_s``): 5 sessions per key, 120 ``tools/call`` per minute per
-session, 10 requests in flight per session. Tool calls are capped at 60 s (or the
-call's own ``timeout_s`` plus a grace period, for ``chat_send`` and
-``kb_add_document(wait=true)``), and at most 20 chats run per process. Sessions
-idle for 30 min (no request; an open ``GET`` stream does not count) are closed.
+(unknown ``404``, other key ``403``). A 6th session for one key is refused at
+``initialize`` with HTTP ``429``, ``retry_after_s`` and ``Retry-After``: the only
+HTTP ``429``, since no session exists yet to answer in band.
+
+The per-call limits (R-V3-28), 120 ``tools/call`` per rolling minute per session
+and 10 tool calls in flight per session, are metered on ``tools/call`` only, by
+the session's registry (:class:`SessionMeter`), and answered **in band**: the
+call's result is ``ok=false, code="rate_limited", status=429,
+details={retry_after_s, limit, scope}`` over HTTP 200, so the client session
+survives and a later call succeeds. A refused call does not count toward the
+window. ``tools/list``, ``resources/read`` and ``prompts/get`` are local and
+unmetered. Tool calls are capped at 60 s (or the call's own ``timeout_s`` plus a
+grace period, for ``chat_send`` and ``kb_add_document(wait=true)``), and at most
+20 chats run per process. Sessions idle for 30 min (no request; an open ``GET``
+stream does not count) are closed.
 
 The ``Authorization`` header and the key are never logged: this module logs the
 key's id (from ``/v1/api-keys/self``) and an 8-character session id prefix only.
@@ -65,12 +74,11 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import Message, Receive, Scope, Send
 
-from lkap_mcp import server as server_module
 from lkap_mcp.chat import tools as chat_tools
 from lkap_mcp.client import ERROR_HINTS, ApiFailure, LkapClient, Method
 from lkap_mcp.registry import Registry, ServerContext, ToolSpec
 from lkap_mcp.results import ToolResult, sanitize
-from lkap_mcp.server import LkapServer, load_tool_modules
+from lkap_mcp.server import LkapServer, build_server
 from lkap_mcp.settings import McpSettings
 
 log = logging.getLogger(__name__)
@@ -267,19 +275,96 @@ class CallLimits:
     chat_starts_pending: int = 0
 
 
+#: The per-session call window (R-V3-28: "120 ``tools/call`` per rolling minute").
+CALL_WINDOW_S: Final = 60.0
+#: ``retry_after_s`` of an in-flight refusal (a running call usually ends within it).
+IN_FLIGHT_RETRY_S: Final = 1.0
+
+
+@dataclass(eq=False)
+class SessionMeter:
+    """The per-call limits of one MCP session (R-V3-28), metered on ``tools/call`` only.
+
+    ``calls`` holds the start times of the admitted calls of the last minute;
+    ``in_flight`` counts the admitted calls still running. A refused call is in
+    neither, so hammering never extends the window.
+    """
+
+    calls_per_min: int
+    max_in_flight: int
+    clock: Callable[[], float] = time.monotonic
+    calls: deque[float] = field(default_factory=deque)
+    in_flight: int = 0
+
+    def admit(self) -> ToolResult | None:
+        """Count a call and return ``None``, or return the in-band ``rate_limited`` result."""
+        now = self.clock()
+        window = self.calls
+        while window and now - window[0] >= CALL_WINDOW_S:
+            window.popleft()
+        if self.in_flight >= self.max_in_flight:
+            return _rate_limited_result(
+                f"{self.max_in_flight} tool calls are already running on this MCP session",
+                retry_after_s=IN_FLIGHT_RETRY_S,
+                limit=self.max_in_flight,
+                scope="in_flight",
+            )
+        if len(window) >= self.calls_per_min:
+            # The oldest counted call leaves the window first; a refused call is never counted.
+            retry = CALL_WINDOW_S - (now - window[0]) if window else CALL_WINDOW_S
+            return _rate_limited_result(
+                f"more than {self.calls_per_min} tool calls in a minute on this MCP session",
+                retry_after_s=retry,
+                limit=self.calls_per_min,
+                scope="calls_per_min",
+            )
+        window.append(now)
+        self.in_flight += 1
+        return None
+
+    def release(self) -> None:
+        """An admitted call finished."""
+        self.in_flight -= 1
+
+
+def _rate_limited_result(message: str, *, retry_after_s: float, limit: int, scope: str) -> ToolResult:
+    """The in-band refusal, in the shape ``client.py`` gives an api ``429`` (R-V3-28)."""
+    return ToolResult.fail(
+        "rate_limited",
+        message,
+        status=429,
+        details={"retry_after_s": max(0.1, round(retry_after_s, 1)), "limit": limit, "scope": scope},
+        next_steps=["wait retry_after_s seconds, then retry this call"],
+    )
+
+
 @dataclass
 class SessionRegistry(Registry):
     """A :class:`~lkap_mcp.registry.Registry` whose tool calls carry the HTTP-mode limits."""
 
     limits: CallLimits | None = None
+    #: The session's per-call meter (``None``: unmetered, e.g. a server built outside a session).
+    meter: SessionMeter | None = None
 
     def wrapped(self, spec: ToolSpec) -> Callable[..., Awaitable[ToolResult]]:
         inner = super().wrapped(spec)
         limits = self.limits
+        meter = self.meter
         client = self.ctx.client
 
         async def run(**kwargs: Any) -> ToolResult:
-            result = await (inner(**kwargs) if limits is None else _limited_call(spec, kwargs, inner, limits))
+            if meter is not None:
+                refused = meter.admit()
+                if refused is not None:
+                    log.info("mcp_call_rate_limited", extra={"tool": spec.name, **_refused_scope(refused)})
+                    return refused
+            try:
+                result = await (
+                    inner(**kwargs) if limits is None else _limited_call(spec, kwargs, inner, limits)
+                )
+            finally:
+                if meter is not None:
+                    meter.release()
             if result.ok and isinstance(client, SessionClient) and client.unauthorized:
                 # A best-effort sub-request (e.g. chat events) saw the 401: the key is gone, and
                 # the session ends after this call, so say so rather than report success.
@@ -333,25 +418,28 @@ async def _limited_call(
     return result
 
 
-def build_session_server(settings: McpSettings, client: SessionClient, limits: CallLimits) -> LkapServer:
-    """The server of one MCP session: ``build_server``'s composition with a :class:`SessionRegistry`.
+def _refused_scope(result: ToolResult) -> dict[str, Any]:
+    """The log-safe ``scope`` of an in-band ``rate_limited`` result."""
+    details = result.error.details if result.error is not None else None
+    return {"scope": details.get("scope")} if isinstance(details, dict) else {}
 
-    Mirrors :func:`lkap_mcp.server.build_server` (the same ``TOOL_MODULES``, resources
-    and prompts); only the registry class differs (``_asks.md`` V3-06-1).
+
+def build_session_server(
+    settings: McpSettings, client: SessionClient, limits: CallLimits, meter: SessionMeter | None = None
+) -> LkapServer:
+    """The server of one MCP session: :func:`~lkap_mcp.server.build_server` with a :class:`SessionRegistry`.
+
+    Args:
+        settings: The service settings.
+        client: The session's api client (the session's bearer key).
+        limits: The process-wide call limits (timeouts, the chat cap).
+        meter: The session's per-call meter (R-V3-28); ``None`` leaves calls unmetered.
     """
-    from lkap_mcp.prompts import register_prompts
-    from lkap_mcp.resources import register_resources
-
-    registry = SessionRegistry(ServerContext(settings=settings, client=client), limits=limits)
-    for module in load_tool_modules(server_module.TOOL_MODULES):
-        register = getattr(module, "register", None)
-        if register is None:
-            raise TypeError(f"tool module {module.__name__} has no register(registry) function")
-        register(registry)
-    server = LkapServer(registry)
-    register_resources(server, registry.ctx)
-    register_prompts(server, registry.ctx)
-    return server
+    return build_server(
+        settings,
+        client=client,
+        registry_factory=lambda ctx: SessionRegistry(ctx, limits=limits, meter=meter),
+    )
 
 
 @dataclass(eq=False)
@@ -365,10 +453,14 @@ class HttpSession:
     client: SessionClient
     transport: StreamableHTTPServerTransport
     last_seen: float
-    in_flight: int = 0
-    calls: deque[float] = field(default_factory=deque)
+    meter: SessionMeter
     closing: bool = False
     ended: anyio.Event = field(default_factory=anyio.Event)
+
+    @property
+    def in_flight(self) -> int:
+        """Tool calls running on this session (the idle sweep skips a session with any)."""
+        return self.meter.in_flight
 
     @property
     def owner(self) -> str:
@@ -556,7 +648,12 @@ class HttpSessions:
 
     async def _start(self, key: str, key_hash: str, request_id: Any) -> HttpSession:
         client = SessionClient(self.settings, api_key=key, transport=self._api_transport)
-        server = build_session_server(self.settings, client, self.limits)
+        meter = SessionMeter(
+            calls_per_min=self.settings.calls_per_min,
+            max_in_flight=self.http.max_in_flight,
+            clock=self._clock,
+        )
+        server = build_session_server(self.settings, client, self.limits, meter)
         identity = await server.refresh_identity()
         if identity is None:
             failure = server.ctx.identity_error
@@ -591,6 +688,7 @@ class HttpSessions:
             client=client,
             transport=transport,
             last_seen=self._clock(),
+            meter=meter,
         )
         self._sessions[session.id] = session
         self._by_ctx[id(server.ctx)] = session
@@ -616,45 +714,16 @@ class HttpSessions:
             await self.end(session, "closed")
 
     # ------------------------------------------------------------------ serving
-    async def serve(
-        self,
-        session: HttpSession,
-        scope: Scope,
-        receive: Receive,
-        send: Send,
-        *,
-        requests: list[tuple[str, Any]],
-    ) -> None:
-        """Serve one request on an existing session, applying the per-session limits."""
-        now = self._clock()
-        calls = [rid for method, rid in requests if method == "tools/call"]
-        if requests and session.in_flight >= self.http.max_in_flight:
-            raise _rate_limited(
-                f"{self.http.max_in_flight} requests are already in flight on this session",
-                retry_after_s=1.0,
-                request_id=requests[0][1],
-            )
-        if calls:
-            window = session.calls
-            while window and now - window[0] >= 60.0:
-                window.popleft()
-            if len(window) + len(calls) > self.settings.calls_per_min:
-                retry = 60.0 - (now - window[0]) if window else 60.0
-                raise _rate_limited(
-                    f"more than {self.settings.calls_per_min} tool calls in a minute on this session",
-                    retry_after_s=retry,
-                    request_id=calls[0],
-                )
-            window.extend([now] * len(calls))
-        counted = bool(requests)
-        if counted:
-            session.in_flight += 1
-        session.last_seen = now
+    async def serve(self, session: HttpSession, scope: Scope, receive: Receive, send: Send) -> None:
+        """Serve one request on an existing session.
+
+        The per-call limits are not checked here: they are the session registry's,
+        answered in band as tool results (R-V3-28, :class:`SessionMeter`).
+        """
+        session.last_seen = self._clock()
         try:
             await session.transport.handle_request(scope, receive, send)
         finally:
-            if counted:
-                session.in_flight -= 1
             if scope.get("method") != "GET":
                 session.last_seen = self._clock()
         if session.transport.is_terminated:
@@ -829,7 +898,7 @@ class McpEndpoint:
             raise Refusal(404, "session_not_found", "unknown or ended MCP session; initialize a new one")
         if not hmac.compare_digest(session.key_hash, hashed):
             raise Refusal(403, "session_key_mismatch", "this MCP session was opened with a different API key")
-        await self.sessions.serve(session, scope, receive, send, requests=requests)
+        await self.sessions.serve(session, scope, receive, send)
 
 
 async def healthz(request: Request) -> Response:

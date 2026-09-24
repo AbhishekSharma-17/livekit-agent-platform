@@ -63,7 +63,7 @@ async def test_migration_head_matches_the_script_directory() -> None:
 
     migration_head.cache_clear()
 
-    assert expected is not None and expected.startswith(("v2_", "v3_"))
+    assert expected is not None and expected.startswith(("v2_", "v3_", "v4_"))
     assert migration_head() == expected
 
 

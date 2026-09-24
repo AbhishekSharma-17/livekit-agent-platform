@@ -21,6 +21,18 @@ from lkap_mcp.tools.discovery import own_workspace, reduce_telephony
 CallAction = Literal["hangup", "dtmf", "transfer"]
 
 
+def hosted_number_warnings(numbers: list[dict[str, Any]]) -> list[str]:
+    """One line per LiveKit-hosted number that does not reach its agent (V4-05, D-V4-21).
+
+    Assigning an inbound agent (or re-attaching) stays console-only (R-V3-7).
+    """
+    return [
+        f"number {n.get('e164', '?')}: {n.get('attach_state')}"
+        for n in numbers
+        if n.get("attach_state") != "routed"
+    ]
+
+
 def dial_enabled(ctx: ServerContext) -> bool:
     """The process-level dial gate (``LKAP_MCP_ALLOW_DIAL=1``)."""
     return ctx.settings.allow_dial
@@ -46,6 +58,9 @@ def register(registry: Registry) -> None:
             except ApiFailure as failure:
                 data[key] = []
                 warnings.append(f"{key}: {failure.code}")
+        hosted = [n for n in data["numbers"] if isinstance(n, dict) and n.get("source") == "livekit"]
+        data["livekit_numbers"] = len(hosted)
+        warnings.extend(hosted_number_warnings(hosted))
         workspace = await own_workspace(ctx)
         data["policy"] = reduce_telephony((workspace or {}).get("settings")).get("telephony", {})
         data["dial_enabled"] = dial_enabled(ctx) and ctx.allows("calls:write")

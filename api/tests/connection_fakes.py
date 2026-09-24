@@ -5,6 +5,12 @@ cannot intercept it. :func:`fake_livekit` runs a real in-process Twirp server
 on `127.0.0.1` instead: it verifies each request's JWT against the key/secret it
 was given (exactly what LiveKit does) and answers with an empty protobuf body,
 which parses as an empty response for every list method.
+
+V4-05: ``livekit.PhoneNumberService/*`` is answered in proto3-JSON (what LiveKit
+Cloud does for ``Content-Type: application/json``) from :attr:`FakeLiveKit.phone_numbers`,
+with LiveKit's snake_case keys (or lowerCamelCase with ``phone_camel``). Only
+List/Get/Update exist; every other method of the service answers 500, so a
+test proves the api never searches for, buys or gives back a number.
 """
 
 from __future__ import annotations
@@ -41,6 +47,18 @@ class FakeLiveKit:
     delay_s: float = 0.0
     bare_401: bool = False
     calls: list[str] = field(default_factory=list)
+    #: Hosted numbers as LiveKit returns them (see :func:`hosted_number`).
+    phone_numbers: list[dict[str, Any]] = field(default_factory=list)
+    phone_page_size: int = 50
+    phone_camel: bool = False
+    #: ``UpdatePhoneNumber`` with an empty rule id answers 400 (one possible LiveKit behaviour).
+    phone_reject_empty_rule: bool = False
+    #: Method name → (HTTP status, Twirp error body) answered instead of the normal reply.
+    phone_fail: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)
+    #: ``(method, json body, content type, jwt claims)`` of every PhoneNumberService request.
+    phone_requests: list[tuple[str, dict[str, Any], str, dict[str, Any]]] = field(default_factory=list)
+    #: Shared, ordered log of calls across fakes (tests append SIP calls to it too).
+    timeline: list[str] = field(default_factory=list)
 
     def app(self) -> web.Application:
         """The aiohttp application serving every `/twirp/livekit.*` route."""
@@ -54,7 +72,7 @@ class FakeLiveKit:
             await asyncio.sleep(self.delay_s)
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
         try:
-            jwt.decode(token, self.api_secret, algorithms=["HS256"], issuer=self.api_key)
+            claims = jwt.decode(token, self.api_secret, algorithms=["HS256"], issuer=self.api_key)
         except jwt.InvalidTokenError:
             if self.bare_401:  # what LiveKit Cloud actually sends (no Twirp JSON body)
                 return web.Response(status=401, text="unauthorized")
@@ -62,11 +80,108 @@ class FakeLiveKit:
                 {"code": "unauthenticated", "msg": "invalid API key or secret"}, status=401
             )
         service = request.path.split("/")[2]
+        if service == "livekit.PhoneNumberService":
+            return await self._phone_number_service(request, request.path.split("/")[3], claims)
         disabled = {"livekit.SIP": not self.sip, "livekit.Egress": not self.egress}
         disabled["livekit.Ingress"] = not self.ingress
         if disabled.get(service, False):
             return web.json_response({"code": "not_found", "msg": "service not deployed"}, status=404)
         return web.Response(body=b"", content_type="application/protobuf")
+
+    # PhoneNumberService (V4-05) ------------------------------------------------
+    def _phone_out(self, number: dict[str, Any]) -> dict[str, Any]:
+        if not self.phone_camel:
+            return dict(number)
+        return {_camel(key): value for key, value in number.items()}
+
+    def _find_phone(self, body: dict[str, Any]) -> dict[str, Any] | None:
+        wanted = body.get("id")
+        return next((n for n in self.phone_numbers if n["id"] == wanted), None)
+
+    async def _phone_number_service(
+        self, request: web.Request, method: str, claims: dict[str, Any]
+    ) -> web.Response:
+        body: dict[str, Any] = await request.json() if request.can_read_body else {}
+        self.phone_requests.append((method, body, request.content_type, claims))
+        self.timeline.append(f"phone.{method}")
+        if method in self.phone_fail:
+            status, payload = self.phone_fail[method]
+            return web.json_response(payload, status=status)
+        if method == "ListPhoneNumbers":
+            token = body.get("pageToken") or body.get("page_token") or {}
+            offset = int(token.get("token") or 0) if isinstance(token, dict) else int(token or 0)
+            statuses = set(body.get("statuses") or [])
+            items = [n for n in self.phone_numbers if not statuses or n.get("status") in statuses]
+            page = items[offset : offset + self.phone_page_size]
+            following = offset + self.phone_page_size
+            return web.json_response(
+                {
+                    "items": [self._phone_out(n) for n in page],
+                    "next_page_token": {"token": str(following)} if following < len(items) else None,
+                    "total_count": len(items),
+                    "offline_count": sum(1 for n in items if n.get("status") == OFFLINE),
+                }
+            )
+        if method in ("GetPhoneNumber", "UpdatePhoneNumber"):
+            number = self._find_phone(body)
+            if number is None:
+                return web.json_response({"code": "not_found", "msg": "phone number not found"}, status=404)
+            if method == "UpdatePhoneNumber":
+                rule = body.get("sipDispatchRuleId", body.get("sip_dispatch_rule_id"))
+                if rule == "" and self.phone_reject_empty_rule:
+                    return web.json_response(
+                        {"code": "invalid_argument", "msg": "sip_dispatch_rule_id is required"}, status=400
+                    )
+                if rule is not None:
+                    number["sip_dispatch_rule_id"] = rule
+                    number["sip_dispatch_rule_ids"] = [rule] if rule else []
+                    number["inbound_status"] = (
+                        "PHONE_NUMBER_IN_STATUS_ACTIVE" if rule else "PHONE_NUMBER_IN_STATUS_DETACHED"
+                    )
+            return web.json_response({"phone_number": self._phone_out(number)})
+        return web.json_response({"code": "internal", "msg": f"{method} must never be called"}, status=500)
+
+
+OFFLINE = "PHONE_NUMBER_STATUS_OFFLINE"
+
+
+def _camel(key: str) -> str:
+    head, *rest = key.split("_")
+    return head + "".join(part.title() for part in rest)
+
+
+def hosted_number(
+    e164: str,
+    number_id: str,
+    *,
+    status: str = "PHONE_NUMBER_STATUS_ACTIVE",
+    inbound_status: str = "PHONE_NUMBER_IN_STATUS_DETACHED",
+    rule_ids: list[str] | None = None,
+    name: str = "",
+) -> dict[str, Any]:
+    """One ``PhoneNumber`` exactly as LiveKit Cloud's Twirp-JSON returns it (V4-05 live check shape)."""
+    rules = list(rule_ids or [])
+    return {
+        "id": number_id,
+        "name": name,
+        "e164_format": e164,
+        "country_code": "US",
+        "area_code": e164[2:5],
+        "number_type": "PHONE_NUMBER_TYPE_LOCAL",
+        "locality": "SAN FRANCISCO",
+        "region": "CA",
+        "spam_score": 0,
+        "created_at": None,
+        "updated_at": None,
+        "capabilities": ["voice"],
+        "status": status,
+        "inbound_status": inbound_status,
+        "outbound_status": "PHONE_NUMBER_OUT_STATUS_UNSPECIFIED",
+        "assigned_at": "2026-09-24T19:39:32.739773Z",
+        "released_at": None,
+        "sip_dispatch_rule_id": rules[0] if rules else "",
+        "sip_dispatch_rule_ids": rules,
+    }
 
 
 @asynccontextmanager

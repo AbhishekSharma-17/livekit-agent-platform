@@ -1,4 +1,4 @@
-import type { AgentOut, CallOut, ConnectionOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, CallOut, ConnectionOut, PhoneNumberOut } from "@/contracts/lkap-contracts";
 
 /** Call status → chip label and tone (`StatusChip` tones). */
 export type CallStatus = NonNullable<CallOut["status"]>;
@@ -72,3 +72,42 @@ export const TRANSFER_TARGET_PATTERN = /^(\+[1-9]\d{6,14}|tel:\+?[0-9]{3,20}|sip
 /** Trunk direction and carrier hint (`TrunkOut.direction` / `provider_hint`). */
 export type TrunkDirection = "inbound" | "outbound";
 export type ProviderHint = "twilio" | "telnyx" | "other";
+
+/** Where a number comes from (V4-05): typed in on a trunk, or hosted by LiveKit. */
+export function isHostedNumber(number: Pick<PhoneNumberOut, "source">): boolean {
+  return number.source === "livekit";
+}
+
+/** `PhoneNumberOut.attach_state` (derived by the api, PHONE-NUMBERS.md §4.4). */
+export type AttachState = NonNullable<PhoneNumberOut["attach_state"]>;
+
+export const ATTACH_STATE_META: Record<AttachState, { label: string; tone: ChipTone; hint: string }> = {
+  routed: { label: "Routed", tone: "success", hint: "Calls to this number reach its inbound agent." },
+  detached: {
+    label: "Detached",
+    tone: "warning",
+    hint: "The number is no longer attached to its LKAP dispatch rule in LiveKit. Re-attach to route it again.",
+  },
+  not_routed: { label: "Not routed", tone: "neutral", hint: "Pick an inbound agent to route calls." },
+  pending: { label: "Pending", tone: "info", hint: "LiveKit is still activating this number." },
+  offline: { label: "Offline", tone: "warning", hint: "LiveKit reports this number offline." },
+  released: { label: "Released", tone: "neutral", hint: "The number is no longer in your LiveKit project." },
+};
+
+/** A number's routing state; older payloads without `attach_state` fall back to the rule id. */
+export function attachStateOf(number: Pick<PhoneNumberOut, "attach_state" | "dispatch_rule_id">): AttachState {
+  return number.attach_state ?? (number.dispatch_rule_id ? "routed" : "not_routed");
+}
+
+/** Agents whose calls run on `connectionId` (a hosted number only reaches its own project's workers). */
+export function agentsOnConnection(
+  agents: AgentOut[],
+  connections: ConnectionOut[],
+  connectionId: string | null | undefined,
+): AgentOut[] {
+  if (!connectionId) return [];
+  return agents.filter((agent) => connectionForAgent(agent, connections)?.id === connectionId);
+}
+
+/** The `lk` CLI line the "Get a number" dialog shows as text; the user runs it (LKAP never buys). */
+export const LK_PURCHASE_COMMAND = "lk number purchase --country-code US";

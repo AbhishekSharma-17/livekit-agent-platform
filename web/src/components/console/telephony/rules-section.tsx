@@ -28,7 +28,8 @@ import { NativeSelect } from "./native-select";
 /**
  * Dispatch rules (V2-17): LiveKit's inbound routing. Each call gets its own
  * room (`<prefix>_<caller>_<random>`) and the agent's worker is dispatched with
- * `channel=sip_in`. Rules a number owns are listed but managed from Numbers.
+ * `channel=sip_in`. Rules a number owns are listed but managed from Numbers;
+ * a LiveKit-hosted number's rule has no trunk (V4-05).
  */
 export function RulesSection({ agents }: { agents: AgentOut[] }) {
   const { data, isLoading, isError, error, refetch } = useDispatchRules();
@@ -36,6 +37,13 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
   const [creating, setCreating] = React.useState(false);
   const rules = data?.items ?? [];
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Unknown agent";
+  // A LiveKit-hosted number's rule has no trunk (V4-05): name the number instead.
+  const trunkLabel = (rule: DispatchRuleOut) =>
+    rule.trunk_id
+      ? (trunks.find((t) => t.id === rule.trunk_id)?.name ?? "—")
+      : rule.managed_by_number
+        ? `LiveKit number ${rule.managed_by_number}`
+        : "LiveKit number";
   const inboundTrunks = trunks.filter((t) => t.direction === "inbound");
   // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
   const { canWrite } = useWriteAccess("admin");
@@ -50,11 +58,7 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
     {
       id: "trunk",
       header: "Trunk",
-      cell: (rule) => (
-        <span className="text-sm text-muted-foreground">
-          {trunks.find((t) => t.id === rule.trunk_id)?.name ?? "—"}
-        </span>
-      ),
+      cell: (rule) => <span className="text-sm text-muted-foreground">{trunkLabel(rule)}</span>,
     },
     {
       id: "numbers",

@@ -1,0 +1,21 @@
+{
+  "$id": "lkap-contracts/NumbersRefreshIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/telephony/numbers/refresh``: mirror the project's LiveKit-hosted numbers.\n\nWithout ``connection_id`` every SIP-capable connection of the workspace is read.",
+  "properties": {
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    }
+  },
+  "title": "NumbersRefreshIn",
+  "type": "object"
+}

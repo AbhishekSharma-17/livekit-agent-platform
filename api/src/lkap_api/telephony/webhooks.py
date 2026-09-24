@@ -25,7 +25,7 @@ from livekit.protocol.models import DisconnectReason, ParticipantInfo
 from sqlalchemy import select
 
 from lkap_api.connections.webhooks import WebhookContext, register_webhook_handler
-from lkap_api.db.models import Call, SipTrunk, new_id, utcnow
+from lkap_api.db.models import Call, PhoneNumber, SipTrunk, new_id, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.logging import get_logger
 from lkap_api.telephony.calls import CallStatus, advance, call_for_session, link_session, orphan_call
@@ -94,18 +94,37 @@ async def _call(ctx: WebhookContext, session: SessionRow | None, sip_call_id: st
     return orphan
 
 
-async def _is_our_trunk(ctx: WebhookContext, lk_trunk_id: str) -> bool:
-    """Whether a SIP leg came in on one of this workspace's trunks (not another app's)."""
-    if not lk_trunk_id:
+async def _is_our_leg(ctx: WebhookContext, attributes: dict[str, str]) -> bool:
+    """Whether a SIP leg is this workspace's (not another app's on the same project).
+
+    Ours when it came in on one of the workspace's trunks on this connection, or
+    (V4-05, D-V4-18) when the called number is one of the workspace's
+    LiveKit-hosted numbers on this connection — a hosted leg carries no trunk of
+    ours, and what LiveKit puts in ``sip.trunkID`` for it is informational only.
+    """
+    lk_trunk_id = attributes.get(ATTR_TRUNK_ID, "")
+    if lk_trunk_id:
+        found = await ctx.db.scalar(
+            select(SipTrunk.id).where(
+                SipTrunk.workspace_id == ctx.connection.workspace_id,
+                SipTrunk.connection_id == ctx.connection.id,
+                SipTrunk.lk_trunk_id == lk_trunk_id,
+            )
+        )
+        if found is not None:
+            return True
+    called = attributes.get(ATTR_TRUNK_PHONE_NUMBER, "")
+    if not called:
         return False
-    found = await ctx.db.scalar(
-        select(SipTrunk.id).where(
-            SipTrunk.workspace_id == ctx.connection.workspace_id,
-            SipTrunk.connection_id == ctx.connection.id,
-            SipTrunk.lk_trunk_id == lk_trunk_id,
+    hosted = await ctx.db.scalar(
+        select(PhoneNumber.id).where(
+            PhoneNumber.workspace_id == ctx.connection.workspace_id,
+            PhoneNumber.connection_id == ctx.connection.id,
+            PhoneNumber.source == "livekit",
+            PhoneNumber.e164 == called,
         )
     )
-    return found is not None
+    return hosted is not None
 
 
 @register_webhook_handler("participant_joined")
@@ -115,7 +134,8 @@ async def on_sip_participant_joined(ctx: WebhookContext) -> None:
     The webhook usually beats the worker's ``sessions/start`` for an inbound
     call (the SIP service creates the room before the job is accepted). The
     row is then created without a session, only when the leg came in on one of
-    this workspace's trunks (the project may carry other apps' SIP traffic),
+    this workspace's trunks or to one of its LiveKit-hosted numbers (the
+    project may carry other apps' SIP traffic),
     and linked by ``sip.callID`` when the session appears.
     """
     participant = ctx.event.participant
@@ -128,7 +148,7 @@ async def on_sip_participant_joined(ctx: WebhookContext) -> None:
     if call is None:
         if session is not None and session.channel != "sip_in":
             return
-        if session is None and not await _is_our_trunk(ctx, attributes.get(ATTR_TRUNK_ID, "")):
+        if session is None and not await _is_our_leg(ctx, attributes):
             return
         caller = caller_from_attributes(attributes, direction="inbound")
         call = Call(

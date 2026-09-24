@@ -98,6 +98,8 @@ export interface LkapContracts {
   Me?: Me;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
+  NumbersRefreshIn?: NumbersRefreshIn;
+  NumbersRefreshOut?: NumbersRefreshOut;
   PackManifest?: PackManifest;
   PackOut?: PackOut;
   PacksResponse?: PacksResponse;
@@ -1179,6 +1181,9 @@ export interface DispatchRuleCreate {
 /**
  * A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns.
  *
+ * ``trunk_id`` is ``None`` only for the trunk-less rule of a LiveKit-hosted
+ * number (``phone_number_id`` names it; PHONE-NUMBERS.md D-V4-17).
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "DispatchRuleOut".
  */
@@ -1191,8 +1196,9 @@ export interface DispatchRuleOut {
   lk_rule_id?: string | null;
   managed_by_number?: string | null;
   numbers?: string[];
+  phone_number_id?: string | null;
   room_prefix?: string;
-  trunk_id: string;
+  trunk_id?: string | null;
 }
 /**
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1666,6 +1672,35 @@ export interface NodeSpecsResponse {
   v?: 1;
 }
 /**
+ * ``POST /v1/telephony/numbers/refresh``: mirror the project's LiveKit-hosted numbers.
+ *
+ * Without ``connection_id`` every SIP-capable connection of the workspace is read.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NumbersRefreshIn".
+ */
+export interface NumbersRefreshIn {
+  connection_id?: string | null;
+}
+/**
+ * What one connection's refresh changed. Nothing is bought or given back.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NumbersRefreshOut".
+ */
+export interface NumbersRefreshOut {
+  added?: number;
+  /**
+   * E.164 numbers already registered as trunk numbers (skipped)
+   */
+  conflicts?: string[];
+  connection_id: string;
+  released?: number;
+  seen?: number;
+  updated?: number;
+  warnings?: string[];
+}
+/**
  * Everything the api and console need to know about a pack.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1747,16 +1782,31 @@ export interface PhoneNumberCreate {
 /**
  * A number owned by the workspace and the agent its inbound calls reach.
  *
+ * ``source="livekit"`` rows are mirrored from the LiveKit project by
+ * ``POST /v1/telephony/numbers/refresh``: they have a ``connection_id`` and
+ * an ``lk_number_id`` and never a trunk. ``warnings`` is filled only on the
+ * response of an assignment (the dispatch-rule conflict pre-check).
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "PhoneNumberOut".
  */
 export interface PhoneNumberOut {
+  attach_state?: "routed" | "detached" | "not_routed" | "pending" | "offline" | "released";
+  connection_id?: string | null;
   dispatch_rule_id?: string | null;
   e164: string;
   id: string;
   inbound_agent_id?: string | null;
   label?: string;
+  lk_inbound_status?: ("active" | "unavailable" | "detached" | "unknown") | null;
+  lk_number_id?: string | null;
+  lk_rule_ids?: string[];
+  lk_status?: ("active" | "pending" | "released" | "offline" | "unknown") | null;
+  lk_synced_at?: string | null;
+  region?: string;
+  source?: "trunk" | "livekit";
   trunk_id?: string | null;
+  warnings?: string[];
 }
 /**
  * This interface was referenced by `LkapContracts`'s JSON-Schema

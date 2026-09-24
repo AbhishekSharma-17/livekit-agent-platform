@@ -11,6 +11,8 @@ import type {
   DispatchRuleCreate,
   DispatchRuleOut,
   DispatchRulePage,
+  NumbersRefreshIn,
+  NumbersRefreshOut,
   PhoneNumberCreate,
   PhoneNumberOut,
   PhoneNumberPage,
@@ -133,6 +135,18 @@ export function useUpdateNumber() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: PhoneNumberUpdate }) =>
       api.put<PhoneNumberOut>(`telephony/numbers/${id}`, body),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * `POST /v1/telephony/numbers/refresh` (V4-05): mirror the LiveKit-hosted
+ * numbers of one connection (or every SIP-capable one). Never buys a number.
+ */
+export function useRefreshNumbers() {
+  const invalidate = useInvalidateTelephony();
+  return useMutation({
+    mutationFn: (body: NumbersRefreshIn) => api.post<NumbersRefreshOut[]>("telephony/numbers/refresh", body),
     onSuccess: invalidate,
   });
 }

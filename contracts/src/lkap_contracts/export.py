@@ -249,6 +249,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PhoneNumberCreate": api_models.PhoneNumberCreate,
     "PhoneNumberUpdate": api_models.PhoneNumberUpdate,
     "PhoneNumberOut": api_models.PhoneNumberOut,
+    "NumbersRefreshIn": api_models.NumbersRefreshIn,
+    "NumbersRefreshOut": api_models.NumbersRefreshOut,
     "CallTransferIn": api_models.CallTransferIn,
     "CallDtmfIn": api_models.CallDtmfIn,
     "CallDtmfOut": api_models.CallDtmfOut,

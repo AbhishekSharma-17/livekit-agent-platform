@@ -27,7 +27,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Annotated, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 import aiohttp
 from aiohttp.abc import AbstractResolver
@@ -40,6 +40,9 @@ from lkap_api.deps import VaultDep
 from lkap_api.livekit_tokens import TOKEN_TTL, mint_participant_token
 from lkap_api.settings import get_settings
 from lkap_api.vault import Vault
+
+if TYPE_CHECKING:
+    from lkap_api.telephony.phone_numbers import PhoneNumberClient
 
 #: How long a decrypted key/secret pair stays in the in-process cache.
 CREDENTIAL_CACHE_TTL_S = 300.0
@@ -219,6 +222,33 @@ class ConnectionClientFactory:
             yield client
         finally:
             await client.aclose()
+            await session.close()
+
+    @asynccontextmanager
+    async def phone_numbers(
+        self, row: ConnectionRowLike, *, timeout_s: float = DEFAULT_API_TIMEOUT_S
+    ) -> AsyncIterator[PhoneNumberClient]:
+        """Yield a Twirp-JSON ``PhoneNumberService`` client for one connection (V4-05, D-V4-16).
+
+        Same url check and network-guarded session as :meth:`api`; each request
+        is signed with this connection's key and ``SIPGrants(admin=True)``.
+        """
+        # Imported here: the telephony package imports this module.
+        from lkap_api.telephony.phone_numbers import PhoneNumberClient, sign
+
+        creds = self.credentials(row)
+        policy = self._net_policy or net_guard.policy_from_settings(get_settings())
+        problem = net_guard.check_url(creds.url, policy, schemes=net_guard.LIVEKIT_SCHEMES)
+        if problem is not None:
+            raise net_guard.BlockedDestinationError(f"blocked destination: {problem}")
+        session = net_guard.guarded_aiohttp_session(
+            policy,
+            timeout=aiohttp.ClientTimeout(total=timeout_s),
+            inner_resolver=self._net_resolver() if self._net_resolver else None,
+        )
+        try:
+            yield PhoneNumberClient(session, creds.url, lambda: sign(creds.api_key, creds.api_secret))
+        finally:
             await session.close()
 
     def token_verifier(self, row: ConnectionRowLike) -> TokenVerifier:

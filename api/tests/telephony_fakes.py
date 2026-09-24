@@ -96,6 +96,13 @@ class FakeLiveKitApi:
         self._record("update_outbound_trunk_fields", {"trunk_id": trunk_id, **fields})
         return SIPOutboundTrunkInfo(sip_trunk_id=trunk_id)
 
+    async def update_outbound_trunk(self, trunk_id: str, trunk: SIPOutboundTrunkInfo) -> SIPOutboundTrunkInfo:
+        self._record("update_outbound_trunk", {"trunk_id": trunk_id, "trunk": trunk})
+        info = SIPOutboundTrunkInfo()
+        info.CopyFrom(trunk)
+        info.sip_trunk_id = trunk_id
+        return info
+
     async def delete_trunk(self, delete: DeleteSIPTrunkRequest) -> Any:
         self._record("delete_trunk", delete)
         return None

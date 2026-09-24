@@ -249,6 +249,16 @@ Outbound dialing and transfers are **denied by default**. Before any outbound ca
 
 Setup, carrier side, trunk/rule/number creation and the live test ladder are in **`docs/v2/TELEPHONY-LIVE-TEST.md`** (§2 covers `allowed_prefixes`). This runbook does not repeat them.
 
+### 8.1 LiveKit-hosted numbers (V4-05)
+
+A number bought from LiveKit itself needs no SIP trunk (US numbers, inbound only; design in `docs/v4/PHONE-NUMBERS.md`).
+
+1. **Buy** it yourself: LiveKit dashboard → Telephony → Phone numbers, or `lk number purchase --country-code US`. LKAP never buys or gives back a number.
+2. **Refresh**: `/console/telephony` → Phone numbers → **Refresh from LiveKit** (`POST /v1/telephony/numbers/refresh`). The number appears with the **LiveKit** source chip. A number already registered here as a trunk number is reported as a conflict and skipped.
+3. **Assign**: pick the inbound agent (only agents on the number's connection are offered). LKAP creates a trunk-less dispatch rule limited to that number and attaches it to the number. The Routing chip reads **Routed**; **Detached** means the attachment changed in LiveKit, so press **Re-attach**.
+
+Check from the CLI with `lk number list` (the number's dispatch rule id) and `lk sip dispatch list` (the `lkap:<rule id>` rule, with no trunk and the number in its called numbers). Deleting the number in LKAP detaches it and forgets it here; the number stays in your LiveKit project. The Build plan's 50 inbound minutes are LiveKit's quota; LKAP does not see them.
+
 ## 9. Database migrations
 
 - The migration head is shown by `cd api && uv run alembic heads`. `/v1/health` reports `db: error` until the schema is at head.

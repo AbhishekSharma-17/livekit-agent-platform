@@ -359,14 +359,29 @@ export function TrunkDialog({
             <Field
               label={direction === "outbound" ? "SIP address" : "Allowed source address"}
               htmlFor="trunk-address"
-              hint={direction === "outbound" ? "e.g. example.pstn.twilio.com" : "IP, CIDR or host; empty accepts any"}
+              hint={
+                direction !== "outbound"
+                  ? "IP, CIDR or host; empty accepts any"
+                  : provider === "telnyx"
+                    ? "Telnyx: sip.telnyx.com"
+                    : "e.g. example.pstn.twilio.com"
+              }
               required={direction === "outbound"}
               optional={direction === "inbound"}
             >
               <Input id="trunk-address" value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Username" htmlFor="trunk-username" optional>
+              <Field
+                label="Username"
+                htmlFor="trunk-username"
+                optional
+                hint={
+                  direction === "outbound" && provider === "telnyx"
+                    ? "Also sent as the X-Telnyx-Username header"
+                    : undefined
+                }
+              >
                 <Input
                   id="trunk-username"
                   autoComplete="off"

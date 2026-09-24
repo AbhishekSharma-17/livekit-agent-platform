@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/DispatchRuleOut.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns.",
+  "description": "A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns.\n\n``trunk_id`` is ``None`` only for the trunk-less rule of a LiveKit-hosted\nnumber (``phone_number_id`` names it; PHONE-NUMBERS.md D-V4-17).",
   "properties": {
     "agent_id": {
       "title": "Agent Id",
@@ -57,20 +57,39 @@
       "title": "Numbers",
       "type": "array"
     },
+    "phone_number_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Phone Number Id"
+    },
     "room_prefix": {
       "default": "",
       "title": "Room Prefix",
       "type": "string"
     },
     "trunk_id": {
-      "title": "Trunk Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trunk Id"
     }
   },
   "required": [
     "id",
     "connection_id",
-    "trunk_id",
     "agent_id",
     "created_at"
   ],

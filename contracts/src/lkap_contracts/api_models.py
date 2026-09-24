@@ -938,12 +938,17 @@ class DispatchRuleCreate(BaseModel):
 
 
 class DispatchRuleOut(BaseModel):
-    """A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns."""
+    """A dispatch rule; ``managed_by_number`` marks the rule a number's inbound agent owns.
+
+    ``trunk_id`` is ``None`` only for the trunk-less rule of a LiveKit-hosted
+    number (``phone_number_id`` names it; PHONE-NUMBERS.md D-V4-17).
+    """
 
     id: str
     connection_id: str
     lk_rule_id: str | None = None
-    trunk_id: str
+    trunk_id: str | None = None
+    phone_number_id: str | None = None
     agent_id: str
     numbers: list[str] = []
     room_prefix: str = ""
@@ -977,15 +982,68 @@ class PhoneNumberUpdate(BaseModel):
     label: str | None = Field(default=None, max_length=200)
 
 
+#: Where a number comes from (PHONE-NUMBERS.md D-V4-14): typed in and bound to a
+#: SIP trunk, or a LiveKit-hosted number mirrored from the project.
+NumberSource = Literal["trunk", "livekit"]
+
+#: ``PhoneNumber.status`` of a LiveKit-hosted number, lowered from the proto enum.
+LkNumberStatus = Literal["active", "pending", "released", "offline", "unknown"]
+
+#: ``PhoneNumber.inbound_status`` of a LiveKit-hosted number, lowered from the proto enum.
+LkInboundStatus = Literal["active", "unavailable", "detached", "unknown"]
+
+#: Whether calls to the number reach its inbound agent (derived; PHONE-NUMBERS.md §4.4).
+AttachState = Literal["routed", "detached", "not_routed", "pending", "offline", "released"]
+
+
 class PhoneNumberOut(BaseModel):
-    """A number owned by the workspace and the agent its inbound calls reach."""
+    """A number owned by the workspace and the agent its inbound calls reach.
+
+    ``source="livekit"`` rows are mirrored from the LiveKit project by
+    ``POST /v1/telephony/numbers/refresh``: they have a ``connection_id`` and
+    an ``lk_number_id`` and never a trunk. ``warnings`` is filled only on the
+    response of an assignment (the dispatch-rule conflict pre-check).
+    """
 
     id: str
     e164: str
+    source: NumberSource = "trunk"
     trunk_id: str | None = None
+    connection_id: str | None = None
     inbound_agent_id: str | None = None
     label: str = ""
     dispatch_rule_id: str | None = None
+    lk_number_id: str | None = None
+    lk_status: LkNumberStatus | None = None
+    lk_inbound_status: LkInboundStatus | None = None
+    lk_rule_ids: list[str] = []
+    attach_state: AttachState = "not_routed"
+    region: str = ""
+    lk_synced_at: datetime | None = None
+    warnings: list[str] = []
+
+
+class NumbersRefreshIn(BaseModel):
+    """``POST /v1/telephony/numbers/refresh``: mirror the project's LiveKit-hosted numbers.
+
+    Without ``connection_id`` every SIP-capable connection of the workspace is read.
+    """
+
+    connection_id: str | None = None
+
+
+class NumbersRefreshOut(BaseModel):
+    """What one connection's refresh changed. Nothing is bought or given back."""
+
+    connection_id: str
+    seen: int = 0
+    added: int = 0
+    updated: int = 0
+    released: int = 0
+    conflicts: list[str] = Field(
+        default_factory=list, description="E.164 numbers already registered as trunk numbers (skipped)"
+    )
+    warnings: list[str] = []
 
 
 class CallTransferIn(BaseModel):

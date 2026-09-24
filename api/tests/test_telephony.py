@@ -319,7 +319,17 @@ async def test_delete_trunk_deletes_rules_and_unroutes_numbers(
     assert len(world.lk.named("delete_dispatch_rule")) == 1
     assert [d.sip_trunk_id for d in world.lk.named("delete_trunk")] == ["ST_in_1"]
     listed = (await admin_client.get("/v1/telephony/numbers")).json()["items"]
-    assert listed == [
+    keys = (
+        "id",
+        "e164",
+        "trunk_id",
+        "inbound_agent_id",
+        "label",
+        "dispatch_rule_id",
+        "source",
+        "attach_state",
+    )
+    assert [{key: item[key] for key in keys} for item in listed] == [
         {
             "id": number.json()["id"],
             "e164": INBOUND_NUMBER,
@@ -327,6 +337,8 @@ async def test_delete_trunk_deletes_rules_and_unroutes_numbers(
             "inbound_agent_id": None,
             "label": "",
             "dispatch_rule_id": None,
+            "source": "trunk",
+            "attach_state": "not_routed",
         }
     ]
     async with database.session() as session:
@@ -1513,3 +1525,97 @@ async def test_a_late_worker_report_on_a_swept_call_is_a_no_op(
     assert response.json()["status"] == "failed"
     row = await _call_row(database, call_id)
     assert (row.status, row.answered_at) == ("failed", None)
+
+
+# ----------------------------------------------------- Telnyx outbound header (V4-05 addition)
+TELNYX_ADDRESS = "sip.telnyx.com"
+
+
+@pytest.mark.parametrize(
+    ("provider_hint", "expected"),
+    [("telnyx", {"X-Telnyx-Username": "lkap-user"}), ("twilio", {}), ("other", {})],
+)
+async def test_outbound_trunk_create_sends_the_telnyx_username_header_only_for_telnyx(
+    admin_client: httpx.AsyncClient, world: World, provider_hint: str, expected: dict[str, str]
+) -> None:
+    await _trunk(
+        admin_client,
+        world,
+        "outbound",
+        provider_hint=provider_hint,
+        address=TELNYX_ADDRESS,
+        auth_username="lkap-user",
+        auth_password="pw-secret-123",
+    )
+
+    (sent,) = world.lk.named("create_outbound_trunk")
+    assert dict(sent.trunk.headers) == expected
+    assert dict(sent.trunk.headers_to_attributes) == {}
+
+
+async def test_telnyx_username_change_replaces_the_trunk_with_the_new_header(
+    admin_client: httpx.AsyncClient, world: World
+) -> None:
+    trunk = await _trunk(
+        admin_client,
+        world,
+        "outbound",
+        provider_hint="telnyx",
+        address=TELNYX_ADDRESS,
+        auth_username="old-user",
+        auth_password="pw-secret-123",
+    )
+
+    response = await admin_client.put(
+        f"/v1/telephony/trunks/{trunk['id']}", json={"auth_username": "new-user"}
+    )
+
+    assert response.status_code == 200, response.text
+    (replaced,) = world.lk.named("update_outbound_trunk")
+    assert replaced["trunk_id"] == trunk["lk_trunk_id"]
+    info = replaced["trunk"]
+    assert dict(info.headers) == {"X-Telnyx-Username": "new-user"}
+    assert info.auth_username == "new-user"
+    assert info.auth_password == "pw-secret-123"  # kept from the vault on a full replace
+    assert list(info.numbers) == [OUTBOUND_NUMBER]
+    assert world.lk.named("update_outbound_trunk_fields") == []
+
+
+async def test_switching_an_outbound_trunk_to_telnyx_adds_the_header_and_a_rename_does_not_replace(
+    admin_client: httpx.AsyncClient, world: World
+) -> None:
+    trunk = await _trunk(admin_client, world, "outbound", auth_username="lkap-user", auth_password="pw-1")
+    url = f"/v1/telephony/trunks/{trunk['id']}"
+
+    await admin_client.put(url, json={"name": "renamed"})
+    assert world.lk.named("update_outbound_trunk") == []
+    assert len(world.lk.named("update_outbound_trunk_fields")) == 1
+
+    response = await admin_client.put(url, json={"provider_hint": "telnyx", "address": TELNYX_ADDRESS})
+
+    assert response.status_code == 200, response.text
+    (replaced,) = world.lk.named("update_outbound_trunk")
+    assert dict(replaced["trunk"].headers) == {"X-Telnyx-Username": "lkap-user"}
+    assert replaced["trunk"].address == TELNYX_ADDRESS
+    assert replaced["trunk"].name == "renamed"
+
+
+async def test_telnyx_outbound_resync_recreates_the_trunk_with_the_header(
+    admin_client: httpx.AsyncClient, world: World
+) -> None:
+    trunk = await _trunk(
+        admin_client,
+        world,
+        "outbound",
+        provider_hint="telnyx",
+        address=TELNYX_ADDRESS,
+        auth_username="lkap-user",
+        auth_password="pw-secret-123",
+    )
+
+    response = await admin_client.post(f"/v1/telephony/trunks/{trunk['id']}/sync")
+
+    assert response.status_code == 200, response.text
+    created = world.lk.named("create_outbound_trunk")
+    assert len(created) == 2
+    assert dict(created[-1].trunk.headers) == {"X-Telnyx-Username": "lkap-user"}

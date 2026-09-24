@@ -15,6 +15,16 @@ dialing and no transfer at all), `allowed_sip_hosts` (hosts a non-numeric
 `call_get(call_id)` read call history and status (`CallOut`).
 `workspace_get()` also echoes the same policy summary.
 
+## LiveKit-hosted numbers
+
+A number bought from LiveKit itself has no trunk: it appears in the overview
+with `source` `livekit`, its `lk_status` and a derived `attach_state`
+(`routed`, `detached`, `not_routed`, `pending`, `offline` or `released`).
+`livekit_numbers` counts them, and every one that is not `routed` adds a
+warning line. Buying a number, mirroring it (**Refresh from LiveKit**) and
+picking its inbound agent all happen in the console's Telephony page; no
+tool buys, refreshes or assigns a number.
+
 ## An agent's transfer targets
 
 `AgentConfig.telephony.transfer_targets` (`TransferTarget{label, to}`) are

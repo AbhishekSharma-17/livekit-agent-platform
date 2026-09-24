@@ -1,8 +1,33 @@
 {
   "$id": "lkap-contracts/PhoneNumberOut.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A number owned by the workspace and the agent its inbound calls reach.",
+  "description": "A number owned by the workspace and the agent its inbound calls reach.\n\n``source=\"livekit\"`` rows are mirrored from the LiveKit project by\n``POST /v1/telephony/numbers/refresh``: they have a ``connection_id`` and\nan ``lk_number_id`` and never a trunk. ``warnings`` is filled only on the\nresponse of an assignment (the dispatch-rule conflict pre-check).",
   "properties": {
+    "attach_state": {
+      "default": "not_routed",
+      "enum": [
+        "routed",
+        "detached",
+        "not_routed",
+        "pending",
+        "offline",
+        "released"
+      ],
+      "title": "Attach State",
+      "type": "string"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    },
     "dispatch_rule_id": {
       "anyOf": [
         {
@@ -40,6 +65,90 @@
       "title": "Label",
       "type": "string"
     },
+    "lk_inbound_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "active",
+            "unavailable",
+            "detached",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lk Inbound Status"
+    },
+    "lk_number_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lk Number Id"
+    },
+    "lk_rule_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Lk Rule Ids",
+      "type": "array"
+    },
+    "lk_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "active",
+            "pending",
+            "released",
+            "offline",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lk Status"
+    },
+    "lk_synced_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lk Synced At"
+    },
+    "region": {
+      "default": "",
+      "title": "Region",
+      "type": "string"
+    },
+    "source": {
+      "default": "trunk",
+      "enum": [
+        "trunk",
+        "livekit"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
     "trunk_id": {
       "anyOf": [
         {
@@ -51,6 +160,14 @@
       ],
       "default": null,
       "title": "Trunk Id"
+    },
+    "warnings": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
     }
   },
   "required": [

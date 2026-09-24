@@ -692,6 +692,6 @@ def test_migration_v3_001_upgrade_downgrade_upgrade_keeps_keys(tmp_path: Path) -
     assert _sql(database, "SELECT id, name, key_hash FROM api_keys") == [("k1", "old key", "h" * 64)]
     assert ("ix_api_keys_workspace",) in {(row[1],) for row in _sql(database, "PRAGMA index_list(api_keys)")}
 
-    _migrate(database, "head")
+    _migrate(database, "v3_001_agent_keys")
     assert _sql(database, "SELECT kind FROM api_keys") == [("standard",)]
     assert _sql(database, "SELECT version_num FROM alembic_version") == [("v3_001_agent_keys",)]

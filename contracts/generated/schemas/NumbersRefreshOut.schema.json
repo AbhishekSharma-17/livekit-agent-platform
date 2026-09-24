@@ -1,0 +1,52 @@
+{
+  "$id": "lkap-contracts/NumbersRefreshOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What one connection's refresh changed. Nothing is bought or given back.",
+  "properties": {
+    "added": {
+      "default": 0,
+      "title": "Added",
+      "type": "integer"
+    },
+    "conflicts": {
+      "description": "E.164 numbers already registered as trunk numbers (skipped)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Conflicts",
+      "type": "array"
+    },
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "released": {
+      "default": 0,
+      "title": "Released",
+      "type": "integer"
+    },
+    "seen": {
+      "default": 0,
+      "title": "Seen",
+      "type": "integer"
+    },
+    "updated": {
+      "default": 0,
+      "title": "Updated",
+      "type": "integer"
+    },
+    "warnings": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "connection_id"
+  ],
+  "title": "NumbersRefreshOut",
+  "type": "object"
+}

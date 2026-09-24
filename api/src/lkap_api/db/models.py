@@ -848,8 +848,9 @@ class SipDispatchRule(Base):
         String(32), ForeignKey("livekit_connections.id", ondelete="CASCADE"), nullable=False
     )
     lk_rule_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    trunk_id: Mapped[str] = mapped_column(
-        String(32), ForeignKey("sip_trunks.id", ondelete="CASCADE"), nullable=False
+    #: ``None`` only for the trunk-less managed rule of a LiveKit-hosted number (V4-05, D-V4-17).
+    trunk_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("sip_trunks.id", ondelete="CASCADE"), nullable=True
     )
     numbers: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     agent_id: Mapped[str] = mapped_column(
@@ -858,12 +859,21 @@ class SipDispatchRule(Base):
     room_prefix: Mapped[str] = mapped_column(String(128), nullable=False, default="", server_default="")
     pin: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    #: The number whose inbound agent owns this rule (its "managed" rule), either source.
+    phone_number_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("phone_numbers.id", ondelete="SET NULL"), nullable=True
+    )
 
     __table_args__ = (Index("ix_sip_dispatch_rules_workspace", "workspace_id"),)
 
 
 class PhoneNumber(Base):
-    """An E.164 number owned by a workspace and bound to a trunk."""
+    """An E.164 number owned by a workspace: bound to a trunk, or hosted by LiveKit (V4-05).
+
+    ``source="livekit"`` rows are a mirror of the project's LiveKit Phone Numbers
+    (``POST /v1/telephony/numbers/refresh``): ``connection_id`` and
+    ``lk_number_id`` are set, ``trunk_id`` never is.
+    """
 
     __tablename__ = "phone_numbers"
 
@@ -877,8 +887,22 @@ class PhoneNumber(Base):
         String(32), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     label: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="trunk", server_default="trunk")
+    connection_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("livekit_connections.id", ondelete="CASCADE"), nullable=True
+    )
+    lk_number_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lk_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    lk_inbound_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    lk_rule_ids: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    region: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
+    lk_synced_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
-    __table_args__ = (Index("ix_phone_numbers_workspace", "workspace_id"),)
+    __table_args__ = (
+        CheckConstraint("source IN ('trunk','livekit')", name="source_valid"),
+        UniqueConstraint("workspace_id", "lk_number_id", name="uq_phone_numbers_workspace_lk_number"),
+        Index("ix_phone_numbers_workspace", "workspace_id"),
+    )
 
 
 class Call(Base):

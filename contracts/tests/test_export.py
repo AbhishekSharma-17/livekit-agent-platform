@@ -61,7 +61,9 @@ def test_generated_up_to_date(generated_dir: Path, tmp_path: Path) -> None:
 
 def test_providers_json_lists_every_registry_entry(generated_dir: Path) -> None:
     document = json.loads((generated_dir / "providers.json").read_text(encoding="utf-8"))
-    assert set(document) == {"v", "providers"}, "providers.json must match ProvidersResponse exactly"
+    assert set(document) == {"v", "providers", "model_id_rules"}, (
+        "providers.json must match ProvidersResponse exactly (V4-07 added model_id_rules)"
+    )
     assert document["v"] == 2, "V2-06 bumped ProvidersResponse to v=2 (ProviderOut)"
     assert [p["id"] for p in document["providers"]] == [spec.id for spec in REGISTRY]
     assert all(p["enabled"] is True and p["installed_on"] == [] for p in document["providers"]), (

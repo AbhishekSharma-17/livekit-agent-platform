@@ -29,7 +29,16 @@ from lkap_contracts.connections import (
 from lkap_contracts.flow import FlowSpec
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.pricing import Unit as Unit
-from lkap_contracts.providers import CatalogKind, ProviderSpec
+from lkap_contracts.providers import (
+    BARE_TOKEN_MIN_LEN,
+    MODEL_ID_MAX_LEN,
+    MODEL_ID_PATTERN,
+    SECRET_PREFIXES,
+    CatalogKind,
+    ModelCapabilities,
+    ProviderKind,
+    ProviderSpec,
+)
 from lkap_contracts.telephony import DTMF_PATTERN, E164_PATTERN, TRANSFER_TARGET_PATTERN
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tools import ToolDefinition
@@ -67,6 +76,22 @@ class ProviderOut(ProviderSpec):
     default_credential_id: str | None = None
 
 
+class ModelIdRules(BaseModel):
+    """The model-id rule the console mirrors (docs/v4/CUSTOM-MODELS.md D-V4-23, R-V4-21).
+
+    Defaults are the contracts' own constants, so ``ModelIdRules()`` is the
+    live rule. ``pattern`` is the syntax rule as a JS-compatible regex; a value
+    starting with one of ``secret_prefixes``, or a bare token of at least
+    ``bare_token_min_len`` characters of one class with no ``/ . : -``, is
+    refused as a secret first.
+    """
+
+    pattern: str = MODEL_ID_PATTERN
+    secret_prefixes: list[str] = Field(default_factory=lambda: list(SECRET_PREFIXES))
+    max_len: int = MODEL_ID_MAX_LEN
+    bare_token_min_len: int = BARE_TOKEN_MIN_LEN
+
+
 class ProvidersResponse(BaseModel):
     """``GET /v1/providers``.
 
@@ -74,10 +99,14 @@ class ProvidersResponse(BaseModel):
     (a superset of ``ProviderSpec`` with this workspace's ``enabled``,
     ``installed_on`` and ``default_credential_id``), not the bare registry
     entry.
+
+    ``model_id_rules`` (V4-07, additive): the model-id rule for the console;
+    filled by ``GET /v1/providers`` and by the ``providers.json`` export.
     """
 
     v: Literal[1, 2] = 2
     providers: list[ProviderOut]
+    model_id_rules: ModelIdRules | None = None
 
 
 class ProviderSettingsIn(BaseModel):
@@ -109,6 +138,45 @@ class CatalogResponse(BaseModel):
     fetched_at: datetime | None = None
     source: Literal["vendor", "static"] = "static"
     error: str | None = None
+    total: int | None = None
+    """Items matching ``q``/``model`` before ``limit``/``offset`` (V4-07); ``None`` from older apis."""
+
+
+class ProviderModelOut(BaseModel):
+    """One workspace's record of a model id (``provider_models``, D-V4-24, R-V4-24).
+
+    Keyed by ``(provider_home, kind, model_id)``: ``provider_home`` is the
+    entry's credential home, so an OpenRouter model tested from the STT entry
+    and from the LLM entry is one row per kind. ``last_test_message`` is
+    scrubbed of secrets and is vendor text: render it as data, never markup.
+    ``last_test_fingerprint`` is the credential's display fingerprint at test
+    time; a rotated key no longer matches it, which resets "Tested".
+    """
+
+    id: str
+    provider_id: str
+    provider_home: str
+    kind: ProviderKind
+    model_id: str
+    declared: ModelCapabilities | None = None
+    detected: ModelCapabilities | None = None
+    last_test_at: datetime | None = None
+    last_test_ok: bool | None = None
+    last_test_message: str | None = None
+    last_test_latency_ms: int | None = None
+    last_test_cost_usd: Decimal | None = None
+    last_test_credential_id: str | None = None
+    last_test_fingerprint: str | None = None
+    catalog_seen_at: datetime | None = None
+    catalog_missing_since: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProviderModelDeclare(BaseModel):
+    """``PUT /v1/providers/{id}/models/{model_id}``: what an admin says the model can do."""
+
+    declared: ModelCapabilities
 
 
 # ---------------------------------------------------------------------- credentials
@@ -1175,3 +1243,4 @@ DispatchRulePage = Page[DispatchRuleOut]
 PhoneNumberPage = Page[PhoneNumberOut]
 WebhookEndpointPage = Page[WebhookEndpointOut]
 WebhookDeliveryPage = Page[WebhookDeliveryOut]
+ProviderModelPage = Page[ProviderModelOut]

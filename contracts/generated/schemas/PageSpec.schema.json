@@ -1,0 +1,82 @@
+{
+  "$id": "lkap-contracts/PageSpec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "How to follow a vendor list's pages (D-V4-25).\n\n* ``token`` / ``cursor``: send ``param=<value at next_path>`` until the\n  value is missing or empty (Gemini ``pageToken``/``nextPageToken``,\n  Anthropic ``after_id``/``last_id``, Cartesia ``starting_after``/``next_page``).\n* ``offset``: send ``param=<items so far>`` until a short or empty page.\n* ``page``: send ``param=<n>`` from 0 (``page_number``), stopping at the\n  total page count read from ``next_path`` or at an empty page (Hume).\n\n``more_path`` (optional) names a boolean such as ``has_more``; ``false``\nstops the loop before another request. ``size_param=size`` rides on\nevery request. The loop never exceeds ``max_pages``.",
+  "properties": {
+    "kind": {
+      "enum": [
+        "cursor",
+        "token",
+        "offset",
+        "page"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "max_pages": {
+      "default": 10,
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Max Pages",
+      "type": "integer"
+    },
+    "more_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "More Path"
+    },
+    "next_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Path"
+    },
+    "param": {
+      "title": "Param",
+      "type": "string"
+    },
+    "size": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Size"
+    },
+    "size_param": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Size Param"
+    }
+  },
+  "required": [
+    "kind",
+    "param"
+  ],
+  "title": "PageSpec",
+  "type": "object"
+}

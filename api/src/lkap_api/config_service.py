@@ -46,6 +46,7 @@ built-in checks, and its issues appear in ``issues`` and in the flat
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -63,7 +64,7 @@ from lkap_contracts.agent_config import (
     VoiceConfig,
     effective_qa,
 )
-from lkap_contracts.api_models import Issue, Severity, ValidationResult
+from lkap_contracts.api_models import CatalogItem, Issue, ProviderModelOut, Severity, ValidationResult
 from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import (
@@ -72,10 +73,11 @@ from lkap_contracts.providers import (
     WorkerImage,
     credential_home,
     get,
+    validate_model_id,
     vision_support,
 )
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.connections.probe import effective_capabilities
@@ -83,6 +85,7 @@ from lkap_api.db.models import (
     Credential,
     KnowledgeBase,
     LiveKitConnection,
+    ProviderCatalogCache,
     Tool,
     WorkerInstance,
     WorkspaceProvider,
@@ -205,6 +208,25 @@ class ValidationContext:
     telephony_policy: TelephonyPolicy | None = None
     """The workspace's outbound dialing policy (R-V2-23; ``settings["telephony"]``, default deny);
     ``None`` skips the transfer-destination policy check (``lkap_api.telephony.validation``)."""
+    credential_fingerprints: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    """``{credential_id: fingerprint}`` (V4-07): a model test counts only with the slot's current key."""
+    model_records: Mapping[tuple[str, str, str], ProviderModelOut] = dataclasses.field(default_factory=dict)
+    """The workspace's ``provider_models`` rows keyed ``(provider_home, kind, model_id)`` (V4-07)."""
+    catalog_items: Mapping[str, Mapping[str, CatalogItem]] = dataclasses.field(default_factory=dict)
+    """``{provider_id: {item_id: item}}`` from the workspace's cached live ``models`` catalogs,
+    fresh or stale, for the providers the config uses (V4-07)."""
+
+    def fingerprint_for(self, ref: ProviderRef) -> str | None:
+        """The fingerprint of the credential ``ref`` uses, if it uses one."""
+        return self.credential_fingerprints.get(ref.credential_id) if ref.credential_id else None
+
+    def record_for(self, spec: ProviderSpec, model_id: str) -> ProviderModelOut | None:
+        """The workspace's ``provider_models`` row for ``model_id`` under ``spec``'s home and kind."""
+        return self.model_records.get((credential_home(spec), spec.kind, model_id))
+
+    def catalog_item(self, provider_id: str, model_id: str) -> CatalogItem | None:
+        """``model_id``'s item in ``provider_id``'s cached live catalog, if listed."""
+        return self.catalog_items.get(provider_id, {}).get(model_id)
 
     def slots(self) -> list[tuple[ProviderSlot, ProviderRef]]:
         """The (slot, ref) pairs the pipeline declares, plus `qa.model` when set (R-V2-6).
@@ -451,7 +473,7 @@ def _validate_slot(ctx: ValidationContext, slot: ProviderSlot, ref: ProviderRef,
         findings.add("error", label, _not_installed_message(spec, ctx.connection))
 
     _validate_credential(label, ref, spec, ctx.credential_providers, findings)
-    _validate_model(label, ref, spec, findings)
+    _validate_model(ctx, label, ref, spec, findings)
     _validate_fields(label, ref, spec, findings)
 
 
@@ -534,14 +556,41 @@ def _validate_credential(
             )
 
 
-def _validate_model(label: str, ref: ProviderRef, spec: ProviderSpec, findings: _Findings) -> None:
-    if ref.model and spec.models and ref.model not in {m.id for m in spec.models}:
-        findings.add(
-            "warning",
-            label,
-            f"model '{ref.model}' is not in the suggestion list for '{spec.id}' "
-            "(free text is allowed; vendor model lists change often)",
-        )
+#: How long a passing "Test model" run silences the unknown-model warning (R-V4-24).
+TESTED_WINDOW_S = 30 * 24 * 3600
+
+
+def _validate_model(
+    ctx: ValidationContext, label: str, ref: ProviderRef, spec: ProviderSpec, findings: _Findings
+) -> None:
+    """Warn once about a model id nobody vouches for (D-V4-23, R-V4-21, R-V4-26).
+
+    The id is "known" when the registry suggests it, the workspace's cached
+    live catalog lists it, or a "Test model" run with the slot's current key
+    answered within :data:`TESTED_WINDOW_S`. The message never contains the id
+    (it may be a pasted key). An id that fails the syntax/secret rule is left
+    to the registered custom-model validator, which reports the error; a
+    failed current test is reported there too, with its reason.
+    """
+    model = ref.model
+    if not model or validate_model_id(model) is not None:
+        return
+    if model == spec.default_model or model in {m.id for m in spec.models}:
+        return
+    if ctx.catalog_item(spec.id, model) is not None:
+        return
+    record = ctx.record_for(spec, model)
+    if record is not None and record.last_test_at is not None and record.last_test_ok is not None:
+        fingerprint = ctx.fingerprint_for(ref)
+        fresh = (dt.datetime.now(dt.UTC) - record.last_test_at).total_seconds() <= TESTED_WINDOW_S
+        if fresh and (fingerprint is None or record.last_test_fingerprint == fingerprint):
+            return
+    findings.add(
+        "warning",
+        label,
+        f"this model id is not in the suggestion list or the live catalog for '{spec.id}' "
+        "— run Test model, or pick a listed one",
+    )
 
 
 def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings: _Findings) -> None:
@@ -555,7 +604,8 @@ def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings:
             findings.add(
                 "error",
                 label,
-                f"field '{name}' must be one of {', '.join(field_spec.options)} (got '{value}')",
+                # Never echo the value: it may be a pasted key (R-V4-21).
+                f"field '{name}' must be one of {', '.join(field_spec.options)}",
             )
     for field_spec in spec.fields:
         if field_spec.required and field_spec.default is None and field_spec.name not in ref.fields:
@@ -739,15 +789,18 @@ async def validation_context_for(
         A context with credentials, tools, knowledge bases, disabled providers
         and the connection (with its pool's installed providers).
     """
-    credential_providers = dict(
+    credential_rows = (
         (
             await db.execute(
-                select(Credential.id, Credential.provider_id).where(Credential.workspace_id == workspace_id)
+                select(Credential.id, Credential.provider_id, Credential.fingerprint).where(
+                    Credential.workspace_id == workspace_id
+                )
             )
         )
         .tuples()
         .all()
     )
+    credential_providers = {row[0]: row[1] for row in credential_rows}
     tool_names_by_id = dict(
         (await db.execute(select(Tool.id, Tool.name).where(Tool.workspace_id == workspace_id))).tuples().all()
     )
@@ -776,7 +829,52 @@ async def validation_context_for(
         known_kb_ids=kb_ids,
         tool_names_by_id=tool_names_by_id,
         telephony_policy=await _telephony_policy(db, workspace_id),
+        credential_fingerprints={row[0]: row[2] for row in credential_rows},
+        model_records=await _model_records(db, workspace_id),
+        catalog_items=await _catalog_items(
+            db,
+            provider_ids={ref.provider_id for _, ref in ValidationContext(config=config).slots()},
+            credential_ids=list(credential_providers),
+        ),
     )
+
+
+async def _model_records(db: AsyncSession, workspace_id: str) -> dict[tuple[str, str, str], ProviderModelOut]:
+    """The workspace's ``provider_models`` rows, in one query (V4-07)."""
+    from lkap_api.custom_models.records import records_for_workspace  # noqa: PLC0415 - avoids an import cycle
+
+    return await records_for_workspace(db, workspace_id=workspace_id)
+
+
+async def _catalog_items(
+    db: AsyncSession, *, provider_ids: set[str], credential_ids: list[str]
+) -> dict[str, dict[str, CatalogItem]]:
+    """Cached live ``models`` items for ``provider_ids``, fresh or stale, in one query (V4-07).
+
+    ``provider_catalog_cache`` has no ``workspace_id``: the rows read are the
+    workspace's own credentials' rows plus the keyless rows of public lists.
+    """
+    if not provider_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(ProviderCatalogCache.provider_id, ProviderCatalogCache.items).where(
+                ProviderCatalogCache.provider_id.in_(provider_ids),
+                ProviderCatalogCache.kind == "models",
+                or_(
+                    ProviderCatalogCache.credential_id.in_(credential_ids),
+                    ProviderCatalogCache.credential_id.is_(None),
+                ),
+            )
+        )
+    ).tuples()
+    out: dict[str, dict[str, CatalogItem]] = {}
+    for provider_id, items in rows:
+        bucket = out.setdefault(provider_id, {})
+        for raw in items if isinstance(items, list) else []:
+            if isinstance(raw, dict) and isinstance(raw.get("id"), str):
+                bucket.setdefault(raw["id"], CatalogItem.model_validate(raw))
+    return out
 
 
 async def _telephony_policy(db: AsyncSession, workspace_id: str) -> TelephonyPolicy:

@@ -95,3 +95,85 @@ sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v4_001-<ts>.db"
 cd api && uv run alembic upgrade head        # → v4_001_livekit_numbers
 sqlite3 -readonly data/lkap.db "SELECT version_num FROM alembic_version"
 ```
+
+---
+
+# Migration rehearsal: `v4_002_provider_models` (V4-07)
+
+Rehearsed 2026-09-25 by V4-07. **Not applied to `api/data/lkap.db`**: the coordinator applies it (HANDOFF rule 4, R-V4-24). V4-07 only read the live DB with one `.backup`. The backup read `alembic_version = v4_001_livekit_numbers`, so the coordinator already applied `v4_001`.
+
+## What the revision does
+
+`api/alembic/versions/v4_002_provider_models.py`, down_revision `v4_001_livekit_numbers` (CUSTOM-MODELS.md D-V4-24). It adds **one new table** and touches nothing else:
+
+| Column | Type |
+|---|---|
+| `id` | `VARCHAR(32)` PK (`pk_provider_models`) |
+| `workspace_id` | `VARCHAR(32) NOT NULL`, FK `workspaces.id` `ON DELETE CASCADE` |
+| `provider_id`, `provider_home` | `VARCHAR(64) NOT NULL` |
+| `kind` | `VARCHAR(16) NOT NULL` |
+| `model_id` | `VARCHAR(200) NOT NULL` |
+| `declared`, `detected` | `JSON NULL` (`ModelCapabilities`) |
+| `last_test_at` | `DATETIME NULL` |
+| `last_test_ok` | `BOOLEAN NULL` |
+| `last_test_message` | `VARCHAR(500) NULL` (scrubbed) |
+| `last_test_latency_ms` | `INTEGER NULL` |
+| `last_test_cost_usd` | `NUMERIC(12, 6) NULL` |
+| `last_test_credential_id` | `VARCHAR(32) NULL` (no FK: deleting a key must not touch the record) |
+| `last_test_fingerprint` | `VARCHAR(32) NULL` |
+| `catalog_seen_at`, `catalog_missing_since` | `DATETIME NULL` |
+| `created_at`, `updated_at` | `DATETIME NOT NULL` |
+
+Also `uq_provider_models_workspace_home_kind_model UNIQUE (workspace_id, provider_home, kind, model_id)` and `ix_provider_models_workspace (workspace_id)`. It is a plain `CREATE TABLE`, with no `batch_alter_table`, so SQLite and Postgres run the same DDL. The downgrade drops the index and the table, and its rows go with it. Nothing references the table.
+
+## Procedure (scratchpad `…/scratchpad/v407/`)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/v407/lkap.backup.db"
+cp lkap.backup.db rehearsal-copy.db;  rehearse.sh rehearsal-copy.db <worktree>/api
+seeded.sh <scratchpad>/v407 <worktree>/api      # its own copy: rehearsal-seeded.db
+```
+
+`rehearse.sh` refuses any path that ends in `api/data/lkap.db`. It unsets `LKAP_DATABASE_URL`, `LKAP_DATA_DIR`, `LKAP_MASTER_KEY` and `LIVEKIT_*`, and runs `uv run alembic -x url=sqlite+aiosqlite:///<copy>` from the worktree's `api/`. The chain is `upgrade head` → `downgrade v4_001_livekit_numbers` → `upgrade head` → `alembic check`. After each step it records the version, the `provider_models` DDL, the row count of every table, `PRAGMA integrity_check` and `foreign_key_check`.
+
+## Results
+
+### Copy of the live DB (35 sessions, 1042 audit rows, 12 agents, 2 credentials, 1 catalog cache row)
+
+| Step | Version | Shape | Rows | Integrity |
+|---|---|---|---|---|
+| before | `v4_001_livekit_numbers` | no `provider_models` | every table count recorded | ok, 0 FK violations |
+| upgrade head | `v4_002_provider_models` | `provider_models`: 19 columns, PK, FK (cascade), unique, `ix_provider_models_workspace` | every pre-existing count identical; `provider_models=0` | ok, 0 |
+| downgrade `v4_001_livekit_numbers` | `v4_001_livekit_numbers` | table and index gone | identical to "before" | ok, 0 |
+| upgrade head (again) | `v4_002_provider_models` | as after the first upgrade | identical | ok, 0 |
+| `alembic check` | | "No new upgrade operations detected." (the models match) | | |
+
+### Seeded copy
+
+| Step | Result |
+|---|---|
+| upgrade head | Clean. |
+| seed | Two rows with the same `(workspace, openrouter-llm, model_id)` and kinds `stt` and `llm`: both accepted. The same `(workspace, home, stt, model_id)` a second time is refused by `uq_provider_models_workspace_home_kind_model`. |
+| downgrade | The table is gone, and its 2 rows with it. The other tables are unchanged. |
+| upgrade head, then check | `provider_models` is back, empty. Integrity ok, 0 FK violations, and `alembic check` is clean. |
+
+Post-upgrade DDL (from the rehearsal output):
+
+```
+CREATE TABLE provider_models ( id VARCHAR(32) NOT NULL, workspace_id VARCHAR(32) NOT NULL, provider_id VARCHAR(64) NOT NULL, provider_home VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, model_id VARCHAR(200) NOT NULL, declared JSON, detected JSON, last_test_at DATETIME, last_test_ok BOOLEAN, last_test_message VARCHAR(500), last_test_latency_ms INTEGER, last_test_cost_usd NUMERIC(12, 6), last_test_credential_id VARCHAR(32), last_test_fingerprint VARCHAR(32), catalog_seen_at DATETIME, catalog_missing_since DATETIME, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, CONSTRAINT pk_provider_models PRIMARY KEY (id), CONSTRAINT fk_provider_models_workspace_id_workspaces FOREIGN KEY(workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE, CONSTRAINT uq_provider_models_workspace_home_kind_model UNIQUE (workspace_id, provider_home, kind, model_id) )
+CREATE INDEX ix_provider_models_workspace ON provider_models (workspace_id)
+```
+
+In the suite: `tests/test_migrations.py::test_upgrade_head_matches_the_models_exactly` and `tests/test_health.py` pass at the new head.
+
+**Postgres**: not rehearsed locally, because Docker is not running on the dev host. The `test-postgres` job in `python.yml` runs the full api suite, and so every migration, on Postgres once the branch is on CI. The revision is one plain `create_table` plus `create_index`, with no SQLite-specific DDL.
+
+## Coordinator step (after merge)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v4_002-<ts>.db"
+cd api && uv run alembic upgrade head        # → v4_002_provider_models
+sqlite3 -readonly data/lkap.db "SELECT version_num FROM alembic_version"
+```
+
+The running api (`--reload`) loads the new code as soon as the merge lands, but the `provider_models` table does not exist until this step. Until then, `/v1/health` reports `db: error` (it compares against the migration head). Validation and the catalog route query `provider_models` too, so apply the migration right after merging.

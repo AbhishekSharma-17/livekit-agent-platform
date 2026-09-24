@@ -7,9 +7,10 @@ objects from it, and the web console renders its forms from the exported
 `generated/providers.json`.
 """
 
-from typing import Literal
+import re
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 ProviderKind = Literal[
     "realtime",
@@ -41,6 +42,209 @@ WorkerImage = Literal["slim", "full", "isolated"]
 
 #: What a vendor catalog adapter can list.
 CatalogKind = Literal["models", "voices", "avatars", "personas"]
+
+# ------------------------------------------------------------------ model ids (V4-07)
+#: Registry kinds whose slot takes a model id (docs/v4/CUSTOM-MODELS.md D-V4-23, R-V4-22).
+#: The console renders the model combobox for every one of them, even with no ``models``.
+MODEL_KINDS: frozenset[ProviderKind] = frozenset({"realtime", "stt", "llm", "tts", "image_gen", "embedding"})
+
+#: Key prefixes a model id never starts with (R-V4-21). Grows by test, never by guess.
+#: Longer prefixes (``sk-or-``, ``sk-ant-``, ``sk_car_``) are listed for documentation and
+#: for the console mirror; ``sk-``/``sk_`` already cover them.
+SECRET_PREFIXES: tuple[str, ...] = (
+    "sk-",
+    "sk_",
+    "sk-or-",
+    "sk-ant-",
+    "sk_car_",
+    "AIza",
+    "xai-",
+    "gsk_",
+    "hf_",
+    "AKIA",
+    "ghp_",
+    "github_pat_",
+    "ya29.",
+    "xi-",
+)
+
+#: Longest model id the platform stores (the ``provider_models.model_id`` column).
+MODEL_ID_MAX_LEN = 200
+
+#: A value this long made of one character class with no separator is a bare token (a key).
+BARE_TOKEN_MIN_LEN = 32
+
+#: Field names whose values are ids, checked by the same rule as a model id (R-V4-21).
+#: Dotted field names (``simli_config.face_id``) are matched on their last segment.
+ID_LIKE_FIELD_NAMES: frozenset[str] = frozenset(
+    {"voice", "voice_id", "avatar_id", "face_id", "pal_id", "persona_id", "voice_name", "emotion_id"}
+)
+
+#: The syntax rule as one JS-compatible regular expression (the console mirrors it).
+#: 1-200 printable ASCII characters without whitespace, ``? # & = < > " ' ```, never
+#: ``://`` and never starting with ``http``. The secret check is separate
+#: (:data:`SECRET_PREFIXES`, the bare-token rule), and runs first.
+MODEL_ID_PATTERN = (
+    r"^(?![Hh][Tt][Tt][Pp])(?!.*://)[!$%()*+,\-./0-9:;@A-Z\[\\\]^_a-z{|}~]{1," + str(MODEL_ID_MAX_LEN) + r"}$"
+)
+
+_MODEL_ID_RE = re.compile(MODEL_ID_PATTERN)
+_BARE_TOKEN_RE = re.compile(r"[A-Za-z0-9+]+={0,2}")
+_FORBIDDEN_CHARS = frozenset("?#&=<>\"'`")
+
+#: The one message a secret-looking value gets. It never contains any part of the value.
+SECRET_LOOKING_REASON = "looks like an API key, not a model id"
+
+
+def looks_like_secret(value: str) -> bool:
+    """Whether ``value`` looks like an API key rather than an id (R-V4-21).
+
+    True for a value starting with one of :data:`SECRET_PREFIXES`, or a bare
+    token: at least :data:`BARE_TOKEN_MIN_LEN` characters of one class (hex or
+    base64 alphanumerics) with no ``/ . : -`` separator.
+    """
+    text = value.strip()
+    if any(text.startswith(prefix) for prefix in SECRET_PREFIXES):
+        return True
+    return len(text) >= BARE_TOKEN_MIN_LEN and _BARE_TOKEN_RE.fullmatch(text) is not None
+
+
+def validate_model_id(value: str) -> str | None:
+    """Return why ``value`` cannot be a model id, or ``None`` when it can (R-V4-21).
+
+    The secret check runs first; no reason ever contains any part of
+    ``value``, so callers may put the reason in errors, audit rows and logs.
+
+    Args:
+        value: The model id (or voice / avatar id) an admin typed.
+
+    Returns:
+        A short, value-free reason, or ``None``.
+    """
+    if looks_like_secret(value):
+        return SECRET_LOOKING_REASON
+    if not value:
+        return "is empty"
+    if len(value) > MODEL_ID_MAX_LEN:
+        return f"is longer than {MODEL_ID_MAX_LEN} characters"
+    if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        return "contains whitespace or a control character"
+    if any(ord(ch) > 0x7E for ch in value):
+        return "contains a non-ASCII character"
+    if "://" in value or value[:4].lower() == "http":
+        return "looks like a URL, not a model id"
+    if any(ch in _FORBIDDEN_CHARS for ch in value):
+        return "contains a character model ids never use (one of ? # & = < > quotes or backtick)"
+    if _MODEL_ID_RE.fullmatch(value) is None:  # pragma: no cover - the checks above are exhaustive
+        return "is not a valid model id"
+    return None
+
+
+def id_like_field(name: str) -> bool:
+    """Whether a (possibly dotted) field name carries an id checked by :func:`validate_model_id`."""
+    return name.rsplit(".", 1)[-1] in ID_LIKE_FIELD_NAMES
+
+
+class ModelCapabilities(BaseModel):
+    """What one model can do, as far as the platform knows (D-V4-24, R-V4-23).
+
+    ``None`` means unknown. Resolved per field from, in order: the admin's
+    declaration, the last "Test model" probe, the live catalog item's
+    metadata, the registry; ``source`` names the source of ``vision``.
+    """
+
+    vision: bool | None = None
+    tools: bool | None = None
+    audio_in: bool | None = None
+    audio_out: bool | None = None
+    streaming: bool | None = None
+    context_tokens: int | None = None
+    source: Literal["declared", "detected", "catalog", "registry"] | None = None
+
+
+class CatalogFilter(BaseModel):
+    """Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).
+
+    Applied by the api after the adapter fetch, so one vendor adapter can
+    serve several entries (OpenAI's one ``/models`` list feeds six). Every
+    set condition must hold: ``id_include`` must match, ``id_exclude`` must
+    not (both :func:`re.search`, case-insensitive), and the list at the dotted
+    ``meta_path`` must contain ``meta_contains``.
+    """
+
+    id_include: str | None = None
+    id_exclude: str | None = None
+    meta_path: str | None = None
+    meta_contains: str | None = None
+
+    @field_validator("id_include", "id_exclude")
+    @classmethod
+    def _compiles(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"not a valid regular expression: {exc}") from exc
+        return value
+
+    @model_validator(mode="after")
+    def _meta_pair(self) -> "CatalogFilter":
+        if (self.meta_path is None) != (self.meta_contains is None):
+            raise ValueError("meta_path and meta_contains are set together")
+        return self
+
+    def matches_id(self, item_id: str) -> bool:
+        """Whether ``item_id`` passes the id conditions (the meta condition is not checked)."""
+        if self.id_include is not None and re.search(self.id_include, item_id, re.IGNORECASE) is None:
+            return False
+        return self.id_exclude is None or re.search(self.id_exclude, item_id, re.IGNORECASE) is None
+
+    def matches(self, item_id: str, meta: dict[str, Any]) -> bool:
+        """Whether a catalog item (its id and raw vendor ``meta``) passes every condition."""
+        if not self.matches_id(item_id):
+            return False
+        if self.meta_path is None or self.meta_contains is None:
+            return True
+        node: Any = meta
+        for part in self.meta_path.split("."):
+            if not isinstance(node, dict):
+                return False
+            node = node.get(part)
+        return isinstance(node, list) and self.meta_contains in node
+
+
+class PageSpec(BaseModel):
+    """How to follow a vendor list's pages (D-V4-25).
+
+    * ``token`` / ``cursor``: send ``param=<value at next_path>`` until the
+      value is missing or empty (Gemini ``pageToken``/``nextPageToken``,
+      Anthropic ``after_id``/``last_id``, Cartesia ``starting_after``/``next_page``).
+    * ``offset``: send ``param=<items so far>`` until a short or empty page.
+    * ``page``: send ``param=<n>`` from 0 (``page_number``), stopping at the
+      total page count read from ``next_path`` or at an empty page (Hume).
+
+    ``more_path`` (optional) names a boolean such as ``has_more``; ``false``
+    stops the loop before another request. ``size_param=size`` rides on
+    every request. The loop never exceeds ``max_pages``.
+    """
+
+    kind: Literal["cursor", "token", "offset", "page"]
+    param: str
+    next_path: str | None = None
+    more_path: str | None = None
+    size_param: str | None = None
+    size: int | None = None
+    max_pages: int = Field(10, ge=1, le=50)
+
+
+#: Catalog adapters whose vendor list answers without a key (R-V4-9, R-V4-28). They
+#: may be a `CatalogSpec.adapter` but never a `ProviderSpec.test`: a list that
+#: answers a bogus key cannot tell a good key from a bad one. (OpenRouter's
+#: ``/models`` is public too, but its adapter probes ``/key`` first, so it is keyed.)
+#: The api's adapters declare ``public=True`` for exactly these names.
+PUBLIC_CATALOG_ADAPTERS: frozenset[str] = frozenset(
+    {"deepgram_stt_models", "deepgram_tts_models", "rime_voices"}
+)
 
 #: Gemini Live prebuilt voice names offered in the console.
 #:
@@ -166,11 +370,18 @@ class ModelSpec(BaseModel):
 
 
 class CatalogSpec(BaseModel):
-    """How to list a provider's models, voices, avatars or personas from the vendor."""
+    """How to list a provider's models, voices, avatars or personas from the vendor.
+
+    ``filter`` and ``page`` (V4-07, D-V4-25) are registry data the api applies
+    around the adapter: ``filter`` keeps this entry's items out of a shared
+    vendor list, ``page`` follows the vendor's pagination.
+    """
 
     adapter: str
     kinds: list[CatalogKind] = []
     ttl_s: int = 3600
+    filter: CatalogFilter | None = None
+    page: PageSpec | None = None
 
 
 class ProviderCapabilities(BaseModel):
@@ -211,6 +422,14 @@ class ProviderSpec(BaseModel):
     worker_image: WorkerImage = "full"
     catalog: CatalogSpec | None = None
     test: str | None = None
+    probe: str | None = Field(
+        None,
+        description=(
+            "The api's 'Test model' probe adapter for this entry (docs/v4/CUSTOM-MODELS.md D-V4-26): "
+            "a capped POST with a payload, deliberately separate from `test` (a GET that lists). "
+            "Unset means no model test; never set on vad, turn_detection or noise_cancellation."
+        ),
+    )
     price_ref: str | None = None
     notes: str | None = None
     package: str
@@ -349,6 +568,50 @@ def _full(
         docs_url=docs_url,
         get_key_url=get_key_url,
     )
+
+
+# ------------------------------------------------ live catalog wiring (V4-07, D-V4-25)
+#: TTLs: a vendor list rarely changes within a day; OpenRouter's churns faster.
+TTL_PUBLIC_LIST_S = 86_400
+TTL_OPENROUTER_S = 21_600
+
+#: OpenAI's one ``/v1/models`` list mixes every kind; each entry keeps its own slice.
+_OPENAI_LLM_FILTER = CatalogFilter(
+    id_include=r"^(gpt-|o\d|chatgpt-)",
+    id_exclude=r"-(tts|transcribe|realtime|audio|search|instruct)|embedding|image|whisper|dall-e",
+)
+_OPENAI_TTS_FILTER = CatalogFilter(id_include=r"(^|-)tts(-|$)")
+_OPENAI_STT_FILTER = CatalogFilter(id_include=r"transcribe|^whisper")
+_OPENAI_REALTIME_FILTER = CatalogFilter(id_include=r"realtime")
+_OPENAI_EMBEDDING_FILTER = CatalogFilter(id_include=r"^text-embedding")
+_OPENAI_IMAGE_FILTER = CatalogFilter(id_include=r"^(gpt-image|dall-e)")
+
+#: Gemini's ``/v1beta/models``: ``pageSize`` <= 1000 with ``pageToken``/``nextPageToken``.
+_GEMINI_PAGE = PageSpec(
+    kind="token", param="pageToken", next_path="nextPageToken", size_param="pageSize", size=1000
+)
+_GEMINI_LLM_FILTER = CatalogFilter(
+    id_exclude=r"-tts|embedding|image|live|native-audio",
+    meta_path="supportedGenerationMethods",
+    meta_contains="generateContent",
+)
+_GEMINI_LIVE_FILTER = CatalogFilter(
+    meta_path="supportedGenerationMethods", meta_contains="bidiGenerateContent"
+)
+_GEMINI_IMAGE_FILTER = CatalogFilter(id_include=r"-image")
+
+#: Anthropic's ``/v1/models``: ``limit`` <= 1000, ``after_id`` = the previous page's ``last_id``.
+_ANTHROPIC_PAGE = PageSpec(
+    kind="cursor", param="after_id", next_path="last_id", more_path="has_more", size_param="limit", size=1000
+)
+
+
+def _openai_catalog(filter_: CatalogFilter) -> CatalogSpec:
+    return CatalogSpec(adapter="openai_models", kinds=["models"], filter=filter_)
+
+
+def _gemini_catalog(filter_: CatalogFilter) -> CatalogSpec:
+    return CatalogSpec(adapter="gemini_models", kinds=["models"], filter=filter_, page=_GEMINI_PAGE)
 
 
 _AVAILABLE: list[ProviderSpec] = [
@@ -501,6 +764,8 @@ _AVAILABLE: list[ProviderSpec] = [
             ),
         ],
         default_model="gemini-3.8-live",
+        catalog=_gemini_catalog(_GEMINI_LIVE_FILTER),
+        test="gemini_models",
         capabilities=ProviderCapabilities(
             video_input=True,
             tool_calling=True,
@@ -532,6 +797,8 @@ _AVAILABLE: list[ProviderSpec] = [
         ],
         models=[ModelSpec(id="gpt-realtime", label="GPT Realtime")],
         default_model="gpt-realtime",
+        catalog=_openai_catalog(_OPENAI_REALTIME_FILTER),
+        test="openai_models",
         notes="Its base_url override is for OpenAI-compatible realtime endpoints; OpenRouter has none.",
         capabilities=ProviderCapabilities(
             video_input=False,
@@ -559,6 +826,8 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="flux-general-en", label="Flux (general, en)"),
         ],
         default_model="nova-3",
+        # Public list (R-V4-9): a catalog, never the credential test.
+        catalog=CatalogSpec(adapter="deepgram_stt_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
         price_ref="deepgram-stt",
         docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",
         get_key_url="https://console.deepgram.com/",
@@ -586,7 +855,7 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="gpt-4.1-mini", label="GPT-4.1 mini"),
         ],
         default_model="gpt-4.1",
-        catalog=CatalogSpec(adapter="openai_models", kinds=["models"]),
+        catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
         price_ref="openai-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
@@ -606,6 +875,8 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="gemini-3.5-flash", label="Gemini 3.5 Flash"),
         ],
         default_model="gemini-2.5-flash",
+        catalog=_gemini_catalog(_GEMINI_LLM_FILTER),
+        test="gemini_models",
         price_ref="google-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/gemini/",
         get_key_url="https://aistudio.google.com/apikey",
@@ -643,7 +914,18 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="eleven_flash_v2_5", label="Eleven Flash v2.5"),
         ],
         default_model="eleven_turbo_v2_5",
-        catalog=CatalogSpec(adapter="elevenlabs_voices", kinds=["voices"]),
+        catalog=CatalogSpec(
+            adapter="elevenlabs_voices",
+            kinds=["voices"],
+            page=PageSpec(
+                kind="token",
+                param="next_page_token",
+                next_path="next_page_token",
+                more_path="has_more",
+                size_param="page_size",
+                size=100,
+            ),
+        ),
         test="elevenlabs_voices",
         docs_url="https://docs.livekit.io/agents/models/tts/elevenlabs/",
         get_key_url="https://elevenlabs.io/app/settings/api-keys",
@@ -659,6 +941,8 @@ _AVAILABLE: list[ProviderSpec] = [
         fields=[FieldSpec(name="voice", label="Voice", type="string", default="ash")],
         models=[ModelSpec(id="gpt-4o-mini-tts", label="GPT-4o mini TTS")],
         default_model="gpt-4o-mini-tts",
+        catalog=_openai_catalog(_OPENAI_TTS_FILTER),
+        test="openai_models",
         price_ref="openai-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/openai/",
         get_key_url="https://platform.openai.com/api-keys",
@@ -755,6 +1039,8 @@ _AVAILABLE: list[ProviderSpec] = [
         secret_fields=[_api_key("Google API key", env="GOOGLE_API_KEY")],
         models=[ModelSpec(id="gemini-3.1-flash-image", label="Gemini 3.1 Flash Image")],
         default_model="gemini-3.1-flash-image",
+        catalog=_gemini_catalog(_GEMINI_IMAGE_FILTER),
+        test="gemini_models",
         capabilities=ProviderCapabilities(tool_calling=False),
         get_key_url="https://aistudio.google.com/apikey",
     ),
@@ -769,6 +1055,8 @@ _AVAILABLE: list[ProviderSpec] = [
         fields=[FieldSpec(name="size", label="Image size", type="string", default="1024x1024")],
         models=[ModelSpec(id="gpt-image-1", label="GPT Image 1")],
         default_model="gpt-image-1",
+        catalog=_openai_catalog(_OPENAI_IMAGE_FILTER),
+        test="openai_models",
         capabilities=ProviderCapabilities(tool_calling=False),
         get_key_url="https://platform.openai.com/api-keys",
     ),
@@ -795,6 +1083,8 @@ _AVAILABLE: list[ProviderSpec] = [
         secret_fields=[_api_key("OpenAI API key", env="OPENAI_API_KEY")],
         models=[ModelSpec(id="text-embedding-3-small", label="text-embedding-3-small")],
         default_model="text-embedding-3-small",
+        catalog=_openai_catalog(_OPENAI_EMBEDDING_FILTER),
+        test="openai_models",
         capabilities=ProviderCapabilities(tool_calling=False),
         get_key_url="https://platform.openai.com/api-keys",
     ),
@@ -930,7 +1220,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="anthropic/claude-sonnet-4.6", label="Claude Sonnet 4.6"),
         ],
         default_model="openai/gpt-4.1-mini",
-        catalog=CatalogSpec(adapter="openrouter_llm_models", kinds=["models"]),
+        catalog=CatalogSpec(adapter="openrouter_llm_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_llm_models",
         notes="Routes to hundreds of models on one key; `openrouter/auto` is not tool-safe and is "
         "deliberately not the default. Tool schemas go out with OpenAI's `strict` flag; if a routed "
@@ -960,7 +1250,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="mistralai/voxtral-mini-transcribe", label="Voxtral Mini Transcribe"),
         ],
         default_model="openai/gpt-4o-mini-transcribe",
-        catalog=CatalogSpec(adapter="openrouter_stt_models", kinds=["models"]),
+        catalog=CatalogSpec(adapter="openrouter_stt_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_stt_models",
         notes="Batch transcription over HTTP: no interim results; each turn is transcribed after "
         "end-of-speech, so expect roughly half a second to two seconds more per turn than a streaming "
@@ -998,7 +1288,9 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         ],
         default_model="google/gemini-3.8-flash-tts",
         capabilities=ProviderCapabilities(voices_dynamic=True),
-        catalog=CatalogSpec(adapter="openrouter_tts_models", kinds=["models", "voices"]),
+        catalog=CatalogSpec(
+            adapter="openrouter_tts_models", kinds=["models", "voices"], ttl_s=TTL_OPENROUTER_S
+        ),
         test="openrouter_tts_models",
         notes="Voices are per model — pick the model first, then a voice it lists. Non-streaming, like "
         "OpenAI TTS: one request per sentence.",
@@ -1018,7 +1310,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         models=[ModelSpec(id="openai/text-embedding-3-small", label="text-embedding-3-small")],
         default_model="openai/text-embedding-3-small",
         capabilities=ProviderCapabilities(tool_calling=False),
-        catalog=CatalogSpec(adapter="openrouter_embedding_models", kinds=["models"]),
+        catalog=CatalogSpec(adapter="openrouter_embedding_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_embedding_models",
         notes="Platform-level: select it with LKAP_EMBEDDER=openrouter-embedding:<credential_id>. Only "
         "the 1536-dimension model is offered; another model would mean re-embedding every knowledge "
@@ -1051,7 +1343,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         ],
         default_model="openai/gpt-image-1",
         capabilities=ProviderCapabilities(tool_calling=False),
-        catalog=CatalogSpec(adapter="openrouter_image_models", kinds=["models"]),
+        catalog=CatalogSpec(adapter="openrouter_image_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_image_models",
         get_key_url=_OPENROUTER_KEY_URL,
     ),
@@ -1133,7 +1425,7 @@ _FULL: list[ProviderSpec] = [
         "livekit.plugins.assemblyai.STT",
         secret_fields=[_api_key("AssemblyAI API key", env="ASSEMBLYAI_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="universal-3-5-pro"),
+            FieldSpec(name="model", label="Model", type="model", default="universal-3-5-pro"),
             FieldSpec(name="language_code", label="Language code", type="string"),
             FieldSpec(name="speaker_labels", label="Speaker labels", type="boolean", default=False),
         ],
@@ -1157,7 +1449,7 @@ _FULL: list[ProviderSpec] = [
                 help="No api_key kwarg exists on this class; Google auth is ADC only.",
             ),
             FieldSpec(name="languages", label="Language", type="string", default="en-US"),
-            FieldSpec(name="model", label="Model", type="string", default="latest_long"),
+            FieldSpec(name="model", label="Model", type="model", default="latest_long"),
         ],
         docs_url="https://docs.livekit.io/agents/models/stt/google/",
     ),
@@ -1169,8 +1461,8 @@ _FULL: list[ProviderSpec] = [
         "livekit-plugins-openai",
         "livekit.plugins.openai.STT",
         secret_fields=[_api_key("OpenAI API key", env="OPENAI_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="gpt-4o-mini-transcribe")],
-        catalog=CatalogSpec(adapter="openai_models", kinds=["models"]),
+        fields=[FieldSpec(name="model", label="Model", type="model", default="gpt-4o-mini-transcribe")],
+        catalog=_openai_catalog(_OPENAI_STT_FILTER),
         test="openai_models",
         docs_url="https://docs.livekit.io/agents/models/stt/openai/",
     ),
@@ -1215,8 +1507,10 @@ _FULL: list[ProviderSpec] = [
         "livekit-plugins-groq",
         "livekit.plugins.groq.STT",
         secret_fields=[_api_key("Groq API key", env="GROQ_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="whisper-large-v3-turbo")],
-        catalog=CatalogSpec(adapter="groq_models", kinds=["models"]),
+        fields=[FieldSpec(name="model", label="Model", type="model", default="whisper-large-v3-turbo")],
+        catalog=CatalogSpec(
+            adapter="groq_models", kinds=["models"], filter=CatalogFilter(id_include="whisper")
+        ),
         test="groq_models",
         docs_url="https://docs.livekit.io/agents/models/stt/groq/",
     ),
@@ -1250,7 +1544,7 @@ _FULL: list[ProviderSpec] = [
             ModelSpec(id="claude-3-5-haiku-20241022", label="Claude 3.5 Haiku"),
         ],
         default_model="claude-sonnet-4-6",
-        catalog=CatalogSpec(adapter="anthropic_models", kinds=["models"]),
+        catalog=CatalogSpec(adapter="anthropic_models", kinds=["models"], page=_ANTHROPIC_PAGE),
         test="anthropic_models",
         docs_url="https://docs.livekit.io/agents/models/llm/anthropic/",
     ),
@@ -1267,7 +1561,9 @@ _FULL: list[ProviderSpec] = [
             ModelSpec(id="openai/gpt-oss-120b", label="GPT-OSS 120B"),
         ],
         default_model="llama-3.3-70b-versatile",
-        catalog=CatalogSpec(adapter="groq_models", kinds=["models"]),
+        catalog=CatalogSpec(
+            adapter="groq_models", kinds=["models"], filter=CatalogFilter(id_exclude="whisper|tts|guard")
+        ),
         test="groq_models",
         docs_url="https://docs.livekit.io/agents/models/llm/groq/",
     ),
@@ -1281,6 +1577,8 @@ _FULL: list[ProviderSpec] = [
         secret_fields=[_api_key("Cerebras API key", env="CEREBRAS_API_KEY")],
         models=[ModelSpec(id="gpt-oss-120b", label="GPT-OSS 120B")],
         default_model="gpt-oss-120b",
+        catalog=CatalogSpec(adapter="cerebras_models", kinds=["models"]),
+        test="cerebras_models",
         notes="v1's stub pointed at a nonexistent openai.LLM.with_cerebras; corrected to the real package.",
         docs_url="https://docs.livekit.io/agents/models/llm/",
     ),
@@ -1355,6 +1653,8 @@ _FULL: list[ProviderSpec] = [
         secret_fields=[_api_key("Deepgram API key", env="DEEPGRAM_API_KEY")],
         models=[ModelSpec(id="aura-2-andromeda-en", label="Aura 2 Andromeda (en)")],
         default_model="aura-2-andromeda-en",
+        # Public list (R-V4-9): a catalog, never the credential test.
+        catalog=CatalogSpec(adapter="deepgram_tts_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
         price_ref="deepgram-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/deepgram/",
     ),
@@ -1372,6 +1672,8 @@ _FULL: list[ProviderSpec] = [
         ],
         models=[ModelSpec(id="mistv3", label="Mist v3")],
         default_model="mistv3",
+        # Public JSON (R-V4-9): one item per (model, voice), never the credential test.
+        catalog=CatalogSpec(adapter="rime_voices", kinds=["voices", "models"], ttl_s=TTL_PUBLIC_LIST_S),
         docs_url="https://docs.livekit.io/agents/models/tts/rime/",
     ),
     _full(
@@ -1385,6 +1687,14 @@ _FULL: list[ProviderSpec] = [
         fields=[FieldSpec(name="voice", label="Voice", type="string", default="Ashley")],
         models=[ModelSpec(id="inworld-tts-1.5-max", label="Inworld TTS 1.5 Max")],
         default_model="inworld-tts-1.5-max",
+        # No `test`: whether the voice list rejects a bad key is UNVERIFIED (asks).
+        catalog=CatalogSpec(
+            adapter="inworld_voices",
+            kinds=["voices"],
+            page=PageSpec(
+                kind="token", param="pageToken", next_path="nextPageToken", size_param="pageSize", size=1000
+            ),
+        ),
         docs_url="https://docs.livekit.io/agents/models/tts/inworld/",
     ),
     _full(
@@ -1395,7 +1705,13 @@ _FULL: list[ProviderSpec] = [
         "livekit-plugins-hume",
         "livekit.plugins.hume.TTS",
         secret_fields=[_api_key("Hume API key", env="HUME_API_KEY")],
-        catalog=CatalogSpec(adapter="hume_voices", kinds=["voices"]),
+        catalog=CatalogSpec(
+            adapter="hume_voices",
+            kinds=["voices"],
+            page=PageSpec(
+                kind="page", param="page_number", next_path="total_pages", size_param="page_size", size=100
+            ),
+        ),
         test="hume_voices",
         docs_url="https://docs.livekit.io/agents/models/tts/hume/",
     ),
@@ -1929,7 +2245,11 @@ _NEW: list[ProviderSpec] = [
         secret_fields=[_api_key("Mistral API key", env="MISTRAL_API_KEY")],
         models=[ModelSpec(id="ministral-8b-latest", label="Ministral 8B")],
         default_model="ministral-8b-latest",
-        catalog=CatalogSpec(adapter="mistral_models", kinds=["models"]),
+        catalog=CatalogSpec(
+            adapter="mistral_models",
+            kinds=["models"],
+            filter=CatalogFilter(id_exclude="embed|ocr|moderation"),
+        ),
         test="mistral_models",
         docs_url="https://docs.livekit.io/agents/models/llm/",
     ),
@@ -1960,6 +2280,8 @@ _NEW: list[ProviderSpec] = [
         secret_fields=[_api_key("xAI API key", env="XAI_API_KEY")],
         models=[ModelSpec(id="grok-4-1-fast-non-reasoning", label="Grok 4.1 Fast (non-reasoning)")],
         default_model="grok-4-1-fast-non-reasoning",
+        catalog=CatalogSpec(adapter="xai_models", kinds=["models"]),
+        test="xai_models",
         docs_url="https://docs.livekit.io/agents/models/llm/",
     ),
     _full(
@@ -1973,7 +2295,7 @@ _NEW: list[ProviderSpec] = [
         fields=[FieldSpec(name="use_websocket", label="Use websocket", type="boolean", default=True)],
         models=[ModelSpec(id="gpt-4.1", label="GPT-4.1")],
         default_model="gpt-4.1",
-        catalog=CatalogSpec(adapter="openai_models", kinds=["models"]),
+        catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
         notes="Distinct class from openai.LLM (chat completions); uses the Responses API over "
         "a websocket by default.",
@@ -1989,7 +2311,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.gladia.STT",
         secret_fields=[_api_key("Gladia API key", env="GLADIA_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="solaria-1"),
+            FieldSpec(name="model", label="Model", type="model", default="solaria-1"),
             FieldSpec(
                 name="region", label="Region", type="enum", default="eu-west", options=["us-west", "eu-west"]
             ),
@@ -2052,7 +2374,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-baseten",
         "livekit.plugins.baseten.STT",
         secret_fields=[_api_key("Baseten API key", env="BASETEN_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="whisper")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="whisper")],
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -2063,7 +2385,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-mistralai",
         "livekit.plugins.mistralai.STT",
         secret_fields=[_api_key("Mistral API key", env="MISTRAL_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="voxtral-mini-latest")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="voxtral-mini-latest")],
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -2078,7 +2400,7 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(
                 name="model",
                 label="Model",
-                type="string",
+                type="model",
                 default="parakeet-1.1b-en-US-asr-streaming-silero-vad-sortformer",
             )
         ],
@@ -2093,7 +2415,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.sarvam.STT",
         secret_fields=[_api_key("Sarvam API key", env="SARVAM_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="saaras:v4"),
+            FieldSpec(name="model", label="Model", type="model", default="saaras:v4"),
             FieldSpec(name="language", label="Language", type="string", default="en-IN"),
         ],
         docs_url="https://docs.livekit.io/agents/models/stt/",
@@ -2106,7 +2428,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-meta",
         "livekit.plugins.meta.STT",
         secret_fields=[_api_key("Meta API key")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="muse-voice-transcribe-1.0")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="muse-voice-transcribe-1.0")],
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -2184,7 +2506,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-smallestai",
         "livekit.plugins.smallestai.STT",
         secret_fields=[_api_key("Smallest AI API key", env="SMALLEST_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="pulse")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="pulse")],
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -2196,7 +2518,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.simplismart.STT",
         secret_fields=[_api_key("Simplismart API key", env="SIMPLISMART_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="openai/whisper-large-v3-turbo")
+            FieldSpec(name="model", label="Model", type="model", default="openai/whisper-large-v3-turbo")
         ],
         notes="Self-deployed inference; api_key authenticates the tenant's Simplismart deployment.",
         docs_url="https://docs.livekit.io/agents/models/stt/",
@@ -2265,7 +2587,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-asyncai",
         "livekit.plugins.asyncai.TTS",
         secret_fields=[_api_key("AsyncAI API key", env="ASYNCAI_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="async_flash_v1.0")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="async_flash_v1.0")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -2307,7 +2629,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-baseten",
         "livekit.plugins.baseten.TTS",
         secret_fields=[_api_key("Baseten API key", env="BASETEN_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="orpheus")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="orpheus")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -2344,7 +2666,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.fishaudio.TTS",
         secret_fields=[_api_key("Fish Audio API key")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="s2.1-pro"),
+            FieldSpec(name="model", label="Model", type="model", default="s2.1-pro"),
             FieldSpec(name="voice_id", label="Voice id", type="string"),
         ],
         docs_url="https://docs.livekit.io/agents/models/tts/",
@@ -2380,7 +2702,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.groq.TTS",
         secret_fields=[_api_key("Groq API key", env="GROQ_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="canopylabs/orpheus-v1-english"),
+            FieldSpec(name="model", label="Model", type="model", default="canopylabs/orpheus-v1-english"),
             FieldSpec(name="voice", label="Voice", type="string", default="autumn"),
         ],
         docs_url="https://docs.livekit.io/agents/models/tts/",
@@ -2394,7 +2716,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.lmnt.TTS",
         secret_fields=[_api_key("LMNT API key", env="LMNT_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="blizzard"),
+            FieldSpec(name="model", label="Model", type="model", default="blizzard"),
             FieldSpec(name="voice", label="Voice", type="string", default="leah"),
         ],
         docs_url="https://docs.livekit.io/agents/models/tts/",
@@ -2407,7 +2729,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-murf",
         "livekit.plugins.murf.TTS",
         secret_fields=[_api_key("Murf API key", env="MURF_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="FALCON")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="FALCON")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -2474,7 +2796,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-respeecher",
         "livekit.plugins.respeecher.TTS",
         secret_fields=[_api_key("Respeecher API key", env="RESPEECHER_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="/public/tts/en-rt")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="/public/tts/en-rt")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -2486,7 +2808,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.sarvam.TTS",
         secret_fields=[_api_key("Sarvam API key", env="SARVAM_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="bulbul:v3"),
+            FieldSpec(name="model", label="Model", type="model", default="bulbul:v3"),
             FieldSpec(name="target_language_code", label="Target language", type="string", default="en-IN"),
         ],
         docs_url="https://docs.livekit.io/agents/models/tts/",
@@ -2499,9 +2821,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-simplismart",
         "livekit.plugins.simplismart.TTS",
         secret_fields=[_api_key("Simplismart API key")],
-        fields=[
-            FieldSpec(name="model", label="Model", type="string", default="canopylabs/orpheus-3b-0.1-ft")
-        ],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="canopylabs/orpheus-3b-0.1-ft")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -2523,7 +2843,7 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-smallestai",
         "livekit.plugins.smallestai.TTS",
         secret_fields=[_api_key("Smallest AI API key", env="SMALLEST_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="lightning_v3.1_pro")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="lightning_v3.1_pro")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -2535,7 +2855,7 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.soniox.TTS",
         secret_fields=[_api_key("Soniox API key", env="SONIOX_API_KEY")],
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="tts-rt-v1-preview"),
+            FieldSpec(name="model", label="Model", type="model", default="tts-rt-v1-preview"),
             FieldSpec(name="voice", label="Voice", type="string", default="Maya"),
         ],
         docs_url="https://docs.livekit.io/agents/models/tts/",
@@ -2550,7 +2870,7 @@ _NEW: list[ProviderSpec] = [
         secret_fields=[_api_key("Speechify API key", env="SPEECHIFY_API_KEY")],
         fields=[
             FieldSpec(name="voice_id", label="Voice id", type="string", default="dominic_32"),
-            FieldSpec(name="model", label="Model", type="string", default="simba-3.2"),
+            FieldSpec(name="model", label="Model", type="model", default="simba-3.2"),
         ],
         catalog=CatalogSpec(adapter="speechify_voices", kinds=["voices"]),
         test="speechify_voices",
@@ -2716,7 +3036,7 @@ _DEFERRED: list[ProviderSpec] = [
         availability="deferred",
         requires_credential=False,
         fields=[
-            FieldSpec(name="model", label="Model", type="string", default="sommers_ko"),
+            FieldSpec(name="model", label="Model", type="model", default="sommers_ko"),
             FieldSpec(name="language", label="Language", type="string", default="ko"),
         ],
         notes="__init__ has no api_key/credential kwarg at all (confirmed by AST snapshot) — auth "
@@ -2761,7 +3081,7 @@ _DEFERRED: list[ProviderSpec] = [
         "livekit.plugins.minimax.TTS",
         availability="incompatible",
         secret_fields=[_api_key("MiniMax API key", env="MINIMAX_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="string", default="speech-02-turbo")],
+        fields=[FieldSpec(name="model", label="Model", type="model", default="speech-02-turbo")],
         notes="livekit-plugins-minimax 1.3.0 pins livekit-agents==1.2.9 exactly, five releases behind this "
         "platform's 1.8.2 baseline; uv pip compile confirms the two cannot resolve together in one "
         "environment. Not installable until the vendor republishes against current core.",

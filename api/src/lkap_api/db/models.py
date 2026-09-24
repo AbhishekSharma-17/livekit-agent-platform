@@ -427,6 +427,54 @@ class ProviderCatalogCache(Base):
     )
 
 
+class ProviderModel(Base):
+    """One workspace's record of a model id (docs/v4/CUSTOM-MODELS.md D-V4-24, R-V4-24).
+
+    One row per ``(workspace_id, provider_home, kind, model_id)``: the admin's
+    ``declared`` capabilities, the last "Test model" result and ``detected``
+    capabilities (with the credential's fingerprint at test time, so a rotated
+    key resets "Tested"), and when the vendor's live catalog last listed the id
+    (``catalog_seen_at``) or stopped listing / deprecated it
+    (``catalog_missing_since``). ``provider_home`` is the entry's credential
+    home (R-V4-7); ``provider_id`` is the entry the row was last written for.
+    """
+
+    __tablename__ = "provider_models"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    provider_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_home: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    declared: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    detected: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    last_test_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_test_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_test_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_test_cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    last_test_credential_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_test_fingerprint: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    catalog_seen_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    catalog_missing_since: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "provider_home",
+            "kind",
+            "model_id",
+            name="uq_provider_models_workspace_home_kind_model",
+        ),
+        Index("ix_provider_models_workspace", "workspace_id"),
+    )
+
+
 class Agent(Base):
     """A configured agent: its pack, panel, publication state and `AgentConfig`."""
 

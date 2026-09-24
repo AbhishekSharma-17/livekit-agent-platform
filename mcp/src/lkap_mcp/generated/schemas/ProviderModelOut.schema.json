@@ -1,0 +1,297 @@
+{
+  "$defs": {
+    "ModelCapabilities": {
+      "description": "What one model can do, as far as the platform knows (D-V4-24, R-V4-23).\n\n``None`` means unknown. Resolved per field from, in order: the admin's\ndeclaration, the last \"Test model\" probe, the live catalog item's\nmetadata, the registry; ``source`` names the source of ``vision``.",
+      "properties": {
+        "audio_in": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio In"
+        },
+        "audio_out": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Out"
+        },
+        "context_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Tokens"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "declared",
+                "detected",
+                "catalog",
+                "registry"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "streaming": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Streaming"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        }
+      },
+      "title": "ModelCapabilities",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ProviderModelOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One workspace's record of a model id (``provider_models``, D-V4-24, R-V4-24).\n\nKeyed by ``(provider_home, kind, model_id)``: ``provider_home`` is the\nentry's credential home, so an OpenRouter model tested from the STT entry\nand from the LLM entry is one row per kind. ``last_test_message`` is\nscrubbed of secrets and is vendor text: render it as data, never markup.\n``last_test_fingerprint`` is the credential's display fingerprint at test\ntime; a rotated key no longer matches it, which resets \"Tested\".",
+  "properties": {
+    "catalog_missing_since": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Catalog Missing Since"
+    },
+    "catalog_seen_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Catalog Seen At"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "declared": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelCapabilities"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "detected": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelCapabilities"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "realtime",
+        "stt",
+        "llm",
+        "tts",
+        "avatar",
+        "vad",
+        "turn_detection",
+        "noise_cancellation",
+        "image_gen",
+        "embedding",
+        "secret_bag"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "last_test_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test At"
+    },
+    "last_test_cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Cost Usd"
+    },
+    "last_test_credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Credential Id"
+    },
+    "last_test_fingerprint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Fingerprint"
+    },
+    "last_test_latency_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Latency Ms"
+    },
+    "last_test_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Message"
+    },
+    "last_test_ok": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Ok"
+    },
+    "model_id": {
+      "title": "Model Id",
+      "type": "string"
+    },
+    "provider_home": {
+      "title": "Provider Home",
+      "type": "string"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "provider_id",
+    "provider_home",
+    "kind",
+    "model_id",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "ProviderModelOut",
+  "type": "object"
+}

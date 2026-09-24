@@ -36,6 +36,18 @@ async def test_list_filters_by_kind_availability_and_enabled(admin_client: httpx
     assert deferred["providers"], "PlayAI and friends should show up as deferred"
 
 
+async def test_the_list_carries_the_model_id_rule(admin_client: httpx.AsyncClient) -> None:
+    # V4-07 (D-V4-23): the console mirrors the rule from here and from providers.json.
+    from lkap_contracts.providers import MODEL_ID_PATTERN, SECRET_PREFIXES
+
+    rules = (await admin_client.get("/v1/providers")).json()["model_id_rules"]
+
+    assert rules["pattern"] == MODEL_ID_PATTERN
+    assert rules["secret_prefixes"] == list(SECRET_PREFIXES)
+    assert rules["max_len"] == 200
+    assert rules["bare_token_min_len"] == 32
+
+
 async def test_absence_of_a_workspace_providers_row_means_enabled(admin_client: httpx.AsyncClient) -> None:
     body = (await admin_client.get("/v1/providers", params={"enabled": "true"})).json()
 

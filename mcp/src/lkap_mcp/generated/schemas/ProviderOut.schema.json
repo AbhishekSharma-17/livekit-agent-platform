@@ -1,11 +1,77 @@
 {
   "$defs": {
+    "CatalogFilter": {
+      "description": "Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).\n\nApplied by the api after the adapter fetch, so one vendor adapter can\nserve several entries (OpenAI's one ``/models`` list feeds six). Every\nset condition must hold: ``id_include`` must match, ``id_exclude`` must\nnot (both :func:`re.search`, case-insensitive), and the list at the dotted\n``meta_path`` must contain ``meta_contains``.",
+      "properties": {
+        "id_exclude": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id Exclude"
+        },
+        "id_include": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id Include"
+        },
+        "meta_contains": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta Contains"
+        },
+        "meta_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta Path"
+        }
+      },
+      "title": "CatalogFilter",
+      "type": "object"
+    },
     "CatalogSpec": {
-      "description": "How to list a provider's models, voices, avatars or personas from the vendor.",
+      "description": "How to list a provider's models, voices, avatars or personas from the vendor.\n\n``filter`` and ``page`` (V4-07, D-V4-25) are registry data the api applies\naround the adapter: ``filter`` keeps this entry's items out of a shared\nvendor list, ``page`` follows the vendor's pagination.",
       "properties": {
         "adapter": {
           "title": "Adapter",
           "type": "string"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "kinds": {
           "default": [],
@@ -20,6 +86,17 @@
           },
           "title": "Kinds",
           "type": "array"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "ttl_s": {
           "default": 3600,
@@ -239,6 +316,86 @@
         "label"
       ],
       "title": "ModelSpec",
+      "type": "object"
+    },
+    "PageSpec": {
+      "description": "How to follow a vendor list's pages (D-V4-25).\n\n* ``token`` / ``cursor``: send ``param=<value at next_path>`` until the\n  value is missing or empty (Gemini ``pageToken``/``nextPageToken``,\n  Anthropic ``after_id``/``last_id``, Cartesia ``starting_after``/``next_page``).\n* ``offset``: send ``param=<items so far>`` until a short or empty page.\n* ``page``: send ``param=<n>`` from 0 (``page_number``), stopping at the\n  total page count read from ``next_path`` or at an empty page (Hume).\n\n``more_path`` (optional) names a boolean such as ``has_more``; ``false``\nstops the loop before another request. ``size_param=size`` rides on\nevery request. The loop never exceeds ``max_pages``.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "cursor",
+            "token",
+            "offset",
+            "page"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_pages": {
+          "default": 10,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Max Pages",
+          "type": "integer"
+        },
+        "more_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "More Path"
+        },
+        "next_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Path"
+        },
+        "param": {
+          "title": "Param",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "size_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size Param"
+        }
+      },
+      "required": [
+        "kind",
+        "param"
+      ],
+      "title": "PageSpec",
       "type": "object"
     },
     "ProviderCapabilities": {
@@ -503,6 +660,19 @@
       ],
       "default": null,
       "title": "Price Ref"
+    },
+    "probe": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The api's 'Test model' probe adapter for this entry (docs/v4/CUSTOM-MODELS.md D-V4-26): a capped POST with a payload, deliberately separate from `test` (a GET that lists). Unset means no model test; never set on vad, turn_detection or noise_cancellation.",
+      "title": "Probe"
     },
     "python_class": {
       "title": "Python Class",

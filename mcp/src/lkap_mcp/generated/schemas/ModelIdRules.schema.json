@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/ModelIdRules.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The model-id rule the console mirrors (docs/v4/CUSTOM-MODELS.md D-V4-23, R-V4-21).\n\nDefaults are the contracts' own constants, so ``ModelIdRules()`` is the\nlive rule. ``pattern`` is the syntax rule as a JS-compatible regex; a value\nstarting with one of ``secret_prefixes``, or a bare token of at least\n``bare_token_min_len`` characters of one class with no ``/ . : -``, is\nrefused as a secret first.",
+  "properties": {
+    "bare_token_min_len": {
+      "default": 32,
+      "title": "Bare Token Min Len",
+      "type": "integer"
+    },
+    "max_len": {
+      "default": 200,
+      "title": "Max Len",
+      "type": "integer"
+    },
+    "pattern": {
+      "default": "^(?![Hh][Tt][Tt][Pp])(?!.*://)[!$%()*+,\\-./0-9:;@A-Z\\[\\\\\\]^_a-z{|}~]{1,200}$",
+      "title": "Pattern",
+      "type": "string"
+    },
+    "secret_prefixes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Secret Prefixes",
+      "type": "array"
+    }
+  },
+  "title": "ModelIdRules",
+  "type": "object"
+}

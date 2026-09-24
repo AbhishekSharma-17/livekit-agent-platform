@@ -5,7 +5,12 @@ from typing import get_args
 import pytest
 
 from lkap_contracts.providers import (
+    MODEL_KINDS,
+    PUBLIC_CATALOG_ADAPTERS,
     REGISTRY,
+    TTL_OPENROUTER_S,
+    TTL_PUBLIC_LIST_S,
+    CatalogFilter,
     FieldSpec,
     FieldType,
     ProviderKind,
@@ -325,3 +330,139 @@ def test_openrouter_llm_default_is_tool_capable_not_auto() -> None:
     assert spec.default_model == "openai/gpt-4.1-mini"
     assert all(not m.id.startswith("openrouter/") for m in spec.models)
     assert spec.capabilities.tool_calling is True
+
+
+# ------------------------------------------------ custom model ids, live catalogs (V4-07)
+#: The 26 string-typed ``model`` fields retyped ``type="model"`` (R-V4-22). bitHuman's
+#: ``model`` is a genuine two-value enum (its runtime mode), not a vendor model id, and
+#: stays ``type="enum"``.
+EXPECTED_MODEL_FIELD_COUNT = 26
+
+
+def test_every_string_model_field_is_typed_model() -> None:
+    model_fields = [(s.id, f) for s in REGISTRY for f in s.fields if f.name == "model"]
+    typed_model = [pid for pid, f in model_fields if f.type == "model"]
+    assert len(typed_model) == EXPECTED_MODEL_FIELD_COUNT
+    assert not [pid for pid, f in model_fields if f.type == "string"]
+    assert [pid for pid, f in model_fields if f.type == "enum"] == ["bithuman-avatar"]
+
+
+@pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)
+def test_no_entry_has_both_a_model_field_and_a_models_list(spec: ProviderSpec) -> None:
+    has_model_field = any(f.name == "model" and f.type == "model" for f in spec.fields)
+    assert not (has_model_field and spec.models), "one place per entry says which model it runs"
+
+
+@pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)
+def test_model_typed_fields_never_carry_options_contradicting_the_default(spec: ProviderSpec) -> None:
+    for field in spec.fields:
+        if field.type == "model" and field.options:
+            assert field.default is None or field.default in field.options, field.name
+            assert spec.default_model is None or spec.default_model in field.options, field.name
+
+
+@pytest.mark.parametrize("spec", [s for s in REGISTRY if s.catalog and s.catalog.filter], ids=lambda s: s.id)
+def test_every_listed_model_and_default_passes_its_own_catalog_filter(spec: ProviderSpec) -> None:
+    # Only the id conditions can be checked here: a registry id has no vendor metadata,
+    # so a `meta_path`/`meta_contains` condition (google-realtime's bidiGenerateContent)
+    # is exercised by the api's fixture tests instead.
+    assert spec.catalog is not None and spec.catalog.filter is not None
+    ids = {m.id for m in spec.models}
+    ids.update(f.default for f in spec.fields if f.type == "model" and isinstance(f.default, str))
+    if spec.default_model:
+        ids.add(spec.default_model)
+    assert ids, "a filtered entry names at least one model"
+    for model_id in sorted(ids):
+        assert spec.catalog.filter.matches_id(model_id), model_id
+
+
+@pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)
+def test_probe_is_never_set_on_non_model_kinds(spec: ProviderSpec) -> None:
+    if spec.kind in ("vad", "turn_detection", "noise_cancellation"):
+        assert spec.probe is None
+
+
+@pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)
+def test_test_is_never_a_public_list_adapter(spec: ProviderSpec) -> None:
+    # R-V4-9: a list that answers a bogus key cannot test a key.
+    assert spec.test not in PUBLIC_CATALOG_ADAPTERS
+
+
+@pytest.mark.parametrize("spec", [s for s in REGISTRY if s.test], ids=lambda s: s.id)
+def test_the_credential_test_and_the_catalog_name_the_same_adapter(spec: ProviderSpec) -> None:
+    assert spec.catalog is not None
+    assert spec.test == spec.catalog.adapter
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "adapter"),
+    [
+        ("google-llm", "gemini_models"),
+        ("google-realtime", "gemini_models"),
+        ("google-image-gen", "gemini_models"),
+        ("deepgram-stt", "deepgram_stt_models"),
+        ("deepgram-tts", "deepgram_tts_models"),
+        ("openai-tts", "openai_models"),
+        ("openai-realtime", "openai_models"),
+        ("openai-embedding", "openai_models"),
+        ("openai-image-gen", "openai_models"),
+        ("xai-llm", "xai_models"),
+        ("cerebras-llm", "cerebras_models"),
+        ("inworld-tts", "inworld_voices"),
+        ("rime-tts", "rime_voices"),
+        ("mistral-llm", "mistral_models"),
+    ],
+)
+def test_the_d_v4_25_entries_are_wired_to_a_live_catalog(provider_id: str, adapter: str) -> None:
+    spec = get(provider_id)
+    assert spec.catalog is not None
+    assert spec.catalog.adapter == adapter
+
+
+def test_public_lists_are_catalogs_with_a_day_long_ttl_and_no_credential_test() -> None:
+    public = [s for s in REGISTRY if s.catalog and s.catalog.adapter in PUBLIC_CATALOG_ADAPTERS]
+    assert {s.id for s in public} == {"deepgram-stt", "deepgram-tts", "rime-tts"}
+    for spec in public:
+        assert spec.test is None
+        assert spec.catalog is not None and spec.catalog.ttl_s == TTL_PUBLIC_LIST_S
+
+
+@pytest.mark.parametrize("provider_id", OPENROUTER_IDS)
+def test_openrouter_catalogs_cache_for_six_hours(provider_id: str) -> None:
+    spec = get(provider_id)
+    assert spec.catalog is not None and spec.catalog.ttl_s == TTL_OPENROUTER_S
+
+
+def test_azure_voices_have_no_adapter_the_region_is_a_slot_field() -> None:
+    # CUSTOM-MODELS.md §1.4 item 7: the provider-level catalog route cannot carry `speech_region`.
+    assert get("azure-tts").catalog is None
+    assert get("azure-stt").catalog is None
+
+
+@pytest.mark.parametrize(
+    ("filter_", "item_id", "meta", "expected"),
+    [
+        (CatalogFilter(id_include="^gpt-"), "gpt-4.1", {}, True),
+        (CatalogFilter(id_include="^gpt-"), "tts-1", {}, False),
+        (CatalogFilter(id_exclude="whisper"), "WHISPER-1", {}, False),
+        (CatalogFilter(meta_path="a.b", meta_contains="x"), "m", {"a": {"b": ["x", "y"]}}, True),
+        (CatalogFilter(meta_path="a.b", meta_contains="x"), "m", {"a": {"b": ["y"]}}, False),
+        (CatalogFilter(meta_path="a.b", meta_contains="x"), "m", {"a": "not-a-dict"}, False),
+        (CatalogFilter(), "anything", {}, True),
+    ],
+)
+def test_catalog_filter_matches(
+    filter_: CatalogFilter, item_id: str, meta: dict[str, object], expected: bool
+) -> None:
+    assert filter_.matches(item_id, meta) is expected
+
+
+def test_catalog_filter_rejects_a_bad_regex_and_half_a_meta_condition() -> None:
+    with pytest.raises(ValueError):
+        CatalogFilter(id_include="(unclosed")
+    with pytest.raises(ValueError):
+        CatalogFilter(meta_path="supportedGenerationMethods")
+
+
+def test_model_kinds_cover_every_kind_that_takes_a_model() -> None:
+    assert frozenset({"realtime", "stt", "llm", "tts", "image_gen", "embedding"}) == MODEL_KINDS

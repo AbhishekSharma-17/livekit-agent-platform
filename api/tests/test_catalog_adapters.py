@@ -312,8 +312,11 @@ async def test_elevenlabs_voices_and_models_use_the_xi_api_key_header() -> None:
     assert adapter is not None
 
     with respx.mock:
-        respx.get("https://api.elevenlabs.io/v1/voices").mock(
-            return_value=httpx.Response(200, json={"voices": [{"voice_id": "v1", "name": "V"}]})
+        # V4-07: voices come from the documented, paged /v2/voices.
+        voices_route = respx.get("https://api.elevenlabs.io/v2/voices").mock(
+            return_value=httpx.Response(
+                200, json={"voices": [{"voice_id": "v1", "name": "V"}], "has_more": False}
+            )
         )
         respx.get("https://api.elevenlabs.io/v1/models").mock(
             return_value=httpx.Response(200, json={"models": [{"model_id": "m1"}]})
@@ -322,8 +325,77 @@ async def test_elevenlabs_voices_and_models_use_the_xi_api_key_header() -> None:
             voices = await adapter.fetch(client=client, secrets={"api_key": "el-1"}, kind="voices")
             models = await adapter.fetch(client=client, secrets={"api_key": "el-1"}, kind="models")
 
+    assert voices_route.calls.last.request.headers["xi-api-key"] == "el-1"
     assert [i.id for i in voices] == ["v1"]
     assert [i.id for i in models] == ["m1"]
+
+
+async def test_elevenlabs_voices_follow_next_page_token_on_v2() -> None:
+    spec = get("elevenlabs-tts")
+    adapter = get_adapter("elevenlabs_voices")
+    assert adapter is not None and spec.catalog is not None
+
+    pages = [
+        {"voices": [{"voice_id": "v1", "name": "One"}], "has_more": True, "next_page_token": "t2"},
+        {"voices": [{"voice_id": "v2", "name": "Two"}], "has_more": False, "next_page_token": None},
+    ]
+    with respx.mock:
+        route = respx.get("https://api.elevenlabs.io/v2/voices").mock(
+            side_effect=[httpx.Response(200, json=body) for body in pages]
+        )
+        async with httpx.AsyncClient() as client:
+            voices = await adapter.fetch(
+                client=client, secrets={"api_key": "el-1"}, kind="voices", page=spec.catalog.page
+            )
+
+    assert [i.id for i in voices] == ["v1", "v2"]
+    assert route.call_count == 2
+    assert route.calls[0].request.url.params["page_size"] == "100"
+    assert route.calls[1].request.url.params["next_page_token"] == "t2"
+
+
+async def test_elevenlabs_falls_back_to_v1_voices_on_a_404() -> None:
+    adapter = get_adapter("elevenlabs_voices")
+    assert adapter is not None
+
+    with respx.mock:
+        respx.get("https://api.elevenlabs.io/v2/voices").mock(return_value=httpx.Response(404))
+        v1 = respx.get("https://api.elevenlabs.io/v1/voices").mock(
+            return_value=httpx.Response(200, json={"voices": [{"voice_id": "old", "name": "Old"}]})
+        )
+        async with httpx.AsyncClient() as client:
+            voices = await adapter.fetch(client=client, secrets={"api_key": "el-1"}, kind="voices")
+
+    assert v1.call_count == 1
+    assert [i.id for i in voices] == ["old"]
+
+
+async def test_elevenlabs_does_not_fall_back_on_a_401() -> None:
+    adapter = get_adapter("elevenlabs_voices")
+    assert adapter is not None
+
+    with respx.mock:
+        respx.get("https://api.elevenlabs.io/v2/voices").mock(return_value=httpx.Response(401))
+        v1 = respx.get("https://api.elevenlabs.io/v1/voices").mock(return_value=httpx.Response(200, json=[]))
+        async with httpx.AsyncClient() as client:
+            with pytest.raises(CatalogAdapterError):
+                await adapter.fetch(client=client, secrets={"api_key": "bad"}, kind="voices")
+
+    assert v1.call_count == 0, "a rejected key is a failed test, not a reason to try v1"
+
+
+async def test_hume_voices_send_the_required_provider_parameter() -> None:
+    adapter = get_adapter("hume_voices")
+    assert adapter is not None
+
+    with respx.mock:
+        route = respx.get("https://api.hume.ai/v0/tts/voices").mock(
+            return_value=httpx.Response(200, json={"voices_page": [], "total_pages": 1})
+        )
+        async with httpx.AsyncClient() as client:
+            await adapter.fetch(client=client, secrets={"api_key": "h-1"}, kind="voices")
+
+    assert route.calls.last.request.url.params["provider"] == "HUME_AI"
 
 
 async def test_did_avatars_adapter_exists_though_unwired() -> None:

@@ -1,7 +1,7 @@
 """The Phase-1 vendor catalog adapters (ARCHITECTURE-V2 D-V2-9).
 
-Registered under the same name the registry uses for both `ProviderSpec.catalog.adapter`
-and `ProviderSpec.test` (they are the same adapter — see :mod:`lkap_api.catalogs.base`).
+Registered under the name the registry uses for `ProviderSpec.catalog.adapter` (and for
+`ProviderSpec.test` where the list rejects a bad key — see :mod:`lkap_api.catalogs.base`).
 13 names are wired into `contracts/src/lkap_contracts/providers.py` today (V2-05's file);
 `did_avatars` is built and tested but not yet referenced by any registry entry — D-ID has
 a confirmed `GET /clips/presenters` list API (research catalog §2.2) but V2-05 has not
@@ -16,6 +16,8 @@ providers page).
 
 The five OpenRouter registrations live in :mod:`lkap_api.catalogs.openrouter` (their own
 adapter class: OpenRouter's model list is public, so the key is probed first, R-V4-9).
+The V4-07 vendors (Gemini, Deepgram, xAI, Cerebras, Together, Inworld, Rime) live in
+:mod:`lkap_api.catalogs.vendors`.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from collections.abc import Mapping
 
 from lkap_api.catalogs.base import AuthBuilder, CatalogAdapter, HttpCatalogAdapter, bearer_auth
 from lkap_api.catalogs.openrouter import OPENROUTER_ADAPTERS
+from lkap_api.catalogs.vendors import VENDOR_ADAPTERS
 
 
 def _header(name: str) -> AuthBuilder:
@@ -72,19 +75,24 @@ ADAPTERS: dict[str, CatalogAdapter] = {
         id_keys=("id",),
         label_keys=("name",),
     ),
+    # V4-07: the documented, paged voice list is /v2/voices (`next_page_token`,
+    # `has_more`); /v1/voices stays as the fallback when v2 answers 404 (asks).
     "elevenlabs_voices": HttpCatalogAdapter(
         vendor="ElevenLabs",
         endpoints={
-            "voices": "https://api.elevenlabs.io/v1/voices",
+            "voices": "https://api.elevenlabs.io/v2/voices",
             "models": "https://api.elevenlabs.io/v1/models",
         },
+        fallback_endpoints={"voices": "https://api.elevenlabs.io/v1/voices"},
         auth=_header("xi-api-key"),
         id_keys=("voice_id", "model_id"),
         label_keys=("name",),
     ),
+    # V4-07: Hume marks `provider` required; HUME_AI lists its voice library (asks).
     "hume_voices": HttpCatalogAdapter(
         vendor="Hume",
         endpoints={"voices": "https://api.hume.ai/v0/tts/voices"},
+        params={"provider": "HUME_AI"},
         auth=_header("X-Hume-Api-Key"),
         id_keys=("id", "voice_id"),
         label_keys=("name",),
@@ -148,6 +156,8 @@ ADAPTERS: dict[str, CatalogAdapter] = {
     ),
     # ----------------------------------- OpenRouter: probe /key, then list /models (V4-03)
     **OPENROUTER_ADAPTERS,
+    # ---------------- Gemini, Deepgram, xAI, Cerebras, Together, Inworld, Rime (V4-07)
+    **VENDOR_ADAPTERS,
 }
 
 

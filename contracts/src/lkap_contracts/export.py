@@ -58,7 +58,7 @@ from lkap_contracts.flow import (
 )
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price
-from lkap_contracts.providers import ProviderSpec
+from lkap_contracts.providers import CatalogFilter, ModelCapabilities, PageSpec, ProviderSpec
 from lkap_contracts.qa import QaVerdict, SessionQaIn
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
 from lkap_contracts.templates import StarterTemplate
@@ -153,6 +153,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "StarterTemplate": StarterTemplate,
     # providers and pricing
     "ProviderSpec": ProviderSpec,
+    "ModelCapabilities": ModelCapabilities,
+    "CatalogFilter": CatalogFilter,
+    "PageSpec": PageSpec,
     "Price": Price,
     # tools
     "HttpToolDefinition": HttpToolDefinition,
@@ -166,6 +169,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ProviderSettingsIn": api_models.ProviderSettingsIn,
     "CatalogItem": api_models.CatalogItem,
     "CatalogResponse": api_models.CatalogResponse,
+    "ModelIdRules": api_models.ModelIdRules,
+    "ProviderModelOut": api_models.ProviderModelOut,
+    "ProviderModelDeclare": api_models.ProviderModelDeclare,
     "CredentialCreate": api_models.CredentialCreate,
     "CredentialUpdate": api_models.CredentialUpdate,
     "CredentialOut": api_models.CredentialOut,
@@ -273,6 +279,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PhoneNumberPage": api_models.PhoneNumberPage,
     "WebhookEndpointPage": api_models.WebhookEndpointPage,
     "WebhookDeliveryPage": api_models.WebhookDeliveryPage,
+    "ProviderModelPage": api_models.ProviderModelPage,
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.
@@ -313,11 +320,16 @@ def build_providers_document() -> dict[str, Any]:
     credential) rather than any one workspace's actual settings, which only
     ``GET /v1/providers`` (backed by the database) can know.
 
+    ``model_id_rules`` (V4-07) carries the model-id rule the console mirrors.
+
     Returns:
-        A mapping with the protocol version and every registry entry, in registry order.
+        A mapping with the protocol version, every registry entry in registry
+        order, and the model-id rule.
     """
     out = [api_models.ProviderOut(**spec.model_dump()) for spec in providers.REGISTRY]
-    return api_models.ProvidersResponse(providers=out).model_dump(mode="json")
+    return api_models.ProvidersResponse(providers=out, model_id_rules=api_models.ModelIdRules()).model_dump(
+        mode="json"
+    )
 
 
 def _schema_for(name: str) -> dict[str, Any]:

@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     session_sweep_interval_s: int = 60
     session_stale_created_s: int = 600
     session_stale_active_s: int = 21600
+    #: ask #55 / B-13: an `active` session with no `session_events` row and no
+    #: recent worker activity for this long is closed as `orphaned` — much
+    #: shorter than `session_stale_active_s`, which assumes a live call that
+    #: just hasn't posted its summary yet.
+    session_orphan_timeout_s: int = 600
 
     # --- V2-02 auth, tenancy and limits (CONTRACTS-V2 §3, §6) ---
     allow_admin_token: bool | None = None

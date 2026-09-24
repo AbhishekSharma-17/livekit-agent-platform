@@ -20,6 +20,21 @@ The same loop also purges recordings past `AgentConfig.recording.retention_days`
 ownership") already starts :func:`sweep_loop` with exactly `(db, settings)`,
 so retention rides along here rather than needing its own ticker wired in a
 file this package does not own.
+
+`sweep_orphaned_sessions` (ask #55, B-13) closes a third kind of stuck row: a
+job that crashes in the SDK entrypoint *before*
+`agent/src/lkap_agent/observability.py`'s `SessionObserver` attaches never
+posts a single `session_events` row and never will again (the worker process
+is gone) — see that module's docstring and CONTRACTS.md §7 for the event
+types. Left to the general `LKAP_SESSION_STALE_ACTIVE_S` rule above (six
+hours by default, sized for a live call that simply hasn't posted its summary
+yet), a row like that sits `active` for hours. This sweep uses a much shorter,
+separately configurable timeout (`LKAP_SESSION_ORPHAN_TIMEOUT_S`) but only
+fires on a session with **zero** `session_events` rows, ever, whose
+`started_at` (or `created_at` when even that is unset) is older than the
+cutoff — a session that has posted even one event has already proven the job
+started for real and is left alone here regardless of how quiet it has been
+since, exactly the "genuinely long live call" this sweep must not touch.
 """
 
 from __future__ import annotations
@@ -29,22 +44,43 @@ import datetime as dt
 from typing import Any, cast
 
 from lkap_contracts.agent_config import AgentConfig
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
-from lkap_api.db.models import Agent, LiveKitConnection, utcnow
+from lkap_api.db.models import Agent, Job, LiveKitConnection, SessionEvent, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
+from lkap_api.jobs.context import JobContext
+from lkap_api.jobs.registry import job
 from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
 from lkap_api.storage.resolve import storage_from_config
 from lkap_api.vault import Vault
+from lkap_api.webhooks import emit
+from lkap_api.webhooks.events import SESSION_ENDED
 
 log = get_logger(__name__)
 
 NEVER_STARTED = "never started"
 SUMMARY_NEVER_RECEIVED = "summary never received"
+
+#: `sessions.error` for a row `sweep_orphaned_sessions` closes (ask #55, B-13).
+ORPHANED = "orphaned"
+
+#: The `error` session event's `payload["message"]` for an orphaned session.
+ORPHAN_MESSAGE = "Session never started: no worker activity"
+
+#: Job kind of the outbox row `sweep_orphaned_sessions` writes for the
+#: `session.ended` webhook — mirrors `telephony.calls.CALL_EVENT_JOB` and
+#: `recordings.finalize.RECORDING_FINALIZE`: the sweep has only `db:
+#: Database`, not a `JobsService`, and `webhooks.emit` opens its own
+#: connection, so calling it while the sweep's own transaction is still open
+#: would deadlock SQLite the same way `docs/v2/_asks.md` #40 documents for the
+#: session-summary path. The row is added to the same session as the status
+#: change, committed with it, and picked up a tick later by the job poller
+#: (or an `arq` worker), which calls `emit` on its own connection.
+SESSION_ORPHAN_EVENT_JOB = "session_orphan_event"
 
 
 async def sweep_once(db: Database, settings: Settings, *, now: dt.datetime | None = None) -> tuple[int, int]:
@@ -80,6 +116,98 @@ async def sweep_once(db: Database, settings: Settings, *, now: dt.datetime | Non
     if created_swept or active_swept:
         log.info("sessions_swept", created_swept=created_swept, active_swept=active_swept)
     return created_swept, active_swept
+
+
+async def sweep_orphaned_sessions(db: Database, settings: Settings, *, now: dt.datetime | None = None) -> int:
+    """Close an `active` session with **no events at all** and a stale start (ask #55, B-13).
+
+    A job that crashes in the SDK entrypoint before the worker's
+    `SessionObserver` attaches never posts a single `session_events` row —
+    that observer is what turns every later `agent_state`/`user_turn`/
+    `agent_turn`/`metrics`/`error` event into a row (CONTRACTS.md §7), so its
+    absence for the session's entire life is the one signal that is *only*
+    true for a job that died before the conversation ever really started.
+    Deliberately **not** "last event older than the cutoff": a genuinely long
+    live call can sit quiet — on hold, mid-thought, a slow caller — for longer
+    than `LKAP_SESSION_ORPHAN_TIMEOUT_S` without a new event, and closing that
+    would be exactly the "genuinely long live call" this sweep must leave
+    alone; a session that has posted even one event has already proven the
+    job started for real, so it is left to the coarser
+    `LKAP_SESSION_STALE_ACTIVE_S` rule above ("summary never received")
+    instead. `WorkerInstance.last_heartbeat_at` was considered too: it is a
+    heartbeat for the *worker process* on a connection's pool, not for one
+    session, so a healthy heartbeat can't tell a crashed job on that same
+    worker from a live one — `session_events` is the only per-session
+    liveness signal that exists.
+
+    Args:
+        db: The process database.
+        settings: Settings carrying `LKAP_SESSION_ORPHAN_TIMEOUT_S`.
+        now: Injected clock for tests; defaults to the real current time.
+
+    Returns:
+        How many sessions were closed this pass.
+    """
+    ts = now or utcnow()
+    cutoff = ts - dt.timedelta(seconds=settings.session_orphan_timeout_s)
+    has_event = select(SessionEvent.id).where(SessionEvent.session_id == SessionRow.id).exists()
+    closed = 0
+    async with db.session() as session:
+        candidates = (
+            (
+                await session.execute(
+                    select(SessionRow)
+                    .where(SessionRow.status == "active")
+                    .where(~has_event)
+                    .where(func.coalesce(SessionRow.started_at, SessionRow.created_at) < cutoff)
+                    # The orphan sweep runs platform-wide, across every workspace.
+                    .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for row in candidates:
+            row.status = "failed"
+            row.error = ORPHANED
+            row.ended_at = ts
+            session.add(
+                SessionEvent(session_id=row.id, ts=ts, type="error", payload={"message": ORPHAN_MESSAGE})
+            )
+            session.add(
+                Job(
+                    kind=SESSION_ORPHAN_EVENT_JOB,
+                    payload={
+                        "workspace_id": row.workspace_id,
+                        "data": {
+                            "session_id": row.id,
+                            "agent_id": row.agent_id,
+                            "status": "failed",
+                            "disposition": row.disposition,
+                            "variables": row.variables or {},
+                        },
+                    },
+                    status="pending",
+                    run_at=ts,
+                )
+            )
+            closed += 1
+    if closed:
+        log.info("orphaned_sessions_swept", count=closed)
+    return closed
+
+
+@job(SESSION_ORPHAN_EVENT_JOB)
+async def _emit_session_orphan_event(ctx: JobContext, payload: dict[str, Any]) -> None:
+    """Fan `session.ended` out for a session `sweep_orphaned_sessions` just closed."""
+    data = payload.get("data")
+    await emit(
+        ctx.database,
+        ctx.jobs,
+        workspace_id=str(payload["workspace_id"]),
+        event_type=SESSION_ENDED,
+        data=dict(data) if isinstance(data, dict) else {},
+    )
 
 
 async def sweep_recording_retention(
@@ -150,8 +278,10 @@ async def sweep_recording_retention(
 
 
 async def sweep_loop(db: Database, settings: Settings) -> None:
-    """Run `sweep_once` and `sweep_recording_retention` forever, every
-    `LKAP_SESSION_SWEEP_INTERVAL_S` seconds.
+    """Run every sweep forever, every `LKAP_SESSION_SWEEP_INTERVAL_S` seconds:
+    `sweep_orphaned_sessions`, `sweep_once`, `sweep_recording_retention` and
+    `sweep_stuck_calls` (in that order — the orphan rule is the more specific
+    one for a row that could match both it and `sweep_once`'s six-hour rule).
 
     One failed pass (e.g. a transient database error) is logged and never kills
     the loop — the next tick tries again.
@@ -161,6 +291,11 @@ async def sweep_loop(db: Database, settings: Settings) -> None:
 
     while True:
         try:
+            # The more specific ask #55/B-13 rule runs first: a row it would close (no
+            # events, ever) also matches `sweep_once`'s coarser six-hour "active" rule
+            # once it's that old, and the orphan rule's `error`/event/webhook are the
+            # more useful diagnosis of the two.
+            await sweep_orphaned_sessions(db, settings)
             await sweep_once(db, settings)
             await sweep_recording_retention(db, settings)
             await sweep_stuck_calls(db)  # R-V2-24: calls stuck in `dialing` / left open

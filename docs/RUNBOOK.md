@@ -328,7 +328,7 @@ In `web/`: `pnpm lint && pnpm typecheck && pnpm test`. Never run `pnpm build` in
 - Observed on 2026-09-19 (livekit-agents 1.8.2), three restarts in `dev` mode with no active job: the process exited **1–2 s** after SIGINT, and the log showed `shutting down worker`. That matches D-W2-13 (dev → `aclose()` immediately). The start-mode drain was not exercised locally because Docker was not running.
 - Plain SIGTERM in `start` mode only *drains*: the old worker stays registered while a new one starts. That is how two workers once served `lkap-agent` at the same time.
 - `agent/Dockerfile` sets `STOPSIGNAL SIGINT`. If you ever run the worker under compose, the commented `agent` service in `deploy/docker-compose.yml` shows `stop_signal: SIGINT` and `stop_grace_period: 1h` (≥ `drain_timeout`).
-- A killed worker leaves `active` session rows behind. The api's stale-session sweep (D-W2-2b) is the safety net, not a substitute for the grace period.
+- A killed worker leaves `active` session rows behind. The api's stale-session sweep (D-W2-2b) is the safety net, not a substitute for the grace period. A job that crashes in the SDK entrypoint before the observer even attaches leaves a session `active` with **no `session_events` at all** — the sweep's `LKAP_SESSION_ORPHAN_TIMEOUT_S` rule (ask #55, B-13; §18) closes those much sooner than the general `LKAP_SESSION_STALE_ACTIVE_S` rule would.
 
 ---
 
@@ -474,6 +474,7 @@ End to end from the cloud worker needs a publicly reachable api (`LKAP_API_BASE_
 | 12 build + register | **DoD-blocking (LIVE_TEST_PLAN Part C), not met yet.** Docker was not running locally, so the image was not built; the deploy is a human step (§6). |
 | 12 end to end from the cloud worker | Needs a public api URL. |
 | Idle hangup | `LKAP_IDLE_HANGUP_S` (default 120 s) ends a session that stays `away` that long while the agent is listening/idle (REVIEW-FINAL F-02). |
+| Orphaned session (ask #55, B-13) | `LKAP_SESSION_ORPHAN_TIMEOUT_S` (default 600 s) closes an `active` session as `failed`/`error="orphaned"` when it has **zero** `session_events` rows (the observer never attached — the job crashed in the SDK entrypoint) and its `started_at`/`created_at` is older than the timeout. A session with even one event, however old, is left to the coarser `LKAP_SESSION_STALE_ACTIVE_S` rule instead — this rule never touches a genuinely long, quiet live call. See `api/src/lkap_api/sessions_sweep.py::sweep_orphaned_sessions`. |
 | Realtime typed turns | In realtime mode the model sees only the raw typed text, not per-turn `turn_ctx` edits (SDK behaviour, D-W2-9p known gap). |
 | Full reconnect after a network drop | Replays the same token/room; if the job already closed, start a new call (D-W2-2). |
 | Shutdown log noise | The insurance pack's final "Session ended … Final route" note is applied to the stored state, but sending it to the already-departed browser logs a `StreamError: internal error` warning. Harmless. |

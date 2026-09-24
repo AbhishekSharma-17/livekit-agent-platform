@@ -119,7 +119,8 @@ Created by the architect (2026-09-24); V3-01 owns this file's structure from wav
 
 | # | Owner | File | Edit | Why | Status |
 |---|---|---|---|---|---|
-| | | | | | |
+| V3-07-1 | V3-06 / coordinator (low) | `docs/RUNBOOK.md` §20 (the remote-MCP launch line), `mcp/README.md` "Run it locally" | `uv run --project <checkout>/mcp lkap-mcp --http` does not forward SIGINT to its python child when the parent was started in its own session. **Repro:** `Popen([... "uv","run",...,"--http"], start_new_session=True)`, then `kill -INT <uv pid>`: after 45 s the uv parent was SIGKILLed and the child (uvicorn) kept `:8090` until it got its own SIGINT, after which it exited within 15 s. **Suggested fix:** document that a service manager must signal the process group (or `exec` the venv's `lkap-mcp` binary directly, which is what V3-07's launcher does now). Compose is unaffected: the image runs the binary as PID 1. | an orphaned service holds the port and answers with stale settings (V3-07's first 6d attempt hit it) | open |
+| V3-07-2 | **user** | — | Headless `claude -p` cannot use the desktop app's login: `claude auth status` → `loggedIn: false` (the same with a clean env), and the first run answered "OAuth session expired and could not be refreshed". Pick one: (a) run `claude login` (or `claude auth login`) once in your own terminal, so `claude -p` uses your default config dir, as you decided; or (b) provide an `ANTHROPIC_API_KEY` that V3-07 exports only in the `claude` process env. | blocks V3-07 steps 2a, 2b-sim, 4, 5 (Claude part), 6a–6c, 6d (Claude part) and 6h | open — waiting on the user |
 
 ## For the architect (design questions; answered as R-V3-n rulings)
 

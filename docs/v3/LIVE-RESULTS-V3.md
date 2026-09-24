@@ -1,6 +1,6 @@
 # LKAP v3: live acceptance results (V3-07)
 
-**Status: complete. Every step of the card was run; the verdict is pending architect.** The run was paused at step 0a on 2026-09-24, because the standalone `claude` CLI had no login. The user then ran `claude login`, and the Claude-driven steps ran on the resume.
+**Status: complete and signed off — SHIP-WITH-CONDITIONS (§Verdict, R-V3-39).** Every step of the card was run. The run was paused at step 0a on 2026-09-24, because the standalone `claude` CLI had no login. The user then ran `claude login`, and the Claude-driven steps ran on the resume.
 
 **Run**
 - **Part 1:** 2026-09-24 09:00–09:12 UTC. Repo HEAD was the V3-06F commit (then `b8b10a6`, now `38f396f` after a history rewrite).
@@ -370,4 +370,30 @@ There were no new incidents in part 2.
 
 ## Verdict
 
-pending architect
+**SHIP-WITH-CONDITIONS for local/MVP** (Fable 5.1, 2026-09-25; rulings R-V3-39 … R-V3-43 in `PLAN-V3.md` §8).
+
+**Why ship.** Every step of the card ran against real headless Claude Code 2.1.226 and Codex 0.153.4, on both legs (stdio and remote), and none failed on behaviour: the connection-by-reference path kept every secret out of the transcript, the MCP stderr, the api log and the audit; the inline path leaked only where R-V3-3 says it must (the client's own tool arguments); build → test → publish produced a real text session with KB and HTTP-tool events on the user's Cloud project within the 10 s window; the delete ladder (needs_confirmation → 409 → archive → purge), the dial refusal, the secret refusal, mid-session and cross-run revocation, the in-band rate limit (R-V3-28, client did not crash), the `Origin`/bearer checks, the Codex write-free form and the plugin form all behaved as designed. Isolation held: the user's settings, plugins, `~/.claude.json` MCP tables, skills, live worker and `other-project-agent` are unchanged; the one file that moved (`~/.codex/config.toml`) moved 18 minutes after the last Codex process and is not attributable (R-V3-42). The `mcp/` gate is green at 718 tests.
+
+**What the run did not prove** (the four gaps; all evidence or docs, none behaviour):
+
+| # | Gap | Why it is not a NO-SHIP |
+|---|---|---|
+| a | The console dialog leg (minting a key through `connect-agent-dialog.tsx`) was not exercised live; the exact body was posted to the api instead | V3-04's vitest + msw suite pins the body; the api accepted that body live. Closed by V4-06's browser check (R-V3-43) |
+| b | The `initialize`-time `X-LKAP-Client` header text (no `client=`) was not observed | `last_client=lkap-mcp` was, which is what R-V3-19 needs; one assertion in `test_http_mode.py` closes it (R-V3-43) |
+| c | A plain build prompt did not auto-invoke the skill; `/lkap` did | Auto-invocation is probabilistic; the model still followed the workflow through `lkap_guide` (R-V3-41) |
+| d | The user's own hooks echoed an inline secret into the persisted session file (8 copies) | A client-side exposure the server cannot narrow; R-V3-3 already accepts the transcript copy, the copy must name hooks and plugins too (R-V3-40) |
+
+**Conditions** (owned items with acceptance; none blocks local use today):
+
+| # | Condition | Owner | Acceptance | Ruling |
+|---|---|---|---|---|
+| C1 | Widen the transcript warning and the acknowledgement label to hooks and plugins, and lead with the `file:` reference form | Sonnet (one web change) | `TRANSCRIPT_WARNING`, the checkbox label and `console-settings-snippets.test.ts` re-pinned; web gate green | R-V3-40 |
+| C2 | Trigger phrases in `SKILL.md`'s description; `/lkap` documented as the deterministic form | Sonnet (V3-08 follow-up) | doc-lint green; `mcp/README.md` and the dialog's step 3 say "type `/lkap` or name LKAP" | R-V3-41 |
+| C3 | Headless docs require `--permission-mode default` and use the server form `--allowedTools mcp__lkap` | Sonnet (docs) | `mcp/README.md` headless section shows the flags with the reason (auto mode masks the check) | R-V3-43 |
+| C4 | The dialog leg: mint one key through the real dialog in a browser, revoke it at once | V4-06 (optional item of its browser check) | recorded in `docs/v4/_briefs/v4-06-populate.md` | R-V3-43 |
+| C5 | Assert the `initialize`-time header shape in `test_http_mode.py` | Opus (next `mcp/` change) | one test: the `/v1/api-keys/self` request at `initialize` carries `X-LKAP-Client: lkap-mcp/<v>` with no `client=` | R-V3-43 |
+| C6 | The user checks what wrote `~/.codex/config.toml` at 09:22:33 UTC | user | a one-line note in `_asks.md` V3-07-6 | R-V3-42 |
+
+**Still open, carried unchanged:** CI without a remote (V3-00-6, V3-05-7), the one-time local `caddy validate` (V3-06-8, before the first prod deploy). **Not a condition:** the optional 2b-user leg (R-V3-38: sign-off does not wait for it).
+
+**Production readiness is a separate call.** This verdict covers the local dev stack and the MVP; prod needs the Caddy validation, the CI rows once a remote exists, and the RUNBOOK §20 walk on a real domain.

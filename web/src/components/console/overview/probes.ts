@@ -17,6 +17,12 @@ import type { ConnectionPage, WebhookEndpointPage } from "@/contracts/lkap-contr
  */
 interface ProbeResult {
   total: number;
+  /**
+   * Connections only: how many passed their last test (`status === "ok"`).
+   * An added-but-never-tested connection shows "Unverified" on the
+   * connections page and must not tick "A LiveKit connection is tested".
+   */
+  verified: number;
   /** False when the endpoint isn't implemented yet. */
   available: boolean;
   isLoading: boolean;
@@ -24,6 +30,7 @@ interface ProbeResult {
 
 interface ProbeQueryData {
   total: number;
+  verified: number;
   available: boolean;
 }
 
@@ -34,13 +41,14 @@ function useCountProbe(key: string, path: string): ProbeResult {
       try {
         if (path === "connections") {
           const page = await api.get<ConnectionPage>(path);
-          return { total: page.total, available: true };
+          const verified = page.items.filter((connection) => connection.status === "ok").length;
+          return { total: page.total, verified, available: true };
         }
         const page = await api.get<WebhookEndpointPage>(path);
-        return { total: page.total, available: true };
+        return { total: page.total, verified: 0, available: true };
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
-          return { total: 0, available: false };
+          return { total: 0, verified: 0, available: false };
         }
         throw error;
       }
@@ -51,6 +59,7 @@ function useCountProbe(key: string, path: string): ProbeResult {
 
   return {
     total: query.data?.total ?? 0,
+    verified: query.data?.verified ?? 0,
     available: query.data?.available ?? false,
     isLoading: query.isLoading,
   };

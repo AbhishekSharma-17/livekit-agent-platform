@@ -607,7 +607,7 @@ function PrimitivesScene() {
           <EmptyState
             icon={BotIcon}
             title="No agents yet"
-            description="Create one from a pack template to get started."
+            description="Start from a starter template — blank, knowledge, receptionist and more."
             action={<Button variant="brand">New agent</Button>}
           />
         </SectionRow>

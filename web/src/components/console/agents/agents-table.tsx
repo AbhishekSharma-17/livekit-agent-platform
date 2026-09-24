@@ -31,11 +31,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EmptyState, GatedButton, Icon, RelativeTime, ResponsiveTable, StatusChip, VendorMark } from "@/components/shared";
+import { EmptyState, Icon, RelativeTime, ResponsiveTable, StatusChip, VendorMark } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { useAgents, useDeleteAgent, usePacks, useProviders, useUpdateAgent } from "@/components/console/lib/api-hooks";
 import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { useWriteAccess } from "@/components/console/lib/roles";
+import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
 import type { AgentOut, ConnectionOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { connectionTypeLabel } from "@/components/console/agents/editor/use-connection";
 import { useConnections } from "@/hooks/useConnections";
@@ -127,8 +128,6 @@ export function AgentsTable() {
   const providersQuery = useProviders();
   const packsQuery = usePacks();
   const deleteAgent = useDeleteAgent();
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
 
   const [q, setQ] = useQueryParamState("q");
   const [status, setStatus] = useQueryParamState("status");
@@ -185,17 +184,7 @@ export function AgentsTable() {
         icon={BotIcon}
         title="No agents yet"
         description="An agent is a voice or video assistant with its own providers, instructions and tools."
-        action={
-          canWrite ? (
-            <Button asChild>
-              <Link href="/console/agents/new">New agent</Link>
-            </Button>
-          ) : (
-            <GatedButton allowed={false} reason={writeReason}>
-              New agent
-            </GatedButton>
-          )
-        }
+        action={<NewAgentButton />}
       />
     );
   }

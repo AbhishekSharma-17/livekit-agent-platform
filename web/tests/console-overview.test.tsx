@@ -1,11 +1,46 @@
 import * as React from "react";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Overview } from "@/components/console/overview/overview";
-import type { AgentOut, AgentPage, CredentialPage, HealthResponse, SessionOut, SessionPage } from "@/contracts/lkap-contracts";
+import type {
+  AgentOut,
+  AgentPage,
+  ConnectionPage,
+  CredentialPage,
+  HealthResponse,
+  SessionOut,
+  SessionPage,
+} from "@/contracts/lkap-contracts";
+
+import { TEMPLATES } from "./fixtures/templates";
+
+const routerPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush, replace: vi.fn() }),
+  usePathname: () => "/console",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+// Radix Dialog in jsdom: see console-editor-shell.test.tsx for why.
+const nativeMatches = Element.prototype.matches;
+beforeAll(() => {
+  Element.prototype.matches = function matches(this: Element, selector: string) {
+    if (selector === ":popover-open" || selector === ":modal") return false;
+    return nativeMatches.call(this, selector);
+  };
+});
+afterAll(() => {
+  Element.prototype.matches = nativeMatches;
+});
+
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 const HEALTH: HealthResponse = {
   ok: true,
@@ -49,6 +84,10 @@ interface Fixtures {
   agents?: AgentPage;
   credentials?: CredentialPage;
   sessions?: SessionPage;
+  /** `GET /v1/connections`; omitted → 404 (the route isn't there). */
+  connections?: ConnectionPage;
+  /** Answer `GET /v1/auth/me` with this role; omitted → 404 (no workspace accounts). */
+  role?: "admin" | "viewer";
 }
 
 function stubFetch(fixtures: Fixtures) {
@@ -60,6 +99,14 @@ function stubFetch(fixtures: Fixtures) {
     if (url.includes("/api/console/agents")) return respond(fixtures.agents ?? { items: [], total: 0 });
     if (url.includes("/api/console/credentials")) return respond(fixtures.credentials ?? { items: [], total: 0 });
     if (url.includes("/api/console/sessions")) return respond(fixtures.sessions ?? { items: [], total: 0 });
+    if (url.includes("/api/console/templates")) return respond(TEMPLATES);
+    if (url.includes("/api/console/connections") && fixtures.connections) return respond(fixtures.connections);
+    if (url.includes("/api/console/auth/me") && fixtures.role) {
+      return respond({
+        user: { id: "u1", email: "admin@example.test" },
+        workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: fixtures.role }],
+      });
+    }
     // connections, webhooks, auth/me: not built yet in this wave.
     return respond({ error: { code: "not_found", message: "not found" } }, 404);
   });
@@ -68,6 +115,7 @@ function stubFetch(fixtures: Fixtures) {
 }
 
 function renderOverview() {
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -78,6 +126,7 @@ function renderOverview() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe("Overview", () => {
@@ -90,8 +139,10 @@ describe("Overview", () => {
     // Sign-in is always "done" in this v1-admin-token phase (no login flow exists yet).
     expect(screen.getByText("Sign in")).toBeTruthy();
 
-    // "New agent" appears twice (the checklist row's action and Quick actions).
-    expect(screen.getAllByRole("link", { name: "New agent" }).length).toBe(2);
+    // "New agent" appears twice (the checklist row's action and Quick actions),
+    // both buttons that open the dialog — never links to /console/agents/new.
+    expect(screen.getAllByRole("button", { name: "New agent" }).length).toBe(2);
+    expect(screen.queryAllByRole("link", { name: "New agent" })).toHaveLength(0);
     expect(await screen.findByText("No calls yet")).toBeTruthy();
     expect(await screen.findByText("No agents are published")).toBeTruthy();
 
@@ -145,16 +196,85 @@ describe("Overview", () => {
     expect(screen.getByText(/1 live/)).toBeTruthy();
   });
 
-  it("links quick actions to the right destinations", async () => {
-    stubFetch({});
+  it("links quick actions to the right destinations; New agent opens the dialog", async () => {
+    stubFetch({ role: "admin" });
     renderOverview();
     await waitFor(() => expect(screen.getByText("Quick actions")).toBeTruthy());
     const quickActions = screen.getByText("Quick actions").closest("section") as HTMLElement;
-    expect(within(quickActions).getByRole("link", { name: "New agent" }).getAttribute("href")).toBe(
-      "/console/agents/new",
-    );
     expect(within(quickActions).getByRole("link", { name: "New knowledge base" }).getAttribute("href")).toBe(
       "/console/knowledge",
     );
+
+    const newAgent = within(quickActions).getByRole("button", { name: "New agent" }) as HTMLButtonElement;
+    await waitFor(() => expect(newAgent.disabled).toBe(false));
+    fireEvent.click(newAgent);
+    expect(await screen.findByRole("dialog", { name: "New agent" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Blank agent" }).getAttribute("aria-checked")).toBe("true"));
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("opens the dialog from the setup checklist's New agent action", async () => {
+    stubFetch({ role: "admin" });
+    renderOverview();
+    await screen.findByText("Create your first agent");
+    const checklist = screen.getByText("Set up LKAP").closest("section") as HTMLElement;
+    // Gated (a disabled button) until the role is known, then a live one.
+    const enabled = () => within(checklist).getByRole("button", { name: "New agent" }) as HTMLButtonElement;
+    await waitFor(() => expect(enabled().disabled).toBe(false));
+    fireEvent.click(enabled());
+    expect(await screen.findByRole("dialog", { name: "New agent" })).toBeTruthy();
+  });
+
+  it("disables New agent for a viewer", async () => {
+    stubFetch({ role: "viewer" });
+    renderOverview();
+    await screen.findByText("Quick actions");
+    await waitFor(() => {
+      for (const button of screen.getAllByRole("button", { name: "New agent" })) {
+        expect((button as HTMLButtonElement).disabled).toBe(true);
+      }
+    });
+  });
+});
+
+describe("Setup checklist — connection row", () => {
+  function connection(id: string, status: "ok" | "unverified" | "error") {
+    return { id, name: `Conn ${id}`, slug: id, url: "wss://example.test", status };
+  }
+
+  /** The row's icon is a check only when done; the title row carries the state. */
+  function connectionRowDone(): boolean {
+    const row = screen.getByText("A LiveKit connection is tested").closest('[data-slot="section-row"]') as HTMLElement;
+    return row.querySelector("svg.text-success") !== null;
+  }
+
+  it("is not ticked when the only connection is unverified", async () => {
+    stubFetch({ connections: { items: [connection("c1", "unverified")], total: 1 } });
+    renderOverview();
+    await screen.findByText("Run Test on a connection to confirm it can host agents.");
+    expect(connectionRowDone()).toBe(false);
+    expect(screen.getByRole("link", { name: "Open connections" })).toBeTruthy();
+  });
+
+  it("is not ticked when the last test failed", async () => {
+    stubFetch({ connections: { items: [connection("c1", "error")], total: 1 } });
+    renderOverview();
+    await screen.findByText("Run Test on a connection to confirm it can host agents.");
+    expect(connectionRowDone()).toBe(false);
+  });
+
+  it("is ticked once a connection has passed its test", async () => {
+    stubFetch({ connections: { items: [connection("c1", "unverified"), connection("c2", "ok")], total: 2 } });
+    renderOverview();
+    await screen.findByText("At least one connection has passed its test and can host agents.");
+    expect(connectionRowDone()).toBe(true);
+    expect(screen.queryByRole("link", { name: "Open connections" })).toBeNull();
+  });
+
+  it("asks for a connection when there are none", async () => {
+    stubFetch({ connections: { items: [], total: 0 } });
+    renderOverview();
+    expect(await screen.findByText("Add a LiveKit Cloud or self-hosted connection, then test it.")).toBeTruthy();
+    expect(connectionRowDone()).toBe(false);
   });
 });

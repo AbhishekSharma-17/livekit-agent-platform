@@ -1,11 +1,14 @@
 import * as React from "react";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AgentsTable } from "@/components/console/agents/agents-table";
+import { CreateAgentDeepLink } from "@/components/console/agents/create/create-agent-deep-link";
 import type { AgentOut, AgentPage, PacksResponse, ProvidersResponse } from "@/contracts/lkap-contracts";
+
+import { TEMPLATES } from "./fixtures/templates";
 
 // jsdom has no ResizeObserver; the shadcn `Select`/`DropdownMenu` (Radix
 // popper positioning) need one to mount (docs pattern already used by
@@ -17,12 +20,27 @@ class ResizeObserverStub {
 }
 
 const routerReplace = vi.fn();
+const routerPush = vi.fn();
+let searchParams = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: routerPush }),
   usePathname: () => "/console/agents",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParams,
 }));
+
+// Radix Dialog positioning in jsdom (see console-editor-shell.test.tsx): answer
+// the top-layer pseudo-class probes with `false` instead of seconds in nwsapi.
+const nativeMatches = Element.prototype.matches;
+beforeAll(() => {
+  Element.prototype.matches = function matches(this: Element, selector: string) {
+    if (selector === ":popover-open" || selector === ":modal") return false;
+    return nativeMatches.call(this, selector);
+  };
+});
+afterAll(() => {
+  Element.prototype.matches = nativeMatches;
+});
 
 function agent(overrides: Partial<AgentOut> & { id: string; name: string; slug: string }): AgentOut {
   return {
@@ -105,6 +123,12 @@ function stubFetch(agents: AgentOut[], role: "owner" | "admin" | "builder" | "vi
     if (url.startsWith("/api/console/packs")) {
       return { ok: true, status: 200, json: async () => PACKS } as Response;
     }
+    if (url.startsWith("/api/console/templates")) {
+      return { ok: true, status: 200, json: async () => TEMPLATES } as Response;
+    }
+    if (url.startsWith("/api/console/credentials")) {
+      return { ok: true, status: 200, json: async () => ({ items: [], total: 0 }) } as Response;
+    }
     if (url.startsWith("/api/console/auth/me")) {
       return {
         ok: true,
@@ -136,6 +160,7 @@ function renderTable(agents: AgentOut[], role: "owner" | "admin" | "builder" | "
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  searchParams = new URLSearchParams();
 });
 
 /**
@@ -251,15 +276,23 @@ describe("AgentsTable", () => {
     expect(tableScope().getByRole("button", { name: "Actions for Support desk" })).toBeTruthy();
   });
 
-  it("shows the empty state with a link to the new-agent flow when there are no agents", async () => {
+  it("opens the New agent dialog from the empty state's button, without navigating", async () => {
     renderTable([]);
     expect(await screen.findByText("No agents yet")).toBeTruthy();
-    const link = screen.getByRole("link", { name: "New agent" });
-    expect(link.getAttribute("href")).toBe("/console/agents/new");
+    expect(screen.queryByRole("link", { name: "New agent" })).toBeNull();
+
+    // The button is gated until the role is known, then enabled for an admin.
+    await waitFor(() => expect((screen.getByRole("button", { name: "New agent" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+
+    expect(await screen.findByRole("dialog", { name: "New agent" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Blank agent" }).getAttribute("aria-checked")).toBe("true"));
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   // ------------------------------------------------------- V2-20-5: viewer gating
-  it("replaces the New agent link with a disabled button for a viewer", async () => {
+  it("disables the New agent button for a viewer (no dialog)", async () => {
     renderTable([], "viewer");
     await screen.findByText("No agents yet");
     // `builder`+ is required (auth/roles.py::ROUTE_POLICY "/v1/agents" write);
@@ -268,6 +301,8 @@ describe("AgentsTable", () => {
     const button = await screen.findByRole("button", { name: "New agent" });
     expect((button as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("link", { name: "New agent" })).toBeNull();
+    fireEvent.click(button);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   // The row menu's Publish/Delete items are also gated (`disabled={!canWrite}`
@@ -275,4 +310,40 @@ describe("AgentsTable", () => {
   // jsdom hangs the test process (see the documented limitation above on
   // "renders a row actions trigger…") — not exercised here for the same
   // environment reason.
+});
+
+describe("/console/agents/new deep link", () => {
+  function renderDeepLink(role: "admin" | "viewer" = "admin") {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    stubFetch([], role);
+    return render(
+      <QueryClientProvider client={client}>
+        <CreateAgentDeepLink />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("opens the dialog with ?template=receptionist preselected", async () => {
+    searchParams = new URLSearchParams("template=receptionist");
+    renderDeepLink();
+    expect(await screen.findByRole("dialog", { name: "New agent" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Receptionist" }).getAttribute("aria-checked")).toBe("true"));
+    expect(screen.getByRole("radio", { name: "Blank agent" }).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("goes back to the agents list when closed without creating", async () => {
+    renderDeepLink();
+    await screen.findByRole("dialog", { name: "New agent" });
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith("/console/agents"));
+  });
+
+  it("never opens for a viewer", async () => {
+    renderDeepLink("viewer");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Give the role query a chance to resolve, then check again.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });

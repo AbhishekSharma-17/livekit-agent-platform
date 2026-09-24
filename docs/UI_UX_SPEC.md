@@ -487,12 +487,7 @@ Empty states (all lists, §6): an `EmptyState` with an icon, a title stating wha
 
 ### 4.2 Creating an agent
 
-Route `/console/agents/new` (a page, not a modal). Two steps on one page (no wizard chrome):
-
-1. **Start from a pack** — cards from `GET /v1/packs`, one per manifest: name, description, and a compact fact list drawn from the manifest: pipeline mode (`recommended_pipeline.mode`), the three/one provider vendors as `VendorMark`s, panel (`PANEL_META[ui_panel_id].label` with the side/wide thumbnail), capabilities as icons, "n code tools" (`tool_names.length`), "seeds n knowledge bases" (`kb_seeds`). The `generic` pack card is labelled "Blank agent" with "Cascaded pipeline on LiveKit Inference; generic panel; no code tools" and sits first. Cards are a radio group (keyboard arrows move selection).
-2. **Name it** — Name (required, inline error on blur), Description (optional, "Shown to callers on the call page" — because `AgentPublicOut.description` is rendered on pre-call), then "Create agent" (primary). On success: navigate to `/console/agents/<id>?section=providers`, toast "Created from <pack>", and the summary rail shows a one-time hint "Next: check providers, then make a test call".
-
-"From scratch" is the Blank agent card; there is no separate flow. The old dialog is removed.
+**Superseded (v4).** The New agent flow is a `Dialog` (`size="xl"`) with a starter-template gallery, opened from every "New agent" trigger; `/console/agents/new` is a deep link that opens it over the agents list (`?template=<id>` preselects a starter). The design — gallery tiles, preview pane, the name step, the post-create toast and the editor's "Next steps" card — is in [`v4/TEMPLATES.md` §6](v4/TEMPLATES.md#6-console-the-new-agent-dialog); the ruling that withdraws "a page, not a modal" is R-V4-2 in [`v4/PLAN-V4.md` §5](v4/PLAN-V4.md#5-rulings).
 
 ### 4.3 The agent editor
 

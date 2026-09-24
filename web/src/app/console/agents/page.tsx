@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
-import { NewResourceButton } from "@/components/shared/new-resource-button";
 import { AgentsTable } from "@/components/console/agents/agents-table";
+import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
 
 export const metadata: Metadata = { title: "Agents" };
 
 /**
  * `/console/agents` — moved here from `/console` (docs/UI_UX_SPEC.md §7.2
- * item 3; docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1's Build group). Folds in
- * WP-2's stopgap (a bare `Link` to `/console/agents/new` in place of the
- * deleted create dialog) now that the real shell and route exist.
+ * item 3; docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1's Build group). "New agent"
+ * opens the New agent dialog in place (R-V4-2, docs/v4/TEMPLATES.md §6).
  */
 export default function ConsoleAgentsPage() {
   return (
@@ -18,7 +17,7 @@ export default function ConsoleAgentsPage() {
       <PageHeader
         title="Agents"
         description="Configure providers, instructions, tools and knowledge, then open a test call."
-        actions={<NewResourceButton href="/console/agents/new">New agent</NewResourceButton>}
+        actions={<NewAgentButton />}
       />
       <AgentsTable />
     </div>

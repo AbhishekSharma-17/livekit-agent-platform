@@ -11,6 +11,7 @@ import { useAgents, useCredentials, useHealth, useSessions } from "@/components/
 import { useWriteAccess } from "@/components/console/lib/roles";
 import { useMe } from "@/components/console/shell/use-me";
 import { useActiveWorkspace, useAgentKeys } from "@/components/console/settings/use-settings-queries";
+import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
 import { useConnectionsProbe, useWebhooksProbe } from "./probes";
 
 interface ChecklistRow {
@@ -70,12 +71,19 @@ export function SetupChecklist() {
     {
       id: "connection",
       title: "A LiveKit connection is tested",
-      help: connections.available
-        ? "At least one connection has been tested and can host agents."
-        : health?.livekit_url
+      help: !connections.available
+        ? health?.livekit_url
           ? `Using ${health.livekit_url} from the server's settings.`
-          : "Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the API and the worker.",
-      done: connections.available && connections.total > 0,
+          : "Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the API and the worker."
+        : connections.verified > 0
+          ? "At least one connection has passed its test and can host agents."
+          : connections.total > 0
+            ? "Run Test on a connection to confirm it can host agents."
+            : "Add a LiveKit Cloud or self-hosted connection, then test it.",
+      // Ticked only by a connection whose last test passed (`status: "ok"`),
+      // never by one that is merely saved — the connections list would show
+      // it as "Unverified" (UI audit, v4).
+      done: connections.available && connections.verified > 0,
       action: connections.available ? (
         <Button asChild size="sm" variant="outline">
           <Link href="/console/connections">Open connections</Link>
@@ -98,11 +106,7 @@ export function SetupChecklist() {
       title: "Create your first agent",
       help: "An agent is a voice or video assistant with its own providers, instructions and tools.",
       done: agentItems.length > 0,
-      action: (
-        <Button asChild size="sm">
-          <Link href="/console/agents/new">New agent</Link>
-        </Button>
-      ),
+      action: <NewAgentButton size="sm" />,
     },
     {
       id: "test-call",

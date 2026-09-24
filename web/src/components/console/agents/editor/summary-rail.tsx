@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useController, useWatch } from "react-hook-form";
-import { ChevronRightIcon } from "lucide-react";
+import { ArrowUpRightIcon, ChevronRightIcon, CircleDashedIcon, SparklesIcon } from "lucide-react";
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { Icon } from "@/components/shared/icon";
@@ -14,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { usePacks, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import { BUILTIN_TOOLS, CAPABILITY_META, type CapabilityKey } from "@/components/console/lib/constants";
 import { panelMeta } from "@/components/shared/panel-meta";
+import { useTemplate } from "@/components/console/agents/create/use-templates";
 import type { AgentEditorForm, ProviderRefForm } from "@/components/console/lib/schemas";
 import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";
@@ -130,6 +133,103 @@ function SlotLine({ slot, value, providers }: { slot: PipelineSlot; value: Provi
   );
 }
 
+/**
+ * "Next steps" (docs/v4/TEMPLATES.md §6.4): after creating from a starter the
+ * editor opens with `?from=<template_id>`, and this card lists that starter's
+ * next steps — section items switch the editor section, href items open their
+ * page. "Dismiss" removes `from` from the URL. No persistence: without `from`
+ * (a refresh after dismissing, a bookmark) the card doesn't render.
+ */
+export function NextStepsCard({ className }: { className?: string }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const ctx = useEditorContext();
+  const onNavigate = React.useContext(RailNavigateContext);
+  const from = searchParams?.get("from") ?? null;
+  const templateQuery = useTemplate(from);
+  const template = templateQuery.data?.template;
+  const steps = template?.next_steps ?? [];
+  const headingId = React.useId();
+  if (!from || !template || steps.length === 0) return null;
+
+  function dismiss() {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete("from");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  const itemClass =
+    "group/step flex w-full items-start gap-2.5 rounded-xs px-4 py-2 text-left text-[0.8125rem] leading-[1.125rem] outline-none transition-colors duration-(--dur-2) ease-out hover:bg-brand-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      data-slot="next-steps"
+      className={cn("shrink-0 overflow-hidden rounded-lg border border-brand-line bg-brand-soft/30", className)}
+    >
+      <div className="flex items-start gap-2 px-4 pt-3 pb-2">
+        <Icon as={SparklesIcon} size="sm" className="mt-0.5 text-brand-text" />
+        <div className="min-w-0 flex-1">
+          <h2 id={headingId} className="text-sm font-semibold">
+            Next steps
+          </h2>
+          <p className="text-xs text-muted-foreground">Created from {template.name}</p>
+        </div>
+        <button
+          type="button"
+          onClick={dismiss}
+          className="shrink-0 rounded-xs text-xs font-medium text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Dismiss
+        </button>
+      </div>
+      <ol className="flex flex-col pb-2">
+        {steps.map((step) => {
+          const body = (
+            <>
+              <Icon as={CircleDashedIcon} size="sm" className="mt-0.5 text-muted-foreground group-hover/step:text-brand-text" />
+              <span className="min-w-0 flex-1 text-pretty">{step.label}</span>
+            </>
+          );
+          if (step.section) {
+            const section = step.section;
+            const canGo = Boolean(ctx?.sections.some((s) => s.id === section));
+            return (
+              <li key={step.label}>
+                {canGo && ctx ? (
+                  <button
+                    type="button"
+                    data-section={section}
+                    onClick={() => {
+                      ctx.goToSection(section);
+                      onNavigate?.();
+                    }}
+                    className={itemClass}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <span className={cn(itemClass, "hover:bg-transparent")}>{body}</span>
+                )}
+              </li>
+            );
+          }
+          return (
+            <li key={step.label}>
+              <Link href={step.href ?? "#"} className={itemClass}>
+                {body}
+                <Icon as={ArrowUpRightIcon} size="sm" className="mt-0.5 text-muted-foreground" />
+              </Link>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 export interface SummaryRailProps {
   agent: AgentOut;
   slots: ResolvedEditorSlots;
@@ -188,7 +288,10 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
 
   return (
     <RailNavigateContext.Provider value={onNavigate}>
-    <aside aria-label="Agent summary" className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
+    {/* The shell makes this wrapper the sticky, height-capped scroller; its cards must not shrink. */}
+    <div className={cn("flex flex-col gap-3", className)}>
+    <NextStepsCard />
+    <aside aria-label="Agent summary" className="shrink-0 overflow-hidden rounded-lg border border-border bg-card">
       <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">What this agent does</h2>
       <div className="divide-y divide-border">
         <RailRow label="Status">
@@ -301,6 +404,7 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
         </div>
       </div>
     </aside>
+    </div>
     </RailNavigateContext.Provider>
   );
 }

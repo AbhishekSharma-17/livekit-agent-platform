@@ -487,6 +487,8 @@ The remote MCP service is the platform's MCP server (`mcp/`, `lkap-mcp`) run as 
 **Dev:**
 - `docker compose -f deploy/docker-compose.dev.yml up mcp` serves `http://127.0.0.1:8090/mcp` on loopback only. Plain HTTP is for this machine only.
 - Without compose: `LKAP_API_URL=http://127.0.0.1:8080 uv run --project mcp lkap-mcp --http`.
+  - Under a process manager, or anything that stops the service with a signal to one pid, run `mcp/.venv/bin/lkap-mcp --http` directly, after `uv sync` in `mcp/`.
+  - Don't use `uv run` there: when it runs in its own session it does not forward `SIGINT`, and the orphaned child keeps `:8090` (V3-07-1).
 - In dev (`LKAP_ENV` unset or `dev`), loopback `Host`/`Origin` values are accepted.
 
 **Prod** (`deploy/docker-compose.prod.yml`):

@@ -335,6 +335,16 @@ accepted without `LKAP_MCP_PUBLIC_URL`. With `LKAP_ENV=prod`, the service
 refuses to start unless `LKAP_MCP_PUBLIC_URL` is an `https://` url. The
 compose files run it as the `mcp` service; see `docs/RUNBOOK.md`.
 
+To run the service under a process manager (launchd, systemd, supervisord, or
+a script that stops it with a signal), start the venv's binary directly:
+`<checkout>/mcp/.venv/bin/lkap-mcp --http`, after `uv sync` in `mcp/`. When
+`uv run` runs in its own session, it does not forward a `SIGINT` sent to its
+own pid. The python child keeps serving on `:8090` with its old settings
+after the `uv` parent is killed. This was seen live in V3-07; see ask
+V3-07-1. The other fix is to signal the whole process group. In the
+foreground, Ctrl-C reaches the whole group, so the `uv run` line above is
+fine there.
+
 ## Claude Code skill and plugin
 
 `mcp/claude-plugin/` packages the platform guide as a Claude Code skill
@@ -366,6 +376,13 @@ session:
 ```bash
 claude --plugin-dir <checkout>/mcp/claude-plugin
 ```
+
+With `--strict-mcp-config`, Claude Code 2.1.226 loads the plugin and its
+`lkap:lkap` skill but drops the plugin's own MCP server. Pass the plugin's
+server file explicitly as well:
+`--plugin-dir <checkout>/mcp/claude-plugin --strict-mcp-config --mcp-config <checkout>/mcp/claude-plugin/.mcp.json`.
+The `${LKAP_CHECKOUT}`/`${LKAP_API_URL}`/`${LKAP_API_KEY}` expansion works
+the same there (verified live in V3-07 step 6h).
 
 or persist it across sessions by registering the checkout as a local
 marketplace once, then installing from it like any other plugin:

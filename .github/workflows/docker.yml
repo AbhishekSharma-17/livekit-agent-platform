@@ -142,6 +142,8 @@ jobs:
           docker rm "${container_id}" >/dev/null
           cat installed_providers.slim.json
 
+          # The runner has no pre-built contracts venv; create it here.
+          uv sync --project contracts --frozen --quiet
           contracts/.venv/bin/python - <<'PY'
           import json
           import sys

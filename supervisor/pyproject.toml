@@ -1,6 +1,7 @@
 [project]
 name = "lkap-supervisor"
 version = "0.1.0"
+license = "Apache-2.0"
 description = "LKAP worker supervisor: reconciles per-connection worker pools (subprocess or docker)."
 requires-python = ">=3.12,<3.13"
 dependencies = [

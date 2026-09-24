@@ -1,6 +1,7 @@
 [project]
 name = "lkap-agent"
 version = "0.1.0"
+license = "Apache-2.0"
 description = "LKAP LiveKit worker (agent_name=lkap-agent)"
 requires-python = ">=3.12,<3.13"
 dependencies = [

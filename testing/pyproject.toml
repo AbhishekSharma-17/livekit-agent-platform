@@ -1,6 +1,7 @@
 [project]
 name = "lkap-testing"
 version = "0.1.0"
+license = "Apache-2.0"
 description = "Shared in-memory test fakes for LKAP packs and the worker (REVIEW-FINAL F-18)"
 requires-python = ">=3.12,<3.13"
 # `packs.base` (the Protocols these fakes implement) comes from `lkap-packs`,

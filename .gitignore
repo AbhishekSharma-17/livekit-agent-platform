@@ -21,3 +21,28 @@ lancedb/
 dist/
 build/
 .claude/
+
+# Secrets and local config (never commit)
+*.pem
+*.key
+*.p12
+dev.env
+*.secret
+*.secrets
+
+# Tooling and editors
+.idea/
+.vscode/
+*.swp
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.uv-cache/
+
+# Local artifacts
+scratchpad/
+*.bundle
+*.sqlite
+*.sqlite3
+!api/tests/fixtures/*.sqlite

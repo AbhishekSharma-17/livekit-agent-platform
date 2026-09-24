@@ -1,0 +1,21 @@
+LiveKit Agent Platform (LKAP)
+Copyright 2026 Abhishek Sharma
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes software derived from the following projects, which are
+also licensed under the Apache License, Version 2.0:
+
+- awesome-llm-apps: voice_ai_agents/insurance_claim_live_agent_team
+  Copyright Shubham Saboo and contributors
+  https://github.com/Shubhamsaboo/awesome-llm-apps
+  The insurance claim intake use case (packs/insurance_claim) was re-implemented
+  on LiveKit from this demo.
+
+- LiveKit Agents UI components (vendored under web/src/components/agents-ui)
+  Copyright LiveKit, Inc.
+  https://github.com/livekit/components-js
+  https://github.com/livekit/agents-js
+
+Third-party dependencies are listed in each package's pyproject.toml or
+package.json and are distributed under their own licenses.

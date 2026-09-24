@@ -1,6 +1,7 @@
 [project]
 name = "lkap-mcp"
 version = "0.1.0"
+license = "Apache-2.0"
 description = "LKAP Agent Access Layer: the MCP server coding agents use to understand and configure the platform"
 requires-python = ">=3.12,<3.13"
 dependencies = [

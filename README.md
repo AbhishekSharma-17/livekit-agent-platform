@@ -1,10 +1,14 @@
 # LiveKit Agent Platform (LKAP)
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
+
 A reusable, configurable **real-time voice + video agent platform on LiveKit Cloud**. Teams build their own agents in a web console — pick a realtime speech-to-speech model (Gemini Live, OpenAI Realtime) or a cascaded STT → LLM → TTS pipeline (LiveKit Inference works with LiveKit credentials alone), optionally add an avatar (Beyond Presence, Tavus), paste credentials, write instructions, attach tools (HTTP/JSON-schema, MCP, code packs), upload knowledge bases, enable camera and screen share, and get a live session page with a pack-defined panel that the agent updates as it talks.
 
 The reference pack is the **insurance claim live agent** (voice intake, camera evidence pinned with confirmed/unconfirmed captions, incident sketches, policy verification, background claim workflow producing routing, missing items and an adjuster packet).
 
-Status: **v2 in integration** (Phase 1, `docs/v2/PLAN-V2.md`). On top of the v1 MVP, v2 adds:
+Status: **Phase 1 (v2) complete** and the **v3 agent access layer** (an MCP server for Claude Code, Codex and Cursor) implemented. Fit for local/MVP use; not yet for multi-tenant production (see `docs/v2/REVIEW-V2.md` §8). On top of the v1 MVP, v2 adds:
 - every LiveKit provider and avatar is configurable from the console, through a 121-entry registry;
 - LiveKit connections, Cloud or self-hosted, with a worker supervisor that runs per-connection pools;
 - sign-in, workspaces, roles and API keys;
@@ -155,3 +159,15 @@ tab (V3-04) mints a scoped key and the exact `claude mcp add` / Codex /
 Cursor snippet for you. Once connected, ask the agent to call `lkap_guide`
 first — it explains the object model, the workflow and the safety rules
 before it touches anything.
+
+## Contributing and security
+
+See `CONTRIBUTING.md` for setup and quality gates, and `SECURITY.md` for how
+to report a vulnerability.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). See [`NOTICE`](NOTICE)
+for attribution: the insurance use case is derived from
+[awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps), and the
+vendored LiveKit Agents UI components are © LiveKit, Inc. Both are Apache-2.0.

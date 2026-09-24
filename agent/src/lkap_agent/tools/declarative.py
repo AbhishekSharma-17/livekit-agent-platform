@@ -33,6 +33,7 @@ from lkap_agent.logging import get_logger
 from lkap_agent.tools._http_safety import (
     HttpToolSecurityError,
     check_url_allowed,
+    check_url_public,
     guarded_transport,
     truncate,
 )
@@ -200,46 +201,84 @@ def build_http_tools(
     return tools
 
 
-def build_mcp_servers(defs: list[McpServerDefinition]) -> list[Any]:
-    """Build one `mcp.MCPServerHTTP` per `McpServerDefinition`.
+#: Called with `(definition, reason)` for each MCP server `build_mcp_servers` refuses.
+McpSkipCallback = Callable[[McpServerDefinition, str], None]
 
-    Lazy-imports `livekit.agents.mcp`, which itself requires the optional
-    `mcp` PyPI package (`pip install 'livekit-agents[mcp]'`) — **not**
-    currently in `agent/pyproject.toml`'s `livekit-agents[...]` extras (that
-    file is W0-SCAFFOLD-owned/read-only for this package; see this
-    package's report for the blocker raised to W2-AGENT-INTEGRATION/deploy).
-    When `defs` is non-empty but the import fails, this logs an error and
-    returns `[]` so a worker without the extra degrades the session (no MCP
-    tools available) instead of crashing at startup.
+
+def build_mcp_servers(
+    defs: list[McpServerDefinition],
+    *,
+    on_skipped: McpSkipCallback | None = None,
+    transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
+) -> list[Any]:
+    """Build one guarded `MCPServerHTTP` per `McpServerDefinition` whose URL is public.
+
+    Every URL goes through `_http_safety.check_url_public` (http/https, a host,
+    not in a private, loopback, link-local or metadata range) before a server
+    is built: the api checks it at save time, but the worker is the process
+    that connects. A refused server is skipped with a warning log and an
+    `on_skipped` call, never an exception, so the session still starts with
+    its other tools. Each built server is a
+    :class:`~lkap_agent.tools.mcp_client.GuardedMCPServerHTTP`, whose client
+    does not follow redirects and connects through `guarded_transport()`.
+
+    No host allowlist applies: `LKAP_HTTP_TOOL_ALLOWED_HOSTS` semantics would
+    refuse every MCP server whenever that list is unset (see `_http_safety`).
+
+    `livekit.agents.mcp` needs the optional `mcp` package (the `mcp` extra of
+    `livekit-agents` in `agent/pyproject.toml`). When the import fails this
+    logs an error and returns `[]`, so the session degrades (no MCP tools)
+    instead of failing.
 
     Args:
         defs: MCP server definitions from `ResolvedAgentConfig.tools`
             (already secret-substituted by the api).
+        on_skipped: Called with `(definition, reason)` for each refused server
+            (the worker records it as a session event). `reason` names the
+            host, never the full URL.
+        transport_factory: Builds each client's transport; defaults to
+            `guarded_transport`. Tests pass a fake.
 
     Returns:
-        `mcp.MCPServerHTTP` instances, ready to pass to `Agent(mcp_servers=...)`.
+        Server instances, ready to pass to `Agent(mcp_servers=...)`.
     """
     if not defs:
         return []
 
+    kept: list[McpServerDefinition] = []
+    for definition in defs:
+        try:
+            check_url_public(definition.url)
+        except HttpToolSecurityError as exc:
+            reason = str(exc)
+            _log.warning("declarative_tool.mcp_server_refused", mcp_server=definition.name, reason=reason)
+            if on_skipped is not None:
+                on_skipped(definition, reason)
+            continue
+        kept.append(definition)
+    if not kept:
+        return []
+
     try:
-        from livekit.agents import mcp
+        # Imports `livekit.agents.llm.mcp`, which raises ImportError without the extra.
+        from lkap_agent.tools.mcp_client import GuardedMCPServerHTTP  # noqa: PLC0415
     except ImportError:
         _log.error(
             "declarative_tool.mcp_extra_missing",
             detail="livekit-agents[mcp] extra is not installed; skipping MCP servers",
-            count=len(defs),
+            count=len(kept),
         )
         return []
 
     return [
-        mcp.MCPServerHTTP(
+        GuardedMCPServerHTTP(
             url=definition.url,
             transport_type="streamable_http",
             allowed_tools=definition.allowed_tools,
             headers=definition.headers,
             timeout=definition.timeout_s,
             sse_read_timeout=definition.sse_read_timeout_s,
+            transport_factory=transport_factory or guarded_transport,
         )
-        for definition in defs
+        for definition in kept
     ]

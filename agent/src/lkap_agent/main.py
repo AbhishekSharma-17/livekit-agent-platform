@@ -570,7 +570,7 @@ def _wire_optional_modules(deps: Deps) -> None:
             return list(build_http_tools(defs, platform_allowed_hosts=allowed_hosts))
 
         deps.declarative_tools_builder = _make_http
-        deps.mcp_servers_builder = lambda defs: list(build_mcp_servers(defs))
+        deps.mcp_servers_builder = lambda defs, **kwargs: list(build_mcp_servers(defs, **kwargs))
     except ImportError:
         logger.warning("lkap_agent.tools.declarative not available: HTTP/MCP tools are skipped")
 
@@ -1241,7 +1241,19 @@ def _assemble(
             else []
         ),
     ]
-    mcp_servers = deps.mcp_servers_builder([t for t in resolved.tools if t.kind == "mcp"])
+    emit = record_event or _noop_record_event
+
+    def _on_mcp_skipped(definition: Any, reason: str) -> None:
+        # CONTRACTS §7 has no `warning` event type; `error {message}` is the one the
+        # console surfaces. The session still starts, without this server's tools.
+        emit(
+            "error",
+            {"message": f"MCP server '{definition.name}' skipped: {reason}", "mcp_server": definition.name},
+        )
+
+    mcp_servers = deps.mcp_servers_builder(
+        [t for t in resolved.tools if t.kind == "mcp"], on_skipped=_on_mcp_skipped
+    )
 
     agent: PlatformAgent
     if is_flow(resolved):

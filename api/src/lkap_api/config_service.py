@@ -410,6 +410,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
         )
 
     findings.extend(connection_flag_issues(ctx))
+    findings.extend(knowledge_auto_inject_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -549,6 +550,48 @@ def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings:
     for field_spec in spec.fields:
         if field_spec.required and field_spec.default is None and field_spec.name not in ref.fields:
             findings.add("error", label, f"field '{field_spec.name}' is required for provider '{spec.id}'")
+
+
+def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
+    """Warn that knowledge auto-inject and preemptive generation do not mix.
+
+    Auto-inject adds the retrieved text to the chat context in
+    ``on_user_turn_completed``; livekit-agents 1.8.2 discards its preemptive
+    (speculative) reply whenever that hook changes the context, and still pays
+    for it. The worker therefore turns preemptive generation off for an agent
+    with auto-inject on and a knowledge base attached, unless
+    ``pipeline.turn_handling.preemptive_generation.enabled`` is set explicitly
+    (research-v4 knowledge-and-memory P0-0). A built-in check with the
+    :data:`Validator` signature, called from :func:`validate` directly so it
+    never depends on import order.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        At most one warning, at ``knowledge.auto_inject``.
+    """
+    knowledge = ctx.config.knowledge
+    if not knowledge.auto_inject or not knowledge.kb_ids:
+        return []
+    preemptive = ctx.config.pipeline.turn_handling.get("preemptive_generation")
+    explicit = preemptive.get("enabled") if isinstance(preemptive, dict) else None
+    if explicit is False:
+        return []
+    if explicit is True:
+        message = (
+            "auto-inject changes the conversation on every turn with a knowledge hit, which discards "
+            "the preemptive reply this agent keeps enabled (turn_handling.preemptive_generation) — "
+            "each such turn pays for two LLM calls; turn auto-inject off and rely on the "
+            "search_knowledge tool to keep preemptive generation effective"
+        )
+    else:
+        message = (
+            "auto-inject turns off preemptive generation for this agent's sessions, so replies start "
+            "only after the caller's turn ends; turn auto-inject off and rely on the search_knowledge "
+            "tool to keep preemptive generation"
+        )
+    return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
 
 
 def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:

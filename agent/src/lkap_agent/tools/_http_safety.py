@@ -1,11 +1,18 @@
 """SSRF guards and small helpers shared by the built-in `http_request` tool
-(`tools/builtin/http_request.py`) and the declarative HTTP tool builder
-(`tools/declarative.py`).
+(`tools/builtin/http_request.py`), the declarative HTTP tool builder and
+`build_mcp_servers` (`tools/declarative.py`), and the MCP server client
+(`tools/mcp_client.py`).
 
-Both callers must also construct their `httpx.AsyncClient` with
+Every caller must also construct its `httpx.AsyncClient` with
 `follow_redirects=False` — otherwise a 3xx response from an allowed host could
 redirect the client to a disallowed one and this check (which only ever sees
 the original URL) would never see it.
+
+**MCP servers** get :func:`check_url_public` (scheme, host, private-range
+deny-list) but no host allowlist: reusing `LKAP_HTTP_TOOL_ALLOWED_HOSTS` with
+:func:`check_url_allowed` would refuse every MCP server whenever that list is
+unset (two empty lists allow nothing). A separate MCP host policy is an open
+design question (research-v4 tools-and-integrations §6).
 
 **Allowlist semantics (REVIEW-FINAL F-14, PLAN-V2 V2-07).** v1 took the
 *union* of a tool's `allowed_hosts` and `LKAP_HTTP_TOOL_ALLOWED_HOSTS`, so an
@@ -136,6 +143,35 @@ def effective_allowlist(
     return tool or platform
 
 
+def check_url_public(url: str) -> str:
+    """Reject `url` unless it is http(s) with a host outside every private range.
+
+    The error messages name the scheme or host only, never the whole URL: an
+    api-substituted `{{ secret.NAME }}` may sit in its path or query.
+
+    Args:
+        url: The URL to check (names are not resolved; see :func:`guarded_transport`).
+
+    Returns:
+        The URL's host, lower-cased.
+
+    Raises:
+        HttpToolSecurityError: If the scheme is not http/https, the URL has no
+            host, or the host is private (:func:`is_private_host`).
+    """
+    parsed = urlsplit(url)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        raise HttpToolSecurityError(f"unsupported URL scheme: {parsed.scheme!r}")
+
+    host = parsed.hostname
+    if not host:
+        raise HttpToolSecurityError("URL has no host")
+
+    if is_private_host(host):
+        raise HttpToolSecurityError(f"host {host!r} is in a private or local network range")
+    return host.lower()
+
+
 def check_url_allowed(
     url: str,
     *,
@@ -154,19 +190,10 @@ def check_url_allowed(
             host, the host is in a private range (even when allowlisted), or it
             is not on :func:`effective_allowlist`.
     """
-    parsed = urlsplit(url)
-    if parsed.scheme not in _ALLOWED_SCHEMES:
-        raise HttpToolSecurityError(f"unsupported URL scheme: {parsed.scheme!r}")
-
-    host = parsed.hostname
-    if not host:
-        raise HttpToolSecurityError(f"URL has no host: {url!r}")
-
-    if is_private_host(host):
-        raise HttpToolSecurityError(f"host {host!r} is in a private or local network range")
+    host = check_url_public(url)
 
     allowed = effective_allowlist(tool_allowed_hosts, platform_allowed_hosts)
-    if host.lower() not in allowed:
+    if host not in allowed:
         raise HttpToolSecurityError(f"host {host!r} is not on the outbound allowlist")
 
 

@@ -1,14 +1,12 @@
 """Tests for `lkap_agent.tools.declarative` — HTTP tools mocked at the
-`httpx` transport boundary via `respx` (no real network); MCP servers tested
-against a faked `livekit.agents.mcp` module (the real `mcp` PyPI package is
-not installed — see the package report for why, and the dedicated test
-below for the resulting graceful-degradation path).
+`httpx` transport boundary via `respx` (no real network). MCP servers are
+covered here only for the empty list and the missing-extra path; the URL
+guard, transport and redirect behaviour live in `test_mcp_guard.py`.
 """
 
 from __future__ import annotations
 
 import sys
-import types
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -204,47 +202,12 @@ class TestBuildMcpServers:
         assert build_mcp_servers([]) == []
 
     def test_missing_mcp_extra_degrades_to_empty_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # `mcp` (the PyPI package) genuinely is not installed in this environment
-        # (agent/pyproject.toml doesn't pin the `livekit-agents[mcp]` extra yet —
-        # see this package's report), but pin the failure explicitly with a `None`
-        # sys.modules entry (the standard "this import is broken" sentinel — `from
-        # .llm import mcp` raises ModuleNotFoundError, which `except ImportError`
-        # catches) so the test stays deterministic once that extra is added.
+        # Pin the "extra not installed" failure with `None` sys.modules entries (the
+        # standard "this import is broken" sentinel): `build_mcp_servers` imports
+        # `lkap_agent.tools.mcp_client`, which imports `livekit.agents.llm.mcp`, and
+        # either import raising ImportError must degrade to no MCP servers.
         monkeypatch.setitem(sys.modules, "livekit.agents.llm.mcp", None)
+        monkeypatch.setitem(sys.modules, "lkap_agent.tools.mcp_client", None)
         defn = McpServerDefinition(name="tools-server", url="https://mcp.example.com/mcp")
 
         assert build_mcp_servers([defn]) == []
-
-    def test_builds_mcp_server_http_with_expected_kwargs(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        fake_module = types.ModuleType("livekit.agents.llm.mcp")
-        calls: list[dict[str, Any]] = []
-
-        class _FakeMCPServerHTTP:
-            def __init__(self, **kwargs: Any) -> None:
-                calls.append(kwargs)
-
-        fake_module.MCPServerHTTP = _FakeMCPServerHTTP  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "livekit.agents.llm.mcp", fake_module)
-
-        defn = McpServerDefinition(
-            name="tools-server",
-            url="https://mcp.example.com/mcp",
-            headers={"Authorization": "Bearer resolved-secret"},
-            allowed_tools=["do_thing"],
-            timeout_s=5,
-            sse_read_timeout_s=300,
-        )
-
-        servers = build_mcp_servers([defn])
-
-        assert len(servers) == 1
-        assert calls == [
-            {
-                "url": "https://mcp.example.com/mcp",
-                "transport_type": "streamable_http",
-                "allowed_tools": ["do_thing"],
-                "headers": {"Authorization": "Bearer resolved-secret"},
-                "timeout": 5,
-                "sse_read_timeout": 300,
-            }
-        ]

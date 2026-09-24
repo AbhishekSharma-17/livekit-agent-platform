@@ -6,6 +6,18 @@ against livekit-agents 1.8.2:
 
 * `turn_handling` is a `TurnHandlingOptions` TypedDict; `allow_interruptions`
   lives at `turn_handling["interruption"]["enabled"]`.
+* Preemptive generation is **on by default** (`voice/turn.py`,
+  `_PREEMPTIVE_GENERATION_DEFAULTS["enabled"] = True`) and is switched off with
+  `turn_handling["preemptive_generation"] = {"enabled": False}` (the
+  `AgentSession(preemptive_generation=...)` kwarg is deprecated in 1.8.2). The
+  SDK discards the speculative reply whenever `on_user_turn_completed` changes
+  the chat context, which knowledge auto-inject does on every turn with a hit,
+  so an agent with auto-inject on and a knowledge base attached runs without
+  it unless its config sets `preemptive_generation.enabled` explicitly
+  (research-v4 knowledge-and-memory P0-0). Agent-level `turn_handling` keys
+  override the session's (`AgentActivity.preemptive_generation_opts`), and
+  `Agent` stores its `turn_handling` as passed; the flow runtime sets only
+  `interruption` there, so the session-level setting holds for flow nodes.
 * `vad=NOT_GIVEN` makes `AgentSession` construct `inference.VAD` itself, which
   needs network. The builder therefore always passes `vad` explicitly: the
   `vad` slot's plugin when one is configured, else the prewarmed Silero
@@ -47,7 +59,13 @@ from typing import Any, Final, cast
 
 from livekit.agents import NOT_GIVEN, AgentSession, TurnHandlingOptions
 from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions
-from lkap_contracts.agent_config import AvatarOptions, PipelineMode, ResolvedAgentConfig, ResolvedProvider
+from lkap_contracts.agent_config import (
+    AgentConfig,
+    AvatarOptions,
+    PipelineMode,
+    ResolvedAgentConfig,
+    ResolvedProvider,
+)
 
 from lkap_agent.logging import get_logger
 from lkap_agent.providers.factory import BuiltProviders
@@ -56,6 +74,7 @@ __all__ = [
     "AVATAR_OPTION_KWARGS",
     "SessionBuilder",
     "SessionPlan",
+    "auto_inject_active",
     "build_turn_handling",
     "factory_view",
     "is_text_channel",
@@ -187,11 +206,22 @@ class SessionPlan:
         return not self.has_tts
 
 
+def auto_inject_active(config: AgentConfig) -> bool:
+    """Whether knowledge auto-inject can change the chat context on a turn.
+
+    `ResolvedAgentConfig.kb_ids` is `config.knowledge.kb_ids` (the api's
+    `/resolved` route), and a flow node only ever searches a subset of it, so
+    an empty list means auto-inject never adds anything.
+    """
+    return config.knowledge.auto_inject and bool(config.knowledge.kb_ids)
+
+
 def build_turn_handling(
     configured: dict[str, Any],
     *,
     allow_interruptions: bool,
     turn_detector: Any | None,
+    disable_preemptive: bool = False,
 ) -> TurnHandlingOptions:
     """Merge the agent's `pipeline.turn_handling` with the platform's own keys.
 
@@ -199,6 +229,9 @@ def build_turn_handling(
         configured: `AgentConfig.pipeline.turn_handling` as stored by the console.
         allow_interruptions: `AgentConfig.voice.allow_interruptions`.
         turn_detector: The session's turn detector (cascaded / half-cascade), else `None`.
+        disable_preemptive: Turn preemptive generation off unless `configured`
+            sets `preemptive_generation.enabled` itself (knowledge auto-inject,
+            see :func:`auto_inject_active`).
 
     Returns:
         A `TurnHandlingOptions` dict safe to pass to `AgentSession`.
@@ -211,6 +244,11 @@ def build_turn_handling(
     interruption: dict[str, Any] = dict(options.get("interruption") or {})
     interruption.setdefault("enabled", allow_interruptions)
     options["interruption"] = interruption
+
+    if disable_preemptive:
+        preemptive: dict[str, Any] = dict(options.get("preemptive_generation") or {})
+        preemptive.setdefault("enabled", False)
+        options["preemptive_generation"] = preemptive
 
     if turn_detector is not None and "turn_detection" not in options:
         options["turn_detection"] = turn_detector
@@ -280,11 +318,27 @@ class SessionBuilder:
                 )
             session_vad, detector = None, None
 
+        auto_inject = auto_inject_active(config)
         turn_handling = build_turn_handling(
             config.pipeline.turn_handling,
             allow_interruptions=config.voice.allow_interruptions,
             turn_detector=detector,
+            disable_preemptive=auto_inject,
         )
+        preemptive_enabled = bool(turn_handling.get("preemptive_generation", {}).get("enabled", True))
+        if auto_inject:
+            if preemptive_enabled:
+                logger.info(
+                    "knowledge auto-inject is on but the config keeps preemptive generation enabled; "
+                    "turns with a knowledge hit discard the preemptive reply",
+                    kb_count=len(config.knowledge.kb_ids),
+                )
+            else:
+                logger.info(
+                    "preemptive generation disabled: knowledge auto-inject changes the chat context "
+                    "on every turn with a hit, which discards the preemptive reply",
+                    kb_count=len(config.knowledge.kb_ids),
+                )
 
         # The plugin objects come back from the factory as `Any`; `AgentSession`'s
         # overloads do not admit `None` for stt/tts even though the runtime does
@@ -324,6 +378,7 @@ class SessionBuilder:
             has_noise_cancellation=providers.noise_cancellation is not None and not text_only,
             video_input=room_options.video_input,
             max_tool_steps=config.tools.max_tool_steps,
+            preemptive_generation=preemptive_enabled,
         )
         return SessionPlan(
             session=session,

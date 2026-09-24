@@ -89,7 +89,7 @@ import {
 import { autoLayout, NODE_HEIGHT, NODE_WIDTH } from "./layout";
 import { NodeForm } from "./node-form";
 import { useFlowDraft } from "./use-flow-draft";
-import { useNodeOptions } from "./use-node-options";
+import { kbScopeFor, kbTag, useAgentKbIds, useNodeOptions } from "./use-node-options";
 import { VariablesDialog } from "./variables-dialog";
 import { VersionHistory } from "./version-history";
 import { SkeletonRows } from "@/components/shared/loading-state";
@@ -128,7 +128,14 @@ type Selection = { kind: "node" | "edge"; id: string } | null;
 interface FlowNodeData extends Record<string, unknown> {
   node: AnyFlowNode;
   issues: TargetIssues | undefined;
+  /** `KB: all` / `KB: 2` / `KB: none` (R-V4-29), or `null`. */
+  kb: string | null;
 }
+
+const KB_TAG_TITLE: Record<string, string> = {
+  "KB: all": "Searches all of the agent's knowledge bases",
+  "KB: none": "Searches no knowledge base",
+};
 
 type FlowRfNode = Node<FlowNodeData, "flowNode">;
 
@@ -150,7 +157,7 @@ function subtitle(node: AnyFlowNode): string {
 }
 
 function FlowNodeCard({ data, selected }: NodeProps<FlowRfNode>) {
-  const { node, issues } = data;
+  const { node, issues, kb } = data;
   const kind = kindOf(node);
   const errors = issues?.errors.length ?? 0;
   const warnings = issues?.warnings.length ?? 0;
@@ -174,12 +181,24 @@ function FlowNodeCard({ data, selected }: NodeProps<FlowRfNode>) {
       <div className="flex items-center gap-1.5 text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase">
         <Icon as={KIND_ICON[kind]} size="sm" />
         {NODE_KIND_LABEL[kind]}
+        {kb ? (
+          <span
+            data-kb-tag
+            title={KB_TAG_TITLE[kb] ?? `Searches ${kb.slice(4)} of the agent's knowledge bases`}
+            className={cn(
+              "ml-auto rounded-sm px-1 text-[0.625rem] font-medium tracking-normal normal-case",
+              kb === "KB: none" ? "bg-warning-soft text-warning-text" : "bg-muted text-muted-foreground",
+            )}
+          >
+            {kb}
+          </span>
+        ) : null}
         {dotLabel ? (
           <span
             role="img"
             aria-label={dotLabel}
             title={[...(issues?.errors ?? []), ...(issues?.warnings ?? [])].map((issue) => issue.message).join("\n")}
-            className={cn("ml-auto size-2 rounded-full", errors ? "bg-danger" : "bg-warning")}
+            className={cn("size-2 rounded-full", kb ? "ml-1" : "ml-auto", errors ? "bg-danger" : "bg-warning")}
           />
         ) : null}
       </div>
@@ -196,6 +215,7 @@ function toRfNodes(
   draft: FlowDraft,
   issues: Map<string, TargetIssues>,
   selection: Selection,
+  agentKbIds: readonly string[],
   previous: readonly FlowRfNode[] = [],
 ): FlowRfNode[] {
   const prior = new Map(previous.map((node) => [node.id, node]));
@@ -209,7 +229,7 @@ function toRfNodes(
       id: node.id,
       type: "flowNode" as const,
       position,
-      data: { node, issues: issues.get(node.id) },
+      data: { node, issues: issues.get(node.id), kb: kbTag(kbScopeFor(node, draft.nodes, agentKbIds)) },
       selected: selection?.kind === "node" && selection.id === node.id,
       deletable: kindOf(node) !== "start",
     };
@@ -280,10 +300,13 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
   const warningCount = issues.length - errorCount;
 
   // ---- nodes (kept in state so React Flow can store measurements) ----
-  const [nodes, setNodes] = React.useState<FlowRfNode[]>(() => toRfNodes(draft, grouped.nodes, selection));
+  const agentKbIds = useAgentKbIds();
+  const [nodes, setNodes] = React.useState<FlowRfNode[]>(() =>
+    toRfNodes(draft, grouped.nodes, selection, agentKbIds),
+  );
   React.useEffect(() => {
-    setNodes((previous) => toRfNodes(draft, grouped.nodes, selection, previous));
-  }, [draft, grouped.nodes, selection]);
+    setNodes((previous) => toRfNodes(draft, grouped.nodes, selection, agentKbIds, previous));
+  }, [agentKbIds, draft, grouped.nodes, selection]);
   const edges: Edge[] = React.useMemo(
     () =>
       draft.edges.map((edge) => {
@@ -730,6 +753,8 @@ function NodeInspector({
 }) {
   const specs = useNodeSpecs();
   const options = useNodeOptions(agent);
+  const agentKbIds = useAgentKbIds();
+  const kbScope = React.useMemo(() => kbScopeFor(node, draft.nodes, agentKbIds), [agentKbIds, draft.nodes, node]);
   const kind = kindOf(node);
   const spec = specs.data?.nodes?.find((item) => item.kind === kind);
   return (
@@ -747,6 +772,7 @@ function NodeInspector({
           variables={draft.variables}
           toolOptions={options.toolOptions}
           kbOptions={options.kbOptions}
+          kbScope={kbScope}
           providerOptions={options.providerOptions}
           {...fieldMessages(issues, draft)}
           onManageVariables={onManageVariables}

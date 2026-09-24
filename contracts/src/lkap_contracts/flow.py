@@ -72,6 +72,9 @@ class GlobalNode(NodeBase):
     #: Tool names (R-V2-10): builtin, block, pack, or the ``name`` of a tool in
     #: ``config.tools.tool_ids``.
     tools: list[str] = []
+    #: Knowledge bases added to every node's scope (R-V2-13). When no ``global``
+    #: or ``agent`` node lists any, every node searches all of the agent's
+    #: ``knowledge.kb_ids`` (R-V4-29).
     kb_ids: list[str] = []
 
 
@@ -83,6 +86,9 @@ class AgentNode(NodeBase):
     #: Tool names (R-V2-10): builtin, block, pack, or the ``name`` of a tool in
     #: ``config.tools.tool_ids``.
     tools: list[str] = []
+    #: This step's knowledge bases, searched with the global node's. When no
+    #: ``global`` or ``agent`` node lists any, every node searches all of the
+    #: agent's ``knowledge.kb_ids`` (R-V4-29).
     kb_ids: list[str] = []
     extract: list[str] = []
     allow_interruptions: bool | None = None

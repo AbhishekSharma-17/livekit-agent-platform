@@ -150,6 +150,43 @@ describe("FlowCanvas", () => {
     expect(validate).toContain("/api/console/agents/a-1/flow/validate");
   });
 
+  it("tags every step with the knowledge it searches (R-V4-29)", async () => {
+    stubApi({ ok: true, issues: [] });
+    const withKbs = (flow: FlowSpec): AgentOut => {
+      const agent = agentWith(flow);
+      return { ...agent, config: { ...agent.config, knowledge: { kb_ids: ["kb1", "kb2"] } } } as AgentOut;
+    };
+    const tag = (id: string) => card(id)?.querySelector("[data-kb-tag]")?.textContent ?? null;
+
+    // Nothing listed anywhere: every step inherits all of the agent's knowledge bases.
+    const { unmount } = renderCanvas(withKbs(VALID));
+    await waitFor(() => expect(card("collect")).not.toBeNull());
+    expect(tag("collect")).toBe("KB: all");
+    expect(tag("start")).toBeNull();
+    expect(tag("done")).toBeNull();
+    unmount();
+
+    // One step lists a knowledge base: it gets that one, the step that lists none gets nothing.
+    const narrowed: FlowSpec = {
+      nodes: [
+        { id: "start", kind: "start", position: [0, 0] },
+        { id: "collect", kind: "agent", label: "Collect", instructions: "Ask.", kb_ids: ["kb1"], position: [0, 150] },
+        { id: "confirm", kind: "agent", label: "Confirm", instructions: "Confirm.", position: [0, 300] },
+        { id: "done", kind: "end", label: "Done", position: [0, 450] },
+      ],
+      edges: [
+        { id: "e1", source: "start", target: "collect", condition: "always" },
+        { id: "e2", source: "collect", target: "confirm", condition: "asked" },
+        { id: "e3", source: "confirm", target: "done", condition: "confirmed" },
+      ],
+      variables: [],
+    };
+    renderCanvas(withKbs(narrowed));
+    await waitFor(() => expect(card("confirm")).not.toBeNull());
+    expect(tag("collect")).toBe("KB: 1");
+    expect(tag("confirm")).toBe("KB: none");
+  });
+
   it("opens the inspector as a modal dialog below xl, never a slide-over", async () => {
     stubApi({ ok: true, issues: [] });
     renderCanvas(agentWith(VALID));

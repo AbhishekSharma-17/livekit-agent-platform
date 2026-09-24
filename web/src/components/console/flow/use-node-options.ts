@@ -7,8 +7,66 @@ import { useKbs, usePacks, useProviders, useTools } from "@/components/console/l
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { AgentOut } from "@/contracts/lkap-contracts";
 
+import { kindOf, type AnyFlowNode } from "./flow-model";
 import type { Option, ProviderOption } from "./node-form";
 import { nodeToolOptions, type NodeToolOption } from "./tool-options";
+
+/**
+ * The knowledge a step searches (R-V4-29), as the worker computes it: when no
+ * Global or step node lists any knowledge base, every step searches all of
+ * the agent's; once one does, a step searches the Global node's picks plus
+ * its own, limited to the agent's knowledge bases.
+ */
+export interface KbScope {
+  /** `inherits`: the flow lists none; `scoped`: this step searches `ids`; `none`: it searches nothing. */
+  state: "inherits" | "scoped" | "none";
+  /** What the step searches, in order. */
+  ids: string[];
+  /** For a step (not the Global node) of a narrowed flow: the Global node's picks it also searches. */
+  fromGlobal: string[];
+}
+
+function listedKbIds(node: AnyFlowNode): string[] {
+  const kind = kindOf(node);
+  if (kind !== "agent" && kind !== "global") return [];
+  return "kb_ids" in node && Array.isArray(node.kb_ids) ? node.kb_ids : [];
+}
+
+/** Whether any Global or step node lists a knowledge base (the flow narrows knowledge). */
+export function flowListsKnowledge(nodes: readonly AnyFlowNode[]): boolean {
+  return nodes.some((node) => listedKbIds(node).length > 0);
+}
+
+/** `node`'s knowledge scope in the flow `nodes`, or `null` for a node that never searches. */
+export function kbScopeFor(
+  node: AnyFlowNode,
+  nodes: readonly AnyFlowNode[],
+  agentKbIds: readonly string[],
+): KbScope | null {
+  const kind = kindOf(node);
+  if (kind !== "agent" && kind !== "global") return null;
+  if (!flowListsKnowledge(nodes)) return { state: "inherits", ids: [...new Set(agentKbIds)], fromGlobal: [] };
+  const allowed = new Set(agentKbIds);
+  const keep = (ids: readonly string[]) => [...new Set(ids)].filter((id) => allowed.has(id));
+  const global = nodes.find((item) => kindOf(item) === "global");
+  const fromGlobal = kind === "agent" && global ? keep(listedKbIds(global)) : [];
+  const ids = keep([...fromGlobal, ...listedKbIds(node)]);
+  return { state: ids.length ? "scoped" : "none", ids, fromGlobal };
+}
+
+/** The canvas card's tag: `KB: all`, `KB: 2`, `KB: none`; `null` when there is nothing to say. */
+export function kbTag(scope: KbScope | null): string | null {
+  if (!scope) return null;
+  if (scope.state === "inherits") return scope.ids.length ? "KB: all" : null;
+  return scope.state === "scoped" ? `KB: ${scope.ids.length}` : "KB: none";
+}
+
+/** The agent's attached knowledge bases, live from the editor form (Knowledge section). */
+export function useAgentKbIds(): string[] {
+  const { control } = useFormContext<AgentEditorForm>();
+  const knowledge = useWatch({ control, name: "config.knowledge" });
+  return React.useMemo(() => knowledge?.kb_ids ?? [], [knowledge]);
+}
 
 /**
  * What the node pickers may offer, from the live form (R-V2-10: exactly the

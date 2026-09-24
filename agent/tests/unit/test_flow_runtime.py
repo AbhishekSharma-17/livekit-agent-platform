@@ -20,7 +20,7 @@ from fakes.fake_tts import FakeTTS
 from livekit.agents import APIConnectOptions, llm
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr
 from lkap_contracts.agent_config import ResolvedAgentConfig
-from lkap_contracts.flow import FlowSpec
+from lkap_contracts.flow import AgentNode, FlowSpec, StartNode
 from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
 
 from lkap_agent.flow import FlowNodeAgent, FlowUserdata
@@ -31,10 +31,11 @@ from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
 
 
 class ToolCall:
-    """A scripted step that calls one tool with no arguments."""
+    """A scripted step that calls one tool (no arguments unless given)."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, arguments: dict[str, Any] | None = None) -> None:
         self.name = name
+        self.arguments = arguments or {}
 
 
 Step = str | ToolCall
@@ -48,7 +49,9 @@ class _ScriptedStream(llm.LLMStream):
     async def _run(self) -> None:
         step = self._step
         if isinstance(step, ToolCall):
-            call = llm.FunctionToolCall(name=step.name, arguments="{}", call_id=f"call-{step.name}")
+            call = llm.FunctionToolCall(
+                name=step.name, arguments=json.dumps(step.arguments), call_id=f"call-{step.name}"
+            )
             delta = llm.ChoiceDelta(role="assistant", tool_calls=[call])
         else:
             delta = llm.ChoiceDelta(role="assistant", content=step)
@@ -188,10 +191,13 @@ async def test_three_node_flow_transitions_extracts_and_ends_with_a_disposition(
     await _wait_for(lambda: session.current_agent.id == "confirm")
     await _wait_for(lambda: len(conversation.calls) >= 3)
 
-    # The edge became a go_to tool whose description is the condition.
-    _prompt, names, descriptions = conversation.calls[1]
+    # The edge became a go_to tool whose description is an instruction naming the step (R-V4-30).
+    prompt_a, names, descriptions = conversation.calls[1]
     assert "go_to_confirm" in names
-    assert descriptions["go_to_confirm"] == "The caller has said their full name."
+    assert descriptions["go_to_confirm"] == (
+        "Call this to move to the step 'Confirm' when: The caller has said their full name."
+    )
+    assert "Your next steps: go_to_confirm — when The caller has said their full name." in prompt_a
     # The next node was rendered with the variable extracted on the transition, and it
     # carries the conversation (the caller never repeats themselves).
     prompt_b, names_b, _ = conversation.calls[2]
@@ -282,6 +288,117 @@ async def test_start_node_routes_when_it_has_several_edges() -> None:
     await session.run(user_input="Question about my bill.")
     await _wait_for(lambda: session.current_agent.id == "billing")
     assert conversation.calls[1][1] == ["go_to_billing", "go_to_claims"]
+
+
+ROUTER_FLOW: dict[str, Any] = {
+    "nodes": [
+        {"id": "start", "kind": "start", "greeting": "Hi."},
+        {"id": "claims", "kind": "agent", "label": "Claims", "instructions": "Claims."},
+        {"id": "billing", "kind": "agent", "label": "Billing", "instructions": "Billing."},
+        {"id": "g", "kind": "global", "instructions": "You work for Acme.", "tools": ["search_knowledge"]},
+    ],
+    "edges": [
+        {"id": "a", "source": "start", "target": "claims", "condition": "The caller wants a claim."},
+        {"id": "b", "source": "start", "target": "billing", "condition": "The caller asks about a bill."},
+    ],
+}
+
+
+async def test_a_routing_start_is_told_its_transitions_and_routes_on_the_tool() -> None:
+    """R-V4-30: the router's prompt lists every go_to_* with its condition; descriptions are imperative."""
+    conversation = ScriptedLLM(["Hi.", ToolCall("go_to_claims"), "Claims here."])
+    _api, _ctx, starter = await _start(_flow_config(ROUTER_FLOW), conversation, FakeLLM(["{}"]))
+    session = starter.session
+    assert session is not None
+    assert starter.agent.id == "start"
+
+    await session.run(user_input="I'd like to file a claim.")
+    await _wait_for(lambda: session.current_agent.id == "claims")
+
+    prompt, names, descriptions = conversation.calls[1]
+    assert names == ["go_to_billing", "go_to_claims"]
+    assert (
+        "You are at the start of the call. Your only job here is to find out which step applies and "
+        "call its go_to_* tool; do not ask the next step's questions yourself."
+    ) in prompt
+    assert (
+        "Conversation flow: you are in the step 'start'. Your next steps: "
+        "go_to_claims — when The caller wants a claim; go_to_billing — when The caller asks about a bill. "
+        "When one of these conditions is met, call that tool right away instead of answering, and do not "
+        "do the next step's work yourself. Never mention steps, tools or transitions to the caller."
+    ) in prompt
+    assert all(d.startswith("Call this to move to the step") for d in descriptions.values())
+    assert descriptions["go_to_claims"] == (
+        "Call this to move to the step 'Claims' when: The caller wants a claim."
+    )
+    assert descriptions["go_to_billing"] == (
+        "Call this to move to the step 'Billing' when: The caller asks about a bill."
+    )
+    # A node without outgoing edges gets no transitions note.
+    assert "Your next steps" not in conversation.calls[2][0]
+
+
+def _scopes(starter: RoomlessStarter) -> dict[str, list[str]]:
+    """`kb_ids_for` of the start node and every agent node."""
+    agent = starter.agent
+    assert isinstance(agent, FlowNodeAgent)
+    runtime = agent.runtime
+    return {
+        node.id: runtime.kb_ids_for(node)
+        for node in runtime.spec.nodes
+        if isinstance(node, AgentNode | StartNode)
+    }
+
+
+async def test_a_flow_that_scopes_no_knowledge_searches_all_of_the_agents() -> None:
+    """R-V4-29: no `kb_ids` anywhere → every node, the router included, searches `[A, B]`."""
+    from lkap_agent.tools.builtin import build_search_knowledge_tool  # noqa: PLC0415
+
+    resolved = _flow_config(ROUTER_FLOW, kb_ids=["kb_a", "kb_b"], auto_inject=False)
+    conversation = ScriptedLLM(
+        ["Hi.", ToolCall("search_knowledge", {"query": "opening hours"}), "We open at nine."]
+    )
+    api = FakeApi(resolved)
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        api,
+        factory=_FlowFactory(conversation, FakeLLM(["{}"])),
+        session_starter=starter,
+        builtin_tools_builder=lambda session_ctx, *_a: [build_search_knowledge_tool(session_ctx)],
+    )
+    await run_session(ctx, deps)
+    session = starter.session
+    assert session is not None
+
+    both = ["kb_a", "kb_b"]
+    assert _scopes(starter) == {"start": both, "claims": both, "billing": both}
+    await session.run(user_input="What are your opening hours?")
+    await _wait_for(lambda: len(conversation.calls) >= 3)
+    # The router's search_knowledge call reached the inner KbClient with the agent's knowledge bases.
+    assert [(ids, query) for ids, query, _k in api.kb_queries] == [(["kb_a", "kb_b"], "opening hours")]
+
+
+async def test_a_global_scope_applies_to_every_node_and_hides_the_rest() -> None:
+    """R-V4-29: `global.kb_ids=[A]` only → `[A]` everywhere; B is unreachable."""
+    flow = json.loads(json.dumps(ROUTER_FLOW))
+    flow["nodes"][3]["kb_ids"] = ["kb_a"]
+    _api, _ctx, starter = await _start(
+        _flow_config(flow, kb_ids=["kb_a", "kb_b"]), ScriptedLLM(["Hi."]), FakeLLM(["{}"])
+    )
+
+    assert _scopes(starter) == {"start": ["kb_a"], "claims": ["kb_a"], "billing": ["kb_a"]}
+
+
+async def test_one_node_scope_is_a_grant_to_that_node_only() -> None:
+    """R-V4-29: only node X declares `[B]` → X sees `[B]`, every other node `[]` (today's semantics)."""
+    flow = json.loads(json.dumps(ROUTER_FLOW))
+    flow["nodes"][2]["kb_ids"] = ["kb_b"]
+    _api, _ctx, starter = await _start(
+        _flow_config(flow, kb_ids=["kb_a", "kb_b"]), ScriptedLLM(["Hi."]), FakeLLM(["{}"])
+    )
+
+    assert _scopes(starter) == {"start": [], "claims": [], "billing": ["kb_b"]}
 
 
 async def test_transfer_without_a_handler_stays_in_the_node() -> None:

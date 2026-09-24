@@ -105,10 +105,24 @@ def test_same_target_edges_merge_into_one_description() -> None:
     ]
     groups = group_edges_by_target(edges)
     assert list(groups) == ["t", "u"]
-    assert edge_description(groups["t"], "T") == (
-        "Call this when any of these is true: (Caller is angry.) OR (Caller asks for a human.)"
+    assert edge_description(groups["t"], "Human") == (
+        "Call this to move to the step 'Human' when any of these is true: "
+        "(Caller is angry) OR (Caller asks for a human)."
     )
     assert edge_description(groups["u"], "Wrap up") == "Move the conversation to the next step: Wrap up."
+
+
+@pytest.mark.parametrize(
+    "condition",
+    ["the caller agrees", "the caller agrees.", "  the caller agrees.  "],
+)
+def test_edge_description_is_an_imperative_naming_the_step(condition: str) -> None:
+    """R-V4-30: one condition reads as an instruction, ending in exactly one full stop."""
+    edge = FlowEdge(id="a", source="start", target="company", condition=condition)
+
+    assert edge_description([edge], "Company") == (
+        "Call this to move to the step 'Company' when: the caller agrees."
+    )
 
 
 # -------------------------------------------------------- provider overrides

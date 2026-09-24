@@ -2,10 +2,12 @@
 
 Every outgoing edge of a node becomes a zero-argument function tool named
 `go_to_{target_id}` (`lkap_contracts.flow.edge_tool_name`) whose description
-is the edge's natural-language condition — the LLM decides when the condition
-holds, as in Dograh. Two edges from one node to the same target would collide
-on the tool name, so they become one tool whose description joins the
-conditions; the highest-priority edge is the one recorded in the `handoff`
+is an instruction built from the edge's natural-language condition (R-V4-30):
+"Call this to move to the step '<label>' when: <condition>." — the LLM decides
+when the condition holds, as in Dograh, and a small model reads an imperative
+where it would skip a bare clause. Two edges from one node to the same target
+would collide on the tool name, so they become one tool whose description joins
+the conditions; the highest-priority edge is the one recorded in the `handoff`
 event.
 
 The tool body delegates to :meth:`FlowRuntime.take_edge`, which returns the
@@ -26,7 +28,7 @@ from lkap_contracts.flow import FlowEdge, edge_tool_name
 if TYPE_CHECKING:
     from lkap_agent.flow.runtime import FlowRuntime
 
-__all__ = ["build_edge_tools", "edge_description", "group_edges_by_target"]
+__all__ = ["build_edge_tools", "condition_clause", "edge_description", "group_edges_by_target"]
 
 
 def group_edges_by_target(edges: list[FlowEdge]) -> dict[str, list[FlowEdge]]:
@@ -38,13 +40,24 @@ def group_edges_by_target(edges: list[FlowEdge]) -> dict[str, list[FlowEdge]]:
 
 
 def edge_description(edges: list[FlowEdge], target_label: str) -> str:
-    """The tool description: the condition verbatim, or the joined conditions of merged edges."""
-    conditions = [e.condition.strip() for e in edges if e.condition.strip()]
+    """The tool description (R-V4-30): an instruction naming the step and its condition(s).
+
+    One condition: ``Call this to move to the step '<label>' when: <condition>.``;
+    merged edges: ``… when any of these is true: (<a>) OR (<b>).``; no condition:
+    ``Move the conversation to the next step: <label>.``
+    """
+    conditions = [c for c in (condition_clause(e.condition) for e in edges) if c]
     if not conditions:
         return f"Move the conversation to the next step: {target_label}."
+    head = f"Call this to move to the step '{target_label}' when"
     if len(conditions) == 1:
-        return conditions[0]
-    return "Call this when any of these is true: " + " OR ".join(f"({c})" for c in conditions)
+        return f"{head}: {conditions[0]}."
+    return f"{head} any of these is true: " + " OR ".join(f"({c})" for c in conditions) + "."
+
+
+def condition_clause(condition: str) -> str:
+    """A condition as a clause inside a sentence: trimmed, without a trailing full stop."""
+    return condition.strip().rstrip(".").strip()
 
 
 def build_edge_tools(

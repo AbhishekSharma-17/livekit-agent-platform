@@ -195,7 +195,7 @@ async def ensure_default_connection(session: AsyncSession, settings: Settings) -
             api_secret_ct=vault.encrypt({"api_secret": settings.livekit_api_secret}),
             agent_name=settings.agent_name or DEFAULT_AGENT_NAME,
             deployment_mode="external",
-            is_default=1,
+            is_default=True,
         )
     )
     await session.flush()
@@ -214,8 +214,7 @@ async def bind_unbound_rows(session: AsyncSession) -> tuple[int, int]:
     connection_id = await session.scalar(
         select(LiveKitConnection.id).where(
             LiveKitConnection.workspace_id == DEFAULT_WORKSPACE_ID,
-            # `is_default` is Integer-as-bool, the v1 convention every model follows.
-            LiveKitConnection.is_default == 1,
+            LiveKitConnection.is_default.is_(True),
         )
     )
     if connection_id is None:

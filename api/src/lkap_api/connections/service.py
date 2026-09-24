@@ -241,7 +241,7 @@ async def default_connection(db: AsyncSession, workspace_id: str) -> LiveKitConn
     """Return the workspace's default connection, if it has one."""
     row: LiveKitConnection | None = await db.scalar(
         select(LiveKitConnection).where(
-            LiveKitConnection.workspace_id == workspace_id, LiveKitConnection.is_default == 1
+            LiveKitConnection.workspace_id == workspace_id, LiveKitConnection.is_default.is_(True)
         )
     )
     return row
@@ -494,8 +494,8 @@ async def list_fleet_desired(db: AsyncSession, packs: Sequence[str]) -> list[Fle
 async def _clear_default(db: AsyncSession, workspace_id: str) -> None:
     await db.execute(
         update(LiveKitConnection)
-        .where(LiveKitConnection.workspace_id == workspace_id, LiveKitConnection.is_default == 1)
-        .values(is_default=0)
+        .where(LiveKitConnection.workspace_id == workspace_id, LiveKitConnection.is_default.is_(True))
+        .values(is_default=False)
     )
     await db.flush()
 
@@ -550,9 +550,9 @@ async def create_connection(
         replicas=payload.replicas,
         worker_image=payload.worker_image,
         region=payload.region,
-        use_inference=int(payload.use_inference),
+        use_inference=payload.use_inference,
         storage_config_id=payload.storage_config_id,
-        is_default=int(make_default),
+        is_default=make_default,
         status="unverified",
         capabilities={},
     )
@@ -600,7 +600,7 @@ async def update_connection(
         if value is None and name not in {"region", "storage_config_id"}:
             continue
         if name == "use_inference":
-            value = int(bool(value))
+            value = bool(value)
         setattr(row, name, value)
     if "url" in changes and changes["url"] is not None:
         row.status = "unverified"

@@ -18,7 +18,7 @@ Root: `~/work/insurance_claim_live_agent_team/livekit_agent_platform/`
   - `lkap-web` (port 3000): `pnpm dev`, with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080` and `LKAP_ADMIN_TOKEN`.
   - `lkap-agent` (no port): `uv run python -m lkap_agent.main dev`, with `LKAP_API_BASE_URL=http://127.0.0.1:8080` and `LKAP_PACKS=packs.insurance_claim,packs.generic`.
 - **Dockerfiles:**
-  - `agent/Dockerfile`: python:3.12-bookworm-slim, multi-stage, `STOPSIGNAL SIGINT`, CMD `python -m lkap_agent.main start`.
+  - `agent/Dockerfile`: python:3.12-slim-bookworm, multi-stage, `STOPSIGNAL SIGINT`, CMD `python -m lkap_agent.main start`.
   - `api/Dockerfile`: uvicorn with `--workers 1`.
   - `web/Dockerfile`: node:24-alpine, standalone `server.js`.
 - **Compose:** `deploy/docker-compose.yml` defines `api` and `web`.

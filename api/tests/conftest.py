@@ -48,7 +48,7 @@ REQUIRED_ENV: dict[str, str] = {
 def postgres_url() -> str | None:
     """Return `LKAP_TEST_DATABASE_URL` when the suite should run against Postgres.
 
-    CI sets it to an `asyncpg` url (`.github/workflows/api-postgres.yml`); locally
+    CI sets it to an `asyncpg` url (`.github/workflows/python.yml`, `test-postgres`); locally
     it is unset and every test runs on SQLite.
     """
     return os.environ.get("LKAP_TEST_DATABASE_URL") or None
@@ -149,8 +149,13 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
 
     Set `LKAP_TEST_DATABASE_URL` to run the suite against Postgres instead; the
     schema is created and dropped per test, so point it at a scratch database.
+    The url is also written into `settings`, because code under test that opens
+    its own `Database(settings.resolved_database_url)` (the `set-password` CLI,
+    `keys rotate`) must reach the same database, not a SQLite file in `data_dir`.
     """
-    db = Database(postgres_url() or settings.resolved_database_url)
+    if (url := postgres_url()) is not None:
+        settings.database_url = url
+    db = Database(settings.resolved_database_url)
     await db.create_all()
     await bootstrap(db, settings)
     try:

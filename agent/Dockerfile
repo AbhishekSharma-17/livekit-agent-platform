@@ -46,7 +46,7 @@
 #   docker build --build-arg LKAP_IMAGE_FLAVOR=full -f agent/Dockerfile -t lkap-agent:full agent
 
 # --- builder ---------------------------------------------------------------
-FROM python:3.12-bookworm-slim AS builder
+FROM python:3.12-slim-bookworm AS builder
 
 ARG LKAP_IMAGE_FLAVOR=slim
 
@@ -124,7 +124,7 @@ RUN uv run --no-sync python requirements/check_installed_providers.py \
 RUN uv run --module livekit.agents download-files
 
 # --- runtime -----------------------------------------------------------------
-FROM python:3.12-bookworm-slim AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 ARG LKAP_IMAGE_FLAVOR=slim
 

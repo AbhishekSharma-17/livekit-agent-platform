@@ -45,7 +45,7 @@ async def _seed(
                 endpoint_url="http://minio.test:9000",
                 access_key_ct=vault.encrypt({"access_key": "AKIA_TEST"}),
                 secret_key_ct=vault.encrypt({"secret_key": "secret_test_value"}),
-                is_default=1,
+                is_default=True,
             )
             session.add(storage)
             await session.flush()
@@ -145,7 +145,7 @@ async def test_start_recording_succeeds_and_is_idempotent_on_retry(
                 bucket="lkap-recordings",
                 access_key_ct=vault.encrypt({"access_key": "AKIA_TEST"}),
                 secret_key_ct=vault.encrypt({"secret_key": "secret_test_value"}),
-                is_default=1,
+                is_default=True,
             )
             session.add(storage)
             await session.flush()

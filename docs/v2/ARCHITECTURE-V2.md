@@ -83,7 +83,7 @@ On api startup (idempotent bootstrap, also runnable as `python -m lkap_api.boots
 
 ### D-V2-8 Worker images and "installed" attribution
 
-- Two images from one Dockerfile with a build arg: **`slim`** (v1 plugin set + silero + turn-detector; dev default) and **`full`** (every 1.8.2-lockstep plugin that resolves together per catalog §4.1, minus minimax/playai/hedra; Python 3.12; `python:3.12-bookworm-slim`, glibc 2.36 ≥ manylinux_2_28 for bithuman/Krisp wheels; no Windows target).
+- Two images from one Dockerfile with a build arg: **`slim`** (v1 plugin set + silero + turn-detector; dev default) and **`full`** (every 1.8.2-lockstep plugin that resolves together per catalog §4.1, minus minimax/playai/hedra; Python 3.12; `python:3.12-slim-bookworm`, glibc 2.36 ≥ manylinux_2_28 for bithuman/Krisp wheels; no Windows target).
 - The build gate is `scripts/check_installed_providers.py`: import every `python_class` of every `availability=available` entry whose `worker_image` ≤ the image flavor, and write `installed_providers.json` into the image. uv resolving is not the acceptance criterion; importing is.
 - On start the worker calls `POST /internal/v1/workers/register` with `connection_id` (`LKAP_CONNECTION_ID`, unset ⇒ default connection), `image`, `installed_provider_ids`, `sdk_version`, and heartbeats every 30 s. The api stores `worker_instances` and exposes per-connection `installed_provider_ids`; the UI greys out providers the bound connection's pool cannot construct and validation errors on save.
 

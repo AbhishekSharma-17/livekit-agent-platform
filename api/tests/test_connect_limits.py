@@ -202,7 +202,7 @@ async def test_session_rows_record_workspace_connection_and_channel(
         rows = {row.id: row for row in (await session.execute(select(SessionRow))).scalars().all()}
         agent_row = await session.get(Agent, agent["id"])
         default_connection = await session.scalar(
-            select(LiveKitConnection.id).where(LiveKitConnection.is_default == 1)
+            select(LiveKitConnection.id).where(LiveKitConnection.is_default.is_(True))
         )
     assert agent_row is not None
     assert rows[public["sessionId"]].channel == "web"

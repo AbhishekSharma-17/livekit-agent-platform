@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -26,7 +27,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     text,
+    true,
 )
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -133,7 +136,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_platform_admin: Mapped[bool] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_platform_admin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     disabled_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
@@ -250,7 +255,7 @@ class StorageConfig(Base):
     access_key_ct: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     secret_key_ct: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     public_base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    is_default: Mapped[bool] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
@@ -286,11 +291,11 @@ class LiveKitConnection(Base):
     replicas: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     worker_image: Mapped[str] = mapped_column(String(16), nullable=False, default="slim")
     region: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    use_inference: Mapped[bool] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    use_inference: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     storage_config_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("storage_configs.id", ondelete="SET NULL"), nullable=True
     )
-    is_default: Mapped[bool] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="unverified")
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     last_checked_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
@@ -313,7 +318,7 @@ class LiveKitConnection(Base):
             "workspace_id",
             unique=True,
             sqlite_where=text("is_default = 1"),
-            postgresql_where=text("is_default = 1"),
+            postgresql_where=text("is_default"),
         ),
     )
 
@@ -394,7 +399,7 @@ class WorkspaceProvider(Base):
         String(32), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
     )
     provider_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     default_credential_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("credentials.id", ondelete="SET NULL"), nullable=True
     )
@@ -437,7 +442,7 @@ class Agent(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     pack_id: Mapped[str] = mapped_column(String(64), nullable=False, default="generic")
     ui_panel_id: Mapped[str] = mapped_column(String(64), nullable=False, default="generic")
-    published: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     config_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     mode: Mapped[str] = mapped_column(String(16), nullable=False, default="prompt", server_default="prompt")
@@ -468,7 +473,7 @@ class Credential(Base):
     ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(32), nullable=False)
     last_test_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
-    last_test_ok: Mapped[bool | None] = mapped_column(Integer, nullable=True)
+    last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
@@ -491,7 +496,7 @@ class Tool(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    enabled: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
@@ -740,7 +745,7 @@ class WebhookEndpoint(Base):
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     secret_ct: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     events: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    enabled: Mapped[bool] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(

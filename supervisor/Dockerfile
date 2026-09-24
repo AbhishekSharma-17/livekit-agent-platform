@@ -15,7 +15,7 @@
 # `deploy/docker-compose.prod.yml`), not baked into this image.
 
 # --- builder -----------------------------------------------------------
-FROM python:3.12-bookworm-slim AS builder
+FROM python:3.12-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.15 /uv /uvx /usr/local/bin/
 
@@ -39,7 +39,7 @@ WORKDIR /build/supervisor
 RUN uv sync --frozen --no-dev --no-editable
 
 # --- runtime -------------------------------------------------------------
-FROM python:3.12-bookworm-slim AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 RUN groupadd --system lkap && useradd --system --gid lkap --create-home lkap
 

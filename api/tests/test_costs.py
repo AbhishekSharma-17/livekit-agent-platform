@@ -98,7 +98,7 @@ async def test_cost_session_persists_priced_lines_and_is_idempotent(database: Da
             name="Cost idempotent",
             pack_id="generic",
             ui_panel_id="generic",
-            published=1,
+            published=True,
             config=inference_config(
                 pipeline=inference_config().pipeline.model_copy(
                     update={"llm": ProviderRef(provider_id="openai-llm", model="gpt-4.1")}
@@ -146,7 +146,7 @@ async def test_cost_session_noop_without_usage(database: Database) -> None:
             name="No usage",
             pack_id="generic",
             ui_panel_id="generic",
-            published=1,
+            published=True,
             config=inference_config().model_dump(mode="json"),
             config_version=1,
         )
@@ -179,7 +179,7 @@ async def test_add_egress_cost_line_is_a_noop_when_unpriced(database: Database) 
             name="Egress",
             pack_id="generic",
             ui_panel_id="generic",
-            published=1,
+            published=True,
             config=inference_config().model_dump(mode="json"),
             config_version=1,
         )

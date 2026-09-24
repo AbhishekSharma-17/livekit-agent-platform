@@ -22,7 +22,7 @@ def _agent_row(config_json: dict[str, object], *, pack_id: str = "generic") -> A
         name="Panel test",
         pack_id=pack_id,
         ui_panel_id="composite",
-        published=1,
+        published=True,
         config=config_json,
         config_version=1,
     )

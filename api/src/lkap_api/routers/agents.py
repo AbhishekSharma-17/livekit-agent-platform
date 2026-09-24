@@ -300,7 +300,7 @@ async def _workspace_connection_id(
                 f"unknown connection '{connection_id}'", details={"connection_id": connection_id}
             )
         return str(found)
-    default = await db.scalar(stmt.where(LiveKitConnection.is_default == 1))
+    default = await db.scalar(stmt.where(LiveKitConnection.is_default.is_(True)))
     return str(default) if default is not None else None
 
 
@@ -520,7 +520,7 @@ async def list_agents(
     """Return the workspace's agents, newest first, with each one's session count."""
     conditions = [Agent.workspace_id == ctx.workspace_id]
     if published is not None:
-        conditions.append(Agent.published == int(published))
+        conditions.append(Agent.published.is_(published))
     if connection_id:
         conditions.append(Agent.connection_id == connection_id)
     if mode:

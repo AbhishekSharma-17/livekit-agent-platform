@@ -247,7 +247,7 @@ async def _beta_connection(database: Database, beta_id: str) -> str:
                 api_key_ct=vault.encrypt({"api_key": "APIbetaKEY1234"}),
                 api_secret_ct=vault.encrypt({"api_secret": "beta-secret-" + "s" * 32}),
                 deployment_mode="external",
-                is_default=1,
+                is_default=True,
             )
         )
     return connection_id
@@ -288,7 +288,7 @@ async def test_connect_never_mints_with_another_workspaces_connection(
 ) -> None:
     beta_connection = await _beta_connection(database, world.beta_id)
     # Force a cross-workspace binding behind the api's back: minting must ignore it.
-    await set_agent_columns(database, str(world.agent_a["id"]), connection_id=beta_connection, published=1)
+    await set_agent_columns(database, str(world.agent_a["id"]), connection_id=beta_connection, published=True)
 
     body = (
         await world.alice.post(

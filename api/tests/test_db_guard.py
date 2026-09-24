@@ -127,5 +127,7 @@ def test_the_default_connection_index_is_partial_on_both_backends() -> None:
     sqlite_ddl = str(CreateIndex(index).compile(dialect=sqlite.dialect()))
 
     assert index.unique
-    assert "WHERE is_default = 1" in postgres_ddl
+    # `is_default` is a real boolean on Postgres; SQLite stores it as 0/1 (and the
+    # index already built in migrated SQLite databases says `= 1`).
+    assert postgres_ddl.rstrip().endswith("WHERE is_default")
     assert "WHERE is_default = 1" in sqlite_ddl

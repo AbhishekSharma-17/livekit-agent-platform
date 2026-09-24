@@ -92,7 +92,7 @@ async def test_resolve_agent_connection_without_binding_or_default_conflicts(dat
         await session.execute(
             update(LiveKitConnection)
             .where(LiveKitConnection.workspace_id == DEFAULT_WORKSPACE_ID)
-            .values(is_default=0)
+            .values(is_default=False)
         )
         with pytest.raises(ConflictError):
             await resolve_agent_connection(session, agent)

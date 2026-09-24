@@ -186,7 +186,7 @@ class ValidationContext:
     connection: ConnectionContext | None = None
     workspace_id: str | None = None
     disabled_provider_ids: frozenset[str] = frozenset()
-    """Providers the workspace switched off (``workspace_providers.enabled = 0``)."""
+    """Providers the workspace switched off (``workspace_providers.enabled`` false)."""
     known_tool_ids: frozenset[str] | None = None
     known_kb_ids: frozenset[str] | None = None
     tool_names_by_id: Mapping[str, str] | None = None
@@ -659,7 +659,7 @@ async def connection_context_for(
     stmt = (
         stmt.where(LiveKitConnection.id == connection_id)
         if connection_id
-        else stmt.where(LiveKitConnection.is_default == 1)
+        else stmt.where(LiveKitConnection.is_default.is_(True))
     )
     row = await db.scalar(stmt)
     if row is None:
@@ -708,7 +708,7 @@ async def validation_context_for(
         (
             await db.execute(
                 select(WorkspaceProvider.provider_id).where(
-                    WorkspaceProvider.workspace_id == workspace_id, WorkspaceProvider.enabled == 0
+                    WorkspaceProvider.workspace_id == workspace_id, WorkspaceProvider.enabled.is_(False)
                 )
             )
         ).scalars()

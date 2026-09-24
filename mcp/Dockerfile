@@ -23,7 +23,7 @@
 # `/healthz` is the only unauthenticated path.
 
 # --- builder -----------------------------------------------------------
-FROM python:3.12-bookworm-slim AS builder
+FROM python:3.12-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.15 /uv /uvx /usr/local/bin/
 
@@ -53,7 +53,7 @@ RUN uv sync --frozen --no-dev --no-editable \
 RUN /app/.venv/bin/python -c "import livekit.rtc, lkap_contracts, lkap_mcp.http; from lkap_mcp import content; assert content.read_doc('guide.md'), 'docs/guide.md missing from the wheel'; assert content.recipe('connect-livekit'), 'docs/recipes missing'; assert (content.GENERATED_DIR / 'providers.json').is_file(), 'generated/ missing'"
 
 # --- runtime -------------------------------------------------------------
-FROM python:3.12-bookworm-slim AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 RUN groupadd --system lkap && useradd --system --gid lkap --create-home lkap
 

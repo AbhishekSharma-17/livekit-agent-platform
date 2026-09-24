@@ -101,7 +101,7 @@ def _v1_tables(*, scoped: bool = False) -> dict[str, sa.Table]:
         sa.Column("description", sa.Text(), server_default="", nullable=False),
         sa.Column("pack_id", sa.String(length=64), nullable=False),
         sa.Column("ui_panel_id", sa.String(length=64), nullable=False),
-        sa.Column("published", sa.Integer(), nullable=False),
+        sa.Column("published", sa.Boolean(), nullable=False),
         sa.Column("config", sa.JSON(), nullable=False),
         sa.Column("config_version", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
@@ -131,7 +131,7 @@ def _v1_tables(*, scoped: bool = False) -> dict[str, sa.Table]:
         sa.Column("kind", sa.String(length=16), nullable=False),
         sa.Column("name", sa.String(length=128), nullable=False),
         sa.Column("definition", sa.JSON(), nullable=False),
-        sa.Column("enabled", sa.Integer(), nullable=False),
+        sa.Column("enabled", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint("kind IN ('http','mcp')", name="kind_valid"),
@@ -248,13 +248,13 @@ def upgrade() -> None:
         "livekit_connections",
         sa.column("id", sa.String),
         sa.column("workspace_id", sa.String),
-        sa.column("is_default", sa.Integer),
+        sa.column("is_default", sa.Boolean),
     )
     default_id = (
         sa.select(connections.c.id)
         .where(
             connections.c.workspace_id == DEFAULT_WORKSPACE_ID,
-            connections.c.is_default == 1,
+            connections.c.is_default.is_(True),
         )
         .scalar_subquery()
     )

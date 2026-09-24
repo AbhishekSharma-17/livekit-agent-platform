@@ -28,6 +28,9 @@ DEFAULT_WORKSPACE_ID = "00000000000000000000000000000001"
 
 def upgrade() -> None:
     """Create the tenancy tables and seed the default workspace."""
+    # Flag columns are sa.Boolean (they were sa.Integer until the first Postgres run,
+    # 2026-09-24). SQLite stores a Boolean as 0/1 in the same INTEGER-affinity column,
+    # so databases already migrated need no new revision.
     op.create_table(
         "workspaces",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -45,7 +48,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=320), nullable=False),
         sa.Column("name", sa.String(length=200), server_default="", nullable=False),
         sa.Column("password_hash", sa.Text(), nullable=True),
-        sa.Column("is_platform_admin", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("is_platform_admin", sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column("disabled_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),

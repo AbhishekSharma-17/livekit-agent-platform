@@ -236,7 +236,7 @@ async def test_validate_in_db_uses_the_default_connection_and_disabled_providers
     async with database.session() as session:
         session.add(
             WorkspaceProvider(
-                workspace_id=DEFAULT_WORKSPACE_ID, provider_id="livekit-inference-tts", enabled=0
+                workspace_id=DEFAULT_WORKSPACE_ID, provider_id="livekit-inference-tts", enabled=False
             )
         )
         self_hosted = connection_row(

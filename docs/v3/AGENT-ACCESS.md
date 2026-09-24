@@ -457,7 +457,7 @@ The same `FastMCP` server, run as `lkap-mcp --http`, in its own container (`mcp`
 - The `mcp` container binds `0.0.0.0:8090` **inside the compose network only** (no published port in prod); Caddy terminates TLS and proxies `https://<api origin>/mcp` → `mcp:8090/mcp` (the MCP streamable-HTTP path), with `request_body max_size 1MB`, a 5 min idle timeout for the SSE leg, and the same `/internal/*` CIDR gate untouched. Dev compose publishes `127.0.0.1:8090` for local testing over plain HTTP on loopback only.
 - `LKAP_MCP_PUBLIC_URL=https://<api origin>/mcp` on the api/web (the console snippet) and on the service (the allowed `Origin`/`Host`, §9.5). Without it the console offers no remote option.
 - Env of the service: `LKAP_API_URL` (the api's in-network url, e.g. `http://api:8080`), `LKAP_MCP_HTTP=1`, `LKAP_MCP_HTTP_HOST/PORT`, `LKAP_MCP_PUBLIC_URL`, `LKAP_MCP_INLINE_SECRETS`, `LKAP_MCP_ALLOW_DIAL` (default off), the limits below, and any operator-provisioned `env:` values. Never the service token, never the admin token.
-- Image `lkap-mcp` from `mcp/Dockerfile` (`python:3.12-bookworm-slim`, non-root `lkap`, vendored `lkap-contracts` wheel like the agent image, the `livekit` rtc wheel for chat); `docker.yml` builds it. `/healthz` is the only unauthenticated path.
+- Image `lkap-mcp` from `mcp/Dockerfile` (`python:3.12-slim-bookworm`, non-root `lkap`, vendored `lkap-contracts` wheel like the agent image, the `livekit` rtc wheel for chat); `docker.yml` builds it. `/healthz` is the only unauthenticated path.
 - Scaling: **one `mcp` replica** in v3 (sessions and chats are in-process). More replicas need sticky routing on the session id, noted for Phase 2.
 
 ### 9.3 Rate limits

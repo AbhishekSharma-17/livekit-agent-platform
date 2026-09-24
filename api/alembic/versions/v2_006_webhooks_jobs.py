@@ -25,6 +25,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Create the webhook and job tables."""
+    # Flag columns are sa.Boolean (they were sa.Integer until the first Postgres run,
+    # 2026-09-24). SQLite stores a Boolean as 0/1 in the same INTEGER-affinity column,
+    # so databases already migrated need no new revision.
     op.create_table(
         "webhook_endpoints",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -32,7 +35,7 @@ def upgrade() -> None:
         sa.Column("url", sa.String(length=1024), nullable=False),
         sa.Column("secret_ct", sa.LargeBinary(), nullable=False),
         sa.Column("events", sa.JSON(), nullable=False),
-        sa.Column("enabled", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("description", sa.Text(), server_default="", nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),

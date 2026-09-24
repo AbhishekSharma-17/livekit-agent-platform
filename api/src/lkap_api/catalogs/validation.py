@@ -3,7 +3,7 @@
 Registers a validator into `lkap_api.config_service.VALIDATORS` (its
 documented extension point) rather than editing that module directly: a
 pipeline slot whose provider the workspace has switched off
-(`workspace_providers.enabled = 0`) is a validation error, exactly like an
+(`workspace_providers.enabled` false) is a validation error, exactly like an
 unavailable or uninstalled provider.
 
 Importing this module has the side effect of registering the validator;

@@ -12,7 +12,8 @@ import os
 from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import Connection, pool
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import Boolean, Column, Connection, Integer, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
@@ -44,6 +45,30 @@ def database_url() -> str:
     return url
 
 
+def compare_type(
+    context: MigrationContext,
+    inspected_column: Column[object],
+    metadata_column: Column[object],
+    inspected_type: object,
+    metadata_type: object,
+) -> bool | None:
+    """Treat an SQLite INTEGER column as matching a model ``Boolean``; defer everything else.
+
+    The flag columns were ``Integer`` until the first Postgres run (2026-09-24) and are
+    ``Boolean`` now. SQLite stores a ``Boolean`` as 0/1 in an INTEGER-affinity column, so
+    databases migrated before the change are correct as they are; without this, autogenerate
+    and ``alembic check`` would report their unchanged storage as drift. Postgres is compared
+    strictly (``None`` falls back to Alembic's own comparison).
+    """
+    if (
+        context.dialect.name == "sqlite"
+        and isinstance(metadata_type, Boolean)
+        and isinstance(inspected_type, Integer)
+    ):
+        return False
+    return None
+
+
 def run_migrations_offline() -> None:
     """Emit SQL for the configured url without connecting."""
     context.configure(
@@ -63,7 +88,7 @@ def do_run_migrations(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         render_as_batch=True,
-        compare_type=True,
+        compare_type=compare_type,
     )
     with context.begin_transaction():
         context.run_migrations()

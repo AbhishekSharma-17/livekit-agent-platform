@@ -210,6 +210,39 @@ async def test_a_restarted_supervisor_adopts_live_children_and_never_signals_twi
     assert await second.list() == []
 
 
+async def test_adoption_recognises_a_worker_behind_a_long_interpreter_path(
+    agent_dir: Path, tmp_path: Path, reaper: Reaper
+) -> None:
+    # CI's interpreter is `/home/runner/work/<repo>/<repo>/supervisor/.venv/bin/python`
+    # (91 chars): a command line cut at 80 columns loses `-m lkap_agent.main`, and
+    # the restarted supervisor would refuse to adopt its own worker.
+    long_dir = tmp_path / ("interpreter-" + "x" * 120) / ("bin-" + "y" * 60)
+    long_dir.mkdir(parents=True)
+    python = long_dir / "python"
+    python.symlink_to(sys.executable)
+    state_dir = tmp_path / "state"
+    first = SubprocessBackend(
+        agent_dir=agent_dir,
+        python=str(python),
+        state_dir=state_dir,
+        parent_env={"PATH": os.environ.get("PATH", ""), "HOME": "/tmp"},
+        poll_s=0.05,
+    )
+    out = tmp_path / "events.jsonl"
+    handle, started = await _start(first, reaper, out, "graceful")
+    assert len(f"{python} -m lkap_agent.main start") > 200
+
+    second = _backend(agent_dir, state_dir)
+    adopted = await second.list()
+    assert [(h.instance_key, h.state) for h in adopted] == [(handle.instance_key, "running")]
+    await second.drain(adopted[0], grace_s=10.0)
+
+    assert [e["event"] for e in _events(out)] == ["started", "sigint"]
+    with pytest.raises(ProcessLookupError):
+        os.kill(started["pid"], 0)
+    assert await second.list() == []
+
+
 async def test_dead_or_foreign_pids_in_the_state_file_are_not_adopted(
     agent_dir: Path, tmp_path: Path
 ) -> None:

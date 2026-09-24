@@ -68,8 +68,8 @@ def _seed_default_connection() -> None:
         sa.column("deployment_mode", sa.String),
         sa.column("replicas", sa.Integer),
         sa.column("worker_image", sa.String),
-        sa.column("use_inference", sa.Integer),
-        sa.column("is_default", sa.Integer),
+        sa.column("use_inference", sa.Boolean),
+        sa.column("is_default", sa.Boolean),
         sa.column("status", sa.String),
         sa.column("capabilities", sa.JSON),
         sa.column("created_at", sa.DateTime),
@@ -90,8 +90,8 @@ def _seed_default_connection() -> None:
             deployment_mode="external",
             replicas=1,
             worker_image="slim",
-            use_inference=1,
-            is_default=1,
+            use_inference=True,
+            is_default=True,
             status="unverified",
             capabilities={},
             created_at=now,
@@ -102,6 +102,9 @@ def _seed_default_connection() -> None:
 
 def upgrade() -> None:
     """Create the connection and fleet tables, then seed the default connection."""
+    # Flag columns are sa.Boolean (they were sa.Integer until the first Postgres run,
+    # 2026-09-24). SQLite stores a Boolean as 0/1 in the same INTEGER-affinity column,
+    # so databases already migrated need no new revision.
     op.create_table(
         "storage_configs",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -115,7 +118,7 @@ def upgrade() -> None:
         sa.Column("access_key_ct", sa.LargeBinary(), nullable=True),
         sa.Column("secret_key_ct", sa.LargeBinary(), nullable=True),
         sa.Column("public_base_url", sa.String(length=512), nullable=True),
-        sa.Column("is_default", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("is_default", sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint("kind IN ('s3','local')", name=op.f("ck_storage_configs_kind_valid")),
@@ -145,9 +148,9 @@ def upgrade() -> None:
         sa.Column("replicas", sa.Integer(), server_default="1", nullable=False),
         sa.Column("worker_image", sa.String(length=16), nullable=False),
         sa.Column("region", sa.String(length=64), nullable=True),
-        sa.Column("use_inference", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("use_inference", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("storage_config_id", sa.String(length=32), nullable=True),
-        sa.Column("is_default", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("is_default", sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("capabilities", sa.JSON(), nullable=False),
         sa.Column("last_checked_at", sa.DateTime(), nullable=True),
@@ -191,7 +194,7 @@ def upgrade() -> None:
         ["workspace_id"],
         unique=True,
         sqlite_where=sa.text("is_default = 1"),
-        postgresql_where=sa.text("is_default = 1"),
+        postgresql_where=sa.text("is_default"),
     )
 
     op.create_table(

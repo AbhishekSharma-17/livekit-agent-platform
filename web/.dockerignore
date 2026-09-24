@@ -1,6 +1,11 @@
 # Build context for this Dockerfile is web/ itself (self-contained — the
 # web app has no path deps outside this directory; the generated contracts
 # type file is already committed at src/contracts/lkap-contracts.d.ts).
+#
+# `tests/` is excluded except `tests/fixtures/`: the preview route
+# (src/components/preview/fixtures.ts) and the block fixtures behind the agent
+# editor's composer preview (src/panels/blocks/__fixtures__/index.ts) import
+# the golden `UiState` JSON files from there, so `next build` fails without them.
 node_modules
 .next
 .git
@@ -10,6 +15,7 @@ node_modules
 coverage
 e2e
 tests
+!tests/fixtures
 playwright-report
 test-results
 *.tsbuildinfo

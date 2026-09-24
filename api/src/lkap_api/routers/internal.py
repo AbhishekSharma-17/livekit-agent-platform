@@ -217,7 +217,7 @@ async def _build_resolved(
                 await db.execute(
                     select(Tool).where(
                         Tool.id.in_(config.tools.tool_ids),
-                        Tool.enabled == 1,
+                        Tool.enabled.is_(True),
                         Tool.workspace_id == agent.workspace_id,
                     )
                 )

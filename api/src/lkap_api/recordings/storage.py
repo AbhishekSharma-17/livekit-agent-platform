@@ -64,7 +64,9 @@ async def _candidate_rows(
         if row is not None:
             rows.append(row)
     default_row = await db.scalar(
-        select(StorageConfig).where(StorageConfig.workspace_id == workspace_id, StorageConfig.is_default == 1)
+        select(StorageConfig).where(
+            StorageConfig.workspace_id == workspace_id, StorageConfig.is_default.is_(True)
+        )
     )
     if default_row is not None:
         rows.append(default_row)

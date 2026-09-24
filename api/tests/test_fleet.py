@@ -139,7 +139,7 @@ async def test_register_without_connection_id_uses_the_default_connection(
 ) -> None:
     async with database.session() as session:
         default_id = (
-            await session.execute(select(LiveKitConnection.id).where(LiveKitConnection.is_default == 1))
+            await session.execute(select(LiveKitConnection.id).where(LiveKitConnection.is_default.is_(True)))
         ).scalar_one()
 
     response = await service_client.post("/internal/v1/workers/register", json=_register_body(None))

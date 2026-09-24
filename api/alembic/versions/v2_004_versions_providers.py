@@ -72,6 +72,9 @@ def _backfill_versions() -> None:
 
 def upgrade() -> None:
     """Create the version, provider-settings and catalog-cache tables."""
+    # Flag columns are sa.Boolean (they were sa.Integer until the first Postgres run,
+    # 2026-09-24). SQLite stores a Boolean as 0/1 in the same INTEGER-affinity column,
+    # so databases already migrated need no new revision.
     op.create_table(
         "agent_config_versions",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -103,7 +106,7 @@ def upgrade() -> None:
         "workspace_providers",
         sa.Column("workspace_id", sa.String(length=32), nullable=False),
         sa.Column("provider_id", sa.String(length=64), nullable=False),
-        sa.Column("enabled", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("default_credential_id", sa.String(length=32), nullable=True),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(
@@ -146,7 +149,7 @@ def upgrade() -> None:
     # Plain ADD COLUMN: nullable, no constraints, so no SQLite table rebuild.
     with op.batch_alter_table("credentials", naming_convention=NAMING_CONVENTION) as batch_op:
         batch_op.add_column(sa.Column("last_test_at", sa.DateTime(), nullable=True))
-        batch_op.add_column(sa.Column("last_test_ok", sa.Integer(), nullable=True))
+        batch_op.add_column(sa.Column("last_test_ok", sa.Boolean(), nullable=True))
         batch_op.add_column(sa.Column("last_test_message", sa.Text(), nullable=True))
     # `knowledge_bases` carries no CHECK constraint, so reflection is lossless here
     # and the rebuild the new foreign key forces on SQLite is safe without copy_from.

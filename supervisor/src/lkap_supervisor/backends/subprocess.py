@@ -82,6 +82,15 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _proc_cmdline(pid: int) -> str | None:
+    """``pid``'s full argv from ``/proc/<pid>/cmdline`` (Linux), or ``None`` without procfs."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    return raw.replace(b"\0", b" ").decode(errors="replace").strip()
+
+
 def _open_log(path: Path) -> IO[bytes]:
     path.parent.mkdir(parents=True, exist_ok=True)
     return path.open("ab")
@@ -147,21 +156,33 @@ class SubprocessBackend:
         """Whether ``pid`` is alive and still runs ``self._module`` (guards against pid reuse)."""
         if not _pid_alive(pid):
             return False
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "ps",
-                "-o",
-                "command=",
-                "-p",
-                str(pid),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            out, _ = await proc.communicate()
-        except OSError:
-            log.warning("replica_adoption_unverifiable", pid=pid)
-            return False
-        return self._module in out.decode(errors="replace")
+        command = await asyncio.to_thread(_proc_cmdline, pid)
+        source = "proc"
+        if command is None:
+            # No procfs (macOS). `-ww`: unlimited width, so a long interpreter path can
+            # never push `-m lkap_agent.main` past a column limit.
+            source = "ps"
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "ps",
+                    "-ww",
+                    "-o",
+                    "command=",
+                    "-p",
+                    str(pid),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                out, _ = await proc.communicate()
+            except OSError:
+                log.warning("replica_adoption_unverifiable", pid=pid)
+                return False
+            command = out.decode(errors="replace")
+        if self._module in command:
+            return True
+        # Never log the command itself: a reused pid may belong to any process.
+        log.info("replica_adoption_rejected", pid=pid, source=source, command_chars=len(command.strip()))
+        return False
 
     async def _adopt(self) -> None:
         if self._adopted:

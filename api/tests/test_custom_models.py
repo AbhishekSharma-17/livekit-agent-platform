@@ -381,6 +381,7 @@ def test_no_new_api_source_path_has_a_credentials_prefixed_segment() -> None:
     offenders = [
         path
         for path in src.rglob("*")
-        if any(part.startswith("credentials") for part in path.relative_to(src).parts)
+        if "__pycache__" not in path.parts
+        and any(part.startswith("credentials") for part in path.relative_to(src).parts)
     ]
     assert offenders == []

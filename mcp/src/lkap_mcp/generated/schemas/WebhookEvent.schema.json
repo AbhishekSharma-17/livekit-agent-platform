@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/WebhookEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The signed envelope posted to a webhook endpoint.\n\nSignature header: ``X-LKAP-Signature: t=<unix>,v1=<hmac_sha256(secret, f\"{t}.{body}\")>``.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Data",
+      "type": "object"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "workspace_id": {
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "created_at",
+    "workspace_id"
+  ],
+  "title": "WebhookEvent",
+  "type": "object"
+}

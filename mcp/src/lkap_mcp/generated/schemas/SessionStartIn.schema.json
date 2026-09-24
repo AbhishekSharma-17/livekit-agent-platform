@@ -1,0 +1,59 @@
+{
+  "$id": "lkap-contracts/SessionStartIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/sessions/start`` — the worker creates the session row.\n\nUsed for rooms the platform did not create (inbound SIP), where the\ndispatch metadata carries no ``session_id``.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "caller": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Caller"
+    },
+    "channel": {
+      "default": "web",
+      "enum": [
+        "web",
+        "test",
+        "text",
+        "sip_in",
+        "sip_out",
+        "widget",
+        "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "dispatch_metadata": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Dispatch Metadata",
+      "type": "object"
+    },
+    "participant_identity": {
+      "default": "",
+      "title": "Participant Identity",
+      "type": "string"
+    },
+    "room_name": {
+      "title": "Room Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "room_name"
+  ],
+  "title": "SessionStartIn",
+  "type": "object"
+}

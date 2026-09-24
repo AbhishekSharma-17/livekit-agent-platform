@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/TransferTarget.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One destination the agent may transfer a caller to.",
+  "properties": {
+    "label": {
+      "description": "What the model and the caller call it",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "to": {
+      "description": "E.164 number or tel:/sip:/sips: URI",
+      "maxLength": 256,
+      "pattern": "^(\\+[1-9]\\d{6,14}|tel:\\+?[0-9]{3,20}|sips?:[^\\s@]+@[^\\s]+)$",
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "label",
+    "to"
+  ],
+  "title": "TransferTarget",
+  "type": "object"
+}

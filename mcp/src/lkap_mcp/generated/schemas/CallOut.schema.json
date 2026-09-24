@@ -1,0 +1,159 @@
+{
+  "$id": "lkap-contracts/CallOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One inbound or outbound call.",
+  "properties": {
+    "answered_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answered At"
+    },
+    "connection_id": {
+      "default": "",
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "direction": {
+      "enum": [
+        "inbound",
+        "outbound"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "from_e164": {
+      "default": "",
+      "title": "From E164",
+      "type": "string"
+    },
+    "hangup_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hangup Reason"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "lk_participant_identity": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lk Participant Identity"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "sip_call_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sip Call Id"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "default": "dialing",
+      "enum": [
+        "dialing",
+        "ringing",
+        "answered",
+        "no_answer",
+        "busy",
+        "failed",
+        "completed",
+        "transferred"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "to_e164": {
+      "default": "",
+      "title": "To E164",
+      "type": "string"
+    },
+    "transfer_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transfer To"
+    },
+    "workspace_id": {
+      "default": "",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "direction"
+  ],
+  "title": "CallOut",
+  "type": "object"
+}

@@ -1,0 +1,68 @@
+{
+  "$id": "lkap-contracts/WorkerRegisterIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/workers/register`` — sent once per worker process.",
+  "properties": {
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    },
+    "image": {
+      "default": "slim",
+      "enum": [
+        "slim",
+        "full"
+      ],
+      "title": "Image",
+      "type": "string"
+    },
+    "installed_provider_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Installed Provider Ids",
+      "type": "array"
+    },
+    "instance_key": {
+      "title": "Instance Key",
+      "type": "string"
+    },
+    "managed_by": {
+      "default": "external",
+      "enum": [
+        "external",
+        "supervisor",
+        "cloud"
+      ],
+      "title": "Managed By",
+      "type": "string"
+    },
+    "pack_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Pack Ids",
+      "type": "array"
+    },
+    "sdk_version": {
+      "default": "",
+      "title": "Sdk Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "instance_key"
+  ],
+  "title": "WorkerRegisterIn",
+  "type": "object"
+}

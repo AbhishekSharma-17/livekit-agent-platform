@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "CatalogItem": {
+      "description": "One model, voice, avatar or persona listed by a vendor catalog adapter.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "meta": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Meta",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "CatalogItem",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/CatalogResponse.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/providers/{id}/catalog``.\n\n``error`` (V2-06, additive) carries a short, secret-free note when the\nlive vendor call failed and ``items``/``source`` fell back to a cached or\nstatic list instead — the endpoint always returns ``200`` (CONTRACTS-V2\n\"a failed vendor call must never break the providers page\").",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "fetched_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fetched At"
+    },
+    "items": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CatalogItem"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "models",
+        "voices",
+        "avatars",
+        "personas"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "source": {
+      "default": "static",
+      "enum": [
+        "vendor",
+        "static"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "title": "CatalogResponse",
+  "type": "object"
+}

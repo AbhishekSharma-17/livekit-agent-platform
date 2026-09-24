@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/UiRequestResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result the browser returns for a :class:`UiRequest`.",
+  "properties": {
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "UiRequestResult",
+  "type": "object"
+}

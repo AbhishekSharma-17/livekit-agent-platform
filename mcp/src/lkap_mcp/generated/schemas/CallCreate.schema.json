@@ -1,0 +1,44 @@
+{
+  "$id": "lkap-contracts/CallCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/calls`` — place one outbound call.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "timeout_s": {
+      "default": 30,
+      "title": "Timeout S",
+      "type": "integer"
+    },
+    "to_e164": {
+      "title": "To E164",
+      "type": "string"
+    },
+    "trunk_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trunk Id"
+    },
+    "variables": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Variables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "agent_id",
+    "to_e164"
+  ],
+  "title": "CallCreate",
+  "type": "object"
+}

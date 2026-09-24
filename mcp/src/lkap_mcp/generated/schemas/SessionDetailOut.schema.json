@@ -1,0 +1,1033 @@
+{
+  "$defs": {
+    "ActivityEvent": {
+      "description": "A tool call, workflow run or escalation rendered as a \"team feed\" entry.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ms"
+        },
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "running",
+            "done",
+            "error",
+            "cancelled"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "urgent": {
+          "default": false,
+          "title": "Urgent",
+          "type": "boolean"
+        },
+        "v": {
+          "const": 1,
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "source",
+        "label",
+        "phase",
+        "headline"
+      ],
+      "title": "ActivityEvent",
+      "type": "object"
+    },
+    "AssetRef": {
+      "description": "Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.",
+      "properties": {
+        "asset_id": {
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "meta": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Meta",
+          "type": "object"
+        },
+        "mime": {
+          "title": "Mime",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "asset_id",
+        "kind",
+        "mime",
+        "ts"
+      ],
+      "title": "AssetRef",
+      "type": "object"
+    },
+    "ChecklistItem": {
+      "description": "One \"still needed\" item.",
+      "properties": {
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChecklistItem",
+      "type": "object"
+    },
+    "CostLine": {
+      "description": "One priced usage line of a session.\n\n``cost_usd`` is ``None`` with ``note=\"no price\"`` when the price table has\nno entry — an unknown price is never reported as zero.",
+      "properties": {
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Quantity"
+        },
+        "unit": {
+          "enum": [
+            "tokens_in",
+            "tokens_out",
+            "audio_s_in",
+            "audio_s_out",
+            "chars",
+            "minutes",
+            "images"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "unit_price_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Price Usd"
+        }
+      },
+      "required": [
+        "provider_id",
+        "unit",
+        "quantity"
+      ],
+      "title": "CostLine",
+      "type": "object"
+    },
+    "Note": {
+      "description": "A line in the panel's notes list. A repeated ``key`` upserts in place.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "kind": {
+          "default": "note",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "tone": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "ts"
+      ],
+      "title": "Note",
+      "type": "object"
+    },
+    "QaOut": {
+      "description": "LLM-judge scoring of a finished session.",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "scored_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scored At"
+        },
+        "scored_by": {
+          "anyOf": [
+            {
+              "enum": [
+                "worker",
+                "api"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scored By"
+        },
+        "sentiment": {
+          "anyOf": [
+            {
+              "enum": [
+                "positive",
+                "neutral",
+                "negative"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sentiment"
+        },
+        "status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "done",
+            "failed",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "title": "QaOut",
+      "type": "object"
+    },
+    "RecordingOut": {
+      "description": "The recording block of ``SessionDetailOut`` (``url`` is a signed URL).",
+      "properties": {
+        "duration_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration S"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "status": {
+          "default": "none",
+          "enum": [
+            "none",
+            "requested",
+            "active",
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "title": "RecordingOut",
+      "type": "object"
+    },
+    "SessionCost": {
+      "description": "The cost block of ``SessionDetailOut``.",
+      "properties": {
+        "lines": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CostLine"
+          },
+          "title": "Lines",
+          "type": "array"
+        },
+        "total_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Usd"
+        }
+      },
+      "title": "SessionCost",
+      "type": "object"
+    },
+    "SessionLatency": {
+      "description": "Per-session latency percentiles collected from ``metrics_collected``.",
+      "properties": {
+        "eou_to_first_audio_ms_p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eou To First Audio Ms P50"
+        },
+        "eou_to_first_audio_ms_p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eou To First Audio Ms P95"
+        },
+        "llm_ttft_ms_p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Ttft Ms P50"
+        },
+        "llm_ttft_ms_p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Ttft Ms P95"
+        },
+        "tts_ttfb_ms_p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tts Ttfb Ms P50"
+        },
+        "tts_ttfb_ms_p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tts Ttfb Ms P95"
+        },
+        "turns": {
+          "default": 0,
+          "title": "Turns",
+          "type": "integer"
+        }
+      },
+      "title": "SessionLatency",
+      "type": "object"
+    },
+    "StatusStamp": {
+      "description": "The big \"stamp\" shown by a panel; ``key`` changes re-trigger the animation.",
+      "properties": {
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "StatusStamp",
+      "type": "object"
+    },
+    "TranscriptTurn": {
+      "description": "One turn of the final transcript (images stripped).",
+      "properties": {
+        "interrupted": {
+          "default": false,
+          "title": "Interrupted",
+          "type": "boolean"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "role",
+        "text",
+        "ts"
+      ],
+      "title": "TranscriptTurn",
+      "type": "object"
+    },
+    "UiState": {
+      "description": "The platform envelope every panel renders; ``custom`` is pack-defined.\n\n``v`` accepts ``1`` for one release so v1 producers (and the web reducer's\nown literals) keep validating while panels migrate to blocks.",
+      "properties": {
+        "activity": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ActivityEvent"
+          },
+          "title": "Activity",
+          "type": "array"
+        },
+        "assets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AssetRef"
+          },
+          "title": "Assets",
+          "type": "array"
+        },
+        "blocks": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Blocks",
+          "type": "object"
+        },
+        "checklist": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ChecklistItem"
+          },
+          "title": "Checklist",
+          "type": "array"
+        },
+        "custom": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Custom",
+          "type": "object"
+        },
+        "notes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Note"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Progress"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusStamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "v": {
+          "default": 2,
+          "enum": [
+            1,
+            2
+          ],
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "title": "UiState",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/SessionDetailOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Session detail, including the transcript and the final UI state.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "caller": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Caller"
+    },
+    "channel": {
+      "default": "web",
+      "enum": [
+        "web",
+        "test",
+        "text",
+        "sip_in",
+        "sip_out",
+        "widget",
+        "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    },
+    "cost": {
+      "$ref": "#/$defs/SessionCost",
+      "default": {
+        "lines": [],
+        "total_usd": null
+      }
+    },
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Usd"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "disposition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Disposition"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "final_ui_state": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "latency": {
+      "$ref": "#/$defs/SessionLatency",
+      "default": {
+        "eou_to_first_audio_ms_p50": null,
+        "eou_to_first_audio_ms_p95": null,
+        "llm_ttft_ms_p50": null,
+        "llm_ttft_ms_p95": null,
+        "tts_ttfb_ms_p50": null,
+        "tts_ttfb_ms_p95": null,
+        "turns": 0
+      }
+    },
+    "pipeline_mode": {
+      "enum": [
+        "realtime",
+        "cascaded",
+        "half_cascade"
+      ],
+      "title": "Pipeline Mode",
+      "type": "string"
+    },
+    "qa": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QaOut"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recording": {
+      "$ref": "#/$defs/RecordingOut",
+      "default": {
+        "duration_s": null,
+        "error": null,
+        "expires_at": null,
+        "status": "none",
+        "url": null
+      }
+    },
+    "recording_status": {
+      "default": "none",
+      "enum": [
+        "none",
+        "requested",
+        "active",
+        "ready",
+        "failed"
+      ],
+      "title": "Recording Status",
+      "type": "string"
+    },
+    "room_name": {
+      "title": "Room Name",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "enum": [
+        "created",
+        "active",
+        "ended",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "transcript": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/TranscriptTurn"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transcript"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Usage"
+    },
+    "variables": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Variables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "agent_id",
+    "agent_name",
+    "config_version",
+    "room_name",
+    "status",
+    "pipeline_mode",
+    "created_at"
+  ],
+  "title": "SessionDetailOut",
+  "type": "object"
+}

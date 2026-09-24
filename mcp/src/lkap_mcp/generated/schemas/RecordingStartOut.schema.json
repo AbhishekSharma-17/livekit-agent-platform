@@ -1,0 +1,16 @@
+{
+  "$id": "lkap-contracts/RecordingStartOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/sessions/{id}/recording/start``.",
+  "properties": {
+    "egress_id": {
+      "title": "Egress Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "egress_id"
+  ],
+  "title": "RecordingStartOut",
+  "type": "object"
+}

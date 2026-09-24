@@ -1,0 +1,21 @@
+{
+  "$id": "lkap-contracts/BlockConfig_video.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``video``: which track the block starts on, and whether it starts muted.",
+  "properties": {
+    "muted": {
+      "default": false,
+      "title": "Muted",
+      "type": "boolean"
+    },
+    "source": {
+      "default": "agent_avatar",
+      "pattern": "^(agent_avatar|user_camera|user_screen|track:.+)$",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "title": "BlockConfig_video",
+  "type": "object"
+}

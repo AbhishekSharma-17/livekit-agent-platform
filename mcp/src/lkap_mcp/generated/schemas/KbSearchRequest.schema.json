@@ -1,0 +1,23 @@
+{
+  "$id": "lkap-contracts/KbSearchRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/knowledge-bases/{id}/search``.",
+  "properties": {
+    "k": {
+      "default": 4,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "K",
+      "type": "integer"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "KbSearchRequest",
+  "type": "object"
+}

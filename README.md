@@ -140,3 +140,18 @@ Web: `pnpm lint && pnpm typecheck && pnpm test`. After any contracts change, run
 **Platform:** api, web, supervisor, Postgres, Redis and MinIO run under `deploy/docker-compose.prod.yml`, behind Caddy.
 
 See `deploy/README.md` §4 and `docs/RUNBOOK.md` §3–§7. No image has been built on the dev host yet (Docker not running), so treat the images as "build unverified" until CI or a local `docker build` has passed.
+
+## Connect an AI coding agent
+
+`mcp/` (`lkap-mcp`) is an MCP server for Claude Code, Codex CLI, Cursor or
+any other MCP-capable agent: a typed client of this repo's own `/v1` api
+that lets an agent understand the platform (a guide, concept docs, recipes
+and the generated provider/schema/tool catalog, all served as MCP resources
+and tools) and configure it (connections, agents, knowledge bases, tools,
+webhooks, plus a text test chat run over the LiveKit room). See
+`docs/v3/AGENT-ACCESS.md` for the design and `mcp/README.md` for install
+instructions once V3-01/V3-05 land; the console's **Settings → AI agents**
+tab (V3-04) mints a scoped key and the exact `claude mcp add` / Codex /
+Cursor snippet for you. Once connected, ask the agent to call `lkap_guide`
+first — it explains the object model, the workflow and the safety rules
+before it touches anything.

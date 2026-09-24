@@ -1,0 +1,42 @@
+{
+  "$id": "lkap-contracts/FormBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A JSON-schema form the agent asked the user to fill in.",
+  "properties": {
+    "schema": {
+      "additionalProperties": true,
+      "title": "Schema",
+      "type": "object"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    },
+    "values": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Values",
+      "type": "object"
+    }
+  },
+  "title": "FormBlockState",
+  "type": "object"
+}

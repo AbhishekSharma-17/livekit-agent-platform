@@ -1,0 +1,51 @@
+{
+  "$id": "lkap-contracts/DispatchRuleCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/telephony/dispatch-rules``: route calls on an inbound trunk to an agent.\n\n``numbers`` empty means every number of the trunk. Each call gets its own\nroom named ``<room_prefix><caller>_<random>`` (LiveKit's individual rule).",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "numbers": {
+      "items": {
+        "pattern": "^\\+[1-9]\\d{6,14}$",
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Numbers",
+      "type": "array"
+    },
+    "pin": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9]{4,12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Write-only",
+      "title": "Pin"
+    },
+    "room_prefix": {
+      "default": "call-",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]*$",
+      "title": "Room Prefix",
+      "type": "string"
+    },
+    "trunk_id": {
+      "title": "Trunk Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "trunk_id",
+    "agent_id"
+  ],
+  "title": "DispatchRuleCreate",
+  "type": "object"
+}

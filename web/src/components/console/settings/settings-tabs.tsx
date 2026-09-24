@@ -9,6 +9,7 @@ import { EnvironmentTab } from "./environment-tab";
 import { WorkspaceTab } from "./workspace-tab";
 import { TeamTab } from "./team-tab";
 import { ApiKeysTab } from "./api-keys-tab";
+import { AiAgentsTab } from "./ai-agents-tab";
 import { WebhooksTab } from "./webhooks-tab";
 import { StorageTab } from "./storage-tab";
 import { DangerTab } from "./danger-tab";
@@ -23,7 +24,8 @@ import { DangerTab } from "./danger-tab";
  * were already real. `ComingSoonTab` (WP-1's placeholder) is gone from this
  * registry — see `storage-tab.tsx`/`danger-tab.tsx` for the two tabs whose
  * backend genuinely doesn't exist yet; they say so plainly instead of
- * reusing that generic copy.
+ * reusing that generic copy. `ai-agents` (v3, docs/v3/AGENT-ACCESS.md §5) is
+ * V3-04's "Connect an AI agent" tab, between `api-keys` and `webhooks`.
  */
 interface TabDef {
   id: string;
@@ -36,6 +38,7 @@ const TABS: TabDef[] = [
   { id: "appearance", label: "Appearance", content: <AppearanceTab /> },
   { id: "team", label: "Team", content: <TeamTab /> },
   { id: "api-keys", label: "API keys", content: <ApiKeysTab /> },
+  { id: "ai-agents", label: "AI agents", content: <AiAgentsTab /> },
   { id: "webhooks", label: "Webhooks", content: <WebhooksTab /> },
   { id: "storage", label: "Storage", content: <StorageTab /> },
   { id: "environment", label: "Environment", content: <EnvironmentTab /> },

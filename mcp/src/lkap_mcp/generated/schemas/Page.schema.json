@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/Page.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A non-cursor list envelope returned by every list endpoint.",
+  "properties": {
+    "items": {
+      "items": {},
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "Page",
+  "type": "object"
+}

@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/KbImportIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/knowledge-bases/{id}/documents/import`` (v3, R-V3-14).\n\nThe api fetches ``url`` itself, through its outbound network guard, and\ningests the body like an upload (25 MB cap; text, markdown, JSON or PDF).",
+  "properties": {
+    "filename": {
+      "anyOf": [
+        {
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The stored document name; defaults to the url's last path segment",
+      "title": "Filename"
+    },
+    "url": {
+      "description": "A public http(s) url of the source document",
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "title": "KbImportIn",
+  "type": "object"
+}

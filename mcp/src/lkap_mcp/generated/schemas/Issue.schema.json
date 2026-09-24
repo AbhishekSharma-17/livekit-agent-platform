@@ -1,0 +1,30 @@
+{
+  "$id": "lkap-contracts/Issue.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One addressable validation finding (UI_UX_SPEC §7.14).\n\n``path`` is a dotted path into the validated document, for example\n``\"pipeline.tts\"`` or ``\"flow.nodes[2].instructions\"``, so the console can\nfocus the offending field.",
+  "properties": {
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "path": {
+      "title": "Path",
+      "type": "string"
+    },
+    "severity": {
+      "default": "error",
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "message"
+  ],
+  "title": "Issue",
+  "type": "object"
+}

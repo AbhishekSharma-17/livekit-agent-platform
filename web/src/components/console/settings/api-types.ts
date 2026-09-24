@@ -136,10 +136,17 @@ export interface MemberUpdate {
   role: Role;
 }
 
+/** `standard` keys are for scripts/integrations; `agent` keys are minted from the "AI agents" tab (v3). */
+export type ApiKeyKind = "standard" | "agent";
+
 export interface ApiKeyCreate {
   name: string;
   scopes: Scope[];
   expires_at?: string | null;
+  /** v3 (V3-00 `ApiKeyCreate.kind`): defaults to `"standard"` server-side when omitted. */
+  kind?: ApiKeyKind;
+  /** v3: the AI client this key is for (`claude-code`, `codex`, `cursor`, `other` …); informational only. */
+  client?: string | null;
 }
 
 export interface ApiKeyOut {
@@ -153,6 +160,11 @@ export interface ApiKeyOut {
   last_used_at?: string | null;
   revoked_at?: string | null;
   expires_at?: string | null;
+  /** v3: defaults to `"standard"` on rows minted before V3-00's migration. */
+  kind: ApiKeyKind;
+  client: string | null;
+  /** v3: the product of the last `X-LKAP-Client` header this key was used with. */
+  last_client: string | null;
 }
 
 /** The only time `key` is ever returned — shown once, never stored client-side beyond the reveal dialog. */

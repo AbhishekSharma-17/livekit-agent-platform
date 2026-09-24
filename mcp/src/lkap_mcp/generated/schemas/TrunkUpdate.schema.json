@@ -1,0 +1,97 @@
+{
+  "$id": "lkap-contracts/TrunkUpdate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PUT /v1/telephony/trunks/{id}``: omitted fields keep their value.\n\n``auth_password`` omitted keeps the stored password, ``\"\"`` clears it.",
+  "properties": {
+    "address": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Address"
+    },
+    "auth_password": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Write-only",
+      "title": "Auth Password"
+    },
+    "auth_username": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Auth Username"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "numbers": {
+      "anyOf": [
+        {
+          "items": {
+            "pattern": "^\\+[1-9]\\d{6,14}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Numbers"
+    },
+    "provider_hint": {
+      "anyOf": [
+        {
+          "enum": [
+            "twilio",
+            "telnyx",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Hint"
+    }
+  },
+  "title": "TrunkUpdate",
+  "type": "object"
+}

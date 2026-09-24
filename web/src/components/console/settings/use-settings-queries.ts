@@ -73,10 +73,48 @@ export function useApiKeys(workspaceId: string | undefined) {
   });
 }
 
+/**
+ * `kind=agent` keys only (v3, "AI agents" tab). Shares `useApiKeys`'s cache
+ * entry (same query key/fn — react-query dedupes the fetch) and filters
+ * client-side: `GET /v1/api-keys` has no `kind` query param.
+ */
+export function useAgentKeys(workspaceId: string | undefined) {
+  return useQuery({
+    queryKey: ["settings", "api-keys", workspaceId] as const,
+    queryFn: () => api.get<Page<ApiKeyOut>>("api-keys", { limit: 200 }),
+    enabled: Boolean(workspaceId),
+    select: (page) => {
+      const items = page.items.filter((key) => key.kind === "agent");
+      return { items, total: items.length };
+    },
+  });
+}
+
 export function useAudit(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ["settings", "audit", workspaceId] as const,
     queryFn: () => api.get<Page<AuditOut>>("audit", { limit: 50 }),
+    enabled: Boolean(workspaceId),
+  });
+}
+
+/** Whether an audit row is agent-originated (D-V3-9): an API key actor with `payload.client` set. */
+export function isAgentActivityRow(row: AuditOut): boolean {
+  return row.actor_type === "api_key" && typeof row.payload?.client === "object" && row.payload?.client !== null;
+}
+
+/**
+ * `GET /v1/audit`, one page at `offset`, for the "Agent activity" table
+ * (v3). The route has no `actor_type`/`client` filter (PLAN-V3 V3-04:
+ * "filtered client-side"), so this returns the raw page and the caller
+ * filters with `isAgentActivityRow` and drives `offset` for "Load more" —
+ * mirroring how `useApiKeys`'s single large page is filtered for
+ * `useAgentKeys` above, just paginated since the audit log has no cap.
+ */
+export function useAgentActivityPage(workspaceId: string | undefined, limit: number, offset: number) {
+  return useQuery({
+    queryKey: ["settings", "audit", "agent", workspaceId, limit, offset] as const,
+    queryFn: () => api.get<Page<AuditOut>>("audit", { limit, offset }),
     enabled: Boolean(workspaceId),
   });
 }

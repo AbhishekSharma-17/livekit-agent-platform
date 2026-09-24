@@ -74,3 +74,16 @@ fi
 mkdir -p "${WEB_CONTRACTS_DIR}"
 cp "${GENERATED_TS}" "${WEB_CONTRACTS_DIR}/lkap-contracts.d.ts"
 echo "export_contracts: copied generated/ts/lkap-contracts.d.ts -> web/src/contracts/" >&2
+
+# V3-01 (docs/v3/_asks.md G2): the MCP server's generated resources, byte-identical
+# to contracts/generated (providers.json, builtin_tools.json, schemas/). The
+# schemas dir is replaced wholesale so a removed model does not linger.
+MCP_GENERATED_DIR="${ROOT_DIR}/mcp/src/lkap_mcp/generated"
+if [[ -d "${ROOT_DIR}/mcp" ]]; then
+  mkdir -p "${MCP_GENERATED_DIR}"
+  cp "${CONTRACTS_DIR}/generated/providers.json" "${MCP_GENERATED_DIR}/providers.json"
+  cp "${CONTRACTS_DIR}/generated/builtin_tools.json" "${MCP_GENERATED_DIR}/builtin_tools.json"
+  rm -rf "${MCP_GENERATED_DIR}/schemas"
+  cp -R "${SCHEMAS_DIR}" "${MCP_GENERATED_DIR}/schemas"
+  echo "export_contracts: copied providers.json, builtin_tools.json, schemas/ -> mcp/src/lkap_mcp/generated/" >&2
+fi

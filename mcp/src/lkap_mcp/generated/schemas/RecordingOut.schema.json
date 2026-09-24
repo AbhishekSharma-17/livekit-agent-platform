@@ -1,0 +1,70 @@
+{
+  "$id": "lkap-contracts/RecordingOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The recording block of ``SessionDetailOut`` (``url`` is a signed URL).",
+  "properties": {
+    "duration_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Duration S"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "status": {
+      "default": "none",
+      "enum": [
+        "none",
+        "requested",
+        "active",
+        "ready",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    }
+  },
+  "title": "RecordingOut",
+  "type": "object"
+}

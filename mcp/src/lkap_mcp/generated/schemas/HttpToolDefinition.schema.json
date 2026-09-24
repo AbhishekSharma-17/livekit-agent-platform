@@ -1,0 +1,118 @@
+{
+  "$id": "lkap-contracts/HttpToolDefinition.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An HTTP call exposed to the model as a raw-schema function tool.",
+  "properties": {
+    "allowed_hosts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Hosts",
+      "type": "array"
+    },
+    "body_template": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Body Template"
+    },
+    "credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "headers": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Headers",
+      "type": "object"
+    },
+    "kind": {
+      "const": "http",
+      "default": "http",
+      "title": "Kind",
+      "type": "string"
+    },
+    "max_result_chars": {
+      "default": 4000,
+      "title": "Max Result Chars",
+      "type": "integer"
+    },
+    "method": {
+      "default": "POST",
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "name": {
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "parameters": {
+      "additionalProperties": true,
+      "title": "Parameters",
+      "type": "object"
+    },
+    "result_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result Path"
+    },
+    "silent_reply": {
+      "default": false,
+      "title": "Silent Reply",
+      "type": "boolean"
+    },
+    "timeout_s": {
+      "default": 10,
+      "title": "Timeout S",
+      "type": "number"
+    },
+    "url": {
+      "title": "Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "parameters",
+    "url"
+  ],
+  "title": "HttpToolDefinition",
+  "type": "object"
+}

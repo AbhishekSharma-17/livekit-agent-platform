@@ -1,0 +1,65 @@
+{
+  "$id": "lkap-contracts/Price.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One vendor price point.\n\n``model`` is ``None`` for providers that price per unit regardless of model\n(most TTS and avatar vendors).",
+  "properties": {
+    "as_of": {
+      "title": "As Of",
+      "type": "string"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "source_url": {
+      "title": "Source Url",
+      "type": "string"
+    },
+    "unit": {
+      "enum": [
+        "tokens_in",
+        "tokens_out",
+        "audio_s_in",
+        "audio_s_out",
+        "chars",
+        "minutes",
+        "images"
+      ],
+      "title": "Unit",
+      "type": "string"
+    },
+    "usd_per_unit": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Usd Per Unit"
+    }
+  },
+  "required": [
+    "provider_id",
+    "unit",
+    "usd_per_unit",
+    "source_url",
+    "as_of"
+  ],
+  "title": "Price",
+  "type": "object"
+}

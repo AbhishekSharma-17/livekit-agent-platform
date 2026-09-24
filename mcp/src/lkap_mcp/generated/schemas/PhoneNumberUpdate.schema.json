@@ -1,0 +1,46 @@
+{
+  "$id": "lkap-contracts/PhoneNumberUpdate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PUT /v1/telephony/numbers/{id}``: only the fields present in the body change.\n\n``inbound_agent_id: null`` stops inbound routing for the number.",
+  "properties": {
+    "inbound_agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inbound Agent Id"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
+    "trunk_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trunk Id"
+    }
+  },
+  "title": "PhoneNumberUpdate",
+  "type": "object"
+}

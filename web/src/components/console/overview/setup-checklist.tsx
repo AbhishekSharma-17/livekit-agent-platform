@@ -8,7 +8,9 @@ import { Icon } from "@/components/shared/icon";
 import { Section, SectionRow } from "@/components/shared/section";
 import { Button } from "@/components/ui/button";
 import { useAgents, useCredentials, useHealth, useSessions } from "@/components/console/lib/api-hooks";
+import { useWriteAccess } from "@/components/console/lib/roles";
 import { useMe } from "@/components/console/shell/use-me";
+import { useActiveWorkspace, useAgentKeys } from "@/components/console/settings/use-settings-queries";
 import { useConnectionsProbe, useWebhooksProbe } from "./probes";
 
 interface ChecklistRow {
@@ -40,6 +42,13 @@ export function SetupChecklist() {
   const { data: sessions } = useSessions();
   const connections = useConnectionsProbe();
   const webhooks = useWebhooksProbe();
+  // `GET /v1/api-keys` needs `admin` regardless of scope (`auth/deps.py::require`),
+  // so this only queries once the role is known to allow it — otherwise every
+  // viewer/builder would 403 on every overview load just for this one row.
+  const { canWrite: canReadAgentKeys } = useWriteAccess("admin");
+  const { workspace } = useActiveWorkspace();
+  const agentKeys = useAgentKeys(canReadAgentKeys ? workspace?.id : undefined);
+  const hasAgentKey = (agentKeys.data?.total ?? 0) > 0;
 
   const agentItems = agents?.items ?? [];
   const mostRecentAgent = [...agentItems].sort(
@@ -155,6 +164,20 @@ export function SetupChecklist() {
           <Link href={`/console/agents/${mostRecentAgent.id}`}>Open agent</Link>
         </Button>
       ) : undefined,
+    },
+    // v3 (docs/v3/AGENT-ACCESS.md §5 item 4): not one of the amendments' 8
+    // named rows either, added the same way "Publish an agent" was — a 10th
+    // row rather than dropped silently.
+    {
+      id: "ai-agent",
+      title: "Connect an AI agent",
+      help: "Give Claude Code, Codex or Cursor a scoped key to build and test on this workspace through MCP.",
+      done: hasAgentKey,
+      action: (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/console/settings?tab=ai-agents">Connect an agent</Link>
+        </Button>
+      ),
     },
   ];
 

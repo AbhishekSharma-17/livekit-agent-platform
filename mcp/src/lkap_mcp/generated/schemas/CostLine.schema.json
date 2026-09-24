@@ -1,0 +1,99 @@
+{
+  "$id": "lkap-contracts/CostLine.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One priced usage line of a session.\n\n``cost_usd`` is ``None`` with ``note=\"no price\"`` when the price table has\nno entry — an unknown price is never reported as zero.",
+  "properties": {
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Usd"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "quantity": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Quantity"
+    },
+    "unit": {
+      "enum": [
+        "tokens_in",
+        "tokens_out",
+        "audio_s_in",
+        "audio_s_out",
+        "chars",
+        "minutes",
+        "images"
+      ],
+      "title": "Unit",
+      "type": "string"
+    },
+    "unit_price_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit Price Usd"
+    }
+  },
+  "required": [
+    "provider_id",
+    "unit",
+    "quantity"
+  ],
+  "title": "CostLine",
+  "type": "object"
+}

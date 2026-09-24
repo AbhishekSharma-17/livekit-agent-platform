@@ -1,0 +1,103 @@
+{
+  "$defs": {
+    "AnalyticsBucket": {
+      "description": "One day or one agent in ``AnalyticsSummary``.",
+      "properties": {
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "failed": {
+          "default": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "minutes": {
+          "default": 0.0,
+          "title": "Minutes",
+          "type": "number"
+        },
+        "sessions": {
+          "default": 0,
+          "title": "Sessions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "AnalyticsBucket",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AnalyticsSummary.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/analytics/summary``.",
+  "properties": {
+    "by_agent": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AnalyticsBucket"
+      },
+      "title": "By Agent",
+      "type": "array"
+    },
+    "by_day": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AnalyticsBucket"
+      },
+      "title": "By Day",
+      "type": "array"
+    },
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Usd"
+    },
+    "failed": {
+      "default": 0,
+      "title": "Failed",
+      "type": "integer"
+    },
+    "minutes": {
+      "default": 0.0,
+      "title": "Minutes",
+      "type": "number"
+    },
+    "sessions": {
+      "default": 0,
+      "title": "Sessions",
+      "type": "integer"
+    }
+  },
+  "title": "AnalyticsSummary",
+  "type": "object"
+}

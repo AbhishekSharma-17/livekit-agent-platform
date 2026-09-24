@@ -1,0 +1,15 @@
+{
+  "$id": "lkap-contracts/BlockConfig_transcript.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``transcript``: whether tool calls are interleaved with the turns.",
+  "properties": {
+    "show_tools": {
+      "default": false,
+      "title": "Show Tools",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_transcript",
+  "type": "object"
+}

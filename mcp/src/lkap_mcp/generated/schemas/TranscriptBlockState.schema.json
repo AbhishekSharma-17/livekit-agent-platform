@@ -1,0 +1,14 @@
+{
+  "$id": "lkap-contracts/TranscriptBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Transcript rendering options (the turns come from the LiveKit room).",
+  "properties": {
+    "show_tools": {
+      "default": false,
+      "title": "Show Tools",
+      "type": "boolean"
+    }
+  },
+  "title": "TranscriptBlockState",
+  "type": "object"
+}

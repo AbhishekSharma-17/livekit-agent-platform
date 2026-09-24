@@ -1,0 +1,19 @@
+{
+  "$id": "lkap-contracts/VideoBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Which video track the block renders.",
+  "properties": {
+    "muted": {
+      "default": false,
+      "title": "Muted",
+      "type": "boolean"
+    },
+    "source": {
+      "default": "agent_avatar",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "title": "VideoBlockState",
+  "type": "object"
+}

@@ -1,0 +1,63 @@
+{
+  "$id": "lkap-contracts/DispatchMetadata.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Serialised as JSON into ``RoomAgentDispatch.metadata``.\n\nIDs ONLY. The browser can read this, so it must never contain secrets,\ninstructions or resolved provider configuration.\n\nRooms the platform did not create (inbound SIP) have no session row yet, so\nv2 adds ``channel`` and ``connection_id`` and makes ``session_id`` optional:\nthe worker (V2-07) calls ``POST /internal/v1/sessions/start`` when\n``session_id`` is ``None`` **or empty** (the v1-era \"no session yet\"\nspelling is still honoured), and ``GET /internal/v1/sessions/{id}/resolved``\notherwise.",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "channel": {
+      "default": "web",
+      "enum": [
+        "web",
+        "test",
+        "text",
+        "sip_in",
+        "sip_out",
+        "widget",
+        "api"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "connection_id": {
+      "default": "",
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "participant_identity": {
+      "title": "Participant Identity",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "v": {
+      "const": 2,
+      "default": 2,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "agent_id",
+    "config_version",
+    "participant_identity"
+  ],
+  "title": "DispatchMetadata",
+  "type": "object"
+}

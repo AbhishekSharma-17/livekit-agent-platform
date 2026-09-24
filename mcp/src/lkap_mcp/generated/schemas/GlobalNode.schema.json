@@ -1,0 +1,67 @@
+{
+  "$id": "lkap-contracts/GlobalNode.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Instructions, tools and knowledge merged into every agent node.",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "instructions": {
+      "default": "",
+      "title": "Instructions",
+      "type": "string"
+    },
+    "kb_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Kb Ids",
+      "type": "array"
+    },
+    "kind": {
+      "const": "global",
+      "default": "global",
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+    },
+    "position": {
+      "default": [
+        0.0,
+        0.0
+      ],
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Position",
+      "type": "array"
+    },
+    "tools": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "GlobalNode",
+  "type": "object"
+}

@@ -1,0 +1,18 @@
+{
+  "$id": "lkap-contracts/CallDtmfIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/calls/{id}/dtmf``: digits the agent plays into the call.",
+  "properties": {
+    "digits": {
+      "description": "0-9, *, #, A-D; up to 32",
+      "pattern": "^[0-9*#A-D]{1,32}$",
+      "title": "Digits",
+      "type": "string"
+    }
+  },
+  "required": [
+    "digits"
+  ],
+  "title": "CallDtmfIn",
+  "type": "object"
+}

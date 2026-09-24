@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/InternalKbSearchRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/kb/search`` (service token).",
+  "properties": {
+    "k": {
+      "default": 4,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "K",
+      "type": "integer"
+    },
+    "kb_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Kb Ids",
+      "type": "array"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kb_ids",
+    "query"
+  ],
+  "title": "InternalKbSearchRequest",
+  "type": "object"
+}

@@ -32,10 +32,16 @@ import { SCOPES } from "./api-types";
 import { useActiveWorkspace, useApiKeys, useInvalidateSettings } from "./use-settings-queries";
 import { SkeletonRows } from "@/components/shared/loading-state";
 
-function keyStatus(key: ApiKeyOut): { tone: "success" | "danger" | "warning"; label: string } {
+/** Shared with `agent-keys-table.tsx` (v3): both tables show the same key rows. */
+export function keyStatus(key: ApiKeyOut): { tone: "success" | "danger" | "warning"; label: string } {
   if (key.revoked_at) return { tone: "danger", label: "Revoked" };
   if (key.expires_at && new Date(key.expires_at).getTime() < Date.now()) return { tone: "warning", label: "Expired" };
   return { tone: "success", label: "Active" };
+}
+
+/** Revoke through `api.delete`, shared by the plain and agent keys tables. */
+export function RevokeKeyButton({ apiKey, onRevoked }: { apiKey: ApiKeyOut; onRevoked: () => void }) {
+  return <RevokeButton apiKey={apiKey} onRevoked={onRevoked} />;
 }
 
 export function ApiKeysTab() {
@@ -50,7 +56,14 @@ export function ApiKeysTab() {
       header: "Name",
       cell: (key) => (
         <div className="min-w-0">
-          <div className="truncate font-medium text-foreground">{key.name}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-medium text-foreground">{key.name}</span>
+            {key.kind === "agent" ? (
+              <StatusChip tone="info" size="sm">
+                Agent
+              </StatusChip>
+            ) : null}
+          </div>
           <div className="truncate font-mono text-xs text-muted-foreground">{key.prefix}…</div>
         </div>
       ),

@@ -1,0 +1,59 @@
+{
+  "$id": "lkap-contracts/FleetDesired.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One row of ``GET /internal/v1/fleet/desired`` (supervised connections only).",
+  "properties": {
+    "agent_name": {
+      "default": "lkap-agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "deployment_mode": {
+      "const": "supervised",
+      "default": "supervised",
+      "title": "Deployment Mode",
+      "type": "string"
+    },
+    "desired_hash": {
+      "title": "Desired Hash",
+      "type": "string"
+    },
+    "desired_replicas": {
+      "default": 0,
+      "title": "Desired Replicas",
+      "type": "integer"
+    },
+    "image": {
+      "default": "slim",
+      "enum": [
+        "slim",
+        "full"
+      ],
+      "title": "Image",
+      "type": "string"
+    },
+    "packs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Packs",
+      "type": "array"
+    },
+    "restart_generation": {
+      "default": 0,
+      "title": "Restart Generation",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "connection_id",
+    "desired_hash"
+  ],
+  "title": "FleetDesired",
+  "type": "object"
+}

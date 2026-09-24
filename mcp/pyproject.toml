@@ -1,0 +1,64 @@
+[project]
+name = "lkap-mcp"
+version = "0.1.0"
+description = "LKAP Agent Access Layer: the MCP server coding agents use to understand and configure the platform"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "mcp>=1.30,<2",
+  "httpx>=0.28,<1",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "lkap-contracts",
+  # Declared here (V3-01) so the chat package (V3-02) adds no dependency.
+  "livekit==1.1.18",
+]
+
+[project.scripts]
+lkap-mcp = "lkap_mcp.__main__:main"
+
+[dependency-groups]
+dev = [
+  "lkap-api",
+  "lkap-packs",
+  "lkap-testing",
+  "pytest>=8.4",
+  "pytest-asyncio>=1.1",
+  "pytest-timeout>=2.4",
+  "ruff>=0.13",
+  "mypy>=1.18",
+  "respx>=0.21,<1",
+]
+
+[tool.uv.sources]
+lkap-contracts = { path = "../contracts", editable = true }
+lkap-api = { path = "../api", editable = true }
+lkap-packs = { path = "../packs", editable = true }
+lkap-testing = { path = "../testing", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lkap_mcp"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+  "live: requires a live LiveKit Cloud connection",
+  "slow: slow test, skipped by default in fast loops",
+]
+testpaths = ["tests"]
+timeout = 120

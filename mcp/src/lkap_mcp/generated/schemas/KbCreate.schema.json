@@ -1,0 +1,26 @@
+{
+  "$id": "lkap-contracts/KbCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/knowledge-bases``.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "embedder_id": {
+      "default": "fastembed-embedding",
+      "title": "Embedder Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "KbCreate",
+  "type": "object"
+}

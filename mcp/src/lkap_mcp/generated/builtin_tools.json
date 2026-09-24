@@ -1,0 +1,43 @@
+{
+  "block_tool_names": [
+    "update_block",
+    "show_document",
+    "table_append",
+    "request_form"
+  ],
+  "block_tool_types": {
+    "request_form": [
+      "form"
+    ],
+    "show_document": [
+      "document"
+    ],
+    "table_append": [
+      "table"
+    ],
+    "update_block": [
+      "custom",
+      "document",
+      "gallery",
+      "kb_citations",
+      "table",
+      "transcript",
+      "video"
+    ]
+  },
+  "builtin_tool_names": [
+    "end_call",
+    "search_knowledge",
+    "http_request",
+    "describe_current_frame",
+    "pin_frame",
+    "push_note",
+    "set_status",
+    "escalate_to_human",
+    "current_time"
+  ],
+  "vision_tool_names": [
+    "describe_current_frame",
+    "pin_frame"
+  ]
+}

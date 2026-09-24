@@ -1,0 +1,110 @@
+{
+  "$id": "lkap-contracts/QaOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "LLM-judge scoring of a finished session.",
+  "properties": {
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Score"
+    },
+    "scored_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scored At"
+    },
+    "scored_by": {
+      "anyOf": [
+        {
+          "enum": [
+            "worker",
+            "api"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scored By"
+    },
+    "sentiment": {
+      "anyOf": [
+        {
+          "enum": [
+            "positive",
+            "neutral",
+            "negative"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sentiment"
+    },
+    "status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "done",
+        "failed",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Summary"
+    },
+    "tags": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    }
+  },
+  "title": "QaOut",
+  "type": "object"
+}

@@ -1,0 +1,37 @@
+{
+  "$id": "lkap-contracts/WorkspaceMembership.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One workspace the signed-in user belongs to, and their role in it.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "owner",
+        "admin",
+        "builder",
+        "viewer"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "slug",
+    "name",
+    "role"
+  ],
+  "title": "WorkspaceMembership",
+  "type": "object"
+}

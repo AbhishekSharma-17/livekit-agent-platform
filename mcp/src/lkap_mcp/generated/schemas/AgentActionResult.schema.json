@@ -1,0 +1,34 @@
+{
+  "$id": "lkap-contracts/AgentActionResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result the agent returns for an :class:`AgentAction`.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "AgentActionResult",
+  "type": "object"
+}

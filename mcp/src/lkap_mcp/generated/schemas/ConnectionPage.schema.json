@@ -1,0 +1,271 @@
+{
+  "$defs": {
+    "ConnectionCapabilities": {
+      "description": "What a probed LiveKit deployment supports (CONTRACTS-V2 §4.3).\n\nDefaults describe the most restrictive target (a bare self-hosted server), so\nan unprobed connection never advertises a feature it may not have.",
+      "properties": {
+        "cloud_hosting": {
+          "default": false,
+          "title": "Cloud Hosting",
+          "type": "boolean"
+        },
+        "egress_enabled": {
+          "default": false,
+          "title": "Egress Enabled",
+          "type": "boolean"
+        },
+        "inference_available": {
+          "default": false,
+          "title": "Inference Available",
+          "type": "boolean"
+        },
+        "ingress_enabled": {
+          "default": false,
+          "title": "Ingress Enabled",
+          "type": "boolean"
+        },
+        "noise_cancellation_tier": {
+          "default": "none",
+          "enum": [
+            "none",
+            "ai_coustics",
+            "krisp"
+          ],
+          "title": "Noise Cancellation Tier",
+          "type": "string"
+        },
+        "observability_dashboard": {
+          "default": false,
+          "title": "Observability Dashboard",
+          "type": "boolean"
+        },
+        "sip_enabled": {
+          "default": false,
+          "title": "Sip Enabled",
+          "type": "boolean"
+        },
+        "turn_detector_mode": {
+          "default": "local",
+          "enum": [
+            "hosted",
+            "local"
+          ],
+          "title": "Turn Detector Mode",
+          "type": "string"
+        }
+      },
+      "title": "ConnectionCapabilities",
+      "type": "object"
+    },
+    "ConnectionOut": {
+      "description": "A LiveKit deployment the workspace can run agents on (secrets redacted).",
+      "properties": {
+        "agent_name": {
+          "default": "lkap-agent",
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/ConnectionCapabilities",
+          "default": {
+            "cloud_hosting": false,
+            "egress_enabled": false,
+            "inference_available": false,
+            "ingress_enabled": false,
+            "noise_cancellation_tier": "none",
+            "observability_dashboard": false,
+            "sip_enabled": false,
+            "turn_detector_mode": "local"
+          }
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "credentials_version": {
+          "default": 1,
+          "title": "Credentials Version",
+          "type": "integer"
+        },
+        "deployment_mode": {
+          "default": "external",
+          "enum": [
+            "external",
+            "supervised",
+            "cloud_hosted"
+          ],
+          "title": "Deployment Mode",
+          "type": "string"
+        },
+        "deployment_type": {
+          "default": "cloud",
+          "enum": [
+            "cloud",
+            "self_hosted"
+          ],
+          "title": "Deployment Type",
+          "type": "string"
+        },
+        "fingerprint": {
+          "default": "",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_default": {
+          "default": false,
+          "title": "Is Default",
+          "type": "boolean"
+        },
+        "last_checked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Checked At"
+        },
+        "last_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Error"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "replicas": {
+          "default": 1,
+          "title": "Replicas",
+          "type": "integer"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "status": {
+          "default": "unverified",
+          "enum": [
+            "unverified",
+            "ok",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "storage_config_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Config Id"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "use_inference": {
+          "default": true,
+          "title": "Use Inference",
+          "type": "boolean"
+        },
+        "worker_image": {
+          "default": "slim",
+          "enum": [
+            "slim",
+            "full"
+          ],
+          "title": "Worker Image",
+          "type": "string"
+        },
+        "workspace_id": {
+          "default": "",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "url"
+      ],
+      "title": "ConnectionOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ConnectionPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ConnectionOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "ConnectionPage",
+  "type": "object"
+}

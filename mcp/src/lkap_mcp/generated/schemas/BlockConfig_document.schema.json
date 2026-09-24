@@ -1,0 +1,28 @@
+{
+  "$id": "lkap-contracts/BlockConfig_document.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``document``: an optional starting document and page.",
+  "properties": {
+    "page": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Page",
+      "type": "integer"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    }
+  },
+  "title": "BlockConfig_document",
+  "type": "object"
+}

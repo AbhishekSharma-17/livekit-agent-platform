@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "TableColumn": {
+      "description": "One column of a table block.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "date"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "TableColumn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/TableBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Tabular data the agent appends rows to.",
+  "properties": {
+    "columns": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TableColumn"
+      },
+      "title": "Columns",
+      "type": "array"
+    },
+    "rows": {
+      "default": [],
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Rows",
+      "type": "array"
+    },
+    "selected_row": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected Row"
+    }
+  },
+  "title": "TableBlockState",
+  "type": "object"
+}

@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "KbCitation": {
+      "description": "One retrieved chunk cited to the user.",
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "filename",
+        "score",
+        "text"
+      ],
+      "title": "KbCitation",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbCitationsBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Knowledge-base hits backing the agent's last answer.",
+  "properties": {
+    "items": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/KbCitation"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "title": "KbCitationsBlockState",
+  "type": "object"
+}

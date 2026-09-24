@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "SessionEventIn": {
+      "description": "An event posted by the worker.",
+      "properties": {
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "SessionEventIn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/SessionEventsIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/sessions/{id}/events``.",
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/SessionEventIn"
+      },
+      "title": "Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "events"
+  ],
+  "title": "SessionEventsIn",
+  "type": "object"
+}

@@ -1,0 +1,1533 @@
+{
+  "$defs": {
+    "AgentConfig": {
+      "description": "The full, admin-editable configuration of one agent (stored as JSON).\n\n``v`` accepts ``1`` for one release: v1 rows are rewritten to v2 by the\n``v2_008_agentconfig_v2`` migration, and the console still posts ``v: 1``\nuntil WP-3 lands.",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/CapabilitiesConfig",
+          "default": {
+            "camera": false,
+            "chat_input": true,
+            "dtmf": false,
+            "screen_share": false,
+            "vision_inject_per_turn": true
+          }
+        },
+        "flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "instructions": {
+          "title": "Instructions",
+          "type": "string"
+        },
+        "knowledge": {
+          "$ref": "#/$defs/KnowledgeConfig",
+          "default": {
+            "auto_inject": true,
+            "kb_ids": [],
+            "top_k": 4
+          }
+        },
+        "pack_settings": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Pack Settings",
+          "type": "object"
+        },
+        "panel": {
+          "$ref": "#/$defs/PanelLayout",
+          "default": {
+            "blocks": [],
+            "layout": "side",
+            "panel_id": "composite"
+          }
+        },
+        "pipeline": {
+          "$ref": "#/$defs/PipelineConfig"
+        },
+        "qa": {
+          "$ref": "#/$defs/QaConfig",
+          "default": {
+            "enabled": false,
+            "model": null,
+            "rubric_prompt": null
+          }
+        },
+        "recording": {
+          "$ref": "#/$defs/RecordingConfig",
+          "default": {
+            "audio_only": true,
+            "enabled": false,
+            "retention_days": null,
+            "storage_config_id": null
+          }
+        },
+        "telephony": {
+          "$ref": "#/$defs/TelephonyConfig",
+          "default": {
+            "transfer_targets": []
+          }
+        },
+        "timezone": {
+          "default": "UTC",
+          "title": "Timezone",
+          "type": "string"
+        },
+        "tools": {
+          "$ref": "#/$defs/ToolsConfig",
+          "default": {
+            "builtin_disabled": [],
+            "http_request_enabled": false,
+            "max_tool_steps": 3,
+            "tool_ids": []
+          }
+        },
+        "v": {
+          "default": 2,
+          "enum": [
+            1,
+            2
+          ],
+          "title": "V",
+          "type": "integer"
+        },
+        "voice": {
+          "$ref": "#/$defs/VoiceConfig",
+          "default": {
+            "allow_interruptions": true,
+            "first_speaker": "agent",
+            "greeting": "Hello! How can I help you today?",
+            "greeting_mode": "say",
+            "language": "en",
+            "user_away_timeout_s": 15.0
+          }
+        }
+      },
+      "required": [
+        "instructions",
+        "pipeline"
+      ],
+      "title": "AgentConfig",
+      "type": "object"
+    },
+    "AgentLimits": {
+      "description": "Per-agent guard rails enforced by ``connect`` (CONTRACTS-V2 §3.3).",
+      "properties": {
+        "max_concurrent_sessions": {
+          "default": 5,
+          "title": "Max Concurrent Sessions",
+          "type": "integer"
+        },
+        "max_session_duration_s": {
+          "default": 1800,
+          "title": "Max Session Duration S",
+          "type": "integer"
+        },
+        "rate_per_agent_per_min": {
+          "default": 60,
+          "title": "Rate Per Agent Per Min",
+          "type": "integer"
+        },
+        "rate_per_ip_per_min": {
+          "default": 6,
+          "title": "Rate Per Ip Per Min",
+          "type": "integer"
+        }
+      },
+      "title": "AgentLimits",
+      "type": "object"
+    },
+    "AgentNode": {
+      "description": "One conversational step with its own instructions, tools and extractions.",
+      "properties": {
+        "allow_interruptions": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Interruptions"
+        },
+        "extract": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Extract",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "agent",
+          "default": "agent",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "max_turns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Turns"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "providers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderRef"
+          },
+          "default": {},
+          "propertyNames": {
+            "enum": [
+              "llm",
+              "tts"
+            ]
+          },
+          "title": "Providers",
+          "type": "object"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "AgentNode",
+      "type": "object"
+    },
+    "AgentOut": {
+      "description": "Full agent record (admin only — ``config`` may reference credential ids).",
+      "properties": {
+        "allowed_origins": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
+          "type": "array"
+        },
+        "archived_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Archived At"
+        },
+        "config": {
+          "$ref": "#/$defs/AgentConfig"
+        },
+        "config_version": {
+          "title": "Config Version",
+          "type": "integer"
+        },
+        "connection_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connection Id"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "last_session_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Session At"
+        },
+        "limits": {
+          "$ref": "#/$defs/AgentLimits",
+          "default": {
+            "max_concurrent_sessions": 5,
+            "max_session_duration_s": 1800,
+            "rate_per_agent_per_min": 60,
+            "rate_per_ip_per_min": 6
+          }
+        },
+        "mode": {
+          "default": "prompt",
+          "enum": [
+            "prompt",
+            "flow"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "pack_id": {
+          "title": "Pack Id",
+          "type": "string"
+        },
+        "published": {
+          "title": "Published",
+          "type": "boolean"
+        },
+        "session_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Count"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "ui_panel_id": {
+          "title": "Ui Panel Id",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "workspace_id": {
+          "default": "",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "description",
+        "pack_id",
+        "ui_panel_id",
+        "published",
+        "config",
+        "config_version",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "AgentOut",
+      "type": "object"
+    },
+    "AvatarOptions": {
+      "description": "Publisher-side options applied to whichever avatar plugin is selected.",
+      "properties": {
+        "idle_timeout_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Idle Timeout S"
+        },
+        "max_duration_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Duration S"
+        },
+        "participant_name": {
+          "default": "Avatar",
+          "title": "Participant Name",
+          "type": "string"
+        },
+        "video_quality": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "very_high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Video Quality"
+        }
+      },
+      "title": "AvatarOptions",
+      "type": "object"
+    },
+    "BlockSpec": {
+      "description": "One block of a composite panel (CONTRACTS-V2 §4.4).\n\n``id`` keys the block's state in :attr:`UiState.blocks`; ``config`` is\nblock-type specific and rendered by the matching React component.",
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Config",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "type": {
+          "enum": [
+            "status",
+            "notes",
+            "checklist",
+            "activity",
+            "form",
+            "document",
+            "gallery",
+            "table",
+            "transcript",
+            "video",
+            "kb_citations",
+            "custom"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "BlockSpec",
+      "type": "object"
+    },
+    "CapabilitiesConfig": {
+      "description": "Which input affordances the session page offers.",
+      "properties": {
+        "camera": {
+          "default": false,
+          "title": "Camera",
+          "type": "boolean"
+        },
+        "chat_input": {
+          "default": true,
+          "title": "Chat Input",
+          "type": "boolean"
+        },
+        "dtmf": {
+          "default": false,
+          "title": "Dtmf",
+          "type": "boolean"
+        },
+        "screen_share": {
+          "default": false,
+          "title": "Screen Share",
+          "type": "boolean"
+        },
+        "vision_inject_per_turn": {
+          "default": true,
+          "title": "Vision Inject Per Turn",
+          "type": "boolean"
+        }
+      },
+      "title": "CapabilitiesConfig",
+      "type": "object"
+    },
+    "EndNode": {
+      "description": "Terminal node: says farewell, records a disposition and ends the session.",
+      "properties": {
+        "disposition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disposition"
+        },
+        "farewell": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Farewell"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "end",
+          "default": "end",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "webhook_event": {
+          "default": true,
+          "title": "Webhook Event",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "EndNode",
+      "type": "object"
+    },
+    "FlowEdge": {
+      "description": "A conditional transition; ``condition`` becomes the handoff tool description.",
+      "properties": {
+        "condition": {
+          "default": "",
+          "title": "Condition",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "priority": {
+          "default": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "transition_speech": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transition Speech"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target"
+      ],
+      "title": "FlowEdge",
+      "type": "object"
+    },
+    "FlowSpec": {
+      "description": "The whole graph, validated structurally on construction.",
+      "properties": {
+        "edges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FlowEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "nodes": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/AgentNode",
+                "end": "#/$defs/EndNode",
+                "global": "#/$defs/GlobalNode",
+                "qa": "#/$defs/QaNode",
+                "start": "#/$defs/StartNode",
+                "transfer": "#/$defs/TransferNode"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StartNode"
+              },
+              {
+                "$ref": "#/$defs/AgentNode"
+              },
+              {
+                "$ref": "#/$defs/EndNode"
+              },
+              {
+                "$ref": "#/$defs/GlobalNode"
+              },
+              {
+                "$ref": "#/$defs/TransferNode"
+              },
+              {
+                "$ref": "#/$defs/QaNode"
+              }
+            ]
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "v": {
+          "const": 1,
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        },
+        "variables": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VariableSpec"
+          },
+          "title": "Variables",
+          "type": "array"
+        }
+      },
+      "title": "FlowSpec",
+      "type": "object"
+    },
+    "GlobalNode": {
+      "description": "Instructions, tools and knowledge merged into every agent node.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "global",
+          "default": "global",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "GlobalNode",
+      "type": "object"
+    },
+    "KnowledgeConfig": {
+      "description": "Knowledge bases attached to the agent and how they are injected.",
+      "properties": {
+        "auto_inject": {
+          "default": true,
+          "title": "Auto Inject",
+          "type": "boolean"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "top_k": {
+          "default": 4,
+          "title": "Top K",
+          "type": "integer"
+        }
+      },
+      "title": "KnowledgeConfig",
+      "type": "object"
+    },
+    "PanelLayout": {
+      "description": "Which panel renders the session, and (for ``composite``) its blocks.",
+      "properties": {
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BlockSpec"
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "layout": {
+          "default": "side",
+          "enum": [
+            "side",
+            "wide"
+          ],
+          "title": "Layout",
+          "type": "string"
+        },
+        "panel_id": {
+          "default": "composite",
+          "title": "Panel Id",
+          "type": "string"
+        }
+      },
+      "title": "PanelLayout",
+      "type": "object"
+    },
+    "PipelineConfig": {
+      "description": "Which providers fill which slot, and how turns are handled.\n\nSlot requirements per mode are reported by :func:`pipeline_issues` rather\nthan raised here: the api returns them as a ``ValidationResult`` so a\nhalf-finished pipeline can still be saved as a draft.",
+      "properties": {
+        "avatar": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "avatar_options": {
+          "$ref": "#/$defs/AvatarOptions",
+          "default": {
+            "idle_timeout_s": null,
+            "max_duration_s": null,
+            "participant_name": "Avatar",
+            "video_quality": null
+          }
+        },
+        "image_gen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mode": {
+          "default": "cascaded",
+          "enum": [
+            "realtime",
+            "cascaded",
+            "half_cascade"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "noise_cancellation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "realtime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "turn_detection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "turn_handling": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Turn Handling",
+          "type": "object"
+        },
+        "vad": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "workflow_llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PipelineConfig",
+      "type": "object"
+    },
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    },
+    "QaConfig": {
+      "description": "Post-call scoring of the session by an LLM judge.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rubric_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rubric Prompt"
+        }
+      },
+      "title": "QaConfig",
+      "type": "object"
+    },
+    "QaNode": {
+      "description": "Post-call scoring step; never part of the conversational graph.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "qa",
+          "default": "qa",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "rubric_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rubric Prompt"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "QaNode",
+      "type": "object"
+    },
+    "RecordingConfig": {
+      "description": "Whether and where the session is recorded through Egress.",
+      "properties": {
+        "audio_only": {
+          "default": true,
+          "title": "Audio Only",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "retention_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retention Days"
+        },
+        "storage_config_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Config Id"
+        }
+      },
+      "title": "RecordingConfig",
+      "type": "object"
+    },
+    "StartNode": {
+      "description": "Entry point: greets the caller and hands off along its first matching edge.",
+      "properties": {
+        "greeting": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Greeting"
+        },
+        "greeting_mode": {
+          "default": "say",
+          "enum": [
+            "say",
+            "generate"
+          ],
+          "title": "Greeting Mode",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "start",
+          "default": "start",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "StartNode",
+      "type": "object"
+    },
+    "TelephonyConfig": {
+      "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
+      "properties": {
+        "transfer_targets": {
+          "items": {
+            "$ref": "#/$defs/TransferTarget"
+          },
+          "maxItems": 50,
+          "title": "Transfer Targets",
+          "type": "array"
+        }
+      },
+      "title": "TelephonyConfig",
+      "type": "object"
+    },
+    "ToolsConfig": {
+      "description": "Built-in tool gating plus references to admin-authored tool rows.",
+      "properties": {
+        "builtin_disabled": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Builtin Disabled",
+          "type": "array"
+        },
+        "http_request_enabled": {
+          "default": false,
+          "title": "Http Request Enabled",
+          "type": "boolean"
+        },
+        "max_tool_steps": {
+          "default": 3,
+          "title": "Max Tool Steps",
+          "type": "integer"
+        },
+        "tool_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tool Ids",
+          "type": "array"
+        }
+      },
+      "title": "ToolsConfig",
+      "type": "object"
+    },
+    "TransferNode": {
+      "description": "Hands the call to a human or another number.",
+      "properties": {
+        "announce": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Announce"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "transfer",
+          "default": "transfer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "mode": {
+          "default": "cold",
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "to"
+      ],
+      "title": "TransferNode",
+      "type": "object"
+    },
+    "TransferTarget": {
+      "description": "One destination the agent may transfer a caller to.",
+      "properties": {
+        "label": {
+          "description": "What the model and the caller call it",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "to": {
+          "description": "E.164 number or tel:/sip:/sips: URI",
+          "maxLength": 256,
+          "pattern": "^(\\+[1-9]\\d{6,14}|tel:\\+?[0-9]{3,20}|sips?:[^\\s@]+@[^\\s]+)$",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "to"
+      ],
+      "title": "TransferTarget",
+      "type": "object"
+    },
+    "VariableSpec": {
+      "description": "One variable a flow extracts from the conversation.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "enum",
+            "date",
+            "phone",
+            "email"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "VariableSpec",
+      "type": "object"
+    },
+    "VoiceConfig": {
+      "description": "Greeting and conversational behaviour.",
+      "properties": {
+        "allow_interruptions": {
+          "default": true,
+          "title": "Allow Interruptions",
+          "type": "boolean"
+        },
+        "first_speaker": {
+          "default": "agent",
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "First Speaker",
+          "type": "string"
+        },
+        "greeting": {
+          "default": "Hello! How can I help you today?",
+          "title": "Greeting",
+          "type": "string"
+        },
+        "greeting_mode": {
+          "default": "say",
+          "enum": [
+            "say",
+            "generate"
+          ],
+          "title": "Greeting Mode",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "title": "Language",
+          "type": "string"
+        },
+        "user_away_timeout_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 15.0,
+          "title": "User Away Timeout S"
+        }
+      },
+      "title": "VoiceConfig",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AgentPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/AgentOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "AgentPage",
+  "type": "object"
+}

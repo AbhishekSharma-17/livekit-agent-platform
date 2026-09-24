@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "DocumentHighlight": {
+      "description": "A rectangle called out on a document page; ``bbox`` is ``[x0, y0, x1, y1]``.",
+      "properties": {
+        "bbox": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Bbox",
+          "type": "array"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page",
+        "bbox"
+      ],
+      "title": "DocumentHighlight",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/DocumentBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A document shown page by page, optionally with highlights.",
+  "properties": {
+    "asset_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Asset Id"
+    },
+    "highlights": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DocumentHighlight"
+      },
+      "title": "Highlights",
+      "type": "array"
+    },
+    "page": {
+      "default": 1,
+      "title": "Page",
+      "type": "integer"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    }
+  },
+  "title": "DocumentBlockState",
+  "type": "object"
+}

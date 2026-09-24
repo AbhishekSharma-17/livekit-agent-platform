@@ -290,6 +290,12 @@ export function CredentialDialog({
                 </div>
               ) : null}
 
+              {spec?.credential_provider ? (
+                <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+                  Stored as your {spec.vendor} key — shared by every {spec.vendor} provider.
+                </p>
+              ) : null}
+
               <Field label="Name" htmlFor="credential-dialog-label" required error={errors.label} hint="Shown in pickers next to the fingerprint.">
                 <Input
                   id="credential-dialog-label"

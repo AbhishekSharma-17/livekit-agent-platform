@@ -157,6 +157,22 @@ export function isSelectableForCredentials(spec: ProviderSpec): boolean {
   return (spec.availability ?? "available") === "available" && enabledFor(spec);
 }
 
+/**
+ * The provider id whose credential row `spec`'s key is stored under
+ * (R-V4-7 / `OPENROUTER.md` D-V4-10 — mirrors the contracts-side
+ * `lkap_contracts.providers.credential_home`): `spec.credential_provider`
+ * when set (an alias, e.g. `openrouter-stt` → `openrouter-llm`), else the
+ * id itself. Accepts a bare id plus the registry for callers that only have
+ * the id (a template's `RequiredKey.provider_id`); an id not found in the
+ * registry is returned unchanged (its own home, as far as this client
+ * knows).
+ */
+export function credentialHome(specOrId: Pick<ProviderSpec, "id" | "credential_provider"> | string, registry: ProviderSpec[] = []): string {
+  const spec = typeof specOrId === "string" ? registry.find((p) => p.id === specOrId) : specOrId;
+  if (!spec) return specOrId as string;
+  return spec.credential_provider ?? spec.id;
+}
+
 export function isVerified(spec: ProviderSpec): boolean {
   return spec.verification === "verified";
 }

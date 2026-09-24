@@ -5,6 +5,8 @@ import { CheckIcon, ZapIcon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
 import { RadioGroupItem } from "@/components/ui/radio-group";
+import { useProviders } from "@/components/console/lib/api-hooks";
+import { credentialHome } from "@/components/console/registry/provider-meta";
 import type { TemplateOut } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +84,26 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
   const uid = React.useId();
   const category = TEMPLATE_CATEGORY_META[template.category] ?? TEMPLATE_CATEGORY_META.example;
   const chips = template.chips ?? [];
-  const badges = templateBadges(template, keyProviderIds, providers);
+  // `keyProviderIds` comes from the raw credential list, which the api
+  // stores under a provider's credential home (R-V4-7: an OpenRouter key
+  // added from any of its five slots lands under `openrouter-llm`). A
+  // starter that requires an aliased provider id (e.g. `openrouter-stt`)
+  // would otherwise never read "Keys present" even though the one shared
+  // key covers it, so every alias whose home is already held is folded in
+  // here — `templateBadges` itself stays a pure function of ids and never
+  // has to know about credential homes. `useProviders()` reuses the
+  // registry `CreateAgentDialog` already fetched (same query key), so this
+  // costs nothing extra over the network.
+  const registry = useProviders().data?.providers;
+  const effectiveKeyProviderIds = React.useMemo(() => {
+    if (!registry || registry.length === 0) return keyProviderIds;
+    const expanded = new Set(keyProviderIds);
+    for (const spec of registry) {
+      if (keyProviderIds.has(credentialHome(spec))) expanded.add(spec.id);
+    }
+    return expanded;
+  }, [keyProviderIds, registry]);
+  const badges = templateBadges(template, effectiveKeyProviderIds, providers);
   const inference = runsOnInference(template);
   const radioId = `template-${template.id.replace(/[^a-z0-9_-]/gi, "-")}`;
 

@@ -109,7 +109,17 @@ export function CredentialPicker({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         spec={spec}
-        onSaved={(credential) => onChange(credential.id)}
+        onSaved={(credential) => {
+          onChange(credential.id);
+          // A credential saved under an aliased provider (R-V4-7, e.g. a
+          // key added from the `openrouter-stt` slot is stored under
+          // `openrouter-llm`) lands in this list's query for `spec.id`
+          // (the alias), which the dialog's own mutation cache invalidation
+          // doesn't reach (it invalidates the home's key and "all", not
+          // every alias). Refetch so the new key shows up selected instead
+          // of vanishing until something else happens to refetch it.
+          void refetch();
+        }}
       />
     </div>
   );

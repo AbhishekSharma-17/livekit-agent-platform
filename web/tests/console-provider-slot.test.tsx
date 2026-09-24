@@ -280,6 +280,26 @@ describe("ProviderSlotEditor", () => {
     );
     expect(document.querySelector("#t-tts-field-voice")?.getAttribute("role")).toBe("combobox");
   });
+
+  it("shows a provider's notes when selected (V4-04: the OpenRouter STT latency caveat)", () => {
+    const openrouterStt = REGISTRY.find((p) => p.id === "openrouter-stt")!;
+    expect(openrouterStt.notes).toBeTruthy();
+    withClient(
+      <Harness
+        kind="stt"
+        initial={{ provider_id: openrouterStt.id, credential_id: null, model: null, fields: {} }}
+      />,
+    );
+    const notes = document.querySelector('[data-slot="provider-notes"]');
+    expect(notes?.textContent).toBe(openrouterStt.notes);
+  });
+
+  it("shows nothing when the selected provider has no notes", () => {
+    const deepgram = REGISTRY.find((p) => p.id === "deepgram-stt")!;
+    expect(deepgram.notes ?? null).toBeNull();
+    withClient(<Harness kind="stt" initial={{ provider_id: deepgram.id, credential_id: null, model: null, fields: {} }} />);
+    expect(document.querySelector('[data-slot="provider-notes"]')).toBeNull();
+  });
 });
 
 describe("ModelCombobox", () => {

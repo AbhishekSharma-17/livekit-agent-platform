@@ -207,6 +207,12 @@ export function ProviderSlotEditor({
 
       {current && value ? (
         <>
+          {current.notes ? (
+            <p data-slot="provider-notes" className="text-[0.8125rem] text-pretty break-words text-muted-foreground">
+              {current.notes}
+            </p>
+          ) : null}
+
           {showModel ? (
             <Field label="Model" htmlFor={`${prefix}-model`} hint={current.default_model ? undefined : "Type any id the provider accepts."}>
               <ModelCombobox

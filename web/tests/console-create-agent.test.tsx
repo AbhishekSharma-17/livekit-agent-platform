@@ -14,7 +14,9 @@ import {
   gatedDifferences,
   landingSection,
 } from "@/components/console/agents/create/template-meta";
+import { TemplateTile } from "@/components/console/agents/create/template-tile";
 import { derivedFromPack } from "@/components/console/agents/create/use-templates";
+import { RadioGroup as RadioGroupRoot } from "@/components/ui/radio-group";
 import type { AgentConfig, AgentOut, CredentialPage, PacksResponse, ProvidersResponse } from "@/contracts/lkap-contracts";
 
 import { TEMPLATES, templateById } from "./fixtures/templates";
@@ -563,5 +565,73 @@ describe("V4-02 file rules", () => {
       .filter((file) => !file.endsWith(path.join("app", "console", "agents", "new", "page.tsx")))
       .filter((file) => /(href[=:]|push\(|replace\()\s*[{"'`]*\/console\/agents\/new/.test(readFileSync(file, "utf8")));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("TemplateTile — 'Keys present' through the credential home (V4-04, R-V4-7)", () => {
+  // `keyProviderIds` is built from the raw credential list (`create-agent-dialog.tsx`),
+  // whose rows the api stores under a provider's credential home — an
+  // OpenRouter key added from any of its five slots is always stored as
+  // `openrouter-llm` (V4-03, ask #13). A starter that requires an *aliased*
+  // id (here `openrouter-stt`) must still read "Keys present" once that one
+  // key exists; `TemplateTile` is the file this card asks to carry that
+  // mapping (`template-meta.ts::templateBadges` itself stays a pure
+  // function of the ids it's given).
+  const openrouterLlm = { id: "openrouter-llm", kind: "llm", label: "OpenRouter", vendor: "OpenRouter", package: "", python_class: "" };
+  const openrouterStt = {
+    id: "openrouter-stt",
+    kind: "stt",
+    label: "OpenRouter (STT)",
+    vendor: "OpenRouter",
+    package: "",
+    python_class: "",
+    credential_provider: "openrouter-llm",
+  };
+
+  function templateRequiring(...providerIds: string[]): (typeof TEMPLATES)["items"][number] {
+    const base = templateById("blank");
+    return {
+      ...base,
+      template: {
+        ...base.template,
+        id: "openrouter_test_template",
+        name: "OpenRouter test starter",
+        requires: { ...base.template.requires, provider_keys: providerIds.map((provider_id) => ({ provider_id })) },
+      },
+    };
+  }
+
+  function renderTile(item: ReturnType<typeof templateRequiring>, keyProviderIds: ReadonlySet<string>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.startsWith("/api/console/providers")) {
+          return { ok: true, status: 200, json: async () => ({ providers: [openrouterLlm, openrouterStt] }) } as Response;
+        }
+        throw new Error(`Unhandled fetch: ${url}`);
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <RadioGroupRoot value={item.template.id} onValueChange={() => {}}>
+          <TemplateTile item={item} selected providers={new Map()} keyProviderIds={keyProviderIds} />
+        </RadioGroupRoot>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("reads 'Keys present' when the one home credential covers an aliased required key", async () => {
+    const item = templateRequiring("openrouter-stt", "openrouter-llm");
+    renderTile(item, new Set(["openrouter-llm"]));
+    await waitFor(() => expect(screen.getByText("Keys present")).toBeTruthy());
+    expect(screen.queryByText("Needs keys")).toBeNull();
+  });
+
+  it("still reads 'Needs keys' when the home credential is missing", async () => {
+    const item = templateRequiring("openrouter-stt");
+    renderTile(item, new Set());
+    await waitFor(() => expect(screen.getByText("Needs keys")).toBeTruthy());
   });
 });

@@ -1,0 +1,52 @@
+{
+  "$id": "lkap-contracts/ProbeResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One call of a \"Test model\" run. ``message`` is scrubbed vendor text: data, never markup.",
+  "properties": {
+    "latency_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms"
+    },
+    "message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "ok": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ok"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "ProbeResult",
+  "type": "object"
+}

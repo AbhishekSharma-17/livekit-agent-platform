@@ -96,6 +96,20 @@ _FORBIDDEN_CHARS = frozenset("?#&=<>\"'`")
 SECRET_LOOKING_REASON = "looks like an API key, not a model id"
 
 
+#: The warning an id-like field gets for a bare token (R-V4-31). It never contains the value.
+BARE_TOKEN_ID_REASON = "looks like an API key; if it is the vendor's id, ignore this"
+
+
+def _has_secret_prefix(value: str) -> bool:
+    text = value.strip()
+    return any(text.startswith(prefix) for prefix in SECRET_PREFIXES)
+
+
+def _is_bare_token(value: str) -> bool:
+    text = value.strip()
+    return len(text) >= BARE_TOKEN_MIN_LEN and _BARE_TOKEN_RE.fullmatch(text) is not None
+
+
 def looks_like_secret(value: str) -> bool:
     """Whether ``value`` looks like an API key rather than an id (R-V4-21).
 
@@ -103,10 +117,26 @@ def looks_like_secret(value: str) -> bool:
     token: at least :data:`BARE_TOKEN_MIN_LEN` characters of one class (hex or
     base64 alphanumerics) with no ``/ . : -`` separator.
     """
-    text = value.strip()
-    if any(text.startswith(prefix) for prefix in SECRET_PREFIXES):
-        return True
-    return len(text) >= BARE_TOKEN_MIN_LEN and _BARE_TOKEN_RE.fullmatch(text) is not None
+    return _has_secret_prefix(value) or _is_bare_token(value)
+
+
+def _syntax_reason(value: str) -> str | None:
+    """Why ``value`` breaks the id syntax rule, or ``None`` (no secret check; value-free)."""
+    if not value:
+        return "is empty"
+    if len(value) > MODEL_ID_MAX_LEN:
+        return f"is longer than {MODEL_ID_MAX_LEN} characters"
+    if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        return "contains whitespace or a control character"
+    if any(ord(ch) > 0x7E for ch in value):
+        return "contains a non-ASCII character"
+    if "://" in value or value[:4].lower() == "http":
+        return "looks like a URL, not a model id"
+    if any(ch in _FORBIDDEN_CHARS for ch in value):
+        return "contains a character model ids never use (one of ? # & = < > quotes or backtick)"
+    if _MODEL_ID_RE.fullmatch(value) is None:  # pragma: no cover - the checks above are exhaustive
+        return "is not a valid model id"
+    return None
 
 
 def validate_model_id(value: str) -> str | None:
@@ -123,20 +153,38 @@ def validate_model_id(value: str) -> str | None:
     """
     if looks_like_secret(value):
         return SECRET_LOOKING_REASON
-    if not value:
-        return "is empty"
-    if len(value) > MODEL_ID_MAX_LEN:
-        return f"is longer than {MODEL_ID_MAX_LEN} characters"
-    if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
-        return "contains whitespace or a control character"
-    if any(ord(ch) > 0x7E for ch in value):
-        return "contains a non-ASCII character"
-    if "://" in value or value[:4].lower() == "http":
-        return "looks like a URL, not a model id"
-    if any(ch in _FORBIDDEN_CHARS for ch in value):
-        return "contains a character model ids never use (one of ? # & = < > quotes or backtick)"
-    if _MODEL_ID_RE.fullmatch(value) is None:  # pragma: no cover - the checks above are exhaustive
-        return "is not a valid model id"
+    return _syntax_reason(value)
+
+
+class IdIssue(BaseModel):
+    """What :func:`validate_id_value` found wrong with an id-like value (R-V4-31). Value-free."""
+
+    severity: Literal["error", "warning"]
+    reason: str
+
+
+def validate_id_value(value: str) -> IdIssue | None:
+    """The id rule for an id-like field (``ID_LIKE_FIELD_NAMES``, ``type="catalog"``), R-V4-31.
+
+    In order: a :data:`SECRET_PREFIXES` prefix is an ``error``; a syntax
+    failure is an ``error`` (checked before the bare-token rule, so a
+    ``=``-padded key stays an error); a bare token is only a ``warning``,
+    because a vendor's real voice or avatar id may be 32 hex characters.
+    A model id keeps :func:`validate_model_id`, where a bare token is an error.
+
+    Args:
+        value: The field value an admin typed.
+
+    Returns:
+        The issue with a value-free reason, or ``None``.
+    """
+    if _has_secret_prefix(value):
+        return IdIssue(severity="error", reason=SECRET_LOOKING_REASON)
+    reason = _syntax_reason(value)
+    if reason is not None:
+        return IdIssue(severity="error", reason=reason)
+    if _is_bare_token(value):
+        return IdIssue(severity="warning", reason=BARE_TOKEN_ID_REASON)
     return None
 
 
@@ -523,6 +571,7 @@ def _full(
     capabilities: "ProviderCapabilities | None" = None,
     catalog: CatalogSpec | None = None,
     test: str | None = None,
+    probe: str | None = None,
     price_ref: str | None = None,
     notes: str | None = None,
     docs_url: str | None = None,
@@ -563,6 +612,7 @@ def _full(
         capabilities=capabilities or ProviderCapabilities(),
         catalog=catalog,
         test=test,
+        probe=probe,
         price_ref=price_ref,
         notes=notes,
         docs_url=docs_url,
@@ -675,6 +725,7 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="google/gemma-4-31b-it",
         capabilities=ProviderCapabilities(cloud_only=True),
         docs_url="https://docs.livekit.io/agents/models/llm/",
+        probe="openai_chat",
     ),
     ProviderSpec(
         id="livekit-inference-tts",
@@ -776,6 +827,7 @@ _AVAILABLE: list[ProviderSpec] = [
         ),
         docs_url="https://docs.livekit.io/agents/models/realtime/gemini/",
         get_key_url="https://aistudio.google.com/apikey",
+        probe="gemini_live_ws",
     ),
     ProviderSpec(
         id="openai-realtime",
@@ -809,6 +861,7 @@ _AVAILABLE: list[ProviderSpec] = [
         ),
         docs_url="https://docs.livekit.io/agents/models/realtime/openai/",
         get_key_url="https://platform.openai.com/api-keys",
+        probe="openai_realtime_ws",
     ),
     # ---------------------------------------------------------------- cascaded plugins
     ProviderSpec(
@@ -831,6 +884,7 @@ _AVAILABLE: list[ProviderSpec] = [
         price_ref="deepgram-stt",
         docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",
         get_key_url="https://console.deepgram.com/",
+        probe="deepgram_listen",
     ),
     ProviderSpec(
         id="openai-llm",
@@ -860,6 +914,7 @@ _AVAILABLE: list[ProviderSpec] = [
         price_ref="openai-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
         get_key_url="https://platform.openai.com/api-keys",
+        probe="openai_chat",
     ),
     ProviderSpec(
         id="google-llm",
@@ -880,6 +935,7 @@ _AVAILABLE: list[ProviderSpec] = [
         price_ref="google-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/gemini/",
         get_key_url="https://aistudio.google.com/apikey",
+        probe="gemini_generate",
     ),
     ProviderSpec(
         id="cartesia-tts",
@@ -899,6 +955,7 @@ _AVAILABLE: list[ProviderSpec] = [
         test="cartesia_voices",
         docs_url="https://docs.livekit.io/agents/models/tts/cartesia/",
         get_key_url="https://play.cartesia.ai/keys",
+        probe="cartesia_tts",
     ),
     ProviderSpec(
         id="elevenlabs-tts",
@@ -929,6 +986,7 @@ _AVAILABLE: list[ProviderSpec] = [
         test="elevenlabs_voices",
         docs_url="https://docs.livekit.io/agents/models/tts/elevenlabs/",
         get_key_url="https://elevenlabs.io/app/settings/api-keys",
+        probe="elevenlabs_tts",
     ),
     ProviderSpec(
         id="openai-tts",
@@ -946,6 +1004,7 @@ _AVAILABLE: list[ProviderSpec] = [
         price_ref="openai-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/openai/",
         get_key_url="https://platform.openai.com/api-keys",
+        probe="openai_speech",
     ),
     # ---------------------------------------------------------------- avatars
     ProviderSpec(
@@ -970,6 +1029,7 @@ _AVAILABLE: list[ProviderSpec] = [
         test="bey_avatars",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/bey/",
         get_key_url="https://bey.chat/",
+        probe="bey_avatar_get",
     ),
     ProviderSpec(
         id="tavus-avatar",
@@ -988,6 +1048,7 @@ _AVAILABLE: list[ProviderSpec] = [
         test="tavus_faces_pals",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/tavus/",
         get_key_url="https://platform.tavus.io/api-keys",
+        probe="tavus_replica_get",
     ),
     # Added to V2-05's full image; moved to the slim image on 2026-09-25 when the
     # user picked Beyond Presence and Simli as the platform's avatars.
@@ -1027,6 +1088,7 @@ _AVAILABLE: list[ProviderSpec] = [
         "nested SimliConfig dataclass.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/simli/",
         get_key_url="https://www.simli.com/",
+        probe="simli_face_member",
     ),
     # ---------------------------------------------------------------- image generation
     ProviderSpec(
@@ -1087,6 +1149,7 @@ _AVAILABLE: list[ProviderSpec] = [
         test="openai_models",
         capabilities=ProviderCapabilities(tool_calling=False),
         get_key_url="https://platform.openai.com/api-keys",
+        probe="openai_embeddings",
     ),
     # ---------------------------------------------------------------- tool secrets
     ProviderSpec(
@@ -1228,6 +1291,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         "to support strict tools.",
         docs_url="https://docs.livekit.io/agents/models/llm/openrouter/",
         get_key_url=_OPENROUTER_KEY_URL,
+        probe="openai_chat",
     ),
     ProviderSpec(
         id="openrouter-stt",
@@ -1257,6 +1321,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         "STT. For low latency prefer LiveKit Inference STT or Deepgram.",
         docs_url="https://docs.livekit.io/agents/models/stt/openai/",
         get_key_url=_OPENROUTER_KEY_URL,
+        probe="openai_transcriptions",
     ),
     ProviderSpec(
         id="openrouter-tts",
@@ -1296,6 +1361,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         "OpenAI TTS: one request per sentence.",
         docs_url="https://docs.livekit.io/agents/models/tts/openai/",
         get_key_url=_OPENROUTER_KEY_URL,
+        probe="openai_speech",
     ),
     ProviderSpec(
         id="openrouter-embedding",
@@ -1316,6 +1382,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         "the 1536-dimension model is offered; another model would mean re-embedding every knowledge "
         "base.",
         get_key_url=_OPENROUTER_KEY_URL,
+        probe="openai_embeddings",
     ),
     ProviderSpec(
         id="openrouter-image-gen",
@@ -1414,6 +1481,7 @@ _FULL: list[ProviderSpec] = [
         capabilities=ProviderCapabilities(video_input=False, tool_calling=True, voices=XAI_VOICES),
         notes="Subclasses openai.realtime.RealtimeModel; audio-native only, no modalities/text-only mode.",
         docs_url="https://docs.livekit.io/agents/models/realtime/",
+        probe="xai_realtime_ws",
     ),
     # ---------------------------------------------------------------- STT
     _full(
@@ -1465,6 +1533,7 @@ _FULL: list[ProviderSpec] = [
         catalog=_openai_catalog(_OPENAI_STT_FILTER),
         test="openai_models",
         docs_url="https://docs.livekit.io/agents/models/stt/openai/",
+        probe="openai_transcriptions",
     ),
     _full(
         "speechmatics-stt",
@@ -1487,6 +1556,7 @@ _FULL: list[ProviderSpec] = [
         secret_fields=[_api_key("ElevenLabs API key", env="ELEVEN_API_KEY")],
         fields=[FieldSpec(name="language_code", label="Language code", type="string")],
         docs_url="https://docs.livekit.io/agents/models/stt/elevenlabs/",
+        probe="elevenlabs_stt",
     ),
     _full(
         "cartesia-stt",
@@ -1498,6 +1568,7 @@ _FULL: list[ProviderSpec] = [
         secret_fields=[_api_key("Cartesia API key", env="CARTESIA_API_KEY")],
         fields=[FieldSpec(name="language", label="Language", type="string", default="en")],
         docs_url="https://docs.livekit.io/agents/models/stt/cartesia/",
+        probe="cartesia_stt",
     ),
     _full(
         "groq-stt",
@@ -1513,6 +1584,7 @@ _FULL: list[ProviderSpec] = [
         ),
         test="groq_models",
         docs_url="https://docs.livekit.io/agents/models/stt/groq/",
+        probe="openai_transcriptions",
     ),
     _full(
         "azure-stt",
@@ -1547,6 +1619,7 @@ _FULL: list[ProviderSpec] = [
         catalog=CatalogSpec(adapter="anthropic_models", kinds=["models"], page=_ANTHROPIC_PAGE),
         test="anthropic_models",
         docs_url="https://docs.livekit.io/agents/models/llm/anthropic/",
+        probe="anthropic_messages",
     ),
     _full(
         "groq-llm",
@@ -1566,6 +1639,7 @@ _FULL: list[ProviderSpec] = [
         ),
         test="groq_models",
         docs_url="https://docs.livekit.io/agents/models/llm/groq/",
+        probe="openai_chat",
     ),
     _full(
         "cerebras-llm",
@@ -1581,6 +1655,7 @@ _FULL: list[ProviderSpec] = [
         test="cerebras_models",
         notes="v1's stub pointed at a nonexistent openai.LLM.with_cerebras; corrected to the real package.",
         docs_url="https://docs.livekit.io/agents/models/llm/",
+        probe="openai_chat",
     ),
     _full(
         "openai-compatible-llm",
@@ -1594,6 +1669,7 @@ _FULL: list[ProviderSpec] = [
         ],
         fields=[FieldSpec(name="base_url", label="Base URL", type="string", required=True)],
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
+        probe="openai_chat",
     ),
     _full(
         "aws-bedrock-llm",
@@ -1657,6 +1733,7 @@ _FULL: list[ProviderSpec] = [
         catalog=CatalogSpec(adapter="deepgram_tts_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
         price_ref="deepgram-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/deepgram/",
+        probe="deepgram_speak",
     ),
     _full(
         "rime-tts",
@@ -1757,6 +1834,7 @@ _FULL: list[ProviderSpec] = [
         capabilities=ProviderCapabilities(tool_calling=False),
         docs_url="https://docs.livekit.io/agents/integrations/avatar/anam/",
         get_key_url="https://anam.ai/",
+        probe="anam_avatar_get",
     ),
     _full(
         "bithuman-avatar",
@@ -2252,6 +2330,7 @@ _NEW: list[ProviderSpec] = [
         ),
         test="mistral_models",
         docs_url="https://docs.livekit.io/agents/models/llm/",
+        probe="openai_chat",
     ),
     _full(
         "baseten-llm",
@@ -2283,6 +2362,7 @@ _NEW: list[ProviderSpec] = [
         catalog=CatalogSpec(adapter="xai_models", kinds=["models"]),
         test="xai_models",
         docs_url="https://docs.livekit.io/agents/models/llm/",
+        probe="openai_chat",
     ),
     _full(
         "openai-responses-llm",
@@ -2300,6 +2380,7 @@ _NEW: list[ProviderSpec] = [
         notes="Distinct class from openai.LLM (chat completions); uses the Responses API over "
         "a websocket by default.",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
+        probe="openai_chat",
     ),
     # ---------------------------------------------------------------- STT (new)
     _full(

@@ -86,6 +86,8 @@ skill deterministically every time (R-V3-41).
 8. **Publish.** `agent_publish(id_or_slug)` makes the session URL live. Don't
    publish a config `agent_validate` still flags.
 
+A model the registry does not list? `lkap_describe("recipe", "test-a-custom-model")`: find it with `provider_catalog(query=...)`, test it with `provider_test_model` (one capped vendor call), declare what it can do with `provider_model_declare`.
+
 Something already broken? `lkap_describe("recipe", "diagnose-a-session")`
 walks `session_get`/`session_events` against a session id.
 

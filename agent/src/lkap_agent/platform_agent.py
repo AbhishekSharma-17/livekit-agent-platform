@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal
 
@@ -41,10 +41,10 @@ from livekit.agents import (
     StopResponse,
 )
 from livekit.agents import llm as lk_llm
-from lkap_contracts.agent_config import AgentConfig, PipelineMode
+from lkap_contracts.agent_config import AgentConfig, PipelineMode, ResolvedProvider
 from lkap_contracts.api_models import KbHit
 from lkap_contracts.packs import PackManifest
-from lkap_contracts.providers import vision_support
+from lkap_contracts.providers import ModelCapabilities, vision_support
 from packs.base import (
     BackgroundRunner,
     FrameBufferProto,
@@ -185,6 +185,8 @@ class SessionContext:
     pack_settings: dict[str, Any] = field(default_factory=dict)
     userdata: dict[str, Any] = field(default_factory=dict)
     record_event: Callable[[str, dict[str, Any]], None] = field(default=_noop_record_event)
+    llm_capabilities: ModelCapabilities | None = None
+    """What the api resolved about the cascaded LLM (``ResolvedProvider.capabilities``, V4-08)."""
 
 
 class PlatformAgent(Agent):
@@ -231,8 +233,10 @@ class PlatformAgent(Agent):
         self._vision_skip_reported = False
         # Strong refs for fire-and-forget `on_agent_turn_completed` tasks (asyncio keeps weak ones).
         self._hook_tasks: set[asyncio.Task[None]] = set()
-        # D-W2-10: True/False for a registry model, None for a free-text id or no LLM slot.
-        self._model_vision = model_vision_support(ctx.config)
+        # D-W2-10 / D-V4-24: the api's resolved capabilities first, then the registry; None = unknown.
+        self._model_vision = model_vision_support(
+            ctx.config, capabilities=getattr(ctx, "llm_capabilities", None)
+        )
         silent = {meta.name for meta in pack.tool_meta() if meta.silent_reply}
         if ctx.pipeline_mode in _REALTIME_MODEL_MODES:
             silent |= _REALTIME_SILENT_BUILTINS
@@ -567,16 +571,30 @@ class PlatformAgent(Agent):
         return self._greeting_mode
 
 
-def model_vision_support(config: AgentConfig) -> bool | None:
-    """Whether the cascaded LLM slot is known to accept images (DECISIONS-W2 §D-W2-10).
+def model_vision_support(
+    config: AgentConfig,
+    resolved: Mapping[str, ResolvedProvider] | None = None,
+    *,
+    capabilities: ModelCapabilities | None = None,
+) -> bool | None:
+    """Whether the cascaded LLM slot is known to accept images (DECISIONS-W2 §D-W2-10, D-V4-24).
+
+    The api's resolved capabilities win (``capabilities``, else
+    ``resolved["llm"].capabilities``): an admin's declaration, a "Test model"
+    probe or the live catalog can say a custom id is text-only. Without them
+    (an older api, or an unknown answer) the registry decides.
 
     Returns:
-        `True`/`False` for a model in the registry's suggestion list, `None` for a
-        free-text model id, an unknown provider, or a pipeline without an LLM slot.
+        `True`/`False` when known, `None` for an unknown free-text model id, an
+        unknown provider, or a pipeline without an LLM slot.
     """
     llm_ref = config.pipeline.llm
     if llm_ref is None:
         return None
+    if capabilities is None and resolved is not None and "llm" in resolved:
+        capabilities = resolved["llm"].capabilities
+    if capabilities is not None and capabilities.vision is not None:
+        return capabilities.vision
     return vision_support(llm_ref.provider_id, llm_ref.model)
 
 

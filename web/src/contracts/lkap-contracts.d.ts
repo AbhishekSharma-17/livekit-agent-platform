@@ -80,6 +80,7 @@ export interface LkapContracts {
   GlobalNode?: GlobalNode;
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
+  IdIssue?: IdIssue;
   InternalKbSearchRequest?: InternalKbSearchRequest;
   InternalTransferIn?: InternalTransferIn;
   InternalTransferOut?: InternalTransferOut;
@@ -99,6 +100,8 @@ export interface LkapContracts {
   Me?: Me;
   ModelCapabilities?: ModelCapabilities;
   ModelIdRules?: ModelIdRules;
+  ModelTestRequest?: ModelTestRequest;
+  ModelTestResult?: ModelTestResult;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
   NumbersRefreshIn?: NumbersRefreshIn;
@@ -114,6 +117,7 @@ export interface LkapContracts {
   PhoneNumberPage?: PhoneNumberPage;
   PhoneNumberUpdate?: PhoneNumberUpdate;
   Price?: Price;
+  ProbeResult?: ProbeResult;
   ProviderModelDeclare?: ProviderModelDeclare;
   ProviderModelOut?: ProviderModelOut;
   ProviderModelPage?: ProviderModelPage;
@@ -1433,6 +1437,16 @@ export interface HttpToolDefinition {
   url: string;
 }
 /**
+ * What :func:`validate_id_value` found wrong with an id-like value (R-V4-31). Value-free.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "IdIssue".
+ */
+export interface IdIssue {
+  reason: string;
+  severity: "error" | "warning";
+}
+/**
  * ``POST /internal/v1/kb/search`` (service token).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1710,6 +1724,84 @@ export interface ModelIdRules {
   max_len?: number;
   pattern?: string;
   secret_prefixes?: string[];
+}
+/**
+ * ``POST /v1/providers/{provider_id}/test-model`` (D-V4-26, R-V4-25).
+ *
+ * ``model`` is checked by the model-id rule before anything else (422 without
+ * echo). ``credential_id`` defaults like the catalog route (the workspace's
+ * default, else its only key for the credential home). ``connection_id``
+ * matters only for the LiveKit Inference entries, whose probe signs the
+ * gateway request with that connection's key and secret (default: the
+ * workspace's default connection). ``fields`` are the slot's non-secret
+ * fields (``voice``, ``voice_id``, ``base_url`` …). ``force`` skips the
+ * 10-minute re-run suppression.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ModelTestRequest".
+ */
+export interface ModelTestRequest {
+  connection_id?: string | null;
+  credential_id?: string | null;
+  fields?: {
+    [k: string]: string | number | boolean;
+  };
+  force?: boolean;
+  model: string;
+  probes?: ("basic" | "tools" | "vision")[];
+}
+/**
+ * The answer of ``POST /v1/providers/{provider_id}/test-model`` (D-V4-26).
+ *
+ * ``ok`` is ``None`` when nothing was probed (no probe for the entry, or an
+ * image model: images cost money). ``message`` and ``sample`` (at most 200
+ * characters: the LLM's word, the STT transcript) are scrubbed vendor text
+ * and **untrusted**: render them as data. ``cached`` answers come from the
+ * workspace's record within 10 minutes of the last run with the same key
+ * (their ``probes`` list is empty). A passing probe proves the vendor accepts
+ * the id with this key, not that the LiveKit plugin constructs it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ModelTestResult".
+ */
+export interface ModelTestResult {
+  cached?: boolean;
+  checked_at: string;
+  cost_estimate_usd?: number | string | null;
+  cost_note?: string;
+  detected?: ModelCapabilities;
+  kind:
+    | "realtime"
+    | "stt"
+    | "llm"
+    | "tts"
+    | "avatar"
+    | "vad"
+    | "turn_detection"
+    | "noise_cancellation"
+    | "image_gen"
+    | "embedding"
+    | "secret_bag";
+  latency_ms?: number | null;
+  message?: string | null;
+  model: string;
+  ok?: boolean | null;
+  probes?: ProbeResult[];
+  provider_id: string;
+  record_id?: string | null;
+  sample?: string | null;
+}
+/**
+ * One call of a "Test model" run. ``message`` is scrubbed vendor text: data, never markup.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProbeResult".
+ */
+export interface ProbeResult {
+  latency_ms?: number | null;
+  message?: string | null;
+  name: string;
+  ok?: boolean | null;
 }
 /**
  * The JSON schema of one flow node kind, for the flow builder's forms.
@@ -2318,6 +2410,7 @@ export interface ResolvedAgentConfig {
  * via the `definition` "ResolvedProvider".
  */
 export interface ResolvedProvider {
+  capabilities?: ModelCapabilities | null;
   kwargs: {
     [k: string]: unknown;
   };

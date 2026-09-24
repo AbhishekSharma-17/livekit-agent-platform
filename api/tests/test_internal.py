@@ -106,6 +106,51 @@ async def test_resolved_contains_the_decrypted_credential(
     assert llm.kwargs["temperature"] == 0.2
 
 
+async def test_resolved_llm_slots_carry_model_capabilities(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient
+) -> None:
+    """V4-08 (D-V4-24): a custom id declared text-only reaches the worker as ``vision=False``."""
+    credential_id = await _credential(admin_client, "openai-llm", {"api_key": API_KEY})
+    config = _openai_config(credential_id)
+    config["pipeline"]["llm"]["model"] = "ft:gpt-4.1-nano:acme::text1"
+    declared = await admin_client.put(
+        "/v1/providers/openai-llm/models/ft:gpt-4.1-nano:acme::text1",
+        json={"declared": {"vision": False, "tools": True}},
+    )
+    assert declared.status_code == 200, declared.text
+    session_id, _ = await _session_for(admin_client, config)
+
+    resolved = ResolvedAgentConfig.model_validate(
+        (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+    )
+
+    llm = resolved.resolved["llm"]
+    assert llm.capabilities is not None
+    assert llm.capabilities.vision is False
+    assert llm.capabilities.tools is True
+    assert llm.capabilities.source == "declared"
+    workflow = resolved.resolved["workflow_llm"]
+    assert workflow.capabilities is not None and workflow.capabilities.vision is False
+    assert resolved.resolved["stt"].capabilities is None, "only llm, workflow_llm and realtime carry them"
+
+
+async def test_a_registry_model_resolves_capabilities_from_the_registry(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient
+) -> None:
+    credential_id = await _credential(admin_client, "openai-llm", {"api_key": API_KEY})
+    session_id, _ = await _session_for(admin_client, _openai_config(credential_id))
+
+    resolved = ResolvedAgentConfig.model_validate(
+        (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+    )
+
+    caps = resolved.resolved["llm"].capabilities
+    assert caps is not None
+    assert caps.source == "registry"
+    assert caps.vision is False, "gpt-4.1 is listed without verified video support"
+    assert caps.tools is True
+
+
 async def test_the_decrypted_secret_is_never_logged(
     admin_client: httpx.AsyncClient,
     service_client: httpx.AsyncClient,

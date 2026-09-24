@@ -192,7 +192,7 @@
       "notes": null,
       "package": "livekit-agents",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.agents.inference.LLM",
       "requires_credential": false,
       "secret_fields": [],
@@ -545,7 +545,7 @@
       "notes": null,
       "package": "livekit-plugins-google",
       "price_ref": null,
-      "probe": null,
+      "probe": "gemini_live_ws",
       "python_class": "livekit.plugins.google.realtime.RealtimeModel",
       "requires_credential": true,
       "secret_fields": [
@@ -668,7 +668,7 @@
       "notes": "Its base_url override is for OpenAI-compatible realtime endpoints; OpenRouter has none.",
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_realtime_ws",
       "python_class": "livekit.plugins.openai.realtime.RealtimeModel",
       "requires_credential": true,
       "secret_fields": [
@@ -773,7 +773,7 @@
       "notes": null,
       "package": "livekit-plugins-deepgram",
       "price_ref": "deepgram-stt",
-      "probe": null,
+      "probe": "deepgram_listen",
       "python_class": "livekit.plugins.deepgram.STT",
       "requires_credential": true,
       "secret_fields": [
@@ -899,7 +899,7 @@
       "notes": null,
       "package": "livekit-plugins-openai",
       "price_ref": "openai-llm",
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.openai.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -1011,7 +1011,7 @@
       "notes": null,
       "package": "livekit-plugins-google",
       "price_ref": "google-llm",
-      "probe": null,
+      "probe": "gemini_generate",
       "python_class": "livekit.plugins.google.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -1120,7 +1120,7 @@
       "notes": null,
       "package": "livekit-plugins-cartesia",
       "price_ref": null,
-      "probe": null,
+      "probe": "cartesia_tts",
       "python_class": "livekit.plugins.cartesia.TTS",
       "requires_credential": true,
       "secret_fields": [
@@ -1227,7 +1227,7 @@
       "notes": null,
       "package": "livekit-plugins-elevenlabs",
       "price_ref": null,
-      "probe": null,
+      "probe": "elevenlabs_tts",
       "python_class": "livekit.plugins.elevenlabs.TTS",
       "requires_credential": true,
       "secret_fields": [
@@ -1325,7 +1325,7 @@
       "notes": null,
       "package": "livekit-plugins-openai",
       "price_ref": "openai-tts",
-      "probe": null,
+      "probe": "openai_speech",
       "python_class": "livekit.plugins.openai.TTS",
       "requires_credential": true,
       "secret_fields": [
@@ -1411,7 +1411,7 @@
       "notes": null,
       "package": "livekit-plugins-bey",
       "price_ref": null,
-      "probe": null,
+      "probe": "bey_avatar_get",
       "python_class": "livekit.plugins.bey.AvatarSession",
       "requires_credential": true,
       "secret_fields": [
@@ -1514,7 +1514,7 @@
       "notes": null,
       "package": "livekit-plugins-tavus",
       "price_ref": null,
-      "probe": null,
+      "probe": "tavus_replica_get",
       "python_class": "livekit.plugins.tavus.AvatarSession",
       "requires_credential": true,
       "secret_fields": [
@@ -1616,7 +1616,7 @@
       "notes": "No top-level api_key or conn_options; credential and face_id both live in the nested SimliConfig dataclass.",
       "package": "livekit-plugins-simli",
       "price_ref": null,
-      "probe": null,
+      "probe": "simli_face_member",
       "python_class": "livekit.plugins.simli.AvatarSession",
       "requires_credential": true,
       "secret_fields": [
@@ -1935,7 +1935,7 @@
       "notes": null,
       "package": "openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_embeddings",
       "python_class": "lkap_api.kb.embed.OpenAIEmbedder",
       "requires_credential": true,
       "secret_fields": [
@@ -2160,7 +2160,7 @@
       "notes": "Routes to hundreds of models on one key; `openrouter/auto` is not tool-safe and is deliberately not the default. Tool schemas go out with OpenAI's `strict` flag; if a routed non-OpenAI model rejects a tool call, pick an OpenAI model or an `order` of providers known to support strict tools.",
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.openai.LLM.with_openrouter",
       "requires_credential": true,
       "secret_fields": [
@@ -2293,7 +2293,7 @@
       "notes": "Batch transcription over HTTP: no interim results; each turn is transcribed after end-of-speech, so expect roughly half a second to two seconds more per turn than a streaming STT. For low latency prefer LiveKit Inference STT or Deepgram.",
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_transcriptions",
       "python_class": "livekit.plugins.openai.STT",
       "requires_credential": true,
       "secret_fields": [
@@ -2443,7 +2443,7 @@
       "notes": "Voices are per model — pick the model first, then a voice it lists. Non-streaming, like OpenAI TTS: one request per sentence.",
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_speech",
       "python_class": "livekit.plugins.openai.TTS",
       "requires_credential": true,
       "secret_fields": [
@@ -2536,7 +2536,7 @@
       "notes": "Platform-level: select it with LKAP_EMBEDDER=openrouter-embedding:<credential_id>. Only the 1536-dimension model is offered; another model would mean re-embedding every knowledge base.",
       "package": "openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_embeddings",
       "python_class": "lkap_api.kb.embed.OpenAIEmbedder",
       "requires_credential": true,
       "secret_fields": [
@@ -2961,7 +2961,7 @@
       "notes": "Subclasses openai.realtime.RealtimeModel; audio-native only, no modalities/text-only mode.",
       "package": "livekit-plugins-xai",
       "price_ref": null,
-      "probe": null,
+      "probe": "xai_realtime_ws",
       "python_class": "livekit.plugins.xai.realtime.RealtimeModel",
       "requires_credential": true,
       "secret_fields": [
@@ -3255,7 +3255,7 @@
       "notes": null,
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_transcriptions",
       "python_class": "livekit.plugins.openai.STT",
       "requires_credential": true,
       "secret_fields": [
@@ -3411,7 +3411,7 @@
       "notes": null,
       "package": "livekit-plugins-elevenlabs",
       "price_ref": null,
-      "probe": null,
+      "probe": "elevenlabs_stt",
       "python_class": "livekit.plugins.elevenlabs.STT",
       "requires_credential": true,
       "secret_fields": [
@@ -3489,7 +3489,7 @@
       "notes": null,
       "package": "livekit-plugins-cartesia",
       "price_ref": null,
-      "probe": null,
+      "probe": "cartesia_stt",
       "python_class": "livekit.plugins.cartesia.STT",
       "requires_credential": true,
       "secret_fields": [
@@ -3580,7 +3580,7 @@
       "notes": null,
       "package": "livekit-plugins-groq",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_transcriptions",
       "python_class": "livekit.plugins.groq.STT",
       "requires_credential": true,
       "secret_fields": [
@@ -3787,7 +3787,7 @@
       "notes": null,
       "package": "livekit-plugins-anthropic",
       "price_ref": null,
-      "probe": null,
+      "probe": "anthropic_messages",
       "python_class": "livekit.plugins.anthropic.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -3874,7 +3874,7 @@
       "notes": null,
       "package": "livekit-plugins-groq",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.groq.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -3950,7 +3950,7 @@
       "notes": "v1's stub pointed at a nonexistent openai.LLM.with_cerebras; corrected to the real package.",
       "package": "livekit-plugins-cerebras",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.cerebras.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -4028,7 +4028,7 @@
       "notes": null,
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.openai.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -4298,7 +4298,7 @@
       "notes": null,
       "package": "livekit-plugins-deepgram",
       "price_ref": "deepgram-tts",
-      "probe": null,
+      "probe": "deepgram_speak",
       "python_class": "livekit.plugins.deepgram.TTS",
       "requires_credential": true,
       "secret_fields": [
@@ -4783,7 +4783,7 @@
       "notes": null,
       "package": "livekit-plugins-anam",
       "price_ref": null,
-      "probe": null,
+      "probe": "anam_avatar_get",
       "python_class": "livekit.plugins.anam.AvatarSession",
       "requires_credential": true,
       "secret_fields": [
@@ -6875,7 +6875,7 @@
       "notes": null,
       "package": "livekit-plugins-mistralai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.mistralai.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -7036,7 +7036,7 @@
       "notes": null,
       "package": "livekit-plugins-xai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.xai.responses.llm.LLM",
       "requires_credential": true,
       "secret_fields": [
@@ -7134,7 +7134,7 @@
       "notes": "Distinct class from openai.LLM (chat completions); uses the Responses API over a websocket by default.",
       "package": "livekit-plugins-openai",
       "price_ref": null,
-      "probe": null,
+      "probe": "openai_chat",
       "python_class": "livekit.plugins.openai.responses.llm.LLM",
       "requires_credential": true,
       "secret_fields": [

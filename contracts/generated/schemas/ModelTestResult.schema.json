@@ -1,0 +1,300 @@
+{
+  "$defs": {
+    "ModelCapabilities": {
+      "description": "What one model can do, as far as the platform knows (D-V4-24, R-V4-23).\n\n``None`` means unknown. Resolved per field from, in order: the admin's\ndeclaration, the last \"Test model\" probe, the live catalog item's\nmetadata, the registry; ``source`` names the source of ``vision``.",
+      "properties": {
+        "audio_in": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio In"
+        },
+        "audio_out": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Out"
+        },
+        "context_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Tokens"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "declared",
+                "detected",
+                "catalog",
+                "registry"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "streaming": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Streaming"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        }
+      },
+      "title": "ModelCapabilities",
+      "type": "object"
+    },
+    "ProbeResult": {
+      "description": "One call of a \"Test model\" run. ``message`` is scrubbed vendor text: data, never markup.",
+      "properties": {
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ok": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ok"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProbeResult",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ModelTestResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The answer of ``POST /v1/providers/{provider_id}/test-model`` (D-V4-26).\n\n``ok`` is ``None`` when nothing was probed (no probe for the entry, or an\nimage model: images cost money). ``message`` and ``sample`` (at most 200\ncharacters: the LLM's word, the STT transcript) are scrubbed vendor text\nand **untrusted**: render them as data. ``cached`` answers come from the\nworkspace's record within 10 minutes of the last run with the same key\n(their ``probes`` list is empty). A passing probe proves the vendor accepts\nthe id with this key, not that the LiveKit plugin constructs it.",
+  "properties": {
+    "cached": {
+      "default": false,
+      "title": "Cached",
+      "type": "boolean"
+    },
+    "checked_at": {
+      "format": "date-time",
+      "title": "Checked At",
+      "type": "string"
+    },
+    "cost_estimate_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Estimate Usd"
+    },
+    "cost_note": {
+      "default": "",
+      "title": "Cost Note",
+      "type": "string"
+    },
+    "detected": {
+      "$ref": "#/$defs/ModelCapabilities",
+      "default": {
+        "audio_in": null,
+        "audio_out": null,
+        "context_tokens": null,
+        "source": null,
+        "streaming": null,
+        "tools": null,
+        "vision": null
+      }
+    },
+    "kind": {
+      "enum": [
+        "realtime",
+        "stt",
+        "llm",
+        "tts",
+        "avatar",
+        "vad",
+        "turn_detection",
+        "noise_cancellation",
+        "image_gen",
+        "embedding",
+        "secret_bag"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "latency_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms"
+    },
+    "message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "ok": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ok"
+    },
+    "probes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ProbeResult"
+      },
+      "title": "Probes",
+      "type": "array"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "record_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Record Id"
+    },
+    "sample": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sample"
+    }
+  },
+  "required": [
+    "provider_id",
+    "model",
+    "kind",
+    "checked_at"
+  ],
+  "title": "ModelTestResult",
+  "type": "object"
+}

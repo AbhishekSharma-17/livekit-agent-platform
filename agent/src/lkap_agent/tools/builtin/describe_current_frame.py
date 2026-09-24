@@ -8,9 +8,10 @@ Capability-gated the same way as `pin_frame`.
   `rtc.VideoFrame` directly per its docstring in `llm/chat_context.py`;
   `LLM.chat(chat_ctx=...)` returns an async-iterable `LLMStream` of
   `ChatChunk`).
-  On a model the registry knows is text-only (`vision_support(...) is False`,
-  DECISIONS-W2 §D-W2-10) the tool refuses with a `ToolError` before touching
-  a frame; unknown (free-text) model ids are tried.
+  On a model known to be text-only — the api's resolved capabilities
+  (`SessionContext.llm_capabilities`, V4-08) first, else the registry
+  (`vision_support(...) is False`, DECISIONS-W2 §D-W2-10) — the tool refuses
+  with a `ToolError` before touching a frame; unknown model ids are tried.
 - **Realtime and half-cascade**: Gemini Live / OpenAI Realtime already
   receive live frames via `RoomOptions(video_input=True)` (ARCHITECTURE §8;
   V2-07 enables it for `half_cascade` too), so this just confirms a frame
@@ -40,6 +41,22 @@ TEXT_ONLY_MODEL_ERROR = (
 )
 
 
+def _llm_vision(ctx: PackSessionContext) -> bool | None:
+    """The cascaded LLM's vision support: the api's resolved capabilities first, then the registry.
+
+    ``llm_capabilities`` is the worker's own ``SessionContext`` field (V4-08,
+    D-V4-24); a pack's fake context without it falls back to the registry.
+    """
+    llm_ref = ctx.config.pipeline.llm
+    if llm_ref is None:
+        return None
+    capabilities = getattr(ctx, "llm_capabilities", None)
+    vision = getattr(capabilities, "vision", None)
+    if isinstance(vision, bool):
+        return vision
+    return vision_support(llm_ref.provider_id, llm_ref.model)
+
+
 def build_describe_current_frame_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
     """Build the `describe_current_frame` tool bound to `ctx`."""
 
@@ -59,8 +76,7 @@ def build_describe_current_frame_tool(ctx: PackSessionContext) -> FunctionTool[.
                 f"{snapshot.age_s:.1f}s ago) — you can already see it directly."
             )
 
-        llm_ref = ctx.config.pipeline.llm
-        if llm_ref is not None and vision_support(llm_ref.provider_id, llm_ref.model) is False:
+        if _llm_vision(ctx) is False:
             raise ToolError(TEXT_ONLY_MODEL_ERROR)
 
         # `ImageContent(image=frame)` encodes the frame itself (per its docstring in

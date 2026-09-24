@@ -55,6 +55,7 @@ from lkap_api.connections.service import (
     resolve_agent_connection,
 )
 from lkap_api.costs import cost_session
+from lkap_api.custom_models.service import with_capabilities
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, Credential, LiveKitConnection, SessionEvent, SessionQa, Tool, utcnow
 from lkap_api.db.models import Session as SessionRow
@@ -240,6 +241,13 @@ async def _build_resolved(
 
     connection = await _session_connection(db, session, agent)
     installed = await installed_provider_ids(db, connection.id)
+    # V4-08 (D-V4-24): what the llm / workflow_llm / realtime models can do, for the worker.
+    resolved_providers = await with_capabilities(
+        db,
+        workspace_id=agent.workspace_id,
+        resolved=resolve_providers(config, secrets),
+        credential_ids=secrets.keys(),
+    )
 
     if session.status == "created":
         session.status = "active"
@@ -265,7 +273,7 @@ async def _build_resolved(
         pack_id=agent.pack_id,
         ui_panel_id=agent.ui_panel_id,
         config=config,
-        resolved=resolve_providers(config, secrets),
+        resolved=resolved_providers,
         tools=tools,
         kb_ids=list(config.knowledge.kb_ids),
         participant_identity=session.participant_identity,

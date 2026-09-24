@@ -179,6 +179,69 @@ class ProviderModelDeclare(BaseModel):
     declared: ModelCapabilities
 
 
+#: The probes a "Test model" run may ask for (D-V4-26): ``basic`` always runs;
+#: ``tools`` (llm, on by default) and ``vision`` (llm, opt-in) add one call each.
+ProbeName = Literal["basic", "tools", "vision"]
+
+
+class ModelTestRequest(BaseModel):
+    """``POST /v1/providers/{provider_id}/test-model`` (D-V4-26, R-V4-25).
+
+    ``model`` is checked by the model-id rule before anything else (422 without
+    echo). ``credential_id`` defaults like the catalog route (the workspace's
+    default, else its only key for the credential home). ``connection_id``
+    matters only for the LiveKit Inference entries, whose probe signs the
+    gateway request with that connection's key and secret (default: the
+    workspace's default connection). ``fields`` are the slot's non-secret
+    fields (``voice``, ``voice_id``, ``base_url`` …). ``force`` skips the
+    10-minute re-run suppression.
+    """
+
+    model: str = Field(min_length=1, max_length=200)
+    credential_id: str | None = None
+    connection_id: str | None = None
+    fields: dict[str, str | int | float | bool] = {}
+    probes: list[ProbeName] = ["basic", "tools"]
+    force: bool = False
+
+
+class ProbeResult(BaseModel):
+    """One call of a "Test model" run. ``message`` is scrubbed vendor text: data, never markup."""
+
+    name: str
+    ok: bool | None = None
+    latency_ms: int | None = None
+    message: str | None = None
+
+
+class ModelTestResult(BaseModel):
+    """The answer of ``POST /v1/providers/{provider_id}/test-model`` (D-V4-26).
+
+    ``ok`` is ``None`` when nothing was probed (no probe for the entry, or an
+    image model: images cost money). ``message`` and ``sample`` (at most 200
+    characters: the LLM's word, the STT transcript) are scrubbed vendor text
+    and **untrusted**: render them as data. ``cached`` answers come from the
+    workspace's record within 10 minutes of the last run with the same key
+    (their ``probes`` list is empty). A passing probe proves the vendor accepts
+    the id with this key, not that the LiveKit plugin constructs it.
+    """
+
+    ok: bool | None = None
+    provider_id: str
+    model: str
+    kind: ProviderKind
+    checked_at: datetime
+    cached: bool = False
+    latency_ms: int | None = None
+    probes: list[ProbeResult] = []
+    detected: ModelCapabilities = ModelCapabilities()
+    cost_estimate_usd: Decimal | None = None
+    cost_note: str = ""
+    message: str | None = None
+    sample: str | None = None
+    record_id: str | None = None
+
+
 # ---------------------------------------------------------------------- credentials
 class CredentialCreate(BaseModel):
     """``POST /v1/credentials`` — secret values are write-only and never returned."""

@@ -19,9 +19,10 @@ from lkap_mcp.content import ConceptTopic
 from lkap_mcp.registry import READ, KeyIdentity, Registry, ServerContext
 from lkap_mcp.results import ToolResult
 from lkap_mcp.tools._common import seg
+from lkap_mcp.tools.providers import describe_model
 
 DescribeKind = Literal[
-    "schema", "provider", "block", "node", "pack", "template", "builtin_tool", "recipe", "route"
+    "schema", "provider", "model", "block", "node", "pack", "template", "builtin_tool", "recipe", "route"
 ]
 
 #: The ``settings.telephony`` keys ``workspace_get`` shows (the policy is never writable here).
@@ -120,14 +121,14 @@ def register(registry: Registry) -> None:
             str,
             Field(
                 description=(
-                    "Model name, provider id, block type, node kind, pack id, starter template id, tool "
-                    "name, recipe name, or 'METHOD /v1/path' for a route"
+                    "Model name, provider id, '<provider_id>/<model_id>', block type, node kind, pack id, "
+                    "starter template id, tool name, recipe name, or 'METHOD /v1/path' for a route"
                 )
             ),
         ],  # noqa: A002
     ) -> ToolResult:
-        """Describe one thing precisely: a JSON schema, provider spec, panel block, flow node, pack, starter
-        template, built-in tool, recipe or api route.
+        """Describe one thing precisely: a JSON schema, provider spec, model id, panel block, flow node, pack,
+        starter template, built-in tool, recipe or api route.
         """
         match kind:
             case "schema":
@@ -156,6 +157,8 @@ def register(registry: Registry) -> None:
                     except ApiFailure as failure:
                         warnings.append(f"workspace enablement unavailable: {failure.code}")
                 return ToolResult.success(spec, warnings=warnings)
+            case "model":
+                return await describe_model(ctx, id)
             case "block":
                 for block in content.block_catalog():
                     if block["type"] == id:

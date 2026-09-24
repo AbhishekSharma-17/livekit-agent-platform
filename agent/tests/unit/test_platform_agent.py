@@ -31,6 +31,7 @@ from livekit.agents import (
 from lkap_contracts.agent_config import PipelineMode, ResolvedAgentConfig
 from lkap_contracts.api_models import KbHit
 from lkap_contracts.packs import ToolMeta
+from lkap_contracts.providers import ModelCapabilities
 from packs.base import FrameSnapshot
 
 from lkap_agent import platform_agent as platform_agent_module
@@ -40,11 +41,12 @@ from lkap_agent.platform_agent import (
     PlatformAgent,
     SessionContext,
     compose_instructions,
+    model_vision_support,
     platform_text_input_cb,
     resolve_greeting_mode,
 )
 from lkap_agent.providers.factory import BuiltProviders
-from lkap_agent.session_builder import SessionBuilder, build_turn_handling
+from lkap_agent.session_builder import SessionBuilder, build_turn_handling, llm_capabilities_of
 
 
 class _SilentPack(NullPack):
@@ -427,6 +429,83 @@ async def test_a_vision_or_unknown_model_gets_the_frame(model: str) -> None:
 
     assert _image_count([message]) == 1
     assert events == []
+
+
+# ------------------------------------------------ resolved capabilities (V4-08, D-V4-24)
+CUSTOM_TEXT_MODEL = "acme/custom-text-only-1"
+
+
+def test_model_vision_support_reads_the_resolved_llm_capabilities_first() -> None:
+    config = resolved_config(camera=True, llm_model=CUSTOM_TEXT_MODEL)
+    llm_slot = config.resolved["llm"].model_copy(update={"capabilities": ModelCapabilities(vision=False)})
+    resolved = {**config.resolved, "llm": llm_slot}
+
+    assert model_vision_support(config.config) is None, "the registry does not know a custom id"
+    assert model_vision_support(config.config, resolved) is False
+    assert model_vision_support(config.config, capabilities=ModelCapabilities(vision=False)) is False
+
+
+def test_model_vision_support_falls_back_to_the_registry_when_capabilities_are_absent() -> None:
+    config = resolved_config(camera=True, llm_model=VISION_MODEL)
+    unknown = config.resolved["llm"].model_copy(update={"capabilities": ModelCapabilities()})
+
+    assert model_vision_support(config.config, config.resolved) is True
+    assert model_vision_support(config.config, {**config.resolved, "llm": unknown}) is True
+    assert model_vision_support(config.config, capabilities=None) is True
+
+
+def test_the_session_plan_carries_the_llm_capabilities() -> None:
+    config = resolved_config(camera=True, llm_model=CUSTOM_TEXT_MODEL)
+    llm_slot = config.resolved["llm"].model_copy(update={"capabilities": ModelCapabilities(vision=False)})
+    config = config.model_copy(update={"resolved": {**config.resolved, "llm": llm_slot}})
+
+    assert llm_capabilities_of(config) == ModelCapabilities(vision=False)
+    assert llm_capabilities_of(resolved_config()) is None
+
+
+async def test_a_custom_id_declared_text_only_is_skipped_and_reported() -> None:
+    """R-V4-23: the api says the custom model is text-only, so the frame never reaches it."""
+    frames = FakeFrameBuffer()
+    frames.set_latest(FrameSnapshot(frame=_fake_frame(), source="camera", age_s=1.0))
+    events: list[tuple[str, dict[str, Any]]] = []
+    ctx = _context(resolved_config(camera=True, llm_model=CUSTOM_TEXT_MODEL), frames=frames)
+    ctx.llm_capabilities = ModelCapabilities(vision=False, source="declared")
+    agent = PlatformAgent(
+        ctx=ctx, pack=NullPack(), has_tts=True, record_event=lambda t, p: events.append((t, p))
+    )
+    message = llm.ChatMessage(role="user", content=["What am I holding?"])
+
+    await agent.on_user_turn_completed(ChatContext.empty(), message)
+
+    assert _image_count([message]) == 0
+    assert events == [("info", {"message": f"vision injection skipped: {CUSTOM_TEXT_MODEL} is text-only"})]
+
+
+async def test_describe_current_frame_refuses_a_custom_id_declared_text_only() -> None:
+    """The built-in tool reads the same resolved capability through the session context."""
+    from livekit.agents import ToolError
+
+    from lkap_agent.tools.builtin.describe_current_frame import build_describe_current_frame_tool
+
+    frames = FakeFrameBuffer()
+    frames.set_latest(FrameSnapshot(frame=_fake_frame(), source="camera", age_s=1.0))
+    ctx = _context(resolved_config(camera=True, llm_model=CUSTOM_TEXT_MODEL), frames=frames)
+    ctx.llm_capabilities = ModelCapabilities(vision=False, source="detected")
+    tool = build_describe_current_frame_tool(ctx)
+
+    with pytest.raises(ToolError, match="cannot see images"):
+        await tool(context=cast(Any, None))
+
+
+async def test_a_custom_id_without_capabilities_still_gets_the_frame() -> None:
+    frames = FakeFrameBuffer()
+    frames.set_latest(FrameSnapshot(frame=_fake_frame(), source="camera", age_s=1.0))
+    agent = _agent(resolved_config(camera=True, llm_model=CUSTOM_TEXT_MODEL), frames=frames)
+    message = llm.ChatMessage(role="user", content=["Look."])
+
+    await agent.on_user_turn_completed(ChatContext.empty(), message)
+
+    assert _image_count([message]) == 1, "unknown stays optimistic (R5 auto-degrade)"
 
 
 async def test_on_user_turn_completed_skips_vision_when_no_camera_capability() -> None:

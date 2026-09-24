@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
+from lkap_contracts.providers import ModelCapabilities
 from lkap_contracts.telephony import TelephonyConfig
 from lkap_contracts.tools import ToolDefinition
 from lkap_contracts.ui_protocol import BlockSpec
@@ -190,6 +191,9 @@ class ResolvedProvider(BaseModel):
     python_class: str
     model: str | None
     kwargs: dict[str, object]
+    capabilities: ModelCapabilities | None = None
+    """What the model can do (V4-08, D-V4-24): filled for ``llm``, ``workflow_llm`` and
+    ``realtime`` from declared → detected → live catalog → registry; ``None`` = not resolved."""
 
 
 class ResolvedAgentConfig(BaseModel):

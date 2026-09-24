@@ -12,8 +12,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 
+import httpx
 import pytest
 from conftest import captured_text
+from fastapi import FastAPI
 
 from lkap_api.logging import configure_logging
 from lkap_api.settings import Settings
@@ -92,3 +94,24 @@ def test_log_worker_callback_url_treats_public_base_url_as_explicit(
 
     text = captured_text(plain_log_capture)
     assert "worker_callback_url_derived_from_port" not in text
+
+
+async def test_an_unhandled_error_logs_the_route_template_not_the_model_id(
+    app: FastAPI, log_capture: pytest.LogCaptureFixture
+) -> None:
+    """R-V4-32: a 500 under ``/models/{model_id:path}`` logs the template, never the concrete id."""
+    model_id = "acme/some-model:secret-looking-9f3c2a7d"
+
+    @app.get("/v1/probe-boom/{provider_id}/models/{model_id:path}")
+    async def _boom(provider_id: str, model_id: str) -> None:
+        raise RuntimeError("boom")
+
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://api.test") as client:
+        response = await client.get(f"/v1/probe-boom/openrouter-llm/models/{model_id}")
+
+    assert response.status_code == 500
+    text = captured_text(log_capture)
+    assert "unhandled_error" in text
+    assert "/v1/probe-boom/{provider_id}/models/{model_id}" in text
+    assert model_id not in text and "9f3c2a7d" not in text

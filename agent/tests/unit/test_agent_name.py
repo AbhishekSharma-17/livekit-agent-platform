@@ -50,7 +50,11 @@ def test_require_agent_name_accepts_a_per_connection_name() -> None:
         ({"LKAP_AGENT_NAME": ""}, "", None),
         ({}, "lkap-agent-b", None),  # LKAP_AGENT_NAME only in a .env file the decorator never saw
         ({"LKAP_AGENT_NAME": "lkap-agent-b"}, "lkap-agent-b", "lkap-agent"),
-        ({"LKAP_AGENT_NAME": "lkap-agent-b", "LIVEKIT_AGENT_NAME": "other-project-agent"}, "lkap-agent-b", None),
+        (
+            {"LKAP_AGENT_NAME": "lkap-agent-b", "LIVEKIT_AGENT_NAME": "other-project-agent"},
+            "lkap-agent-b",
+            None,
+        ),
         (
             {"LKAP_AGENT_NAME": "lkap-agent-b", "LIVEKIT_AGENT_NAME_OVERRIDE": "other-project-agent"},
             "lkap-agent-b",

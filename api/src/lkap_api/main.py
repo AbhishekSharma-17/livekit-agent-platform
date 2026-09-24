@@ -65,9 +65,33 @@ DESCRIPTION = """
 Control plane for the LiveKit Agent Platform: providers, credentials, agents,
 tools, knowledge bases, sessions and the browser `connect` endpoint.
 
-* `/v1/*` — admin surface (`X-Admin-Token`) plus the public `connect` and `health` routes.
+* `/v1/*` — the console and API surface, plus the public `connect` and `health` routes.
 * `/internal/v1/*` — worker surface (`X-Service-Token`); the only place decrypted
   credentials leave the api.
+
+## Authentication
+
+`/v1` accepts, in this order:
+
+1. the `lkap_session` cookie of a signed-in console user;
+2. an **API key**, `Authorization: Bearer lkap_…`, bound to one workspace. A key
+   carries **scopes** (`agents:read`, `agents:write`, `sessions:read`, `sessions:write`,
+   `calls:write`, `connections:read`, `connections:write`, `providers:read`,
+   `providers:write`, `webhooks:write`, `audit:read`, or `*` for all); `x:write` implies
+   `x:read`, and a route answers 403 naming the scope it needs. `GET /v1/api-keys/self`
+   returns the calling key's scopes and workspace (no secret material). Agent keys
+   (`kind=agent`) are the ones the console mints for AI coding agents;
+3. the break-glass `X-Admin-Token` (on by default only in `LKAP_ENV=dev`; `LKAP_ALLOW_ADMIN_TOKEN`
+   overrides).
+
+The workspace comes from `X-Workspace: <slug|id>` or `?workspace=`; an API key always acts in
+its own.
+
+**Attribution.** Any request may send
+`X-LKAP-Client: <product>/<version>; client=<name>; tool=<tool>; call=<id>` (the LKAP MCP
+server sends it on every call). It is attribution, never authority: its fields are merged
+into the audit row's `payload.client`, and an API key records `last_client`. A missing or
+malformed header changes nothing.
 """
 
 

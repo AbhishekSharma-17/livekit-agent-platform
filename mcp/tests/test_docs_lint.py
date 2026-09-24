@@ -75,12 +75,18 @@ CONTRACTS_GENERATED_DIR = REPO_ROOT / "contracts" / "generated"
 README_PATH = REPO_ROOT / "README.md"
 
 #: Files outside `docs/` that must pass the same sanitisation and identifier
-#: checks. Empty until V3-08 lands (`mcp/claude-plugin/skills/lkap/SKILL.md`,
-#: its recipe copies, `AGENTS.md`, `llms.txt`) — see the V3-08 card and
-#: `docs/v3/_asks.md`. Missing entries are skipped, not an error, so this
-#: file does not need to change the day V3-08 appends to it; it only needs
-#: those files to actually exist once it does.
-EXTRA_LINT_FILES: Final[list[Path]] = []
+#: checks (V3-08, R-V3-16, docs/v3/_asks.md): the packaged Claude Code skill,
+#: its recipe copies (byte-identical to `mcp/src/lkap_mcp/docs/recipes/`,
+#: `test_generated_dir_matches_contracts_generated`-style parity is asserted
+#: separately below), and the repo-root Codex/generic guidance. Missing
+#: entries are skipped, not an error.
+_CLAUDE_PLUGIN_DIR: Final[Path] = MCP_ROOT / "claude-plugin"
+EXTRA_LINT_FILES: Final[list[Path]] = [
+    _CLAUDE_PLUGIN_DIR / "skills" / "lkap" / "SKILL.md",
+    *sorted((_CLAUDE_PLUGIN_DIR / "skills" / "lkap" / "recipes").glob("*.md")),
+    REPO_ROOT / "AGENTS.md",
+    REPO_ROOT / "llms.txt",
+]
 
 # `lkap_mcp` and `lkap_contracts` are real dependencies of this package once
 # `mcp/pyproject.toml` installs it (they are, as of V3-01) — but this file is
@@ -804,6 +810,30 @@ def test_generated_dir_matches_contracts_generated() -> None:
         source_schema = CONTRACTS_GENERATED_DIR / "schemas" / name
         assert filecmp.cmp(mcp_schema, source_schema, shallow=False), (
             f"schemas/{name} is out of sync with contracts/generated"
+        )
+
+
+def test_skill_recipes_match_source_recipes() -> None:
+    """V3-08 (R-V3-16): the skill's recipes have one source, this package's own.
+
+    `scripts/export_contracts.sh` copies `RECIPES_DIR` byte-identical into
+    `mcp/claude-plugin/skills/lkap/recipes/`; skipped (not failed) until
+    V3-08's plugin directory exists, exactly like `EXTRA_LINT_FILES` above.
+    """
+    skill_recipes_dir = _CLAUDE_PLUGIN_DIR / "skills" / "lkap" / "recipes"
+    if not skill_recipes_dir.is_dir():
+        pytest.skip("mcp/claude-plugin/skills/lkap/recipes not present (V3-08 not landed yet)")
+
+    source_names = {p.name for p in RECIPES_DIR.glob("*.md")}
+    copy_names = {p.name for p in skill_recipes_dir.glob("*.md")}
+    assert copy_names == source_names, (
+        f"recipe copy set differs from the source: only in copy={copy_names - source_names}, "
+        f"only in source={source_names - copy_names}"
+    )
+    for name in source_names:
+        assert filecmp.cmp(RECIPES_DIR / name, skill_recipes_dir / name, shallow=False), (
+            f"skills/lkap/recipes/{name} is out of sync with docs/recipes/{name} "
+            "— re-run scripts/export_contracts.sh"
         )
 
 

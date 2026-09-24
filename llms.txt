@@ -1,0 +1,37 @@
+# LKAP (LiveKit Agent Platform)
+
+> A configurable voice/video agent platform on LiveKit: connections, agents
+> (prompt or flow), providers and keys, knowledge bases, HTTP/MCP tools,
+> panels, telephony, sessions and QA — all reachable by a coding agent
+> through one MCP server, `lkap` (package name lkap-mcp, `mcp/`). There is
+> no CLI.
+
+Start with the platform guide, then the reference docs below. A coding agent
+should call `lkap_guide()` (an MCP tool the server exposes) rather than
+reading these files directly whenever that tool is available; the files
+exist for Codex, generic agents, and anyone browsing the checkout.
+
+## Guidance
+
+- [AGENTS.md](AGENTS.md): connect the MCP server, the workflow, the safety
+  rules — written for Codex and other agents that read this file
+  automatically.
+- [mcp/README.md](mcp/README.md): install for every client (Claude Code,
+  Codex CLI, Cursor, generic), every environment variable, the tool catalog
+  by domain, remote (HTTP) mode.
+- [mcp/claude-plugin/skills/lkap/SKILL.md](mcp/claude-plugin/skills/lkap/SKILL.md):
+  the same guidance packaged as a Claude Code skill
+  (`scripts/install_claude_skill.sh` installs it on its own).
+
+## Design docs
+
+- [docs/v3/AGENT-ACCESS.md](docs/v3/AGENT-ACCESS.md): the full design —
+  object model, the tool catalog, the console's connect flow, safety
+  mechanisms, remote mode.
+- [docs/v2/HANDOFF.md](docs/v2/HANDOFF.md): the platform itself (connections,
+  agents, packs, panels, telephony) below the agent-access layer.
+
+## Optional
+
+- [README.md](README.md): the repository overview (every package, running
+  the platform locally).

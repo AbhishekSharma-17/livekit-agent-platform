@@ -470,3 +470,132 @@ End to end from the cloud worker needs a publicly reachable api (`LKAP_API_BASE_
 10. **The console redirects to `/login`.** Either the web's admin bypass is off or the api refuses the admin token (`LKAP_ENV=prod`). Sign in, or see §2.
 11. **A new agent's provider is rejected as "not installed".** The bound connection's workers do not report it. Use the `full` image, or pick another provider (§3).
 12. **An api test run takes 20+ minutes.** Something is loading the fastembed model over the network. `tests/conftest.py` now fails such a test at once.
+
+## 20. Remote MCP (v3, V3-06)
+
+The remote MCP service is the platform's MCP server (`mcp/`, `lkap-mcp`) run as `lkap-mcp --http` in its own process and compose service. It serves agents that do not run on the user's machine: Claude Code on the web, Codex cloud, a shared team endpoint, CI. It is never mounted in the api (R-V3-4, R-V3-15). The design is in `docs/v3/AGENT-ACCESS.md` §9, and the client side is in `mcp/README.md` "Remote (HTTP) mode".
+
+**How it authenticates.** The service holds no key of its own. Every request carries `Authorization: Bearer lkap_…`, and the key on a session's `initialize` request is the key that session uses for every api call.
+- The key's scopes shape that session's tool list (R-V3-13).
+- The session id (32 random bytes) is bound to the key's sha256. A request on the session with another key gets `403`.
+- Test chats belong to the session (`session:<id>`, R-V3-24). They close when the session ends: `DELETE`, 30 min idle, revocation or shutdown.
+
+### 20.1 Enable it
+
+**Dev:**
+- `docker compose -f deploy/docker-compose.dev.yml up mcp` serves `http://127.0.0.1:8090/mcp` on loopback only. Plain HTTP is for this machine only.
+- Without compose: `LKAP_API_URL=http://127.0.0.1:8080 uv run --project mcp lkap-mcp --http`.
+- In dev (`LKAP_ENV` unset or `dev`), loopback `Host`/`Origin` values are accepted.
+
+**Prod** (`deploy/docker-compose.prod.yml`):
+- The `mcp` service is network-internal (no published port). Caddy proxies `https://$LKAP_PUBLIC_DOMAIN/mcp` to `mcp:8090/mcp` (`deploy/Caddyfile`).
+- The service runs with `LKAP_ENV=prod`, `LKAP_API_URL=http://api:8080` and `LKAP_MCP_PUBLIC_URL`. The public url defaults to `https://$LKAP_PUBLIC_DOMAIN/mcp`; override it in `deploy/prod.env` only for a different https url.
+- The console's Connect dialog offers **Remote (HTTP)** only when the web image was built with `NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL`. Both compose files pass it as a build arg, but `web/Dockerfile` must declare the `ARG` first (`docs/v3/_asks.md` V3-06-4).
+- **Check:**
+  - `curl -si https://<domain>/mcp -X POST -H 'content-type: application/json' -d '{}'` answers `401` with `WWW-Authenticate: Bearer`: the route reaches the service, and the service wants a key.
+  - `docker compose … exec mcp python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8090/healthz').read())"` prints `{"status":"ok"}`.
+
+**The service refuses to start** (exit 2, reason on stderr) when:
+- `LKAP_ENV=prod` and `LKAP_MCP_PUBLIC_URL` is missing or not `https://` (the bearer travels only over TLS). The bare-IP `LKAP_PUBLIC_DOMAIN=:80` smoke mode therefore leaves `mcp` down on purpose;
+- `LKAP_MCP_PUBLIC_URL` is not an absolute http(s) url;
+- any of `LKAP_API_KEY`, `LKAP_SERVICE_TOKEN`, `LKAP_ADMIN_TOKEN`, `LKAP_MASTER_KEY` is in its environment. `env:` references resolve in this process, so a value there would be usable by every key holder. That is also why the service gets no `api.env`.
+
+**One replica, always.** Sessions and chats live in the process. A second replica needs sticky routing on `Mcp-Session-Id` (Phase 2). Never `--scale mcp=2`. A restart drops every session and chat; clients reconnect on the `404`.
+
+### 20.2 TLS and the proxy
+
+- **TLS.** Caddy terminates TLS for the api origin, and `/mcp` shares its certificate.
+- **Host header.** Caddy passes the client's `Host` through, and the service compares it with the public url's host (`403 forbidden_host` otherwise; DNS rebinding, §9.5 item 3). A proxy that rewrites `Host` breaks this. Keep `reverse_proxy`'s default.
+- **Origin header.** An `Origin` header, when present, must be the public origin (`403 forbidden_origin`). Browsers are not clients of this endpoint: there are no cookies and no CORS.
+- **Caddy settings for `/mcp`.** `request_body max_size 1MB`, `flush_interval -1` (SSE events go out at once), `read_timeout 5m` (a dead upstream; the service pings open SSE streams every 15 s), and no `encode`.
+- **Access log.** Caddy's access log redacts `Authorization` by default. Never enable the `log_credentials` server option.
+- **Not validated locally.** `caddy validate` has not been run on this host (no `caddy` binary). Run `caddy validate --config deploy/Caddyfile --adapter caddyfile` with `LKAP_PUBLIC_DOMAIN` set before the first deploy.
+
+### 20.3 Connect a client
+
+Mint an agent key in the console (Settings → AI agents), then use the Remote snippet:
+- **Claude Code:** `claude mcp add -s user --transport http lkap <LKAP_MCP_PUBLIC_URL> --header "Authorization: Bearer <key>"`.
+- **Codex CLI** (field names verified against codex-cli 0.153.4, R-V3-25). The console's form for `~/.codex/config.toml`:
+  ```toml
+  [mcp_servers.lkap]
+  url = "<LKAP_MCP_PUBLIC_URL>"
+
+  [mcp_servers.lkap.http_headers]
+  Authorization = "Bearer <key>"
+  ```
+  On a shared machine, keep the key in the shell environment instead:
+  ```toml
+  [mcp_servers.lkap]
+  url = "<LKAP_MCP_PUBLIC_URL>"
+  bearer_token_env_var = "LKAP_API_KEY"
+  ```
+  You can also add it from the command line: `codex mcp add lkap --url <LKAP_MCP_PUBLIC_URL> --bearer-token-env-var LKAP_API_KEY`, then `export LKAP_API_KEY=<key>`. Codex rejects a literal `bearer_token`. `codex mcp list` shows `Auth = Bearer token` for both forms.
+- **Generic clients:** `{"mcpServers": {"lkap": {"url": "<LKAP_MCP_PUBLIC_URL>", "headers": {"Authorization": "Bearer <key>"}}}}`.
+
+### 20.4 Limits
+
+| Limit | Default | Env on the `mcp` service | Answer |
+|---|---|---|---|
+| Sessions per key | 5 | `LKAP_MCP_MAX_SESSIONS_PER_KEY` | the 6th `initialize` gets `429` + `retry_after_s` |
+| Tool calls per session | 120 per rolling minute | `LKAP_MCP_CALLS_PER_MIN` | `429` + `retry_after_s`, `Retry-After` |
+| Requests in flight per session | 10 | `LKAP_MCP_MAX_IN_FLIGHT_PER_SESSION` | `429` |
+| Per tool call | 60 s, or the call's own `timeout_s` + 15 s | `LKAP_MCP_CALL_TIMEOUT_S` | tool result `call_timeout` |
+| Chats | 3 per session, 20 per service | `LKAP_MCP_MAX_CHATS`, `LKAP_MCP_MAX_CHATS_TOTAL` | tool result `too_many_chats` |
+| Request body | 1 MB | `LKAP_MCP_MAX_BODY_BYTES` (Caddy enforces it too) | `413` |
+| Idle session | 30 min without a request (an open `GET` stream does not count) | `LKAP_MCP_SESSION_IDLE_S` | the session and its chats are closed; the next request gets `404` |
+| Api calls per key | 600/min | the api's `LKAP_API_KEY_RATE_PER_MIN` | the api's `429` |
+
+Transport refusals (`401`, `403`, `404`, `413`, `429`) are JSON-RPC error bodies whose `error.data.code` names the reason: `unauthorized`, `forbidden_host`, `forbidden_origin`, `session_key_mismatch`, `session_not_found`, `payload_too_large` or `rate_limited`. A `429` on an open session can end some clients' sessions (the Python SDK client raises on it); they reconnect.
+
+### 20.5 Revoke a key
+
+Console → Settings → AI agents → revoke. A key is also invalid after its expiry.
+- **Existing sessions.** The next tool call on any session of that key gets the api's `401`. The service relays it as `ok=false, code="unauthorized"`, then closes the session and its chats. Later requests on that session id get `404`.
+- **New sessions.** A new `initialize` with a revoked key is refused with `401` before any session exists.
+- **To end every session at once**, whatever the key, restart the `mcp` service.
+
+### 20.6 Secrets on the remote service
+
+- **Inline values** (pasted by the user) are allowed. They travel inside the TLS request and go straight to the api's vault; they never appear in a result, plan, log or error. To force references, set `LKAP_MCP_INLINE_SECRETS=off` in `deploy/prod.env`.
+- **`env:NAME` references** resolve in the `mcp` service's environment only. Provision such values in the optional `deploy/mcp.env` (human-created, never committed). Every key holder can use them as secrets: never read them back, but able to send them in the requests of an HTTP tool they build. Put nothing there that is not meant for every key holder.
+- **`file:` references** are refused (`ref_unavailable_in_http_mode`). So is `kb_add_document(file_path=)`.
+- **`webhook_create`** is unavailable, because the one-time signing secret has nowhere safe to go. Create webhooks in the console.
+
+### 20.7 The dial gate
+
+`call_place`/`call_control` exist only when the key has `calls:write`, the service has `LKAP_MCP_ALLOW_DIAL=1`, and each call passes `confirm=true` (R-V3-7). The service default is `0`. Enabling it on the shared service lets every `calls:write` key place calls through the remote endpoint.
+- Treat enabling it as a change: set `LKAP_MCP_ALLOW_DIAL=1` in `deploy/prod.env`, record who approved it and when in your change log, then run `docker compose … up -d mcp`.
+- To turn it off, set it back to `0` and run the same command.
+- The workspace dialing policy (`/console/telephony`) still applies to every call.
+
+### 20.8 Logs
+
+- **What the service logs.** The key's id (never the key), an 8-character session id prefix, the request method, and the refusal status and code.
+- **What it never logs.** The `Authorization` header or any tool argument.
+- **Library logs.** The MCP SDK's own loggers (`mcp.*`) are raised to WARNING in the service, because at INFO and DEBUG they print full session ids and raw messages. `uvicorn.access` is off.
+
+### 20.9 Security review items (AGENT-ACCESS §9.5)
+
+| # | Item | Covered by |
+|---|---|---|
+| 1 | Bearer only over TLS; `Authorization` never logged | `test_main_http_in_prod_with_a_plain_http_public_url_refuses_to_start`, `test_check_startup_public_url_rules`, `test_authorization_header_and_key_are_in_no_log_record` |
+| 2 | Tenant isolation; unguessable, key-bound session ids | `test_two_workspaces_in_parallel_sessions_never_see_each_others_agents`, `test_session_ids_are_32_random_bytes_bound_to_the_key_hash`, `test_a_request_on_a_session_with_a_different_key_is_403`, the chat-ownership tests |
+| 3 | DNS rebinding / Origin | `test_foreign_origin_or_wrong_host_is_403`, `test_origin_policy_host_and_origin` |
+| 4 | Secrets | `test_file_ref_is_ref_unavailable_in_http_mode`, `test_inline_secret_creates_the_row_and_appears_in_no_log_or_result`, `test_inline_secrets_off_refuses_inline_values_on_the_service`, `test_webhook_create_is_unavailable_in_http_mode` |
+| 5 | Resource limits | `test_sixth_session_…_is_429…`, `test_the_121st_tool_call_…`, `test_an_eleventh_request_in_flight_…`, `test_a_2_mb_body_is_413`, `test_a_body_streamed_without_content_length_is_still_capped`, `test_a_call_over_the_cap_is_call_timeout`, `test_the_process_wide_chat_cap_spans_sessions`, `test_an_idle_session_is_closed_with_its_chats` |
+| 6 | Outbound | Note: the service calls only `LKAP_API_URL` and the LiveKit urls the api returns in `text-sessions` responses (already `net_guard`-checked when the connection was saved). No code path fetches a user-supplied url; KB url import happens on the api (R-V3-14). |
+| 7 | Resumability | Note: no event store is configured, so there is no `Last-Event-ID` replay. SSE state is in memory, per session, and gone when the session ends. |
+| 8 | Image | Note: `mcp/Dockerfile` uses the pinned `python:3.12-bookworm-slim` and `uv` images, runs as non-root `lkap`, and has no `curl \| sh`. The builder stage fails unless the docs, generated resources and rtc wheel load. R2-21 digest pinning applies once the remote exists. The image is built by CI (`docker.yml`), not locally (no Docker daemon on the dev host). |
+| 9 | Revocation | `test_key_revoked_mid_session_relays_unauthorized_then_the_session_is_dropped`, `test_revocation_closes_the_sessions_chats` |
+| 10 | Dial gate | Note: `LKAP_MCP_ALLOW_DIAL` defaults to `0` in both compose files and `prod.env.example`; enabling it is the recorded operator action in §20.7. |
+
+### 20.10 Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| `403 forbidden_host` for every request | `LKAP_MCP_PUBLIC_URL`'s host differs from the host clients use, or a proxy in front rewrites `Host`. |
+| `401` at connect with a key that works in stdio | The key was revoked or expired, or the client does not send the header. Check the Claude Code `--header` form or the Codex `http_headers`/`bearer_token_env_var`. |
+| `502 api_unavailable` at connect | The service cannot reach `LKAP_API_URL`. |
+| The client keeps reconnecting | The session went idle (30 min) or the service restarted. Clients start a new session on `404`. |
+| `too_many_chats` with few chats open | Another session is using the 20-per-service cap, or this session already has 3. End chats with `chat_end`. |
+| `call_timeout` on `kb_add_document` | The ingest took longer than `timeout_s` + 15 s. Use `wait=false`, then `kb_get`. |

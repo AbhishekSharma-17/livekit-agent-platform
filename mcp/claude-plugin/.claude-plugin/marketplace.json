@@ -1,0 +1,16 @@
+{
+  "name": "lkap",
+  "owner": {
+    "name": "LKAP"
+  },
+  "metadata": {
+    "description": "Local marketplace for the lkap plugin, so `claude plugin marketplace add <checkout>/mcp/claude-plugin` persists the install across sessions (the alternative to a one-off `claude --plugin-dir`)."
+  },
+  "plugins": [
+    {
+      "name": "lkap",
+      "source": "./",
+      "description": "Build and operate LKAP (LiveKit Agent Platform) voice/video agents from Claude Code."
+    }
+  ]
+}

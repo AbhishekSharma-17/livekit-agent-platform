@@ -42,9 +42,43 @@
 # the life of the process, restart Caddy after scaling, or add an explicit
 # `reverse_proxy api-1:8080 api-2:8080` two-service pair instead. See the
 # report for the exact caveat.
+#
+# `/mcp` is the remote MCP service (V3-06, docs/v3/AGENT-ACCESS.md §9.2,
+# R-V3-15): Caddy terminates TLS and proxies `https://<domain>/mcp` unchanged
+# to `mcp:8090/mcp` (never to the api; R-V3-4).
+#   - `path /mcp /mcp/*` and not `/mcp*`, which would also match `/mcpfoo`.
+#   - The `Host` header is passed through as sent (reverse_proxy's default), which
+#     is what the service's Host check compares with LKAP_MCP_PUBLIC_URL.
+#   - `request_body max_size 1MB` is the service's own body cap, enforced here
+#     first (413).
+#   - Streamable HTTP answers with SSE: `flush_interval -1` sends each event at
+#     once; `read_timeout 5m` closes a leg whose upstream sent nothing for 5
+#     minutes (the service pings open SSE streams every 15 s, so only a dead
+#     upstream trips it); `encode` skips /mcp so events are never held in a
+#     compression buffer.
+#   - `Authorization` (the API key) is redacted from Caddy's access log by
+#     default; never enable the `log_credentials` server option.
+#   - One `mcp` replica (sessions live in the process); a second one needs
+#     sticky routing on the `Mcp-Session-Id` header (Phase 2).
 
 {$LKAP_PUBLIC_DOMAIN:localhost} {
-	encode zstd gzip
+	@compressible {
+		not path /mcp /mcp/*
+	}
+	encode @compressible zstd gzip
+
+	@mcp path /mcp /mcp/*
+	handle @mcp {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy mcp:8090 {
+			flush_interval -1
+			transport http {
+				read_timeout 5m
+			}
+		}
+	}
 
 	@apiPaths path /v1/* /hooks/* /internal/*
 	@internalRefused {

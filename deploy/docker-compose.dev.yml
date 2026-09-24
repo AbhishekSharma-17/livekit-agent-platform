@@ -69,6 +69,10 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+        # The console's Connect dialog offers "Remote (HTTP)" only when this is set
+        # (V3-06). web/Dockerfile must declare the ARG for it to reach the build
+        # (docs/v3/_asks.md V3-06-4); until then Docker ignores it with a warning.
+        NEXT_PUBLIC_LKAP_MCP_PUBLIC_URL: ${LKAP_MCP_PUBLIC_URL:-http://127.0.0.1:8090/mcp}
     image: lkap-web:dev
     network_mode: "service:api" # local-smoke-test only; see note above
     env_file:
@@ -110,6 +114,45 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
+
+  # --- mcp: the remote MCP server (V3-06, docs/v3/AGENT-ACCESS.md §9) ------
+  # `lkap-mcp --http` from mcp/Dockerfile: the same MCP server coding agents
+  # run locally over stdio, served as streamable HTTP at /mcp. Published on
+  # loopback only (plain HTTP is for this machine; prod goes through Caddy's
+  # TLS). It has no key of its own: each MCP session uses the
+  # `Authorization: Bearer lkap_…` key of its requests, so this service gets
+  # no env_file (it refuses to start with LKAP_API_KEY, LKAP_SERVICE_TOKEN,
+  # LKAP_ADMIN_TOKEN or LKAP_MASTER_KEY in its environment). Local coding
+  # agents do not need it: they run `uv run --project <checkout>/mcp lkap-mcp`
+  # over stdio (mcp/README.md). Connect a remote client to
+  # http://127.0.0.1:8090/mcp (docs/RUNBOOK.md, "Remote MCP"). One replica:
+  # sessions and test chats live in the process.
+  mcp:
+    build:
+      context: ..
+      dockerfile: mcp/Dockerfile
+    image: lkap-mcp:dev
+    command: ["lkap-mcp", "--http"]
+    environment:
+      LKAP_ENV: dev
+      LKAP_API_URL: http://api:8080
+      LKAP_MCP_HTTP_HOST: 0.0.0.0
+      LKAP_MCP_HTTP_PORT: "8090"
+      LKAP_MCP_PUBLIC_URL: ${LKAP_MCP_PUBLIC_URL:-http://127.0.0.1:8090/mcp}
+      LKAP_MCP_INLINE_SECRETS: ${LKAP_MCP_INLINE_SECRETS:-on}
+      LKAP_MCP_ALLOW_DIAL: ${LKAP_MCP_ALLOW_DIAL:-0}
+    ports:
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # --- optional: --profile postgres ---------------------------------------

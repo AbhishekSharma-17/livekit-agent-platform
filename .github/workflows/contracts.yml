@@ -14,6 +14,11 @@ on:
       - "agent/requirements/**"
       - "scripts/gen_plugin_requirements.py"
       - "scripts/check_installed_providers.py"
+      - "scripts/export_contracts.sh"
+      # V3-05: the MCP server's copies of the generated contracts and of the recipes.
+      - "mcp/src/lkap_mcp/generated/**"
+      - "mcp/src/lkap_mcp/docs/recipes/**"
+      - "mcp/claude-plugin/skills/lkap/recipes/**"
       - ".github/workflows/contracts.yml"
 
 # V2-21: least-privilege GITHUB_TOKEN (every job only reads the repo).
@@ -68,11 +73,14 @@ jobs:
 
       # PLAN-V2 §1: "the export diff test must pass" — regenerate everything
       # the registry feeds and fail if the working tree would change.
+      # V3-05 (PLAN-V3 "Contracts gate"): the export script also copies the
+      # generated contracts into the MCP server (V3-01, G2) and the recipes
+      # into the Claude Code skill (V3-08, G4); both copies must be in sync too.
       - name: Export diff check
         run: |
           cd contracts && uv run python -m lkap_contracts.export && cd ..
           scripts/export_contracts.sh
-          git diff --exit-code -- contracts/generated web/src/contracts
+          git diff --exit-code -- contracts/generated web/src/contracts mcp/src/lkap_mcp/generated mcp/claude-plugin/skills/lkap/recipes
 
       # docs/v2/_asks.md #32 / PLAN-V2 §8 R-V2-1: agent/requirements/{slim,full}.txt
       # and their mirrored check_installed_providers.py must be regenerated

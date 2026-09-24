@@ -23,6 +23,7 @@ on:
       - "supervisor/**"
       - "contracts/**"
       - "testing/**"
+      - "mcp/**"
       - ".github/workflows/python.yml"
 
 # V2-21: least-privilege GITHUB_TOKEN (every job only reads the repo).
@@ -41,7 +42,12 @@ jobs:
       fail-fast: false
       matrix:
         # `testing` is the shared fakes package (F-18); agent and packs use it as a dev dep.
-        package: [api, agent, packs, supervisor, testing]
+        # `mcp` (V3-05, docs/v3/_asks.md V3-01-4): its dev group pulls lkap-api, lkap-packs and
+        # lkap-testing as path deps, because the tests boot the real api in-process, and
+        # `mcp/tests/conftest.py` imports the `api/tests` helpers (`auth_helpers`,
+        # `connection_fakes`). The full checkout above provides both. `test_stdio.py` spawns
+        # `python -m lkap_mcp` against a closed loopback port, so the job needs no network or secrets.
+        package: [api, agent, packs, supervisor, testing, mcp]
 
     steps:
       - uses: actions/checkout@v4

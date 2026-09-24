@@ -1,0 +1,14 @@
+{
+  "name": "lkap",
+  "description": "Build and operate LKAP (LiveKit Agent Platform) voice/video agents from Claude Code: connect a LiveKit project, build an agent from a pack or from scratch, add knowledge and HTTP/MCP tools, wire flows and panels, test over a real text chat, then validate and publish. Adds the `lkap` MCP server and the `lkap` skill.",
+  "version": "0.1.0",
+  "author": {
+    "name": "LKAP"
+  },
+  "keywords": [
+    "lkap",
+    "livekit",
+    "voice-agent",
+    "mcp"
+  ]
+}

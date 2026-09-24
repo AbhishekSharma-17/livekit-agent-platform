@@ -87,3 +87,19 @@ if [[ -d "${ROOT_DIR}/mcp" ]]; then
   cp -R "${SCHEMAS_DIR}" "${MCP_GENERATED_DIR}/schemas"
   echo "export_contracts: copied providers.json, builtin_tools.json, schemas/ -> mcp/src/lkap_mcp/generated/" >&2
 fi
+
+# V3-08 (docs/v3/_asks.md G4): the Claude Code skill's recipes have one
+# source, mcp/src/lkap_mcp/docs/recipes/ (V3-03), copied byte-identical into
+# the packaged skill so `mcp/tests/test_docs_lint.py` can assert on the copy
+# without a second place to keep the text in sync.
+MCP_RECIPES_DIR="${ROOT_DIR}/mcp/src/lkap_mcp/docs/recipes"
+SKILL_RECIPES_DIR="${ROOT_DIR}/mcp/claude-plugin/skills/lkap/recipes"
+if [[ -d "${MCP_RECIPES_DIR}" ]]; then
+  mkdir -p "${SKILL_RECIPES_DIR}"
+  # Remove copies of recipes that no longer exist at the source, then copy
+  # every current one, so a rename on the source side doesn't leave a stale
+  # file behind in the plugin.
+  find "${SKILL_RECIPES_DIR}" -maxdepth 1 -name '*.md' -delete
+  cp "${MCP_RECIPES_DIR}"/*.md "${SKILL_RECIPES_DIR}/"
+  echo "export_contracts: copied mcp/src/lkap_mcp/docs/recipes/*.md -> mcp/claude-plugin/skills/lkap/recipes/" >&2
+fi

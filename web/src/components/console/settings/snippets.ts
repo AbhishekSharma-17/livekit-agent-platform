@@ -153,11 +153,10 @@ export function claudeCodeSnippet(ctx: SnippetContext): string {
 /**
  * Codex CLI: the `[mcp_servers.lkap]` block for `~/.codex/config.toml`.
  *
- * The remote form's header field name (`http_headers` here) is the one
- * documented for streamable-HTTP MCP servers as of this writing; V3-06 (which
- * ships the remote service) or a later pass should re-verify this against
- * whatever Codex CLI version is installed at build time and correct it here
- * if the field name has moved — see `docs/v3/_asks.md`.
+ * The remote form (`url` plus the `http_headers` table) is verified against
+ * codex-cli 0.153.4 (R-V3-25). `bearer_token_env_var = "LKAP_API_KEY"` is the
+ * documented alternative for a shared machine (`mcp/README.md`, RUNBOOK §20);
+ * a literal `bearer_token` is rejected by Codex.
  */
 export function codexSnippet(ctx: SnippetContext): string {
   if (ctx.remote) {

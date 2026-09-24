@@ -21,6 +21,10 @@
 #   scripts/smoke_v2.sh --no-boot    use an api that is already up at $LKAP_SMOKE_API_URL
 #   scripts/smoke_v2.sh --dry-run    READ-ONLY checks against a running api, no Docker,
 #                                    no writes; prints the write steps it would take
+#   scripts/smoke_v2.sh --with-mcp   ... then run the "agent builds an agent" recipe through the
+#                                    MCP server (V3-05): a temporary agent key, `lkap-mcp` over
+#                                    stdio, a generic agent built, test-chatted and published
+#                                    through the tools; the key is revoked on exit
 # Env: LKAP_SMOKE_API_URL (default http://127.0.0.1:8080),
 #      LKAP_SMOKE_TIMEOUT_S (default 300; waits for health and for the worker).
 set -euo pipefail
@@ -37,12 +41,14 @@ COOKIES="${WORK_DIR}/cookies.txt"
 DRY_RUN=false
 BOOT=true
 KEEP=false
+WITH_MCP=false
 for arg in "$@"; do
   case "${arg}" in
     --dry-run) DRY_RUN=true; BOOT=false ;;
     --no-boot) BOOT=false ;;
     --keep) KEEP=true ;;
-    -h | --help) sed -n '2,27p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --with-mcp) WITH_MCP=true ;;
+    -h | --help) sed -n '2,29p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) printf 'smoke_v2: unknown argument: %s\n' "${arg}" >&2; exit 2 ;;
   esac
 done
@@ -170,6 +176,16 @@ if [[ "${DRY_RUN}" == true ]]; then
   log "  POST /v1/agents {pack_id: generic, connection_id}, PUT {published: true}"
   log "  POST /v1/agents/{id}/text-sessions, send 'lk.chat' and wait for the agent's 'lk.transcription'"
   log "  GET /v1/sessions/{id}: transcript has the exchange; then stop the pool"
+  if [[ "${WITH_MCP}" == true ]]; then
+    command -v uv >/dev/null || die "uv is required for --with-mcp (runs lkap-mcp from mcp/)"
+    mcp_version="$(uv run --quiet --project "${ROOT_DIR}/mcp" lkap-mcp --version </dev/null)" \
+      || die "lkap-mcp does not start from the checkout (uv run --project mcp lkap-mcp --version)"
+    pass "MCP server entry point: ${mcp_version}"
+    log "  --with-mcp: POST /v1/api-keys {kind: agent, client: smoke, Builder scopes, 1 day}, then over"
+    log "  lkap-mcp stdio: me, agent_create(generic, connection_id), agent_update, agent_validate,"
+    log "  chat_start/chat_send/chat_end, agent_publish, activity, session_list(channel=text);"
+    log "  DELETE /v1/api-keys/{id} on exit"
+  fi
   exit 0
 fi
 
@@ -276,5 +292,110 @@ until expect 200 GET "/v1/sessions/${SESSION_ID}" \
 done
 [[ "$(json "${WORK_DIR}/body.json" 'd["channel"]')" == text ]] || die "session channel is not text"
 pass "session ${SESSION_ID}: channel text, $(json "${WORK_DIR}/body.json" 'd["status"]'), $(json "${WORK_DIR}/body.json" 'len(d["transcript"])') transcript turns"
+
+# ------------------------------------------------------------------ 9. through the MCP server (--with-mcp)
+# The "agent builds an agent" recipe (V3-05, docs/v3/AGENT-ACCESS.md §2.1) driven through `lkap-mcp`
+# over stdio, against this stack and the supervised worker of step 6. The agent key is minted
+# here and revoked on exit; it reaches the server only through the child's environment and the
+# 0600 work dir, never argv.
+if [[ "${WITH_MCP}" == true ]]; then
+  key_body="$(STAMP="${STAMP}" python3 -c '
+import datetime, json, os
+expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+print(json.dumps({
+    "name": "smoke-mcp-" + os.environ["STAMP"],
+    "kind": "agent",
+    "client": "smoke",
+    "scopes": ["agents:read", "sessions:read", "connections:read", "providers:read", "audit:read",
+               "agents:write", "sessions:write"],
+    "expires_at": expires.isoformat(),
+}))')"
+  expect 201 POST /v1/api-keys "${key_body}"
+  (umask 077 && cp "${WORK_DIR}/body.json" "${WORK_DIR}/mcp-key.json")
+  MCP_KEY_ID="$(json "${WORK_DIR}/mcp-key.json" 'd["id"]')"
+  revoke_mcp_key() { call DELETE "/v1/api-keys/${MCP_KEY_ID}" >/dev/null || true; }
+  trap 'revoke_mcp_key; stop_pool; cleanup' EXIT
+  pass "minted agent key ${MCP_KEY_ID} (Builder scopes, revoked on exit)"
+
+  (cd "${ROOT_DIR}/mcp" && LKAP_API_URL="${API}" SMOKE_STAMP="${STAMP}" CONNECTION_ID="${CONNECTION_ID}" \
+    uv run --quiet python - "${WORK_DIR}/mcp-key.json") <<'PY' || die "the MCP recipe failed"
+import asyncio, json, os, shutil, sys
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from mcp.types import Implementation
+
+
+def say(message: str) -> None:
+    print(f"[smoke_v2] {message}", file=sys.stderr)
+
+
+class RecipeFailed(Exception):
+    """One step of the recipe did not do what it should."""
+
+
+async def main() -> None:
+    with open(sys.argv[1]) as fh:
+        key = json.load(fh)["key"]
+    command = shutil.which("lkap-mcp")
+    if command is None:
+        raise RecipeFailed("lkap-mcp is not on PATH (uv run --project mcp)")
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", ""),
+           "LKAP_API_URL": os.environ["LKAP_API_URL"], "LKAP_API_KEY": key}
+    params = StdioServerParameters(command=command, args=[], env=env)
+    async with stdio_client(params) as (read, write), ClientSession(
+        read, write, client_info=Implementation(name="smoke_v2", version="0")
+    ) as mcp:
+        await mcp.initialize()
+
+        async def call(tool: str, **arguments: object) -> dict:
+            result = await mcp.call_tool(tool, arguments)
+            body = result.structuredContent or {}
+            if result.isError or not body.get("ok"):
+                text = "".join(getattr(block, "text", "") for block in result.content)
+                raise RecipeFailed(f"{tool} failed: {json.dumps(body.get('error')) if body else text[:400]}")
+            say(f"PASS mcp {tool}")
+            return body["data"]
+
+        await call("lkap_guide")
+        me = await call("me")
+        say(f"mcp key scopes: {sorted(me['key']['scopes'])}")
+        agent = (await call("agent_create", name="Smoke MCP " + os.environ["SMOKE_STAMP"],
+                            pack_id="generic", connection_id=os.environ["CONNECTION_ID"]))["agent"]
+        await call("agent_update", id_or_slug=agent["id"],
+                   patch={"instructions": "You are a terse test agent. Answer in one short sentence."})
+        validation = await call("agent_validate", id_or_slug=agent["id"])
+        errors = [i for i in validation.get("issues", []) if i.get("severity") == "error"]
+        if errors:
+            raise RecipeFailed(f"agent_validate: {errors}")
+        chat = await call("chat_start", agent_id_or_slug=agent["id"], timeout_s=90)
+        turn = await call("chat_send", chat_id=chat["chat_id"], text="Reply with the single word pong.",
+                          timeout_s=90)
+        replies = [r.get("content", "") for r in turn.get("replies", [])]
+        if not any(r.strip() for r in replies):
+            raise RecipeFailed(f"chat_send: no reply (state {turn.get('state')})")
+        say(f"mcp agent replied: {replies[0][:120]!r}")
+        await call("chat_end", chat_id=chat["chat_id"])
+        await call("agent_publish", id_or_slug=agent["id"])
+        rows = await call("activity", limit=200)
+        tools = {row["payload"]["client"]["tool"] for row in rows}
+        missing = {"agent_create", "agent_update", "agent_publish"} - tools
+        if missing or any(row["payload"]["client"]["name"] != "smoke_v2" for row in rows):
+            raise RecipeFailed(f"activity: missing {sorted(missing)} or a row not attributed to smoke_v2")
+        sessions = await call("session_list", channel="text", agent_id=agent["id"])
+        if chat["session_id"] not in [s["id"] for s in sessions]:
+            raise RecipeFailed("session_list(channel=text) does not show the chat")
+
+
+try:
+    asyncio.run(main())
+except BaseException as error:  # the stdio client re-raises inside exception groups
+    while isinstance(error, BaseExceptionGroup) and error.exceptions:
+        error = error.exceptions[0]
+    say(f"FAIL mcp: {error}")
+    raise SystemExit(1) from None
+PY
+  pass "MCP recipe: built, test-chatted and published an agent through lkap-mcp; activity attributed"
+fi
 
 log "smoke passed"

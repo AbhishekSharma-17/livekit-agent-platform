@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "lkap": {
+      "command": "uv",
+      "args": ["run", "--project", "${LKAP_CHECKOUT}/mcp", "lkap-mcp"],
+      "env": {
+        "LKAP_API_URL": "${LKAP_API_URL}",
+        "LKAP_API_KEY": "${LKAP_API_KEY}"
+      }
+    }
+  }
+}

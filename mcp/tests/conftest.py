@@ -65,6 +65,13 @@ BUILDER_SCOPES = [*READ_ONLY_SCOPES, "agents:write", "sessions:write"]
 OPERATOR_SCOPES = [*BUILDER_SCOPES, "connections:write", "providers:write", "webhooks:write"]
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """``--snapshot-update`` rewrites ``tests/tools.snap.json`` (V3-05, ``test_catalog_snapshot.py``)."""
+    parser.addoption(
+        "--snapshot-update", action="store_true", default=False, help="rewrite tests/tools.snap.json"
+    )
+
+
 # --------------------------------------------------------------------------- api
 @pytest.fixture
 def api_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Settings]:

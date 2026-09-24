@@ -1,14 +1,16 @@
 """``lkap-mcp``: run the LKAP MCP server.
 
 stdio by default (the coding agent spawns this process; ``LKAP_API_URL`` and
-``LKAP_API_KEY`` come from its MCP config). ``--http`` is the remote
-streamable-HTTP mode, owned by V3-06.
+``LKAP_API_KEY`` come from its MCP config). ``--http`` (or ``LKAP_MCP_HTTP=1``) is
+the remote streamable-HTTP service (V3-06, ``lkap_mcp.http``): it has no key of
+its own, every MCP session uses the bearer key of its requests.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 import anyio
@@ -33,20 +35,29 @@ async def run_stdio(settings: McpSettings) -> None:
 def main(argv: list[str] | None = None) -> int:
     """Entry point of the ``lkap-mcp`` script."""
     parser = argparse.ArgumentParser(prog="lkap-mcp", description="LKAP MCP server")
-    parser.add_argument("--http", action="store_true", help="serve streamable HTTP (remote mode, V3-06)")
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="serve streamable HTTP at /mcp (remote mode; bearer API key per request)",
+    )
     parser.add_argument("--version", action="version", version=f"lkap-mcp {__version__}")
     args = parser.parse_args(argv)
     settings = load_settings()
     configure_logging(settings.log_level)
-    if args.http:
-        sys.stderr.write("lkap-mcp: --http (remote mode) is not available in this build yet\n")
-        return 2
+    if args.http or settings.http_mode or _truthy(os.environ.get("LKAP_MCP_HTTP")):
+        from lkap_mcp.http import run_http
+
+        return run_http(settings, dict(os.environ))
     if settings.api_key is None:
         sys.stderr.write("lkap-mcp: LKAP_API_KEY is not set (mint an agent key in the console)\n")
         return 2
     log.info("lkap_mcp_starting", extra={"api_url": settings.api_url, "transport": "stdio"})
     anyio.run(run_stdio, settings)
     return 0
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 if __name__ == "__main__":

@@ -196,6 +196,44 @@ async def test_a_node_kb_outside_the_agents_kbs_is_an_error(admin_client: httpx.
     assert _paths(body["issues"], "error") == ["flow.nodes[1].kb_ids[0]"]
 
 
+# ------------------------------------------------------------- R-V4-29 knowledge scope
+def _kb_flow(agent_kbs: list[str], *, global_kbs: list[str], node_kbs: list[str]) -> AgentConfig:
+    flow = _flow(kb_ids=node_kbs)
+    flow["nodes"].append({"id": "g", "kind": "global", "kb_ids": global_kbs})
+    return AgentConfig.model_validate({**_config(flow), "knowledge": {"kb_ids": agent_kbs}})
+
+
+def _kb_findings(config: AgentConfig) -> list[tuple[str, str, str]]:
+    issues = flow_issues(ValidationContext(config=config, tool_names_by_id={}))
+    return [(i.path, i.severity, i.message) for i in issues if i.path.startswith("knowledge.")]
+
+
+def test_a_flow_that_scopes_no_knowledge_has_no_unreachable_warning() -> None:
+    """Every step searches all of the agent's knowledge bases, so nothing is unreachable."""
+    config = _kb_flow(["kb-a", "kb-b"], global_kbs=[], node_kbs=[])
+
+    assert _kb_findings(config) == []
+
+
+@pytest.mark.parametrize(
+    ("global_kbs", "node_kbs"),
+    [(["kb-a"], []), ([], ["kb-a"])],
+    ids=["global-scopes", "node-scopes"],
+)
+def test_an_attached_kb_no_step_lists_is_a_warning_once_the_flow_scopes_any(
+    global_kbs: list[str], node_kbs: list[str]
+) -> None:
+    config = _kb_flow(["kb-a", "kb-b"], global_kbs=global_kbs, node_kbs=node_kbs)
+
+    assert _kb_findings(config) == [
+        (
+            "knowledge.kb_ids[1]",
+            "warning",
+            "knowledge base 'kb-b' is attached but no step of the flow can search it",
+        )
+    ]
+
+
 def test_allowed_tool_names_is_the_agent_level_union() -> None:
     config = AgentConfig.model_validate(
         {

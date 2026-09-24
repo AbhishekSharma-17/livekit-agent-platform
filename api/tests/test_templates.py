@@ -247,6 +247,18 @@ def test_flow_tool_references_resolve_for_the_seeded_config(template_id: str) ->
             assert name in allowed, f"node {node.id!r} references {name!r}, which the agent will not have"
 
 
+def test_lead_qualification_starts_at_company_with_a_single_edge() -> None:
+    """R-V4-30: the lead starter's start never routes; declining is handled from `company`."""
+    flow = _template("lead_qualification").flow
+    assert flow is not None
+
+    from_start = [edge for edge in flow.edges if edge.source == "start"]
+    assert [(edge.id, edge.target) for edge in from_start] == [("start_company", "company")]
+    from_company = [(edge.id, edge.target) for edge in flow.edges if edge.source == "company"]
+    # `company_needs` stays first: it is the `max_turns` fallback of `company`.
+    assert from_company == [("company_needs", "needs"), ("company_nurture", "nurture")]
+
+
 @pytest.mark.parametrize("template_id", EXPECTED_IDS)
 def test_panel_block_configs_are_valid(template_id: str) -> None:
     template = _template(template_id)

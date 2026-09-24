@@ -12,6 +12,11 @@ Two entry points:
     each tool row in ``config.tools.tool_ids``; node knowledge bases are a
     subset of ``config.knowledge.kb_ids``. The builder's pickers list exactly
     :func:`allowed_tool_names`.
+  - **knowledge scope (R-V4-29)**: a flow that lists no ``kb_ids`` anywhere
+    searches all of the agent's knowledge bases from every step; once any
+    ``global``/``agent`` node lists one, an attached knowledge base that no
+    node lists is a ``warning`` at ``knowledge.kb_ids[i]`` (never an error:
+    an author may attach one for a later step).
   - **provider overrides (R-V2-9)**: mirrors the worker's
     ``lkap_agent.flow.providers.resolve_override`` — an override is applied
     only when it needs no new secret (the same provider, and the same or no
@@ -205,6 +210,23 @@ def _tool_and_kb_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
     return issues
 
 
+def _kb_scope_issues(config: AgentConfig, flow: FlowSpec) -> list[Issue]:
+    """Attached knowledge bases no step can search (R-V4-29), only when the flow scopes any."""
+    scoping = [n for n in flow.nodes if isinstance(n, AgentNode | GlobalNode) and n.kb_ids]
+    if not scoping:
+        return []
+    listed = {kb_id for node in scoping for kb_id in node.kb_ids}
+    return [
+        Issue(
+            path=f"knowledge.kb_ids[{i}]",
+            message=f"knowledge base '{kb_id}' is attached but no step of the flow can search it",
+            severity="warning",
+        )
+        for i, kb_id in enumerate(config.knowledge.kb_ids)
+        if kb_id not in listed
+    ]
+
+
 # ---------------------------------------------------------------------- overrides
 def _override_bases(config: AgentConfig) -> dict[OverrideSlot, list[tuple[str, ProviderRef | None]]]:
     """``(resolved provider id, stored ref)`` for every slot a node override may reuse.
@@ -372,6 +394,7 @@ def flow_issues(ctx: ValidationContext) -> list[Issue]:
         return []
     return [
         *_tool_and_kb_issues(ctx, flow),
+        *_kb_scope_issues(ctx.config, flow),
         *_override_issues(ctx.config, flow),
         *_variable_issues(flow),
         *_qa_issues(ctx.config, flow),

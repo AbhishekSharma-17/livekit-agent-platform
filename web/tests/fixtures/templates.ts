@@ -1426,7 +1426,7 @@ export const TEMPLATES: TemplatesResponse = {
               "id": "start_company",
               "source": "start",
               "target": "company",
-              "condition": "the caller agrees",
+              "condition": "the caller agrees or starts answering",
               "priority": 0
             },
             {
@@ -1434,6 +1434,13 @@ export const TEMPLATES: TemplatesResponse = {
               "source": "company",
               "target": "needs",
               "condition": "the company name and role are known",
+              "priority": 0
+            },
+            {
+              "id": "company_nurture",
+              "source": "company",
+              "target": "nurture",
+              "condition": "the caller declines to answer questions or is only researching",
               "priority": 0
             },
             {
@@ -1462,13 +1469,6 @@ export const TEMPLATES: TemplatesResponse = {
               "source": "book_demo",
               "target": "qualified",
               "condition": "email collected",
-              "priority": 0
-            },
-            {
-              "id": "start_nurture",
-              "source": "start",
-              "target": "nurture",
-              "condition": "the caller declines to answer questions",
               "priority": 0
             }
           ],

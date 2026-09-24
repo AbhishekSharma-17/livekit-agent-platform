@@ -19,6 +19,9 @@ database and run in `agent_validate`/`agent_flow_validate`.
   optional per-node `providers` overrides (`llm`/`tts`).
 - `global` — instructions, tools and knowledge merged into every `agent`
   node; at most one per flow, never an edge endpoint.
+  A step searches the `global` node's `kb_ids` plus its own; when no node
+  lists any `kb_ids`, every step searches all of the agent's
+  `knowledge.kb_ids`, so leave them empty unless you mean to narrow a step.
 - `end` — terminal: `farewell`, a `disposition` label, `webhook_event`.
 - `transfer` — hands the call to a human or another number (`to`, `mode:
   "cold"|"warm"`); phone-shaped, so it interacts with the telephony policy

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { kindOf, type AnyFlowNode } from "./flow-model";
 import { MentionTextarea } from "./mention-textarea";
 import type { NodeToolOption } from "./tool-options";
+import type { KbScope } from "./use-node-options";
 
 /**
  * One flow node's form (V2-16), generated from the node kind's JSON schema
@@ -50,6 +52,8 @@ export interface NodeFormProps {
   /** Field → warning message (shown in the hint slot). */
   warnings?: Readonly<Record<string, string>>;
   onManageVariables?: () => void;
+  /** What this step searches (R-V4-29); omitted → the knowledge field shows no scope note. */
+  kbScope?: KbScope | null;
 }
 
 const TEMPLATED = ["instructions", "greeting", "farewell", "announce", "rubric_prompt"] as const;
@@ -82,7 +86,8 @@ const HINTS: Record<string, string> = {
   position: "Drag the node on the canvas to move it.",
   instructions: "What the agent does in this step. Type @ to insert a variable.",
   tools: "Only the agent's own tools can be used in a step.",
-  kb_ids: "Only the agent's knowledge bases can be used in a step.",
+  kb_ids:
+    "A step searches what the Global node lists plus what is picked here; when no step lists anything, every step searches all of the agent's knowledge bases.",
   extract: "Variables filled from the conversation when the call leaves this step.",
   max_turns: "After this many caller turns without moving on, the first path is taken.",
   providers: "Cascaded pipelines only. Same provider as the pipeline (same key) or a provider that needs no key.",
@@ -105,6 +110,7 @@ export function NodeForm({
   errors = {},
   warnings = {},
   onManageVariables,
+  kbScope,
 }: NodeFormProps) {
   const kind = kindOf(node);
   const value = node as unknown as Record<string, unknown>;
@@ -127,14 +133,17 @@ export function NodeForm({
         />
       ),
       kb_ids: ({ id, value: current, onChange: set, describedBy }) => (
-        <CheckboxList
-          id={id}
-          describedBy={describedBy}
-          options={kbOptions}
-          value={asStrings(current)}
-          onChange={set}
-          empty="Attach knowledge bases to the agent first (Knowledge section)."
-        />
+        <div className="flex flex-col gap-2">
+          {kbScope ? <KbScopeNote id={`${id}-scope`} scope={kbScope} kbOptions={kbOptions} isGlobal={kind === "global"} /> : null}
+          <CheckboxList
+            id={id}
+            describedBy={describedBy}
+            options={kbOptions}
+            value={asStrings(current)}
+            onChange={set}
+            empty="Attach knowledge bases to the agent first (Knowledge section)."
+          />
+        </div>
       ),
       extract: ({ id, value: current, onChange: set, describedBy }) => (
         <div className="flex flex-col gap-2">
@@ -184,7 +193,7 @@ export function NodeForm({
       );
     }
     return out;
-  }, [kbOptions, onManageVariables, providerOptions, toolOptions, variables]);
+  }, [kbOptions, kbScope, kind, onManageVariables, providerOptions, toolOptions, variables]);
 
   return (
     <SchemaForm
@@ -212,6 +221,55 @@ function withWarnings(
     out[field] = <span className="text-warning-text">Warning: {message}</span>;
   }
   return out;
+}
+
+/**
+ * The knowledge field's scope line (R-V4-29): everything is inherited, the
+ * Global node's picks this step gets too, or nothing at all.
+ */
+function KbScopeNote({
+  id,
+  scope,
+  kbOptions,
+  isGlobal,
+}: {
+  id: string;
+  scope: KbScope;
+  kbOptions: readonly Option[];
+  isGlobal: boolean;
+}) {
+  const nameOf = (kbId: string) => kbOptions.find((option) => option.value === kbId)?.label ?? kbId;
+  if (scope.state === "inherits") {
+    const count = scope.ids.length;
+    if (count === 0) return null;
+    const inherits =
+      count === 1 ? "Inherits the one knowledge base of this agent." : `Inherits all ${count} knowledge bases of this agent.`;
+    const narrow = isGlobal ? "Pick some here to narrow every step." : "Pick some here or on the Global node to narrow.";
+    return (
+      <p id={id} data-kb-scope="inherits" className="text-[0.8125rem] text-muted-foreground">
+        {inherits} {narrow}
+      </p>
+    );
+  }
+  if (scope.state === "none") {
+    return (
+      <p id={id} data-kb-scope="none" className="text-[0.8125rem] text-warning-text">
+        {isGlobal
+          ? "Adds no knowledge base to the steps; each step searches only its own picks."
+          : "This step searches no knowledge base."}
+      </p>
+    );
+  }
+  if (scope.fromGlobal.length === 0) return null;
+  return (
+    <ul id={id} data-kb-scope="scoped" aria-label="Knowledge bases from the Global node" className="flex flex-wrap gap-1.5">
+      {scope.fromGlobal.map((kbId) => (
+        <li key={kbId}>
+          <Badge tone="neutral">From Global: {nameOf(kbId)}</Badge>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function asStrings(value: unknown): string[] {

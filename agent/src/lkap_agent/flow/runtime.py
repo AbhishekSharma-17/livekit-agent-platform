@@ -27,7 +27,13 @@ installed SDK):
   job shuts down (the same route as the `end_call` built-in).
 * **Prompt order** (R-V2-13): `AgentConfig.instructions` (the agent's base
   prompt, in both modes) → the global node's instructions → the node's own.
-  The global node's tools and knowledge bases are added to every node.
+  The global node's tools and knowledge bases are added to every node; a
+  flow that scopes no knowledge base at all searches the agent's
+  `knowledge.kb_ids` from every node (R-V4-29).
+* **Transitions in the prompt** (R-V4-30): every node with outgoing edges
+  lists them (`go_to_<target> — when <condition>`) and is told to call the
+  tool instead of doing the next step's work; a routing start node's only job
+  is to pick one.
 * **max_turns**: after `max_turns` caller turns in one node without a
   transition, the node's fallback edge (highest `priority`, then declaration
   order) is taken as soon as the agent is listening again.
@@ -61,11 +67,12 @@ from lkap_contracts.flow import (
     StartNode,
     TransferNode,
     VariableSpec,
+    edge_tool_name,
 )
 from lkap_contracts.tools import McpServerDefinition
 from packs.base import Pack
 
-from lkap_agent.flow.edges import build_edge_tools
+from lkap_agent.flow.edges import build_edge_tools, condition_clause, group_edges_by_target
 from lkap_agent.flow.providers import NodeProviders
 from lkap_agent.flow.state import ScopedKbClient, attach_flow_state
 from lkap_agent.flow.variables import (
@@ -86,8 +93,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "EXTRACTION_TIMEOUT_S",
+    "NO_CONDITION_CLAUSE",
+    "ROUTER_INSTRUCTIONS",
     "SETTLE_TIMEOUT_S",
     "TEARDOWN_SETTLE_TIMEOUT_S",
+    "TRANSITION_RULE",
     "ConversationNode",
     "FlowRuntime",
     "FlowServices",
@@ -111,6 +121,19 @@ _FAREWELL_PLAYOUT_TIMEOUT_S: Final[float] = 30.0
 
 #: `custom` blocks with this `config.kind` mirror the flow position (CONTRACTS-V2 §4.5).
 FLOW_PROGRESS_KIND: Final[str] = "flow_progress"
+
+#: A routing start node's own instruction (R-V4-30).
+ROUTER_INSTRUCTIONS: Final[str] = (
+    "You are at the start of the call. Your only job here is to find out which step applies and "
+    "call its go_to_* tool; do not ask the next step's questions yourself."
+)
+#: Follows the transitions list of every node with outgoing edges (R-V4-30).
+TRANSITION_RULE: Final[str] = (
+    "When one of these conditions is met, call that tool right away instead of answering, and do "
+    "not do the next step's work yourself. Never mention steps, tools or transitions to the caller."
+)
+#: The transitions list's clause for an edge without a condition.
+NO_CONDITION_CLAUSE: Final[str] = "this step is done"
 
 #: A node that talks: an agent node, or the start node acting as a router.
 ConversationNode = AgentNode | StartNode
@@ -219,6 +242,9 @@ class FlowRuntime:
                 self._tools_by_name.setdefault(name, tool)
         self._mcp_by_name = {d.name: d for d in services.mcp_definitions}
         self._allowed_kb_ids = set(services.resolved.kb_ids)
+        #: R-V4-29: whether any global/agent node narrows knowledge; if none does, every node
+        #: searches all of the agent's resolved knowledge bases.
+        self._flow_scopes_kbs = any(n.kb_ids for n in spec.nodes if isinstance(n, AgentNode | GlobalNode))
         self._progress_block_ids = [
             spec_.id
             for spec_ in resolve_block_specs(ctx.config.panel, services.pack.manifest)
@@ -301,15 +327,12 @@ class FlowRuntime:
         if isinstance(node, AgentNode):
             parts.append(render_template(node.instructions, variables, missing="(not yet known)"))
         else:
+            parts.append(ROUTER_INSTRUCTIONS)
+        edges = self._out.get(node.id)
+        if edges:
             parts.append(
-                "You are at the start of the call. Find out what the caller needs and move to the "
-                "matching step as soon as it is clear."
-            )
-        if self._out.get(node.id):
-            parts.append(
-                f"Conversation flow: you are in the step '{node.label or node.id}'. When the condition "
-                "of one of your go_to_* tools is met, call that tool right away instead of answering. "
-                "Never mention steps, tools or transitions to the caller."
+                f"Conversation flow: you are in the step '{node.label or node.id}'. "
+                f"Your next steps: {self._transitions_text(edges)}. {TRANSITION_RULE}"
             )
         known = known_variables_block(variables, self.spec.variables)
         if known:
@@ -318,6 +341,15 @@ class FlowRuntime:
         return compose_instructions(
             base, mode=self.services.ctx.pipeline_mode, manifest=self.services.pack.manifest
         )
+
+    def _transitions_text(self, edges: list[FlowEdge]) -> str:
+        """`go_to_<target> — when <condition>` for each distinct target, `; `-joined (R-V4-30)."""
+        items: list[str] = []
+        for target_id, group in group_edges_by_target(edges).items():
+            conditions = [c for c in (condition_clause(e.condition) for e in group) if c]
+            when = " or ".join(conditions) if conditions else NO_CONDITION_CLAUSE
+            items.append(f"{edge_tool_name(target_id)} — when {when}")
+        return "; ".join(items)
 
     def _tool_names_for(self, node: ConversationNode) -> list[str]:
         names = list(self._global.tools) if self._global is not None else []
@@ -354,7 +386,15 @@ class FlowRuntime:
             return []
 
     def kb_ids_for(self, node: ConversationNode) -> list[str]:
-        """Global + node knowledge bases, limited to the ones the api resolved for the session."""
+        """The knowledge bases `node` searches (R-V4-29).
+
+        When no `global` or `agent` node declares a `kb_ids`, every node (the
+        routing start included) searches all of the agent's resolved knowledge
+        bases, in list order. Otherwise: the global node's plus the node's own,
+        limited to the ones the api resolved for the session.
+        """
+        if not self._flow_scopes_kbs:
+            return list(self.services.resolved.kb_ids)
         ids = list(self._global.kb_ids) if self._global is not None else []
         if isinstance(node, AgentNode):
             ids += node.kb_ids

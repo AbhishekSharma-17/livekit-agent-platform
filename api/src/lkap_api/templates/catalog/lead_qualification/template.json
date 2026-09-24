@@ -175,13 +175,19 @@
         "id": "start_company",
         "source": "start",
         "target": "company",
-        "condition": "the caller agrees"
+        "condition": "the caller agrees or starts answering"
       },
       {
         "id": "company_needs",
         "source": "company",
         "target": "needs",
         "condition": "the company name and role are known"
+      },
+      {
+        "id": "company_nurture",
+        "source": "company",
+        "target": "nurture",
+        "condition": "the caller declines to answer questions or is only researching"
       },
       {
         "id": "needs_budget",
@@ -206,12 +212,6 @@
         "source": "book_demo",
         "target": "qualified",
         "condition": "email collected"
-      },
-      {
-        "id": "start_nurture",
-        "source": "start",
-        "target": "nurture",
-        "condition": "the caller declines to answer questions"
       }
     ],
     "variables": [

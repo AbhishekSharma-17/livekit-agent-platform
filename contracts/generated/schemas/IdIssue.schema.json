@@ -1,0 +1,25 @@
+{
+  "$id": "lkap-contracts/IdIssue.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What :func:`validate_id_value` found wrong with an id-like value (R-V4-31). Value-free.",
+  "properties": {
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "severity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "severity",
+    "reason"
+  ],
+  "title": "IdIssue",
+  "type": "object"
+}

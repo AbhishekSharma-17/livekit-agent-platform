@@ -86,6 +86,7 @@ RECIPE_NAMES: Final[tuple[str, ...]] = (
     "switch-to-flow",
     "composite-panel",
     "test-and-publish",
+    "test-a-custom-model",
     "diagnose-a-session",
 )
 

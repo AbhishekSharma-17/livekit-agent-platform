@@ -935,6 +935,103 @@
       "title": "McpServerDefinition",
       "type": "object"
     },
+    "ModelCapabilities": {
+      "description": "What one model can do, as far as the platform knows (D-V4-24, R-V4-23).\n\n``None`` means unknown. Resolved per field from, in order: the admin's\ndeclaration, the last \"Test model\" probe, the live catalog item's\nmetadata, the registry; ``source`` names the source of ``vision``.",
+      "properties": {
+        "audio_in": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio In"
+        },
+        "audio_out": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Out"
+        },
+        "context_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Tokens"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "declared",
+                "detected",
+                "catalog",
+                "registry"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "streaming": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Streaming"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        }
+      },
+      "title": "ModelCapabilities",
+      "type": "object"
+    },
     "PanelLayout": {
       "description": "Which panel renders the session, and (for ``composite``) its blocks.",
       "properties": {
@@ -1300,6 +1397,17 @@
     "ResolvedProvider": {
       "description": "A provider ready to construct: class path plus complete constructor kwargs.",
       "properties": {
+        "capabilities": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelCapabilities"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "kwargs": {
           "additionalProperties": true,
           "title": "Kwargs",

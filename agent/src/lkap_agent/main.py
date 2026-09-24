@@ -1332,6 +1332,7 @@ def _assemble(
         record_event=record_event or _noop_record_event,
         channel=resolved.channel,
         request_shutdown=lambda reason: ctx.shutdown(reason=reason),
+        llm_capabilities=plan.llm_capabilities,
     )
     cell.append(session_ctx)
 

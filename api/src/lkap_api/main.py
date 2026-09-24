@@ -27,6 +27,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from lkap_api import __version__
 from lkap_api.bootstrap import bootstrap
+from lkap_api.custom_models.router import router as model_test_router
 from lkap_api.db.session import Database
 from lkap_api.errors import ApiError
 from lkap_api.logging import configure_logging, get_logger
@@ -137,7 +138,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-        log.exception("unhandled_error", path=request.url.path, error_type=type(exc).__name__)
+        # R-V4-32: the matched route template, never the concrete path (a model id may sit in it).
+        route_path = getattr(request.scope.get("route"), "path_format", None)
+        path = route_path if isinstance(route_path, str) else request.url.path
+        log.exception("unhandled_error", path=path, error_type=type(exc).__name__)
         return _error_response(500, "internal_error", "internal server error")
 
 
@@ -149,6 +153,7 @@ def _include_routers(app: FastAPI) -> None:
     edit this function again.
     """
     app.include_router(providers.router)
+    app.include_router(model_test_router)
     app.include_router(packs_router)
     app.include_router(templates_router)
     app.include_router(provider_keys.router)

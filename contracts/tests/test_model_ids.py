@@ -11,6 +11,7 @@ import pytest
 
 from lkap_contracts.api_models import ModelIdRules
 from lkap_contracts.providers import (
+    BARE_TOKEN_ID_REASON,
     BARE_TOKEN_MIN_LEN,
     ID_LIKE_FIELD_NAMES,
     MODEL_ID_MAX_LEN,
@@ -20,6 +21,7 @@ from lkap_contracts.providers import (
     SECRET_PREFIXES,
     id_like_field,
     looks_like_secret,
+    validate_id_value,
     validate_model_id,
 )
 
@@ -168,3 +170,55 @@ def test_model_id_rules_default_to_the_contract_constants() -> None:
 def test_id_like_field_matches_the_last_segment(name: str, expected: bool) -> None:
     assert id_like_field(name) is expected
     assert ID_LIKE_FIELD_NAMES >= {"voice", "voice_id", "avatar_id", "face_id", "pal_id", "persona_id"}
+
+
+# ------------------------------------------------------ id-like fields: the severity split (R-V4-31)
+_HEX32 = "0123456789abcdef0123456789abcdef"
+_PADDED_BASE64 = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo+YWJjZA=="
+
+
+def _runs(value: str, size: int = 4) -> list[str]:
+    return [value[i : i + size] for i in range(len(value) - size + 1)]
+
+
+def test_a_32_hex_value_is_a_model_id_error_but_an_id_field_warning() -> None:
+    assert validate_model_id(_HEX32) == SECRET_LOOKING_REASON
+    issue = validate_id_value(_HEX32)
+    assert issue is not None
+    assert issue.severity == "warning"
+    assert issue.reason == BARE_TOKEN_ID_REASON
+
+
+@pytest.mark.parametrize("prefix", SECRET_PREFIXES)
+def test_a_prefixed_key_is_an_error_from_both_rules(prefix: str) -> None:
+    value = _fake_secret(prefix)
+    assert validate_model_id(value) == SECRET_LOOKING_REASON
+    issue = validate_id_value(value)
+    assert issue is not None and issue.severity == "error"
+    assert issue.reason == SECRET_LOOKING_REASON
+
+
+@pytest.mark.parametrize("value", ["3f2b8c1e-9a4d-4e6b-8c2a-1d5e7f9a0b3c", "r79e1c033f", "aura-2-thalia-en"])
+def test_a_uuid_or_ordinary_id_passes_both_rules(value: str) -> None:
+    assert validate_model_id(value) is None
+    assert validate_id_value(value) is None
+
+
+def test_a_padded_base64_key_stays_an_error_on_an_id_field() -> None:
+    # `=` is a forbidden character: the syntax check runs before the bare-token warning.
+    issue = validate_id_value(_PADDED_BASE64)
+    assert issue is not None and issue.severity == "error"
+
+
+@pytest.mark.parametrize("value", ["has space", "http://x", "a?b", "x" * 201, ""])
+def test_a_syntax_failure_is_an_error_on_an_id_field(value: str) -> None:
+    issue = validate_id_value(value)
+    assert issue is not None and issue.severity == "error"
+
+
+@pytest.mark.parametrize("value", [_HEX32, _fake_secret("sk-"), _fake_secret("xi-"), _PADDED_BASE64])
+def test_no_reason_of_either_rule_carries_a_run_of_the_value(value: str) -> None:
+    issue = validate_id_value(value)
+    for reason in (validate_model_id(value) or "", issue.reason if issue else ""):
+        leaked = [run for run in _runs(value) if run in reason]
+        assert not leaked, leaked

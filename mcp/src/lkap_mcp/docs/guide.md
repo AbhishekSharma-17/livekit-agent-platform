@@ -92,7 +92,7 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `connect-livekit`, `start-from-template`, `insurance-intake-agent`, `generic-assistant`,
 `add-http-tool`, `attach-mcp-server`, `knowledge-from-text`,
 `switch-to-flow`, `composite-panel`, `test-and-publish`,
-`diagnose-a-session` — each is a numbered, copy-pasteable tool sequence
+`test-a-custom-model`, `diagnose-a-session` — each is a numbered, copy-pasteable tool sequence
 (`lkap_describe("recipe", name)`).
 
 ## Concepts

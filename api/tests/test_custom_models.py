@@ -376,6 +376,77 @@ async def test_declaring_needs_admin_while_a_builder_may_read(
     assert write.status_code == 403
 
 
+# ----------------------------------------------------- the severity split (R-V4-31, V4-08)
+#: 32 hex characters: a Simli- or Tavus-style key *or* a vendor's real id.
+HEX32 = "9f3c2a7d41e84b6fa0c5d2e19b7a6c83"
+
+
+async def _simli_agent(admin_client: httpx.AsyncClient, face_id: str) -> httpx.Response:
+    created = await admin_client.post(
+        "/v1/credentials",
+        json={
+            "provider_id": "simli-avatar",
+            "label": "simli",
+            "secrets": {"simli_config.api_key": "placeholder-simli-key"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    config = inference_config()
+    config.pipeline.avatar = ProviderRef(
+        provider_id="simli-avatar",
+        credential_id=created.json()["id"],
+        fields={"simli_config.face_id": face_id},
+    )
+    return await admin_client.post(
+        "/v1/agents", json={"name": "Simli", "config": json.loads(config.model_dump_json())}
+    )
+
+
+async def test_a_32_hex_face_id_is_one_value_free_warning_and_the_agent_publishes(
+    admin_client: httpx.AsyncClient,
+) -> None:
+    created = await _simli_agent(admin_client, HEX32)
+    assert created.status_code == 201, created.text
+    agent_id = created.json()["id"]
+
+    validated = (await admin_client.post(f"/v1/agents/{agent_id}/validate")).json()
+    published = await admin_client.put(f"/v1/agents/{agent_id}", json={"published": True})
+
+    path = "pipeline.avatar.fields.simli_config.face_id"
+    at_path = [i for i in validated["issues"] if i["path"] == path]
+    assert len(at_path) == 1
+    assert at_path[0]["severity"] == "warning"
+    assert "looks like an API key; if it is the vendor's id, ignore this" in at_path[0]["message"]
+    assert not [i for i in validated["issues"] if i["severity"] == "error"]
+    _assert_no_fragment(json.dumps(validated), HEX32)
+    assert published.status_code == 200, published.text
+    assert published.json()["published"] is True
+
+
+async def test_a_prefixed_key_in_face_id_is_still_an_error(admin_client: httpx.AsyncClient) -> None:
+    fake_key = "sk_" + HEX32
+    response = await _simli_agent(admin_client, fake_key)
+
+    assert response.status_code == 422, response.text
+    issues = response.json()["error"]["details"]["issues"]
+    at_path = [i for i in issues if i["path"] == "pipeline.avatar.fields.simli_config.face_id"]
+    assert [i["severity"] for i in at_path] == ["error"]
+    _assert_no_fragment(response.text, HEX32)
+
+
+async def test_a_32_hex_model_id_stays_an_error(admin_client: httpx.AsyncClient) -> None:
+    credential_id = await _key(admin_client, "openrouter-llm", api_key="sk-or-v1-placeholder-credential")
+
+    response = await admin_client.post(
+        "/v1/agents", json={"name": "Hex model", "config": _openrouter_config(HEX32, credential_id)}
+    )
+
+    assert response.status_code == 422, response.text
+    issues = response.json()["error"]["details"]["issues"]
+    assert [i["severity"] for i in issues if i["path"] == "pipeline.llm"] == ["error"]
+    _assert_no_fragment(response.text, HEX32)
+
+
 def test_no_new_api_source_path_has_a_credentials_prefixed_segment() -> None:
     src = Path(__file__).resolve().parents[1] / "src"
     offenders = [

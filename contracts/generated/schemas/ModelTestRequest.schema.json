@@ -1,0 +1,84 @@
+{
+  "$id": "lkap-contracts/ModelTestRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/providers/{provider_id}/test-model`` (D-V4-26, R-V4-25).\n\n``model`` is checked by the model-id rule before anything else (422 without\necho). ``credential_id`` defaults like the catalog route (the workspace's\ndefault, else its only key for the credential home). ``connection_id``\nmatters only for the LiveKit Inference entries, whose probe signs the\ngateway request with that connection's key and secret (default: the\nworkspace's default connection). ``fields`` are the slot's non-secret\nfields (``voice``, ``voice_id``, ``base_url`` …). ``force`` skips the\n10-minute re-run suppression.",
+  "properties": {
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    },
+    "credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "fields": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "default": {},
+      "title": "Fields",
+      "type": "object"
+    },
+    "force": {
+      "default": false,
+      "title": "Force",
+      "type": "boolean"
+    },
+    "model": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Model",
+      "type": "string"
+    },
+    "probes": {
+      "default": [
+        "basic",
+        "tools"
+      ],
+      "items": {
+        "enum": [
+          "basic",
+          "tools",
+          "vision"
+        ],
+        "type": "string"
+      },
+      "title": "Probes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "model"
+  ],
+  "title": "ModelTestRequest",
+  "type": "object"
+}

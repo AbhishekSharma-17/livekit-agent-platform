@@ -58,7 +58,7 @@ from lkap_contracts.flow import (
 )
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price
-from lkap_contracts.providers import CatalogFilter, ModelCapabilities, PageSpec, ProviderSpec
+from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
 from lkap_contracts.qa import QaVerdict, SessionQaIn
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
 from lkap_contracts.templates import StarterTemplate
@@ -154,6 +154,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # providers and pricing
     "ProviderSpec": ProviderSpec,
     "ModelCapabilities": ModelCapabilities,
+    "IdIssue": IdIssue,
     "CatalogFilter": CatalogFilter,
     "PageSpec": PageSpec,
     "Price": Price,
@@ -172,6 +173,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ModelIdRules": api_models.ModelIdRules,
     "ProviderModelOut": api_models.ProviderModelOut,
     "ProviderModelDeclare": api_models.ProviderModelDeclare,
+    "ModelTestRequest": api_models.ModelTestRequest,
+    "ProbeResult": api_models.ProbeResult,
+    "ModelTestResult": api_models.ModelTestResult,
     "CredentialCreate": api_models.CredentialCreate,
     "CredentialUpdate": api_models.CredentialUpdate,
     "CredentialOut": api_models.CredentialOut,

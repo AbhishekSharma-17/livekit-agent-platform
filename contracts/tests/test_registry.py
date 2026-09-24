@@ -466,3 +466,58 @@ def test_catalog_filter_rejects_a_bad_regex_and_half_a_meta_condition() -> None:
 
 def test_model_kinds_cover_every_kind_that_takes_a_model() -> None:
     assert frozenset({"realtime", "stt", "llm", "tts", "image_gen", "embedding"}) == MODEL_KINDS
+
+
+# ------------------------------------------------------------------ "Test model" probes (V4-08, D-V4-26)
+#: The kinds a probe may exist for: the model kinds plus avatars (a session-less GET).
+_PROBE_KINDS = MODEL_KINDS | {"avatar"}
+
+
+@pytest.mark.parametrize("spec", [s for s in REGISTRY if s.probe], ids=lambda s: s.id)
+def test_a_probe_is_set_only_on_model_kinds_and_avatars(spec: ProviderSpec) -> None:
+    assert spec.kind in _PROBE_KINDS
+    assert spec.kind != "image_gen", "images are never probed (R-V4-25)"
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "probe"),
+    [
+        ("openai-llm", "openai_chat"),
+        ("openai-responses-llm", "openai_chat"),
+        ("openai-stt", "openai_transcriptions"),
+        ("openai-tts", "openai_speech"),
+        ("openai-realtime", "openai_realtime_ws"),
+        ("openai-embedding", "openai_embeddings"),
+        ("openrouter-llm", "openai_chat"),
+        ("openrouter-stt", "openai_transcriptions"),
+        ("openrouter-tts", "openai_speech"),
+        ("openrouter-embedding", "openai_embeddings"),
+        ("groq-llm", "openai_chat"),
+        ("groq-stt", "openai_transcriptions"),
+        ("cerebras-llm", "openai_chat"),
+        ("xai-llm", "openai_chat"),
+        ("xai-realtime", "xai_realtime_ws"),
+        ("mistral-llm", "openai_chat"),
+        ("openai-compatible-llm", "openai_chat"),
+        ("anthropic-llm", "anthropic_messages"),
+        ("google-llm", "gemini_generate"),
+        ("google-realtime", "gemini_live_ws"),
+        ("livekit-inference-llm", "openai_chat"),
+        ("deepgram-stt", "deepgram_listen"),
+        ("deepgram-tts", "deepgram_speak"),
+        ("elevenlabs-stt", "elevenlabs_stt"),
+        ("elevenlabs-tts", "elevenlabs_tts"),
+        ("cartesia-stt", "cartesia_stt"),
+        ("cartesia-tts", "cartesia_tts"),
+        ("bey-avatar", "bey_avatar_get"),
+        ("tavus-avatar", "tavus_replica_get"),
+        ("simli-avatar", "simli_face_member"),
+        ("anam-avatar", "anam_avatar_get"),
+    ],
+)
+def test_the_d_v4_26_entries_name_their_probe(provider_id: str, probe: str) -> None:
+    assert get(provider_id).probe == probe
+
+
+def test_no_image_entry_has_a_probe() -> None:
+    assert [s.id for s in REGISTRY if s.kind == "image_gen" and s.probe] == []

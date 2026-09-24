@@ -6,20 +6,29 @@ Registered into :data:`lkap_api.config_service.VALIDATORS` on import (the
 **Errors** (the only two the rule allows): a model id, or the value of an
 id-like field (``type="model"``/``"catalog"`` or a name in
 ``ID_LIKE_FIELD_NAMES``), that looks like an API key or breaks the syntax
-rule. No message contains the value.
+rule. No message contains the value. R-V4-31: on an id-like or
+``type="catalog"`` field a *bare token* (no key prefix) is only a warning.
 
-**Warnings**: the last "Test model" run with the slot's current key failed
-(with its scrubbed reason); the vendor deprecated the model or it is gone from
-the live catalog (``catalog_missing_since``); the resolved capabilities say a
-cascaded LLM cannot see images while the agent wants video. The "unknown and
-untested" warning is ``config_service._validate_model``'s own, so it fires once.
+**Warnings**: an id-like field whose value is a bare token; the last "Test
+model" run with the slot's current key failed (with its scrubbed reason); the
+vendor deprecated the model or it is gone from the live catalog
+(``catalog_missing_since``); the resolved capabilities say a cascaded LLM
+cannot see images while the agent wants video. The "unknown and untested"
+warning is ``config_service._validate_model``'s own, so it fires once.
 """
 
 from __future__ import annotations
 
 from lkap_contracts.agent_config import ProviderRef, ProviderSlot
 from lkap_contracts.api_models import Issue
-from lkap_contracts.providers import ProviderSpec, get, id_like_field, validate_model_id, vision_support
+from lkap_contracts.providers import (
+    ProviderSpec,
+    get,
+    id_like_field,
+    validate_id_value,
+    validate_model_id,
+    vision_support,
+)
 
 from lkap_api.config_service import SLOT_KIND, ValidationContext, register_validator
 from lkap_api.custom_models.capabilities import resolve_capabilities
@@ -42,7 +51,14 @@ def _spec(ref: ProviderRef, slot: ProviderSlot) -> ProviderSpec | None:
 
 
 def id_rule_issues(path: str, ref: ProviderRef, spec: ProviderSpec) -> list[Issue]:
-    """The secret/syntax errors of one slot's model id and id-like fields (never echoing a value)."""
+    """The id-rule issues of one slot's model id and id-like fields (never echoing a value).
+
+    R-V4-31: a model id (``ProviderRef.model``, a ``type="model"`` field) gets
+    :func:`validate_model_id` — a bare token is an error. An id-like or
+    ``type="catalog"`` field gets :func:`validate_id_value` — a key prefix or a
+    syntax failure is an error, a bare token only a warning (a vendor's real id
+    may be 32 hex characters). Field issues sit at ``<path>.fields.<name>``.
+    """
     issues: list[Issue] = []
     if ref.model:
         reason = validate_model_id(ref.model)
@@ -53,12 +69,19 @@ def id_rule_issues(path: str, ref: ProviderRef, spec: ProviderSpec) -> list[Issu
         if not isinstance(value, str) or not value:
             continue
         field_spec = by_name.get(name)
-        typed = field_spec is not None and field_spec.type in ("model", "catalog")
-        if not (typed or id_like_field(name)):
+        field_path = f"{path}.fields.{name}"
+        if field_spec is not None and field_spec.type == "model":
+            reason = validate_model_id(value)
+            if reason is not None:
+                message = f"field '{name}': the value {reason}"
+                issues.append(Issue(path=field_path, message=message, severity="error"))
             continue
-        reason = validate_model_id(value)
-        if reason is not None:
-            issues.append(Issue(path=path, message=f"field '{name}': the value {reason}", severity="error"))
+        if not ((field_spec is not None and field_spec.type == "catalog") or id_like_field(name)):
+            continue
+        issue = validate_id_value(value)
+        if issue is not None:
+            message = f"field '{name}': the value {issue.reason}"
+            issues.append(Issue(path=field_path, message=message, severity=issue.severity))
     return issues
 
 

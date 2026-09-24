@@ -120,6 +120,13 @@ ROUTE_POLICY: tuple[_Rule, ...] = (
         Requirement("viewer", "providers:read"),
         Requirement("admin", "providers:write"),
     ),
+    # R-V4-26: a builder may test the model they are configuring (it spends vendor money,
+    # as test chat does under sessions:write); declaring capabilities stays admin.
+    _Rule(
+        "/v1/providers/{provider_id}/test-model",
+        Requirement("builder", "providers:read"),
+        Requirement("builder", "agents:write"),
+    ),
     _Rule(
         "/v1/connections",
         Requirement("viewer", "connections:read"),

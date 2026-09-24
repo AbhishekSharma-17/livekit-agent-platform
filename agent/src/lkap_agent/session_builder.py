@@ -66,6 +66,7 @@ from lkap_contracts.agent_config import (
     ResolvedAgentConfig,
     ResolvedProvider,
 )
+from lkap_contracts.providers import ModelCapabilities
 
 from lkap_agent.logging import get_logger
 from lkap_agent.providers.factory import BuiltProviders
@@ -78,6 +79,7 @@ __all__ = [
     "build_turn_handling",
     "factory_view",
     "is_text_channel",
+    "llm_capabilities_of",
     "prepare_resolved",
 ]
 
@@ -166,6 +168,12 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
     return resolved.model_copy(update={"resolved": slots})
 
 
+def llm_capabilities_of(resolved: ResolvedAgentConfig) -> ModelCapabilities | None:
+    """The resolved ``llm`` slot's capabilities (``None`` from an older api or without an llm slot)."""
+    slot = resolved.resolved.get("llm")
+    return slot.capabilities if slot is not None else None
+
+
 def factory_view(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
     """What `ProviderFactory.build_all` should see for this session.
 
@@ -193,6 +201,9 @@ class SessionPlan:
     mode: PipelineMode = "cascaded"
     #: A `channel="text"` session: no audio in or out.
     text_only: bool = False
+    #: What the api resolved about the cascaded LLM (`ResolvedProvider.capabilities`, V4-08);
+    #: the worker hands it to `SessionContext.llm_capabilities`.
+    llm_capabilities: ModelCapabilities | None = None
 
     @property
     def needs_generate_reply_greeting(self) -> bool:
@@ -388,6 +399,7 @@ class SessionBuilder:
             is_realtime=mode == "realtime",
             mode=mode,
             text_only=text_only,
+            llm_capabilities=llm_capabilities_of(resolved),
         )
 
     @staticmethod

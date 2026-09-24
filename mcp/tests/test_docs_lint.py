@@ -418,11 +418,17 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "connection_rotate": frozenset({"id", "api_key", "api_secret", "confirm", "plan"}),
     # 4.3 providers and keys
     "provider_list": frozenset({"kind", "enabled", "installed_on", "query", "availability"}),
-    "provider_catalog": frozenset({"provider_id", "kind", "key_id", "refresh"}),
+    "provider_catalog": frozenset(
+        {"provider_id", "kind", "key_id", "query", "limit", "offset", "model", "search_vendor", "refresh"}
+    ),
     "provider_settings": frozenset({"provider_id", "enabled", "default_key_id", "plan"}),
     "provider_key_create": frozenset({"provider_id", "label", "secrets", "test", "plan"}),
     "provider_key_list": frozenset({"provider_id"}),
     "provider_key_test": frozenset({"key_id"}),
+    "provider_test_model": frozenset(
+        {"provider_id", "model", "key_id", "connection_id", "fields", "probes", "force", "plan"}
+    ),
+    "provider_model_declare": frozenset({"provider_id", "model", "capabilities", "plan"}),
     # 4.4 agents
     "agent_list": frozenset({"query", "mode", "published", "archived", "connection_id", "limit"}),
     "agent_get": frozenset({"id_or_slug", "include_config", "include_validation"}),

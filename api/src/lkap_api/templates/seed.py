@@ -34,7 +34,9 @@ def requirements_from_pipeline(pipeline: PipelineConfig) -> list[RequiredKey]:
 
     Every provider reference of the slots the pipeline's mode runs (plus
     ``avatar``, ``image_gen`` and ``workflow_llm``) whose registry spec needs a
-    credential, in slot order, once per provider. ``avatar``/``image_gen`` keys
+    credential, in slot order, once per credential home (R-V4-7: providers that
+    share a key, like the OpenRouter entries, report it once, under the home's
+    id). ``avatar``/``image_gen`` keys
     are ``optional`` (seeding drops those slots without a key instead of
     substituting LiveKit Inference). ``purpose`` is left empty: it is prose the
     catalogue writes, not something a pipeline says.
@@ -57,11 +59,14 @@ def requirements_from_pipeline(pipeline: PipelineConfig) -> list[RequiredKey]:
         if not spec.requires_credential:
             continue
         optional = slot in OPTIONAL_KEY_SLOTS
-        existing = keys.get(spec.id)
+        # R-V4-7: providers sharing a credential home need one key, reported
+        # under the home (three OpenRouter slots → one `openrouter-llm` key).
+        home = provider_registry.credential_home(spec)
+        existing = keys.get(home)
         if existing is None:
-            keys[spec.id] = RequiredKey(provider_id=spec.id, optional=optional)
+            keys[home] = RequiredKey(provider_id=home, optional=optional)
         elif existing.optional and not optional:
-            keys[spec.id] = RequiredKey(provider_id=spec.id, optional=False)
+            keys[home] = RequiredKey(provider_id=home, optional=False)
     return list(keys.values())
 
 

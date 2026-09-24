@@ -1,7 +1,8 @@
 """Image-generation providers behind `packs.base.ImageGen`.
 
 Registry entries `google-image-gen` / `openai-image-gen` (docs/CONTRACTS.md
-§4) point their `python_class` here. `ProviderFactory` (W1-AGENT-CORE)
+§4) and `openrouter-image-gen` (docs/v4/OPENROUTER.md §2.6) point their
+`python_class` here. `ProviderFactory` (W1-AGENT-CORE)
 constructs these the same way as every other provider: credentials and
 `model` arrive as explicit constructor kwargs, never via process env
 (docs/ARCHITECTURE.md §6 factory rule).
@@ -204,3 +205,109 @@ class OpenAIImageGen:
         if not b64:
             raise ImageGenError("OpenAI image generation returned no image data")
         return base64.b64decode(b64), "image/png"
+
+
+#: OpenRouter's API root (the registry's `OPENROUTER_BASE_URL`).
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class OpenRouterImageGen:
+    """`packs.base.ImageGen` over OpenRouter's unified Images API (docs/v4/OPENROUTER.md §2.6).
+
+    OpenRouter's image endpoint is ``POST /api/v1/images`` (not OpenAI's
+    ``/images/generations``) with ``resolution``/``aspect_ratio`` instead of
+    ``size``, so ``AsyncOpenAI().images.generate`` cannot reach it. This class
+    uses the SDK's generic ``post`` (no new dependency) and reads
+    ``data[0].b64_json`` / ``data[0].media_type`` from the JSON response.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str = "openai/gpt-image-1",
+        resolution: str = "1K",
+        aspect_ratio: str = "1:1",
+        site_url: str | None = None,
+        app_name: str | None = "LKAP",
+        base_url: str = OPENROUTER_BASE_URL,
+        client: Any | None = None,
+    ) -> None:
+        """Build an OpenRouter image-generation client.
+
+        Args:
+            api_key: OpenRouter API key, decrypted from the credential vault.
+            model: Model id, e.g. `"openai/gpt-image-1"`.
+            resolution: `"512"`, `"1K"`, `"2K"` or `"4K"`.
+            aspect_ratio: e.g. `"1:1"`, `"16:9"`.
+            site_url: Sent as `HTTP-Referer` (OpenRouter app attribution) when set.
+            app_name: Sent as `X-Title` when set.
+            base_url: OpenRouter's API root.
+            client: Test seam — an `AsyncOpenAI`-like object exposing `.post(...)`.
+                Constructed from `api_key` when omitted.
+
+        Raises:
+            ValueError: If `api_key` is empty and no `client` is supplied.
+        """
+        if client is not None:
+            self._client = client
+        else:
+            if not api_key:
+                raise ValueError("OpenRouterImageGen requires a non-empty api_key")
+            from openai import AsyncOpenAI
+
+            headers: dict[str, str] = {}
+            if site_url:
+                headers["HTTP-Referer"] = site_url
+            if app_name:
+                headers["X-Title"] = app_name
+            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, default_headers=headers)
+        self._model = model
+        self._resolution = resolution
+        self._aspect_ratio = aspect_ratio
+
+    async def generate(self, prompt: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> tuple[bytes, str]:
+        """Generate one image from `prompt`.
+
+        Args:
+            prompt: The full image prompt.
+            timeout_s: Seconds to wait before raising `ImageGenError`.
+
+        Returns:
+            `(image_bytes, mime_type)`; the MIME type is OpenRouter's `media_type`.
+
+        Raises:
+            ImageGenError: On timeout, an SDK/API error, or a response with no image data.
+        """
+        import httpx
+
+        body = {
+            "model": self._model,
+            "prompt": prompt,
+            "resolution": self._resolution,
+            "aspect_ratio": self._aspect_ratio,
+            "n": 1,
+        }
+        try:
+            response = await asyncio.wait_for(
+                self._client.post(
+                    "/images", body=body, cast_to=httpx.Response, options={"timeout": timeout_s}
+                ),
+                timeout=timeout_s,
+            )
+            payload = response.json()
+        except TimeoutError as exc:
+            _log.warning("image_gen.timeout", provider="openrouter", timeout_s=timeout_s)
+            raise ImageGenError(f"OpenRouter image generation timed out after {timeout_s}s") from exc
+        except ImageGenError:
+            raise
+        except Exception as exc:
+            _log.warning("image_gen.error", provider="openrouter", error=str(exc))
+            raise ImageGenError(f"OpenRouter image generation failed: {exc}") from exc
+
+        data = payload.get("data") if isinstance(payload, dict) else None
+        first = data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else {}
+        b64 = first.get("b64_json")
+        if not b64:
+            raise ImageGenError("OpenRouter image generation returned no image data")
+        return base64.b64decode(b64), str(first.get("media_type") or "image/png")

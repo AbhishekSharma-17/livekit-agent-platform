@@ -106,11 +106,12 @@ async def test_installed_on_reflects_the_connections_worker_image(
     body = (await admin_client.get("/v1/providers")).json()
     by_id = {p["id"]: p for p in body["providers"]}
 
-    # bey-avatar ships in the v1 (`slim`) worker image, so every pool carries it.
+    # bey-avatar and simli-avatar ship in the `slim` worker image, so every pool carries them.
     assert {slim_id, full_id} <= set(by_id["bey-avatar"]["installed_on"])
-    # simli-avatar is `worker_image="full"` (V2-05): only the full-image pool can build it.
-    assert full_id in by_id["simli-avatar"]["installed_on"]
-    assert slim_id not in by_id["simli-avatar"]["installed_on"]
+    assert {slim_id, full_id} <= set(by_id["simli-avatar"]["installed_on"])
+    # anam-avatar is `worker_image="full"` (V2-05): only the full-image pool can build it.
+    assert full_id in by_id["anam-avatar"]["installed_on"]
+    assert slim_id not in by_id["anam-avatar"]["installed_on"]
 
 
 # ------------------------------------------------------------------------------- catalog

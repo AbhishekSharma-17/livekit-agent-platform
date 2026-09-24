@@ -125,14 +125,25 @@ def test_nested_model_classes_resolve_from_the_same_module(spec: ProviderSpec) -
         # nothing further to assert.
 
 
-def test_the_four_classmethod_python_classes_are_in_the_fixture() -> None:
+def test_the_five_classmethod_python_classes_are_in_the_fixture() -> None:
     """Spot-check the classmethod-path entries `import_target` must resolve at runtime."""
     classmethod_ids = {
         "azure-openai-realtime": "livekit.plugins.openai.realtime.RealtimeModel.with_azure",
         "silero-vad": "livekit.plugins.silero.VAD.load",
+        # V4-03: a @staticmethod in 1.8.2, captured by name like the classmethods.
+        "openrouter-llm": "livekit.plugins.openai.LLM.with_openrouter",
     }
     for provider_id, python_class in classmethod_ids.items():
         spec = next(s for s in available_providers() if s.id == provider_id)
         assert spec.python_class == python_class
         if python_class not in SIGNATURES:
             pytest.skip(f"{python_class} not in the AST snapshot this pass")
+
+
+def test_with_openrouter_is_in_the_fixture_and_takes_every_openrouter_llm_field() -> None:
+    """V4-03: the snapshot captured the static constructor, so the field-name gate above really ran."""
+    signature = SIGNATURES["livekit.plugins.openai.LLM.with_openrouter"]
+    assert signature["has_var_keyword"] is False
+    assert {"site_url", "app_name", "fallback_models", "provider", "temperature", "api_key", "model"} <= set(
+        signature["params"]
+    )

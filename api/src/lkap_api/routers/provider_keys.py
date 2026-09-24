@@ -24,7 +24,7 @@ from lkap_contracts.api_models import (
     CredentialTestResult,
     CredentialUpdate,
 )
-from lkap_contracts.providers import ProviderSpec, get
+from lkap_contracts.providers import ProviderSpec, credential_home, get
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,12 +108,18 @@ async def _load(db: AsyncSession, ctx: WorkspaceContext, credential_id: str) -> 
 async def create_credential(
     payload: CredentialCreate, db: DbDep, vault: VaultDep, ctx: AdminCtxDep
 ) -> CredentialOut:
-    """Store a new encrypted credential in the caller's workspace."""
+    """Store a new encrypted credential in the caller's workspace.
+
+    A provider with a credential home (R-V4-7) has its row stored under the
+    home, after the secrets are checked against the requested provider's own
+    (identical) `secret_fields`: a key added from `openrouter-stt` is the
+    `openrouter-llm` key every OpenRouter provider shares.
+    """
     spec = _spec_for(payload.provider_id)
     _check_secrets(spec, payload.secrets)
     row = Credential(
         workspace_id=ctx.workspace_id,
-        provider_id=spec.id,
+        provider_id=credential_home(spec),
         label=payload.label,
         ciphertext=vault.encrypt(payload.secrets),
         fingerprint=fingerprint(payload.secrets, primary_field=_primary_field(spec)),
@@ -133,7 +139,11 @@ async def create_credential(
 async def list_credentials(
     db: DbDep,
     ctx: AdminCtxDep,
-    provider_id: str | None = Query(default=None, description="Filter by registry provider id"),
+    provider_id: str | None = Query(
+        default=None,
+        description="Filter by registry provider id; a provider that shares another's key (every "
+        "OpenRouter entry) lists the rows stored under that credential home",
+    ),
 ) -> CredentialPage:
     """Return the workspace's credentials, newest first."""
     stmt = select(Credential).where(Credential.workspace_id == ctx.workspace_id)
@@ -141,8 +151,9 @@ async def list_credentials(
         select(func.count()).select_from(Credential).where(Credential.workspace_id == ctx.workspace_id)
     )
     if provider_id:
-        stmt = stmt.where(Credential.provider_id == provider_id)
-        count_stmt = count_stmt.where(Credential.provider_id == provider_id)
+        home = credential_home(provider_id)
+        stmt = stmt.where(Credential.provider_id == home)
+        count_stmt = count_stmt.where(Credential.provider_id == home)
     rows = (await db.execute(stmt.order_by(Credential.created_at.desc()))).scalars().all()
     total = (await db.execute(count_stmt)).scalar_one()
     return CredentialPage(items=[_to_out(r) for r in rows], total=total)
@@ -174,7 +185,7 @@ async def update_credential(
 ) -> CredentialOut:
     """Update label and/or secrets; omitting `secrets` keeps the stored values."""
     row = await _load(db, ctx, credential_id)
-    if payload.provider_id and payload.provider_id != row.provider_id:
+    if payload.provider_id and credential_home(payload.provider_id) != row.provider_id:
         raise UnprocessableEntityError("a credential's provider cannot be changed; create a new one")
     spec = _spec_for(row.provider_id)
     if payload.label is not None:
@@ -325,10 +336,11 @@ async def seed_bootstrap_credentials(db: Any, vault: Vault, raw_json: str | None
         except KeyError:
             log.warning("bootstrap_unknown_provider", provider_id=provider_id)
             continue
+        home = credential_home(spec)
         existing = (
             await db.execute(
                 select(Credential.id).where(
-                    Credential.workspace_id == DEFAULT_WORKSPACE_ID, Credential.provider_id == provider_id
+                    Credential.workspace_id == DEFAULT_WORKSPACE_ID, Credential.provider_id == home
                 )
             )
         ).first()
@@ -337,8 +349,8 @@ async def seed_bootstrap_credentials(db: Any, vault: Vault, raw_json: str | None
         db.add(
             Credential(
                 workspace_id=DEFAULT_WORKSPACE_ID,
-                provider_id=spec.id,
-                label=_bootstrap_label(spec.id),
+                provider_id=home,
+                label=_bootstrap_label(home),
                 ciphertext=vault.encrypt(secrets),
                 fingerprint=fingerprint(secrets, primary_field=_primary_field(spec)),
             )

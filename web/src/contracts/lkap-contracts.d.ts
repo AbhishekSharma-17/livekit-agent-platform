@@ -1806,6 +1806,10 @@ export interface ProviderOut {
   availability?: "available" | "deferred" | "incompatible" | "removed";
   capabilities?: ProviderCapabilities;
   catalog?: CatalogSpec | null;
+  /**
+   * The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names.
+   */
+  credential_provider?: string | null;
   default_credential_id?: string | null;
   default_model?: string | null;
   docs_url?: string | null;
@@ -1934,6 +1938,10 @@ export interface ProviderSpec {
   availability?: "available" | "deferred" | "incompatible" | "removed";
   capabilities?: ProviderCapabilities;
   catalog?: CatalogSpec | null;
+  /**
+   * The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names.
+   */
+  credential_provider?: string | null;
   default_model?: string | null;
   docs_url?: string | null;
   fields?: FieldSpec[];

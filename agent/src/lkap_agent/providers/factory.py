@@ -30,6 +30,7 @@ failing the call.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from typing import Any, Final
@@ -284,4 +285,48 @@ class ProviderFactory:
             extra = dict(kwargs.pop("extra_kwargs", None) or {})
             extra.setdefault("temperature", kwargs.pop("temperature"))
             kwargs["extra_kwargs"] = extra
+        if spec.id == "openrouter-llm":
+            kwargs = _openrouter_llm_kwargs(kwargs)
         return kwargs
+
+
+def _json_field(kwargs: dict[str, Any], name: str, expected: type) -> Any:
+    """Decode a registry ``type="json"`` field, which reaches the worker as a string.
+
+    `ProviderRef.fields` holds scalars only, so the console's JSON textarea
+    arrives as text. An empty string means "unset".
+    """
+    value = kwargs.get(name)
+    if isinstance(value, str):
+        if not value.strip():
+            return None
+        try:
+            value = json.loads(value)
+        except ValueError as exc:
+            raise ProviderBuildError(f"openrouter-llm field {name!r} is not valid JSON") from exc
+    if value is not None and not isinstance(value, expected):
+        raise ProviderBuildError(f"openrouter-llm field {name!r} must be a JSON {expected.__name__}")
+    return value
+
+
+def _openrouter_llm_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """`LLM.with_openrouter` options (docs/v4/OPENROUTER.md D-V4-12, R-V4-8).
+
+    Decodes the two JSON fields and defaults ``provider.require_parameters``
+    to true, so a request carrying tools is never routed to an endpoint that
+    ignores them (the agent would "answer" instead of calling the tool). An
+    admin who wants cheaper routing sets ``{"require_parameters": false}``.
+    """
+    converted = dict(kwargs)
+    provider = _json_field(converted, "provider", dict)
+    preferences: dict[str, Any] = dict(provider or {})
+    preferences.setdefault("require_parameters", True)
+    converted["provider"] = preferences
+    fallback_models = _json_field(converted, "fallback_models", list)
+    if fallback_models:
+        converted["fallback_models"] = [str(model) for model in fallback_models]
+    else:
+        converted.pop("fallback_models", None)
+    if not converted.get("site_url"):
+        converted.pop("site_url", None)
+    return converted

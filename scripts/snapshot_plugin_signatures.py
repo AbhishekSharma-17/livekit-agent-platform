@@ -36,8 +36,8 @@ What it captures per class (keyed by its dotted path, e.g.
   Synthesia's ``avatar_config``).
 
 Classmethod constructors (``RealtimeModel.with_azure``, ``LLM.with_cerebras``,
-``VAD.load``) are additionally captured under a synthetic
-``<Class>.<classmethod>`` key with the same shape, because the registry may
+``VAD.load``, and the static ``LLM.with_openrouter``) are additionally
+captured under a synthetic ``<Class>.<classmethod>`` key with the same shape, because the registry may
 point `python_class` at one of these instead of `__init__`.
 
 Nested config dataclasses/BaseModels referenced from a provider's `fields[]`
@@ -68,8 +68,12 @@ NESTED_MODEL_CLASSES: frozenset[str] = frozenset(
 )
 
 #: Method names, beyond `__init__`, worth snapshotting as alternate
-#: constructors when found as an `@classmethod`.
-CLASSMETHOD_CONSTRUCTORS: frozenset[str] = frozenset({"with_azure", "with_cerebras", "load", "create"})
+#: constructors. Selected by name, not by decorator: `LLM.with_openrouter` is a
+#: `@staticmethod` in 1.8.2 and is captured the same way (its `is_classmethod`
+#: flag records the decorator honestly, so it is `false` there).
+CLASSMETHOD_CONSTRUCTORS: frozenset[str] = frozenset(
+    {"with_azure", "with_cerebras", "with_openrouter", "load", "create"}
+)
 
 
 def _decorator_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:

@@ -223,6 +223,14 @@ class ProviderSpec(BaseModel):
     capabilities: ProviderCapabilities = ProviderCapabilities()
     docs_url: str | None = None
     get_key_url: str | None = None
+    credential_provider: str | None = Field(
+        None,
+        description=(
+            "The registry id whose credential rows this provider uses (its credential home, R-V4-7). "
+            "Unset means the provider is its own home. The home exists, has no home of its own and "
+            "declares the same secret field names."
+        ),
+    )
 
     @model_validator(mode="after")
     def _derive_status(self) -> "ProviderSpec":
@@ -524,6 +532,7 @@ _AVAILABLE: list[ProviderSpec] = [
         ],
         models=[ModelSpec(id="gpt-realtime", label="GPT Realtime")],
         default_model="gpt-realtime",
+        notes="Its base_url override is for OpenAI-compatible realtime endpoints; OpenRouter has none.",
         capabilities=ProviderCapabilities(
             video_input=False,
             tool_calling=True,
@@ -696,6 +705,45 @@ _AVAILABLE: list[ProviderSpec] = [
         docs_url="https://docs.livekit.io/agents/integrations/avatar/tavus/",
         get_key_url="https://platform.tavus.io/api-keys",
     ),
+    # Added to V2-05's full image; moved to the slim image on 2026-09-25 when the
+    # user picked Beyond Presence and Simli as the platform's avatars.
+    ProviderSpec(
+        id="simli-avatar",
+        kind="avatar",
+        label="Simli",
+        vendor="Simli",
+        package="livekit-plugins-simli",
+        python_class="livekit.plugins.simli.AvatarSession",
+        secret_fields=[
+            FieldSpec(
+                name="simli_config.api_key",
+                label="Simli API key",
+                type="secret",
+                required=True,
+                nested_model="SimliConfig",
+                help="Nested under simli_config: this avatar has no top-level api_key kwarg.",
+            ),
+        ],
+        fields=[
+            FieldSpec(
+                name="simli_config.face_id",
+                label="Face id",
+                type="string",
+                required=True,
+                nested_model="SimliConfig",
+            ),
+            FieldSpec(
+                name="simli_config.emotion_id", label="Emotion id", type="string", nested_model="SimliConfig"
+            ),
+        ],
+        catalog=CatalogSpec(adapter="simli_faces", kinds=["avatars"]),
+        test="simli_faces",
+        capabilities=ProviderCapabilities(tool_calling=False),
+        notes="No top-level api_key or conn_options; credential and face_id both live in the "
+        "nested SimliConfig dataclass.",
+        docs_url="https://docs.livekit.io/agents/integrations/avatar/simli/",
+        get_key_url="https://www.simli.com/",
+    ),
     # ---------------------------------------------------------------- image generation
     ProviderSpec(
         id="google-image-gen",
@@ -799,7 +847,222 @@ def _shipped(spec: ProviderSpec) -> ProviderSpec:
 _MVP: list[ProviderSpec] = [_shipped(spec) for spec in _AVAILABLE]
 
 
-#: The 25 v1 catalogue-only entries, promoted to full availability and
+#: OpenRouter's public API root; every OpenRouter entry below defaults to it.
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+#: The one registry entry that holds the OpenRouter credential (R-V4-7).
+OPENROUTER_CREDENTIAL_HOME = "openrouter-llm"
+
+
+def _openrouter_key() -> FieldSpec:
+    return _api_key("OpenRouter API key", env="OPENROUTER_API_KEY")
+
+
+def _openrouter_base_url() -> FieldSpec:
+    return FieldSpec(
+        name="base_url",
+        label="Base URL",
+        type="string",
+        default=OPENROUTER_BASE_URL,
+        help="OpenRouter's OpenAI-compatible API root; change it only for a proxy in front of OpenRouter.",
+    )
+
+
+_OPENROUTER_KEY_URL = "https://openrouter.ai/settings/keys"
+
+#: OpenRouter, one key for five slots (docs/v4/OPENROUTER.md D-V4-9…13, R-V4-7…9).
+#:
+#: Every entry is built from packages the slim image already carries
+#: (`livekit-plugins-openai` and the `openai` SDK), so the five ship through
+#: :func:`_shipped` like the v1 set. The four non-LLM entries name
+#: ``openrouter-llm`` as their credential home, so one stored key serves all
+#: five. There is deliberately no ``realtime`` entry: OpenRouter has no
+#: speech-to-speech or websocket endpoint (R-V4-8).
+_OPENROUTER_AVAILABLE: list[ProviderSpec] = [
+    ProviderSpec(
+        id="openrouter-llm",
+        kind="llm",
+        label="OpenRouter",
+        vendor="OpenRouter",
+        package="livekit-plugins-openai",
+        python_class="livekit.plugins.openai.LLM.with_openrouter",
+        secret_fields=[_openrouter_key()],
+        fields=[
+            FieldSpec(name="temperature", label="Temperature", type="number", default=0.7),
+            FieldSpec(
+                name="fallback_models",
+                label="Fallback models",
+                type="json",
+                placeholder='["openai/gpt-4o-mini"]',
+                help="Model ids tried in order when the primary is unavailable; sent as OpenRouter's "
+                "`models` array.",
+            ),
+            FieldSpec(
+                name="provider",
+                label="Provider preferences",
+                type="json",
+                placeholder='{"sort": "latency"}',
+                help="OpenRouter provider preferences: `order`, `only`, `ignore`, `sort` "
+                "(price/throughput/latency), `allow_fallbacks`, `require_parameters`, "
+                "`data_collection`, `preferred_max_latency`…; `require_parameters` defaults to true so "
+                "a request with tools never lands on an endpoint that cannot call them.",
+            ),
+            FieldSpec(
+                name="site_url",
+                label="Site URL",
+                type="string",
+                help="Sent as `HTTP-Referer` for OpenRouter's app rankings; the app name below only "
+                "counts when this is set.",
+            ),
+            FieldSpec(
+                name="app_name",
+                label="App name",
+                type="string",
+                default="LKAP",
+                help="Sent as `X-Title` for OpenRouter's app attribution.",
+            ),
+        ],
+        models=[
+            ModelSpec(id="openai/gpt-4.1-mini", label="GPT-4.1 mini"),
+            ModelSpec(id="openai/gpt-4.1", label="GPT-4.1"),
+            ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini"),
+            ModelSpec(id="google/gemini-3.5-flash", label="Gemini 3.5 Flash"),
+            ModelSpec(id="anthropic/claude-sonnet-4.6", label="Claude Sonnet 4.6"),
+        ],
+        default_model="openai/gpt-4.1-mini",
+        catalog=CatalogSpec(adapter="openrouter_llm_models", kinds=["models"]),
+        test="openrouter_llm_models",
+        notes="Routes to hundreds of models on one key; `openrouter/auto` is not tool-safe and is "
+        "deliberately not the default. Tool schemas go out with OpenAI's `strict` flag; if a routed "
+        "non-OpenAI model rejects a tool call, pick an OpenAI model or an `order` of providers known "
+        "to support strict tools.",
+        docs_url="https://docs.livekit.io/agents/models/llm/openrouter/",
+        get_key_url=_OPENROUTER_KEY_URL,
+    ),
+    ProviderSpec(
+        id="openrouter-stt",
+        kind="stt",
+        label="OpenRouter (STT)",
+        vendor="OpenRouter",
+        package="livekit-plugins-openai",
+        python_class="livekit.plugins.openai.STT",
+        credential_provider=OPENROUTER_CREDENTIAL_HOME,
+        secret_fields=[_openrouter_key()],
+        fields=[
+            _openrouter_base_url(),
+            FieldSpec(name="language", label="Language", type="string", default="en"),
+        ],
+        models=[
+            ModelSpec(id="openai/gpt-4o-mini-transcribe", label="GPT-4o mini Transcribe"),
+            ModelSpec(id="openai/whisper-large-v3-turbo", label="Whisper large v3 turbo"),
+            ModelSpec(id="openai/gpt-4o-transcribe", label="GPT-4o Transcribe"),
+            ModelSpec(id="deepgram/nova-3", label="Deepgram Nova 3 (batch)"),
+            ModelSpec(id="mistralai/voxtral-mini-transcribe", label="Voxtral Mini Transcribe"),
+        ],
+        default_model="openai/gpt-4o-mini-transcribe",
+        catalog=CatalogSpec(adapter="openrouter_stt_models", kinds=["models"]),
+        test="openrouter_stt_models",
+        notes="Batch transcription over HTTP: no interim results; each turn is transcribed after "
+        "end-of-speech, so expect roughly half a second to two seconds more per turn than a streaming "
+        "STT. For low latency prefer LiveKit Inference STT or Deepgram.",
+        docs_url="https://docs.livekit.io/agents/models/stt/openai/",
+        get_key_url=_OPENROUTER_KEY_URL,
+    ),
+    ProviderSpec(
+        id="openrouter-tts",
+        kind="tts",
+        label="OpenRouter (TTS)",
+        vendor="OpenRouter",
+        package="livekit-plugins-openai",
+        python_class="livekit.plugins.openai.TTS",
+        credential_provider=OPENROUTER_CREDENTIAL_HOME,
+        secret_fields=[_openrouter_key()],
+        fields=[
+            _openrouter_base_url(),
+            FieldSpec(
+                name="voice",
+                label="Voice",
+                type="catalog",
+                catalog_kind="voices",
+                default="Kore",
+                help="Voices are per model: pick the model first, then a voice it lists.",
+            ),
+            FieldSpec(name="speed", label="Speed", type="number", default=1.0),
+        ],
+        models=[
+            ModelSpec(id="google/gemini-3.8-flash-tts", label="Gemini 3.8 Flash TTS"),
+            ModelSpec(id="google/gemini-3.8-flash-lite-tts", label="Gemini 3.8 Flash Lite TTS"),
+            ModelSpec(id="deepgram/aura-2", label="Deepgram Aura 2"),
+            ModelSpec(id="mistralai/voxtral-mini-tts-2603", label="Voxtral Mini TTS"),
+            ModelSpec(id="x-ai/grok-voice-tts-1.0", label="Grok Voice TTS 1.0"),
+        ],
+        default_model="google/gemini-3.8-flash-tts",
+        capabilities=ProviderCapabilities(voices_dynamic=True),
+        catalog=CatalogSpec(adapter="openrouter_tts_models", kinds=["models", "voices"]),
+        test="openrouter_tts_models",
+        notes="Voices are per model — pick the model first, then a voice it lists. Non-streaming, like "
+        "OpenAI TTS: one request per sentence.",
+        docs_url="https://docs.livekit.io/agents/models/tts/openai/",
+        get_key_url=_OPENROUTER_KEY_URL,
+    ),
+    ProviderSpec(
+        id="openrouter-embedding",
+        kind="embedding",
+        label="OpenRouter embeddings",
+        vendor="OpenRouter",
+        package="openai",
+        python_class="lkap_api.kb.embed.OpenAIEmbedder",
+        credential_provider=OPENROUTER_CREDENTIAL_HOME,
+        secret_fields=[_openrouter_key()],
+        fields=[_openrouter_base_url()],
+        models=[ModelSpec(id="openai/text-embedding-3-small", label="text-embedding-3-small")],
+        default_model="openai/text-embedding-3-small",
+        capabilities=ProviderCapabilities(tool_calling=False),
+        catalog=CatalogSpec(adapter="openrouter_embedding_models", kinds=["models"]),
+        test="openrouter_embedding_models",
+        notes="Platform-level: select it with LKAP_EMBEDDER=openrouter-embedding:<credential_id>. Only "
+        "the 1536-dimension model is offered; another model would mean re-embedding every knowledge "
+        "base.",
+        get_key_url=_OPENROUTER_KEY_URL,
+    ),
+    ProviderSpec(
+        id="openrouter-image-gen",
+        kind="image_gen",
+        label="OpenRouter image generation",
+        vendor="OpenRouter",
+        package="openai",
+        python_class="lkap_agent.providers.image_gen.OpenRouterImageGen",
+        credential_provider=OPENROUTER_CREDENTIAL_HOME,
+        secret_fields=[_openrouter_key()],
+        fields=[
+            FieldSpec(
+                name="resolution",
+                label="Resolution",
+                type="enum",
+                options=["512", "1K", "2K", "4K"],
+                default="1K",
+            ),
+            FieldSpec(name="aspect_ratio", label="Aspect ratio", type="string", default="1:1"),
+        ],
+        models=[
+            ModelSpec(id="openai/gpt-image-1", label="GPT Image 1"),
+            ModelSpec(id="openai/gpt-image-1-mini", label="GPT Image 1 mini"),
+            ModelSpec(id="google/gemini-3.1-flash-image", label="Gemini 3.1 Flash Image"),
+        ],
+        default_model="openai/gpt-image-1",
+        capabilities=ProviderCapabilities(tool_calling=False),
+        catalog=CatalogSpec(adapter="openrouter_image_models", kinds=["models"]),
+        test="openrouter_image_models",
+        get_key_url=_OPENROUTER_KEY_URL,
+    ),
+]
+
+#: The OpenRouter entries as shipped on the slim image.
+_OPENROUTER: list[ProviderSpec] = [_shipped(spec) for spec in _OPENROUTER_AVAILABLE]
+
+
+#: The v1 catalogue-only entries (25 until ``simli-avatar`` moved to the slim
+#: image in v4, 24 now), promoted to full availability and
 #: enriched with source-verified fields (PLAN-V2 V2-05 card: "Add every entry
 #: from the catalog"). Every one keeps ``worker_image="full"`` (the
 #: ``ProviderSpec`` default), so promoting them changes nothing about the
@@ -1151,44 +1414,8 @@ _FULL: list[ProviderSpec] = [
         docs_url="https://docs.livekit.io/agents/models/tts/azure/",
     ),
     # ---------------------------------------------------------------- avatars
-    _full(
-        "simli-avatar",
-        "avatar",
-        "Simli",
-        "Simli",
-        "livekit-plugins-simli",
-        "livekit.plugins.simli.AvatarSession",
-        requires_credential=True,
-        secret_fields=[
-            FieldSpec(
-                name="simli_config.api_key",
-                label="Simli API key",
-                type="secret",
-                required=True,
-                nested_model="SimliConfig",
-                help="Nested under simli_config: this avatar has no top-level api_key kwarg.",
-            ),
-        ],
-        fields=[
-            FieldSpec(
-                name="simli_config.face_id",
-                label="Face id",
-                type="string",
-                required=True,
-                nested_model="SimliConfig",
-            ),
-            FieldSpec(
-                name="simli_config.emotion_id", label="Emotion id", type="string", nested_model="SimliConfig"
-            ),
-        ],
-        catalog=CatalogSpec(adapter="simli_faces", kinds=["avatars"]),
-        test="simli_faces",
-        capabilities=ProviderCapabilities(tool_calling=False),
-        notes="No top-level api_key or conn_options; credential and face_id both live in the "
-        "nested SimliConfig dataclass.",
-        docs_url="https://docs.livekit.io/agents/integrations/avatar/simli/",
-        get_key_url="https://www.simli.com/",
-    ),
+    # `simli-avatar` moved to the slim image (`_AVAILABLE`) by the user's
+    # avatar choice (Beyond Presence + Simli, 2026-09-25).
     _full(
         "anam-avatar",
         "avatar",
@@ -2555,9 +2782,33 @@ def _live_verified(spec: ProviderSpec) -> ProviderSpec:
     return ProviderSpec.model_validate({**spec.model_dump(exclude={"status"}), "verification": "verified"})
 
 
-REGISTRY: list[ProviderSpec] = [_live_verified(spec) for spec in [*_MVP, *_FULL, *_NEW, *_DEFERRED]]
+REGISTRY: list[ProviderSpec] = [
+    _live_verified(spec) for spec in [*_MVP, *_OPENROUTER, *_FULL, *_NEW, *_DEFERRED]
+]
 
 _BY_ID: dict[str, ProviderSpec] = {spec.id: spec for spec in REGISTRY}
+
+
+def credential_home(spec_or_id: ProviderSpec | str) -> str:
+    """Return the registry id a provider's credential rows are stored under (R-V4-7).
+
+    A provider that names a ``credential_provider`` shares that entry's key
+    (every OpenRouter entry stores its key under ``openrouter-llm``); every
+    other provider is its own home. An id the registry does not know is
+    returned unchanged, so callers can filter by it and simply find nothing.
+
+    Args:
+        spec_or_id: A :class:`ProviderSpec` or a registry id.
+
+    Returns:
+        The id every credential lookup for this provider compares against.
+    """
+    if isinstance(spec_or_id, ProviderSpec):
+        return spec_or_id.credential_provider or spec_or_id.id
+    spec = _BY_ID.get(spec_or_id)
+    if spec is None:
+        return spec_or_id
+    return spec.credential_provider or spec.id
 
 
 def get(provider_id: str) -> ProviderSpec:

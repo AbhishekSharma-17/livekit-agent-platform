@@ -21,5 +21,6 @@ livekit-plugins-elevenlabs==1.8.2
 livekit-plugins-google==1.8.2
 livekit-plugins-openai==1.8.2
 livekit-plugins-silero==1.8.2
+livekit-plugins-simli==1.8.2
 livekit-plugins-tavus==1.8.2
 livekit-plugins-turn-detector==1.8.2

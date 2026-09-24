@@ -57,6 +57,7 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `LKAP_WEB_BASE_URL`, `LKAP_CORS_ORIGINS` | ✓ | | | | invite links, and the origins allowed to call `connect` anonymously |
 | `LKAP_PUBLIC_BASE_URL` | ✓ | | | | public `https://` origin of the api, needed for Cloud-hosted pools (§3) |
 | `LKAP_API_BASE_URL` | ✓ | ✓ | ✓ | | `http://127.0.0.1:8080`. On the api it is the url handed to workers (worker env, deploy bundle); unset falls back to `LKAP_PUBLIC_BASE_URL`, then to a guess from `PORT`, which the api logs as `worker_callback_url_derived_from_port`. |
+| `LKAP_EMBEDDER` | ✓ | | | | the knowledge-base embedder, platform-wide: `fastembed` (default, local), `<provider_id>:<credential_id>` for an OpenAI-shaped embedding entry (`openai-embedding`, `openrouter-embedding`; the credential must be stored under that entry's credential home), or the legacy `openai:<credential_id>`. |
 | `LKAP_NET_ALLOW_PRIVATE_HOSTS` | ✓ | | | | comma list of host names, IPs or CIDRs the outbound network guard may reach although they are private. Unset = `localhost,127.0.0.1,::1` in `dev`, nothing in `prod` (§5.1). |
 | `LKAP_CONNECTION_ID` | | optional | | | the connection a worker serves. Unset means the default connection. |
 | `LKAP_AGENT_NAME` | | optional | | | must equal the connection's `agent_name` (default `lkap-agent`) |

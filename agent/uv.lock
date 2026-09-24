@@ -740,6 +740,9 @@ openai = [
 silero = [
     { name = "livekit-plugins-silero" },
 ]
+simli = [
+    { name = "livekit-plugins-simli" },
+]
 tavus = [
     { name = "livekit-plugins-tavus" },
 ]
@@ -877,6 +880,18 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-simli"
+version = "1.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/de/cc6e4b962da8069a8dc15147e188900e03cf4f9d0030713423f63df524dd/livekit_plugins_simli-1.8.2.tar.gz", hash = "sha256:096455ec2cc90a76507e23c093aeaf4559572d61b0d94d5ae9745f74dbffd2ce", size = 5197, upload_time = "2026-09-15T18:31:48.663Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/0e/251a51ed0a88bbd9caf2127106c05ee8226636dff61b777409eb426567e2/livekit_plugins_simli-1.8.2-py3-none-any.whl", hash = "sha256:10b9f05e95f18ffd21f772e61b57b829d27c240ee3cf81a905f4f6ce13c00d87", size = 5276, upload_time = "2026-09-15T18:31:47.381Z" },
+]
+
+[[package]]
 name = "livekit-plugins-tavus"
 version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
@@ -909,7 +924,7 @@ dependencies = [
     { name = "google-genai" },
     { name = "httpx" },
     { name = "livekit" },
-    { name = "livekit-agents", extra = ["bey", "cartesia", "deepgram", "elevenlabs", "google", "mcp", "openai", "silero", "tavus"] },
+    { name = "livekit-agents", extra = ["bey", "cartesia", "deepgram", "elevenlabs", "google", "mcp", "openai", "silero", "simli", "tavus"] },
     { name = "livekit-api" },
     { name = "livekit-plugins-bey" },
     { name = "livekit-plugins-cartesia" },
@@ -918,6 +933,7 @@ dependencies = [
     { name = "livekit-plugins-google" },
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
+    { name = "livekit-plugins-simli" },
     { name = "livekit-plugins-tavus" },
     { name = "lkap-contracts" },
     { name = "lkap-packs" },
@@ -944,7 +960,7 @@ requires-dist = [
     { name = "google-genai", specifier = ">=1.30,<3" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "livekit", specifier = "==1.1.18" },
-    { name = "livekit-agents", extras = ["google", "openai", "deepgram", "cartesia", "elevenlabs", "silero", "bey", "tavus", "mcp"], specifier = "==1.8.2" },
+    { name = "livekit-agents", extras = ["google", "openai", "deepgram", "cartesia", "elevenlabs", "silero", "bey", "tavus", "simli", "mcp"], specifier = "==1.8.2" },
     { name = "livekit-api", specifier = "==1.2.1" },
     { name = "livekit-plugins-bey", specifier = "==1.8.2" },
     { name = "livekit-plugins-cartesia", specifier = "==1.8.2" },
@@ -953,6 +969,7 @@ requires-dist = [
     { name = "livekit-plugins-google", specifier = "==1.8.2" },
     { name = "livekit-plugins-openai", specifier = "==1.8.2" },
     { name = "livekit-plugins-silero", specifier = "==1.8.2" },
+    { name = "livekit-plugins-simli", specifier = "==1.8.2" },
     { name = "livekit-plugins-tavus", specifier = "==1.8.2" },
     { name = "lkap-contracts", editable = "../contracts" },
     { name = "lkap-packs", editable = "../packs" },

@@ -24,7 +24,11 @@ from lkap_api.vault import Vault
 
 #: Provider ids whose HTTP wire format is the documented OpenAI chat-completions
 #: shape, and their default base URL when a `ProviderRef` does not override one.
-_OPENAI_COMPATIBLE_DEFAULT_BASE_URL: dict[str, str] = {"openai-llm": "https://api.openai.com/v1"}
+_OPENAI_COMPATIBLE_DEFAULT_BASE_URL: dict[str, str] = {
+    "openai-llm": "https://api.openai.com/v1",
+    # V4-03 (OPENROUTER.md D-V4-12): OpenRouter's chat completions are OpenAI-shaped.
+    "openrouter-llm": providers.OPENROUTER_BASE_URL,
+}
 
 
 @dataclass(slots=True, frozen=True)

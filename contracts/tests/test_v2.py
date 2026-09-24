@@ -91,10 +91,27 @@ V1_MVP_ID_ORDER = [
 
 V1_MVP_IDS = set(V1_MVP_ID_ORDER)
 
+#: The slim (``mvp``) set today: the v1 set plus the v4 slim additions —
+#: ``simli-avatar`` (moved from the full image by the user's avatar choice,
+#: placed next to the other avatars) and the five OpenRouter entries (V4-03,
+#: appended after the v1 set).
+MVP_ID_ORDER = [
+    *V1_MVP_ID_ORDER[: V1_MVP_ID_ORDER.index("tavus-avatar") + 1],
+    "simli-avatar",
+    *V1_MVP_ID_ORDER[V1_MVP_ID_ORDER.index("tavus-avatar") + 1 :],
+    "openrouter-llm",
+    "openrouter-stt",
+    "openrouter-tts",
+    "openrouter-embedding",
+    "openrouter-image-gen",
+]
+
+MVP_IDS = set(MVP_ID_ORDER)
+
 
 @pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)
 def test_provider_status_alias_keeps_its_v1_value(spec: ProviderSpec) -> None:
-    assert spec.status == ("mvp" if spec.id in V1_MVP_IDS else "deferred")
+    assert spec.status == ("mvp" if spec.id in MVP_IDS else "deferred")
 
 
 @pytest.mark.parametrize("spec", REGISTRY, ids=lambda s: s.id)
@@ -112,8 +129,9 @@ def test_provider_verification_never_affects_the_status_alias(spec: ProviderSpec
 
 
 def test_the_mvp_id_set_is_byte_identical_to_the_v1_registry() -> None:
-    """The alias's whole purpose: waves 0-1 consumers see exactly the v1 set."""
-    assert [spec.id for spec in mvp_providers()] == V1_MVP_ID_ORDER
+    """The alias's whole purpose: consumers see the v1 set, plus only the listed v4 slim additions."""
+    assert [spec.id for spec in mvp_providers()] == MVP_ID_ORDER
+    assert V1_MVP_IDS <= MVP_IDS
 
 
 def test_only_the_live_verified_providers_are_marked_verified() -> None:
@@ -180,11 +198,11 @@ def test_available_providers_matches_the_registry_availability_field() -> None:
 
 
 def test_mvp_providers_still_returns_the_eighteen_v1_entries() -> None:
-    assert {s.id for s in mvp_providers()} == V1_MVP_IDS
+    assert V1_MVP_IDS <= {s.id for s in mvp_providers()} == MVP_IDS
 
 
 def test_by_image_slim_returns_the_v1_plugin_set() -> None:
-    assert {s.id for s in by_image("slim")} == V1_MVP_IDS
+    assert {s.id for s in by_image("slim")} == MVP_IDS
 
 
 def test_by_image_full_includes_the_slim_entries() -> None:

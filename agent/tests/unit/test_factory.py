@@ -22,7 +22,7 @@ from lkap_agent.providers.factory import (
     ProviderFactory,
 )
 
-#: The registry ships 18 MVP entries but only these kinds have a class the agent
+#: The registry ships 24 MVP entries but only these kinds have a class the agent
 #: constructs: `embedding` providers live in `lkap_api.kb.embed` and the
 #: `http-tool-secret` bag has no `python_class` at all.
 CONSTRUCTIBLE_MVP = [
@@ -57,12 +57,37 @@ def _resolved_for(spec: ProviderSpec) -> ResolvedProvider:
     for field in spec.fields:
         if field.default is not None:
             kwargs[field.name] = field.default
+        elif field.required:
+            kwargs[field.name] = f"test-{field.name}"  # e.g. simli's required `simli_config.face_id`
     return ResolvedProvider(
         provider_id=spec.id,
         python_class=spec.python_class,
         model=spec.default_model,
         kwargs=kwargs,
     )
+
+
+def _patch_constructor(monkeypatch: pytest.MonkeyPatch, python_class: str) -> None:
+    """Replace a registry `python_class` with `_Recorder`.
+
+    Handles both a plain class (`livekit.plugins.openai.TTS`) and a
+    classmethod/staticmethod path (`livekit.plugins.openai.LLM.with_openrouter`),
+    where the owner is a class rather than a module.
+    """
+    owner_path, _, attr = python_class.rpartition(".")
+    try:
+        owner: Any = importlib.import_module(owner_path)
+    except ImportError:
+        module_path, _, class_name = owner_path.rpartition(".")
+        owner = getattr(importlib.import_module(module_path), class_name)
+    monkeypatch.setattr(owner, attr, _Recorder)
+
+
+def _secret_value(built: _Recorder, field_name: str) -> object:
+    """The value a secret field reached the constructor with (dotted names are nested)."""
+    outer, _, inner = field_name.partition(".")
+    value = built.kwargs[outer]
+    return getattr(value, inner) if inner else value
 
 
 @pytest.fixture
@@ -89,15 +114,13 @@ def test_build_constructs_every_constructible_mvp_provider_without_network(
     socket: the contract under test is "the registry's class path resolves and
     the resolved kwargs are handed to it", not the vendor's own behaviour.
     """
-    module_path, _, attr = spec.python_class.rpartition(".")
-    module = importlib.import_module(module_path)
-    monkeypatch.setattr(module, attr, _Recorder)
+    _patch_constructor(monkeypatch, spec.python_class)
 
     built = ProviderFactory().build(_SLOT_FOR_KIND[spec.kind], _resolved_for(spec))
 
     assert isinstance(built, _Recorder)
     if spec.kind == "avatar":
-        assert "model" not in built.kwargs, "bey/tavus AvatarSession take no model kwarg"
+        assert "model" not in built.kwargs, "bey/tavus/simli AvatarSession take no model kwarg"
     else:
         assert built.kwargs.get("model") == spec.default_model
 
@@ -116,15 +139,14 @@ def test_build_passes_secrets_as_kwargs_and_never_touches_the_environment(
     kwarg *names* only. structlog writes to stdout until `configure_logging()`
     runs, so both sinks are checked.
     """
-    module_path, _, attr = spec.python_class.rpartition(".")
-    monkeypatch.setattr(importlib.import_module(module_path), attr, _Recorder)
+    _patch_constructor(monkeypatch, spec.python_class)
     before = dict(os.environ)
 
     with caplog.at_level(logging.DEBUG):
         built = ProviderFactory().build(_SLOT_FOR_KIND[spec.kind], _resolved_for(spec))
 
     for field in spec.secret_fields:
-        assert built.kwargs[field.name] == SECRET_VALUE
+        assert _secret_value(built, field.name) == SECRET_VALUE
     assert os.environ == before, "a provider must never set a process env var"
     captured = capsys.readouterr()
     assert SECRET_VALUE not in caplog.text

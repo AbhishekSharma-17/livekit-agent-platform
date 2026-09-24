@@ -66,7 +66,14 @@ from lkap_contracts.agent_config import (
 from lkap_contracts.api_models import Issue, Severity, ValidationResult
 from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
 from lkap_contracts.packs import PackManifest
-from lkap_contracts.providers import ProviderKind, ProviderSpec, WorkerImage, get, vision_support
+from lkap_contracts.providers import (
+    ProviderKind,
+    ProviderSpec,
+    WorkerImage,
+    credential_home,
+    get,
+    vision_support,
+)
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -513,14 +520,17 @@ def _validate_credential(
         findings.add("warning", label, f"provider '{spec.id}' needs no credential; the reference is ignored")
         return
     if ref.credential_id:
+        # R-V4-7: a provider with a credential home (every OpenRouter entry)
+        # accepts the rows stored under that home.
         owner = credential_providers.get(ref.credential_id)
+        home = credential_home(spec)
         if owner is None:
             findings.add("error", label, f"unknown credential '{ref.credential_id}'")
-        elif owner != spec.id:
+        elif owner != home:
             findings.add(
                 "error",
                 label,
-                f"credential '{ref.credential_id}' belongs to provider '{owner}', not '{spec.id}'",
+                f"credential '{ref.credential_id}' belongs to provider '{owner}', not '{home}'",
             )
 
 
@@ -883,10 +893,14 @@ def _usable(ref: ProviderRef, credential: str | None, connection: ConnectionCont
 def _unambiguous_credential(
     ref: ProviderRef | None, credentials_by_provider: Mapping[str, list[str]]
 ) -> str | None:
-    """Return the single credential for the ref's provider, or ``None``."""
+    """Return the single credential for the ref's provider, or ``None``.
+
+    ``credentials_by_provider`` is keyed by each row's *stored* provider id,
+    which for a provider with a credential home is the home (R-V4-7).
+    """
     if ref is None:
         return None
-    candidates = credentials_by_provider.get(ref.provider_id, [])
+    candidates = credentials_by_provider.get(credential_home(ref.provider_id), [])
     return candidates[0] if len(candidates) == 1 else None
 
 

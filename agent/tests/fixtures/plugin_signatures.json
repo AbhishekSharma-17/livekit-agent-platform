@@ -8725,6 +8725,31 @@
     ],
     "positional_only": []
   },
+  "livekit.plugins.openai.LLM.with_openrouter": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "app_name",
+      "base_url",
+      "client",
+      "fallback_models",
+      "model",
+      "parallel_tool_calls",
+      "plugins",
+      "prompt_cache_key",
+      "provider",
+      "reasoning_effort",
+      "safety_identifier",
+      "site_url",
+      "temperature",
+      "timeout",
+      "tool_choice",
+      "top_p",
+      "user"
+    ],
+    "positional_only": []
+  },
   "livekit.plugins.openai.LLMStream": {
     "has_var_keyword": false,
     "is_classmethod": false,
@@ -8941,6 +8966,31 @@
       "reasoning_effort",
       "safety_identifier",
       "temperature",
+      "tool_choice",
+      "top_p",
+      "user"
+    ],
+    "positional_only": []
+  },
+  "livekit.plugins.openai.llm.LLM.with_openrouter": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "app_name",
+      "base_url",
+      "client",
+      "fallback_models",
+      "model",
+      "parallel_tool_calls",
+      "plugins",
+      "prompt_cache_key",
+      "provider",
+      "reasoning_effort",
+      "safety_identifier",
+      "site_url",
+      "temperature",
+      "timeout",
       "tool_choice",
       "top_p",
       "user"

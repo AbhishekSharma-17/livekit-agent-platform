@@ -19,7 +19,7 @@ self-hosted server; `connection_create`, `connection_list`) → **agents**
 `generic` or `insurance_claim`) → each
 agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 `half_cascade` — see `lkap_explain("pipeline-modes")`), **providers and keys**
-(`provider_list`, `provider_key_create` — the registry has 121 provider
+(`provider_list`, `provider_key_create` — the registry has 126 provider
 entries), **tools** (`tool_create_http`, `tool_create_mcp`, plus built-ins like
 `search_knowledge`), **knowledge bases** (`kb_create`, `kb_add_document`), a
 **panel** (composite blocks, or a pack's own UI) and, optionally, a **flow**

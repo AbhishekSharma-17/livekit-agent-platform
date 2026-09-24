@@ -2,8 +2,9 @@
 
 Default is :class:`FastEmbedEmbedder` (local ONNX, no vendor key, no network
 after the model is cached). :class:`OpenAIEmbedder` is an optional path,
-selected via ``LKAP_EMBEDDER=openai:<credential_id>``, that calls the OpenAI
-REST API directly over ``httpx`` so the api does not need the ``openai`` SDK
+selected via ``LKAP_EMBEDDER=<provider_id>:<credential_id>`` (``openai-embedding``
+or ``openrouter-embedding``; the legacy ``openai:<credential_id>`` still works),
+that calls an OpenAI-shaped REST API directly over ``httpx`` so the api does not need the ``openai`` SDK
 as a dependency. :class:`FakeEmbedder` is for offline tests: a deterministic,
 dependency-free bag-of-tokens embedding whose cosine similarity is high for
 texts sharing tokens.
@@ -25,6 +26,8 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import httpx
+from lkap_contracts import providers as provider_registry
+from lkap_contracts.providers import ProviderSpec
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -200,37 +203,90 @@ def clear_embedder_cache() -> None:
     _FASTEMBED_CACHE.clear()
 
 
+#: The dotted class path of every registry embedding entry :func:`resolve_embedder`
+#: can build with a credential (`openai-embedding`, `openrouter-embedding`).
+OPENAI_EMBEDDER_CLASS = "lkap_api.kb.embed.OpenAIEmbedder"
+
+#: The legacy ``LKAP_EMBEDDER=openai:<credential_id>`` scheme and the entry it means.
+_LEGACY_OPENAI_SCHEME = "openai"
+_LEGACY_OPENAI_PROVIDER = "openai-embedding"
+
+
+def _openai_shaped_embedding_spec(provider_id: str) -> ProviderSpec | None:
+    """The registry entry for ``provider_id`` if it is an OpenAI-shaped embedding provider."""
+    try:
+        spec = provider_registry.get(provider_id)
+    except KeyError:
+        return None
+    if spec.kind != "embedding" or spec.python_class != OPENAI_EMBEDDER_CLASS:
+        return None
+    if spec.availability != "available":
+        return None
+    return spec
+
+
+def _base_url_default(spec: ProviderSpec) -> str | None:
+    for field in spec.fields:
+        if field.name == "base_url" and isinstance(field.default, str) and field.default:
+            return field.default
+    return None
+
+
 async def resolve_embedder(settings: Settings, db: AsyncSession, vault: Vault) -> Embedder:
     """Build the active :class:`Embedder` from ``LKAP_EMBEDDER``.
 
+    Accepted values (D-V4-13):
+
+    - ``fastembed`` (the default): the local :class:`FastEmbedEmbedder`.
+    - ``<provider_id>:<credential_id>``: any available registry entry of kind
+      ``embedding`` whose ``python_class`` is :class:`OpenAIEmbedder`
+      (``openai-embedding``, ``openrouter-embedding``). It is built with the
+      entry's ``default_model`` and its ``base_url`` field default, and the
+      credential must be stored under the entry's credential home.
+    - ``openai:<credential_id>``: the legacy form, kept as it always behaved
+      (``openai-embedding``'s model and URL, credential looked up by id only).
+
     Args:
-        settings: Service settings (``embedder`` = ``"fastembed"`` or ``"openai:<credential_id>"``).
-        db: Session used to look up the credential for the ``openai:`` form.
+        settings: Service settings (``embedder`` holds ``LKAP_EMBEDDER``).
+        db: Session used to look up the credential.
         vault: Decrypts the credential's secret bag.
 
     Returns:
         A :class:`FastEmbedEmbedder` or :class:`OpenAIEmbedder`.
 
     Raises:
-        UnprocessableEntityError: If ``LKAP_EMBEDDER`` names an unknown
-            credential or an unsupported scheme.
+        UnprocessableEntityError: If ``LKAP_EMBEDDER`` names an unsupported
+            scheme or provider, an unknown credential, or a credential stored
+            under another provider.
     """
-    spec = (settings.embedder or "fastembed").strip()
-    if spec in {"", "fastembed"}:
+    value = (settings.embedder or "fastembed").strip()
+    if value in {"", "fastembed"}:
         return get_fastembed_embedder(settings.data_dir)
-    if spec.startswith("openai:"):
-        credential_id = spec.split(":", 1)[1]
-        # LKAP_EMBEDDER is platform configuration, so the credential it names is
-        # looked up by id in whichever workspace holds it (deliberately cross-workspace).
-        credential = (
-            await db.execute(
-                select(Credential)
-                .where(Credential.id == credential_id)
-                .execution_options(**{CROSS_WORKSPACE_OPTION: True})
-            )
-        ).scalar_one_or_none()
-        if credential is None:
-            raise UnprocessableEntityError(f"LKAP_EMBEDDER references unknown credential '{credential_id}'")
-        secrets = vault.decrypt(credential.ciphertext)
-        return OpenAIEmbedder(api_key=secrets["api_key"])
-    raise UnprocessableEntityError(f"unsupported LKAP_EMBEDDER value '{spec}'")
+    scheme, separator, credential_id = value.partition(":")
+    legacy = scheme == _LEGACY_OPENAI_SCHEME
+    spec = _openai_shaped_embedding_spec(_LEGACY_OPENAI_PROVIDER if legacy else scheme)
+    if not separator or not credential_id or spec is None:
+        raise UnprocessableEntityError(f"unsupported LKAP_EMBEDDER value '{value}'")
+    # LKAP_EMBEDDER is platform configuration, so the credential it names is
+    # looked up by id in whichever workspace holds it (deliberately cross-workspace).
+    credential = (
+        await db.execute(
+            select(Credential)
+            .where(Credential.id == credential_id)
+            .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+        )
+    ).scalar_one_or_none()
+    if credential is None:
+        raise UnprocessableEntityError(f"LKAP_EMBEDDER references unknown credential '{credential_id}'")
+    home = provider_registry.credential_home(spec)
+    if not legacy and credential.provider_id != home:
+        raise UnprocessableEntityError(
+            f"LKAP_EMBEDDER credential '{credential_id}' belongs to provider "
+            f"'{credential.provider_id}', not '{home}'"
+        )
+    secrets = vault.decrypt(credential.ciphertext)
+    base_url = _base_url_default(spec)
+    model = spec.default_model or OPENAI_EMBEDDING_MODEL
+    if base_url is None:
+        return OpenAIEmbedder(api_key=secrets["api_key"], model=model)
+    return OpenAIEmbedder(api_key=secrets["api_key"], model=model, base_url=base_url)

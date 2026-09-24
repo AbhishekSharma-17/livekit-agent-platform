@@ -156,7 +156,8 @@ async def test_providers_endpoint_lists_the_whole_registry(admin_client: httpx.A
 
     assert body["v"] == 2, "V2-06 bumped ProvidersResponse to v=2 (ProviderOut)"
     assert len(body["providers"]) == len(REGISTRY)
-    assert len([p for p in body["providers"] if p["status"] == "mvp"]) == len(mvp_providers()) == 18
+    # 18 v1 slim entries + simli-avatar (moved to slim) + five OpenRouter entries (V4-03).
+    assert len([p for p in body["providers"] if p["status"] == "mvp"]) == len(mvp_providers()) == 24
     assert {p["id"] for p in body["providers"]} >= {
         "livekit-inference-llm",
         "google-realtime",

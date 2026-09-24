@@ -4,8 +4,9 @@
 with its documents. A knowledge base (`kb_create(name, embedder_id=
 "fastembed-embedding")`) is a named collection of chunked, embedded
 documents an agent can search. `fastembed-embedding` runs locally (no
-vendor key); `openai-embedding` needs one. `KbOut.chunk_count` tracks the
-total across every ready document.
+vendor key); `openai-embedding` needs one, and `openrouter-embedding` uses
+the shared OpenRouter key (see `lkap_explain("providers-and-keys")`).
+`KbOut.chunk_count` tracks the total across every ready document.
 
 ## Adding documents
 

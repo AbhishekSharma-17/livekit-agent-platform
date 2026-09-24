@@ -360,6 +360,19 @@
           ],
           "default": null
         },
+        "credential_provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names.",
+          "title": "Credential Provider"
+        },
         "default_credential_id": {
           "anyOf": [
             {

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import math
 
 import httpx
 import pytest
+import respx
 
 from lkap_api.db.session import Database
 from lkap_api.errors import UnprocessableEntityError
@@ -105,3 +107,90 @@ async def test_openai_embedder_posts_to_the_embeddings_endpoint() -> None:
 
 async def test_openai_embedder_empty_input_returns_empty_list() -> None:
     assert await OpenAIEmbedder(api_key="sk-test").embed([]) == []
+
+
+# ------------------------------------------------------------------ `<provider_id>:<credential_id>` (D-V4-13)
+
+
+async def _store_credential(
+    database: Database, vault: Vault, *, credential_id: str, provider_id: str
+) -> None:
+    from lkap_api.db.models import Credential
+
+    async with database.session() as session:
+        session.add(
+            Credential(
+                id=credential_id,
+                provider_id=provider_id,
+                label=provider_id,
+                ciphertext=vault.encrypt({"api_key": "sk-or-v1-embed"}),
+                fingerprint="...mbed",
+            )
+        )
+
+
+async def test_resolve_embedder_openrouter_form_uses_the_openrouter_url_and_model(
+    settings: Settings, database: Database
+) -> None:
+    vault = Vault(settings.master_key)
+    await _store_credential(database, vault, credential_id="cred-or-embed", provider_id="openrouter-llm")
+    settings.embedder = "openrouter-embedding:cred-or-embed"
+    async with database.session() as session:
+        embedder = await resolve_embedder(settings, session, vault)
+    assert isinstance(embedder, OpenAIEmbedder)
+    assert embedder.dimension == 1536
+
+    with respx.mock:
+        route = respx.post("https://openrouter.ai/api/v1/embeddings").mock(
+            return_value=httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.5, 0.5]}]})
+        )
+        vectors = await embedder.embed(["hello"])
+
+    assert vectors == [[0.5, 0.5]]
+    request = route.calls.last.request
+    assert request.headers["authorization"] == "Bearer sk-or-v1-embed"
+    assert json.loads(request.content)["model"] == "openai/text-embedding-3-small"
+
+
+async def test_resolve_embedder_legacy_openai_form_still_calls_openai(
+    settings: Settings, database: Database
+) -> None:
+    vault = Vault(settings.master_key)
+    await _store_credential(database, vault, credential_id="cred-legacy", provider_id="openai-llm")
+    settings.embedder = "openai:cred-legacy"
+    async with database.session() as session:
+        embedder = await resolve_embedder(settings, session, vault)
+
+    with respx.mock:
+        route = respx.post("https://api.openai.com/v1/embeddings").mock(
+            return_value=httpx.Response(200, json={"data": [{"index": 0, "embedding": [1.0]}]})
+        )
+        await embedder.embed(["hello"])
+
+    assert json.loads(route.calls.last.request.content)["model"] == "text-embedding-3-small"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["openrouter-stt:cred-or-embed2", "openrouter-llm:cred-or-embed2", "fastembed-embedding:x", "openai"],
+)
+async def test_resolve_embedder_rejects_non_embedding_or_malformed_values(
+    value: str, settings: Settings, database: Database
+) -> None:
+    vault = Vault(settings.master_key)
+    await _store_credential(database, vault, credential_id="cred-or-embed2", provider_id="openrouter-llm")
+    settings.embedder = value
+    with pytest.raises(UnprocessableEntityError):
+        async with database.session() as session:
+            await resolve_embedder(settings, session, vault)
+
+
+async def test_resolve_embedder_rejects_a_credential_of_another_provider(
+    settings: Settings, database: Database
+) -> None:
+    vault = Vault(settings.master_key)
+    await _store_credential(database, vault, credential_id="cred-openai-x", provider_id="openai-llm")
+    settings.embedder = "openrouter-embedding:cred-openai-x"
+    with pytest.raises(UnprocessableEntityError, match="belongs to provider 'openai-llm'"):
+        async with database.session() as session:
+            await resolve_embedder(settings, session, vault)

@@ -292,6 +292,21 @@ def test_requirements_from_pipeline_marks_image_gen_optional_and_realtime_requir
     ]
 
 
+def test_requirements_from_pipeline_reports_one_shared_openrouter_key_under_its_home() -> None:
+    """R-V4-7: three OpenRouter slots (and an optional OpenRouter image slot) need one key."""
+    pipeline = PipelineConfig(
+        mode="cascaded",
+        stt=ProviderRef(provider_id="openrouter-stt"),
+        llm=ProviderRef(provider_id="openrouter-llm"),
+        tts=ProviderRef(provider_id="openrouter-tts"),
+        image_gen=ProviderRef(provider_id="openrouter-image-gen"),
+    )
+
+    keys = requirements_from_pipeline(pipeline)
+
+    assert [(k.provider_id, k.optional) for k in keys] == [("openrouter-llm", False)]
+
+
 # --------------------------------------------------------------------------- loader rules
 def _write_entry(
     root: Path, template_id: str, data: dict[str, Any], files: dict[str, str] | None = None

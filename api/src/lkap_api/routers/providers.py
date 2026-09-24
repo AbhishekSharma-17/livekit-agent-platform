@@ -12,7 +12,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 from lkap_contracts.api_models import CatalogResponse, ProviderOut, ProviderSettingsIn, ProvidersResponse
-from lkap_contracts.providers import REGISTRY, Availability, CatalogKind, ProviderKind, ProviderSpec, get
+from lkap_contracts.providers import (
+    REGISTRY,
+    Availability,
+    CatalogKind,
+    ProviderKind,
+    ProviderSpec,
+    credential_home,
+    get,
+)
 from sqlalchemy import select
 
 from lkap_api import catalogs
@@ -69,12 +77,14 @@ async def _credential_for(
     Tenant-scoped in the query itself (not a post-fetch check) so the guard
     `lkap_api.db.guard` will eventually enforce autouse (ask #13) never flags
     this file — the same recipe ask #25 asks of `routers/provider_keys.py`.
+    Rows are matched against the provider's credential home (R-V4-7), so an
+    `openrouter-stt` lookup finds the key stored under `openrouter-llm`.
     """
     result: Credential | None = await db.scalar(
         select(Credential).where(
             Credential.id == credential_id,
             Credential.workspace_id == workspace_id,
-            Credential.provider_id == provider_id,
+            Credential.provider_id == credential_home(provider_id),
         )
     )
     return result
@@ -211,7 +221,8 @@ async def _resolve_credential(
         (
             await db.execute(
                 select(Credential).where(
-                    Credential.workspace_id == workspace_id, Credential.provider_id == spec.id
+                    Credential.workspace_id == workspace_id,
+                    Credential.provider_id == credential_home(spec),
                 )
             )
         )

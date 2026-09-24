@@ -12,11 +12,13 @@ from lkap_contracts.providers import (
     ProviderSpec,
     available_providers,
     by_kind,
+    credential_home,
     get,
     mvp_providers,
 )
 
-#: The MVP table of CONTRACTS §4 plus the §9 tool-secret bag.
+#: The MVP table of CONTRACTS §4 plus the §9 tool-secret bag, plus the slim
+#: entries added since (``simli-avatar`` in v4, the five OpenRouter entries).
 EXPECTED_MVP_IDS = [
     "livekit-inference-stt",
     "livekit-inference-llm",
@@ -31,11 +33,26 @@ EXPECTED_MVP_IDS = [
     "openai-tts",
     "bey-avatar",
     "tavus-avatar",
+    "simli-avatar",  # moved to the slim image in v4 (the user's avatar choice)
     "google-image-gen",
     "openai-image-gen",
     "fastembed-embedding",
     "openai-embedding",
     "http-tool-secret",
+    # V4-03: OpenRouter, shipped on the slim image (OPENROUTER.md D-V4-9).
+    "openrouter-llm",
+    "openrouter-stt",
+    "openrouter-tts",
+    "openrouter-embedding",
+    "openrouter-image-gen",
+]
+
+OPENROUTER_IDS = [
+    "openrouter-llm",
+    "openrouter-stt",
+    "openrouter-tts",
+    "openrouter-embedding",
+    "openrouter-image-gen",
 ]
 
 #: V2-05 (PLAN-V2 §4 card, ruling R-V2-1): every entry it adds or promotes
@@ -85,7 +102,7 @@ def test_status_alias_is_deferred_for_every_full_image_entry() -> None:
 
     Every entry V2-05 added or promoted is `worker_image="full"`, so it must
     report `status == "deferred"` no matter its `availability` — `"mvp"` is
-    reserved for the untouched v1 slim set.
+    reserved for the slim set (the v1 set plus the v4 slim additions).
     """
     for spec in REGISTRY:
         if spec.id in EXPECTED_MVP_IDS:
@@ -221,7 +238,12 @@ def test_get_raises_key_error_for_unknown_ids() -> None:
 
 def test_by_kind_defaults_to_mvp_only() -> None:
     llms = by_kind("llm")
-    assert {spec.id for spec in llms} == {"livekit-inference-llm", "openai-llm", "google-llm"}
+    assert {spec.id for spec in llms} == {
+        "livekit-inference-llm",
+        "openai-llm",
+        "google-llm",
+        "openrouter-llm",
+    }
 
 
 def test_by_kind_can_include_deferred_entries() -> None:
@@ -238,3 +260,68 @@ def test_every_pipeline_slot_kind_has_an_mvp_provider() -> None:
 def test_field_spec_rejects_unknown_field_type() -> None:
     with pytest.raises(ValueError, match="type"):
         FieldSpec(name="x", label="X", type="not-a-type")  # type: ignore[arg-type]
+
+
+def test_simli_avatar_ships_on_the_slim_image() -> None:
+    """The user's avatar choice (Beyond Presence + Simli): both build on the slim worker."""
+    for provider_id in ("bey-avatar", "simli-avatar"):
+        spec = get(provider_id)
+        assert spec.worker_image == "slim"
+        assert spec.status == "mvp"
+
+
+# --------------------------------------------------------------------------- credential home (R-V4-7)
+
+
+@pytest.mark.parametrize(
+    "spec", [s for s in REGISTRY if s.credential_provider is not None], ids=lambda s: s.id
+)
+def test_credential_provider_names_a_home_with_no_home_and_the_same_secret_fields(spec: ProviderSpec) -> None:
+    assert spec.credential_provider is not None
+    home = get(spec.credential_provider)
+    assert home.credential_provider is None, f"{spec.id}: home {home.id} has a home of its own"
+    assert [f.name for f in home.secret_fields] == [f.name for f in spec.secret_fields]
+
+
+def test_credential_home_resolves_aliases_and_passes_other_ids_through() -> None:
+    assert credential_home("openrouter-tts") == "openrouter-llm"
+    assert credential_home(get("openrouter-image-gen")) == "openrouter-llm"
+    assert credential_home("openrouter-llm") == "openrouter-llm"
+    assert credential_home("openai-llm") == "openai-llm"
+    assert credential_home("not-a-provider") == "not-a-provider"
+
+
+def test_only_the_four_non_llm_openrouter_entries_have_a_home() -> None:
+    aliased = {s.id for s in REGISTRY if s.credential_provider is not None}
+    assert aliased == {"openrouter-stt", "openrouter-tts", "openrouter-embedding", "openrouter-image-gen"}
+
+
+# --------------------------------------------------------------------------- OpenRouter (D-V4-9, R-V4-8)
+
+
+@pytest.mark.parametrize("provider_id", OPENROUTER_IDS)
+def test_openrouter_default_model_is_listed(provider_id: str) -> None:
+    spec = get(provider_id)
+    assert spec.default_model is not None
+    assert spec.default_model in {m.id for m in spec.models}
+
+
+def test_no_openrouter_entry_fills_realtime() -> None:
+    assert all(s.kind != "realtime" for s in REGISTRY if s.vendor == "OpenRouter")
+    assert {s.id for s in REGISTRY if s.vendor == "OpenRouter"} == set(OPENROUTER_IDS)
+
+
+@pytest.mark.parametrize("provider_id", OPENROUTER_IDS)
+def test_openrouter_entries_ship_on_slim_and_are_catalogued(provider_id: str) -> None:
+    spec = get(provider_id)
+    assert spec.worker_image == "slim"
+    assert spec.availability == "available"
+    assert spec.catalog is not None
+    assert spec.test == spec.catalog.adapter
+
+
+def test_openrouter_llm_default_is_tool_capable_not_auto() -> None:
+    spec = get("openrouter-llm")
+    assert spec.default_model == "openai/gpt-4.1-mini"
+    assert all(not m.id.startswith("openrouter/") for m in spec.models)
+    assert spec.capabilities.tool_calling is True

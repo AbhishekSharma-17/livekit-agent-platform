@@ -13,6 +13,9 @@ vendor source are marked there as UNVERIFIED, and the parsing here is deliberate
 lenient (`base.parse_items`) so an unverified payload shape degrades to "fewer items
 parsed", never to a crash (CONTRACTS-V2: a failed/odd vendor call must never break the
 providers page).
+
+The five OpenRouter registrations live in :mod:`lkap_api.catalogs.openrouter` (their own
+adapter class: OpenRouter's model list is public, so the key is probed first, R-V4-9).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from lkap_api.catalogs.base import AuthBuilder, CatalogAdapter, HttpCatalogAdapter, bearer_auth
+from lkap_api.catalogs.openrouter import OPENROUTER_ADAPTERS
 
 
 def _header(name: str) -> AuthBuilder:
@@ -142,6 +146,8 @@ ADAPTERS: dict[str, CatalogAdapter] = {
         id_keys=("presenter_id",),
         label_keys=("name",),
     ),
+    # ----------------------------------- OpenRouter: probe /key, then list /models (V4-03)
+    **OPENROUTER_ADAPTERS,
 }
 
 

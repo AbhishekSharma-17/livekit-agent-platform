@@ -1,6 +1,6 @@
 # Providers and keys
 
-The registry (`providers.json`, 121 entries) is the single source of every
+The registry (`providers.json`, 126 entries) is the single source of every
 vendor plugin the worker can construct: `stt`, `llm`, `tts`, `realtime`,
 `avatar`, `image_gen`, `embedding`, `vad`, `turn_detection`,
 `noise_cancellation`, plus one `secret_bag` kind (`http-tool-secret`, for
@@ -21,6 +21,26 @@ run on the LiveKit connection's own credentials — a cascaded agent can be
 fully built and tested with zero `provider_key_create` calls. Every other
 provider (`deepgram-stt`, `openai-llm`, `elevenlabs-tts`, `google-realtime`,
 `bey-avatar`, …) needs a credential first.
+
+## One OpenRouter key
+
+OpenRouter sells LLM, speech-to-text, text-to-speech, embeddings and image
+generation behind one key, so five entries share it: `openrouter-llm`,
+`openrouter-stt`, `openrouter-tts`, `openrouter-embedding` and
+`openrouter-image-gen`. `openrouter-llm` is the key's **home**: the other
+four name it in `credential_provider`, a key created for any of them is
+stored under `openrouter-llm`, and `provider_key_list(provider_id=
+"openrouter-stt")` lists that same row. One `provider_key_create` call covers
+the LLM, the workflow and QA judge models, STT, TTS, the knowledge-base
+embedder and image generation. It never fills the `realtime` slot: OpenRouter
+has no speech-to-speech model.
+
+`openrouter-stt` is batch transcription (no interim results; each turn is
+uploaded after end-of-speech, adding roughly half a second to two seconds),
+and `openrouter-tts` is non-streaming like `openai-tts`. For the lowest
+latency keep LiveKit Inference for STT and TTS and use OpenRouter for the
+LLM. `openrouter/auto` is not tool-safe, so the default model is
+`openai/gpt-4.1-mini`.
 
 ## Creating a key
 

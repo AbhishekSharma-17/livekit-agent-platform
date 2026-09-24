@@ -42,6 +42,7 @@ import {
   DEFAULT_AGENT_KEY_PRESET,
   KEEP_KEY_NOTE,
   SNIPPET_TABS,
+  TRANSCRIPT_ACK_LABEL,
   TRANSCRIPT_WARNING,
   expiresAtIso,
   presetById,
@@ -381,7 +382,7 @@ function KeyStep({
             onCheckedChange={(v) => setAcknowledged(v === true)}
             disabled={creating}
           />
-          <span>I understand my coding agent&apos;s own transcript will store what I paste into it.</span>
+          <span>{TRANSCRIPT_ACK_LABEL}</span>
         </label>
       </DialogBody>
       <DialogFooter>

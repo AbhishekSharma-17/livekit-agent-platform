@@ -105,12 +105,25 @@ export function expiresAtIso(days: number, from: Date = new Date()): string {
 
 // ---------------------------------------------------------------- copy
 
-/** R-V3-3: the one-time, acknowledged warning shown before "Create key" — verbatim from AGENT-ACCESS.md §5. */
+/**
+ * R-V3-3 as widened by R-V3-40 (V3-07-4, verdict C1): the one-time, acknowledged
+ * warning shown before "Create key" — verbatim from AGENT-ACCESS.md §5. The
+ * inline-secret exposure is wider than "your transcript": the client's own
+ * hooks and plugins can also copy a pasted tool call's arguments into their
+ * own logs before it ever reaches LKAP, so this leads with the by-reference
+ * form (`env:`/`file:`) and treats pasting as the accepted fallback, not the
+ * default.
+ */
 export const TRANSCRIPT_WARNING =
   "Your coding agent stores every tool call, including any LiveKit or vendor secret you paste into the chat, " +
-  "in its own local transcript on your machine. LKAP itself never shows a secret again after you paste it. " +
-  "If you would rather not paste, put secrets in a file and give the agent " +
-  "file:~/.config/lkap/dev.env#NAME references instead.";
+  "in its own local transcript on your machine, and any hooks or plugins it runs may copy that same tool-call " +
+  "input into their own logs before LKAP ever sees it. LKAP itself never shows a secret again after you paste " +
+  "it. Prefer a reference instead: give the agent an env:NAME or file:~/.config/lkap/dev.env#NAME value. " +
+  "Paste a secret only if you accept those local copies.";
+
+/** R-V3-40 (verdict C1): the acknowledgement checkbox label, widened the same way as {@link TRANSCRIPT_WARNING}. */
+export const TRANSCRIPT_ACK_LABEL =
+  "I understand my coding agent's transcript, hooks and plugins may store what I paste into it.";
 
 /** Shown under every snippet (§5). */
 export const KEEP_KEY_NOTE = "Keep the key in your user-level agent config, not in a project file that is committed.";

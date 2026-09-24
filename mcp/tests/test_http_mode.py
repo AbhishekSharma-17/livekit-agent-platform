@@ -45,6 +45,7 @@ from mcp.types import LATEST_PROTOCOL_VERSION, Implementation
 from sse_starlette.sse import AppStatus
 from starlette.applications import Starlette
 
+from lkap_mcp import __version__
 from lkap_mcp.chat import tools as chat_tools
 from lkap_mcp.client import LkapClient
 from lkap_mcp.http import (
@@ -146,11 +147,12 @@ def service(app: FastAPI) -> ServiceFactory:
     @contextlib.asynccontextmanager
     async def start(**overrides: Any) -> AsyncIterator[Service]:
         http_fields = {k: overrides.pop(k) for k in list(overrides) if k in HttpSettings.model_fields}
+        api_transport: httpx.AsyncBaseTransport = overrides.pop("api_transport", None) or httpx.ASGITransport(
+            app=app
+        )
         settings = McpSettings(api_url=API_BASE, **overrides)
         clock = Clock()
-        mcp_app = build_app(
-            settings, HttpSettings(**http_fields), api_transport=httpx.ASGITransport(app=app), clock=clock
-        )
+        mcp_app = build_app(settings, HttpSettings(**http_fields), api_transport=api_transport, clock=clock)
         async with _running(mcp_app) as base:
             yield Service(base, mcp_app, clock)
 
@@ -717,6 +719,46 @@ async def test_authorization_header_and_key_are_in_no_log_record(
     assert "lkap_" + "9" * 40 not in text
     assert "Bearer " not in text
     assert "authorization" not in text.lower()
+
+
+@dataclass
+class _RecordingTransport(httpx.AsyncBaseTransport):
+    """Wraps a transport and records the ``X-LKAP-Client`` header of every request to ``path``."""
+
+    inner: httpx.AsyncBaseTransport
+    path: str
+    sink: list[str]
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == self.path:
+            self.sink.append(request.headers.get("x-lkap-client", ""))
+        return await self.inner.handle_async_request(request)
+
+
+async def test_initialize_identity_check_has_no_client_segment_and_the_first_tool_call_does(
+    service: ServiceFactory, database: Database, app: FastAPI
+) -> None:
+    """R-V3-43 gap b / verdict C5: ``HttpSessions._start`` calls ``refresh_identity`` (the
+    ``GET /v1/api-keys/self`` identity check) before the transport has parsed ``initialize``,
+    so ``current_client_name`` finds no active FastMCP request context and that request's
+    ``X-LKAP-Client`` header carries no ``client=`` segment — only ``lkap-mcp/<version>``
+    (R-V3-19). The first real tool call (``me``, which hits the same route) runs inside a
+    request context once ``clientInfo.name`` is known, so its header carries
+    ``client=<clientInfo.name>``.
+    """
+    _, raw_key = await builder_key(database)
+    recorded: list[str] = []
+    transport = _RecordingTransport(httpx.ASGITransport(app=app), "/v1/api-keys/self", recorded)
+
+    async with service(api_transport=transport) as svc:
+        async with mcp_client(svc.url, raw_key) as session:
+            await call(session, "me")
+
+    assert len(recorded) >= 2, recorded
+    assert recorded[0].startswith(f"lkap-mcp/{__version__}")
+    assert "client=" not in recorded[0]
+    assert f"client={CLIENT_NAME}" in recorded[1]
+    assert "tool=me" in recorded[1]
 
 
 # ============================================================================ limits

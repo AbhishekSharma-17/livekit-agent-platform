@@ -370,6 +370,12 @@ This copies `skills/lkap` to `~/.claude/skills/lkap` (`--project` installs to
 `./.claude/skills/lkap` for one project instead). Re-run it after an update
 to refresh the recipes.
 
+The skill's description carries trigger phrases (voice/phone agent,
+first-notice-of-loss, intake agent, starter template, knowledge base, HTTP
+tool, test in chat, publish), but auto-invocation from a plain prompt is
+best-effort — it depends on the model noticing them (R-V3-41). Type `/lkap`
+before your first request, or name LKAP in it, for the deterministic form.
+
 To load the whole plugin — the skill and the MCP server together — for one
 session:
 
@@ -418,6 +424,21 @@ and produces `lkap@lkap` as an enabled, `user`-scope plugin in
 Codex CLI and other non-Claude-Code agents do not read a Claude Code plugin;
 they read `AGENTS.md` at the repository root instead — see
 [Codex CLI](#codex-cli) above and `AGENTS.md` itself.
+
+### Headless (`claude -p`)
+
+Every scripted invocation — `claude -p "..."` with `--mcp-config <file>
+--strict-mcp-config`, the shape V3-07's live run used — should also pass
+`--permission-mode default --allowedTools mcp__lkap`. Reason: a user's own
+global settings can set `permissionMode: auto`, which approves every MCP
+call regardless of `--allowedTools`, so a script that only sets
+`--allowedTools` may pass locally while relying on a setting it doesn't
+control; `--permission-mode default` makes the allowlist the thing actually
+deciding. Under `default`, the *server* form `mcp__lkap` pre-approves every
+tool of the `lkap` server, while `Skill ToolSearch` alone still denies
+`mcp__lkap__me` (three discriminating runs, `docs/v3/LIVE-RESULTS-V3.md`
+§0a). `--allowedTools mcp__lkap Skill ToolSearch` also lets the skill and
+`ToolSearch` run alongside the server's tools.
 
 ## Development
 

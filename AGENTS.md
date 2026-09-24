@@ -73,7 +73,10 @@ preset or higher (`agents:write` + `sessions:write` + `connections:read`).
   plain value itself. Prefer a reference when the user has an env file;
   accept an inline paste without hesitation otherwise — that choice is
   theirs. No tool result, `plan`, log line or error ever contains a secret
-  value, and you must never repeat one back to the user either.
+  value, and you must never repeat one back to the user either. A pasted
+  value still lands in your own client's transcript, and any hooks or
+  plugins you run may record tool arguments too, so a reference is the
+  safer default.
 - **Ask before anything destructive.** `lkap_delete`, `connection_rotate`,
   `connection_fleet` (`stop`/`restart`), `agent_archive`,
   `agent_versions(restore=...)`, `call_place` and `call_control` need

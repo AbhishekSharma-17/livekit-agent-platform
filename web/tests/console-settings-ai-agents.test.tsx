@@ -189,7 +189,7 @@ describe("ConnectAgentDialog — the full flow", () => {
     fireEvent.change(nameInput, { target: { value: "My Claude Code key" } });
     expect((createButton as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's own transcript/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's transcript, hooks and plugins/i }));
     expect((createButton as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(createButton);
@@ -231,7 +231,7 @@ describe("ConnectAgentDialog — the full flow", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /connect an ai agent/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /allow outbound phone calls/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's own transcript/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's transcript, hooks and plugins/i }));
     fireEvent.click(screen.getByRole("button", { name: /create key/i }));
 
     await waitFor(() => expect(stub.postCalls).toHaveLength(1));
@@ -243,7 +243,7 @@ describe("ConnectAgentDialog — the full flow", () => {
     renderWithClient(<AiAgentsTab />);
 
     fireEvent.click(await screen.findByRole("button", { name: /connect an ai agent/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's own transcript/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's transcript, hooks and plugins/i }));
     fireEvent.click(screen.getByRole("button", { name: /create key/i }));
 
     const snippet = await screen.findByText(/claude mcp add/);
@@ -273,7 +273,7 @@ describe("ConnectAgentDialog — the full flow", () => {
     const remoteRadio = await screen.findByRole("radio", { name: /remote \(http\)/i });
     expect((remoteRadio as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(remoteRadio);
-    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's own transcript/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /coding agent's transcript, hooks and plugins/i }));
     fireEvent.click(screen.getByRole("button", { name: /create key/i }));
 
     await waitFor(() => expect(stub.postCalls).toHaveLength(1));

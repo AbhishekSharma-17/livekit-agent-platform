@@ -10,6 +10,8 @@ import {
   presetById,
   skillInstallLine,
   snippetClientFor,
+  TRANSCRIPT_ACK_LABEL,
+  TRANSCRIPT_WARNING,
   type SnippetContext,
 } from "@/components/console/settings/snippets";
 
@@ -172,5 +174,39 @@ describe("snippetClientFor", () => {
 describe("skillInstallLine", () => {
   it("uses the <checkout> placeholder when no path is given", () => {
     expect(skillInstallLine()).toBe("<checkout>/scripts/install_claude_skill.sh");
+  });
+});
+
+/**
+ * R-V3-40 (V3-07-4, verdict C1): the warning and the acknowledgement label
+ * widened to name the client's own hooks and plugins, and the warning leads
+ * with the by-reference form before it accepts an inline paste.
+ */
+describe("TRANSCRIPT_WARNING", () => {
+  it("names hooks and plugins, not just the transcript", () => {
+    expect(TRANSCRIPT_WARNING).toContain("hooks");
+    expect(TRANSCRIPT_WARNING).toContain("plugins");
+  });
+
+  it("leads with the by-reference form (env:/file:) before it accepts pasting", () => {
+    const referenceAt = TRANSCRIPT_WARNING.indexOf("env:NAME");
+    const fileRefAt = TRANSCRIPT_WARNING.indexOf("file:~/.config/lkap/dev.env#NAME");
+    const pasteAt = TRANSCRIPT_WARNING.indexOf("Paste a secret only if");
+    expect(referenceAt).toBeGreaterThan(-1);
+    expect(fileRefAt).toBeGreaterThan(-1);
+    expect(pasteAt).toBeGreaterThan(-1);
+    expect(referenceAt).toBeLessThan(pasteAt);
+    expect(fileRefAt).toBeLessThan(pasteAt);
+  });
+
+  it("never carries a literal agent key", () => {
+    expect(TRANSCRIPT_WARNING).not.toMatch(/lkap_/);
+  });
+});
+
+describe("TRANSCRIPT_ACK_LABEL", () => {
+  it("names the transcript, hooks and plugins", () => {
+    expect(TRANSCRIPT_ACK_LABEL).toContain("hooks and plugins");
+    expect(TRANSCRIPT_ACK_LABEL).toContain("transcript");
   });
 });

@@ -64,7 +64,9 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
   returned to you again — a tool result never contains a secret value, only
   `<inline secret>` or `<ref>` in a `plan`. Prefer a `file:` reference when the
   user already keeps one; accept an inline paste without hesitation when they
-  offer it — that choice is theirs, not a policy you enforce.
+  offer it — that choice is theirs, not a policy you enforce. A pasted value
+  still lands in the client's own transcript, and its hooks or plugins may
+  record tool arguments too, so a reference is the safer default.
 - **Ask before anything destructive.** `lkap_delete`, `connection_rotate`,
   `connection_fleet(stop|restart)`, `agent_archive`, `agent_versions(restore=
   ...)`, `call_place` and `call_control` need `confirm=true`; without it they

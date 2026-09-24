@@ -1,6 +1,6 @@
 ---
 name: lkap
-description: Build and operate voice/video agents on LKAP (LiveKit Agent Platform) through the `lkap` MCP server. Use when the user mentions LKAP, "the LiveKit agent platform", asks to build, configure or publish a voice agent on the platform, wants to connect a LiveKit project, add a knowledge base or an HTTP/MCP tool to an agent, wire a flow or panel, or test an agent in chat before publishing.
+description: Build and operate voice, phone or video agents on LKAP (LiveKit Agent Platform) through the `lkap` MCP server (its tools are named `mcp__lkap__*`). Use when the user mentions LKAP or "the LiveKit agent platform", or asks to build, configure or publish a voice agent, phone agent, first-notice-of-loss agent or intake agent; start one from a starter template; connect a LiveKit project; add a knowledge base or an HTTP tool to an agent; wire a flow or panel; or test it in chat before publishing.
 ---
 
 # lkap — build LKAP voice agents
@@ -8,7 +8,10 @@ description: Build and operate voice/video agents on LKAP (LiveKit Agent Platfor
 You are working against a running LKAP workspace through the `lkap` MCP
 server (`mcp/` in this checkout, `docs/v3/AGENT-ACCESS.md` for the full
 design). Every platform action is one of its tools; there is no CLI and no
-direct database or file access to the platform.
+direct database or file access to the platform. Auto-invocation from a plain
+prompt is best-effort (it depends on the model matching the phrases above);
+type `/lkap` before your first request, or name LKAP in it, to load this
+skill deterministically every time (R-V3-41).
 
 ## Before anything else
 
@@ -38,7 +41,8 @@ direct database or file access to the platform.
    never echoes it back — you will see `<inline secret>` in a `plan=true`
    preview, never the value, and a real call returns only a `fingerprint`.
    Prefer a `file:` reference when the user already keeps one (it never
-   touches your own transcript at all); accept an inline paste without
+   touches your own transcript at all, and your own hooks or plugins cannot
+   copy it into their logs either); accept an inline paste without
    hesitation otherwise — that choice belongs to the user, not to you.
 2. **Build the agent.** Start from a starter template: read
    `lkap://templates` for the catalogue, then

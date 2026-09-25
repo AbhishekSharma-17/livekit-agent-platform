@@ -398,8 +398,12 @@ class FakeUiChannel:
 
     async def cite(self, block_id: str, hits: list[KbHit]) -> None:
         self.block_calls.append(("cite", block_id))
+        # Same wire shape as the worker's channel: unset locator fields are omitted.
         items = [
-            KbCitation(chunk_id=h.chunk_id, filename=h.filename, score=h.score, text=h.text) for h in hits
+            KbCitation(chunk_id=h.chunk_id, filename=h.filename, score=h.score, text=h.text).model_dump(
+                mode="json", exclude_none=True
+            )
+            for h in hits
         ]
         await self.patch([UiPatchOp(op="set", path=block_path(block_id, "items"), value=items)])
 

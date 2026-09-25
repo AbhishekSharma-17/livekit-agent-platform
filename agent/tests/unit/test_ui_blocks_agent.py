@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any, cast
@@ -23,10 +24,12 @@ from lkap_contracts.api_models import KbHit
 from lkap_contracts.migrate import DEFAULT_COMPOSITE_BLOCKS
 from lkap_contracts.ui_protocol import (
     RPC_AGENT_ACTION,
+    RPC_UI_REQUEST,
     TOPIC_UI_STATE,
     AgentAction,
     AgentActionResult,
     BlockSpec,
+    UiPatchOp,
     UiSnapshot,
 )
 
@@ -59,7 +62,12 @@ def _config(panel: PanelLayout, **kwargs: Any) -> ResolvedAgentConfig:
 
 
 def _agent(
-    config: ResolvedAgentConfig, pack: Any = None, *, ui: Any = None, kb: FakeKbClient | None = None
+    config: ResolvedAgentConfig,
+    pack: Any = None,
+    *,
+    ui: Any = None,
+    kb: FakeKbClient | None = None,
+    session: Any = None,
 ) -> tuple[PlatformAgent, Any, FakeRoom, list[tuple[str, dict[str, Any]]]]:
     room = FakeRoom()
     room.add_remote_participant(FakeRemoteParticipant("user-guest"))
@@ -72,7 +80,7 @@ def _agent(
         agent_id=config.agent_id,
         pipeline_mode=config.config.pipeline.mode,
         config=config.config,
-        session=cast(Any, object()),
+        session=cast(Any, session if session is not None else object()),
         room=cast(rtc.Room, room),
         ui=channel,
         frames=FakeFrameBuffer(),
@@ -230,3 +238,94 @@ async def test_auto_injected_knowledge_is_cited_into_the_citations_block() -> No
     agent, channel, _room, _ = _agent(_config(panel, kb_ids=["kb-1"]), kb=FakeKbClient(hits))
     await agent.on_user_turn_completed(ChatContext.empty(), llm.ChatMessage(role="user", content=["Flood?"]))
     assert channel.state.blocks["sources"]["items"][0]["text"] == "Flood is covered."
+
+
+# ================================================================ V5-08 (R-V5-1)
+
+CHOICE_PANEL = PanelLayout(blocks=[BlockSpec(id="pick", type="choices"), BlockSpec(id="intake", type="form")])
+
+
+class _RecordingSession:
+    """The slice of `AgentSession` the barge-in wiring uses: `on(event, handler)`."""
+
+    def __init__(self) -> None:
+        self.handlers: list[tuple[str, Any]] = []
+
+    def on(self, event: str, handler: Any) -> None:
+        self.handlers.append((event, handler))
+
+
+def _user_state(state: str = "speaking") -> Any:
+    return SimpleNamespace(old_state="listening", new_state=state)
+
+
+async def _until(predicate: Any) -> None:
+    for _ in range(50):
+        if predicate():
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("condition never became true")
+
+
+@pytest.mark.parametrize(
+    ("mode", "silenced"), [("realtime", True), ("half_cascade", True), ("cascaded", False)]
+)
+def test_request_choice_reply_is_cancelled_on_realtime_models(mode: Any, silenced: bool) -> None:
+    agent, *_ = _agent(_config(CHOICE_PANEL, mode=mode))
+    event = _tools_executed("request_choice")
+    agent.on_function_tools_executed(event)
+    assert event.has_tool_reply is not silenced
+
+
+def test_barge_in_handler_is_registered_once_per_session() -> None:
+    session = _RecordingSession()
+    agent, *_ = _agent(_config(CHOICE_PANEL), session=session)
+    PlatformAgent(ctx=agent.context, pack=NullPack(), has_tts=True)  # e.g. a second flow node
+    assert [name for name, _ in session.handlers] == ["user_state_changed"]
+
+
+async def test_barge_in_cancels_a_pending_choice_but_not_a_pending_form() -> None:
+    session = _RecordingSession()
+    agent, channel, room, events = _agent(_config(CHOICE_PANEL), session=session)
+    room.local_participant.rpc_call_responses[RPC_UI_REQUEST] = json.dumps({"ok": True, "payload": {}})
+    [(_, handler)] = session.handlers
+    choice = asyncio.create_task(channel.request_block("pick", timeout_s=30))
+    form = asyncio.create_task(channel.request_form("intake", {"type": "object"}, timeout_s=30))
+    await _until(lambda: channel.pending_requests == {"pick": "request", "intake": "form"})
+
+    handler(_user_state("listening"))  # not speaking: nothing happens
+    assert channel.pending_requests == {"pick": "request", "intake": "form"}
+
+    handler(_user_state("speaking"))
+    assert await choice is None
+    await _until(lambda: channel.state.blocks["pick"]["status"] == "cancelled")
+    assert channel.pending_requests == {"intake": "form"}
+    assert channel.state.blocks["intake"]["status"] == "requested"
+    assert (
+        "block_update",
+        {"block_id": "pick", "block_type": "choices", "op": "block_cancelled", "reason": "barge_in"},
+    ) in events
+
+    raw = AgentAction(action="form_submit", payload={"block_id": "intake", "values": {"a": 1}})
+    await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw.model_dump_json())
+    assert await form == {"a": 1}
+    del agent
+
+
+async def test_late_choice_submission_prompts_a_block_neutral_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent, channel, room, _events = _agent(_config(CHOICE_PANEL))
+    replies: list[str] = []
+    fake_session = SimpleNamespace(generate_reply=lambda **kw: replies.append(kw["instructions"]))
+    monkeypatch.setattr(PlatformAgent, "session", property(lambda self: fake_session))
+    await channel.patch_block(
+        "pick", [UiPatchOp(op="set", path="/options", value=[{"id": "no", "label": "No"}])]
+    )
+
+    raw = AgentAction(action="block_submit", payload={"block_id": "pick", "values": {"selected": ["no"]}})
+    await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw.model_dump_json())
+
+    assert len(replies) == 1
+    assert "the pick block on screen" in replies[0] and '"selected": ["no"]' in replies[0]
+    assert "form" not in replies[0]
+    assert channel.state.blocks["pick"]["selected"] == ["no"]
+    del agent

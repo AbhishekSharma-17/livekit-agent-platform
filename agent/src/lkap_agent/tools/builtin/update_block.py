@@ -25,7 +25,18 @@ __all__ = ["UPDATABLE_BLOCK_TYPES", "build_update_block_tool", "parse_json_objec
 #: their own tools (`set_status`, `push_note`); a form's status/values belong
 #: to `request_form` and the user.
 UPDATABLE_BLOCK_TYPES: Final[frozenset[BlockType]] = frozenset(
-    {"document", "gallery", "table", "transcript", "video", "kb_citations", "custom"}
+    {
+        "document",
+        "gallery",
+        "table",
+        "transcript",
+        "video",
+        "kb_citations",
+        "custom",
+        "details",
+        "markdown",
+        "steps",
+    }
 )
 
 #: Fields of a form block the model must not rewrite.

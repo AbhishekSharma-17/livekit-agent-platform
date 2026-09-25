@@ -103,7 +103,7 @@ from lkap_agent.flow.variables import (
 from lkap_agent.logging import get_logger
 from lkap_agent.platform_agent import SessionContext, compose_instructions
 from lkap_agent.providers.factory import ProviderFactory
-from lkap_agent.ui.blocks import resolve_block_specs
+from lkap_agent.ui.blocks import flow_steps_specs, flow_steps_state, resolve_block_specs
 
 if TYPE_CHECKING:
     from lkap_agent.flow.node_agent import FlowNodeAgent
@@ -841,10 +841,16 @@ class FlowRuntime:
     # ---------------------------------------------------------------- helpers
 
     def publish_progress(self) -> None:
-        """Mirror `FlowState` into every `flow_progress` custom block (best effort)."""
-        if not self._progress_block_ids:
+        """Mirror `FlowState` into every `flow_progress` custom block and every flow `steps` block.
+
+        Best effort. A `steps` block with `config.source == "flow"` (V5-08,
+        D-V5-33) gets a typed `StepsBlockState` built from the same state.
+        """
+        ctx = self.services.ctx
+        steps_specs = flow_steps_specs(resolve_block_specs(ctx.config.panel, self.services.pack.manifest))
+        if not self._progress_block_ids and not steps_specs:
             return
-        set_block = getattr(self.services.ctx.ui, "set_block", None)
+        set_block = getattr(ctx.ui, "set_block", None)
         if not callable(set_block):
             return
         state = {
@@ -856,6 +862,17 @@ class FlowRuntime:
         }
         for block_id in self._progress_block_ids:
             self.spawn(set_block(block_id, dict(state)))
+        nodes = [(n.id, n.label or n.id) for n in self.spec.nodes if isinstance(n, AgentNode)]
+        finished = isinstance(self._nodes.get(self.state.current_node), EndNode)
+        for spec_ in steps_specs:
+            steps = flow_steps_state(
+                spec_.config,
+                nodes=nodes,
+                path=self.state.path,
+                current=self.state.current_node,
+                finished=finished,
+            )
+            self.spawn(set_block(spec_.id, steps))
 
     def _speak(self, text: str) -> Any:
         """Queue `text` on the current activity.

@@ -50,7 +50,7 @@ import datetime as dt
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 from urllib.parse import quote, urlparse
 
 from lkap_contracts.agent_config import (
@@ -457,6 +457,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(knowledge_auto_inject_issues(ctx))
     findings.extend(tool_execution_issues(ctx))
     findings.extend(apps_issues(ctx))
+    findings.extend(choices_on_phone_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -667,6 +668,41 @@ def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings:
     for field_spec in spec.fields:
         if field_spec.required and field_spec.default is None and field_spec.name not in ref.fields:
             findings.add("error", label, f"field '{field_spec.name}' is required for provider '{spec.id}'")
+
+
+#: Shown on a `choices` block of an agent set up for phone calls (V5-08).
+CHOICES_ON_PHONE_MESSAGE: Final[str] = (
+    "callers on a phone line cannot see or tap choices; on a call the agent asks the question "
+    "out loud instead"
+)
+
+
+def choices_on_phone_issues(ctx: ValidationContext) -> list[Issue]:
+    """Warn that a `choices` block is invisible to callers on a phone line (V5-08, B1).
+
+    Validators never see which channels reach an agent (phone numbers and
+    dispatch rules live elsewhere), so an agent counts as set up for phone
+    calls when it has a phone-only setting: keypad input
+    (``capabilities.dtmf``) or transfer destinations
+    (``telephony.transfer_targets``). On such calls ``request_choice`` shows
+    nothing and answers ``{"channel": "voice_only"}``; the agent still works
+    on the web, so this is a warning. A built-in check called from
+    :func:`validate` directly.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        One warning per ``choices`` block, at ``panel.blocks[i]``.
+    """
+    config = ctx.config
+    if not (config.capabilities.dtmf or config.telephony.transfer_targets):
+        return []
+    return [
+        Issue(path=f"panel.blocks[{index}]", message=CHOICES_ON_PHONE_MESSAGE, severity="warning")
+        for index, block in enumerate(config.panel.blocks)
+        if block.type == "choices"
+    ]
 
 
 def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:

@@ -20,7 +20,10 @@ request from a snapshot), a short `lkap.ui.request {method: "request"}` RPC
 asks the browser to show it, and the answer normally comes back as
 `lkap.agent.action {action: "block_submit"}`. At most one request is pending
 per block. `request_form` is the v2 form request, now a thin alias over the
-same machinery with `method="form"` and its v2 statuses.
+same machinery with `method="form"` and its v2 statuses. `submit_block`
+(V5-08) answers a request from the agent side (a choice spoken aloud), and
+`block_action {name: "open_citation"}` on a `kb_citations` block is handled
+here (`ui.blocks.open_citation`) before any pack callback.
 
 Note on attribute naming: the byte-stream attribute and `AssetRef` field
 carrying the caption are named `caption` (docs/CONTRACTS.md §10 wins over
@@ -74,9 +77,12 @@ from pydantic import BaseModel, ValidationError
 from lkap_agent.logging import get_logger
 from lkap_agent.ui.blocks import (
     BLOCK_STATE_MODELS,
+    OPEN_CITATION,
     block_path,
+    choice_selection_error,
     initial_block_states,
     jsonable,
+    open_citation,
     validate_block_state,
 )
 
@@ -721,6 +727,37 @@ class UiChannel:
             self._log.debug("ui_requests_cancelled", block_ids=released, reason=reason)
         return released
 
+    async def submit_block(self, block_id: str, values: dict[str, Any]) -> bool:
+        """Answer a requestable block from the agent side, exactly as a `block_submit` would (V5-08).
+
+        For an answer the caller gave some other way, e.g. by voice
+        (`resolve_choice`): the block is marked `submitted` and a pending
+        request resolves with `values`. With nothing pending, the block is
+        still marked submitted but the unsolicited-submit callback is **not**
+        called (the model already knows the answer: it gave it).
+
+        Args:
+            block_id: The block.
+            values: The answer, in the shape a browser would submit.
+
+        Returns:
+            Whether a pending request was resolved.
+
+        Raises:
+            ValueError: When the block is unknown or cannot be requested.
+        """
+        if block_id not in self.state.blocks and block_id not in self._block_specs:
+            raise ValueError(f"unknown block: {block_id!r}")
+        if not self._is_requestable(block_id):
+            raise ValueError(f"block {block_id!r} ({self._block_type(block_id)}) cannot be submitted")
+        entry = self._pending.get(block_id)
+        waiting = entry is not None and not entry.future.done()
+        if entry is not None and entry.method == "form":
+            await self._accept_form(block_id, values, notify=False)
+        else:
+            await self._accept_request(block_id, values, notify=False)
+        return waiting
+
     async def _await_request(
         self,
         block_id: str,
@@ -761,10 +798,14 @@ class UiChannel:
                 del self._pending[block_id]
 
     async def cite(self, block_id: str, hits: list[KbHit]) -> None:
-        """Replace `/blocks/<block_id>/items` with `hits` as `KbCitation`s."""
-        items = [
-            KbCitation(chunk_id=h.chunk_id, filename=h.filename, score=h.score, text=h.text) for h in hits
-        ]
+        """Replace `/blocks/<block_id>/items` with `hits` as `KbCitation`s.
+
+        Each citation carries the hit's `document_id` and, when the hit has
+        them in its `meta` (V5-01 ingest locators, surfaced by V5-04), the
+        `page`, `heading_path` and character offsets (V5-08).
+        """
+        # Unset locators stay off the wire, so a pre-V5-01 chunk's citation keeps its v2 shape.
+        items = [_citation_of(h).model_dump(mode="json", exclude_none=True) for h in hits]
         await self.patch([UiPatchOp(op="set", path=block_path(block_id, "items"), value=items)])
         self._record("block_update", {"block_id": block_id, "block_type": "kb_citations", "op": "cite"})
 
@@ -825,6 +866,9 @@ class UiChannel:
                 return AgentActionResult(ok=False, error="block_action needs a block_id")
             name = str(action.payload.get("name", ""))
             data = dict(action.payload.get("data") or {})
+            if name == OPEN_CITATION and self._block_type(block_id) == "kb_citations":
+                # E1 (V5-08): the platform opens the cited page; packs never see it.
+                return AgentActionResult(ok=True, payload=await open_citation(self, block_id, data))
             if self._on_block_action is None:
                 # Default no-op (CONTRACTS-V2 §4.4): acknowledged, nothing to return.
                 return AgentActionResult(ok=True)
@@ -892,7 +936,7 @@ class UiChannel:
         else:
             await self._accept_request(block_id, values)
 
-    async def _accept_form(self, block_id: str, values: dict[str, Any]) -> None:
+    async def _accept_form(self, block_id: str, values: dict[str, Any], *, notify: bool = True) -> None:
         """Store submitted `values`, record `form_submitted`, and hand them to the waiter.
 
         One patch, three ops: `set .../values`, `set .../status = "submitted"`,
@@ -908,19 +952,23 @@ class UiChannel:
             ]
         )
         self._record("form_submitted", {"block_id": block_id, "values": values})
-        await self._deliver(block_id, values)
+        await self._deliver(block_id, values, notify=notify)
 
-    async def _accept_request(self, block_id: str, values: dict[str, Any]) -> None:
+    async def _accept_request(self, block_id: str, values: dict[str, Any], *, notify: bool = True) -> None:
         """Generic submit: mark the block `submitted` and hand `values` to the waiter.
 
-        The values are stored at `.../values` only when the block's state model
-        has that field (or the block is untyped); a block that renders its
-        answer elsewhere is updated by the requesting tool.
+        The values are stored at `.../values` when the block's state model has
+        that field (or the block is untyped). Otherwise each key of `values`
+        that names a field of the state model is written there when the result
+        still validates (V5-08: a `choices` answer `{selected: [...]}` lands
+        in `selected`); anything else is left to the requesting tool.
         """
         values = jsonable(values)
         ops: list[UiPatchOp] = []
         if self._stores_values(block_id):
             ops.append(UiPatchOp(op="set", path=block_path(block_id, "values"), value=values))
+        else:
+            ops += self._answer_field_ops(block_id, values)
         ops += [
             UiPatchOp(op="set", path=block_path(block_id, "status"), value="submitted"),
             UiPatchOp(op="set", path=block_path(block_id, "submitted_at"), value=time.time()),
@@ -935,15 +983,44 @@ class UiChannel:
                 "values": values,
             },
         )
-        await self._deliver(block_id, values)
+        await self._deliver(block_id, values, notify=notify)
 
-    async def _deliver(self, block_id: str, values: dict[str, Any]) -> None:
+    def _answer_field_ops(self, block_id: str, values: dict[str, Any]) -> list[UiPatchOp]:
+        """`set` ops for the keys of `values` that name state fields (status fields excluded).
+
+        Returns nothing when the block is untyped or the answer would not
+        validate against the block's state model.
+        """
+        block_type = self._block_type(block_id)
+        model = BLOCK_STATE_MODELS.get(block_type)
+        if model is None:
+            return []
+        if block_type == "choices" and "selected" in values:
+            error = choice_selection_error(self.state.blocks.get(block_id) or {}, values["selected"])
+            if error is not None:
+                self._log.debug("choice answer not stored", block_id=block_id, error=error)
+                return []
+        protected = set(RequestableState.model_fields)
+        ops = [
+            UiPatchOp(op="set", path=key, value=value)
+            for key, value in values.items()
+            if key in model.model_fields and key not in protected
+        ]
+        if not ops:
+            return []
+        try:
+            return self._validated_block_ops(block_id, ops)
+        except ValidationError:
+            self._log.debug("block answer not stored: it does not fit the block", block_id=block_id)
+            return []
+
+    async def _deliver(self, block_id: str, values: dict[str, Any], *, notify: bool = True) -> None:
         """Resolve the block's waiter, or, with nobody waiting, call the unsolicited handler."""
         entry = self._pending.get(block_id)
         if entry is not None and not entry.future.done():
             entry.future.set_result(values)
             return
-        if self._on_unsolicited_form is not None:
+        if notify and self._on_unsolicited_form is not None:
             try:
                 await self._on_unsolicited_form(block_id, values)
             except Exception:  # noqa: BLE001 - the submission is already stored and recorded
@@ -1051,6 +1128,26 @@ class UiChannel:
                 continue
             return str(participant.identity)
         raise RuntimeError("request_ui: no remote participant connected")
+
+
+def _citation_of(hit: KbHit) -> KbCitation:
+    """A `KbCitation` for `hit`, with the locators its `meta` carries (when it has one)."""
+    meta = getattr(hit, "meta", None)
+    meta = meta if isinstance(meta, dict) else {}
+    page = meta.get("page")
+    heading = meta.get("heading_path")
+    start, end = meta.get("char_start"), meta.get("char_end")
+    return KbCitation(
+        chunk_id=hit.chunk_id,
+        filename=hit.filename,
+        score=hit.score,
+        text=hit.text,
+        document_id=getattr(hit, "document_id", None) or None,
+        page=page if isinstance(page, int) and not isinstance(page, bool) else None,
+        heading_path=[str(h) for h in heading] if isinstance(heading, list) and heading else None,
+        char_start=start if isinstance(start, int) and not isinstance(start, bool) else None,
+        char_end=end if isinstance(end, int) and not isinstance(end, bool) else None,
+    )
 
 
 def _normalize_block_op(op: UiPatchOp) -> UiPatchOp:

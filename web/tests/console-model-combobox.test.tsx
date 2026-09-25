@@ -215,14 +215,21 @@ describe("ModelCombobox — trailing price figures (docs/v4/COSTS.md §5 item 3)
     await openAndType("gem");
     await screen.findByText("Gemini X 0");
 
-    await waitFor(() => {
-      const quoteCalls = calls.filter((c) => c.url.includes("/pricing/quotes"));
-      expect(quoteCalls).toHaveLength(1);
-    });
-
+    // Wait for the *catalog-inclusive* quotes response specifically (proof
+    // the second, buggy POST — fired once the catalog page lands — would
+    // already have happened if the timing gate were missing): the "no
+    // price" figure on a catalog row only exists in that response.
+    await waitFor(() => expect(within(group("Catalog")).getAllByText("no price").length).toBeGreaterThan(0));
     await waitFor(() => expect(within(group("Suggested")).getByText("≈ $0.0040/min")).toBeTruthy());
-    const catalog = group("Catalog");
-    await waitFor(() => expect(within(catalog).getAllByText("no price").length).toBeGreaterThan(0));
+
+    // Now that the catalog-inclusive answer has landed, the count is final:
+    // exactly one POST, not the pre-fix suggested-only-then-catalog pair.
+    expect(calls.filter((c) => c.url.includes("/pricing/quotes"))).toHaveLength(1);
+
+    // Typing further narrows the list locally; it must not re-fire the quote.
+    fireEvent.change(screen.getByPlaceholderText(/Search models or type an id/), { target: { value: "gemini-x" } });
+    await screen.findByText("Gemini X 3");
+    expect(calls.filter((c) => c.url.includes("/pricing/quotes"))).toHaveLength(1);
 
     const customRow = (await screen.findByText(/Use custom model:/)).closest("[cmdk-item]") as HTMLElement;
     expect(within(customRow).queryByText(/≈ \$/)).toBeNull();

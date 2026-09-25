@@ -19,7 +19,7 @@ from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
 REVISION = "v5_010_tool_provider_kind"
-PREVIOUS = "v4_002_provider_models"
+PREVIOUS = "v5_001_knowledge_p0"
 INSERT = (
     "INSERT INTO tools (id, agent_id, kind, name, definition, enabled, created_at, updated_at, workspace_id) "
     "VALUES (?, NULL, ?, 'x_y', '{}', 1, '2026-09-25', '2026-09-25', '00000000000000000000000000000001')"

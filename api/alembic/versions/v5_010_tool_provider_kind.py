@@ -16,7 +16,7 @@ CHECK. Agents that listed them keep a dangling id in ``tools.tool_ids``,
 which validation reports as "unknown tool".
 
 Revision ID: v5_010_tool_provider_kind
-Revises: v4_002_provider_models
+Revises: v5_001_knowledge_p0
 Create Date: 2026-09-25
 """
 
@@ -29,7 +29,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "v5_010_tool_provider_kind"
-down_revision: str | None = "v4_002_provider_models"
+down_revision: str | None = "v5_001_knowledge_p0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

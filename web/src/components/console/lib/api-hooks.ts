@@ -506,6 +506,10 @@ export function useEnableApps() {
     mutationFn: () => api.post<AppsStatusOut>(`${APPS_BASE}/enable`),
     onSuccess: (status) => {
       queryClient.setQueryData(keys.appsStatus, status);
+      // Every `["apps", …]` query (toolkits, connections, both details), not
+      // just `keys.appsStatus`: `AppCard`/`ConnectionRow` read those to
+      // decide what to show, and "enabled" changes what they should return.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
       void queryClient.invalidateQueries({ queryKey: ["providers"] });
       void queryClient.invalidateQueries({ queryKey: ["credentials"] });
     },
@@ -519,6 +523,7 @@ export function useDisableApps() {
     mutationFn: () => api.post<AppsStatusOut>(`${APPS_BASE}/disable`),
     onSuccess: (status) => {
       queryClient.setQueryData(keys.appsStatus, status);
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
       void queryClient.invalidateQueries({ queryKey: ["providers"] });
       void queryClient.invalidateQueries({ queryKey: ["credentials"] });
       void queryClient.invalidateQueries({ queryKey: ["tools"] });
@@ -616,8 +621,11 @@ export function useConnectApp() {
   return useMutation({
     mutationFn: (body: AppConnectIn) => api.post<AppConnectOut>(`${APPS_BASE}/connections`, body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.appsConnections });
-      void queryClient.invalidateQueries({ queryKey: keys.appsStatus });
+      // `keys.appsToolkits(...)` is what `AppCard` actually reads to decide
+      // Connect-button vs `ConnectionRow` (`ToolkitOut.connected`) — a
+      // narrower invalidation (just `appsConnections`/`appsStatus`) leaves
+      // the gallery showing "Connect" on an app that just connected.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });
 }
@@ -628,9 +636,8 @@ export function useReconnectApp() {
   return useMutation({
     mutationFn: ({ id, fields }: { id: string; fields?: AppReconnectIn["fields"] }) =>
       api.post<AppConnectOut>(`${APPS_BASE}/connections/${id}/reconnect`, { fields: fields ?? {} }),
-    onSuccess: (_result, { id }) => {
-      void queryClient.invalidateQueries({ queryKey: keys.appsConnections });
-      void queryClient.invalidateQueries({ queryKey: keys.appsConnection(id) });
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });
 }
@@ -642,8 +649,11 @@ export function useDisconnectApp() {
     mutationFn: ({ id, purge }: { id: string; purge?: boolean }) =>
       api.delete<AppConnectionOut | void>(`${APPS_BASE}/connections/${id}${purge ? "?purge=true" : ""}`),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.appsConnections });
-      void queryClient.invalidateQueries({ queryKey: keys.appsStatus });
+      // `keys.appsConnections` alone does not match `keys.appsConnection(id)`
+      // (a different second segment) — the disconnected row's own detail
+      // query, which `ConnectionRow` renders from, would otherwise keep
+      // answering "active" from cache.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
       void queryClient.invalidateQueries({ queryKey: ["tools"] });
     },
   });
@@ -655,7 +665,9 @@ export function useMaterialiseAppActions() {
   return useMutation({
     mutationFn: (body: AppActionsPickIn) => api.post<AppActionsPickOut>(`${APPS_BASE}/materialise`, body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.appsConnections });
+      // Not just the connections list: `ConnectionRow` reads `picked_actions`
+      // from `appsConnection(id)` when it reopens the Actions dialog.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });
 }

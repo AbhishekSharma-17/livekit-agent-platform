@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
 
+  const queryClient = useQueryClient();
   const detailQuery = useToolProviderToolkit(open ? toolkit.slug : null);
   const agentsQuery = useAgents();
   const connectMutation = useConnectApp();
@@ -127,6 +129,11 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
   React.useEffect(() => {
     if (pendingStatus === "active") {
       toast.success(`${toolkit.name} connected`);
+      // The managed/custom-OAuth path reaches "active" through polling, not
+      // a mutation's own `onSuccess` — nothing else refreshes the gallery's
+      // `AppCard` (which reads `toolkit.connected` from the *toolkits*
+      // list) without this.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
       onConnected?.();
       setOpen(false);
     }

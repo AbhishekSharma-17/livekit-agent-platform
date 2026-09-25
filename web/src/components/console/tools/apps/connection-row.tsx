@@ -22,6 +22,7 @@ import {
   useDisconnectApp,
   useReconnectApp,
   useToolProviderConnection,
+  useToolProviderToolkit,
 } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
 import { fieldsFor } from "@/components/console/tools/apps/connect-app-dialog";
@@ -64,6 +65,11 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
   const [redirectUrl, setRedirectUrl] = React.useState<string | null>(null);
   const { canWrite } = useWriteAccess();
   const writeReason = writeAccessReason();
+  // `toolkit` here is the *list* read (`AppCard`'s `ToolkitOut`), whose
+  // `auth_fields` is always `{}` (`toolkit_out(item, detail=False)`,
+  // docs/v5/COMPOSIO.md §4) — the reconnect key form needs the *detail*
+  // read's real fields, fetched only once the dialog actually opens.
+  const detailQuery = useToolProviderToolkit(keyDialogOpen ? toolkit.slug : null);
 
   const connection = connectionQuery.data;
   if (!connection) {
@@ -157,7 +163,8 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
         open={keyDialogOpen}
         onOpenChange={setKeyDialogOpen}
         toolkitName={toolkit.name}
-        fields={fieldsFor(toolkit, "api_key")}
+        fields={fieldsFor(detailQuery.data ?? toolkit, "api_key")}
+        loading={detailQuery.isLoading}
         onSubmit={async (fields) => {
           await reconnectMutation.mutateAsync({ id: connectionId, fields });
           toast.success(`${toolkit.name} reconnected`);
@@ -183,12 +190,15 @@ function ReconnectKeyDialog({
   onOpenChange,
   toolkitName,
   fields,
+  loading = false,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   toolkitName: string;
   fields: AppAuthField[];
+  /** The detail fetch for `fields` hasn't resolved yet. */
+  loading?: boolean;
   onSubmit: (fields: Record<string, string>) => Promise<void>;
 }) {
   const [values, setValues] = React.useState<Record<string, string>>({});
@@ -221,17 +231,21 @@ function ReconnectKeyDialog({
             <DialogDescription>Enter the new key. It is sent once and never stored in the console.</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            {fields.map((field) => (
-              <Field key={field.name} label={field.label} htmlFor={`reconnect-field-${field.name}`} required={field.required}>
-                <Input
-                  id={`reconnect-field-${field.name}`}
-                  type={field.secret ? "password" : "text"}
-                  autoComplete="new-password"
-                  value={values[field.name] ?? ""}
-                  onChange={(event) => setValues((prev) => ({ ...prev, [field.name]: event.target.value }))}
-                />
-              </Field>
-            ))}
+            {loading ? (
+              <p className="text-[0.8125rem] text-muted-foreground">Loading…</p>
+            ) : (
+              fields.map((field) => (
+                <Field key={field.name} label={field.label} htmlFor={`reconnect-field-${field.name}`} required={field.required}>
+                  <Input
+                    id={`reconnect-field-${field.name}`}
+                    type={field.secret ? "password" : "text"}
+                    autoComplete="new-password"
+                    value={values[field.name] ?? ""}
+                    onChange={(event) => setValues((prev) => ({ ...prev, [field.name]: event.target.value }))}
+                  />
+                </Field>
+              ))
+            )}
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

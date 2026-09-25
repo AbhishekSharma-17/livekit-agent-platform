@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AppGallery } from "@/components/console/tools/apps/app-gallery";
 import { ConnectAppDialog } from "@/components/console/tools/apps/connect-app-dialog";
+import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
 import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
 import { useToolProviderToolkits } from "@/components/console/lib/api-hooks";
 import {
@@ -215,6 +216,46 @@ describe("AppGallery", () => {
     expect(screen.getByRole("button", { name: "Actions" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
   });
+
+  it("flips a card from Connect to its status row once the connection goes active (cache coherence)", async () => {
+    // Regression: `useConnectApp`'s `onSuccess` used to invalidate only
+    // `appsConnections`/`appsStatus`, never the *toolkits* list `AppCard`
+    // actually reads `connected`/`connection_id` from — the card kept
+    // showing "Connect" after a successful sign-in.
+    let connected = false;
+    stubApi((call) => {
+      if (call.url.includes("/tool-providers/composio/toolkits") && !/\/toolkits\/[^/?]+/.test(call.url)) {
+        return {
+          status: 200,
+          body: toolkitPage([toolkitFixture(connected ? { connected: true, connection_id: "conn_new" } : {})]),
+        };
+      }
+      if (call.url.endsWith("/tool-providers/composio/connections") && call.method === "POST") {
+        return { status: 201, body: { connection_id: "conn_new", status: "initiated", redirect_url: "https://backend.composio.dev/consent", expires_at: null } };
+      }
+      if (call.url.endsWith("/connections/conn_new")) {
+        connected = true;
+        return { status: 200, body: connectionFixture({ id: "conn_new", status: "active" }) };
+      }
+      return undefined;
+    });
+    vi.spyOn(window, "open").mockReturnValue(null);
+    renderWithClient(<AppGallery />);
+
+    // `AppCard`'s Connect trigger is `useWriteAccess`-gated; `GET /auth/me`
+    // is a separate query from the toolkits one `findByText` above waited
+    // on, so it can still be resolving when this button first appears.
+    const connectButton = await screen.findByRole("button", { name: "Connect" });
+    await waitFor(() => expect(isDisabled(connectButton)).toBe(false));
+    fireEvent.click(connectButton);
+    const dialog = await screen.findByRole("dialog", { name: "Connect Google Calendar" });
+    await within(dialog).findByText("Managed — one click");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+  });
 });
 
 describe("ConnectAppDialog", () => {
@@ -335,5 +376,24 @@ describe("ActionsDialog", () => {
     const checkbox = await within(dialog).findByRole("checkbox", { name: /List repositories/ });
     expect(isDisabled(checkbox)).toBe(true);
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("ConnectionRow — reconnecting an api_key app", () => {
+  it("fetches the toolkit detail for its real fields, not the list read's empty auth_fields", async () => {
+    // Regression: `toolkit_out(item, detail=False)` (the list read `AppCard`
+    // passes down) always has `auth_fields: {}` — the reconnect key form
+    // used to render with no input at all for an `api_key` connection.
+    stubApi((call) => {
+      if (call.url.endsWith("/connections/conn_slack")) {
+        return { status: 200, body: connectionFixture({ id: "conn_slack", toolkit: "slack", method: "api_key", status: "inactive", needs_reconnect: true }) };
+      }
+      if (/\/toolkits\/[^/?]+$/.test(call.url)) return { status: 200, body: TOOLKIT_SLACK };
+      return undefined;
+    });
+    renderWithClient(<ConnectionRow connectionId="conn_slack" toolkit={{ slug: "slack", name: "Slack", auth_fields: {} }} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reconnect" }));
+    expect(await screen.findByLabelText("Bot token")).toBeTruthy();
   });
 });

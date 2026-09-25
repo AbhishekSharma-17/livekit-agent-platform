@@ -185,14 +185,26 @@ export function ActionsDialog({
               <ul className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
                 {items.map((action) => {
                   const alreadyPicked = pickedSet.has(action.slug.toUpperCase());
+                  // "Picks only ever add" (D-V5-C7) locks the checkbox in the
+                  // generic Tools → Apps picker, where a pick has no single
+                  // agent to attach to. From an agent's own Connected apps
+                  // card (`presetAgentId` set) that lock dead-ends: the
+                  // connection already picked "List repos" for agent A, so
+                  // agent B's card would show it checked-and-unremovable
+                  // with no way to attach it — even though re-materialising
+                  // an existing slug is exactly how the api attaches it
+                  // (`tools_existing`, merged into `tool_ids` by
+                  // `onAdded`/`handleActionsAdded`). Only lock it outside
+                  // that flow.
+                  const locked = alreadyPicked && !presetAgentId;
                   const inputId = `action-${action.slug}`;
                   const risk: ActionRisk = action.risk ?? "write";
                   return (
                     <li key={action.slug} className="flex items-start gap-2 rounded-md border border-border p-2.5">
                       <Checkbox
                         id={inputId}
-                        checked={alreadyPicked || checked.has(action.slug)}
-                        disabled={alreadyPicked}
+                        checked={locked || checked.has(action.slug)}
+                        disabled={locked}
                         onCheckedChange={() => toggle(action.slug)}
                         className="mt-0.5"
                       />

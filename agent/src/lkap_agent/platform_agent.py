@@ -20,7 +20,12 @@
   after its tool stopped waiting → a reply, and `block_update` /
   `form_submitted` session events (CONTRACTS-V2 §4.4),
 * cancels pending generic block requests (`request_choice`) when the caller
-  starts speaking; forms stay open (R-V5-1).
+  starts speaking; forms stay open (R-V5-1),
+* tells the model the caller's current date and time (R-V5-10): the caller's
+  timezone is resolved on enter (:mod:`lkap_agent.locale`), one stamp line
+  joins the composed prompt, and a short "Time now" note is appended at the
+  tail of the chat context after 15 minutes or a day change — the system
+  prompt itself is never rewritten per turn.
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -73,6 +78,7 @@ from lkap_agent.knowledge import (
     knowledge_state,
     skip_reason,
 )
+from lkap_agent.locale import SessionLocale, ensure_session_locale, session_locale
 from lkap_agent.logging import get_logger
 from lkap_agent.tools.execution import (
     FLOW_BACKGROUND_MIN_SDK,
@@ -171,6 +177,7 @@ def compose_instructions(
     *,
     mode: PipelineMode,
     manifest: PackManifest | None = None,
+    locale: SessionLocale | None = None,
 ) -> str:
     """Build the full system prompt for one session.
 
@@ -178,16 +185,20 @@ def compose_instructions(
         base: `AgentConfig.instructions`, authored in the console.
         mode: The pipeline mode, selecting the pack addendum and platform note.
         manifest: The pack manifest, for `instructions_by_mode`.
+        locale: The session's resolved locale (R-V5-10); its stamp is fixed at
+            session start, so every composition of one session carries the same line.
 
     Returns:
         The composed prompt: agent instructions, then the pack's mode addendum,
-        then the platform pipeline note.
+        then the date-and-time stamp, then the platform pipeline note.
     """
     blocks = [base.strip()]
     if manifest is not None:
         addendum = manifest.instructions_by_mode.get(mode, "").strip()
         if addendum:
             blocks.append(addendum)
+    if locale is not None:
+        blocks.append(locale.stamp())
     blocks.append(PIPELINE_NOTES[mode])
     return "\n\n".join(b for b in blocks if b)
 
@@ -324,12 +335,10 @@ class PlatformAgent(Agent):
                 silent -= {"request_choice"}
         self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
+        # R-V5-10: a caller-supplied prompt (a flow node's) is recomposed by its owner.
+        self._composes_own_instructions = instructions is None
         if instructions is None:
-            instructions = compose_instructions(
-                ctx.config.instructions,
-                mode=ctx.pipeline_mode,
-                manifest=pack.manifest,
-            )
+            instructions = self._compose_own_instructions(session_locale(ctx))
         toolsets = [*(mcp_toolsets or []), *(mcp_servers or [])]
         final_tools = self._apply_execution_policy(list(tools or []), pack)
         policies = register_policies(ctx.session, [*final_tools, *toolsets])
@@ -458,6 +467,73 @@ class PlatformAgent(Agent):
         self._hook_tasks.add(task)
         task.add_done_callback(self._hook_tasks.discard)
 
+    # ----------------------------------------------------------------- locale
+
+    def _compose_own_instructions(self, locale: SessionLocale | None) -> str:
+        return compose_instructions(
+            self._ctx.config.instructions,
+            mode=self._ctx.pipeline_mode,
+            manifest=self._pack.manifest,
+            locale=locale,
+        )
+
+    def linked_participant(self) -> Any:
+        """The participant RoomIO linked, or `None` (no running session, no RoomIO)."""
+        try:
+            return self.session.room_io.linked_participant
+        except Exception:
+            return None
+
+    async def _apply_locale(self) -> None:
+        """Resolve the caller's timezone and put the stamp into this agent's prompt (R-V5-10).
+
+        Runs on enter, before the greeting: the room is connected by then (the
+        agent is built before `ctx.connect()`), so the caller's `lkap.tz` or
+        phone number can be read. One `update_instructions` per session; a flow
+        node's prompt is recomposed by the flow runtime instead. Never raises.
+        """
+        try:
+            locale = ensure_session_locale(self._ctx, linked=self.linked_participant())
+        except Exception:
+            logger.warning("could not resolve the caller's timezone", exc_info=True)
+            return
+        if not self._composes_own_instructions:
+            return
+        fresh = self._compose_own_instructions(locale)
+        if fresh == self.instructions:
+            return
+        try:
+            await self.update_instructions(fresh)
+        except Exception:
+            logger.warning("could not add the date and time to the instructions", exc_info=True)
+
+    async def _refresh_time(self, turn_ctx: ChatContext) -> None:
+        """Append a "Time now" note at the context tail when one is due (R-V5-10).
+
+        Due after 15 minutes since the last stamp or when the caller's day
+        changed. The note goes into this turn's context and is persisted in the
+        agent's chat context (`turn_ctx` is a per-turn copy in livekit-agents
+        1.8.3), so it is added once and a cached prompt prefix survives. The
+        system prompt is untouched. Never raises.
+        """
+        locale = session_locale(self._ctx)
+        if locale is None:
+            return
+        now = locale.clock()
+        if not locale.due_refresh(now):
+            return
+        note = locale.refresh_note(now)
+        turn_ctx.add_message(role="system", content=note)
+        try:
+            persisted = self.chat_ctx.copy()
+            persisted.add_message(role="system", content=note)
+            await self.update_chat_ctx(persisted)
+        except Exception:
+            logger.debug("could not persist the time note", exc_info=True)
+            return
+        locale.mark_stamped(now)
+        logger.debug("time note appended", note=note)
+
     # ----------------------------------------------------------------- blocks
 
     def _init_blocks(self) -> None:
@@ -577,6 +653,7 @@ class PlatformAgent(Agent):
         applied: if the pack already snapshotted, this one repeats the full state
         at the same seq (harmless); if it sent nothing, this one is seq 1.
         """
+        await self._apply_locale()
         self._speak_greeting()
         await self._publish_initial_ui()
 
@@ -621,6 +698,7 @@ class PlatformAgent(Agent):
         """
         await self._inject_knowledge(turn_ctx, new_message)
         await self._inject_vision(turn_ctx, new_message)
+        await self._refresh_time(turn_ctx)
         try:
             await self._pack.on_user_turn_completed(self._ctx, turn_ctx, new_message)
         except Exception:

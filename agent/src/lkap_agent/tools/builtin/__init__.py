@@ -25,6 +25,7 @@ from lkap_agent.logging import get_logger
 from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
 from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_execution
 
+from .convert_time import build_convert_time_tool
 from .current_time import build_current_time_tool
 from .describe_current_frame import build_describe_current_frame_tool
 from .end_call import build_end_call_tool
@@ -49,6 +50,7 @@ __all__ = [
     "BUILTIN_TOOL_NAMES",
     "TELEPHONY_TOOL_NAMES",
     "build_builtin_tools",
+    "build_convert_time_tool",
     "build_current_time_tool",
     "build_describe_current_frame_tool",
     "build_end_call_tool",
@@ -189,6 +191,8 @@ def build_builtin_tools(
         tools.append(build_escalate_to_human_tool(ctx))
     if _want("current_time"):
         tools.append(build_current_time_tool(ctx))
+    if _want("convert_time"):
+        tools.append(build_convert_time_tool(ctx))
 
     block_types = {spec.type for spec in ctx.config.panel.blocks}
     if block_types & UPDATABLE_BLOCK_TYPES and _want("update_block"):

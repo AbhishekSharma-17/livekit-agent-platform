@@ -41,7 +41,7 @@ async def test_a_flow_reaching_an_end_node_posts_its_disposition_and_variables_i
 
     (summary,) = api.summaries
     assert summary.disposition == "completed"
-    assert summary.variables == {"name": "Ada Lovelace"}
+    assert summary.variables == {"caller_timezone": "UTC", "name": "Ada Lovelace"}  # R-V5-10 seed
 
 
 async def test_a_prompt_session_posts_the_summary_defaults() -> None:

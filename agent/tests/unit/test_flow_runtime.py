@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -217,7 +218,7 @@ async def test_three_node_flow_transitions_extracts_and_ends_with_a_disposition(
 
     state = session.userdata
     assert isinstance(state, FlowUserdata)
-    assert state.flow.variables == {"name": "Ada Lovelace"}
+    assert state.flow.variables == {"caller_timezone": "UTC", "name": "Ada Lovelace"}  # R-V5-10 seed
 
     await session.run(user_input="Yes, that's right.")
     await _wait_for(lambda: bool(ctx.shutdown_reasons))
@@ -241,7 +242,7 @@ async def test_three_node_flow_transitions_extracts_and_ends_with_a_disposition(
     (ended,) = [e.payload for e in api.events_of("flow_ended")]
     assert ended["completed"] is True
     assert ended["disposition"] == "completed"
-    assert ended["variables"] == {"name": "Ada Lovelace"}
+    assert ended["variables"] == {"caller_timezone": "UTC", "name": "Ada Lovelace"}
     assert ended["webhook_event"] is True
 
 
@@ -445,7 +446,7 @@ async def test_teardown_extracts_the_current_node_and_records_flow_ended() -> No
     (ended,) = [e.payload for e in api.events_of("flow_ended")]
     assert ended["completed"] is False
     assert ended["current_node"] == "collect"
-    assert ended["variables"] == {"name": "Grace Hopper"}
+    assert ended["variables"] == {"caller_timezone": "UTC", "name": "Grace Hopper"}
     assert ended["disposition"] is None
 
 
@@ -1002,3 +1003,82 @@ async def test_the_unhonoured_line_is_logged_once_per_flow_session_below_1_8_3(
     assert len(unhonoured) == 1
     assert unhonoured[0]["tools"] == ["push_status"]
     await ctx.fire_shutdown("done")
+
+
+# ------------------------------------------------------------ date and time (R-V5-10)
+#: 20:15 UTC on Friday 25 September 2026 (21:15 in London); patched in as the session clock.
+_FIXED_NOW = datetime(2026, 9, 25, 20, 15, tzinfo=UTC)
+_LONDON_STAMP = "Current date and time: Friday 25 September 2026, 21:15 (Europe/London, UTC+01:00)."
+
+
+def _in_london(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
+    config = resolved.config.model_copy(update={"timezone": "Europe/London"})
+    return resolved.model_copy(update={"config": config})
+
+
+def _system_text(chat_ctx: llm.ChatContext) -> str:
+    return "\n".join(
+        item.text_content or ""
+        for item in chat_ctx.items
+        if isinstance(item, llm.ChatMessage) and item.role in ("system", "developer")
+    )
+
+
+async def test_prompt_and_flow_agents_get_the_same_stamp_exactly_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("lkap_agent.locale.utc_now", lambda: _FIXED_NOW)
+
+    flow_llm = ScriptedLLM(["Hi, this is intake."])
+    flow_api, flow_ctx, flow_starter = await _start(
+        _in_london(_flow_config(INTAKE_FLOW)), flow_llm, FakeLLM(["{}"])
+    )
+    prompt_llm = ScriptedLLM(["Hello there!"])
+    prompt_api = FakeApi(_in_london(resolved_config(channel="text")))
+    prompt_ctx = FakeJobContext(_metadata())
+    await run_session(
+        prompt_ctx,
+        _deps(
+            prompt_api, factory=_FlowFactory(prompt_llm, FakeLLM(["{}"])), session_starter=RoomlessStarter()
+        ),
+    )
+    await _wait_for(lambda: bool(flow_llm.contexts) and bool(prompt_llm.contexts))
+
+    flow_system = _system_text(flow_llm.contexts[0])
+    prompt_system = _system_text(prompt_llm.contexts[0])
+    assert flow_system.count("Current date and time:") == 1
+    assert prompt_system.count("Current date and time:") == 1
+    assert _LONDON_STAMP in flow_system
+    assert _LONDON_STAMP in prompt_system
+    # No browser zone and no number: the business timezone, recorded once per session.
+    expected = {
+        "caller_timezone": "Europe/London",
+        "source": "business",
+        "business_timezone": "Europe/London",
+    }
+    assert flow_starter.session is not None
+    state = flow_starter.session.userdata
+    assert isinstance(state, FlowUserdata)
+    assert state.flow.variables["caller_timezone"] == "Europe/London"
+    await flow_ctx.fire_shutdown("done")
+    await prompt_ctx.fire_shutdown("done")
+    # Events are flushed with the summary.
+    assert [e.payload for e in flow_api.events_of("locale")] == [expected]
+    assert [e.payload for e in prompt_api.events_of("locale")] == [expected]
+
+
+async def test_the_locale_is_resolved_once_across_flow_nodes() -> None:
+    conversation = ScriptedLLM(["Hi, this is intake.", ToolCall("go_to_confirm"), "Is Ada Lovelace right?"])
+    workflow = FakeLLM([json.dumps({"name": "Ada Lovelace"})])
+    api, ctx, starter = await _start(_flow_config(INTAKE_FLOW), conversation, workflow)
+    session = starter.session
+    assert session is not None
+
+    await session.run(user_input="My name is Ada Lovelace.")
+    await _wait_for(lambda: session.current_agent.id == "confirm")
+    await _wait_for(lambda: len(conversation.calls) >= 3)
+
+    stamps = [_system_text(c).count("Current date and time:") for c in conversation.contexts]
+    assert stamps and all(count == 1 for count in stamps)
+    await ctx.fire_shutdown("done")
+    assert len(api.events_of("locale")) == 1

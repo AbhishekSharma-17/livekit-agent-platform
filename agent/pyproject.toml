@@ -31,6 +31,7 @@ dependencies = [
   "pillow>=12.3,<13",
   "lkap-contracts",
   "lkap-packs",
+  "phonenumbers>=9,<10",
 ]
 
 [dependency-groups]

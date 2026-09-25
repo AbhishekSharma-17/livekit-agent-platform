@@ -938,6 +938,7 @@ dependencies = [
     { name = "lkap-contracts" },
     { name = "lkap-packs" },
     { name = "openai" },
+    { name = "phonenumbers" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -974,6 +975,7 @@ requires-dist = [
     { name = "lkap-contracts", editable = "../contracts" },
     { name = "lkap-packs", editable = "../packs" },
     { name = "openai", specifier = ">=2,<3" },
+    { name = "phonenumbers", specifier = ">=9,<10" },
     { name = "pillow", specifier = ">=12.3,<13" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
@@ -1364,6 +1366,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a", size = 135180, upload_time = "2026-04-27T01:46:08.907Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload_time = "2026-04-27T01:46:07.06Z" },
+]
+
+[[package]]
+name = "phonenumbers"
+version = "9.0.40"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/39/66db12a16eec873aa12411fc6da0fe052a86413fe117e208b51836b41740/phonenumbers-9.0.40.tar.gz", hash = "sha256:a0dd1bc98efa0b6f5839c7b1fface2ebdf0a811645dd8211ae3f037a17ec07ac", size = 2311069, upload_time = "2026-09-24T06:59:03.882Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/da/c266478ebea2b8d3176484e06756960d94d27cce2d7dc5ca3be6151cb9e3/phonenumbers-9.0.40-py2.py3-none-any.whl", hash = "sha256:189c028c4acd41ee80782e50f74a91260bd76d9115c83be94302509e1cdb5e84", size = 2594747, upload_time = "2026-09-24T06:59:00.564Z" },
 ]
 
 [[package]]

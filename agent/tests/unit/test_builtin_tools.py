@@ -6,7 +6,9 @@ keys, no network (HTTP calls go through `respx`).
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -19,10 +21,13 @@ from livekit.agents import ChatContext, RunContext, ToolError
 from livekit.agents.llm.utils import build_legacy_openai_schema
 from lkap_contracts.agent_config import CapabilitiesConfig, KnowledgeConfig, PipelineMode, ToolsConfig
 from lkap_contracts.api_models import KbHit
+from lkap_contracts.tools import never_background
 from packs.base import FrameSnapshot
 
+from lkap_agent.locale import LOCALE_USERDATA_KEY, SessionLocale
 from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
 from lkap_agent.tools.builtin import BUILTIN_TOOL_NAMES, build_builtin_tools
+from lkap_agent.tools.builtin.convert_time import build_convert_time_tool
 from lkap_agent.tools.builtin.current_time import build_current_time_tool
 from lkap_agent.tools.builtin.describe_current_frame import build_describe_current_frame_tool
 from lkap_agent.tools.builtin.end_call import build_end_call_tool
@@ -235,30 +240,162 @@ class TestEscalateToHuman:
         assert len(ctx.ui.state.activity) == 1
 
 
+#: R-V5-10 fixtures: 20:15 UTC on Friday 25 September 2026 is 01:45 on Saturday in
+#: Kolkata and 21:15 on Friday in London (BST). No test reads the machine's clock or zone.
+_FIXED_NOW = datetime(2026, 9, 25, 20, 15, tzinfo=UTC)
+
+
+def _located_ctx(caller: str = "Asia/Kolkata", business: str = "Europe/London") -> FakePackSessionContext:
+    """A context whose session locale is already resolved, on a fixed clock."""
+    ctx = FakePackSessionContext(config=default_agent_config(timezone=business))
+    ctx.userdata[LOCALE_USERDATA_KEY] = SessionLocale(
+        caller_timezone=caller,
+        source="browser",
+        business_timezone=business,
+        started_at=_FIXED_NOW,
+        clock=lambda: _FIXED_NOW,
+    )
+    return ctx
+
+
 class TestCurrentTime:
     async def test_defaults_to_utc(self) -> None:
         ctx = FakePackSessionContext()
         tool = build_current_time_tool(ctx)
 
-        result = await tool(context=_run_ctx())
+        result = json.loads(await tool(context=_run_ctx()))
 
-        assert result.endswith("+00:00")
+        assert result["timezone"] == "UTC"
+        assert result["utc_offset"] == "+00:00"
+        assert result["business"]["timezone"] == "UTC"
 
-    async def test_uses_configured_timezone(self) -> None:
+    async def test_without_a_session_locale_uses_the_configured_timezone(self) -> None:
+        """Compatibility: no browser zone and no number → the agent's `timezone`, as before."""
         ctx = FakePackSessionContext(config=default_agent_config(timezone="America/New_York"))
         tool = build_current_time_tool(ctx)
 
-        result = await tool(context=_run_ctx())
+        result = json.loads(await tool(context=_run_ctx()))
 
-        assert "-04:" in result or "-05:" in result
+        assert result["timezone"] == "America/New_York"
+        assert result["utc_offset"] in {"-04:00", "-05:00"}
 
     async def test_falls_back_to_utc_for_unknown_timezone(self) -> None:
         ctx = FakePackSessionContext(config=default_agent_config(timezone="Not/AZone"))
         tool = build_current_time_tool(ctx)
 
-        result = await tool(context=_run_ctx())
+        result = json.loads(await tool(context=_run_ctx()))
 
-        assert result.endswith("+00:00")
+        assert result["timezone"] == "UTC"
+
+    async def test_answers_in_the_callers_zone_with_the_business_block(self) -> None:
+        tool = build_current_time_tool(_located_ctx())
+
+        result = json.loads(await tool(context=_run_ctx()))
+
+        assert result == {
+            "now_iso": "2026-09-26T01:45:00+05:30",
+            "weekday": "Saturday",
+            "date": "2026-09-26",
+            "time": "01:45",
+            "timezone": "Asia/Kolkata",
+            "utc_offset": "+05:30",
+            "business": {
+                "now_iso": "2026-09-25T21:15:00+01:00",
+                "weekday": "Friday",
+                "date": "2026-09-25",
+                "time": "21:15",
+                "timezone": "Europe/London",
+                "utc_offset": "+01:00",
+            },
+        }
+
+    async def test_an_explicit_timezone_adds_the_callers_block(self) -> None:
+        tool = build_current_time_tool(_located_ctx())
+
+        result = json.loads(await tool(context=_run_ctx(), timezone="America/New_York"))
+
+        assert (result["timezone"], result["time"], result["weekday"]) == (
+            "America/New_York",
+            "16:15",
+            "Friday",
+        )
+        assert result["caller"]["timezone"] == "Asia/Kolkata"
+        assert result["business"]["timezone"] == "Europe/London"
+
+    async def test_refuses_an_unknown_timezone(self) -> None:
+        tool = build_current_time_tool(_located_ctx())
+
+        with pytest.raises(ToolError, match="Unknown timezone"):
+            await tool(context=_run_ctx(), timezone="Mars/Base")
+
+    def test_its_timezone_argument_is_optional(self) -> None:
+        params = _tool_parameters(build_current_time_tool(FakePackSessionContext()))
+
+        assert "timezone" in params["properties"]
+        assert "timezone" not in params.get("required", [])
+
+
+class TestConvertTime:
+    async def test_converts_the_business_opening_hour_to_the_callers_time_by_default(self) -> None:
+        tool = build_convert_time_tool(_located_ctx())
+
+        result = json.loads(await tool(context=_run_ctx(), time="9:00"))
+
+        assert result["from"]["timezone"] == "Europe/London"
+        assert (result["from"]["date"], result["from"]["time"]) == ("2026-09-25", "09:00")
+        assert (result["to"]["timezone"], result["to"]["time"]) == ("Asia/Kolkata", "13:30")
+
+    @pytest.mark.parametrize(
+        ("time", "expected"),
+        # London is UTC+1 on 25 September (BST) and UTC+0 on 1 December; New York is UTC-4 / UTC-5.
+        [("2:30 pm", "09:30"), ("9am", "04:00"), ("14:30", "09:30"), ("2026-12-01T14:30", "09:30")],
+    )
+    async def test_reads_clock_times_and_iso_datetimes(self, time: str, expected: str) -> None:
+        tool = build_convert_time_tool(_located_ctx())
+
+        result = json.loads(
+            await tool(context=_run_ctx(), time=time, from_tz="Europe/London", to_tz="America/New_York")
+        )
+
+        assert result["to"]["time"] == expected
+
+    async def test_accepts_the_caller_and_business_aliases(self) -> None:
+        tool = build_convert_time_tool(_located_ctx())
+
+        result = json.loads(await tool(context=_run_ctx(), time="18:00", from_tz="caller", to_tz="business"))
+
+        assert (result["from"]["timezone"], result["to"]["timezone"]) == ("Asia/Kolkata", "Europe/London")
+        assert result["to"]["time"] == "13:30"
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"time": "9:00", "from_tz": "Mars/Base"}, "Unknown timezone"),
+            ({"time": "9:00", "to_tz": "nowhere"}, "Unknown timezone"),
+            ({"time": "noonish"}, "Could not read the time"),
+            ({"time": "25:00"}, "Could not read the time"),
+        ],
+    )
+    async def test_refuses_what_it_cannot_read(self, kwargs: dict[str, str], message: str) -> None:
+        tool = build_convert_time_tool(_located_ctx())
+
+        with pytest.raises(ToolError, match=message):
+            await tool(context=_run_ctx(), **kwargs)
+
+    def test_is_registered_and_can_be_disabled(self) -> None:
+        ctx = FakePackSessionContext()
+
+        enabled = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
+        disabled = {
+            t.info.name for t in build_builtin_tools(ctx, disabled=["convert_time"], http_enabled=False)
+        }
+
+        assert "convert_time" in enabled
+        assert "convert_time" not in disabled
+
+    def test_both_time_tools_never_run_in_the_background(self) -> None:
+        assert never_background("current_time")
+        assert never_background("convert_time")
 
 
 class TestPinFrame:

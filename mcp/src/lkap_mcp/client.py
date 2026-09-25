@@ -45,6 +45,7 @@ ERROR_HINTS: dict[str, str] = {
     ),
     "rate_limited": "the api rate-limited this key; wait and retry",
     "api_unreachable": "check LKAP_API_URL and that the api is running",
+    "unexpected_redirect": "nothing was changed; check the id or path (an empty id ends the path in '/')",
 }
 
 
@@ -151,6 +152,24 @@ def failure_from_response(response: httpx.Response) -> ApiFailure:
     return ApiFailure(response.status_code, _status_code(response.status_code), response.reason_phrase)
 
 
+def redirect_failure(method: str, path: str, response: httpx.Response) -> ApiFailure:
+    """A ``3xx`` answer to a write: the api did not perform it (ask #103).
+
+    The client never follows redirects, so a write answered with a redirect (for
+    example FastAPI's ``307`` from ``DELETE /v1/tools/`` to ``/v1/tools``) changed
+    nothing, and must not read as success.
+    """
+    location = response.headers.get("location")
+    where = f" to {location}" if location else ""
+    return ApiFailure(
+        response.status_code,
+        "unexpected_redirect",
+        f"the api answered {method} {path} with {response.status_code} {response.reason_phrase}{where}; "
+        "the request was not carried out",
+        {"location": location} if location else None,
+    )
+
+
 class LkapClient:
     """An ``httpx.AsyncClient`` wrapper for the LKAP ``/v1`` api."""
 
@@ -177,6 +196,9 @@ class LkapClient:
             headers=headers,
             timeout=settings.request_timeout_s,
             transport=transport,
+            # Never follow a redirect: a write re-sent to another URL is not the write
+            # that was asked for, and a 3xx to a write is reported as a failure (#103).
+            follow_redirects=False,
         )
         self._slots = asyncio.Semaphore(settings.max_in_flight)
         self._openapi: dict[str, Any] | None = None
@@ -203,7 +225,8 @@ class LkapClient:
         """Send one request; return the parsed JSON body (``None`` for an empty body).
 
         Raises:
-            ApiFailure: A non-2xx answer (after one ``429`` retry) or an unreachable api.
+            ApiFailure: A ``4xx``/``5xx`` answer (after one ``429`` retry), a ``3xx``
+                answer to a write (``POST``/``PUT``/``DELETE``), or an unreachable api.
         """
         clean_params = {k: v for k, v in (params or {}).items() if v is not None} or None
         response = await self._send(method, path, clean_params, json, files, data)
@@ -213,6 +236,8 @@ class LkapClient:
             response = await self._send(method, path, clean_params, json, files, data)
         if response.status_code >= 400:
             raise failure_from_response(response)
+        if method != "GET" and 300 <= response.status_code < 400:
+            raise redirect_failure(method, path, response)
         if response.status_code == 204 or not response.content:
             return None
         try:

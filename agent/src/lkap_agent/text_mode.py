@@ -72,6 +72,7 @@ Verified against livekit-agents 1.8.2 (``agent/.venv``):
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Collection
 from typing import Any, Protocol
 
 from livekit.agents import llm
@@ -84,6 +85,7 @@ __all__ = [
     "handle_agent_action",
     "inject_user_text",
     "rewind",
+    "strip_calls",
     "truncate_to_turn",
 ]
 
@@ -159,7 +161,9 @@ def truncate_to_turn(chat_ctx: llm.ChatContext, turn_index: int) -> llm.ChatCont
     return llm.ChatContext(list(items[: boundary + 1]))
 
 
-async def _truncate_and_sync(session: _SessionLike, turn_index: int) -> None:
+async def _truncate_and_sync(
+    session: _SessionLike, turn_index: int, *, drop_call_ids: Collection[str] = ()
+) -> None:
     """Truncate to ``turn_index`` and apply it to both chat-context copies.
 
     Shared by :func:`rewind` and :func:`inject_user_text`'s edit path — see
@@ -168,14 +172,46 @@ async def _truncate_and_sync(session: _SessionLike, turn_index: int) -> None:
     Never calls ``generate_reply`` itself, so a caller can truncate and then
     append in the same turn without two competing replies being queued.
 
+    ``drop_call_ids`` are the calls :func:`cancel_running` just cancelled: their
+    items are removed even when they sit before the cut (a background call from
+    a kept turn), so the model never reads an announcement whose result will not
+    come (ask #102).
+
     Raises:
         TextModeError: An invalid ``turn_index`` (:func:`truncate_to_turn`).
     """
     with contextlib.suppress(Exception):
         await session.interrupt(force=True)
-    truncated = truncate_to_turn(session.history, turn_index)
+    truncated = strip_calls(truncate_to_turn(session.history, turn_index), drop_call_ids)
     session.history.items = truncated.items
     await session.current_agent.update_chat_ctx(truncated)
+
+
+def strip_calls(chat_ctx: llm.ChatContext, call_ids: Collection[str]) -> llm.ChatContext:
+    """Return ``chat_ctx`` without the function calls and outputs of ``call_ids``.
+
+    A call's entries are its own ``call_id`` plus the SDK's derived ids for its
+    progress updates and deferred result (``<call_id>_update_N``, ``<call_id>_final``,
+    ``RunContext._make_update_pair`` in livekit-agents 1.8.2 ``voice/events.py``).
+
+    Args:
+        chat_ctx: The context to filter; never mutated.
+        call_ids: The base call ids to drop.
+
+    Returns:
+        A new ``ChatContext`` (``chat_ctx`` itself when there is nothing to drop).
+    """
+    if not call_ids:
+        return chat_ctx
+    ids = tuple(call_ids)
+    prefixes = tuple(f"{call_id}_" for call_id in ids)
+
+    def _belongs(item: llm.ChatItem) -> bool:
+        if item.type not in ("function_call", "function_call_output"):
+            return False
+        return item.call_id in ids or item.call_id.startswith(prefixes)
+
+    return llm.ChatContext([item for item in chat_ctx.items if not _belongs(item)])
 
 
 async def rewind(session: _SessionLike, turn_index: int) -> None:
@@ -190,8 +226,10 @@ async def rewind(session: _SessionLike, turn_index: int) -> None:
     """
     # A background tool still running belongs to the conversation being cut away;
     # its result would land after the rewind (docs/v4/BACKGROUND-TOOLS.md D-V4-34).
-    cancel_running(session)
-    await _truncate_and_sync(session, turn_index)
+    # Awaited, and its items stripped, so the regenerated reply neither reads the
+    # SDK's "still in progress" placeholder nor an announcement for it (ask #102).
+    cancelled = await cancel_running(session)
+    await _truncate_and_sync(session, turn_index, drop_call_ids=cancelled)
     session.generate_reply()
 
 
@@ -211,8 +249,8 @@ async def inject_user_text(session: _SessionLike, text: str, *, turn_index: int 
     """
     if turn_index is not None:
         # Editing a turn rewinds too: work started after it no longer belongs to the conversation.
-        cancel_running(session)
-        await _truncate_and_sync(session, turn_index)
+        cancelled = await cancel_running(session)
+        await _truncate_and_sync(session, turn_index, drop_call_ids=cancelled)
     session.generate_reply(user_input=text)
 
 

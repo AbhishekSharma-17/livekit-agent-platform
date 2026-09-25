@@ -22,7 +22,8 @@ the mechanical safety rule of D-V4-32), the flags it is declared with
 (:func:`tool_flags`), and one wrapper every built-in, declarative HTTP and opted-in
 pack tool goes through (:func:`run_with_policy`). It never schedules a reply itself
 (R-V4-37) and uses no SDK private: :func:`cancel_running` keeps its own per-session
-registry of the inner work tasks it created.
+registry of the inner work tasks it created, and waits for the SDK's public
+``tool_call_ended`` event to know a cancelled call has left the executor.
 
 If a future SDK drops one of the symbols used here, :data:`SDK_ASYNC_TOOLS` is
 false and every tool resolves to ``blocking`` with one warning per process (the
@@ -56,6 +57,7 @@ from lkap_contracts.ui_protocol import ActivityEvent
 from lkap_agent.logging import get_logger
 
 __all__ = [
+    "CANCEL_WAIT_S",
     "FLOW_BACKGROUND_MIN_SDK",
     "SDK_ASYNC_TOOLS",
     "SLOW_BLOCKING_S",
@@ -325,28 +327,81 @@ def _unregister(session: Any, call_id: str) -> None:
         tasks.pop(call_id, None)
 
 
-def cancel_running(session: Any) -> int:
-    """Cancel every inner work task :func:`run_with_policy` started for ``session``.
+#: How long :func:`cancel_running` waits for the SDK to end the calls it cancelled.
+CANCEL_WAIT_S: Final[float] = 1.0
+
+
+async def cancel_running(session: Any, *, timeout_s: float = CANCEL_WAIT_S) -> list[str]:
+    """Cancel every inner work task :func:`run_with_policy` started for ``session``, and wait.
 
     Used by the text channel's rewind (the conversation the result belongs to is
     gone) and by tests. The SDK then ends each call as ``cancelled``.
 
+    Cancelling the inner task is not enough on its own (ask #102): the SDK drops
+    the call from its running set only later, in the done-callback of its own
+    tool task (livekit-agents 1.8.2 ``voice/tool_executor.py:431-434``,
+    ``_on_done``). Until then, every inference injects the "The tool call is still
+    in progress." placeholder for it (``agent_activity.py:3496-3503`` →
+    ``generation.py:73-105``) and the duplicate guard still sees it running, so a
+    reply generated right after the cancel tells the user the result is on its
+    way. ``_on_done`` pops the running set and *then* emits the public
+    ``tool_execution_updated`` event with ``ToolCallEnded`` (``:461-468``, same
+    order in 1.8.3), so waiting for that event per cancelled call means the SDK no
+    longer counts it as running. The wait is bounded by ``timeout_s``; a session
+    without ``on``/``off`` (a test double) waits for the inner tasks instead.
+
+    Args:
+        session: The ``AgentSession`` the work belongs to.
+        timeout_s: Upper bound on the wait; on expiry a warning is logged and the
+            call ids are returned anyway.
+
     Returns:
-        How many running tasks were cancelled.
+        The call ids whose work was cancelled (empty when nothing was running).
     """
     try:
         tasks = _RUNNING.get(session)
     except TypeError:
-        return 0
+        return []
     if not tasks:
-        return 0
-    cancelled = 0
-    for task in list(tasks.values()):
-        if not task.done():
-            task.cancel()
-            cancelled += 1
+        return []
+    running = {call_id: task for call_id, task in tasks.items() if not task.done()}
     tasks.clear()
-    return cancelled
+    if not running:
+        return []
+
+    pending = set(running)
+    all_ended = asyncio.get_running_loop().create_future()
+
+    def _on_update(ev: Any) -> None:
+        update = getattr(ev, "update", None)
+        if getattr(update, "type", None) != "tool_call_ended":
+            return
+        pending.discard(getattr(update, "call_id", ""))
+        if not pending and not all_ended.done():
+            all_ended.set_result(None)
+
+    on: Callable[..., Any] | None = getattr(session, "on", None)
+    off: Callable[..., Any] | None = getattr(session, "off", None)
+    subscribed = callable(on) and callable(off)
+    if on is not None and subscribed:
+        on("tool_execution_updated", _on_update)  # before cancelling: no ended event can be missed
+    try:
+        for task in running.values():
+            task.cancel()
+        # `asyncio.wait`, not `wait_for`: on expiry it neither cancels nor waits on
+        # what it watched, so work that ignores cancellation cannot stall a rewind.
+        watched: set[asyncio.Future[Any]] = {all_ended} if subscribed else set(running.values())
+        _done, not_done = await asyncio.wait(watched, timeout=timeout_s)
+        if not_done:
+            logger.warning(
+                "cancelled tool calls did not end in time",
+                call_ids=sorted(pending if subscribed else (i for i, t in running.items() if not t.done())),
+                timeout_s=timeout_s,
+            )
+    finally:
+        if off is not None and subscribed:
+            off("tool_execution_updated", _on_update)
+    return list(running)
 
 
 def _has_voice(session: Any) -> bool:

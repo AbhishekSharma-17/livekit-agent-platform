@@ -671,3 +671,47 @@ export function useMaterialiseAppActions() {
     },
   });
 }
+
+/**
+ * `POST /v1/tool-providers/composio/tools/{id}/refresh-schema` (R-V5-8,
+ * R-V5-6, D-V5-C8): what changed upstream for one `provider` tool's pinned
+ * action inputs, and — with `apply` — writes them.
+ *
+ * `SchemaRefreshOut` is api-local (`api/src/lkap_api/tool_providers/materialise.py`),
+ * not a `lkap_contracts` model, so it never reaches the generated
+ * `lkap-contracts.d.ts` (`lkap_contracts.export` only emits pydantic models
+ * that package owns) — mirrored by hand here, same as `ToolkitListParams`
+ * above. Filed as docs/v5/_asks.md for the contracts owner to promote it,
+ * the same pattern as asks #12/#27.
+ */
+export interface ProviderToolSchemaRefreshOut {
+  tool_id: string;
+  tool_slug: string;
+  changed: boolean;
+  applied: boolean;
+  schema_version_before: string | null;
+  schema_version_after: string | null;
+  added: string[];
+  removed: string[];
+  modified: string[];
+  required_before: string[];
+  required_after: string[];
+}
+
+export function useRefreshProviderToolSchema() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ toolId, apply = false }: { toolId: string; apply?: boolean }) =>
+      api.post<ProviderToolSchemaRefreshOut>(`${APPS_BASE}/tools/${toolId}/refresh-schema${apply ? "?apply=true" : ""}`),
+    onSuccess: async (result) => {
+      // Awaited (not `void`): the dialog's `mutateAsync` reads the tool's
+      // *current* `parameters` from its `tool` prop right after Apply
+      // resolves, so a refetch that lands before that read matters — a
+      // Save posted before the parent re-renders with fresh `parameters`
+      // would otherwise overwrite the just-applied schema right back.
+      if (result.applied) {
+        await queryClient.invalidateQueries({ queryKey: ["tools"] });
+      }
+    },
+  });
+}

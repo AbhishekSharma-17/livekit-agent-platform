@@ -12,9 +12,10 @@ import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
+import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import type { ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 
 /** `method + host` per docs/UI_UX_SPEC.md §7.6 item 4 ("method + host"), not the full URL template. */
 export function requestSummary(tool: ToolOut): string {
@@ -103,8 +104,25 @@ export function ToolRow({
               </Button>
             }
           />
-        ) : "tool_slug" in tool.definition ? null : (
-          // An app action has its own editor (R-V5-8, V5-50); until then no Edit here.
+        ) : tool.kind === "provider" ? (
+          // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
+          <ProviderToolEditorDialog
+            tool={tool as ToolOut & { definition: ProviderToolDefinition }}
+            onSaved={onSaved}
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
+                <PencilIcon className="size-3.5" />
+              </Button>
+            }
+          />
+        ) : (
           <McpToolEditorDialog
             agentId={agentId}
             tool={tool}

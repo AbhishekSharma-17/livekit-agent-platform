@@ -69,6 +69,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
   const mode = (watch("config.tools.apps.mode") ?? "off") as Mode;
   const allowedToolkits = watch("config.tools.apps.allowed_toolkits") ?? [];
   const deniedActions = watch("config.tools.apps.denied_actions") ?? [];
+  const reviewedActions = watch("config.tools.apps.reviewed_actions") ?? [];
   const toolIds = watch("config.tools.tool_ids") ?? [];
 
   const statusQuery = useAppsStatus();
@@ -145,6 +146,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
     );
   }
 
+  /** A non-destructive action's checkbox: the only field it ever touches is `denied_actions` (unchanged). */
   function denyAction(slug: string, denied: boolean) {
     const current = getValues("config.tools.apps.denied_actions") ?? [];
     setValue(
@@ -155,31 +157,41 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
   }
 
   /**
-   * Seeds a fresh destructive action into the deny list once per mount, so
-   * it starts unchecked (D-V5-C7). Reads the *current* form value with
-   * `getValues` rather than the render-time `deniedActions` closure: several
-   * `AppActionsList` instances (one per allowed app) can each seed in the
-   * same commit, and a stale closure would let the second call's `setValue`
-   * clobber the first's addition.
+   * A destructive action's checkbox (R-V5-9): the card never seeds
+   * `denied_actions` on mount any more — the server computes the effective
+   * deny list from `reviewed_actions` (`effective_denied_actions`,
+   * `lkap_contracts.tool_providers`), so an unreviewed destructive action is
+   * blocked whatever this card does, with no client-side write needed just
+   * to open the tab.
    *
-   * `shouldDirty: false`: there is no saved "the builder reviewed and
-   * explicitly allowed this one" marker separate from "not denied", so
-   * re-opening an already-configured agent cannot tell those apart from
-   * "never reviewed" — seeding quietly (no unsaved-changes prompt from
-   * merely opening the tab) is the smaller risk than either flagging the
-   * whole tab dirty on load or leaving a destructive action checked by
-   * default. Filed as docs/v5/_asks.md #27 — a real fix needs a ruling on
-   * where "reviewed" should live.
+   * Ticking (reviewing and allowing): adds the slug to `reviewed_actions`
+   * and removes it from `denied_actions` — the latter matters for an agent
+   * saved under the old client-side seed (ask #47), where a since-allowed
+   * destructive action could still carry a stale deny entry.
+   *
+   * Unticking a reviewed one (reviewing and denying): adds the slug to
+   * `denied_actions`; `reviewed_actions` is left alone — it's already
+   * reviewed, the decision is just "no".
    */
-  const seenDestructive = React.useRef<Set<string>>(new Set());
-  function seedDestructive(slugs: string[]) {
-    const toAdd = slugs.filter((slug) => !seenDestructive.current.has(slug));
-    if (toAdd.length === 0) return;
-    for (const slug of toAdd) seenDestructive.current.add(slug);
-    const current = getValues("config.tools.apps.denied_actions") ?? [];
-    const missing = toAdd.filter((slug) => !current.includes(slug));
-    if (missing.length === 0) return;
-    setValue("config.tools.apps.denied_actions", [...current, ...missing], { shouldDirty: false });
+  function reviewAction(slug: string, allow: boolean) {
+    const currentReviewed = getValues("config.tools.apps.reviewed_actions") ?? [];
+    const currentDenied = getValues("config.tools.apps.denied_actions") ?? [];
+    if (allow) {
+      if (!currentReviewed.includes(slug)) {
+        setValue("config.tools.apps.reviewed_actions", [...currentReviewed, slug], { shouldDirty: true });
+      }
+      if (currentDenied.includes(slug)) {
+        setValue(
+          "config.tools.apps.denied_actions",
+          currentDenied.filter((existing) => existing !== slug),
+          { shouldDirty: true },
+        );
+      }
+      return;
+    }
+    if (!currentDenied.includes(slug)) {
+      setValue("config.tools.apps.denied_actions", [...currentDenied, slug], { shouldDirty: true });
+    }
   }
 
   const activeOption = MODE_OPTIONS.find((option) => option.value === mode) ?? MODE_OPTIONS[0];
@@ -307,7 +319,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
             <SectionRow className="flex flex-col gap-3">
               <p className="text-sm font-medium text-foreground">Actions the agent may take</p>
               <p className="text-[0.8125rem] text-muted-foreground">
-                Destructive actions (delete, remove, send money) start unchecked.
+                Destructive actions (delete, remove, send money) stay blocked until you review them.
               </p>
               <div className="flex flex-col gap-3" data-issue-path="tools.apps.denied_actions">
                 {allowedConnections.map((connection) => (
@@ -316,8 +328,9 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
                     toolkit={connection.toolkit}
                     toolkitName={connection.toolkit_name ?? connection.toolkit}
                     denied={deniedActions}
+                    reviewed={reviewedActions}
                     onDeny={denyAction}
-                    onSeedDestructive={seedDestructive}
+                    onReview={reviewAction}
                   />
                 ))}
               </div>
@@ -436,25 +449,19 @@ function AppActionsList({
   toolkit,
   toolkitName,
   denied,
+  reviewed,
   onDeny,
-  onSeedDestructive,
+  onReview,
 }: {
   toolkit: string;
   toolkitName: string;
   denied: string[];
+  reviewed: string[];
   onDeny: (slug: string, denied: boolean) => void;
-  onSeedDestructive: (slugs: string[]) => void;
+  onReview: (slug: string, allow: boolean) => void;
 }) {
   const actionsQuery = useToolProviderActions(toolkit, { limit: 50 });
   const items = React.useMemo(() => actionsQuery.data?.pages.flatMap((page) => page.items) ?? [], [actionsQuery.data]);
-
-  React.useEffect(() => {
-    const destructiveSlugs = items.filter(isDestructive).map((action) => action.slug);
-    if (destructiveSlugs.length > 0) onSeedDestructive(destructiveSlugs);
-    // `onSeedDestructive` is stable enough for this effect's purpose (it only
-    // acts once per slug, via its own ref-guarded set upstream).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
 
   if (actionsQuery.isLoading) {
     return <p className="text-[0.8125rem] text-muted-foreground">Loading {toolkitName}&rsquo;s actions…</p>;
@@ -470,15 +477,29 @@ function AppActionsList({
       <ul className="flex flex-col gap-1">
         {items.map((action) => {
           const inputId = `apps-action-${toolkit}-${action.slug}`;
-          const checked = !denied.includes(action.slug);
+          const destructive = isDestructive(action);
+          // R-V5-9: an unreviewed destructive action always renders
+          // unchecked (`denied_actions` is irrelevant until it's reviewed —
+          // the server blocks it either way, `effective_denied_actions`);
+          // a reviewed one reflects `denied_actions` like any other action.
+          const isReviewed = !destructive || reviewed.includes(action.slug);
+          const checked = isReviewed && !denied.includes(action.slug);
+          const onCheckedChange = destructive
+            ? (v: boolean) => onReview(action.slug, v)
+            : (v: boolean) => onDeny(action.slug, !v);
           return (
             <li key={action.slug} className="flex items-center gap-2">
-              <Checkbox id={inputId} checked={checked} onCheckedChange={(v) => onDeny(action.slug, v !== true)} />
+              <Checkbox id={inputId} checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} />
               <Label htmlFor={inputId} className="flex items-center gap-1.5 text-[0.8125rem] font-normal">
                 {action.name}
-                {isDestructive(action) ? (
+                {destructive ? (
                   <StatusChip tone="danger" size="sm">
                     Destructive
+                  </StatusChip>
+                ) : null}
+                {destructive && !isReviewed ? (
+                  <StatusChip tone="warning" size="sm">
+                    Blocked until you review it
                   </StatusChip>
                 ) : null}
               </Label>

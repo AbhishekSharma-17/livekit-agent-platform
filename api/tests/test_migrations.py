@@ -102,7 +102,8 @@ def test_v4_003_session_estimates_upgrades_and_downgrades(tmp_path: Path) -> Non
     """The columns come and go; a new-unit row is accepted after and removed by the downgrade."""
     data_dir = tmp_path / "v4003"
     data_dir.mkdir()
-    database = _upgrade_head(data_dir)
+    # Pinned revisions: later migrations (v5_001) sit on top of v4_003.
+    database = _run(data_dir, lambda config: command.upgrade(config, "v4_003_session_estimates"))
 
     def columns(table: str) -> set[str]:
         connection = sqlite3.connect(database)
@@ -133,7 +134,7 @@ def test_v4_003_session_estimates_upgrades_and_downgrades(tmp_path: Path) -> Non
     finally:
         connection.close()
 
-    _run(data_dir, lambda config: command.downgrade(config, "-1"))
+    _run(data_dir, lambda config: command.downgrade(config, "v4_002_provider_models"))
     assert not {"estimate", "estimated_usd", "reconciled_usd"} & columns("sessions")
     assert "estimated_usd" not in columns("usage_daily")
     assert not {"price_source", "vendor_usd", "vendor_ref"} & columns("session_costs")

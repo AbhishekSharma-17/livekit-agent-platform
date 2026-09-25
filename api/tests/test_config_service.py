@@ -11,8 +11,10 @@ import pytest
 from conftest import inference_config
 from lkap_contracts.agent_config import KnowledgeConfig, ProviderRef
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
+from lkap_contracts.providers import get
 
 from lkap_api.config_service import ValidationContext, register_validator, validate, validate_agent_config
+from lkap_api.custom_models.capabilities import resolve_capabilities
 from lkap_api.custom_models.validation import custom_model_issues
 
 
@@ -156,13 +158,37 @@ def test_the_vision_suggestion_never_names_the_configured_model(
         assert model not in suggestion
 
 
-def test_an_openrouter_text_only_catalog_item_warns_and_suggests_the_vision_probe() -> None:
+def test_an_openrouter_text_only_catalog_item_warns_and_suggests_a_flagged_model() -> None:
     (warning,) = _vision_warnings(
         _openrouter_vision_ctx("google/gemini-3.5-flash", input_modalities=["text"])
     )
 
     assert "cannot see images (per its catalog capabilities)" in warning
-    assert "vision probe" in warning, "openrouter-llm lists no model marked 'supports video'"
+    suggestion = warning.split("—", 1)[-1]
+    assert "pick a model marked 'supports video' (e.g. openai/gpt-4.1-mini, openai/gpt-4.1)" in suggestion
+    assert "google/gemini-3.5-flash" not in suggestion
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "openai/gpt-4.1-mini",
+        "openai/gpt-4.1",
+        "openai/gpt-4o-mini",
+        "google/gemini-3.5-flash",
+        "anthropic/claude-sonnet-4.6",
+    ],
+)
+def test_a_promoted_openrouter_model_with_no_record_and_no_catalog_item_sees_images(model: str) -> None:
+    """Ask #79 (R-V4-42): a key that never opened the catalog still gets vision from the registry."""
+    ctx = _openrouter_vision_ctx(model)
+    spec = get("openrouter-llm")
+    assert ctx.record_for(spec, model) is None and ctx.catalog_item(spec.id, model) is None
+
+    caps = resolve_capabilities(spec, model, None, None)
+
+    assert caps.vision is True and caps.source == "registry"
+    assert _vision_warnings(ctx) == [], "no 'cannot see images' warning and no vision Tip"
 
 
 def _knowledge_issues(result: Any) -> list[Any]:

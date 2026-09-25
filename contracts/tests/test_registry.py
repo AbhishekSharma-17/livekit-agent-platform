@@ -20,6 +20,7 @@ from lkap_contracts.providers import (
     credential_home,
     get,
     mvp_providers,
+    vision_support,
 )
 
 #: The MVP table of CONTRACTS §4 plus the §9 tool-secret bag, plus the slim
@@ -330,6 +331,22 @@ def test_openrouter_llm_default_is_tool_capable_not_auto() -> None:
     assert spec.default_model == "openai/gpt-4.1-mini"
     assert all(not m.id.startswith("openrouter/") for m in spec.models)
     assert spec.capabilities.tool_calling is True
+
+
+#: The ``openrouter-llm`` ids promoted on a passing ``vision`` probe (ask #79,
+#: R-V4-42; the readings are in ``docs/v4/_briefs/v4-08-live.md``).
+OPENROUTER_VISION_PROMOTED = [
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1",
+    "openai/gpt-4o-mini",
+    "google/gemini-3.5-flash",
+    "anthropic/claude-sonnet-4.6",
+]
+
+
+@pytest.mark.parametrize("model", OPENROUTER_VISION_PROMOTED)
+def test_openrouter_llm_models_promoted_on_the_vision_probe_support_vision(model: str) -> None:
+    assert vision_support("openrouter-llm", model) is True
 
 
 # ------------------------------------------------ custom model ids, live catalogs (V4-07)

@@ -18,7 +18,6 @@ from lkap_contracts.api_models import ProbeResult
 from lkap_api.custom_models.probes.base import (
     EMBED_INPUT,
     LLM_PROMPT,
-    MAX_TOKENS,
     PING_TOOL_DESCRIPTION,
     PING_TOOL_NAME,
     PNG_1X1_BASE64,
@@ -39,6 +38,7 @@ from lkap_api.custom_models.probes.base import (
     json_body,
     positive_int,
     stt_clip,
+    token_budget,
     transcript_outcome,
 )
 
@@ -77,11 +77,11 @@ def _bearer(ctx: ProbeContext) -> dict[str, str]:
 
 
 class OpenAiChatProbe(LlmProbe):
-    """``POST {base}/chat/completions``: ``max_tokens`` 4, ``temperature`` 0, ``stream`` false.
+    """``POST {base}/chat/completions``: ``max_tokens`` 4 (16 on ``tools``), ``temperature`` 0, no stream.
 
     A 400 that names ``max_tokens`` or ``temperature`` (reasoning models refuse
-    them) is retried once with ``max_completion_tokens`` 4 and no temperature;
-    the rest of the run keeps that shape.
+    them) is retried once with ``max_completion_tokens`` at the same budget and
+    no temperature; the rest of the run keeps that shape.
     """
 
     name = "openai_chat"
@@ -99,9 +99,9 @@ class OpenAiChatProbe(LlmProbe):
             "stream": False,
         }
         if ctx.state.get("reasoning_shape"):
-            body["max_completion_tokens"] = MAX_TOKENS
+            body["max_completion_tokens"] = token_budget(variant)
         else:
-            body["max_tokens"] = MAX_TOKENS
+            body["max_tokens"] = token_budget(variant)
             body["temperature"] = 0
         if variant == "tools":
             body["tools"] = [

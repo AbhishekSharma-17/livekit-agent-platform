@@ -354,7 +354,7 @@ export function ModelTestPanel({
 }) {
   const tone = result.ok === true ? "success" : result.ok === false ? "danger" : "neutral";
   const title =
-    result.ok === true ? "The vendor accepted this model" : result.ok === false ? "The vendor refused this model" : "Not tested";
+    result.ok === true ? "The vendor accepted this model" : result.ok === false ? "The vendor refused this model" : "Couldn't verify this model";
   const probes = result.probes ?? [];
   const detected = result.detected ?? {};
   const known = CAPABILITY_LABEL.filter(({ key }) => typeof detected[key] === "boolean");

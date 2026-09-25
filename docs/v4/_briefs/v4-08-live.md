@@ -48,6 +48,28 @@ The four failing readings were fixed in the api (asks #64–#67, plus #76 and #7
 - **Still open:** a definite `tools` reading for models that cannot finish a forced tool call in 4 tokens needs a ruling on the budget (ask #78). The `openrouter-llm` registry flags are ask #79.
 - **Side effects:** the four `provider_models` rows were overwritten by the route (as designed); `livekit-inference-llm`/`openai/gpt-4o-mini` now stores `detected.tools=null`. Audit rows `provider.test_model` were written. No agent config, connection, credential or worker was touched.
 
+## Vision probes for #79 (R-V4-42, with the R-V4-41 re-tests, 2026-09-25, 06:00 IST)
+
+The five `openrouter-llm` ids were probed with `probes: ["basic","tools","vision"]`, and the two LiveKit Inference ids of R-V4-41 were re-tested with `["basic","tools"]`, all with `force: true`, on the same dev api on `:8080`. R-V4-41's fix (`TOOLS_MAX_TOKENS = 16` on the `tools` call) was already on disk, and `uvicorn --reload` had picked it up: the Gemini `tools` row below reads "within the 16-token budget", a message only the new code produces.
+
+- **Access.** One Builder key: scope `agents:write` (what `test-model` needs besides the builder role), named `R-V4-42 vision probes (temporary)`, minted with the admin token with a 1-day expiry. It was held only in a 0600 scratchpad file and never printed, and was **revoked at 06:01:35 IST** (`DELETE /v1/api-keys/{id}` → 204; the listing shows `revoked_at` set). The file was then deleted.
+- **Calls.** Seven, one at a time, about 7 s after the previous one returned (under the 10-per-minute cap). None was answered from the cache (`cached=false` on all).
+
+| Provider | Model / id | ok | Latency | Wall | Probes | Detected | Cost |
+|---|---|---|---|---|---|---|---|
+| `openrouter-llm` | `openai/gpt-4.1-mini` | ✅ true | 1604 ms | 4780 ms | basic ✓ (`ok`), tools ✓ 1182 ms, **vision ✓** 1941 ms "accepted an image" | `vision=true`, `tools=true` | $0.0000408 (catalog pricing) |
+| `openrouter-llm` | `openai/gpt-4.1` | ✅ true | 1643 ms | 4080 ms | basic ✓ (`ok`), tools ✓ 1105 ms, **vision ✓** 1286 ms | `vision=true`, `tools=true` | $0.000708 (catalog pricing) |
+| `openrouter-llm` | `openai/gpt-4o-mini` | ✅ true | 1326 ms | 3341 ms | basic ✓ (`Ok.`), tools ✓ 937 ms, **vision ✓** 1018 ms | `vision=true`, `tools=true` | $0.0012942 (catalog pricing; most of it is the image input) |
+| `openrouter-llm` | `google/gemini-3.5-flash` | ✅ true | 1540 ms | 4830 ms | basic ✓ ("answered, with no text within the 4-token budget"), tools **inconclusive** 2031 ms ("no tool call within the 16-token budget"), **vision ✓** 1222 ms | `vision=true`, `tools=null` | $0.000903 (catalog pricing) |
+| `openrouter-llm` | `anthropic/claude-sonnet-4.6` | ✅ true | 2390 ms | 5075 ms | basic ✓ (`ok`), tools ✓ 1088 ms, **vision ✓** 1545 ms | `vision=true`, `tools=true` | $0.002379 (catalog pricing) |
+| `livekit-inference-llm` | `openai/gpt-4o-mini` | ✅ true | 1697 ms | 3601 ms | basic ✓ (`Ok.`), tools ✓ 1864 ms "called the tool" | **`tools=true`** (was `null`, ask #65) | $0.0000159 (platform price table) |
+| `livekit-inference-llm` | `google/gemma-4-31b-it` | ✅ true | 1378 ms | 2903 ms | basic ✓ (`ok` plus a raw `<turn\|>` marker), tools ✓ 1485 ms "called the tool" | **`tools=true`** (was `null`) | $0.0000488 (platform price table) |
+
+- **Vision (#79): all five pass.** Each accepted the 1×1 PNG with a 2xx. The contracts owner flips `supports_video=True` on all five `openrouter-llm` `ModelSpec` lines. None failed and none was inconclusive.
+- **Tools (#78): both LiveKit Inference ids now read definite `tools=true`** at the 16-token budget. The stored rows are corrected by the route. `google/gemini-3.5-flash` on OpenRouter still reads `tools=null`: it spent the budget without a call (its `basic` answer also had no text within 4 tokens, which is typical of a thinking model). Per R-V4-41 that stays inconclusive, with no retry at a larger budget.
+- **Vendor spend:** about $0.0054 in all, from the route's own estimates (catalog pricing for OpenRouter, the platform price table for LiveKit Inference). That is under the $0.01 budget. OpenRouter's image-input pricing accounts for most of the gpt-4o-mini and Claude figures.
+- **Side effects:** the seven `provider_models` rows were overwritten by the route (as designed), and audit rows `provider.test_model` were written. No agent config, connection, credential or worker was touched.
+
 ## §4 step by step
 
 1. **OpenRouter LLM: pass.** `openai/gpt-4.1-mini` was used instead of `google/gemini-3.8-flash` (the card asked for a cheap model). `tools` ✓, cost from `meta.pricing`. The nonsense id gives `ok=false` with the vendor's reason and no key fragment. A key-shaped id gives 422 with no echo.
@@ -96,3 +118,5 @@ Reserved for V4-09 (`PLAN-V4.md` V4-09 "Live"): pick `openrouter-llm`, type `goo
 - 05:11 Key revoked (204), and its scratchpad file deleted.
 - 05:37 Re-run after the fixes (section above): the key minted, the four `force=true` calls, the Vision assistant validated, the key revoked (204) and its file deleted.
 - 05:03 (before the api calls) `python -m lkap_api.catalogs.drift --only keyless`, with no keys: the §4 step 8 result above. It was re-run at 05:13 through `scripts/catalog_drift.py` with the final module: exit 0, the same sections, and `flux-general-en` marked expected.
+- 06:00 Vision probes for #79 (section above): the Builder key minted (expires in 1 day); the seven `force=true` `test-model` calls, sequential, 06:00:25–06:01:32.
+- 06:01 Key revoked at 06:01:35 (204; `revoked_at` set in the listing), and its scratchpad file deleted.

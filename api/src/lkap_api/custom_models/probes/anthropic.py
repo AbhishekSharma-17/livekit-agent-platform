@@ -9,7 +9,6 @@ import httpx
 
 from lkap_api.custom_models.probes.base import (
     LLM_PROMPT,
-    MAX_TOKENS,
     PING_TOOL_DESCRIPTION,
     PING_TOOL_NAME,
     PNG_1X1_BASE64,
@@ -18,6 +17,7 @@ from lkap_api.custom_models.probes.base import (
     ProbeContext,
     elapsed_ms,
     positive_int,
+    token_budget,
 )
 
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
@@ -25,7 +25,10 @@ ANTHROPIC_VERSION = "2023-06-01"
 
 
 class AnthropicMessagesProbe(LlmProbe):
-    """``max_tokens`` 4, ``temperature`` 0; ``tools`` forces ``{"type": "tool", "name": "ping"}``."""
+    """``max_tokens`` 4 (16 on ``tools``), ``temperature`` 0.
+
+    ``tools`` forces ``{"type": "tool", "name": "ping"}``.
+    """
 
     name = "anthropic_messages"
 
@@ -41,7 +44,7 @@ class AnthropicMessagesProbe(LlmProbe):
             ]
         body: dict[str, Any] = {
             "model": ctx.model,
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": token_budget(variant),
             "temperature": 0,
             "messages": [{"role": "user", "content": content}],
         }

@@ -2,10 +2,10 @@
 
 Every vendor is an ``httpx.MockTransport`` (or a fake websocket); no probe here
 reaches a network, and every "key" is a placeholder. The request bodies are
-asserted against the budgets: ``max_tokens`` 4, ``temperature`` 0, the forced
-tool on the second call, the 1x1 PNG only when ``vision`` is asked for, TTS
-``input="Hello."``, STT multipart carrying the bundled clip, embeddings
-``input="ping"``.
+asserted against the budgets: ``max_tokens`` 4 (16 on the ``tools`` call,
+R-V4-41), ``temperature`` 0, the forced tool on the second call, the 1x1 PNG
+only when ``vision`` is asked for, TTS ``input="Hello."``, STT multipart
+carrying the bundled clip, embeddings ``input="ping"``.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from lkap_contracts.providers import REGISTRY, get
 
 from lkap_api.custom_models.probes import PROBES, ProbeContext, ProbeInputError
 from lkap_api.custom_models.probes import realtime as realtime_probes
-from lkap_api.custom_models.probes.base import MAX_TOKENS, PNG_1X1_BASE64, stt_clip
+from lkap_api.custom_models.probes.base import MAX_TOKENS, PNG_1X1_BASE64, TOOLS_MAX_TOKENS, stt_clip
 
 PLACEHOLDER_KEY = "placeholder-vendor-key-0000"
 Handler = Callable[[httpx.Request], httpx.Response]
@@ -106,24 +106,29 @@ async def test_openai_chat_sends_the_budgeted_body_and_detects_tools() -> None:
         seen.append(request)
         return _chat_answer(request)
 
-    outcome = await PROBES["openai_chat"].run(_ctx("openai-llm", "gpt-4.1-nano-2026", handler))
+    outcome = await PROBES["openai_chat"].run(
+        _ctx("openai-llm", "gpt-4.1-nano-2026", handler, probes=frozenset({"tools", "vision"}))
+    )
 
     assert outcome.ok is True
-    assert outcome.detected.tools is True
+    assert outcome.detected.tools is True and outcome.detected.vision is True
     assert outcome.sample == "ok"
     assert outcome.latency_ms is not None
-    assert len(seen) == 2
-    first, second = (_body(r) for r in seen)
+    assert len(seen) == 3
+    first, second, third = (_body(r) for r in seen)
     assert str(seen[0].url) == "https://api.openai.com/v1/chat/completions"
     assert seen[0].headers["authorization"] == f"Bearer {PLACEHOLDER_KEY}"
     assert first["max_tokens"] <= MAX_TOKENS and first["temperature"] == 0 and first["stream"] is False
     assert first["model"] == "gpt-4.1-nano-2026"
     assert "tools" not in first
+    assert second["max_tokens"] == TOOLS_MAX_TOKENS, "the tools call alone gets 16 tokens (R-V4-41)"
     assert second["tools"][0]["function"]["name"] == "ping"
     assert second["tools"][0]["function"]["parameters"] == {"type": "object", "properties": {}}
     assert second["tool_choice"] == "required"
+    assert third["max_tokens"] <= MAX_TOKENS and "tools" not in third
     assert PNG_1X1_BASE64 not in json.dumps(first) + json.dumps(second)
-    assert outcome.usage.tokens_in == 24 and outcome.usage.tokens_out == 2
+    assert PNG_1X1_BASE64 in json.dumps(third["messages"])
+    assert outcome.usage.tokens_in == 36 and outcome.usage.tokens_out == 3
 
 
 async def test_the_png_is_sent_only_when_vision_is_requested() -> None:
@@ -201,13 +206,15 @@ async def test_a_reasoning_model_is_retried_once_with_max_completion_tokens() ->
             200, json={"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
         )
 
-    outcome = await PROBES["openai_chat"].run(
-        _ctx("openai-llm", "o9-mini", handler, probes=frozenset({"basic"}))
-    )
+    outcome = await PROBES["openai_chat"].run(_ctx("openai-llm", "o9-mini", handler))
 
     assert outcome.ok is True, "a 2xx with an empty answer inside the budget still proves the id"
-    assert [("max_tokens" in b, b.get("max_completion_tokens")) for b in seen] == [(True, None), (False, 4)]
-    assert "temperature" not in seen[1]
+    assert [("max_tokens" in b, b.get("max_completion_tokens")) for b in seen] == [
+        (True, None),
+        (False, MAX_TOKENS),
+        (False, TOOLS_MAX_TOKENS),
+    ], "one retry on basic; the tools call keeps the reasoning shape at its own 16-token budget"
+    assert "temperature" not in seen[1] and "temperature" not in seen[2]
 
 
 async def test_a_truncated_tool_answer_is_inconclusive_not_false() -> None:
@@ -221,6 +228,7 @@ async def test_a_truncated_tool_answer_is_inconclusive_not_false() -> None:
     assert outcome.ok is True
     assert outcome.detected.tools is None
     assert outcome.results[1].ok is None
+    assert outcome.results[1].message == "no tool call within the 16-token budget (inconclusive)"
 
 
 def _refuse_tools(status: int, message: str) -> Handler:
@@ -250,7 +258,8 @@ async def test_a_tool_call_refused_for_the_output_limit_is_inconclusive_not_fals
     assert outcome.results[1].ok is None
     assert outcome.results[1].message is not None and "(inconclusive)" in outcome.results[1].message
     assert len(seen) == 2, "the reasoning-shape retry must not fire on an output-limit 400"
-    assert all(body.get("max_tokens", body.get("max_completion_tokens")) <= MAX_TOKENS for body in seen)
+    budgets = [(bool(b.get("tools")), b.get("max_tokens", b.get("max_completion_tokens"))) for b in seen]
+    assert budgets == [(False, MAX_TOKENS), (True, TOOLS_MAX_TOKENS)]
 
 
 @pytest.mark.parametrize(
@@ -322,6 +331,7 @@ async def test_anthropic_forces_the_ping_tool() -> None:
     assert seen[0].headers["x-api-key"] == PLACEHOLDER_KEY
     assert seen[0].headers["anthropic-version"]
     assert first["max_tokens"] <= MAX_TOKENS and first["temperature"] == 0
+    assert second["max_tokens"] == TOOLS_MAX_TOKENS
     assert second["tool_choice"] == {"type": "tool", "name": "ping"}
     assert second["tools"][0]["input_schema"] == {"type": "object", "properties": {}}
 
@@ -347,6 +357,7 @@ async def test_gemini_forces_function_calling_and_keeps_the_key_out_of_the_url()
     assert seen[0].headers["x-goog-api-key"] == PLACEHOLDER_KEY
     first, second = (_body(r) for r in seen)
     assert first["generationConfig"] == {"maxOutputTokens": MAX_TOKENS, "temperature": 0}
+    assert second["generationConfig"] == {"maxOutputTokens": TOOLS_MAX_TOKENS, "temperature": 0}
     assert second["toolConfig"] == {"functionCallingConfig": {"mode": "ANY"}}
 
 

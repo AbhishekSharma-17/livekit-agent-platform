@@ -6,7 +6,8 @@ second adapter tree, deliberately separate from the catalog adapters
 (``ProviderSpec.test == catalog.adapter`` is a GET that lists; a probe is a
 POST with a payload and a budget).
 
-Budgets are fixed here and asserted by the tests: ``max_tokens`` 4, TTS input
+Budgets are fixed here and asserted by the tests: ``max_tokens`` 4 (16 on the
+``tools`` call, R-V4-41), TTS input
 ``"Hello."``, the bundled 1 s STT clip, embeddings ``"ping"``, a realtime
 websocket handshake without audio, a session-less avatar GET, and **no image
 generation anywhere** (images cost money; an image model is checked against
@@ -35,8 +36,11 @@ from lkap_contracts.providers import ModelCapabilities, ProviderSpec
 
 #: The one prompt every LLM probe sends.
 LLM_PROMPT = "Reply with the single word ok."
-#: ``max_tokens`` (or the vendor's equivalent) on every LLM call (R-V4-25: ≤ 4).
+#: ``max_tokens`` (or the vendor's equivalent) on the ``basic`` and ``vision`` LLM calls (R-V4-25: ≤ 4).
 MAX_TOKENS = 4
+#: ``max_tokens`` (or the vendor's equivalent) on the ``tools`` LLM call: a forced function call
+#: does not fit in 4 output tokens for several tokenisers (R-V4-41, ask #78).
+TOOLS_MAX_TOKENS = 16
 #: What every TTS probe speaks (≤ 8 characters, D-V4-26).
 TTS_INPUT = "Hello."
 #: What every embedding probe embeds.
@@ -60,6 +64,11 @@ SAMPLE_MAX = 200
 VENDOR_TEXT_MAX = 300
 #: Seconds of audio in the bundled STT clip.
 STT_CLIP_SECONDS = 1.0
+
+
+def token_budget(variant: str) -> int:
+    """The output budget of one LLM probe call: 16 for ``tools``, 4 otherwise (R-V4-41)."""
+    return TOOLS_MAX_TOKENS if variant == "tools" else MAX_TOKENS
 
 
 def stt_clip() -> bytes:
@@ -427,7 +436,7 @@ class LlmProbe:
             if answer.tool_called:
                 return True, ProbeResult(name="tools", ok=True, latency_ms=latency, message="called the tool")
             if answer.truncated:
-                message = f"no tool call within the {MAX_TOKENS}-token budget (inconclusive)"
+                message = f"no tool call within the {TOOLS_MAX_TOKENS}-token budget (inconclusive)"
                 return None, ProbeResult(name="tools", ok=None, latency_ms=latency, message=message)
             message = "answered without calling the forced tool"
             return False, ProbeResult(name="tools", ok=False, latency_ms=latency, message=message)
@@ -446,6 +455,7 @@ __all__ = [
     "RAW_PCM_TYPES",
     "SAMPLE_MAX",
     "STT_CLIP_SECONDS",
+    "TOOLS_MAX_TOKENS",
     "TTS_INPUT",
     "ChatAnswer",
     "LlmProbe",
@@ -464,6 +474,7 @@ __all__ = [
     "failure",
     "json_body",
     "stt_clip",
+    "token_budget",
     "tools_from_refusal",
     "transcript_outcome",
     "vendor_text",

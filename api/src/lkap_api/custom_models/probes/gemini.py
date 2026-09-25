@@ -15,7 +15,6 @@ import httpx
 from lkap_api.custom_models.probes.base import (
     EMBED_INPUT,
     LLM_PROMPT,
-    MAX_TOKENS,
     PING_TOOL_DESCRIPTION,
     PING_TOOL_NAME,
     PNG_1X1_BASE64,
@@ -29,6 +28,7 @@ from lkap_api.custom_models.probes.base import (
     failure,
     json_body,
     positive_int,
+    token_budget,
 )
 from lkap_api.custom_models.probes.openai_like import embedding_outcome
 
@@ -41,7 +41,10 @@ def model_path(model: str) -> str:
 
 
 class GeminiGenerateProbe(LlmProbe):
-    """``maxOutputTokens`` 4, ``temperature`` 0; ``tools`` forces ``functionCallingConfig.mode=ANY``."""
+    """``maxOutputTokens`` 4 (16 on ``tools``), ``temperature`` 0.
+
+    ``tools`` forces ``functionCallingConfig.mode=ANY``.
+    """
 
     name = "gemini_generate"
 
@@ -51,7 +54,7 @@ class GeminiGenerateProbe(LlmProbe):
             parts.insert(0, {"inlineData": {"mimeType": "image/png", "data": PNG_1X1_BASE64}})
         body: dict[str, Any] = {
             "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"maxOutputTokens": MAX_TOKENS, "temperature": 0},
+            "generationConfig": {"maxOutputTokens": token_budget(variant), "temperature": 0},
         }
         if variant == "tools":
             body["tools"] = [

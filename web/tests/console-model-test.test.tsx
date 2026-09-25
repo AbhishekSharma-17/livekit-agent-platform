@@ -225,6 +225,28 @@ describe("Test model", () => {
     expect((await screen.findByTestId("tested-chip")).textContent).toBe("Test failed · model_not_found: no such model");
   });
 
+  it("an inconclusive result (ok: null) is headed “Couldn't verify this model”, never “Not tested”, with its message (R-V4-43)", async () => {
+    stub("builder", [
+      testPost(
+        testResult({
+          ok: null,
+          message: "the key works, but the id is not among this account's own faces (0 listed)",
+          probes: [{ name: "basic", ok: null, latency_ms: 120, message: "0 faces listed" }],
+          sample: null,
+        }),
+      ),
+    ]);
+    withClient(<Harness kind="llm" initial={CUSTOM_LLM} />);
+    await clickTest();
+    await screen.findByText("Couldn't verify this model");
+    expect(screen.queryByText("Not tested")).toBeNull();
+    expect(screen.queryByText("The vendor accepted this model")).toBeNull();
+    expect(screen.queryByText("The vendor refused this model")).toBeNull();
+    expect(screen.getByLabelText("What the vendor said").textContent).toBe(
+      "the key works, but the id is not among this account's own faces (0 listed)",
+    );
+  });
+
   it("a 429 reads “try again in N s” (retry_after rounded up)", async () => {
     stub("builder", [
       testPost({ error: { code: "rate_limited", message: "too many", details: { retry_after_s: 11.2, retry_after: 11.2 } } }, 429),

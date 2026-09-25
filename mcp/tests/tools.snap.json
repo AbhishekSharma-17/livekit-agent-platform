@@ -370,6 +370,22 @@
             "title": "Plan",
             "type": "boolean"
           },
+          "reviewed_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Destructive action slugs the user has decided about: a destructive action (delete, remove, send money) stays blocked until it is listed here, and denied_actions still blocks a reviewed one. Ask the user first",
+            "title": "Reviewed Actions"
+          },
           "router": {
             "anyOf": [
               {

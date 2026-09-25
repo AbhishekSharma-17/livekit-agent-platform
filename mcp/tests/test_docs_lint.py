@@ -474,7 +474,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "agent_versions": frozenset({"id_or_slug", "get", "restore", "confirm", "plan"}),
     "agent_attach": frozenset({"id_or_slug", "kb_ids", "tool_ids", "remove", "plan"}),
     "agent_apps_mode": frozenset(
-        {"id_or_slug", "mode", "allowed_toolkits", "denied_actions", "router", "plan"}
+        {"id_or_slug", "mode", "allowed_toolkits", "denied_actions", "reviewed_actions", "router", "plan"}
     ),
     "agent_limits": frozenset({"id_or_slug", "limits", "allowed_origins", "plan"}),
     "agent_flow_validate": frozenset({"id_or_slug", "flow"}),

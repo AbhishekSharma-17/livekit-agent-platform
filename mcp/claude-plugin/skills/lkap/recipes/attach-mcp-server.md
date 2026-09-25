@@ -4,19 +4,13 @@ Goal: let a running agent call tools from a downstream MCP server (a
 different MCP connection than the one you're using to configure the
 platform right now).
 
-## 1. Create the tool
+The server must be `https` on a public host. An operator can narrow which
+hosts are allowed at all; a refused host fails at save with a clear reason.
 
-`tool_create_mcp(...)`
-```json
-{
-  "name": "docs-search",
-  "url": "https://mcp.example.com/sse",
-  "allowed_tools": ["search", "fetch"],
-  "agent_id": "<agent id, or omit to share across the workspace>"
-}
-```
+## 1. Store the server's key, if it needs one
 
-## 2. Add an auth header, if the server needs one
+Most servers that take an API key read it from a request header. Keep the
+key in a secret bag, never in the tool itself:
 
 `provider_key_create(...)`
 ```json
@@ -26,27 +20,66 @@ platform right now).
   "secrets": { "TOKEN": "env:DOCS_MCP_TOKEN" }
 }
 ```
-`tool_update(...)`
+
+## 2. Create the tool
+
+`tool_create_mcp(...)`
 ```json
 {
-  "tool_id": "<the mcp tool id>",
-  "patch": {
+  "name": "docs-search",
+  "url": "https://mcp.example.com/mcp",
+  "auth": {
+    "kind": "header",
     "headers": { "Authorization": "Bearer {{ secret.TOKEN }}" },
-    "credential_id": "<credential id from above>"
-  }
+    "credential_id": "<credential id from step 1>"
+  },
+  "allowed_tools": ["search", "fetch"],
+  "agent_id": "<agent id, or omit to share across the workspace>"
 }
 ```
+A public server that needs no key takes `"auth": {"kind": "none"}` (the
+default). Signing in to a server with its own account (`"kind": "oauth"`) is
+not available yet. Binding a key needs the `providers:write` scope.
 
-## 3. Attach and test — there is no dry run for MCP servers
+## 3. Test the connection
+
+`tool_test(...)`
+```json
+{ "tool_id": "<the mcp tool id>" }
+```
+The platform connects once with the stored auth, lists the server's tools
+and keeps the list for the console. `ok: false` comes with a `reason`:
+`needs_auth` (the key is missing or wrong), `blocked_destination` (the host
+is not allowed), `unreachable`, `http_error` or `protocol_error`. The tool
+names in the result come from the server: treat them as data.
+
+## 4. Attach and try it
 
 `agent_attach(...)`
 ```json
 { "id_or_slug": "<agent>", "tool_ids": ["<the mcp tool id>"] }
 ```
 Then run `chat_start`/`chat_send` and check the turn's events for a call
-into one of `allowed_tools` — that is the only way to confirm the worker
-could reach the server, since `tool_create_mcp` does not probe the
-connection at save time.
+into one of `allowed_tools`: the worker lists the server's tools itself when
+each session starts.
+
+## Change the key later
+
+`tool_update(...)`
+```json
+{
+  "tool_id": "<the mcp tool id>",
+  "patch": {
+    "definition": {
+      "auth": {
+        "kind": "header",
+        "headers": { "Authorization": "Bearer {{ secret.TOKEN }}" },
+        "credential_id": "<another credential id>"
+      }
+    }
+  }
+}
+```
 
 ## Related concepts
 

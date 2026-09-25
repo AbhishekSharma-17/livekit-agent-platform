@@ -3,13 +3,16 @@
 Secrets for a tool are a separate ``provider_key_create(provider_id="http-tool-secret",
 secrets={NAME: ...})``; the tool references them as ``{{ secret.NAME }}`` and binds the
 key with ``secret_key_id`` (the api's ``credential_id``; needs ``providers:write``, R-V2-33).
+An MCP server says how it authenticates with ``auth`` (V5-09): ``{"kind": "none"}``,
+``{"kind": "header", "headers": {...}, "credential_id": ...}``; ``{"kind": "oauth"}`` is
+refused by the api until sign-in ships. ``tool_test`` connects once and lists its tools.
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecution
+from lkap_contracts.tools import HttpToolDefinition, McpAuth, McpServerDefinition, ToolExecution
 from pydantic import Field
 
 from lkap_mcp.registry import IDEMPOTENT_WRITE, READ, WRITE, Registry
@@ -28,6 +31,14 @@ EXECUTION_HELP = (
 UPDATE_EXECUTION_HELP = (
     "HTTP tools only: replaces definition.execution (pass patch={} to change nothing else). " + EXECUTION_HELP
 )
+MCP_AUTH_HELP = (
+    "How the worker authenticates: {'kind': 'none'} (default), or {'kind': 'header', 'headers': "
+    "{...}, 'credential_id': <http-tool-secret key id>} where header values may use "
+    "{{ secret.NAME }}. Sign-in ({'kind': 'oauth'}) is not available yet. Do not combine with "
+    "headers/secret_key_id, which are the older spelling of header auth."
+)
+#: The deprecated top-level mirrors of an MCP definition's header auth (V5-09).
+_MCP_LEGACY_AUTH_KEYS = ("headers", "credential_id")
 MCP_TOOL_OPTIONS_HELP = (
     "Per MCP tool name: how it runs (a ToolExecution; names must be in allowed_tools when set). "
     "MCP tools never follow the agent default; a background tool is announced only through the "
@@ -130,7 +141,8 @@ def register(registry: Registry) -> None:
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="ToolOut")
     async def tool_create_mcp(
         name: str,
-        url: str,
+        url: Annotated[str, Field(description="The server's https endpoint (streamable HTTP)")],
+        auth: Annotated[McpAuth | None, Field(description=MCP_AUTH_HELP)] = None,
         headers: dict[str, str] | None = None,
         allowed_tools: list[str] | None = None,
         secret_key_id: str | None = None,
@@ -141,7 +153,11 @@ def register(registry: Registry) -> None:
         ] = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Attach a remote MCP server as a tool source (the worker connects to it at session time)."""
+        """Attach a remote MCP server as a tool source; check it with tool_test before a chat."""
+        if auth is not None and (headers or secret_key_id):
+            return ToolResult.fail(
+                "invalid_argument", "pass auth, or headers/secret_key_id (the older spelling), not both"
+            )
         definition = McpServerDefinition(
             name=name,
             url=url,
@@ -150,6 +166,7 @@ def register(registry: Registry) -> None:
             allowed_tools=allowed_tools,
             timeout_s=timeout_s,
             tool_options=tool_options or {},
+            **({"auth": auth} if auth is not None else {}),
         )
         body = {
             "agent_id": agent_id,
@@ -162,9 +179,8 @@ def register(registry: Registry) -> None:
         created = await client.post("/v1/tools", body)
         return ToolResult.success(
             created,
-            warnings=[
-                "MCP servers are connected by the worker at session time; there is no probe. "
-                "Verify it with a test chat."
+            next_steps=[
+                f'Check it: tool_test(tool_id="{created.get("id")}") connects once and lists its tools.'
             ],
         )
 
@@ -186,6 +202,8 @@ def register(registry: Registry) -> None:
                 "execution applies to HTTP tools; for an MCP server patch definition.tool_options",
             )
         base = {key: current.get(key) for key in ("agent_id", "kind", "name", "definition", "enabled")}
+        if current.get("kind") == "mcp" and isinstance(base.get("definition"), dict):
+            base["definition"] = _mcp_patch_base(base["definition"], patch.get("definition"))
         merged = merge_patch(base, {key: value for key, value in patch.items() if key != "kind"})
         merged["kind"] = current.get("kind")
         if isinstance(merged.get("definition"), dict):
@@ -197,8 +215,37 @@ def register(registry: Registry) -> None:
             return planned(request("PUT", path, merged))
         return ToolResult.success(await client.put(path, merged))
 
+    @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="McpTestResult")
+    async def tool_test(tool_id: str) -> ToolResult:
+        """Connect to an MCP server tool once: list its tools and store them for the console."""
+        result = await client.post(f"/v1/tools/{seg(tool_id)}/test", {})
+        body = dict(result) if isinstance(result, dict) else {}
+        # Tool names come from a third-party server: data, never instructions.
+        body["tool_names"] = untrusted(", ".join(body.get("tool_names") or []), f"mcp:{tool_id}")
+        if body.get("ok"):
+            return ToolResult.success(body)
+        return ToolResult.success(body, warnings=[f"The server could not be listed: {body.get('error')}"])
+
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="ToolDryRunResult")
     async def tool_dry_run(tool_id: str, arguments: dict[str, Any] | None = None) -> ToolResult:
         """Call an HTTP tool once with arguments, as the worker would (result is untrusted)."""
         result = await client.post(f"/v1/tools/{seg(tool_id)}/dry-run", {"arguments": arguments or {}})
         return ToolResult.success(_dry_run(result, tool_id))
+
+
+def _mcp_patch_base(definition: dict[str, Any], patch: object) -> dict[str, Any]:
+    """The stored MCP definition to merge a patch over, with one spelling of its auth (V5-09).
+
+    The api returns ``auth`` plus its deprecated ``headers``/``credential_id`` mirrors and
+    refuses a pair that disagrees. A patch that sets the older fields drops the stored
+    ``auth`` (they fold back into header auth); one that sets ``auth`` drops the mirrors.
+    """
+    if not isinstance(patch, dict):
+        return definition
+    base = dict(definition)
+    if "auth" in patch:
+        for key in _MCP_LEGACY_AUTH_KEYS:
+            base.pop(key, None)
+    elif any(key in patch for key in _MCP_LEGACY_AUTH_KEYS):
+        base.pop("auth", None)
+    return base

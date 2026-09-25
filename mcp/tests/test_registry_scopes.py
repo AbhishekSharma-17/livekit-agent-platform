@@ -30,6 +30,7 @@ WRITE_TOOLS = {
     "tool_create_http",
     "tool_create_mcp",
     "tool_update",
+    "tool_test",
     "tool_dry_run",
     "session_rescore",
     "webhook_create",

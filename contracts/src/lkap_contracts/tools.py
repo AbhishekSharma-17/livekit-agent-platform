@@ -11,6 +11,8 @@ from typing import Annotated, Any, Final, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from lkap_contracts.tool_providers import ToolProviderId
+
 #: Model-facing tool names must match this pattern.
 TOOL_NAME_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$"
 
@@ -133,6 +135,11 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "set_status",
         "pin_frame",
         "current_time",
+        # Composio Tool Router meta tools (docs/v5/COMPOSIO.md D-V5-C7): running an action,
+        # opening a connection or waiting on one always waits for the result.
+        "COMPOSIO_MULTI_EXECUTE_TOOL",
+        "COMPOSIO_MANAGE_CONNECTIONS",
+        "COMPOSIO_WAIT_FOR_CONNECTIONS",
     }
 )
 #: Flow edge tools are named ``go_to_<node>`` (:func:`lkap_contracts.flow.edge_tool_name`).
@@ -175,6 +182,20 @@ class HttpToolDefinition(BaseModel):
         return self
 
 
+#: Which provisioned server an origin-tagged MCP definition is (D-V5-C6): ``server`` exposes the
+#: picked actions directly, ``router`` exposes the provider's search/execute meta tools.
+McpOriginKind = Literal["server", "router"]
+
+
+class McpServerOrigin(BaseModel):
+    """Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3)."""
+
+    provider: ToolProviderId = "composio"
+    kind: McpOriginKind
+    remote_id: str = Field(min_length=1, max_length=200)
+    """The provider's id for it (a Tool Router session id)."""
+
+
 class McpServerDefinition(BaseModel):
     """A streamable-HTTP MCP server attached to the agent."""
 
@@ -190,6 +211,10 @@ class McpServerDefinition(BaseModel):
     """How each MCP tool runs, by tool name (a subset of ``allowed_tools`` when that is set).
     MCP tools never follow the agent default; their announcement comes from the server's
     progress notifications (``report_progress``)."""
+    origin: McpServerOrigin | None = None
+    """Set on servers LKAP provisions for a tool provider (Composio's app server or tool finder,
+    docs/v5/COMPOSIO.md D-V5-C6). The api manages these rows; the worker connects to them only
+    over ``https`` on the provider's host."""
 
     @model_validator(mode="after")
     def _tool_options_are_allowed(self) -> Self:
@@ -200,4 +225,63 @@ class McpServerDefinition(BaseModel):
         return self
 
 
-ToolDefinition = Annotated[HttpToolDefinition | McpServerDefinition, Field(discriminator="kind")]
+class ProviderToolDefinition(BaseModel):
+    """One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).
+
+    Created by materialisation (``POST /v1/tool-providers/composio/materialise``): the
+    parameters are pinned from the provider's schema at import, the description is its first
+    sentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``
+    on the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``
+    placeholder that the api substitutes from ``credential_id`` when a session resolves, as
+    for HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's
+    ``user_id`` copied from it.
+    """
+
+    kind: Literal["provider"] = "provider"
+    provider: ToolProviderId = "composio"
+    name: str = Field(pattern=TOOL_NAME_PATTERN)
+    description: str
+    parameters: dict[str, Any]
+    """The action's JSON Schema input, pinned at import ("Refresh schema" diffs it)."""
+    tool_slug: str = Field(min_length=1, max_length=200)
+    """The provider's action slug, e.g. ``GOOGLECALENDAR_FIND_FREE_SLOTS``."""
+    toolkit: str = ""
+    """The app the action belongs to (lower case), e.g. ``googlecalendar``."""
+    connection_id: str
+    """The connected-app row (``credentials`` of provider ``tool-provider-account``)."""
+    credential_id: str | None = None
+    """The provider key row (``credentials`` of provider ``composio``); cleared once resolved."""
+    subject: str
+    """The provider's ``user_id``: ``ws:<workspace_id>`` or ``agent:<agent_id>``."""
+    connected_account_id: str | None = None
+    """The provider's connected account to run as; ``None`` lets the provider pick the
+    subject's account for the app (the api does not store the vendor id on the tool)."""
+    headers: dict[str, str] = Field(default_factory=lambda: {"x-api-key": "{{ secret.api_key }}"})
+    """Sent with every execute call; secrets are substituted by the api, never stored resolved."""
+    timeout_s: float = Field(default=10, gt=0, le=60)
+    max_result_chars: int = Field(default=1500, ge=100, le=20000)
+    result_path: str | None = "data"
+    """A top-level key of the execute response (``data``) or a JSON pointer (``/data/items``)."""
+    silent_reply: bool = False
+    execution: ToolExecution = Field(default_factory=ToolExecution)
+    """How the action runs (docs/v4/BACKGROUND-TOOLS.md): reads are ``auto``, writes block."""
+    schema_version: str | None = None
+    """The provider's tool version at import; ``None`` runs the latest."""
+    risk: Literal["read", "write", "destructive"] = "write"
+    """How risky the action is (D-V5-C7); destructive actions always block."""
+
+    @model_validator(mode="after")
+    def _silent_reply_blocks(self) -> Self:
+        if self.silent_reply and self.execution.mode in NON_BLOCKING_MODES:
+            raise ValueError(
+                "silent_reply cannot be combined with a background or automatic execution mode: "
+                "the silenced reply would swallow the tool's announcement"
+            )
+        if self.risk == "destructive" and self.execution.mode in NON_BLOCKING_MODES:
+            raise ValueError("a destructive action always runs blocking")
+        return self
+
+
+ToolDefinition = Annotated[
+    HttpToolDefinition | McpServerDefinition | ProviderToolDefinition, Field(discriminator="kind")
+]

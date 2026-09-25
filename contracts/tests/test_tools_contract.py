@@ -10,6 +10,7 @@ from lkap_contracts.agent_config import AgentConfig, ToolsConfig, VoiceConfig
 from lkap_contracts.export import EXPORTED_MODELS
 from lkap_contracts.flow import edge_tool_name
 from lkap_contracts.packs import ToolMeta
+from lkap_contracts.tool_providers import ROUTER_CONNECTION_TOOLS, ROUTER_EXECUTE_TOOLS
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     BLOCK_TOOL_NAMES,
@@ -165,7 +166,9 @@ def test_backgroundable_builtins_are_builtins() -> None:
 
 
 def test_every_never_list_name_is_a_real_tool_name() -> None:
-    real = frozenset(BUILTIN_TOOL_NAMES) | frozenset(BLOCK_TOOL_NAMES) | TELEPHONY_TOOL_NAMES
+    # V5-47: the Composio tool finder's execute and connection meta tools (COMPOSIO.md D-V5-C7).
+    router = frozenset(ROUTER_EXECUTE_TOOLS) | frozenset(ROUTER_CONNECTION_TOOLS)
+    real = frozenset(BUILTIN_TOOL_NAMES) | frozenset(BLOCK_TOOL_NAMES) | TELEPHONY_TOOL_NAMES | router
     assert real >= NEVER_BACKGROUND_TOOLS
 
 

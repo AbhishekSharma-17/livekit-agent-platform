@@ -13,7 +13,7 @@ export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNo
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ToolDefinition".
  */
-export type ToolDefinition = HttpToolDefinition | McpServerDefinition;
+export type ToolDefinition = HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
 
 export interface LkapContracts {
   ActivityEvent?: ActivityEvent;
@@ -41,6 +41,8 @@ export interface LkapContracts {
   AppKeyTestIn?: AppKeyTestIn;
   AppKeyTestOut?: AppKeyTestOut;
   AppReconnectIn?: AppReconnectIn;
+  AppsMode?: AppsMode;
+  AppsRouterOptions?: AppsRouterOptions;
   AppsStatusOut?: AppsStatusOut;
   AvatarOptions?: AvatarOptions;
   BlockRequestPayload?: BlockRequestPayload;
@@ -112,6 +114,7 @@ export interface LkapContracts {
   KbSearchResponse?: KbSearchResponse;
   KbSeed?: KbSeed;
   McpServerDefinition?: McpServerDefinition;
+  McpServerOrigin?: McpServerOrigin;
   Me?: Me;
   ModelCapabilities?: ModelCapabilities;
   ModelIdRules?: ModelIdRules;
@@ -139,6 +142,7 @@ export interface LkapContracts {
   ProviderOut?: ProviderOut;
   ProviderSettingsIn?: ProviderSettingsIn;
   ProviderSpec?: ProviderSpec;
+  ProviderToolDefinition?: ProviderToolDefinition;
   ProvidersResponse?: ProvidersResponse;
   QaConfig?: QaConfig;
   QaNode?: QaNode;
@@ -637,6 +641,7 @@ export interface TransferTarget {
  * via the `definition` "ToolsConfig".
  */
 export interface ToolsConfig {
+  apps?: AppsMode;
   builtin_disabled?: string[];
   builtin_execution?: {
     [k: string]: ToolExecution;
@@ -645,6 +650,50 @@ export interface ToolsConfig {
   http_request_enabled?: boolean;
   max_tool_steps?: number;
   tool_ids?: string[];
+}
+/**
+ * ``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).
+ *
+ * The default ``off`` changes nothing for an agent saved before this field existed.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppsMode".
+ */
+export interface AppsMode {
+  /**
+   * Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent
+   *
+   * @maxItems 50
+   */
+  allowed_toolkits?: string[];
+  /**
+   * Actions the app server or tool finder must never run (action slugs)
+   *
+   * @maxItems 500
+   */
+  denied_actions?: string[];
+  mode?: "actions" | "server" | "router" | "off";
+  router?: AppsRouterOptions;
+}
+/**
+ * What the tool finder may do (D-V5-C7).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppsRouterOptions".
+ */
+export interface AppsRouterOptions {
+  /**
+   * Let the agent run the actions it found
+   */
+  execute?: boolean;
+  /**
+   * Let the agent offer a sign-in link for an app that is not connected yet (text and web chats only: a phone caller cannot open a link)
+   */
+  manage_connections?: boolean;
+  /**
+   * Let the agent look actions up during the conversation
+   */
+  search?: boolean;
 }
 /**
  * How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).
@@ -864,9 +913,8 @@ export interface AppActionPage {
 /**
  * ``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.
  *
- * Until the ``provider`` tool kind exists (V5-47) the picks are stored on the
- * connection and returned; V5-47 turns them into tools (attached to
- * ``agent_id`` when given).
+ * The picks are stored on the connection and each becomes a ``provider`` tool
+ * (one per action, reused when it exists), attached to ``agent_id`` when given.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AppActionsPickIn".
@@ -895,9 +943,13 @@ export interface AppActionsPickOut {
   connection_id: string;
   picked_actions: string[];
   /**
-   * Tool ids created (empty until V5-47 lands)
+   * Ids of the agent tools created for the picked actions
    */
   tools_created?: string[];
+  /**
+   * Ids of tools that already existed for picked actions
+   */
+  tools_existing?: string[];
 }
 /**
  * One field the Connect dialog asks for (never a stored value).
@@ -1980,12 +2032,24 @@ export interface McpServerDefinition {
   };
   kind?: "mcp";
   name: string;
+  origin?: McpServerOrigin | null;
   sse_read_timeout_s?: number;
   timeout_s?: number;
   tool_options?: {
     [k: string]: ToolExecution;
   };
   url: string;
+}
+/**
+ * Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpServerOrigin".
+ */
+export interface McpServerOrigin {
+  kind: "server" | "router";
+  provider?: "composio";
+  remote_id: string;
 }
 /**
  * ``GET /v1/auth/me``.
@@ -2620,6 +2684,45 @@ export interface ProviderSpec {
   worker_image?: "slim" | "full" | "isolated";
 }
 /**
+ * One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).
+ *
+ * Created by materialisation (``POST /v1/tool-providers/composio/materialise``): the
+ * parameters are pinned from the provider's schema at import, the description is its first
+ * sentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``
+ * on the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``
+ * placeholder that the api substitutes from ``credential_id`` when a session resolves, as
+ * for HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's
+ * ``user_id`` copied from it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderToolDefinition".
+ */
+export interface ProviderToolDefinition {
+  connected_account_id?: string | null;
+  connection_id: string;
+  credential_id?: string | null;
+  description: string;
+  execution?: ToolExecution;
+  headers?: {
+    [k: string]: string;
+  };
+  kind?: "provider";
+  max_result_chars?: number;
+  name: string;
+  parameters: {
+    [k: string]: unknown;
+  };
+  provider?: "composio";
+  result_path?: string | null;
+  risk?: "read" | "write" | "destructive";
+  schema_version?: string | null;
+  silent_reply?: boolean;
+  subject: string;
+  timeout_s?: number;
+  tool_slug: string;
+  toolkit?: string;
+}
+/**
  * ``GET /v1/providers``.
  *
  * ``v=2`` (V2-06): ``providers`` carries the enriched :class:`ProviderOut`
@@ -2750,7 +2853,7 @@ export interface ResolvedAgentConfig {
     [k: string]: ResolvedProvider;
   };
   session_id: string;
-  tools: (HttpToolDefinition | McpServerDefinition)[];
+  tools: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition)[];
   ui_panel_id: string;
   v?: 2;
   variables?: {
@@ -3259,9 +3362,9 @@ export interface TemplatesResponse {
  */
 export interface ToolCreate {
   agent_id?: string | null;
-  definition: HttpToolDefinition | McpServerDefinition;
+  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
   enabled?: boolean;
-  kind: "http" | "mcp";
+  kind: "http" | "mcp" | "provider";
   name: string;
 }
 /**
@@ -3308,10 +3411,10 @@ export interface ToolMeta {
 export interface ToolOut {
   agent_id?: string | null;
   created_at: string;
-  definition: HttpToolDefinition | McpServerDefinition;
+  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
   enabled?: boolean;
   id: string;
-  kind: "http" | "mcp";
+  kind: "http" | "mcp" | "provider";
   name: string;
   updated_at: string;
 }

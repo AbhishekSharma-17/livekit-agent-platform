@@ -167,6 +167,17 @@
           "title": "Name",
           "type": "string"
         },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpServerOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "sse_read_timeout_s": {
           "default": 300,
           "title": "Sse Read Timeout S",
@@ -195,6 +206,184 @@
         "url"
       ],
       "title": "McpServerDefinition",
+      "type": "object"
+    },
+    "McpServerOrigin": {
+      "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "server",
+            "router"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "remote_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Remote Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "remote_id"
+      ],
+      "title": "McpServerOrigin",
+      "type": "object"
+    },
+    "ProviderToolDefinition": {
+      "description": "One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).\n\nCreated by materialisation (``POST /v1/tool-providers/composio/materialise``): the\nparameters are pinned from the provider's schema at import, the description is its first\nsentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``\non the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``\nplaceholder that the api substitutes from ``credential_id`` when a session resolves, as\nfor HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's\n``user_id`` copied from it.",
+      "properties": {
+        "connected_account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connected Account Id"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ToolExecution"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "provider",
+          "default": "provider",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 1500,
+          "maximum": 20000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "result_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "data",
+          "title": "Result Path"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write",
+            "destructive"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "silent_reply": {
+          "default": false,
+          "title": "Silent Reply",
+          "type": "boolean"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 10,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool_slug": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "toolkit": {
+          "default": "",
+          "title": "Toolkit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "parameters",
+        "tool_slug",
+        "connection_id",
+        "subject"
+      ],
+      "title": "ProviderToolDefinition",
       "type": "object"
     },
     "ToolExecution": {
@@ -338,7 +527,8 @@
           "discriminator": {
             "mapping": {
               "http": "#/$defs/HttpToolDefinition",
-              "mcp": "#/$defs/McpServerDefinition"
+              "mcp": "#/$defs/McpServerDefinition",
+              "provider": "#/$defs/ProviderToolDefinition"
             },
             "propertyName": "kind"
           },
@@ -348,6 +538,9 @@
             },
             {
               "$ref": "#/$defs/McpServerDefinition"
+            },
+            {
+              "$ref": "#/$defs/ProviderToolDefinition"
             }
           ],
           "title": "Definition"
@@ -364,7 +557,8 @@
         "kind": {
           "enum": [
             "http",
-            "mcp"
+            "mcp",
+            "provider"
           ],
           "title": "Kind",
           "type": "string"

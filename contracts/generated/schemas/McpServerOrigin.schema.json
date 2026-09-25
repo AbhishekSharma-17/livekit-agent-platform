@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/McpServerOrigin.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
+  "properties": {
+    "kind": {
+      "enum": [
+        "server",
+        "router"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "provider": {
+      "const": "composio",
+      "default": "composio",
+      "title": "Provider",
+      "type": "string"
+    },
+    "remote_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Remote Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "remote_id"
+  ],
+  "title": "McpServerOrigin",
+  "type": "object"
+}

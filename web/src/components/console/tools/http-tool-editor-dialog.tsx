@@ -35,17 +35,19 @@ type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 /**
- * Background-tool execution policy (BACKGROUND-TOOLS.md §2, §7). The
- * contract's `mode`/`cancellable`/`on_duplicate` are nullable ("agent
- * decides"); the editor spells that out as an explicit "Default" option
- * rather than guessing a value, so an untouched tool keeps posting `null`
- * and inherits the worker's per-method default (R-V4-36 / D-V4-32).
+ * Background-tool execution policy. The contract's `mode`/`cancellable`/
+ * `on_duplicate` are nullable ("agent decides"); the editor spells each out
+ * as an explicit "Default" option rather than guessing a value, so an
+ * untouched tool keeps posting `null` and a GET tool keeps inheriting the
+ * agent's "Read tools run" setting (a POST/PUT/PATCH/DELETE tool still always
+ * blocks unless a mode is chosen explicitly).
  */
+type ModeDraft = "default" | "blocking" | "background" | "auto";
 type CancellableDraft = "default" | "true" | "false";
 type DuplicateDraft = "default" | "allow" | "reject" | "replace" | "confirm";
 
 interface ExecutionDraft {
-  mode: "blocking" | "background" | "auto";
+  mode: ModeDraft;
   announce: string;
   auto_threshold_ms: number;
   /** One filler phrase per line; ≤ 5 lines kept (`ToolExecution.fillers`, `max_length=5`). */
@@ -58,7 +60,7 @@ interface ExecutionDraft {
 }
 
 const DEFAULT_EXECUTION_DRAFT: ExecutionDraft = {
-  mode: "blocking",
+  mode: "default",
   announce: "",
   auto_threshold_ms: 700,
   fillersText: "",
@@ -80,7 +82,7 @@ function fillersFromText(text: string): string[] {
 function executionDraftFromValue(execution: ToolExecution | undefined): ExecutionDraft {
   if (!execution) return DEFAULT_EXECUTION_DRAFT;
   return {
-    mode: execution.mode ?? "blocking",
+    mode: execution.mode ?? "default",
     announce: execution.announce ?? "",
     auto_threshold_ms: execution.auto_threshold_ms ?? 700,
     fillersText: (execution.fillers ?? []).join("\n"),
@@ -98,7 +100,7 @@ function executionDraftFromValue(execution: ToolExecution | undefined): Executio
 
 function executionFromDraft(draft: ExecutionDraft): ToolExecution {
   return {
-    mode: draft.mode,
+    mode: draft.mode === "default" ? null : draft.mode,
     announce: draft.announce.trim() === "" ? null : draft.announce,
     auto_threshold_ms: draft.auto_threshold_ms,
     fillers: fillersFromText(draft.fillersText) as ToolExecution["fillers"],
@@ -109,6 +111,11 @@ function executionFromDraft(draft: ExecutionDraft): ToolExecution {
     duplicate_scope: "name_and_args",
     max_duration_s: draft.max_duration_s,
   };
+}
+
+/** An explicit choice of "In the background" or "Automatic" — not "Default" (inherits the agent setting) or "Blocking". */
+function isNonBlocking(mode: ModeDraft): boolean {
+  return mode === "background" || mode === "auto";
 }
 
 /** The api validator's exact wording (`config_service.py::tool_execution_issues`). */
@@ -249,7 +256,7 @@ export function HttpToolEditorDialog({
       nextErrors.allowed_hosts = "Required — an empty list blocks every call.";
     }
 
-    if (draft.silent_reply && draft.execution.mode !== "blocking") {
+    if (draft.silent_reply && isNonBlocking(draft.execution.mode)) {
       nextErrors.execution = silentReplyConflictMessage(draft.name);
     }
 
@@ -297,7 +304,7 @@ export function HttpToolEditorDialog({
 
   const pending = createTool.isPending || updateTool.isPending;
   // Live, not just on submit (BACKGROUND-TOOLS.md §7): flipping either control disables Save at once.
-  const executionConflict = draft.silent_reply && draft.execution.mode !== "blocking";
+  const executionConflict = draft.silent_reply && isNonBlocking(draft.execution.mode);
   const executionConflictMessage = executionConflict ? silentReplyConflictMessage(draft.name) : undefined;
   const isRead = draft.method === "GET";
 
@@ -459,17 +466,27 @@ export function HttpToolEditorDialog({
                     onChange={(e) => setDraft((d) => ({ ...d, max_result_chars: Number(e.target.value) }))}
                   />
                 </Field>
-                <Field label="Runs" htmlFor={`${uid}-execution-mode`} error={executionConflictMessage}>
+                <Field
+                  label="Runs"
+                  htmlFor={`${uid}-execution-mode`}
+                  error={executionConflictMessage}
+                  hint={
+                    isRead
+                      ? 'Left at "Agent default", this follows the agent\'s "Read tools run" setting (Instructions & voice → Conversation).'
+                      : 'This tool changes something, so "Agent default" always blocks; choose a mode below to change that.'
+                  }
+                >
                   <Select
                     value={draft.execution.mode}
                     onValueChange={(v) =>
-                      setDraft((d) => ({ ...d, execution: { ...d.execution, mode: v as ExecutionDraft["mode"] } }))
+                      setDraft((d) => ({ ...d, execution: { ...d.execution, mode: v as ModeDraft } }))
                     }
                   >
                     <SelectTrigger id={`${uid}-execution-mode`} className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="default">Agent default</SelectItem>
                       <SelectItem value="blocking">Blocking</SelectItem>
                       <SelectItem value="background">In the background</SelectItem>
                       <SelectItem value="auto">Automatic</SelectItem>
@@ -495,15 +512,15 @@ export function HttpToolEditorDialog({
             <section className="flex flex-col gap-4 border-t border-border pt-5">
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Execution</h3>
               <p className="text-[0.8125rem] text-muted-foreground">
-                How this tool behaves while it runs (BACKGROUND-TOOLS.md §2). &quot;Blocking&quot; waits for the result before
-                the agent replies; the other modes let the agent keep talking.
+                How this tool behaves while it runs. &quot;Blocking&quot; waits for the result before the agent
+                replies; the other modes let the agent keep talking.
               </p>
               {!isRead ? (
                 <p className="text-[0.8125rem] text-muted-foreground">
                   This tool changes something; the agent asks before running it twice.
                 </p>
               ) : null}
-              {draft.execution.mode !== "blocking" ? (
+              {isNonBlocking(draft.execution.mode) ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="What the agent says first"

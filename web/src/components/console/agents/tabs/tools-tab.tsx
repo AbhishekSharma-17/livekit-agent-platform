@@ -4,7 +4,7 @@ import * as React from "react";
 import { Controller, useFormContext } from "react-hook-form";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
 
-import { Field } from "@/components/shared/field";
+import { Field, fieldIds } from "@/components/shared/field";
 import { Section, SectionRow } from "@/components/shared/section";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
@@ -46,15 +46,29 @@ const BUILTIN_GROUPS: { label: string; tools: string[] }[] = [
 /** `BACKGROUNDABLE_BUILTINS` (BACKGROUND-TOOLS.md §3) — everything else always blocks. */
 const BUILTINS_WITH_EXECUTION = new Set(["search_knowledge", "http_request", "describe_current_frame"]);
 
+/** Below this, a chain of background announcements can exhaust the tool-steps budget (api's `MIN_TOOL_STEPS_FOR_BACKGROUND`, R-V4-35). */
+const MIN_TOOL_STEPS_FOR_BACKGROUND = 4;
+
 export function ToolsTab({ agent }: { agent: AgentOut }) {
   const maxToolStepsId = React.useId();
   const { control, watch, setValue } = useFormContext<AgentEditorForm>();
   const toolIds = watch("config.tools.tool_ids");
   const builtinDisabled = watch("config.tools.builtin_disabled");
   const builtinExecution = watch("config.tools.builtin_execution");
+  const executionDefault = watch("config.tools.execution_default");
+  const maxToolSteps = watch("config.tools.max_tool_steps");
   const kbIds = watch("config.knowledge.kb_ids");
   const camera = watch("config.capabilities.camera");
   const screenShare = watch("config.capabilities.screen_share");
+  // Instructions & voice's Conversation card shows the same warning; a
+  // server-issued `tools.max_tool_steps` issue routes to this section
+  // (`builtin-sections.tsx`), so this is the field `focusFieldFor` actually
+  // needs to reach — auto-open Advanced so it is visible and focusable.
+  const stepsWarning = executionDefault !== "blocking" && maxToolSteps < MIN_TOOL_STEPS_FOR_BACKGROUND;
+  const [advancedOpen, setAdvancedOpen] = React.useState(stepsWarning);
+  React.useEffect(() => {
+    if (stepsWarning) setAdvancedOpen(true);
+  }, [stepsWarning]);
 
   const ownToolsQuery = useTools(agent.id);
   const allToolsQuery = useTools();
@@ -169,7 +183,12 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                 control={control}
                 name="config.tools.http_request_enabled"
                 render={({ field }) => (
-                  <Switch id="http-request-enabled" checked={field.value} onCheckedChange={field.onChange} />
+                  <Switch
+                    id="http-request-enabled"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    aria-describedby={fieldIds("http-request-enabled").hint}
+                  />
                 )}
               />
             </div>
@@ -177,7 +196,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
         </SectionRow>
 
         <SectionRow>
-          <Collapsible>
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger
               className={cn(
                 "group/more inline-flex items-center gap-1 rounded-xs text-[0.8125rem] font-medium text-muted-foreground outline-none",
@@ -194,7 +213,11 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
               <Field
                 label="Tool steps per turn"
                 htmlFor={maxToolStepsId}
-                hint="How many tool calls the model may chain before it must reply."
+                hint={
+                  stepsWarning
+                    ? `Read tools run "${executionDefault}" and each announcement spends a step; use ${MIN_TOOL_STEPS_FOR_BACKGROUND} or more.`
+                    : "How many tool calls the model may chain before it must reply."
+                }
               >
                 <Controller
                   control={control}
@@ -207,6 +230,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                       className="w-32"
                       value={field.value}
                       onChange={(event) => field.onChange(Number(event.target.value))}
+                      data-issue-path="tools.max_tool_steps"
                     />
                   )}
                 />
@@ -400,6 +424,7 @@ function BuiltinToolRow({
             checked={checked && !disabledReason}
             disabled={Boolean(disabledReason)}
             onCheckedChange={onCheckedChange}
+            aria-describedby={fieldIds(id).hint}
           />
         </div>
       </Field>

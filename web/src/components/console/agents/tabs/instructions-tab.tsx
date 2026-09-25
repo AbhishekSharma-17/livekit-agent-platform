@@ -306,8 +306,14 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
             )}
           />
           {stepsWarning ? (
+            // A server-issued `tools.max_tool_steps` issue routes to the Tools
+            // section (`builtin-sections.tsx`'s `issuePaths`), whose own field
+            // carries the same `data-issue-path` and is what actually receives
+            // focus; `tabIndex` here only makes this local hint focusable too,
+            // in case it is ever reached directly.
             <p
               data-issue-path="tools.max_tool_steps"
+              tabIndex={-1}
               className="text-[0.8125rem] text-warning-text"
             >
               Read tools run &quot;{executionDefault}&quot; and each announcement spends a tool step; with{" "}

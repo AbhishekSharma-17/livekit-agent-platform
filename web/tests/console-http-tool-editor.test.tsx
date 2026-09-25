@@ -156,6 +156,32 @@ describe("HttpToolEditorDialog", () => {
       fireEvent.change(getByLabelText(/Allowed hosts/), { target: { value: "api.example.com" } });
     }
 
+    it('leaves an untouched GET tool at "Agent default" and posts execution.mode: null', async () => {
+      // A tool whose console draft never touches "Runs" must not pin mode to
+      // "blocking" — that would silently override the agent's "Read tools
+      // run" setting for every GET tool ever saved through this editor.
+      const fetchMock = stubFetch();
+      const onSaved = vi.fn();
+      const { getByText, getByLabelText } = renderWithClient(
+        <HttpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={onSaved} trigger={<button>New HTTP tool</button>} />,
+      );
+      fireEvent.click(getByText("New HTTP tool"));
+      fillBasics(getByLabelText);
+
+      fireEvent.click(getByLabelText("Method"));
+      await pickOption("GET");
+
+      expect((getByLabelText("Runs") as HTMLElement).textContent).toContain("Agent default");
+
+      fireEvent.click(getByText("Save tool"));
+      await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+      const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+      const [, init] = calls.find(([url]) => !url.includes("auth/me")) as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as { definition: { execution: { mode: unknown } } };
+      expect(body.definition.execution.mode).toBeNull();
+    });
+
     it('choosing "Automatic" shows the threshold field with 700', async () => {
       stubFetch();
       const { getByText, getByLabelText } = renderWithClient(

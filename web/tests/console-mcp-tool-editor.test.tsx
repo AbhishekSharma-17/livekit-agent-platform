@@ -113,6 +113,37 @@ describe("McpToolEditorDialog", () => {
     expect(body.definition.tool_options.a.report_progress).toBe(true);
   });
 
+  it("drops a stale free-text row's override once allowed_tools narrows past it", async () => {
+    // A row added while allowed_tools was empty, then hidden by narrowing
+    // allowed_tools, must not still post an override the api would reject
+    // ("not one of this server's allowed_tools").
+    const fetchMock = stubFetch();
+    const onSaved = vi.fn();
+    const { getByText, getByLabelText, getByPlaceholderText } = renderWithClient(
+      <McpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={onSaved} trigger={<button>New MCP server</button>} />,
+    );
+    fireEvent.click(getByText("New MCP server"));
+    fireEvent.change(getByLabelText("Name"), { target: { value: "billing" } });
+    fireEvent.change(getByLabelText("URL"), { target: { value: "https://mcp.example.com/stream" } });
+
+    fireEvent.change(getByPlaceholderText("tool_name"), { target: { value: "stale_tool" } });
+    fireEvent.click(getByText("Add"));
+    expect(await screen.findByText("stale_tool")).toBeTruthy();
+    fireEvent.click(await screen.findByLabelText("stale_tool — announce progress"));
+
+    // Narrowing allowed_tools now hides the row from the table.
+    fireEvent.change(getByLabelText("Allowed tools"), { target: { value: "a" } });
+    expect(screen.queryByText("stale_tool")).toBeNull();
+
+    fireEvent.click(getByText("Save server"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const [, init] = calls.find(([url]) => !url.includes("auth/me")) as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { definition: { tool_options: Record<string, unknown> } };
+    expect(Object.keys(body.definition.tool_options)).toEqual([]);
+  });
+
   it("lets a free-text row be added and removed when allowed_tools is empty", async () => {
     stubFetch();
     const { getByText, getByPlaceholderText } = renderWithClient(

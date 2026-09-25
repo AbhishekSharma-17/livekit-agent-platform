@@ -26,15 +26,19 @@ import {
 import type { ToolExecution } from "@/contracts/lkap-contracts";
 
 /**
- * Background-tool execution policy for one built-in (BACKGROUND-TOOLS.md §2,
- * §7). Mirrors `http-tool-editor-dialog.tsx`'s draft shape (kept local, not
- * shared — the card grants this file but not a new shared module).
+ * Background-tool execution policy for one built-in. Mirrors
+ * `http-tool-editor-dialog.tsx`'s draft shape (kept local, not shared — the
+ * card grants this file but not a new shared module). `mode` defaults to
+ * "Agent default" (posts `null`), not "Blocking": an untouched built-in must
+ * keep inheriting the agent's "Read tools run" setting, the same reasoning
+ * as the HTTP editor's "Runs" field.
  */
+type ModeDraft = "default" | "blocking" | "background" | "auto";
 type CancellableDraft = "default" | "true" | "false";
 type DuplicateDraft = "default" | "allow" | "reject" | "replace" | "confirm";
 
 export interface ExecutionDraft {
-  mode: "blocking" | "background" | "auto";
+  mode: ModeDraft;
   announce: string;
   auto_threshold_ms: number;
   fillersText: string;
@@ -46,7 +50,7 @@ export interface ExecutionDraft {
 }
 
 const DEFAULT_EXECUTION_DRAFT: ExecutionDraft = {
-  mode: "blocking",
+  mode: "default",
   announce: "",
   auto_threshold_ms: 700,
   fillersText: "",
@@ -56,6 +60,11 @@ const DEFAULT_EXECUTION_DRAFT: ExecutionDraft = {
   on_duplicate: "default",
   max_duration_s: 60,
 };
+
+/** An explicit choice of "In the background" or "Automatic" — not "Default" (inherits the agent setting) or "Blocking". */
+function isNonBlocking(mode: ModeDraft): boolean {
+  return mode === "background" || mode === "auto";
+}
 
 function fillersFromText(text: string): string[] {
   return text
@@ -68,7 +77,7 @@ function fillersFromText(text: string): string[] {
 export function executionDraftFromValue(execution: ToolExecution | undefined): ExecutionDraft {
   if (!execution) return DEFAULT_EXECUTION_DRAFT;
   return {
-    mode: execution.mode ?? "blocking",
+    mode: execution.mode ?? "default",
     announce: execution.announce ?? "",
     auto_threshold_ms: execution.auto_threshold_ms ?? 700,
     fillersText: (execution.fillers ?? []).join("\n"),
@@ -87,7 +96,7 @@ export function executionDraftFromValue(execution: ToolExecution | undefined): E
 
 export function executionFromDraft(draft: ExecutionDraft): ToolExecution {
   return {
-    mode: draft.mode,
+    mode: draft.mode === "default" ? null : draft.mode,
     announce: draft.announce.trim() === "" ? null : draft.announce,
     auto_threshold_ms: draft.auto_threshold_ms,
     fillers: fillersFromText(draft.fillersText) as ToolExecution["fillers"],
@@ -147,21 +156,19 @@ export function BuiltinExecutionDialog({
           <DialogHeader>
             <DialogTitle>Execution — {label}</DialogTitle>
             <DialogDescription id={`${uid}-description`}>
-              How &quot;{label}&quot; behaves while it runs (BACKGROUND-TOOLS.md §2). Overrides the agent&apos;s
-              &quot;Read tools run&quot; default for this built-in only.
+              How &quot;{label}&quot; behaves while it runs. Left at &quot;Agent default&quot;, it follows the
+              agent&apos;s &quot;Read tools run&quot; setting (Instructions & voice → Conversation).
             </DialogDescription>
           </DialogHeader>
 
           <DialogBody className="gap-4">
             <Field label="Runs" htmlFor={`${uid}-mode`}>
-              <Select
-                value={draft.mode}
-                onValueChange={(v) => setDraft((d) => ({ ...d, mode: v as ExecutionDraft["mode"] }))}
-              >
+              <Select value={draft.mode} onValueChange={(v) => setDraft((d) => ({ ...d, mode: v as ModeDraft }))}>
                 <SelectTrigger id={`${uid}-mode`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="default">Agent default</SelectItem>
                   <SelectItem value="blocking">Blocking — wait for the result</SelectItem>
                   <SelectItem value="background">In the background — always</SelectItem>
                   <SelectItem value="auto">Automatic — background only if slow</SelectItem>
@@ -169,7 +176,7 @@ export function BuiltinExecutionDialog({
               </Select>
             </Field>
 
-            {draft.mode !== "blocking" ? (
+            {isNonBlocking(draft.mode) ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="What the agent says first"

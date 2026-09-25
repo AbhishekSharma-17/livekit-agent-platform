@@ -187,4 +187,29 @@ describe("ToolsTab", () => {
       expect(latest?.config.tools.builtin_execution.search_knowledge?.auto_threshold_ms).toBe(700);
     });
   });
+
+  describe("max_tool_steps warning (V4-13, BACKGROUND-TOOLS.md §7, R-V4-35)", () => {
+    const AGENT_LOW_STEPS = {
+      ...AGENT,
+      config: { ...AGENT.config, tools: { execution_default: "auto" as const, max_tool_steps: 3 } },
+    } as AgentOut;
+
+    it('auto-opens Advanced and marks the field with data-issue-path="tools.max_tool_steps" (a server issue at that path routes to this section)', async () => {
+      stubFetch();
+      const { container } = render(<Harness agent={AGENT_LOW_STEPS} />);
+      await screen.findByText("custom_pack_tool");
+
+      // No manual "Advanced" click needed — the field must be reachable for focusFieldFor to find it.
+      const input = await waitFor(() => screen.getByLabelText("Tool steps per turn") as HTMLInputElement);
+      expect(input.getAttribute("data-issue-path")).toBe("tools.max_tool_steps");
+      expect(container.querySelector('[data-issue-path="tools.max_tool_steps"]')).toBe(input);
+    });
+
+    it("stays collapsed when the default is blocking", async () => {
+      stubFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+      expect(screen.queryByLabelText("Tool steps per turn")).toBeNull();
+    });
+  });
 });

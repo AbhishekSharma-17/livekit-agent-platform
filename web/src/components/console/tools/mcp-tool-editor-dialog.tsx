@@ -208,6 +208,10 @@ export function McpToolEditorDialog({
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+    // A stale free-text row from before `allowed_tools` was narrowed would
+    // otherwise still post an override for a name the server rejects
+    // ("not one of this server's allowed_tools").
+    const validOptionNames = allowedTools.length > 0 ? new Set(allowedTools) : null;
 
     const definition: McpServerDefinition = {
       kind: "mcp",
@@ -220,7 +224,9 @@ export function McpToolEditorDialog({
       sse_read_timeout_s: draft.sse_read_timeout_s,
       // Only rows the admin touched (D-V4-32: an unedited row means "no override").
       tool_options: Object.fromEntries(
-        Object.entries(toolOptions).map(([name, option]) => [name, executionFromMcpOption(option)]),
+        Object.entries(toolOptions)
+          .filter(([name]) => !validOptionNames || validOptionNames.has(name))
+          .map(([name, option]) => [name, executionFromMcpOption(option)]),
       ),
     };
 
@@ -308,9 +314,7 @@ export function McpToolEditorDialog({
             </Field>
 
             <div className="flex flex-col gap-2 border-t border-border pt-4">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">
-                How each tool runs (BACKGROUND-TOOLS.md §2)
-              </h3>
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">How each tool runs</h3>
               <p className="text-[0.8125rem] text-muted-foreground">
                 Left at &quot;Blocking&quot; until edited — an MCP tool never runs in the background unless it opts in here.
               </p>
@@ -351,6 +355,11 @@ export function McpToolEditorDialog({
                               checked={option.report_progress}
                               onCheckedChange={(v) => patchOption(name, { report_progress: v })}
                             />
+                            {option.mode !== "blocking" && !option.report_progress ? (
+                              <p className="mt-1 max-w-40 text-[0.6875rem] leading-tight text-warning-text">
+                                No progress messages — the agent won&apos;t announce this tool.
+                              </p>
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             <Select

@@ -30,6 +30,7 @@ from lkap_api.bootstrap import bootstrap
 from lkap_api.custom_models.router import router as model_test_router
 from lkap_api.db.session import Database
 from lkap_api.errors import ApiError
+from lkap_api.jobs.handlers import load_all_handlers
 from lkap_api.logging import configure_logging, get_logger
 from lkap_api.packs import router as packs_router
 from lkap_api.routers import (
@@ -268,6 +269,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """
     resolved = settings or get_settings()
     configure_logging(level=resolved.log_level, json_output=resolved.log_json)
+    # ask #25: register every job kind's handler explicitly, the same call the
+    # `arq` worker makes, instead of relying on every router below happening to
+    # import the right handler modules as a side effect.
+    load_all_handlers()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

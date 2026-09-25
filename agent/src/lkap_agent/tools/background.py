@@ -20,8 +20,9 @@ returns immediately; this runner does the actual work as a session-scoped
   - *routine*: `agent.update_chat_ctx(agent.chat_ctx.copy() + assistant note)`,
     so the model sees it on its next turn.
 
-  Realtime's `reply_required=False` silencing (`FunctionCallOutput`, read only
-  by realtime models per the `function_tools_executed` event) and cascaded's
+  The `reply_required=False` silencing (`FunctionCallOutput`, honoured by
+  realtime models, and by the cascaded pipeline from livekit-agents 1.8.3, per
+  the `function_tools_executed` event) and cascaded's
   "one short acknowledgement clause" are both properties of what the *tool
   function* returns, not of this runner — see docs/ARCHITECTURE.md §7.2.
 

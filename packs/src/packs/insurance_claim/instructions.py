@@ -77,9 +77,11 @@ two sentences and tell the claimant an adjuster will be in touch.
 """.strip()
 
 #: Appended to ``SYSTEM_INSTRUCTION`` only in cascaded pipeline mode
-#: (docs/INSURANCE_PACK_MAPPING.md parity note #1): a cascaded LLM always
-#: voices a tool's return value, unlike a realtime model that can stay silent,
-#: so it needs telling to keep that voiced acknowledgement short.
+#: (docs/INSURANCE_PACK_MAPPING.md parity note #1): a cascaded LLM voices a
+#: tool's return value unless the tool is `silent_reply` (`reply_required` is
+#: honoured by realtime models, and by the cascaded pipeline from livekit-agents
+#: 1.8.3); none of this pack's tools is, so it needs telling to keep that voiced
+#: acknowledgement short.
 CASCADED_MODE_ADDENDUM = """
 Pipeline note: you always say something out loud right after calling a background
 tool, even before it finishes. Keep that acknowledgement to one short clause, for

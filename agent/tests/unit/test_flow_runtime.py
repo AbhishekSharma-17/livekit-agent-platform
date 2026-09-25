@@ -880,3 +880,125 @@ async def test_a_flow_steps_block_and_a_flow_progress_block_both_follow_the_flow
     assert [s["status"] for s in latest("steps")["steps"]] == ["done", "done"]
     assert latest("progress")["disposition"] == "completed"
     assert not any(bid == "mine" for bid, _ in ui.blocks)
+
+
+# ---------------------------- V4-21: an HTTP tool's silent_reply on flow agents (R-V4-71, ask #170)
+
+
+NARRATION = "Your status came back as saved."
+
+
+def _silent_http_row() -> Any:
+    from lkap_contracts.tools import HttpToolDefinition  # noqa: PLC0415
+
+    return HttpToolDefinition(
+        name="push_status",
+        description="Record the caller's status.",
+        parameters={"type": "object", "properties": {}},
+        method="GET",
+        url="https://api.example.com/status",
+        allowed_hosts=["api.example.com"],
+        silent_reply=True,
+    )
+
+
+def _push_status_tool(calls: list[str]) -> Any:
+    """Stands in for the declarative HTTP tool of the same name (the handler works on names)."""
+    from livekit.agents import function_tool  # noqa: PLC0415
+
+    async def _run() -> str:
+        calls.append("push_status")
+        return '{"status": "saved"}'
+
+    return function_tool(_run, name="push_status", description="Record the caller's status.")
+
+
+def _silent_flow_deps(
+    resolved: ResolvedAgentConfig, conversation: llm.LLM[Any], workflow: llm.LLM[Any], calls: list[str]
+) -> tuple[FakeJobContext, RoomlessStarter, Any]:
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        FakeApi(resolved),
+        factory=_FlowFactory(conversation, workflow),
+        session_starter=starter,
+        declarative_tools_builder=lambda _defs: [_push_status_tool(calls)],
+    )
+    return ctx, starter, deps
+
+
+def _silent_flow(*, silent: bool) -> ResolvedAgentConfig:
+    flow = json.loads(json.dumps(INTAKE_FLOW))
+    flow["nodes"][1]["tools"] = ["push_status"]
+    return _flow_config(flow, mode="cascaded", tools=[_silent_http_row()] if silent else [])
+
+
+async def test_assemble_flow_branch_passes_the_silent_http_names_to_the_entry_node() -> None:
+    """Ask #170: `_assemble`'s flow branch hands the names to `FlowServices`; the entry node carries them."""
+    from lkap_contracts.tools import McpServerDefinition  # noqa: PLC0415
+
+    from lkap_agent.flow import prepare_flow_resolved  # noqa: PLC0415
+    from lkap_agent.main import _assemble  # noqa: PLC0415
+    from lkap_agent.session_builder import prepare_resolved  # noqa: PLC0415
+
+    speaking = _silent_http_row().model_copy(update={"name": "lookup_status", "silent_reply": False})
+    mcp = McpServerDefinition(name="crm", url="https://mcp.example.com/mcp")
+    resolved = _flow_config(INTAKE_FLOW, mode="cascaded", tools=[_silent_http_row(), speaking, mcp])
+    ctx, _starter, deps = _silent_flow_deps(resolved, FakeLLM(["Hi"]), FakeLLM(["{}"]), [])
+
+    _plan, agent = _assemble(ctx, deps, prepare_flow_resolved(prepare_resolved(resolved)))
+
+    assert isinstance(agent, FlowNodeAgent)
+    assert agent.runtime.services.silent_reply_tools == frozenset({"push_status"})
+    assert agent._silent_reply_tools == frozenset({"push_status"})
+
+
+@pytest.mark.parametrize(("silent", "narrated"), [(True, False), (False, True)], ids=["silent", "control"])
+async def test_a_silent_http_tool_on_a_flow_node_gets_no_reply_on_1_8_3(
+    monkeypatch: pytest.MonkeyPatch, silent: bool, narrated: bool
+) -> None:
+    """R-V4-71 on flows: a batch of only the silent HTTP tool ends the turn in cascaded mode (1.8.3)."""
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.3")
+    conversation = ScriptedLLM(["Hi, this is intake.", ToolCall("push_status"), NARRATION])
+    calls: list[str] = []
+    ctx, starter, deps = _silent_flow_deps(_silent_flow(silent=silent), conversation, FakeLLM(["{}"]), calls)
+    await run_session(ctx, deps)
+    session = starter.session
+    assert session is not None
+    await _wait_for(lambda: bool(conversation.calls))
+
+    await session.run(user_input="Please update my status.")
+    await asyncio.sleep(0.2)
+
+    assert calls == ["push_status"]
+    assert session.current_agent.id == "collect"
+    assert (f"assistant:{NARRATION}" in _history_kinds(starter)) is narrated
+    assert len(conversation.calls) == (3 if narrated else 2)
+    await ctx.fire_shutdown("done")
+
+
+async def test_the_unhonoured_line_is_logged_once_per_flow_session_below_1_8_3(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Below 1.8.3 every node carries the names, but only the entry node logs; a transition adds none."""
+    import structlog  # noqa: PLC0415
+
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.2")
+    conversation = ScriptedLLM(["Hi, this is intake.", ToolCall("go_to_confirm"), "Is Ada Lovelace right?"])
+    workflow = FakeLLM([json.dumps({"name": "Ada Lovelace"})])
+    ctx, starter, deps = _silent_flow_deps(_silent_flow(silent=True), conversation, workflow, [])
+
+    with structlog.testing.capture_logs() as logs:
+        await run_session(ctx, deps)
+        session = starter.session
+        assert session is not None
+        await session.run(user_input="My name is Ada Lovelace.")
+        await _wait_for(lambda: session.current_agent.id == "confirm")
+
+    confirm = session.current_agent
+    assert isinstance(confirm, FlowNodeAgent)
+    assert "push_status" in confirm._silent_reply_tools
+    unhonoured = [line for line in logs if "silent_reply is not honoured" in str(line.get("event"))]
+    assert len(unhonoured) == 1
+    assert unhonoured[0]["tools"] == ["push_status"]
+    await ctx.fire_shutdown("done")

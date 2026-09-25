@@ -23,7 +23,8 @@ agent_id=None, dry_run_args={...})`:
   rejects an unknown `{{ secret.NAME }}` at save time.
 - `result_path` picks a field out of the response body (dot path); omit it
   to keep the whole (capped) body. `silent_reply=true` means the tool's
-  result updates the UI without the model narrating it back.
+  result updates the UI without the model narrating it back (realtime
+  models; cascaded pipelines from livekit-agents 1.8.3).
 - Passing `dry_run_args` runs the request once immediately and returns a
   `ToolDryRunResult` alongside the created `ToolOut`, so you catch a bad URL
   or template before an agent ever calls it live.

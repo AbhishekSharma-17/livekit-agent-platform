@@ -232,6 +232,8 @@ class FlowServices:
     transfer: TransferHandler | None = None
     #: Seed values (e.g. an outbound call's `variables`).
     initial_variables: Mapping[str, VariableValue] | None = None
+    #: Names of the HTTP tools with `silent_reply=True` (R-V4-71); every node agent gets them.
+    silent_reply_tools: frozenset[str] = frozenset()
 
 
 class FlowRuntime:

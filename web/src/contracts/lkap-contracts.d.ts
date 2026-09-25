@@ -574,6 +574,7 @@ export interface BlockSpec {
 export interface PipelineConfig {
   avatar?: ProviderRef | null;
   avatar_options?: AvatarOptions;
+  conversation_preset?: "patient" | "balanced" | "snappy" | "telephony" | "custom";
   image_gen?: ProviderRef | null;
   llm?: ProviderRef | null;
   mode?: "realtime" | "cascaded" | "half_cascade";
@@ -582,9 +583,12 @@ export interface PipelineConfig {
   stt?: ProviderRef | null;
   tts?: ProviderRef | null;
   turn_detection?: ProviderRef | null;
-  turn_handling?: {
-    [k: string]: unknown;
-  };
+  turn_detector?: TurnDetectorSettings | null;
+  turn_handling?:
+    | TurnHandlingOptions
+    | {
+        [k: string]: unknown;
+      };
   vad?: ProviderRef | null;
   workflow_llm?: ProviderRef | null;
 }
@@ -599,6 +603,87 @@ export interface AvatarOptions {
   max_duration_s?: number | null;
   participant_name?: string;
   video_quality?: ("low" | "medium" | "high" | "very_high") | null;
+}
+/**
+ * ``PipelineConfig.turn_detector``: the end-of-turn model's placement and sensitivity.
+ *
+ * Applies to the LiveKit turn detector (``inference.TurnDetector``, 1.8.3
+ * ``inference/eot/detector.py:35-47``) and to the local plugin model, on top of the
+ * connection's ``turn_detector_mode``: a connection without hosted Inference always
+ * runs the local model, whatever ``mode`` says.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TurnDetectorSettings".
+ */
+export interface TurnDetectorSettings {
+  mode?: ("hosted" | "local") | null;
+  unlikely_threshold?: number | null;
+}
+/**
+ * ``AgentSession(turn_handling=...)`` as the console edits it (SDK ``turn.py:260``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TurnHandlingOptions".
+ */
+export interface TurnHandlingOptions {
+  endpointing?: EndpointingOptions | null;
+  interruption?: InterruptionOptions | null;
+  preemptive_generation?: PreemptiveGenerationOptions | null;
+  turn_detection?: ("stt" | "vad" | "realtime_llm" | "manual") | null;
+  user_turn_limit?: UserTurnLimitOptions | null;
+  [k: string]: unknown;
+}
+/**
+ * When the caller's turn counts as finished (SDK ``EndpointingOptions``, ``turn.py:113``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EndpointingOptions".
+ */
+export interface EndpointingOptions {
+  alpha?: number | null;
+  max_delay?: number | null;
+  min_delay?: number | null;
+  mode?: ("fixed" | "dynamic") | null;
+  [k: string]: unknown;
+}
+/**
+ * How the caller interrupts the agent (SDK ``InterruptionOptions``, ``turn.py:150``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InterruptionOptions".
+ */
+export interface InterruptionOptions {
+  enabled?: boolean | null;
+  false_interruption_timeout?: number | null;
+  min_duration?: number | null;
+  min_words?: number | null;
+  mode?: ("adaptive" | "vad") | null;
+  resume_false_interruption?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * Start the reply before the caller's turn is confirmed (SDK ``turn.py:201``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PreemptiveGenerationOptions".
+ */
+export interface PreemptiveGenerationOptions {
+  enabled?: boolean | null;
+  max_retries?: number | null;
+  max_speech_duration?: number | null;
+  preemptive_tts?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * Stop a caller who talks too long without a reply (SDK ``turn.py:231``; off by default).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UserTurnLimitOptions".
+ */
+export interface UserTurnLimitOptions {
+  max_duration?: number | null;
+  max_words?: number | null;
+  [k: string]: unknown;
 }
 /**
  * Post-call scoring of the session by an LLM judge.
@@ -752,6 +837,7 @@ export interface ToolExecution {
  */
 export interface VoiceConfig {
   allow_interruptions?: boolean;
+  ambient_sound?: string;
   first_speaker?: "agent" | "user";
   greeting?: string;
   greeting_mode?: "say" | "generate";
@@ -2974,6 +3060,10 @@ export interface ProviderOut {
   notes?: string | null;
   package: string;
   /**
+   * A plain-language price line the console shows beside the provider when it is metered outside the price table (V5-07: LiveKit Cloud noise cancellation).
+   */
+  price_note?: string | null;
+  /**
    * Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. `openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows.
    */
   price_ref?: string | null;
@@ -2985,6 +3075,10 @@ export interface ProviderOut {
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
   status?: "mvp" | "deferred";
+  /**
+   * noise_cancellation only (V5-07, D-V5-30): the dotted path of the variant tuned for phone audio. The worker builds it instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset. Unset = the entry has no telephony variant.
+   */
+  telephony_variant?: string | null;
   test?: string | null;
   v?: 1 | 2;
   vendor: string;
@@ -3117,6 +3211,10 @@ export interface ProviderSpec {
   notes?: string | null;
   package: string;
   /**
+   * A plain-language price line the console shows beside the provider when it is metered outside the price table (V5-07: LiveKit Cloud noise cancellation).
+   */
+  price_note?: string | null;
+  /**
    * Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. `openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows.
    */
   price_ref?: string | null;
@@ -3128,6 +3226,10 @@ export interface ProviderSpec {
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
   status?: "mvp" | "deferred";
+  /**
+   * noise_cancellation only (V5-07, D-V5-30): the dotted path of the variant tuned for phone audio. The worker builds it instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset. Unset = the entry has no telephony variant.
+   */
+  telephony_variant?: string | null;
   test?: string | null;
   v?: 1 | 2;
   vendor: string;

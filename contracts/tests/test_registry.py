@@ -538,3 +538,41 @@ def test_the_d_v4_26_entries_name_their_probe(provider_id: str, probe: str) -> N
 
 def test_no_image_entry_has_a_probe() -> None:
     assert [s.id for s in REGISTRY if s.kind == "image_gen" and s.probe] == []
+
+
+# ---------------------------------------------------------------- V5-07 noise-cancellation variants
+
+
+def test_only_noise_cancellation_entries_carry_a_telephony_variant() -> None:
+    carriers = {spec.id for spec in REGISTRY if spec.telephony_variant is not None}
+
+    assert carriers == {"krisp-noise-cancellation", "legacy-noise-cancellation"}
+    assert all(get(provider_id).kind == "noise_cancellation" for provider_id in carriers)
+
+
+def test_telephony_variants_are_dotted_paths_in_the_same_package() -> None:
+    for spec in REGISTRY:
+        if spec.telephony_variant is None:
+            continue
+        assert spec.telephony_variant != spec.python_class
+        module = spec.python_class.rsplit(".", 1)[0]
+        assert spec.telephony_variant.startswith(module + "."), spec.id
+
+
+def test_livekit_cloud_noise_cancellation_names_its_verified_functions() -> None:
+    spec = get("legacy-noise-cancellation")
+
+    assert spec.python_class == "livekit.plugins.noise_cancellation.BVC"
+    assert spec.telephony_variant == "livekit.plugins.noise_cancellation.BVCTelephony"
+    assert spec.capabilities.cloud_only
+    assert spec.requires_credential is False
+    # Not in the worker image yet: offered only once the package ships (docs/v5/_asks.md).
+    assert spec.availability == "deferred"
+
+
+def test_metered_noise_cancellation_entries_show_a_price_note() -> None:
+    for provider_id in ("krisp-noise-cancellation", "legacy-noise-cancellation"):
+        note = get(provider_id).price_note
+        assert note is not None
+        assert "minute" in note
+    assert all(spec.price_note is None for spec in REGISTRY if spec.kind != "noise_cancellation")

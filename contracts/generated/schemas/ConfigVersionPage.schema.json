@@ -115,6 +115,7 @@
           "$ref": "#/$defs/VoiceConfig",
           "default": {
             "allow_interruptions": true,
+            "ambient_sound": "none",
             "first_speaker": "agent",
             "greeting": "Hello! How can I help you today?",
             "greeting_mode": "say",
@@ -576,6 +577,70 @@
       "title": "EndNode",
       "type": "object"
     },
+    "EndpointingOptions": {
+      "additionalProperties": true,
+      "description": "When the caller's turn counts as finished (SDK ``EndpointingOptions``, ``turn.py:113``).",
+      "properties": {
+        "alpha": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alpha"
+        },
+        "max_delay": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Delay"
+        },
+        "min_delay": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Delay"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "fixed",
+                "dynamic"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        }
+      },
+      "title": "EndpointingOptions",
+      "type": "object"
+    },
     "FlowEdge": {
       "description": "A conditional transition; ``condition`` becomes the handoff tool description.",
       "properties": {
@@ -766,6 +831,93 @@
       "title": "GlobalNode",
       "type": "object"
     },
+    "InterruptionOptions": {
+      "additionalProperties": true,
+      "description": "How the caller interrupts the agent (SDK ``InterruptionOptions``, ``turn.py:150``).",
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled"
+        },
+        "false_interruption_timeout": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Interruption Timeout"
+        },
+        "min_duration": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Duration"
+        },
+        "min_words": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Words"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "adaptive",
+                "vad"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "resume_false_interruption": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resume False Interruption"
+        }
+      },
+      "title": "InterruptionOptions",
+      "type": "object"
+    },
     "KnowledgeConfig": {
       "description": "Knowledge bases attached to the agent and how they are injected.",
       "properties": {
@@ -842,6 +994,18 @@
             "participant_name": "Avatar",
             "video_quality": null
           }
+        },
+        "conversation_preset": {
+          "default": "custom",
+          "enum": [
+            "patient",
+            "balanced",
+            "snappy",
+            "telephony",
+            "custom"
+          ],
+          "title": "Conversation Preset",
+          "type": "string"
         },
         "image_gen": {
           "anyOf": [
@@ -930,11 +1094,29 @@
           ],
           "default": null
         },
+        "turn_detector": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnDetectorSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "turn_handling": {
-          "additionalProperties": true,
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnHandlingOptions"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          ],
           "default": {},
-          "title": "Turn Handling",
-          "type": "object"
+          "title": "Turn Handling"
         },
         "vad": {
           "anyOf": [
@@ -960,6 +1142,64 @@
         }
       },
       "title": "PipelineConfig",
+      "type": "object"
+    },
+    "PreemptiveGenerationOptions": {
+      "additionalProperties": true,
+      "description": "Start the reply before the caller's turn is confirmed (SDK ``turn.py:201``).",
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled"
+        },
+        "max_retries": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Retries"
+        },
+        "max_speech_duration": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Speech Duration"
+        },
+        "preemptive_tts": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preemptive Tts"
+        }
+      },
+      "title": "PreemptiveGenerationOptions",
       "type": "object"
     },
     "ProviderRef": {
@@ -1509,6 +1749,147 @@
       "title": "TransferTarget",
       "type": "object"
     },
+    "TurnDetectorSettings": {
+      "description": "``PipelineConfig.turn_detector``: the end-of-turn model's placement and sensitivity.\n\nApplies to the LiveKit turn detector (``inference.TurnDetector``, 1.8.3\n``inference/eot/detector.py:35-47``) and to the local plugin model, on top of the\nconnection's ``turn_detector_mode``: a connection without hosted Inference always\nruns the local model, whatever ``mode`` says.",
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "hosted",
+                "local"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "unlikely_threshold": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unlikely Threshold"
+        }
+      },
+      "title": "TurnDetectorSettings",
+      "type": "object"
+    },
+    "TurnHandlingOptions": {
+      "additionalProperties": true,
+      "description": "``AgentSession(turn_handling=...)`` as the console edits it (SDK ``turn.py:260``).",
+      "properties": {
+        "endpointing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EndpointingOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "interruption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InterruptionOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "preemptive_generation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreemptiveGenerationOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "turn_detection": {
+          "anyOf": [
+            {
+              "enum": [
+                "stt",
+                "vad",
+                "realtime_llm",
+                "manual"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Detection"
+        },
+        "user_turn_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UserTurnLimitOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "TurnHandlingOptions",
+      "type": "object"
+    },
+    "UserTurnLimitOptions": {
+      "additionalProperties": true,
+      "description": "Stop a caller who talks too long without a reply (SDK ``turn.py:231``; off by default).",
+      "properties": {
+        "max_duration": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Duration"
+        },
+        "max_words": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Words"
+        }
+      },
+      "title": "UserTurnLimitOptions",
+      "type": "object"
+    },
     "VariableSpec": {
       "description": "One variable a flow extracts from the conversation.",
       "properties": {
@@ -1570,6 +1951,12 @@
           "default": true,
           "title": "Allow Interruptions",
           "type": "boolean"
+        },
+        "ambient_sound": {
+          "default": "none",
+          "pattern": "^(none|city_ambience|forest_ambience|office_ambience|crowded_room|keyboard_typing|keyboard_typing2|hold_music|asset:[A-Za-z0-9_-]+)$",
+          "title": "Ambient Sound",
+          "type": "string"
         },
         "first_speaker": {
           "default": "agent",

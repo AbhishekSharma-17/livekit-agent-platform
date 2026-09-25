@@ -261,6 +261,13 @@ from lkap_contracts.tools import (
     ToolExecutionMode,
     never_background,
 )
+from lkap_contracts.turn_handling import (
+    CONVERSATION_PRESETS,
+    ConversationPreset,
+    TurnDetectorSettings,
+    TurnHandlingOptions,
+    resolve_turn_handling,
+)
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
     RPC_AGENT_ACTION,
@@ -308,6 +315,7 @@ __all__ = [
     "BLOCK_TOOL_NAMES",
     "BLOCK_TOOL_TYPES",
     "BUILTIN_TOOL_NAMES",
+    "CONVERSATION_PRESETS",
     "DEFAULT_RUBRIC_PROMPT",
     "DEFAULT_TAGS",
     "DTMF_PATTERN",
@@ -378,6 +386,7 @@ __all__ = [
     "ConnectionRotateIn",
     "ConnectionTestResult",
     "ConnectionUpdate",
+    "ConversationPreset",
     "CostLine",
     "CredentialCreate",
     "CredentialOut",
@@ -536,6 +545,8 @@ __all__ = [
     "TrunkOut",
     "TrunkPage",
     "TrunkUpdate",
+    "TurnDetectorSettings",
+    "TurnHandlingOptions",
     "UiPatch",
     "UiPatchOp",
     "UiRequest",
@@ -579,6 +590,7 @@ __all__ = [
     "mvp_providers",
     "never_background",
     "pipeline_issues",
+    "resolve_turn_handling",
     "validate_block_config",
     "validate_id_value",
     "validate_model_id",

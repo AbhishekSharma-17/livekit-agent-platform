@@ -29,11 +29,14 @@ to match. The usage entry still contributes the real `model` id actually used
 (falling back to the `ProviderRef.model` override, then the registry's
 `default_model`) because a session's provider can serve more than one model.
 
-`interruption_usage`/`eot_usage` entries (LiveKit-hosted VAD/turn-detector
-inference counts) are deliberately not priced here: they are not a
-usage-metered vendor cost in `pricing.PRICES` today (LiveKit Inference has no
-published, single per-request figure — see `pricing.py`'s module docstring),
-and CONTRACTS-V2's `Unit` literal has no "requests" unit for them anyway.
+`eot_usage`/`interruption_usage` entries (LiveKit-hosted turn-detector and
+interruption inference counts) map onto `turn_detection`/`vad` and are priced
+under the `requests` unit (V4-15, COSTS.md D-V4-44) — only when a price exists;
+LiveKit's page lists no per-request rate today, so they render unpriced.
+
+`llm_usage` may come from the `llm`, `realtime` or `workflow_llm` slot: the slot
+whose resolved model equals the entry's reported model wins, else the first
+bound one in that order (:func:`slot_for_usage`).
 """
 
 from __future__ import annotations
@@ -46,10 +49,36 @@ from lkap_contracts.common import ProviderRef
 
 #: Which `PipelineConfig` slots can produce each usage `type`, in preference order.
 _SLOTS_FOR_USAGE_TYPE: dict[str, tuple[str, ...]] = {
-    "llm_usage": ("llm", "realtime"),
+    "llm_usage": ("llm", "realtime", "workflow_llm"),
     "tts_usage": ("tts",),
     "stt_usage": ("stt",),
+    "eot_usage": ("turn_detection",),
+    "interruption_usage": ("vad",),
 }
+
+
+def slot_for_usage(
+    usage_type: str, entry: dict[str, Any], pipeline: PipelineConfig
+) -> tuple[str, ProviderRef] | None:
+    """Return ``(slot, ref)`` billed for one usage entry, or ``None`` when no slot could produce it.
+
+    For ``llm_usage`` the slot whose resolved model equals the entry's own
+    ``model`` wins (a flow's routing model next to the conversation model);
+    otherwise the first bound slot in :data:`_SLOTS_FOR_USAGE_TYPE` order.
+    """
+    bound = [
+        (slot, ref)
+        for slot in _SLOTS_FOR_USAGE_TYPE.get(usage_type, ())
+        if isinstance(ref := getattr(pipeline, slot, None), ProviderRef)
+    ]
+    if not bound:
+        return None
+    reported = entry.get("model")
+    if isinstance(reported, str) and reported and len(bound) > 1:
+        for slot, ref in bound:
+            if resolve_model({}, ref) == reported:
+                return slot, ref
+    return bound[0]
 
 
 def ref_for_usage_type(usage_type: str, pipeline: PipelineConfig) -> ProviderRef | None:

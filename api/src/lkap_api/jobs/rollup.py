@@ -61,11 +61,13 @@ async def rollup_day(ctx: JobContext, day: dt.date) -> int:
         for row in rows:
             bucket = buckets.setdefault(
                 (row.workspace_id, row.agent_id),
-                {"sessions": 0, "minutes": 0.0, "cost_usd": 0.0, "failed": 0},
+                {"sessions": 0, "minutes": 0.0, "cost_usd": 0.0, "failed": 0, "estimated_usd": None},
             )
             bucket["sessions"] += 1
             bucket["minutes"] += _session_minutes(row)
             bucket["cost_usd"] += float(row.cost_usd or 0.0)
+            if row.estimated_usd is not None:  # `None` until a session of the bucket has a snapshot
+                bucket["estimated_usd"] = (bucket["estimated_usd"] or 0.0) + float(row.estimated_usd)
             if row.status == "failed":
                 bucket["failed"] += 1
 
@@ -80,6 +82,7 @@ async def rollup_day(ctx: JobContext, day: dt.date) -> int:
                 existing.minutes = values["minutes"]
                 existing.cost_usd = values["cost_usd"]
                 existing.failed = values["failed"]
+                existing.estimated_usd = values["estimated_usd"]
 
     log.info("usage_daily_rolled_up", day=day.isoformat(), buckets=len(buckets))
     return len(buckets)

@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Query, Response, status
 from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.api_models import (
@@ -29,6 +29,8 @@ from lkap_contracts.api_models import (
     AgentPublicOut,
     AgentUpdate,
     ConfigVersionOut,
+    CostEstimate,
+    CostEstimateRequest,
     Issue,
     Page,
     ValidationResult,
@@ -39,7 +41,7 @@ from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext
+from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext, require
 from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import connection_context_for, validate_in_db
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
@@ -60,6 +62,7 @@ from lkap_api.kb.store import get_lancedb_store
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
+from lkap_api.routers.costs import estimate_for_request
 from lkap_api.settings import Settings
 from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
 from lkap_api.templates.router import resolve_template
@@ -949,3 +952,32 @@ async def validate_agent(agent_id: str, db: DbDep, ctx: AdminCtxDep) -> Validati
         connection_id=row.connection_id,
         pack_id=row.pack_id,
     )
+
+
+@router.post(
+    "/{agent_id}/cost-estimate",
+    response_model=CostEstimate,
+    summary="Estimate this agent's cost per minute",
+    description=(
+        "An **estimate** at list prices (never a bill) of what the agent's saved config costs per "
+        "minute and per call; the same handler as `POST /v1/cost-estimates` with `agent_id` set. "
+        "The body is optional: assumption overrides, the channel, workspace averages."
+    ),
+)
+async def estimate_agent_cost(
+    agent_id: str,
+    db: DbDep,
+    settings: SettingsDep,
+    ctx: Annotated[WorkspaceContext, Depends(require("viewer", "agents:read"))],
+    payload: Annotated[CostEstimateRequest | None, Body()] = None,
+) -> CostEstimate:
+    """Estimate the agent's saved configuration (read-only; nothing is stored).
+
+    Raises:
+        UnprocessableEntityError: The body names a template or a draft config.
+    """
+    body = payload or CostEstimateRequest()
+    if body.template_id is not None or body.config is not None:
+        raise UnprocessableEntityError("this route estimates the agent in the path; drop template_id/config")
+    request = body.model_copy(update={"agent_id": agent_id})
+    return await estimate_for_request(db, ctx, settings, request)

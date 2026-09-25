@@ -663,6 +663,11 @@ class Session(Base):
     recording_object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     recording_duration_s: Mapped[float | None] = mapped_column(Numeric(12, 3, asdecimal=False), nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    #: The `CostEstimate` snapshotted after creation at the pinned config version
+    #: (docs/v4/COSTS.md D-V4-43, `v4_003`); `None` for older sessions — never back-filled.
+    estimate: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    estimated_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    reconciled_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
     latency: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     disposition: Mapped[str | None] = mapped_column(String(128), nullable=True)
     variables: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
@@ -752,12 +757,22 @@ class SessionCost(Base):
     unit_price_usd: Mapped[float] = mapped_column(Numeric(18, 9, asdecimal=False), nullable=False)
     cost_usd: Mapped[float] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=False)
     price_version: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    #: Which price source priced the line (`pricing.PriceSource`, `v4_003`).
+    price_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="table", server_default="table"
+    )
+    #: The vendor's own charge for this line once reconciled (V4-17), and what was reconciled.
+    vendor_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    vendor_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
-            "unit IN ('tokens_in','tokens_out','audio_s_in','audio_s_out','chars','minutes','images')",
+            "unit IN ('tokens_in','tokens_out','audio_s_in','audio_s_out','chars','minutes','images',"
+            "'text_tokens_in','text_tokens_out','audio_tokens_in','audio_tokens_out',"
+            "'cached_tokens_in','requests')",
             name="unit_valid",
         ),
+        CheckConstraint("price_source IN ('table','live','workspace')", name="price_source_valid"),
         Index("ix_session_costs_session", "session_id"),
     )
 
@@ -780,6 +795,8 @@ class UsageDaily(Base):
         Numeric(12, 6, asdecimal=False), nullable=False, default=0, server_default="0"
     )
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    #: Sum of the day's sessions' `estimated_usd` (`v4_003`); `None` when none had an estimate.
+    estimated_usd: Mapped[float | None] = mapped_column(Numeric(14, 6, asdecimal=False), nullable=True)
 
 
 # -------------------------------------------------------------- webhooks and jobs

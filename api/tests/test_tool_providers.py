@@ -1850,3 +1850,19 @@ def test_plan_session_uses_the_agent_subject_when_only_its_own_apps_exist() -> N
 
     assert plan.subject == "agent:a1"
     assert plan.allowed_tools == ["MAIL_LIST"]
+
+
+async def test_a_refused_agent_delete_keeps_its_session_at_composio(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    await _crm(admin_client)
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps scratch"))["id"])
+    await _set_apps(admin_client, agent_id, mode="router")
+    connected = await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})
+    assert connected.status_code == 200, connected.text
+
+    refused = await admin_client.delete(f"/v1/agents/{agent_id}")
+
+    assert refused.status_code == 409
+    assert len(world.sessions) == 1, "the agent still exists, so its tool finder must too"
+    assert len(await _origin_rows(database, agent_id)) == 1

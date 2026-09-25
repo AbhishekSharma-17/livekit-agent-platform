@@ -796,12 +796,13 @@ async def delete_agent(
         # FK, which would otherwise raise the same `IntegrityError` this
         # branch exists to avoid.
         await db.execute(delete(SessionRow).where(SessionRow.agent_id == row.id))
-    await apps.on_delete(db, ctx, row)  # V5-47: delete its Composio sessions (best effort)
+    app_sessions = await apps.before_delete(db, ctx, row)  # V5-47
     await db.delete(row)
     try:
         await db.flush()
     except IntegrityError as exc:
         raise ConflictError("agent still has sessions; delete them first, or archive and purge it") from exc
+    await apps.after_delete(db, ctx, row.id, app_sessions)  # V5-47: its Composio sessions, best effort
     log.info("agent_deleted", agent_id=agent_id, purged=purge)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

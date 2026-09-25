@@ -252,10 +252,33 @@ class AppsProvisioner:
         """
         return await sync_agent_apps(db, self.vault, self.factory, ctx, agent, config)
 
-    async def on_delete(self, db: AsyncSession, ctx: WorkspaceContext, agent: Agent) -> None:
-        """Delete the agent's sessions at Composio (best effort) and their rows."""
+    async def before_delete(
+        self, db: AsyncSession, ctx: WorkspaceContext, agent: Agent
+    ) -> list[tuple[str, McpServerOrigin]]:
+        """The agent's provisioned sessions ``(tool id, origin)``, read before its row (and tools) go."""
+        found: list[tuple[str, McpServerOrigin]] = []
         for row in await origin_rows(db, ctx.workspace_id, agent.id):
-            await _teardown(db, self.vault, self.factory, ctx, row)
+            origin = origin_of(row)
+            if origin is not None:
+                found.append((row.id, origin))
+        return found
+
+    async def after_delete(
+        self,
+        db: AsyncSession,
+        ctx: WorkspaceContext,
+        agent_id: str,
+        sessions: list[tuple[str, McpServerOrigin]],
+    ) -> None:
+        """Delete those sessions at Composio once the agent is really gone (best effort, audited).
+
+        Called only after the delete flushed, so a refused delete (the agent still has
+        sessions) never leaves the agent pointing at a session Composio no longer has.
+        """
+        for tool_id, origin in sessions:
+            await _delete_remote(
+                db, self.vault, self.factory, ctx, origin, agent_id=agent_id, tool_id=tool_id
+            )
 
 
 def get_apps_provisioner(
@@ -292,27 +315,42 @@ async def _delete_session(adapter: Any, session_id: str) -> bool:
     return True
 
 
+async def _delete_remote(
+    db: AsyncSession,
+    vault: Vault,
+    factory: AdapterFactory,
+    ctx: WorkspaceContext,
+    origin: McpServerOrigin,
+    *,
+    agent_id: str,
+    tool_id: str,
+) -> None:
+    """Delete one provisioned session at Composio (best effort) and audit it."""
+    deleted = False
+    try:
+        adapter, _ = await service.workspace_adapter(
+            db, vault, factory, ctx.workspace_id, require_enabled=False
+        )
+    except service.AppsNotEnabledError:
+        adapter = None
+    if adapter is not None:
+        deleted = await _delete_session(adapter, origin.remote_id)
+    _audit(db, ctx, f"apps.{origin.kind}.delete", agent_id, tool_id=tool_id, deleted_at_vendor=deleted)
+
+
 async def _teardown(
     db: AsyncSession, vault: Vault, factory: AdapterFactory, ctx: WorkspaceContext, row: Tool
 ) -> None:
     origin = origin_of(row)
-    deleted = False
     if origin is not None:
-        try:
-            adapter, _ = await service.workspace_adapter(
-                db, vault, factory, ctx.workspace_id, require_enabled=False
-            )
-        except service.AppsNotEnabledError:
-            adapter = None
-        if adapter is not None:
-            deleted = await _delete_session(adapter, origin.remote_id)
-        _audit(
+        await _delete_remote(
             db,
+            vault,
+            factory,
             ctx,
-            f"apps.{origin.kind}.delete",
-            row.agent_id or "",
+            origin,
+            agent_id=row.agent_id or "",
             tool_id=row.id,
-            deleted_at_vendor=deleted,
         )
     await db.delete(row)
     await db.flush()

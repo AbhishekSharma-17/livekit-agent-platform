@@ -1866,3 +1866,26 @@ async def test_a_refused_agent_delete_keeps_its_session_at_composio(
     assert refused.status_code == 409
     assert len(world.sessions) == 1, "the agent still exists, so its tool finder must too"
     assert len(await _origin_rows(database, agent_id)) == 1
+
+
+async def test_the_resolved_config_carries_the_key_in_both_composio_paths(
+    admin_client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+) -> None:
+    connection_id = await _crm(admin_client)
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps resolved"))["id"])
+    await _pick(admin_client, connection_id, "ACMECRM_LIST_CONTACTS", agent_id=agent_id)
+    assert (await _set_apps(admin_client, agent_id, mode="router")).status_code == 200
+    session_id = (await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})).json()["sessionId"]
+
+    resolved = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+
+    by_kind = {tool["kind"]: tool for tool in resolved["tools"]}
+    assert set(by_kind) == {"provider", "mcp"}
+    for kind in ("provider", "mcp"):
+        assert by_kind[kind]["headers"]["x-api-key"] == VALID_KEY
+        assert by_kind[kind]["credential_id"] is None
+    assert by_kind["provider"]["subject"] == f"ws:{WS}"
+    assert by_kind["mcp"]["origin"]["kind"] == "router"

@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/LocaleEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``locale`` session event the worker records at session start (R-V5-10).",
+  "properties": {
+    "business_timezone": {
+      "title": "Business Timezone",
+      "type": "string"
+    },
+    "caller_timezone": {
+      "title": "Caller Timezone",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "browser",
+        "number",
+        "business",
+        "workspace",
+        "default"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "caller_timezone",
+    "source",
+    "business_timezone"
+  ],
+  "title": "LocaleEvent",
+  "type": "object"
+}

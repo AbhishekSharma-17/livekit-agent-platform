@@ -581,6 +581,12 @@ class ConnectResponse(BaseModel):
     serverUrl: str; participantToken: str; roomName: str; participantName: str   # TokenSourceResponse-compatible (camelCase, protobuf-JSON)
     sessionId: str; agent: AgentPublicOut; uiPanelId: str; protocolVersion: Literal[1] = 1
 POST /v1/agents/{id_or_slug}/connect     ConnectRequest -> ConnectResponse
+class TextSessionCreate(ConnectRequest): timezone: str | None = None   # R-V5-10
+POST /v1/agents/{id_or_slug}/text-sessions TextSessionCreate -> ConnectResponse   # channel "text"
+# R-V5-10: participant_metadata["timezone"] (and TextSessionCreate.timezone, which wins) is the browser's
+# Intl.DateTimeFormat().resolvedOptions().timeZone. The api keeps it only when it is an IANA name
+# (lkap_contracts.common.is_iana_timezone; an unknown name is dropped, never a 422) and stamps it as the
+# participant attribute `lkap.tz`; every client key starting with `lkap.` is dropped first.
 # Token: identity = participant_identity or f"user-{uuid[:8]}", ttl 2h, grants room_join/can_publish/can_subscribe/can_publish_data,
 # room_config = RoomConfiguration(agents=[RoomAgentDispatch(agent_name=settings.agent_name, metadata=DispatchMetadata(...).model_dump_json())]).
 # Any roomConfig/agentName sent by the client is ignored.
@@ -610,6 +616,7 @@ GET  /v1/packs                           -> { items: list[PackOut] }
 
 # ---- sessions (admin)
 class SessionOut(BaseModel): id; agent_id; agent_name; config_version; room_name; status; pipeline_mode; created_at; started_at; ended_at; usage: dict | None; error: str | None
+    caller_timezone: str | None   # R-V5-10: from the `locale` event, stored as usage["caller_timezone"] by the summary
 class SessionDetailOut(SessionOut): transcript: list[TranscriptTurn] | None; final_ui_state: UiState | None
 class TranscriptTurn(BaseModel): role: Literal["user","assistant"]; text: str; ts: float; interrupted: bool = False
 class SessionEventOut(BaseModel): id: int; ts: datetime; type: str; payload: dict
@@ -630,7 +637,7 @@ POST /internal/v1/kb/search              InternalKbSearchRequest -> KbSearchResp
 GET  /v1/health                          -> { ok: bool; version: str; livekit_url: str; packs: list[str]; db: "ok"|"error" }
 ```
 
-Event `type` values posted by the worker: `session_started`, `agent_state` (`{state}`), `user_turn` (`{text}`), `agent_turn` (`{text, interrupted}`), `tool_call_started` (`{call_id, tool, args_redacted}`), `tool_call_ended` (`{call_id, tool, status, duration_ms, result_preview}`), `tool_call_updated` (`{call_id, tool, message_preview}`: a background tool reported progress; its first update is the announcement, docs/v4/BACKGROUND-TOOLS.md D-V4-38), `tool_reply` (`{call_ids, status, speech_id}`: the deferred reply that voices background results; `status` is `scheduled`, `completed`, `interrupted` or `skipped`, the last meaning the model had already said it), `workflow_run` (`{name, duration_ms, status}`), `ui_state` (`{seq}` only), `asset` (`{asset_id, kind, bytes}`), `escalation` (`{reason, urgency}`), `metrics` (`{kind, data}`), `error` (`{message}`), `info` (`{message}`), `session_ended` (`{reason}`).
+Event `type` values posted by the worker: `session_started`, `agent_state` (`{state}`), `user_turn` (`{text}`), `agent_turn` (`{text, interrupted}`), `tool_call_started` (`{call_id, tool, args_redacted}`), `tool_call_ended` (`{call_id, tool, status, duration_ms, result_preview}`), `tool_call_updated` (`{call_id, tool, message_preview}`: a background tool reported progress; its first update is the announcement, docs/v4/BACKGROUND-TOOLS.md D-V4-38), `tool_reply` (`{call_ids, status, speech_id}`: the deferred reply that voices background results; `status` is `scheduled`, `completed`, `interrupted` or `skipped`, the last meaning the model had already said it), `workflow_run` (`{name, duration_ms, status}`), `ui_state` (`{seq}` only), `asset` (`{asset_id, kind, bytes}`), `escalation` (`{reason, urgency}`), `metrics` (`{kind, data}`), `error` (`{message}`), `info` (`{message}`), `session_ended` (`{reason}`), `locale` (`LocaleEvent {caller_timezone, source, business_timezone}`, once at session start, R-V5-10: `source` is `browser` (the `lkap.tz` attribute), `number` (the caller's E.164 number maps to exactly one zone), `business` (`AgentConfig.timezone`, also when `locale.caller_timezone == "business"`), `workspace` (`workspaces.settings.locale.timezone`) or `default` (UTC); the summary copies `caller_timezone` into `usage`).
 
 `metrics` kinds: `session_usage` (`data` = the SDK's `AgentSessionUsage`, on every update) and, only when the workspace opted into cost reconciliation (`ResolvedAgentConfig.cost_reconcile` non-empty, docs/v4/COSTS.md D-V4-45), one `provider_requests` just before the summary: `data = {llm, stt, tts: [{request_id, provider, model}], dropped}` — per-request vendor ids only (≤ 2,000; `dropped` counts the rest), never a prompt, completion or secret; the api's `cost_reconcile` job looks them up.
 

@@ -131,6 +131,8 @@ export interface LkapContracts {
   KbSearchResponse?: KbSearchResponse;
   KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
+  LocaleConfig?: LocaleConfig;
+  LocaleEvent?: LocaleEvent;
   MarkdownBlockState?: MarkdownBlockState;
   McpServerDefinition?: McpServerDefinition;
   McpServerOrigin?: McpServerOrigin;
@@ -201,6 +203,7 @@ export interface LkapContracts {
   TemplateEstimate?: TemplateEstimate;
   TemplateOut?: TemplateOut;
   TemplatesResponse?: TemplatesResponse;
+  TextSessionCreate?: TextSessionCreate;
   ToolCreate?: ToolCreate;
   ToolDefinition?: ToolDefinition;
   ToolDryRunRequest?: ToolDryRunRequest;
@@ -325,6 +328,7 @@ export interface AgentConfig {
   flow?: FlowSpec | null;
   instructions: string;
   knowledge?: KnowledgeConfig;
+  locale?: LocaleConfig;
   pack_settings?: {
     [k: string]: unknown;
   };
@@ -333,6 +337,9 @@ export interface AgentConfig {
   qa?: QaConfig;
   recording?: RecordingConfig;
   telephony?: TelephonyConfig;
+  /**
+   * The business timezone (IANA name): opening hours and bookings are in this zone.
+   */
   timezone?: string;
   tools?: ToolsConfig;
   v?: 1 | 2;
@@ -563,6 +570,22 @@ export interface KnowledgeConfig {
    */
   skip_short_turns?: boolean;
   top_k?: number;
+}
+/**
+ * Whose clock the agent talks in (R-V5-10).
+ *
+ * ``AgentConfig.timezone`` stays the **business** timezone (opening hours, seeds,
+ * booking defaults); this block says how the **caller's** timezone is chosen at
+ * session start.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LocaleConfig".
+ */
+export interface LocaleConfig {
+  /**
+   * `detect` uses the caller's own timezone (from the browser, else the phone number, else the business timezone); `business` always uses the business timezone.
+   */
+  caller_timezone?: "detect" | "business";
 }
 /**
  * Which panel renders the session, and (for ``composite``) its blocks.
@@ -1582,11 +1605,20 @@ export interface ConfigVersionPage {
 /**
  * ``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.
  *
+ * ``participant_metadata`` becomes the caller's participant attributes. One key is
+ * read by the platform (R-V5-10): ``timezone``, the browser's
+ * ``Intl.DateTimeFormat().resolvedOptions().timeZone``. The api checks it against the
+ * IANA database and stamps it as the ``lkap.tz`` attribute; an unknown name is dropped
+ * (never a 422). Keys starting with ``lkap.`` are reserved and dropped.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ConnectRequest".
  */
 export interface ConnectRequest {
   participant_identity?: string | null;
+  /**
+   * Caller attributes (at most 2 KB). `timezone` = the browser's IANA timezone; keys starting with `lkap.` are reserved and dropped.
+   */
   participant_metadata?: {
     [k: string]: string;
   };
@@ -3069,6 +3101,17 @@ export interface KbSeed {
   kb_name: string;
 }
 /**
+ * Payload of the ``locale`` session event the worker records at session start (R-V5-10).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LocaleEvent".
+ */
+export interface LocaleEvent {
+  business_timezone: string;
+  caller_timezone: string;
+  source: "browser" | "number" | "business" | "workspace" | "default";
+}
+/**
  * Rich text in a strict Markdown subset, never raw HTML (``show_text``, V5-08).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -4003,6 +4046,7 @@ export interface RequestableState {
 export interface ResolvedAgentConfig {
   agent_id: string;
   agent_slug: string;
+  business_timezone?: string | null;
   channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config: AgentConfig;
   config_version: number;
@@ -4010,6 +4054,7 @@ export interface ResolvedAgentConfig {
   cost_reconcile?: string[];
   installed_provider_ids?: string[] | null;
   kb_ids: string[];
+  locale?: LocaleConfig;
   pack_id: string;
   panel?: PanelLayout;
   participant_identity: string;
@@ -4080,6 +4125,10 @@ export interface SessionDetailOut {
   caller?: {
     [k: string]: unknown;
   } | null;
+  /**
+   * The caller's timezone the agent used (the `locale` event, R-V5-10); null before the session's summary or for a session that never started.
+   */
+  caller_timezone?: string | null;
   channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config_version: number;
   connection_id?: string | null;
@@ -4280,6 +4329,10 @@ export interface SessionMetricsIn {
 export interface SessionOut {
   agent_id: string;
   agent_name: string;
+  /**
+   * The caller's timezone the agent used (the `locale` event, R-V5-10); null before the session's summary or for a session that never started.
+   */
+  caller_timezone?: string | null;
   channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   config_version: number;
   connection_id?: string | null;
@@ -4594,6 +4647,26 @@ export interface TemplateOut {
  */
 export interface TemplatesResponse {
   items: TemplateOut[];
+}
+/**
+ * ``POST /v1/agents/{id_or_slug}/text-sessions`` (R-V5-10: a ``ConnectRequest`` plus the zone).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TextSessionCreate".
+ */
+export interface TextSessionCreate {
+  participant_identity?: string | null;
+  /**
+   * Caller attributes (at most 2 KB). `timezone` = the browser's IANA timezone; keys starting with `lkap.` are reserved and dropped.
+   */
+  participant_metadata?: {
+    [k: string]: string;
+  };
+  participant_name?: string;
+  /**
+   * The browser's IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`); an unknown name is ignored. Wins over `participant_metadata.timezone`.
+   */
+  timezone?: string | null;
 }
 /**
  * ``POST /v1/tools``. ``agent_id=None`` makes the tool shared.

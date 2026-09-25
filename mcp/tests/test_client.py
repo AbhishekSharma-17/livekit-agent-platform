@@ -143,3 +143,27 @@ async def test_request_logs_method_path_status_only(caplog: pytest.LogCaptureFix
     assert records and records[0].__dict__["path"] == "/v1/connections"
     text = " ".join(repr(r.__dict__) for r in caplog.records)
     assert "never-logged-value" not in text and RAW_KEY not in text
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+@pytest.mark.parametrize("status", [300, 301, 302, 303, 307, 308])
+async def test_request_a_3xx_to_a_write_is_a_failure_and_is_not_followed(method: str, status: int) -> None:
+    """Ask #103: `DELETE /v1/tools/` got a 307 and `lkap_delete` reported a deletion."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(status, headers={"location": "http://api.test/v1/tools"})
+
+    client = _client(httpx.MockTransport(handler))
+    try:
+        with pytest.raises(ApiFailure) as caught:
+            await client.request(method, "/v1/tools/")  # type: ignore[arg-type]
+    finally:
+        await client.aclose()
+
+    assert (caught.value.status, caught.value.code) == (status, "unexpected_redirect")
+    assert "not carried out" in caught.value.message
+    assert caught.value.details == {"location": "http://api.test/v1/tools"}
+    assert caught.value.to_result().ok is False
+    assert [r.url.path for r in seen] == ["/v1/tools/"], "the redirect is never followed"

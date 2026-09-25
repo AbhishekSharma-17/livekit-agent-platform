@@ -164,6 +164,15 @@ def match_route(document: dict[str, Any], method: str, path: str) -> dict[str, A
     return best[1] if best else None
 
 
+def id_refusal(name: str, value: str) -> str | None:
+    """Why ``value`` cannot be the ``name`` path segment of a delete, or ``None`` when it can."""
+    if not value.strip():
+        return f"{name} must not be empty"
+    if "/" in value:
+        return f"{name} must be a single id, without '/'"
+    return None
+
+
 def register(registry: Registry) -> None:
     """Declare the generic tools."""
     ctx = registry.ctx
@@ -191,6 +200,12 @@ def register(registry: Registry) -> None:
             return forbidden(scope)
         if kind == "kb_document" and not parent_id:
             return ToolResult.fail("invalid_input", "kb_document needs parent_id (the knowledge base id)")
+        # Checked before any request (#103): an empty id sent `DELETE /v1/tools/`, which
+        # the api answered with a redirect, and the tool reported a deletion.
+        segments = {"id": id, "parent_id": parent_id or ""} if kind == "kb_document" else {"id": id}
+        for name, value in segments.items():
+            if refused := id_refusal(name, value):
+                return ToolResult.fail("invalid_input", refused)
         path = template.replace("{id}", seg(id)).replace("{parent}", seg(parent_id or ""))
         query = {"purge": "true"} if kind == "agent" and purge else None
         if plan:

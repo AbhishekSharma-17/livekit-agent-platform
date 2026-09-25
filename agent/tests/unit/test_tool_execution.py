@@ -49,7 +49,7 @@ from lkap_contracts.tools import (
 from lkap_agent.observability import SessionObserver
 from lkap_agent.session_builder import ASYNC_TOOL_OPTIONS
 from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
-from lkap_agent.text_mode import rewind
+from lkap_agent.text_mode import inject_user_text, rewind
 from lkap_agent.tools import execution
 from lkap_agent.tools.builtin import build_builtin_tools
 from lkap_agent.tools.declarative import build_http_tools
@@ -323,10 +323,74 @@ async def test_cancel_running_cancels_the_work_of_a_session() -> None:
     )
     await started.wait()
 
-    assert cancel_running(context.session) == 1
+    assert await cancel_running(context.session) == ["call-1"]
     with pytest.raises(asyncio.CancelledError):
         await call
-    assert cancel_running(context.session) == 0
+    assert await cancel_running(context.session) == []
+
+
+async def test_cancel_running_waits_at_most_its_bound_for_work_that_ignores_cancellation() -> None:
+    context = FakeRunContext()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _stubborn() -> str:
+        started.set()
+        while True:
+            try:
+                await release.wait()
+                return "late"
+            except asyncio.CancelledError:
+                continue
+
+    call = asyncio.create_task(run_with_policy(context, _policy("background"), _stubborn))  # type: ignore[arg-type]
+    await started.wait()
+
+    with structlog.testing.capture_logs() as logs:
+        cancelled = await asyncio.wait_for(cancel_running(context.session, timeout_s=0.05), 1)
+
+    assert cancelled == ["call-1"]
+    assert [entry["event"] for entry in logs] == ["cancelled tool calls did not end in time"]
+    release.set()
+    await call
+
+
+class _EmittingSession:
+    """A session double with `on`/`off`: `cancel_running` waits for the SDK's ended event."""
+
+    def __init__(self) -> None:
+        self.tts = None
+        self.handlers: list[Callable[[Any], None]] = []
+
+    def on(self, event: str, callback: Callable[[Any], None]) -> None:
+        assert event == "tool_execution_updated"
+        self.handlers.append(callback)
+
+    def off(self, event: str, callback: Callable[[Any], None]) -> None:
+        self.handlers.remove(callback)
+
+
+async def test_cancel_running_returns_once_the_sdk_reports_the_call_ended() -> None:
+    context = FakeRunContext()
+    session = _EmittingSession()
+    context.session = cast(Any, session)
+    started = asyncio.Event()
+    call = asyncio.create_task(
+        run_with_policy(context, _policy("background"), _work(60, started=started))  # type: ignore[arg-type]
+    )
+    await started.wait()
+
+    waiter = asyncio.create_task(cancel_running(session, timeout_s=5))
+    await asyncio.sleep(0.05)
+    assert not waiter.done(), "the inner task ending is not enough: the SDK must report the call ended"
+    ended = ToolCallEnded(id="call-1", call_id="call-1", message=None, status="cancelled")
+    for handler in list(session.handlers):
+        handler(ToolExecutionUpdatedEvent(update=ended))
+
+    assert await asyncio.wait_for(waiter, 1) == ["call-1"]
+    assert session.handlers == [], "the listener is removed"
+    with pytest.raises(asyncio.CancelledError):
+        await call
 
 
 async def test_run_with_policy_skips_fillers_without_a_voice() -> None:
@@ -711,6 +775,122 @@ async def test_real_sdk_a_text_rewind_cancels_the_running_tool() -> None:
     ended = await recorder.wait_for(lambda u: u.type == "tool_call_ended")
     assert ended.status == "cancelled"
     await session.aclose()
+
+
+def _mentions(ctx: llm.ChatContext, call_id: str) -> list[tuple[str, str | None, Any]]:
+    """Items of ``ctx`` belonging to ``call_id`` (its own id or a ``_update_N``/``_final`` entry)."""
+    return [
+        i for i in _items(ctx) if i[1] is not None and (i[1] == call_id or i[1].startswith(f"{call_id}_"))
+    ]
+
+
+@respx.mock
+async def test_real_sdk_a_rewind_frees_the_model_to_call_the_cancelled_tool_again() -> None:
+    """Ask #102: the regenerated reply sees nothing of the cancelled call, so it can call again.
+
+    Before the fix, the regenerated inference read the SDK's placeholder pair
+    ("The tool call is still in progress.") for the cancelled call, because the
+    executor had not yet dropped it from its running set, and the model told the
+    user the result was on its way.
+    """
+    route = respx.get(API_URL).mock(side_effect=_slow_ok)
+    tools = build_http_tools(
+        [_http_definition()], platform_allowed_hosts=["api.example.com"], execution_default="auto"
+    )
+    scripted = ScriptedLLM(
+        [
+            ToolCall("lookup_item", {"item_id": "42"}),
+            "Let me pull that up.",
+            ToolCall("lookup_item", {"item_id": "42"}),
+            "Let me pull that up again.",
+            "Item 42 is in stock.",
+        ]
+    )
+    session = _session(scripted)
+    recorder = _Recorder(session)
+    await session.start(Agent(instructions="Help.", tools=tools))
+    await session.run(user_input="Is item 42 in stock?")
+
+    await rewind(session, 1)
+    await recorder.wait_for(lambda u: u.type == "tool_call_started" and u.function_call.call_id == "call-2")
+
+    regenerated, names, choice = scripted.calls[2]
+    assert _mentions(regenerated, "call-1") == []
+    assert all(i[2] != "The tool call is still in progress." for i in _items(regenerated))
+    assert "lookup_item" in names
+    assert choice is NOT_GIVEN
+    cancelled = [u for u in recorder.updates if u.type == "tool_call_ended" and u.call_id == "call-1"]
+    assert [u.status for u in cancelled] == ["cancelled"]
+    # The re-call runs: not rejected as a duplicate of the cancelled one.
+    outputs = {i.call_id: i.output for i in session.history.items if i.type == "function_call_output"}
+    assert outputs.get("call-2") != "That is already being looked up; tell the user it is on its way."
+    second = await recorder.wait_for(lambda u: u.type == "tool_call_ended" and u.call_id == "call-2")
+    assert second.status == "done"
+    # respx records a call once its response is produced: the cancelled request never was.
+    assert route.call_count == 1
+    await recorder.wait_for(lambda u: u.type == "tool_reply_updated" and u.status == "completed")
+    assert _mentions(session.history, "call-1") == []
+    await session.aclose()
+
+
+@respx.mock
+async def test_real_sdk_a_rewind_strips_an_earlier_turn_s_cancelled_call() -> None:
+    """A call from a kept turn is cancelled too, so its announcement must not stay behind the cut."""
+    respx.get(API_URL).mock(side_effect=_slow_ok)
+    tools = build_http_tools(
+        [_http_definition()], platform_allowed_hosts=["api.example.com"], execution_default="auto"
+    )
+    scripted = ScriptedLLM(
+        [ToolCall("lookup_item", {"item_id": "42"}), "Let me pull that up.", "It is noon.", "Okay."]
+    )
+    session = _session(scripted)
+    recorder = _Recorder(session)
+    agent = Agent(instructions="Help.", tools=tools)
+    await session.start(agent)
+    await session.run(user_input="Is item 42 in stock?")
+    await session.run(user_input="What time is it?")
+    assert _mentions(agent.chat_ctx, "call-1"), "the announcement pair sits in turn 1"
+
+    await rewind(session, 2)
+    await recorder.wait_for(lambda u: u.type == "tool_call_ended" and u.call_id == "call-1")
+    await asyncio.wait_for(_until(lambda: len(scripted.calls) == 4), 5)
+
+    regenerated, _names, _choice = scripted.calls[3]
+    assert _mentions(regenerated, "call-1") == []
+    assert _mentions(session.history, "call-1") == []
+    assert _mentions(agent.chat_ctx, "call-1") == []
+    await session.aclose()
+
+
+@respx.mock
+async def test_real_sdk_an_edit_during_a_running_call_leaves_no_trace_of_it() -> None:
+    """The edit path (`inject_user_text` with a `turn_index`) has the same guarantee."""
+    respx.get(API_URL).mock(side_effect=_slow_ok)
+    tools = build_http_tools(
+        [_http_definition()], platform_allowed_hosts=["api.example.com"], execution_default="auto"
+    )
+    scripted = ScriptedLLM(
+        [ToolCall("lookup_item", {"item_id": "42"}), "Let me pull that up.", "You're welcome."]
+    )
+    session = _session(scripted)
+    recorder = _Recorder(session)
+    await session.start(Agent(instructions="Help.", tools=tools))
+    await session.run(user_input="Is item 42 in stock?")
+
+    await inject_user_text(session, "Thanks, that's all.", turn_index=0)
+    await asyncio.wait_for(_until(lambda: len(scripted.calls) == 3), 5)
+
+    regenerated, _names, _choice = scripted.calls[2]
+    assert _mentions(regenerated, "call-1") == []
+    assert [u.status for u in recorder.updates if u.type == "tool_call_ended"] == ["cancelled"]
+    await session.aclose()
+
+
+async def _until(predicate: Callable[[], bool]) -> None:
+    while True:
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
 
 
 def test_no_lkap_code_generates_a_reply_for_a_tool_result() -> None:

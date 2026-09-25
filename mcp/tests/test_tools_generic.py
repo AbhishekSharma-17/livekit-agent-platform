@@ -163,3 +163,34 @@ def test_match_route_prefers_literal_segments_over_parameters() -> None:
     assert match_route(document, "GET", "/v1/api-keys/self")["operation_id"] == "self"  # type: ignore[index]
     assert match_route(document, "GET", "/v1/knowledge-bases/k1/documents")["operation_id"] == "docs"  # type: ignore[index]
     assert match_route(document, "POST", "/v1/knowledge-bases/k1/documents") is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "id_", "parent_id", "field"),
+    [
+        ("tool", "", None, "id"),
+        ("tool", "   ", None, "id"),
+        ("tool", "abc/def", None, "id"),
+        ("agent", "../agents", None, "id"),
+        ("kb_document", "doc-1", "kb/1", "parent_id"),
+        ("kb_document", "", "kb-1", "id"),
+    ],
+)
+async def test_lkap_delete_refuses_an_empty_or_slashed_id_before_sending(
+    key: Any, mcp_session: Any, kind: str, id_: str, parent_id: str | None, field: str
+) -> None:
+    """Ask #103: `lkap_delete(kind="tool", id="")` sent `DELETE /v1/tools/` and reported success."""
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        await mcp.tool_names()
+        before = len(mcp.transport.requests)
+        planned = await mcp.call("lkap_delete", kind=kind, id=id_, parent_id=parent_id, plan=True)
+        result = await mcp.call("lkap_delete", kind=kind, id=id_, parent_id=parent_id, confirm=True)
+        sent = mcp.transport.requests[before:]
+
+    for answer in (planned, result):
+        assert answer["ok"] is False, answer
+        assert answer["error"]["code"] == "invalid_input"
+        assert answer["error"]["message"].startswith(field)
+    assert sent == []

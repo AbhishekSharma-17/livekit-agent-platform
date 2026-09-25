@@ -497,3 +497,22 @@ async def test_prefetch_ready_before_final_compares_the_answer_with_the_last_fin
 
     assert [e[1]["prefetch_hit"] for e in events] == [True, True]
     assert [e[1]["prefetch_ready_before_final"] for e in events] == [True, False]
+
+
+async def test_a_failed_prefetch_makes_the_hook_search_again() -> None:
+    class _FlakyKb(FakeKbClient):
+        async def search(self, query: str, k: int = 4, kb_ids: list[str] | None = None) -> list[KbHit]:
+            self.queries.append((query, k, kb_ids))
+            if len(self.queries) == 1:
+                raise RuntimeError("api hiccup")
+            return self.hits[:k]
+
+    kb = _FlakyKb([_hit("c1")])
+    agent = _agent(_context(resolved_config(kb_ids=["kb-1"]), kb))
+
+    agent.prefetch_knowledge("Is flood damage covered", False)
+    await _settle()
+    turn_ctx = await _turn(agent, "Is flood damage covered?")
+
+    assert len(kb.queries) == 2
+    assert len(_notes(turn_ctx)) == 1

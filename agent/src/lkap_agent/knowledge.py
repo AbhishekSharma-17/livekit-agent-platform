@@ -373,6 +373,8 @@ class _Pending:
     scope: tuple[str, ...]
     #: The debounce elapsed and the search request went out.
     started: bool = False
+    #: The search raised; the hook searches again rather than injecting nothing.
+    failed: bool = False
     #: Loop time the search answered (the spike's measurement, see `KnowledgeState.last_final_at`).
     done_at: float | None = None
     task: asyncio.Task[list[KbHit]] | None = None
@@ -436,6 +438,7 @@ class KnowledgePrefetch:
             raise
         except Exception:
             logger.debug("knowledge pre-fetch failed", exc_info=True)
+            pending.failed = True
             hits = []
         pending.done_at = asyncio.get_running_loop().time()
         return hits
@@ -469,6 +472,8 @@ class KnowledgePrefetch:
             return None
         else:
             hits = task.result()
+        if pending.failed:
+            return None
         self.last_done_at = pending.done_at
         return hits
 

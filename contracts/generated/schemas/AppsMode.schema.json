@@ -59,6 +59,15 @@
       "title": "Mode",
       "type": "string"
     },
+    "reviewed_actions": {
+      "description": "Destructive actions the builder has decided about (action slugs, R-V5-9); denied_actions says which way. An unreviewed destructive action is blocked",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Reviewed Actions",
+      "type": "array"
+    },
     "router": {
       "$ref": "#/$defs/AppsRouterOptions"
     }

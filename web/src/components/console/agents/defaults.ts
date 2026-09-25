@@ -40,6 +40,13 @@ export const DEFAULT_TOOLS: Required<ToolsConfig> = {
   max_tool_steps: 3,
   execution_default: "blocking",
   builtin_execution: {},
+  // V5-47: connected apps are off unless the agent opts in (V5-48's card edits this).
+  apps: {
+    mode: "off",
+    allowed_toolkits: [],
+    denied_actions: [],
+    router: { search: true, execute: true, manage_connections: false },
+  },
 };
 
 export const DEFAULT_KNOWLEDGE: Required<KnowledgeConfig> = {

@@ -37,9 +37,10 @@ from lkap_contracts.tool_providers import (
 from lkap_api.auth.deps import WorkspaceContext, require
 from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.deps import DbDep, HttpClientDep, SettingsDep, VaultDep
+from lkap_api.errors import NotFoundError
 from lkap_api.logging import get_logger
-from lkap_api.tool_providers import service
-from lkap_api.tool_providers.adapter import AdapterFactory, ToolProviderAdapter
+from lkap_api.tool_providers import materialise, service
+from lkap_api.tool_providers.adapter import AdapterFactory, ToolProviderAdapter, ToolProviderError
 from lkap_api.tool_providers.composio import ComposioAdapter
 
 log = get_logger(__name__)
@@ -382,15 +383,55 @@ async def get_callback(
 @router.post(
     "/materialise",
     response_model=AppActionsPickOut,
-    summary="Pick actions of a connected app",
+    summary="Pick actions of a connected app and add them as tools",
     description=(
-        "Records the actions agents may use from a connected app. Every action must belong to the app; "
-        "an action that deletes, removes or moves money needs `allow_destructive=true`. Turning picks "
-        "into agent tools arrives with the agent side of Apps."
+        "Records the actions agents may use from a connected app and turns each into an agent tool "
+        "(one per action; picking it again reuses the tool). Every action must belong to the app; an "
+        "action that deletes, removes or moves money needs `allow_destructive=true`. With `agent_id` the "
+        "tools are attached to that agent (a new configuration version). Read actions run while the "
+        "conversation continues; actions that change something wait for their result."
     ),
 )
 async def post_materialise(
     payload: AppActionsPickIn, db: DbDep, vault: VaultDep, ctx: WriteCtx, factory: FactoryDep
 ) -> AppActionsPickOut:
-    """Store picked actions on the connection."""
+    """Store picked actions on the connection and materialise them as ``provider`` tools."""
     return await service.pick_actions(db, vault, factory, ctx, payload)
+
+
+@router.post(
+    "/tools/{tool_id}/refresh-schema",
+    response_model=materialise.SchemaRefreshOut,
+    summary="Compare an app action tool with Composio's current version",
+    description=(
+        "Reads the action's current inputs from Composio and lists the fields added, removed or changed "
+        "since the tool was created. Nothing changes unless `apply=true`, which writes the new inputs "
+        "and version to the tool."
+    ),
+)
+async def post_refresh_schema(
+    tool_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    ctx: WriteCtx,
+    factory: FactoryDep,
+    apply: bool = Query(default=False, description="Write the new inputs to the tool"),
+) -> materialise.SchemaRefreshOut:
+    """Diff (and optionally apply) the pinned schema of one ``provider`` tool."""
+    tool = await materialise.load_provider_tool(db, ctx, tool_id)
+    definition = tool.definition if isinstance(tool.definition, dict) else {}
+    slug = str(definition.get("tool_slug") or "")
+    toolkit = str(definition.get("toolkit") or "") or None
+    adapter, _ = await service.workspace_adapter(db, vault, factory, ctx.workspace_id)
+    try:
+        listed = await adapter.list_tools(toolkit=toolkit, tool_slugs=[slug], limit=1)
+    except ToolProviderError as exc:
+        raise service.api_error(exc) from exc
+    items = [service.action_out(item) for item in listed.get("items", []) if isinstance(item, dict)]
+    action = next((item for item in items if item.slug.upper() == slug.upper()), None)
+    if action is None:
+        raise NotFoundError(f"Composio no longer lists the action '{slug}'")
+    result = materialise.refresh_result(tool, action, apply=apply)
+    await db.flush()
+    log.info("apps_schema_refreshed", tool_id=tool_id, changed=result.changed, applied=result.applied)
+    return result

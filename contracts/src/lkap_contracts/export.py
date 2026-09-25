@@ -66,6 +66,8 @@ from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
     ToolDefinition,
     ToolExecution,
     builtin_tools_document,
@@ -171,6 +173,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # tools
     "HttpToolDefinition": HttpToolDefinition,
     "McpServerDefinition": McpServerDefinition,
+    "McpServerOrigin": McpServerOrigin,
+    "ProviderToolDefinition": ProviderToolDefinition,
     "ToolExecution": ToolExecution,
     # api models
     "Page": api_models.Page,

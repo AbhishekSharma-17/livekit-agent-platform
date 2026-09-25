@@ -431,7 +431,7 @@ class ToolCreate(BaseModel):
     """``POST /v1/tools``. ``agent_id=None`` makes the tool shared."""
 
     agent_id: str | None = None
-    kind: Literal["http", "mcp"]
+    kind: Literal["http", "mcp", "provider"]  # V5-47: `provider` = a connected app's action
     name: str
     definition: ToolDefinition
     enabled: bool = True

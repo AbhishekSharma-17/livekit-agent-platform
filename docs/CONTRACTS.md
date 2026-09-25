@@ -223,9 +223,40 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
 
 - **Key.** Registry entry `composio` (`kind: "tool_provider"`, one secret field `api_key`, no `test`/`catalog`); a normal provider-key row. `POST /v1/credentials/{id}/test` checks it through `lkap_api.credential_tests` (Composio's session-info call, then the app count). `POST /v1/tool-providers/composio/key/test` checks a pasted key without storing it (10 per workspace per minute). Rotate is `PUT /v1/credentials/{id}` on the same row. Enablement is the `workspace_providers` row of `composio` (`POST …/enable`, `POST …/disable`; disable switches off the tools bound to the key or to a connection).
 - **Connections.** One `credentials` row per connected app with `provider_id = "tool-provider-account"` (not a registry id, so `POST /v1/credentials` cannot create one). The encrypted bag holds references only: `toolkit`, `method`, `subject` (`ws:<workspace_id>` or `agent:<agent_id>`), `auth_config_id`, `connected_account_id`, status, picked actions, and while a sign-in is pending the SHA-256 of its single-use nonce and its expiry. `last_test_message` mirrors the status (`initiated|active|expired|failed|inactive|unknown`, transiently `verifying`), `last_test_ok` = active, `last_test_at` = last checked. The sessions sweep marks sign-ins unfinished after 10 minutes `expired`.
-- **Routes** (`lkap_api/tool_providers/router.py`, reads `viewer` + `providers:read`, writes `admin` + `providers:write`): `GET …/status`, `POST …/key/test`, `POST …/enable`, `POST …/disable`, `GET …/toolkits`, `GET …/toolkits/{slug}`, `GET …/toolkits/{slug}/actions`, `POST …/connections`, `GET …/connections`, `GET …/connections/{id}` (refreshes from Composio), `POST …/connections/{id}/reconnect`, `DELETE …/connections/{id}[?purge=true]`, `POST …/materialise` (stores picked actions until V5-47), and the unauthenticated `GET …/callback?flow=<row id>.<nonce>&status&connected_account_id` (302 to `/console/tools?tab=apps&connect=ok|error`). Prefix `…` = `/v1/tool-providers/composio`.
+- **Routes** (`lkap_api/tool_providers/router.py`, reads `viewer` + `providers:read`, writes `admin` + `providers:write`): `GET …/status`, `POST …/key/test`, `POST …/enable`, `POST …/disable`, `GET …/toolkits`, `GET …/toolkits/{slug}`, `GET …/toolkits/{slug}/actions`, `POST …/connections`, `GET …/connections`, `GET …/connections/{id}` (refreshes from Composio), `POST …/connections/{id}/reconnect`, `DELETE …/connections/{id}[?purge=true]`, `POST …/materialise` (stores the picks and creates one `provider` tool per action, attached to `agent_id` when given — V5-47), `POST …/tools/{id}/refresh-schema[?apply=true]` (diffs a `provider` tool's pinned inputs with Composio's current ones; V5-47), and the unauthenticated `GET …/callback?flow=<row id>.<nonce>&status&connected_account_id` (302 to `/console/tools?tab=apps&connect=ok|error`). Prefix `…` = `/v1/tool-providers/composio`.
 - **Models** (`lkap_contracts.tool_providers`, exported with an `App`/`Toolkit` prefix because `ConnectionOut` is taken): `ToolkitOut`, `ToolkitPage`, `AppAuthField`, `AppActionOut`, `AppActionPage`, `AppConnectIn`, `AppConnectOut`, `AppConnectionOut`, `AppConnectionPage`, `AppReconnectIn`, `AppKeyTestIn`, `AppKeyTestOut`, `AppsStatusOut`, `AppActionsPickIn`, `AppActionsPickOut`.
-- **Tool bindings.** `_check_payload` lets a `composio` key bind only to an `mcp` definition whose url is `https://backend.composio.dev/…` (V5-47 switches this to its `origin` tag and adds the `provider` kind); an `http` tool can never bind it, and a connection row is never a tool credential.
+- **Tool bindings.** `_check_payload` lets a `composio` key bind only to an `mcp` definition tagged `origin.provider == "composio"` whose url is `https://backend.composio.dev/…`, or to a `provider` definition (V5-47), which also binds a connection row as `connection_id` with the connection's own `subject` (an app connected for one agent serves only that agent's tools); an `http` tool can never bind the key, and a connection row is never a tool credential.
+
+### Apps on agents (V5-47)
+
+`docs/v5/COMPOSIO.md` §3–§5. No environment variable; one migration, `v5_010_tool_provider_kind`
+(`tools.kind` CHECK gains `provider`).
+
+- **`provider` tools.** `ProviderToolDefinition` (`kind: "provider"`, `provider`, `name`, `description`,
+  pinned `parameters`, `tool_slug`, `toolkit`, `connection_id`, `credential_id`, `subject`,
+  `connected_account_id` (normally `None`: Composio picks the subject's account for the app), `headers`
+  (default `{"x-api-key": "{{ secret.api_key }}"}`), `timeout_s`, `max_result_chars` (1500), `result_path`
+  (`"data"`), `silent_reply`, `execution`, `schema_version`, `risk`) joins the `ToolDefinition` union and
+  `ToolCreate.kind`. Materialisation names it `<toolkit>_<action>` (≤ 64 characters), reads run `auto`
+  with an announcement, writes and destructive actions block and are not cancellable, 20 s. The api
+  substitutes the key into `headers` at resolve time; the worker (`lkap_agent.tools.provider`) posts
+  `{user_id: subject, arguments, version}` to `https://backend.composio.dev/api/v3.1/tools/execute/{slug}`.
+- **`tools.apps`.** `ToolsConfig.apps: AppsMode` (`mode: actions|server|router|off = off`,
+  `allowed_toolkits`, `denied_actions`, `router: {search, execute, manage_connections=false}`).
+  `server`/`router` make the api provision a Composio Tool Router session on agent save
+  (`tool_providers/provisioning.py`; the MCP server API is deprecated at Composio) and attach it as an
+  agent-owned `mcp` row with `origin: McpServerOrigin{provider, kind: server|router, remote_id: <session
+  id>, config_hash}`, `allowed_tools` (the picked actions, or the permitted meta tools) and
+  `tool_options`; its id is kept in `tools.tool_ids`. Unchanged settings reuse the session; `off`, another
+  mode or deleting the agent deletes it. The worker connects to an origin-tagged server only over `https`
+  on `backend.composio.dev`.
+- **Never-list.** `COMPOSIO_MULTI_EXECUTE_TOOL`, `COMPOSIO_MANAGE_CONNECTIONS`,
+  `COMPOSIO_WAIT_FOR_CONNECTIONS` join `NEVER_BACKGROUND_TOOLS`.
+- **Validation.** `tools.apps.mode` other than `off` without a Composio key (or with Apps disabled) is an
+  error; `router.manage_connections` is a warning; an attached `provider` tool whose connection is gone,
+  `expired`, `failed` or `inactive` is an error naming the app.
+- **Events.** `tool_needs_reauth {call_id, tool}` when an action fails because its app needs a person to
+  reconnect it (the model is told "This app needs to be reconnected by an admin"; no link is ever spoken).
 
 ---
 

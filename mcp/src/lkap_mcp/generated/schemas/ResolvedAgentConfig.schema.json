@@ -84,6 +84,16 @@
         "tools": {
           "$ref": "#/$defs/ToolsConfig",
           "default": {
+            "apps": {
+              "allowed_toolkits": [],
+              "denied_actions": [],
+              "mode": "off",
+              "router": {
+                "execute": true,
+                "manage_connections": false,
+                "search": true
+              }
+            },
             "builtin_disabled": [],
             "builtin_execution": {},
             "execution_default": "blocking",
@@ -230,6 +240,70 @@
         "id"
       ],
       "title": "AgentNode",
+      "type": "object"
+    },
+    "AppsMode": {
+      "description": "``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).\n\nThe default ``off`` changes nothing for an agent saved before this field existed.",
+      "properties": {
+        "allowed_toolkits": {
+          "description": "Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Allowed Toolkits",
+          "type": "array"
+        },
+        "denied_actions": {
+          "description": "Actions the app server or tool finder must never run (action slugs)",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 500,
+          "title": "Denied Actions",
+          "type": "array"
+        },
+        "mode": {
+          "default": "off",
+          "enum": [
+            "actions",
+            "server",
+            "router",
+            "off"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "router": {
+          "$ref": "#/$defs/AppsRouterOptions"
+        }
+      },
+      "title": "AppsMode",
+      "type": "object"
+    },
+    "AppsRouterOptions": {
+      "description": "What the tool finder may do (D-V5-C7).",
+      "properties": {
+        "execute": {
+          "default": true,
+          "description": "Let the agent run the actions it found",
+          "title": "Execute",
+          "type": "boolean"
+        },
+        "manage_connections": {
+          "default": false,
+          "description": "Let the agent offer a sign-in link for an app that is not connected yet (text and web chats only: a phone caller cannot open a link)",
+          "title": "Manage Connections",
+          "type": "boolean"
+        },
+        "search": {
+          "default": true,
+          "description": "Let the agent look actions up during the conversation",
+          "title": "Search",
+          "type": "boolean"
+        }
+      },
+      "title": "AppsRouterOptions",
       "type": "object"
     },
     "AvatarOptions": {
@@ -919,6 +993,17 @@
           "title": "Name",
           "type": "string"
         },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpServerOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "sse_read_timeout_s": {
           "default": 300,
           "title": "Sse Read Timeout S",
@@ -947,6 +1032,50 @@
         "url"
       ],
       "title": "McpServerDefinition",
+      "type": "object"
+    },
+    "McpServerOrigin": {
+      "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "kind": {
+          "enum": [
+            "server",
+            "router"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "remote_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Remote Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "remote_id"
+      ],
+      "title": "McpServerOrigin",
       "type": "object"
     },
     "ModelCapabilities": {
@@ -1274,6 +1403,153 @@
         "provider_id"
       ],
       "title": "ProviderRef",
+      "type": "object"
+    },
+    "ProviderToolDefinition": {
+      "description": "One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).\n\nCreated by materialisation (``POST /v1/tool-providers/composio/materialise``): the\nparameters are pinned from the provider's schema at import, the description is its first\nsentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``\non the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``\nplaceholder that the api substitutes from ``credential_id`` when a session resolves, as\nfor HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's\n``user_id`` copied from it.",
+      "properties": {
+        "connected_account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connected Account Id"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ToolExecution"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "provider",
+          "default": "provider",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 1500,
+          "maximum": 20000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "result_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "data",
+          "title": "Result Path"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write",
+            "destructive"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "silent_reply": {
+          "default": false,
+          "title": "Silent Reply",
+          "type": "boolean"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 10,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool_slug": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "toolkit": {
+          "default": "",
+          "title": "Toolkit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "parameters",
+        "tool_slug",
+        "connection_id",
+        "subject"
+      ],
+      "title": "ProviderToolDefinition",
       "type": "object"
     },
     "QaConfig": {
@@ -1656,6 +1932,19 @@
     "ToolsConfig": {
       "description": "Built-in tool gating plus references to admin-authored tool rows.",
       "properties": {
+        "apps": {
+          "$ref": "#/$defs/AppsMode",
+          "default": {
+            "allowed_toolkits": [],
+            "denied_actions": [],
+            "mode": "off",
+            "router": {
+              "execute": true,
+              "manage_connections": false,
+              "search": true
+            }
+          }
+        },
         "builtin_disabled": {
           "default": [],
           "items": {
@@ -2045,7 +2334,8 @@
         "discriminator": {
           "mapping": {
             "http": "#/$defs/HttpToolDefinition",
-            "mcp": "#/$defs/McpServerDefinition"
+            "mcp": "#/$defs/McpServerDefinition",
+            "provider": "#/$defs/ProviderToolDefinition"
           },
           "propertyName": "kind"
         },
@@ -2055,6 +2345,9 @@
           },
           {
             "$ref": "#/$defs/McpServerDefinition"
+          },
+          {
+            "$ref": "#/$defs/ProviderToolDefinition"
           }
         ]
       },

@@ -339,6 +339,7 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/tool-providers/composio/toolkits",
     "/v1/tool-providers/composio/toolkits/{slug}",
     "/v1/tool-providers/composio/toolkits/{slug}/actions",
+    "/v1/tool-providers/composio/tools/{tool_id}/refresh-schema",
     "/v1/tools",
     "/v1/tools/{tool_id}",
     "/v1/tools/{tool_id}/dry-run",
@@ -472,6 +473,9 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "agent_archive": frozenset({"id_or_slug", "archive", "confirm"}),
     "agent_versions": frozenset({"id_or_slug", "get", "restore", "confirm", "plan"}),
     "agent_attach": frozenset({"id_or_slug", "kb_ids", "tool_ids", "remove", "plan"}),
+    "agent_apps_mode": frozenset(
+        {"id_or_slug", "mode", "allowed_toolkits", "denied_actions", "router", "plan"}
+    ),
     "agent_limits": frozenset({"id_or_slug", "limits", "allowed_origins", "plan"}),
     "agent_flow_validate": frozenset({"id_or_slug", "flow"}),
     # 4.5 knowledge bases

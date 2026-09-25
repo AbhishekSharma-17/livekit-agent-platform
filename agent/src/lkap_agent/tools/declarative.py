@@ -27,7 +27,13 @@ from urllib.parse import quote
 import httpx
 from livekit.agents import RunContext, ToolError, function_tool
 from livekit.agents.llm import RawFunctionTool
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecutionMode
+from lkap_contracts.tool_providers import COMPOSIO_HOST
+from lkap_contracts.tools import (
+    HttpToolDefinition,
+    McpServerDefinition,
+    ProviderToolDefinition,
+    ToolExecutionMode,
+)
 
 from lkap_agent.logging import get_logger
 from lkap_agent.tools._http_safety import (
@@ -262,7 +268,7 @@ def build_http_tool(
 
 
 def build_http_tools(
-    defs: list[HttpToolDefinition],
+    defs: list[HttpToolDefinition | ProviderToolDefinition],
     *,
     platform_allowed_hosts: list[str] | None = None,
     user_agent: str | None = None,
@@ -288,17 +294,47 @@ def build_http_tools(
 
     Returns:
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.
+        A `ProviderToolDefinition` (a connected app's action, V5-47) is built by
+        `lkap_agent.tools.provider` instead: it calls Composio's execute route on the
+        pinned Composio host, so the HTTP allowlists do not apply to it.
     """
-    return [
-        build_http_tool(
-            definition,
-            platform_allowed_hosts=platform_allowed_hosts,
-            user_agent=user_agent,
-            execution_default=execution_default,
-            flow_node=flow_node,
+    tools: list[RawFunctionTool[..., Any]] = []
+    for definition in defs:
+        if isinstance(definition, ProviderToolDefinition):
+            from lkap_agent.tools.provider import build_provider_tool  # noqa: PLC0415 - avoids a cycle
+
+            tools.append(
+                build_provider_tool(definition, execution_default=execution_default, flow_node=flow_node)
+            )
+            continue
+        tools.append(
+            build_http_tool(
+                definition,
+                platform_allowed_hosts=platform_allowed_hosts,
+                user_agent=user_agent,
+                execution_default=execution_default,
+                flow_node=flow_node,
+            )
         )
-        for definition in defs
-    ]
+    return tools
+
+
+def check_origin_host(url: str) -> None:
+    """Pin a provider-provisioned MCP server to ``https`` on the provider's host (D-V5-C10).
+
+    An origin-tagged definition (the Composio app server or tool finder, V5-47) carries the
+    workspace's Composio key in a header, so it may only ever connect to Composio itself,
+    whatever `check_url_public` would allow.
+
+    Raises:
+        HttpToolSecurityError: The scheme is not ``https``, the host is not the provider's,
+            or the url carries credentials or another port.
+    """
+    parsed = httpx.URL(url)
+    if parsed.scheme != "https" or (parsed.host or "").lower() != COMPOSIO_HOST:
+        raise HttpToolSecurityError(f"an app server must be https on {COMPOSIO_HOST}, not {parsed.host!r}")
+    if parsed.port not in (None, 443) or parsed.userinfo:
+        raise HttpToolSecurityError(f"an app server must be https on {COMPOSIO_HOST} without a port or login")
 
 
 #: Called with `(definition, reason)` for each MCP server `build_mcp_toolsets` refuses.
@@ -459,6 +495,8 @@ def _guarded_mcp_servers(
     for definition in defs:
         try:
             check_url_public(definition.url)
+            if definition.origin is not None:
+                check_origin_host(definition.url)
         except HttpToolSecurityError as exc:
             reason = str(exc)
             _log.warning("declarative_tool.mcp_server_refused", mcp_server=definition.name, reason=reason)

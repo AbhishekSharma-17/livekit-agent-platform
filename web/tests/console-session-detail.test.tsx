@@ -71,8 +71,8 @@ describe("BUILTIN_EVENT_KINDS — tool_call_updated / tool_reply", () => {
 
   it("otherwise humanizes the reply status", () => {
     const kind = KINDS.get("tool_reply");
-    expect(kind?.title({ call_ids: ["c1"], status: "scheduled" })).toBe("Reply Scheduled");
-    expect(kind?.title({ call_ids: ["c1", "c2"], status: "completed" })).toBe("Reply Completed");
+    expect(kind?.title({ call_ids: ["c1"], status: "scheduled" })).toBe("Reply scheduled");
+    expect(kind?.title({ call_ids: ["c1", "c2"], status: "completed" })).toBe("Reply completed");
     expect(kind?.summary?.({ call_ids: ["c1", "c2"], status: "completed" })).toBe("2 tool calls");
   });
 });

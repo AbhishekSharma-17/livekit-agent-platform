@@ -110,7 +110,13 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
         value={builtinExecution?.[name]}
         onSave={(execution) => setBuiltinExecution(name, execution)}
         trigger={
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            aria-label={`Execution — ${label}`}
+          >
             Execution
           </Button>
         }

@@ -422,6 +422,7 @@ export function McpToolEditorDialog({
                     value={freeTextRow}
                     onChange={(e) => setFreeTextRow(e.target.value)}
                     placeholder="tool_name"
+                    aria-label="Tool name"
                     className="font-mono text-sm"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {

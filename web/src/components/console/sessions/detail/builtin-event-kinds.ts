@@ -130,7 +130,7 @@ export const BUILTIN_EVENT_KINDS: TimelineEventKind[] = [
     title: (payload) => {
       const status = text(payload, "status");
       if (status === "skipped") return "Already covered";
-      return status ? `Reply ${humanize(status)}` : "Reply";
+      return status ? humanize(`reply ${status}`) : "Reply";
     },
     summary: (payload) => {
       const ids = payload["call_ids"];

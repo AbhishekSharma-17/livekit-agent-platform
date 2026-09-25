@@ -26,13 +26,22 @@ config_hash}``, the session's MCP url (``https`` on the Composio host only),
 session (``config_hash``); a change creates a new session and deletes the
 old one; ``off``, another mode or deleting the agent deletes it (best
 effort, audited).
+
+What the session may not run is computed here, never trusted from the console
+(R-V5-9): ``effective_denied_actions`` = ``denied_actions`` plus every destructive
+action in scope that is not in ``reviewed_actions``. In scope are the picked
+destructive actions (an app server) and, for a tool finder, every destructive
+action in the catalogue of the agent's apps. The resolve step applies the same
+rule to an app server row provisioned before that rule existed
+(:func:`apply_denied_actions`).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import Annotated, Any, Final
 
 from fastapi import Depends
@@ -44,10 +53,17 @@ from lkap_contracts.tool_providers import (
     AppsMode,
     action_risk,
     agent_subject,
+    effective_denied_actions,
     router_allowed_tools,
     workspace_subject,
 )
-from lkap_contracts.tools import McpOriginKind, McpServerDefinition, McpServerOrigin, ToolExecution
+from lkap_contracts.tools import (
+    McpOriginKind,
+    McpServerDefinition,
+    McpServerOrigin,
+    ToolDefinition,
+    ToolExecution,
+)
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +77,7 @@ from lkap_api.logging import get_logger
 from lkap_api.tool_providers import service
 from lkap_api.tool_providers.adapter import AdapterFactory, ToolProviderError, ToolProviderNotFoundError
 from lkap_api.tool_providers.bindings import is_composio_url
-from lkap_api.tool_providers.router import get_adapter_factory
+from lkap_api.tool_providers.router import get_adapter_factory, get_catalog_cache
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -130,14 +146,27 @@ def _usable(conn: service.AppConnection, agent_id: str) -> bool:
     )
 
 
+def _destructive(slugs: Iterable[str]) -> set[str]:
+    return {slug.upper() for slug in slugs if action_risk(slug) == "destructive"}
+
+
 def plan_session(
-    apps: AppsMode, connections: list[service.AppConnection], *, workspace_id: str, agent_id: str
+    apps: AppsMode,
+    connections: list[service.AppConnection],
+    *,
+    workspace_id: str,
+    agent_id: str,
+    destructive_in_scope: Iterable[str] = (),
 ) -> SessionPlan:
     """The Tool Router session an agent's ``tools.apps`` asks for (D-V5-C6, C7).
 
     The subject is the workspace's (``ws:<id>``) unless every usable connection was
     made for this agent alone. Only connections of that subject count; their
     connected accounts are pinned per app.
+
+    The session never runs an action of ``effective_denied_actions`` (R-V5-9): the picked
+    destructive actions of the chosen apps are always in scope; a tool finder's caller adds
+    the destructive actions of those apps' catalogues (``destructive_in_scope``).
 
     Raises:
         UnprocessableEntityError: The mode is not ``server``/``router``, no connected app
@@ -164,7 +193,9 @@ def plan_session(
     subject = chosen[0].subject
     chosen = [c for c in chosen if c.subject == subject]
     toolkits = sorted({c.toolkit for c in chosen})
-    denied = {slug.upper() for slug in apps.denied_actions}
+    scope = _destructive(slug for conn in chosen for slug in conn.picked_actions)
+    scope |= {slug.upper() for slug in destructive_in_scope}
+    denied = set(effective_denied_actions(apps, scope))
     accounts = {
         toolkit: sorted(
             {c.connected_account_id for c in chosen if c.toolkit == toolkit and c.connected_account_id}
@@ -188,6 +219,13 @@ def plan_session(
                     picked.setdefault(conn.toolkit, []).append(slug.upper())
         exposed = sorted({slug for slugs in picked.values() for slug in slugs})
         if not exposed:
+            unreviewed = [slug for slug in unreviewed_destructive(apps, scope) if slug in denied]
+            if unreviewed:
+                raise UnprocessableEntityError(
+                    "the app server has no action to offer: its picked actions are destructive and "
+                    "blocked until reviewed in the Connected apps card: " + ", ".join(unreviewed),
+                    details={"path": "tools.apps.denied_actions", "unreviewed": unreviewed},
+                )
             raise UnprocessableEntityError(
                 "the app server has no action to offer: pick actions of a connected app first",
                 details={"path": "tools.apps.mode"},
@@ -235,12 +273,49 @@ def plan_session(
     )
 
 
+def unreviewed_destructive(apps: AppsMode, destructive_in_scope: Iterable[str]) -> list[str]:
+    """The destructive actions in scope the builder has not reviewed yet (R-V5-9), sorted."""
+    reviewed = {slug.upper() for slug in apps.reviewed_actions}
+    return sorted({slug.upper() for slug in destructive_in_scope} - reviewed)
+
+
+def apply_denied_actions(definition: ToolDefinition, apps: AppsMode) -> ToolDefinition:
+    """An app server row without the actions R-V5-9 denies (the resolve step).
+
+    The row's ``allowed_tools`` are the actions preloaded when it was provisioned; one
+    provisioned before ``reviewed_actions`` existed may still offer a destructive action
+    the builder never reviewed. Dropping ``effective_denied_actions`` here keeps such an
+    action away from the session until the agent is saved again. Any other definition
+    (a tool finder offers meta tools only; its deny list lives in the Composio session)
+    is returned unchanged.
+    """
+    if not isinstance(definition, McpServerDefinition):
+        return definition
+    origin = definition.origin
+    if origin is None or origin.kind != "server" or definition.allowed_tools is None:
+        return definition
+    denied = set(effective_denied_actions(apps, _destructive(definition.allowed_tools)))
+    if not denied & {name.upper() for name in definition.allowed_tools}:
+        return definition
+    return definition.model_copy(
+        update={
+            "allowed_tools": [name for name in definition.allowed_tools if name.upper() not in denied],
+            "tool_options": {
+                name: options
+                for name, options in definition.tool_options.items()
+                if name.upper() not in denied
+            },
+        }
+    )
+
+
 @dataclass
 class AppsProvisioner:
     """Provisions and tears down an agent's app server / tool finder (the agents router's hook)."""
 
     vault: Vault
     factory: AdapterFactory
+    cache: service.CatalogCache = field(default_factory=service.CatalogCache)
 
     async def on_save(
         self, db: AsyncSession, ctx: WorkspaceContext, agent: Agent, config: AgentConfig
@@ -250,7 +325,7 @@ class AppsProvisioner:
         Idempotent: a save that changes nothing Composio sees makes no vendor call.
         Called after validation and before the config is stored.
         """
-        return await sync_agent_apps(db, self.vault, self.factory, ctx, agent, config)
+        return await sync_agent_apps(db, self.vault, self.factory, ctx, agent, config, cache=self.cache)
 
     async def before_delete(
         self, db: AsyncSession, ctx: WorkspaceContext, agent: Agent
@@ -282,10 +357,12 @@ class AppsProvisioner:
 
 
 def get_apps_provisioner(
-    vault: VaultDep, factory: Annotated[AdapterFactory, Depends(get_adapter_factory)]
+    vault: VaultDep,
+    factory: Annotated[AdapterFactory, Depends(get_adapter_factory)],
+    cache: Annotated[service.CatalogCache, Depends(get_catalog_cache)],
 ) -> AppsProvisioner:
     """The hook ``routers/agents.py`` calls on create, update and delete."""
-    return AppsProvisioner(vault=vault, factory=factory)
+    return AppsProvisioner(vault=vault, factory=factory, cache=cache)
 
 
 AppsProvisionerDep = Annotated[AppsProvisioner, Depends(get_apps_provisioner)]
@@ -363,6 +440,8 @@ async def sync_agent_apps(
     ctx: WorkspaceContext,
     agent: Agent,
     config: AgentConfig,
+    *,
+    cache: service.CatalogCache | None = None,
 ) -> AgentConfig:
     """Provision, update or remove the agent's app server / tool finder (D-V5-C11).
 
@@ -373,6 +452,7 @@ async def sync_agent_apps(
         ctx: The caller's workspace context.
         agent: The agent row (flushed, so it has an id).
         config: The validated configuration about to be stored.
+        cache: The catalogue cache a tool finder's destructive-action scan reads (R-V5-9).
 
     Returns:
         ``config`` with ``tools.tool_ids`` holding the provisioned row (and no stale one).
@@ -402,6 +482,20 @@ async def sync_agent_apps(
     adapter, key = await service.workspace_adapter(db, vault, factory, ctx.workspace_id)
     connections = await service.list_connection_records(db, vault, ctx.workspace_id)
     plan = plan_session(apps, connections, workspace_id=ctx.workspace_id, agent_id=agent.id)
+    if plan.kind == "router":
+        # R-V5-9: a tool finder reaches every action of its apps, so every destructive one
+        # of their catalogues is in scope.
+        catalogue = cache if cache is not None else service.CatalogCache()
+        scope: set[str] = set()
+        for toolkit in plan.toolkits:
+            scope.update(await service.destructive_actions(adapter, key, catalogue, toolkit))
+        plan = plan_session(
+            apps,
+            connections,
+            workspace_id=ctx.workspace_id,
+            agent_id=agent.id,
+            destructive_in_scope=scope,
+        )
     previous = origin_of(keep) if keep is not None else None
     same_key = keep is not None and _definition(keep).get("credential_id") == key.id
     if keep is not None and previous is not None and previous.config_hash == plan.config_hash and same_key:
@@ -473,9 +567,11 @@ __all__ = [
     "AppsProvisioner",
     "AppsProvisionerDep",
     "SessionPlan",
+    "apply_denied_actions",
     "get_apps_provisioner",
     "origin_of",
     "origin_rows",
     "plan_session",
     "sync_agent_apps",
+    "unreviewed_destructive",
 ]

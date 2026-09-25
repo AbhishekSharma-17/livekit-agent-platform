@@ -24,7 +24,14 @@ from conftest import create_agent
 from fakes.composio import VALID_KEY, ComposioWorld
 from fastapi import FastAPI
 from lkap_contracts.tool_providers import TOOL_PROVIDER_ACCOUNT, AppsMode, AppsRouterOptions, action_risk
-from lkap_contracts.tools import TOOL_NAME_PATTERN, ProviderToolDefinition
+from lkap_contracts.tools import (
+    TOOL_NAME_PATTERN,
+    McpOriginKind,
+    McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
+    ToolExecution,
+)
 from sqlalchemy import select
 
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID as WS
@@ -1889,3 +1896,212 @@ async def test_the_resolved_config_carries_the_key_in_both_composio_paths(
         assert by_kind[kind]["credential_id"] is None
     assert by_kind["provider"]["subject"] == f"ws:{WS}"
     assert by_kind["mcp"]["origin"]["kind"] == "router"
+
+
+# ------------------------------------------------------------------------ R-V5-9: reviewed_actions
+DELETE_EVENT = "GOOGLECALENDAR_DELETE_EVENT"
+FREE_SLOTS = "GOOGLECALENDAR_FIND_FREE_SLOTS"
+
+
+async def _calendar_with_delete_picked(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld
+) -> str:
+    connection_id = await _active_calendar(admin_client, client, world)
+    await _pick(admin_client, connection_id, FREE_SLOTS)
+    await _pick(admin_client, connection_id, DELETE_EVENT, allow_destructive=True)
+    return connection_id
+
+
+async def test_server_mode_blocks_an_unreviewed_destructive_action_until_it_is_reviewed(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    unreviewed = await _set_apps(admin_client, agent_id, mode="server")
+    reviewed = await _set_apps(admin_client, agent_id, reviewed_actions=[DELETE_EVENT])
+    denied = await _set_apps(admin_client, agent_id, denied_actions=[DELETE_EVENT])
+
+    assert unreviewed.status_code == 200, unreviewed.text
+    assert reviewed.status_code == 200, reviewed.text
+    assert denied.status_code == 200, denied.text
+    creates = world.calls_of("create_router_session")
+    preloads = [call.kwargs["options"]["preload"]["tools"] for call in creates]
+    assert preloads == [[FREE_SLOTS], [DELETE_EVENT, FREE_SLOTS], [FREE_SLOTS]]
+
+
+async def test_server_mode_needs_no_catalogue_call(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+    before = len(world.calls_of("list_tools"))
+
+    assert (await _set_apps(admin_client, agent_id, mode="server")).status_code == 200
+
+    assert len(world.calls_of("list_tools")) == before
+
+
+async def test_server_mode_with_only_unreviewed_destructive_picks_names_them(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+    await _pick(admin_client, connection_id, DELETE_EVENT, allow_destructive=True)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    refused = await _set_apps(admin_client, agent_id, mode="server")
+
+    assert refused.status_code == 422
+    assert "blocked until reviewed in the Connected apps card" in refused.text
+    assert DELETE_EVENT in refused.text
+    assert world.calls_of("create_router_session") == []
+
+
+async def test_router_mode_disables_the_catalogues_unreviewed_destructive_actions(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _active_calendar(admin_client, client, world)
+    agent_id = await _new_agent(admin_client)
+
+    unreviewed = await _set_apps(admin_client, agent_id, mode="router")
+    reviewed = await _set_apps(admin_client, agent_id, reviewed_actions=[DELETE_EVENT])
+
+    assert unreviewed.status_code == 200, unreviewed.text
+    assert reviewed.status_code == 200, reviewed.text
+    first, second = (call.kwargs["options"] for call in world.calls_of("create_router_session"))
+    assert first["tools"] == {"googlecalendar": {"disable": [DELETE_EVENT]}}
+    assert "tools" not in second
+    scans = world.calls_of("list_tools")
+    assert scans
+    assert all(call.kwargs["toolkit"] == "googlecalendar" for call in scans)
+    assert len(scans) == 1, "the second save reads the catalogue cache"
+
+
+@pytest.mark.parametrize("mode", ["server", "router"])
+async def test_no_reviews_provision_exactly_what_the_console_seed_did(
+    mode: str,
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+) -> None:
+    """R-V5-9 compatibility: the V5-48 card wrote each destructive action into denied_actions;
+    with reviewed_actions=[] the api denies the same ones, so the session stays the same."""
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    seeded = await _set_apps(admin_client, agent_id, mode=mode, denied_actions=[DELETE_EVENT])
+    unseeded = await _set_apps(admin_client, agent_id, denied_actions=[], reviewed_actions=[])
+
+    assert seeded.status_code == 200, seeded.text
+    assert unseeded.status_code == 200, unseeded.text
+    assert len(world.calls_of("create_router_session")) == 1, "same options, same session"
+
+
+async def test_the_validator_names_unreviewed_destructive_actions(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+    await _set_apps(admin_client, agent_id, mode="server")
+
+    before = (await admin_client.post(f"/v1/agents/{agent_id}/validate")).json()
+    await _set_apps(admin_client, agent_id, reviewed_actions=[DELETE_EVENT])
+    after = (await admin_client.post(f"/v1/agents/{agent_id}/validate")).json()
+
+    flagged = [issue for issue in before["issues"] if issue["path"] == "tools.apps.denied_actions"]
+    assert len(flagged) == 1
+    assert flagged[0]["severity"] == "warning"
+    assert DELETE_EVENT in flagged[0]["message"]
+    assert FREE_SLOTS not in flagged[0]["message"]
+    assert "blocked until reviewed in the Connected apps card" in flagged[0]["message"]
+    assert not [issue for issue in after["issues"] if issue["path"] == "tools.apps.denied_actions"]
+
+
+def _server_definition(*names: str, kind: McpOriginKind = "server") -> McpServerDefinition:
+    return McpServerDefinition(
+        name="composio_app_server",
+        url="https://backend.composio.dev/tool_router/s1/mcp",
+        allowed_tools=list(names),
+        tool_options={name: ToolExecution(mode="blocking", cancellable=False) for name in names},
+        origin=McpServerOrigin(kind=kind, remote_id="s1", config_hash="h"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("apps", "expected"),
+    [
+        pytest.param(AppsMode(mode="server"), [FREE_SLOTS], id="unreviewed-dropped"),
+        pytest.param(
+            AppsMode(mode="server", reviewed_actions=[DELETE_EVENT]),
+            [DELETE_EVENT, FREE_SLOTS],
+            id="reviewed-kept",
+        ),
+        pytest.param(
+            AppsMode(mode="server", reviewed_actions=[DELETE_EVENT], denied_actions=[DELETE_EVENT]),
+            [FREE_SLOTS],
+            id="reviewed-and-denied-dropped",
+        ),
+    ],
+)
+def test_apply_denied_actions_filters_an_app_server(apps: AppsMode, expected: list[str]) -> None:
+    resolved = provisioning.apply_denied_actions(_server_definition(DELETE_EVENT, FREE_SLOTS), apps)
+
+    assert isinstance(resolved, McpServerDefinition)
+    assert resolved.allowed_tools == expected
+    assert sorted(resolved.tool_options) == expected
+
+
+def test_apply_denied_actions_leaves_a_tool_finder_and_other_tools_alone() -> None:
+    finder = _server_definition("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", kind="router")
+    plain = McpServerDefinition(name="docs", url="https://mcp.example.com/mcp")
+
+    assert provisioning.apply_denied_actions(finder, AppsMode(mode="router")) is finder
+    assert provisioning.apply_denied_actions(plain, AppsMode(mode="server")) is plain
+
+
+def test_plan_session_adds_the_catalogue_scope_to_a_tool_finders_deny_list() -> None:
+    conn = service.AppConnection(
+        row=Credential(id="c1"),
+        toolkit="mail",
+        method="api_key",
+        subject="ws:w1",
+        status="active",
+    )
+
+    plan = provisioning.plan_session(
+        AppsMode(mode="router", denied_actions=["MAIL_SEND"], reviewed_actions=["MAIL_REMOVE_LABEL"]),
+        [conn],
+        workspace_id="w1",
+        agent_id="a1",
+        destructive_in_scope=["MAIL_DELETE", "MAIL_REMOVE_LABEL"],
+    )
+
+    assert plan.options["tools"] == {"mail": {"disable": ["MAIL_DELETE", "MAIL_SEND"]}}
+
+
+class _PagedCatalogue:
+    """Two catalogue pages; the second action's read tag must not hide its destructive slug."""
+
+    def __init__(self) -> None:
+        self.cursors: list[str | None] = []
+
+    async def list_tools(self, *, toolkit: str, cursor: str | None, limit: int) -> dict[str, Any]:
+        self.cursors.append(cursor)
+        if cursor is None:
+            return {"items": [{"slug": "X_DELETE_A"}, {"slug": "X_LIST_A"}], "next_cursor": "p2"}
+        return {"items": [{"slug": "X_REMOVE_B", "tags": ["readOnlyHint"]}], "next_cursor": None}
+
+
+async def test_destructive_actions_walks_every_catalogue_page() -> None:
+    catalogue = _PagedCatalogue()
+
+    found = await service.destructive_actions(
+        catalogue,  # type: ignore[arg-type]
+        Credential(id="k1", workspace_id=WS, fingerprint="…abcd"),
+        service.CatalogCache(),
+        "x",
+    )
+
+    assert found == ["X_DELETE_A", "X_REMOVE_B"]
+    assert catalogue.cursors == [None, "p2"]

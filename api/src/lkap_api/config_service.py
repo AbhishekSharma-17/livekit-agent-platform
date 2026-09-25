@@ -76,7 +76,7 @@ from lkap_contracts.providers import (
     get,
     validate_model_id,
 )
-from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT
+from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT, action_risk
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     NON_BLOCKING_MODES,
@@ -991,6 +991,12 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
       sign-in link (it only helps text and web chats).
     * An attached ``provider`` tool whose connection is gone, or expired, failed or disconnected
       → error naming the app; one whose key is not a Composio key → error.
+    * The app server or tool finder with destructive actions in scope that are not in
+      ``reviewed_actions`` → warning at ``tools.apps.denied_actions`` naming them: the api
+      blocks them until the builder reviews them (R-V5-9). In scope here are the workspace's
+      picked actions of the agent's apps (what an app server offers); a tool finder can also
+      reach destructive actions nobody picked, which only provisioning sees (it reads the
+      catalogue) and blocks all the same.
 
     Args:
         ctx: The validation context.
@@ -1029,6 +1035,8 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
     definitions = ctx.tool_definitions_by_id
     if definitions is None:
         return issues
+    if apps.mode in ("server", "router"):
+        issues.extend(_unreviewed_destructive_issues(ctx, definitions))
     for index, tool_id in enumerate(tools.tool_ids):
         definition = definitions.get(tool_id)
         if not isinstance(definition, Mapping) or definition.get("kind") != "provider":
@@ -1060,6 +1068,40 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _unreviewed_destructive_issues(
+    ctx: ValidationContext, definitions: Mapping[str, Mapping[str, Any]]
+) -> list[Issue]:
+    """The warning naming picked destructive actions the builder has not reviewed (R-V5-9)."""
+    apps = ctx.config.tools.apps
+    allowed = {slug.lower() for slug in apps.allowed_toolkits}
+    reviewed = {slug.upper() for slug in apps.reviewed_actions}
+    unreviewed: set[str] = set()
+    for definition in definitions.values():
+        if definition.get("kind") != "provider":
+            continue
+        slug = str(definition.get("tool_slug") or "").upper()
+        toolkit = str(definition.get("toolkit") or "").lower()
+        connection_id = definition.get("connection_id")
+        if not slug or (allowed and toolkit not in allowed):
+            continue
+        if not isinstance(connection_id, str) or connection_id not in ctx.connection_statuses:
+            continue
+        if action_risk(slug) == "destructive" and slug not in reviewed:
+            unreviewed.add(slug)
+    if not unreviewed:
+        return []
+    names = ", ".join(sorted(unreviewed))
+    return [
+        Issue(
+            path="tools.apps.denied_actions",
+            message=f"blocked until reviewed in the Connected apps card: {names} "
+            "(these actions delete, remove or move money, so the agent cannot use them until you "
+            "allow or deny each one)",
+            severity="warning",
+        )
+    ]
 
 
 def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:

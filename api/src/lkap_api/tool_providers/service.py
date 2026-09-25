@@ -98,6 +98,11 @@ CATALOG_CACHE_MAX: Final = 512
 #: Pasted-key tests per workspace per minute.
 KEY_TEST_PER_MIN: Final = 10
 
+#: Page size and page cap of the destructive-action scan (R-V5-9). The page size is the
+#: console picker's, so the scan shares its cache entries; 20 pages cover 1000 actions per app.
+DESTRUCTIVE_SCAN_LIMIT: Final = 50
+DESTRUCTIVE_SCAN_PAGES: Final = 20
+
 #: Where the console shows Apps (the callback's redirect target).
 CONSOLE_APPS_PATH: Final = "/console/tools"
 
@@ -748,6 +753,45 @@ async def list_actions(
         next_cursor=_str(page.get("next_cursor")) or None,
         total=_int(page.get("total_items")),
     )
+
+
+def _tools_fetch(adapter: ToolProviderAdapter, toolkit: str, cursor: str | None) -> Callable[[], Any]:
+    async def fetch() -> dict[str, Any]:
+        return await adapter.list_tools(toolkit=toolkit, cursor=cursor, limit=DESTRUCTIVE_SCAN_LIMIT)
+
+    return fetch
+
+
+async def destructive_actions(
+    adapter: ToolProviderAdapter, credential: Credential, cache: CatalogCache, toolkit: str
+) -> list[str]:
+    """Every destructive action of one app in the vendor catalogue (R-V5-9), upper-cased and sorted.
+
+    Walks the app's action pages with the catalogue's risk rule (``action_risk``), up to
+    :data:`DESTRUCTIVE_SCAN_PAGES` pages, through the same cache entries as the console's
+    Actions list.
+
+    Raises:
+        ApiError: Composio refused or failed a page (the caller must not provision a tool
+            finder whose destructive actions it could not list).
+    """
+    found: set[str] = set()
+    cursor: str | None = None
+    for _ in range(DESTRUCTIVE_SCAN_PAGES):
+        key = _cache_key(credential, "tools", toolkit, "", False, cursor or "", DESTRUCTIVE_SCAN_LIMIT)
+        page = await _cached(cache, key, _tools_fetch(adapter, toolkit, cursor), refresh=False)
+        for raw in _list(page.get("items")):
+            item = _dict(raw)
+            slug = _str(item.get("slug"))
+            tags = [str(t) for t in _list(item.get("tags")) if isinstance(t, str)]
+            if slug and action_risk(slug, tags) == "destructive":
+                found.add(slug.upper())
+        cursor = _str(page.get("next_cursor")) or None
+        if cursor is None:
+            break
+    else:
+        log.warning("apps_destructive_scan_truncated", toolkit=toolkit, pages=DESTRUCTIVE_SCAN_PAGES)
+    return sorted(found)
 
 
 # ============================================================================ connections
@@ -1556,6 +1600,8 @@ async def expire_stale_connections(db: AsyncSession, vault: Vault, *, now: dt.da
 
 __all__ = [
     "CATALOG_TTL_S",
+    "DESTRUCTIVE_SCAN_LIMIT",
+    "DESTRUCTIVE_SCAN_PAGES",
     "FLOW_TTL",
     "KEY_TEST_PER_MIN",
     "AppConnection",
@@ -1569,6 +1615,7 @@ __all__ = [
     "api_error",
     "connect",
     "console_redirect",
+    "destructive_actions",
     "disconnect",
     "expire_stale_connections",
     "get_toolkit",

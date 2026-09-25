@@ -766,7 +766,7 @@ def _strip_images(turn_ctx: ChatContext) -> int:
 async def platform_text_input_cb(sess: AgentSession[Any], ev: Any) -> None:
     """Route a typed `lk.chat` turn through `Agent.on_user_turn_completed`.
 
-    livekit-agents 1.8.2's default `text_input_cb` calls
+    livekit-agents 1.8.3's default `text_input_cb` calls
     `session.generate_reply(user_input=text)` directly, which **skips**
     `on_user_turn_completed` — so typed turns would get no knowledge
     auto-inject, no per-turn frame (D-W2-8) and no pack hook, unlike spoken

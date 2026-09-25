@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 # and the project itself in `packs/`. Declaring it here would make `packs`'
 # dev group depend on itself, so it is only in this package's own dev group.
 dependencies = [
-  "livekit-agents==1.8.2",
+  "livekit-agents==1.8.3",
   "pydantic>=2.11,<3",
   "lkap-contracts",
 ]

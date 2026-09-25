@@ -2,7 +2,7 @@
 
 This is the one place that knows how `AgentConfig` maps onto the LiveKit
 runtime (docs/ARCHITECTURE.md §4/§6/§8, ARCHITECTURE-V2 D-V2-10). Verified
-against livekit-agents 1.8.2:
+against livekit-agents 1.8.3:
 
 * `turn_handling` is a `TurnHandlingOptions` TypedDict; `allow_interruptions`
   lives at `turn_handling["interruption"]["enabled"]`.

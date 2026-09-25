@@ -4,16 +4,16 @@ The provider registry (`contracts/src/lkap_contracts/providers.py`) declares
 `secret_fields`/`fields` for ~90 providers, most of whose plugin packages are
 *not* installed in this project's venv (`agent/.venv` only carries the 8
 packages the v1 MVP set needs). This script is how V2-05 verified every other
-entry's field names without guessing: it AST-parses the real `1.8.2`-tagged
+entry's field names without guessing: it AST-parses the real release-tagged
 source tree (never imports it — most of these packages have native/heavy
 dependencies this project doesn't install) and writes a JSON fixture of every
 class's accepted keyword names.
 
 Usage::
 
-    git clone --depth 1 --branch livekit-agents@1.8.2 https://github.com/livekit/agents /tmp/lk-agents-1.8.2
+    git clone --depth 1 --branch livekit-agents@1.8.3 https://github.com/livekit/agents /tmp/lk-agents-1.8.3
     uv run python scripts/snapshot_plugin_signatures.py \\
-        --source /tmp/lk-agents-1.8.2 \\
+        --source /tmp/lk-agents-1.8.3 \\
         --out agent/tests/fixtures/plugin_signatures.json
 
 The output is committed (`agent/tests/fixtures/plugin_signatures.json`) so
@@ -45,6 +45,18 @@ via `nested_model` (``SimliConfig``, ``PersonaConfig``, Synthesia's
 ``AvatarConfig``, D-ID's ``AudioConfig``) are captured the same way so a
 dotted field name like ``simli_config.face_id`` can be checked against
 ``SimliConfig``'s own ``__init__``/field names.
+
+Star-import shims (R-V4-55): since livekit-agents 1.8.3 (upstream #7318)
+``livekit/plugins/openai/realtime/realtime_model.py`` is a
+``from livekit.agents.llm._realtime.openai import *`` shim. A plugin file's
+``from livekit.agents.<module> import *`` is followed exactly one hop into the
+``livekit-agents/`` tree of the same clone: the target file is snapshotted
+under its own module path, and each public class it defines (its ``__all__``
+if it declares one, else every class whose name has no leading underscore) is
+re-exported under the shim's module path, so the ordinary ``__init__.py``
+re-export pass then gives it its public key
+(``livekit.plugins.openai.realtime.RealtimeModel``). A star import inside the
+target is reported, not followed.
 """
 
 from __future__ import annotations
@@ -69,7 +81,7 @@ NESTED_MODEL_CLASSES: frozenset[str] = frozenset(
 
 #: Method names, beyond `__init__`, worth snapshotting as alternate
 #: constructors. Selected by name, not by decorator: `LLM.with_openrouter` is a
-#: `@staticmethod` in 1.8.2 and is captured the same way (its `is_classmethod`
+#: `@staticmethod` (not a classmethod) and is captured the same way (its `is_classmethod`
 #: flag records the decorator honestly, so it is `false` there).
 CLASSMETHOD_CONSTRUCTORS: frozenset[str] = frozenset(
     {"with_azure", "with_cerebras", "with_openrouter", "load", "create"}
@@ -270,6 +282,63 @@ def _apply_reexports(
     return result
 
 
+def _star_imports(path: Path) -> list[str]:
+    """Return the absolute ``livekit.agents…`` modules a file star-imports (``from X import *``)."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except SyntaxError:
+        return []
+    return [
+        node.module
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        and node.level == 0
+        and node.module is not None
+        and (node.module == "livekit.agents" or node.module.startswith("livekit.agents."))
+        and any(alias.name == "*" for alias in node.names)
+    ]
+
+
+def _core_module_file(core_root: Path, dotted_module: str) -> Path | None:
+    """Map ``livekit.agents.x.y`` to its file under ``livekit-agents/livekit`` (module or package)."""
+    parts = dotted_module.split(".")[1:]  # drop the leading "livekit"
+    module_file = core_root.joinpath(*parts).with_suffix(".py")
+    if module_file.is_file():
+        return module_file
+    package_init = core_root.joinpath(*parts, "__init__.py")
+    return package_init if package_init.is_file() else None
+
+
+def _star_exported_classes(path: Path) -> list[str]:
+    """Class names ``from <path's module> import *`` would bind: ``__all__``, else public classes."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    classes = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets)
+            and isinstance(node.value, (ast.List, ast.Tuple))
+        ):
+            exported = {e.value for e in node.value.elts if isinstance(e, ast.Constant)}
+            return [name for name in classes if name in exported]
+    return [name for name in classes if not name.startswith("_")]
+
+
+def _follow_star_import(
+    shim_module: str, target_module: str, core_root: Path
+) -> tuple[dict[str, dict[str, Any]], list[tuple[str, str, str, str]]]:
+    """Snapshot one star-import target (one hop) and the edges that re-export its classes."""
+    target_file = _core_module_file(core_root, target_module)
+    if target_file is None:
+        logger.warning("star import target not found in the clone: %s (from %s)", target_module, shim_module)
+        return {}, []
+    for nested in _star_imports(target_file):
+        logger.warning("not following a second star-import hop: %s -> %s", target_module, nested)
+    signatures = snapshot_file(target_file, target_module)
+    edges = [(shim_module, name, target_module, name) for name in _star_exported_classes(target_file)]
+    return signatures, edges
+
+
 def _dotted_module_for(py_file: Path, package_root: Path) -> str:
     rel = py_file.relative_to(package_root).with_suffix("")
     parts = list(rel.parts)
@@ -308,6 +377,13 @@ def snapshot_source_tree(source: Path) -> dict[str, dict[str, Any]]:
             # fixed-point pass below quadratic in the whole tree for no benefit.
             if py_file.name == "__init__.py":
                 edges.extend(_reexport_edges(py_file, dotted_module))
+            # A plugin module that is a `from livekit.agents… import *` shim (R-V4-55).
+            if pkg_root != core_root:
+                for target_module in _star_imports(py_file):
+                    followed, star_edges = _follow_star_import(dotted_module, target_module, core_root)
+                    for key, sig in followed.items():
+                        signatures.setdefault(key, sig)
+                    edges.extend(star_edges)
 
     return _apply_reexports(signatures, edges)
 

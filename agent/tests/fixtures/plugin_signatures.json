@@ -113,6 +113,45 @@
     ],
     "positional_only": []
   },
+  "livekit.agents.inference.RealtimeModel": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "api_secret",
+      "base_url",
+      "conn_options",
+      "http_session",
+      "inference_class",
+      "input_audio_noise_reduction",
+      "input_audio_transcription",
+      "max_session_duration",
+      "modalities",
+      "model",
+      "provider",
+      "reasoning",
+      "speed",
+      "tool_choice",
+      "tracing",
+      "truncation",
+      "turn_detection",
+      "voice"
+    ],
+    "positional_only": [
+      "model"
+    ]
+  },
+  "livekit.agents.inference.RealtimeSession": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "realtime_model",
+      "turn_detection_disabled"
+    ],
+    "positional_only": [
+      "realtime_model"
+    ]
+  },
   "livekit.agents.inference.STT": {
     "has_var_keyword": false,
     "is_classmethod": false,
@@ -613,6 +652,95 @@
     ],
     "positional_only": []
   },
+  "livekit.agents.inference.realtime.RealtimeModel": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "api_secret",
+      "base_url",
+      "conn_options",
+      "http_session",
+      "inference_class",
+      "input_audio_noise_reduction",
+      "input_audio_transcription",
+      "max_session_duration",
+      "modalities",
+      "model",
+      "provider",
+      "reasoning",
+      "speed",
+      "tool_choice",
+      "tracing",
+      "truncation",
+      "turn_detection",
+      "voice"
+    ],
+    "positional_only": [
+      "model"
+    ]
+  },
+  "livekit.agents.inference.realtime.RealtimeSession": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "realtime_model",
+      "turn_detection_disabled"
+    ],
+    "positional_only": [
+      "realtime_model"
+    ]
+  },
+  "livekit.agents.inference.realtime.openai.RealtimeModel": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "api_secret",
+      "base_url",
+      "conn_options",
+      "http_session",
+      "inference_class",
+      "input_audio_noise_reduction",
+      "input_audio_transcription",
+      "max_session_duration",
+      "modalities",
+      "model",
+      "provider",
+      "reasoning",
+      "speed",
+      "tool_choice",
+      "tracing",
+      "truncation",
+      "turn_detection",
+      "voice"
+    ],
+    "positional_only": [
+      "model"
+    ]
+  },
+  "livekit.agents.inference.realtime.openai.RealtimeSession": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "realtime_model",
+      "turn_detection_disabled"
+    ],
+    "positional_only": [
+      "realtime_model"
+    ]
+  },
+  "livekit.agents.inference.realtime.openai._InferenceOptions": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "api_secret",
+      "inference_class",
+      "provider"
+    ],
+    "positional_only": []
+  },
   "livekit.agents.inference.stt.AssemblyaiOptions": {
     "has_var_keyword": false,
     "is_classmethod": false,
@@ -1003,6 +1131,119 @@
       "opts",
       "parent"
     ]
+  },
+  "livekit.agents.llm._realtime.openai.RealtimeModel": {
+    "has_var_keyword": true,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "api_version",
+      "azure_deployment",
+      "base_url",
+      "conn_options",
+      "entra_token",
+      "http_session",
+      "input_audio_noise_reduction",
+      "input_audio_transcription",
+      "max_session_duration",
+      "modalities",
+      "model",
+      "reasoning",
+      "speed",
+      "temperature",
+      "tool_choice",
+      "tracing",
+      "truncation",
+      "turn_detection",
+      "voice"
+    ],
+    "positional_only": []
+  },
+  "livekit.agents.llm._realtime.openai.RealtimeModel.with_azure": {
+    "has_var_keyword": true,
+    "is_classmethod": true,
+    "params": [
+      "api_key",
+      "azure_deployment",
+      "azure_endpoint",
+      "base_url",
+      "entra_token",
+      "http_session",
+      "input_audio_noise_reduction",
+      "input_audio_transcription",
+      "max_session_duration",
+      "modalities",
+      "reasoning",
+      "speed",
+      "temperature",
+      "tracing",
+      "turn_detection",
+      "voice"
+    ],
+    "positional_only": []
+  },
+  "livekit.agents.llm._realtime.openai.RealtimeSession": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "realtime_model",
+      "turn_detection_disabled"
+    ],
+    "positional_only": [
+      "realtime_model"
+    ]
+  },
+  "livekit.agents.llm._realtime.openai._MessageGeneration": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "audio_ch",
+      "audio_transcript",
+      "message_id",
+      "modalities",
+      "text_ch"
+    ],
+    "positional_only": []
+  },
+  "livekit.agents.llm._realtime.openai._RealtimeOptions": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "api_key",
+      "api_version",
+      "azure_deployment",
+      "base_url",
+      "conn_options",
+      "entra_token",
+      "input_audio_noise_reduction",
+      "input_audio_transcription",
+      "is_azure",
+      "max_response_output_tokens",
+      "max_session_duration",
+      "modalities",
+      "model",
+      "reasoning",
+      "speed",
+      "tool_choice",
+      "tracing",
+      "truncation",
+      "turn_detection",
+      "voice"
+    ],
+    "positional_only": []
+  },
+  "livekit.agents.llm._realtime.openai._ResponseGeneration": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [
+      "_created_timestamp",
+      "_done_fut",
+      "_first_token_timestamp",
+      "function_ch",
+      "message_ch",
+      "messages"
+    ],
+    "positional_only": []
   },
   "livekit.plugins.anam.AnamPlugin": {
     "has_var_keyword": false,
@@ -4483,6 +4724,7 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "audio_chunk_duration_ms",
       "base_url",
       "enable_logging",
       "http_session",
@@ -4579,6 +4821,7 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "audio_chunk_duration_ms",
       "base_url",
       "enable_logging",
       "http_session",
@@ -4603,6 +4846,7 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "audio_chunk_duration_ms",
       "base_url",
       "enable_logging",
       "include_language_detection",
@@ -5626,6 +5870,8 @@
       "location",
       "model",
       "project",
+      "speaker",
+      "speakers",
       "vertexai",
       "voice_name"
     ],
@@ -5698,6 +5944,8 @@
       "location",
       "model",
       "project",
+      "speaker",
+      "speakers",
       "vertexai",
       "voice_name"
     ],
@@ -5711,6 +5959,8 @@
       "location",
       "model",
       "project",
+      "speaker",
+      "speakers",
       "vertexai",
       "voice_name"
     ],
@@ -7644,6 +7894,12 @@
     ],
     "positional_only": []
   },
+  "livekit.plugins.liveavatar.LiveAvatarPlugin": {
+    "has_var_keyword": false,
+    "is_classmethod": false,
+    "params": [],
+    "positional_only": []
+  },
   "livekit.plugins.liveavatar.api.LiveAvatarAPI": {
     "has_var_keyword": false,
     "is_classmethod": false,
@@ -7935,6 +8191,7 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "api_mode",
       "client",
       "frequency_penalty",
       "max_completion_tokens",
@@ -7985,6 +8242,7 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "api_mode",
       "client",
       "frequency_penalty",
       "max_completion_tokens",
@@ -8001,12 +8259,15 @@
     "has_var_keyword": false,
     "is_classmethod": false,
     "params": [
+      "api_mode",
       "chat_ctx",
       "client",
       "conn_options",
       "extra_kwargs",
       "llm_v",
       "model",
+      "parallel_tool_calls",
+      "tool_choice",
       "tools"
     ],
     "positional_only": [
@@ -8017,6 +8278,7 @@
     "has_var_keyword": false,
     "is_classmethod": false,
     "params": [
+      "api_mode",
       "frequency_penalty",
       "max_completion_tokens",
       "model",
@@ -9080,13 +9342,35 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "azure_deployment",
       "base_url",
       "conn_options",
       "delegation",
+      "entra_token",
       "http_session",
       "max_session_duration",
       "model",
       "responses_options",
+      "service_tier",
+      "voice"
+    ],
+    "positional_only": []
+  },
+  "livekit.plugins.openai.realtime.GPTLiveModel.with_azure": {
+    "has_var_keyword": false,
+    "is_classmethod": true,
+    "params": [
+      "api_key",
+      "azure_deployment",
+      "azure_endpoint",
+      "base_url",
+      "conn_options",
+      "delegation",
+      "entra_token",
+      "http_session",
+      "max_session_duration",
+      "responses_options",
+      "service_tier",
       "voice"
     ],
     "positional_only": []
@@ -9099,34 +9383,6 @@
     ],
     "positional_only": [
       "duplex_model"
-    ]
-  },
-  "livekit.plugins.openai.realtime.InferenceRealtimeModel": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "api_key",
-      "api_secret",
-      "base_url",
-      "conn_options",
-      "http_session",
-      "inference_class",
-      "input_audio_noise_reduction",
-      "input_audio_transcription",
-      "max_session_duration",
-      "modalities",
-      "model",
-      "provider",
-      "reasoning",
-      "speed",
-      "tool_choice",
-      "tracing",
-      "truncation",
-      "turn_detection",
-      "voice"
-    ],
-    "positional_only": [
-      "model"
     ]
   },
   "livekit.plugins.openai.realtime.RealtimeModel": {
@@ -9219,13 +9475,35 @@
     "is_classmethod": false,
     "params": [
       "api_key",
+      "azure_deployment",
       "base_url",
       "conn_options",
       "delegation",
+      "entra_token",
       "http_session",
       "max_session_duration",
       "model",
       "responses_options",
+      "service_tier",
+      "voice"
+    ],
+    "positional_only": []
+  },
+  "livekit.plugins.openai.realtime.gpt_live_model.GPTLiveModel.with_azure": {
+    "has_var_keyword": false,
+    "is_classmethod": true,
+    "params": [
+      "api_key",
+      "azure_deployment",
+      "azure_endpoint",
+      "base_url",
+      "conn_options",
+      "delegation",
+      "entra_token",
+      "http_session",
+      "max_session_duration",
+      "responses_options",
+      "service_tier",
       "voice"
     ],
     "positional_only": []
@@ -9263,9 +9541,12 @@
       "base_url",
       "conn_options",
       "delegation",
+      "entra_token",
+      "is_azure",
       "max_session_duration",
       "model",
       "responses",
+      "service_tier",
       "voice"
     ],
     "positional_only": []
@@ -9676,56 +9957,6 @@
     ],
     "positional_only": []
   },
-  "livekit.plugins.openai.realtime.inference_realtime_model.InferenceRealtimeModel": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "api_key",
-      "api_secret",
-      "base_url",
-      "conn_options",
-      "http_session",
-      "inference_class",
-      "input_audio_noise_reduction",
-      "input_audio_transcription",
-      "max_session_duration",
-      "modalities",
-      "model",
-      "provider",
-      "reasoning",
-      "speed",
-      "tool_choice",
-      "tracing",
-      "truncation",
-      "turn_detection",
-      "voice"
-    ],
-    "positional_only": [
-      "model"
-    ]
-  },
-  "livekit.plugins.openai.realtime.inference_realtime_model.InferenceRealtimeSession": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "realtime_model",
-      "turn_detection_disabled"
-    ],
-    "positional_only": [
-      "realtime_model"
-    ]
-  },
-  "livekit.plugins.openai.realtime.inference_realtime_model._InferenceOptions": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "api_key",
-      "api_secret",
-      "inference_class",
-      "provider"
-    ],
-    "positional_only": []
-  },
   "livekit.plugins.openai.realtime.realtime_model.RealtimeModel": {
     "has_var_keyword": true,
     "is_classmethod": false,
@@ -9786,58 +10017,6 @@
     "positional_only": [
       "realtime_model"
     ]
-  },
-  "livekit.plugins.openai.realtime.realtime_model._MessageGeneration": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "audio_ch",
-      "audio_transcript",
-      "message_id",
-      "modalities",
-      "text_ch"
-    ],
-    "positional_only": []
-  },
-  "livekit.plugins.openai.realtime.realtime_model._RealtimeOptions": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "api_key",
-      "api_version",
-      "azure_deployment",
-      "base_url",
-      "conn_options",
-      "entra_token",
-      "input_audio_noise_reduction",
-      "input_audio_transcription",
-      "is_azure",
-      "max_response_output_tokens",
-      "max_session_duration",
-      "modalities",
-      "model",
-      "reasoning",
-      "speed",
-      "tool_choice",
-      "tracing",
-      "truncation",
-      "turn_detection",
-      "voice"
-    ],
-    "positional_only": []
-  },
-  "livekit.plugins.openai.realtime.realtime_model._ResponseGeneration": {
-    "has_var_keyword": false,
-    "is_classmethod": false,
-    "params": [
-      "_created_timestamp",
-      "_done_fut",
-      "_first_token_timestamp",
-      "function_ch",
-      "message_ch",
-      "messages"
-    ],
-    "positional_only": []
   },
   "livekit.plugins.openai.responses.LLM": {
     "has_var_keyword": false,
@@ -10373,6 +10552,7 @@
       "no_input_poke_text",
       "observability_integrations",
       "phonic_agent",
+      "phonic_model",
       "phonic_tools",
       "project",
       "pronunciation_dictionary",
@@ -10461,6 +10641,7 @@
       "no_input_poke_text",
       "observability_integrations",
       "phonic_agent",
+      "phonic_model",
       "phonic_tools",
       "project",
       "pronunciation_dictionary",
@@ -10516,6 +10697,7 @@
       "no_input_poke_text",
       "observability_integrations",
       "phonic_agent",
+      "phonic_model",
       "phonic_tools",
       "project",
       "pronunciation_dictionary",

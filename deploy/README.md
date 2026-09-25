@@ -188,6 +188,7 @@ was launched from another agent's env), and a job request whose
 After starting, confirm the guard held: the agent's first log lines should
 show `agent_name=lkap-agent` (LIVE_TEST_PLAN §A1 step 2) — if a registration
 line appears with no agent name, stop it immediately.
+Since livekit-agents 1.8.3 the worker also logs the warning "agent_name is set in code; move it to livekit.toml …" at startup. This is expected. The name stays in code on purpose (R-V4-56), so don't move it.
 
 `.claude/launch.json` (outside this repo, at the `Insurance_live_Agent/`
 root) has equivalent `lkap-api`, `lkap-web` and `lkap-agent` entries for

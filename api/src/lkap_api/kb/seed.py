@@ -5,8 +5,18 @@ starter template with `kb_seeds` (docs/CONTRACTS.md §8, docs/v4/TEMPLATES.md
 §4 step 4). :func:`import_kb_seeds` reads files under any ``root / "seeds"``
 (a pack package or a catalogue directory); :func:`import_pack_kb_seeds` is the
 pack wrapper that resolves the pack's package first. Idempotent: re-seeding
-reuses an existing knowledge base by name and skips files it has already
-ingested, so seeding twice never double-imports content.
+reuses an existing knowledge base by name and skips files it already holds a
+document for, so seeding twice never double-imports content.
+
+V4-18 (R-V4-65, ask #127): seeds take the **upload path**. Importing creates
+the knowledge base rows and one ``pending`` document per seed file, writes the
+file's bytes to the storage backend under the upload key scheme
+(:func:`~lkap_api.kb.ingest.upload_storage_key`) and returns one
+:data:`~lkap_api.jobs.kinds.KB_INGEST` payload per document. Nothing is
+embedded here: the caller commits the agent row first and then enqueues the
+payloads, so the create never holds the database's write lock through an
+embedding-model load, and the ``jobs`` process stays the single vector-store
+writer (V5-04 ask #29).
 """
 
 from __future__ import annotations
@@ -15,7 +25,9 @@ import importlib
 import importlib.resources
 import mimetypes
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from importlib.resources.abc import Traversable
+from typing import Any
 
 from lkap_contracts.packs import KbSeed
 from sqlalchemy import select
@@ -24,13 +36,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.models import KbDocument, KnowledgeBase
 from lkap_api.kb.embed import Embedder, record_kb_embedder
-from lkap_api.kb.ingest import ChunkingConfig, ingest_into_session
-from lkap_api.kb.store import VectorStore
+from lkap_api.kb.ingest import ChunkingConfig, ingest_payload, upload_storage_key
 from lkap_api.logging import get_logger
+from lkap_api.storage.base import StorageBackend
 
 log = get_logger(__name__)
 
 DEFAULT_SEED_EMBEDDER_ID = "fastembed-embedding"
+
+
+@dataclass(slots=True)
+class SeedImport:
+    """What importing a list of seeds produced.
+
+    Attributes:
+        kb_ids: Every knowledge base the seeds reference (created or reused),
+            in seed order — suitable for `AgentConfig.knowledge.kb_ids`.
+        ingest_payloads: One ``KB_INGEST`` job payload per newly created
+            ``pending`` document, to enqueue **after** the caller commits.
+    """
+
+    kb_ids: list[str] = field(default_factory=list)
+    ingest_payloads: list[dict[str, Any]] = field(default_factory=list)
+
+    def extend(self, other: SeedImport) -> None:
+        """Append ``other``'s knowledge bases and payloads to this one."""
+        self.kb_ids.extend(other.kb_ids)
+        self.ingest_payloads.extend(other.ingest_payloads)
 
 
 def resolve_pack_module_path(packs: Sequence[str], pack_id: str) -> str | None:
@@ -96,7 +128,8 @@ async def _get_or_create_kb(
     """Reuse the workspace's knowledge base called ``name`` or create it there.
 
     A new knowledge base records ``embedder``'s model and width and the
-    default chunking (V5-01); a reused one is left exactly as it is.
+    default chunking (V5-01); a reused one is left exactly as it is. Recording
+    reads the embedder's metadata only; no model is loaded.
     """
     existing = (
         (
@@ -125,52 +158,88 @@ async def _get_or_create_kb(
 
 
 async def _already_ingested(db: AsyncSession, *, kb_id: str, filename: str) -> bool:
+    """Whether ``kb_id`` already holds a document called ``filename`` (in any status)."""
     existing = (
         await db.execute(
-            select(KbDocument.id).where(KbDocument.kb_id == kb_id, KbDocument.filename == filename)
+            select(KbDocument.id).where(KbDocument.kb_id == kb_id, KbDocument.filename == filename).limit(1)
         )
     ).scalar_one_or_none()
     return existing is not None
 
 
+async def _stage_seed_file(
+    db: AsyncSession,
+    storage: StorageBackend,
+    *,
+    kb: KnowledgeBase,
+    file_name: str,
+    data: bytes,
+    origin: str,
+) -> dict[str, Any]:
+    """Create the ``pending`` document, store its bytes like an upload, and return its job payload."""
+    mime = _guess_mime(file_name)
+    document = KbDocument(
+        kb_id=kb.id, filename=file_name, mime=mime, bytes=len(data), status="pending", progress=0.0
+    )
+    db.add(document)
+    await db.flush()
+    storage_key = upload_storage_key(kb.id, document.id, file_name)
+    await storage.put(storage_key, data, content_type=mime)
+    log.info("kb_seed_document_staged", kb_id=kb.id, document_id=document.id, origin=origin, file=file_name)
+    return ingest_payload(
+        kb_id=kb.id,
+        document_id=document.id,
+        storage_key=storage_key,
+        filename=file_name,
+        mime=mime,
+        origin=origin,
+    )
+
+
 async def import_kb_seeds(
     *,
     db: AsyncSession,
-    store: VectorStore,
+    storage: StorageBackend,
     embedder: Embedder,
     root: Traversable | None,
     source_label: str,
     seeds: list[KbSeed],
     embedder_id: str = DEFAULT_SEED_EMBEDDER_ID,
     workspace_id: str = DEFAULT_WORKSPACE_ID,
-) -> list[str]:
-    """Create/reuse knowledge bases from ``seeds`` and ingest their files from ``root / "seeds"``.
+) -> SeedImport:
+    """Create/reuse knowledge bases from ``seeds`` and stage their files from ``root / "seeds"``.
+
+    Nothing is embedded: each new file becomes a ``pending`` document whose
+    bytes are in ``storage`` and whose ``KB_INGEST`` payload is returned. The
+    caller commits, then enqueues the payloads (the job needs the committed row).
 
     Args:
         db: The session the calling agent-creation transaction is using;
             not committed here (the caller controls the transaction).
-        store: Vector store the seed chunks are embedded into.
-        embedder: Embedder used for the seed content.
+        storage: The platform storage backend the seed bytes are written to
+            (a validation failure that rolls the transaction back leaves these
+            objects behind, unreferenced).
+        embedder: The configured embedder; only its model id and width are
+            recorded on new knowledge bases.
         root: The directory holding ``seeds/`` (a pack package or a template's
             catalogue directory); ``None`` creates the knowledge bases but
-            ingests nothing.
-        source_label: Names the seed source in log lines (``pack:<id>`` or
-            ``template:<id>``).
+            stages nothing.
+        source_label: The seed source (``pack:<id>`` or ``template:<id>``),
+            logged and carried as the job payload's ``origin``.
         seeds: The seeds to import.
         embedder_id: Recorded on newly created knowledge bases (metadata only).
         workspace_id: The workspace of the agent being created; seed knowledge
             bases are created in (and reused only from) that workspace.
 
     Returns:
-        The ids of every knowledge base referenced by ``seeds`` (created or reused),
-        in the same order as ``seeds`` — suitable for `AgentConfig.knowledge.kb_ids`.
+        The knowledge base ids (in seed order) and one ingest payload per staged file.
     """
-    kb_ids: list[str] = []
+    result = SeedImport()
     for seed in seeds:
         kb = await _get_or_create_kb(
             db, workspace_id=workspace_id, name=seed.kb_name, embedder_id=embedder_id, embedder=embedder
         )
-        kb_ids.append(kb.id)
+        result.kb_ids.append(kb.id)
         if root is None:
             continue
         for file_name in seed.files:
@@ -180,37 +249,26 @@ async def import_kb_seeds(
             if data is None:
                 log.warning("kb_seed_file_missing", source=source_label, file=file_name)
                 continue
-            mime = _guess_mime(file_name)
-            document = KbDocument(
-                kb_id=kb.id, filename=file_name, mime=mime, bytes=len(data), status="pending"
+            result.ingest_payloads.append(
+                await _stage_seed_file(
+                    db, storage, kb=kb, file_name=file_name, data=data, origin=source_label
+                )
             )
-            db.add(document)
-            await db.flush()
-            await ingest_into_session(
-                db,
-                store=store,
-                embedder=embedder,
-                kb_id=kb.id,
-                document_id=document.id,
-                filename=file_name,
-                mime=mime,
-                data=data,
-            )
-    return kb_ids
+    return result
 
 
 async def import_pack_kb_seeds(
     *,
     db: AsyncSession,
-    store: VectorStore,
+    storage: StorageBackend,
     embedder: Embedder,
     packs: Sequence[str],
     pack_id: str,
     seeds: list[KbSeed],
     embedder_id: str = DEFAULT_SEED_EMBEDDER_ID,
     workspace_id: str = DEFAULT_WORKSPACE_ID,
-) -> list[str]:
-    """Create/reuse knowledge bases from a pack's `kb_seeds` and ingest their files.
+) -> SeedImport:
+    """Create/reuse knowledge bases from a pack's `kb_seeds` and stage their files.
 
     A thin wrapper over :func:`import_kb_seeds` that locates the pack's package
     (its ``seeds/`` directory) from ``LKAP_PACKS``.
@@ -218,8 +276,8 @@ async def import_pack_kb_seeds(
     Args:
         db: The session the calling agent-creation transaction is using;
             not committed here (the caller controls the transaction).
-        store: Vector store the seed chunks are embedded into.
-        embedder: Embedder used for the seed content.
+        storage: The platform storage backend the seed bytes are written to.
+        embedder: The configured embedder (metadata only, see :func:`import_kb_seeds`).
         packs: `LKAP_PACKS`-configured dotted module paths (to locate the pack's
             `seeds/` directory on disk).
         pack_id: The pack's manifest id.
@@ -229,8 +287,7 @@ async def import_pack_kb_seeds(
             bases are created in (and reused only from) that workspace.
 
     Returns:
-        The ids of every knowledge base referenced by ``seeds`` (created or reused),
-        in the same order as ``seeds`` — suitable for `AgentConfig.knowledge.kb_ids`.
+        The knowledge base ids (in seed order) and one ingest payload per staged file.
     """
     module_path = resolve_pack_module_path(packs, pack_id)
     root: Traversable | None = None
@@ -240,7 +297,7 @@ async def import_pack_kb_seeds(
         root = _pack_seed_root(module_path)
     return await import_kb_seeds(
         db=db,
-        store=store,
+        storage=storage,
         embedder=embedder,
         root=root,
         source_label=f"pack:{pack_id}",

@@ -11,8 +11,10 @@ rather than about any route:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.schema import CreateIndex, CreateTable
 
@@ -24,7 +26,7 @@ from lkap_api.db.guard import (
     tenant_scope_guard,
 )
 from lkap_api.db.models import Agent, Base, Session, Workspace
-from lkap_api.db.session import Database
+from lkap_api.db.session import SQLITE_BUSY_TIMEOUT_MS, Database, _set_sqlite_pragmas
 
 # ------------------------------------------------------------------ tenancy guard
 
@@ -131,3 +133,34 @@ def test_the_default_connection_index_is_partial_on_both_backends() -> None:
     # index already built in migrated SQLite databases says `= 1`).
     assert postgres_ddl.rstrip().endswith("WHERE is_default")
     assert "WHERE is_default = 1" in sqlite_ddl
+
+
+# ------------------------------------------------------------------ SQLite pragmas (V4-18, R-V4-65)
+
+
+async def test_a_sqlite_engine_runs_wal_with_a_busy_timeout_and_foreign_keys(tmp_path: Path) -> None:
+    database = Database(f"sqlite+aiosqlite:///{tmp_path}/pragmas.db")
+    try:
+        async with database.engine.connect() as conn:
+            journal_mode = (await conn.exec_driver_sql("PRAGMA journal_mode")).scalar_one()
+            busy_timeout = (await conn.exec_driver_sql("PRAGMA busy_timeout")).scalar_one()
+            foreign_keys = (await conn.exec_driver_sql("PRAGMA foreign_keys")).scalar_one()
+    finally:
+        await database.dispose()
+
+    assert (journal_mode, busy_timeout, foreign_keys) == ("wal", 10_000, 1)
+    assert SQLITE_BUSY_TIMEOUT_MS == 10_000
+
+
+async def test_a_postgres_engine_gets_no_sqlite_pragmas() -> None:
+    database = Database("postgresql+asyncpg://lkap:unused@127.0.0.1:1/lkap")  # never connected
+    try:
+        assert not event.contains(database.engine.sync_engine, "connect", _set_sqlite_pragmas)
+    finally:
+        await database.dispose()
+
+    sqlite_database = Database("sqlite+aiosqlite://")
+    try:
+        assert event.contains(sqlite_database.engine.sync_engine, "connect", _set_sqlite_pragmas)
+    finally:
+        await sqlite_database.dispose()

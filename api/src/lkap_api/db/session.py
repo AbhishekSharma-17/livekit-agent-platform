@@ -19,17 +19,34 @@ from sqlalchemy.pool import ConnectionPoolEntry
 
 from lkap_api.db.models import Base
 
+#: How long (ms) a SQLite connection waits for another writer's lock before
+#: failing with ``database is locked`` (V4-18, R-V4-65).
+SQLITE_BUSY_TIMEOUT_MS = 10_000
 
-def _enable_sqlite_foreign_keys(engine: AsyncEngine) -> None:
-    """Turn on ``PRAGMA foreign_keys`` so ``ON DELETE CASCADE`` actually cascades."""
 
-    @event.listens_for(engine.sync_engine, "connect")
-    def _set_pragma(dbapi_connection: DBAPIConnection, _record: ConnectionPoolEntry) -> None:
-        cursor = dbapi_connection.cursor()
-        try:
-            cursor.execute("PRAGMA foreign_keys=ON")
-        finally:
-            cursor.close()
+def _set_sqlite_pragmas(dbapi_connection: DBAPIConnection, _record: ConnectionPoolEntry) -> None:
+    """Configure every new SQLite connection (a ``connect`` event listener).
+
+    * ``busy_timeout`` first: a short writer makes the others wait instead of
+      failing at once (and the WAL switch below may itself meet a lock).
+    * ``journal_mode=WAL`` (V4-18, R-V4-65): readers no longer block on a
+      writer and a writer no longer waits for readers. The mode is persistent
+      on the database file (``-wal``/``-shm`` sidecar files appear beside it);
+      an in-memory database reports ``memory`` and is unaffected.
+    * ``foreign_keys=ON`` so ``ON DELETE CASCADE`` actually cascades.
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
+
+
+def _configure_sqlite(engine: AsyncEngine) -> None:
+    """Register :func:`_set_sqlite_pragmas` on ``engine`` (SQLite engines only; Postgres is untouched)."""
+    event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
 
 
 class Database:
@@ -46,7 +63,7 @@ class Database:
         self.url = url
         self.engine: AsyncEngine = create_async_engine(url, echo=echo, future=True, **engine_kwargs)
         if url.startswith("sqlite"):
-            _enable_sqlite_foreign_keys(self.engine)
+            _configure_sqlite(self.engine)
         self.sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self.engine, expire_on_commit=False, autoflush=False
         )

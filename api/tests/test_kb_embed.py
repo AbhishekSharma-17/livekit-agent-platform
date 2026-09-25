@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 from pathlib import Path
@@ -13,6 +14,7 @@ import respx
 from lkap_api.db.models import KnowledgeBase
 from lkap_api.db.session import Database
 from lkap_api.errors import UnprocessableEntityError
+from lkap_api.kb import embed as embed_module
 from lkap_api.kb.embed import (
     FAKE_EMBEDDER_MODEL_ID,
     FakeEmbedder,
@@ -21,11 +23,14 @@ from lkap_api.kb.embed import (
     OpenAIEmbedder,
     approx_token_count,
     check_kb_embedder,
+    clear_embedder_cache,
     kb_embedder_mismatch,
     record_kb_embedder,
     resolve_embedder,
     token_counter_for,
+    warm_default_embedder,
 )
+from lkap_api.kb.ingest import warm_embedder
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 
@@ -334,3 +339,110 @@ def test_record_kb_embedder_fills_only_unset_values() -> None:
     kept = _kb(dimension=384, embedder_model="BAAI/bge-small-en-v1.5")
     record_kb_embedder(kept, FakeEmbedder())
     assert (kept.dimension, kept.embedder_model) == (384, "BAAI/bge-small-en-v1.5")
+
+
+# --------------------------------------------------------------------------- warm-up (V4-18, R-V4-65)
+class _RecordingLog:
+    """Stands in for the module's structlog logger; keeps ``(level, event, fields)``."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict[str, object]]] = []
+
+    def info(self, event: str, **fields: object) -> None:
+        self.events.append(("info", event, fields))
+
+    def warning(self, event: str, **fields: object) -> None:
+        self.events.append(("warning", event, fields))
+
+
+@pytest.fixture
+def embed_log(monkeypatch: pytest.MonkeyPatch) -> _RecordingLog:
+    recorder = _RecordingLog()
+    monkeypatch.setattr(embed_module, "log", recorder)
+    return recorder
+
+
+async def test_fastembed_warm_loads_the_model_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    loads: list[str] = []
+
+    async def _load(self: FastEmbedEmbedder) -> object:
+        loads.append(self.model_id)
+        return object()
+
+    monkeypatch.setattr(FastEmbedEmbedder, "_get_model", _load)
+    embedder = FastEmbedEmbedder(tmp_path)
+
+    await embedder.warm()
+    await warm_embedder(embedder)
+
+    assert loads == [embedder.model_id, embedder.model_id]
+
+
+async def test_warm_embedder_skips_an_embedder_without_a_model() -> None:
+    await warm_embedder(FakeEmbedder())  # nothing to load, nothing raised
+
+
+async def test_warm_default_embedder_logs_a_failed_download_and_never_raises(
+    settings: Settings, embed_log: _RecordingLog
+) -> None:
+    clear_embedder_cache()
+    # The session-wide conftest patch makes `_get_model` raise: a download that fails.
+    await warm_default_embedder(settings)
+
+    assert [(level, event) for level, event, _ in embed_log.events] == [
+        ("warning", "fastembed_warmup_failed")
+    ]
+    assert embed_log.events[0][2]["error_type"] == "RuntimeError"
+
+
+async def test_warm_default_embedder_logs_done_once_the_model_is_loaded(
+    settings: Settings, embed_log: _RecordingLog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _load(self: FastEmbedEmbedder) -> object:
+        return object()
+
+    monkeypatch.setattr(FastEmbedEmbedder, "_get_model", _load)
+    clear_embedder_cache()
+
+    await warm_default_embedder(settings)
+
+    assert [event for _, event, _ in embed_log.events] == ["fastembed_warmup_done"]
+
+
+async def test_warm_default_embedder_skips_a_remote_embedder(
+    settings: Settings, embed_log: _RecordingLog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _never(*_args: object, **_kwargs: object) -> FastEmbedEmbedder:
+        raise AssertionError("a remote embedder has no local model to warm")
+
+    monkeypatch.setattr(embed_module, "get_fastembed_embedder", _never)
+    settings.embedder = "openai-embedding:cred123"
+
+    await warm_default_embedder(settings)
+
+    assert embed_log.events == []
+
+
+async def test_the_api_lifespan_starts_the_warmup_once_and_survives_its_failure(
+    settings: Settings, database: Database, embed_log: _RecordingLog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lkap_api import main as main_module
+
+    calls: list[Settings] = []
+    real_warm = main_module.warm_default_embedder
+
+    async def _counting(resolved: Settings) -> None:
+        calls.append(resolved)
+        await real_warm(resolved)
+
+    monkeypatch.setattr(main_module, "warm_default_embedder", _counting)
+    clear_embedder_cache()
+    app = main_module.create_app(settings)
+
+    async with app.router.lifespan_context(app):
+        task = app.state.embedder_warmup_task
+        await asyncio.wait_for(asyncio.shield(task), timeout=10)
+        assert task.done() and task.exception() is None
+
+    assert calls == [settings]
+    assert ("warning", "fastembed_warmup_failed") in [(level, event) for level, event, _ in embed_log.events]

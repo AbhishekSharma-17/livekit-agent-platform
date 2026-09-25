@@ -54,6 +54,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
+from lkap_api.auth.audit import record as record_audit
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase, new_id
 from lkap_api.db.session import Database
@@ -783,6 +784,36 @@ async def _drop_orphan_vectors(store: VectorStore, *, kb_id: str, document_id: s
         )
 
 
+def ingest_payload(
+    *, kb_id: str, document_id: str, storage_key: str, filename: str, mime: str, origin: str | None = None
+) -> dict[str, Any]:
+    """The JSON payload of a :data:`~lkap_api.jobs.kinds.KB_INGEST` job.
+
+    Args:
+        kb_id: The owning knowledge base.
+        document_id: The committed ``pending`` document row.
+        storage_key: Where the source bytes are stored (:func:`upload_storage_key`).
+        filename: The document's filename.
+        mime: Its declared content type.
+        origin: Set for platform-seeded documents (``template:<id>`` or
+            ``pack:<id>``, V4-18); the job then writes a ``kb.seed_ingest``
+            audit row naming it. ``None`` (an upload or a url import) adds nothing.
+
+    Returns:
+        ``{"kb_id", "document_id", "storage_key", "filename", "mime"}`` plus ``origin`` when given.
+    """
+    payload: dict[str, Any] = {
+        "kb_id": kb_id,
+        "document_id": document_id,
+        "storage_key": storage_key,
+        "filename": filename,
+        "mime": mime,
+    }
+    if origin is not None:
+        payload["origin"] = origin
+    return payload
+
+
 def upload_storage_key(kb_id: str, document_id: str, filename: str) -> str:
     """Return the storage key a KB source upload is written to.
 
@@ -824,19 +855,28 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
 
     Args:
         ctx: The job context (``database``, ``settings``, ``vault``).
-        payload: ``{"kb_id", "document_id", "storage_key", "filename", "mime"}``,
-            JSON-serialisable so this also works through the ``arq`` backend.
+        payload: ``{"kb_id", "document_id", "storage_key", "filename", "mime"}``
+            and, for a starter's knowledge seed, ``"origin"`` (see
+            :func:`ingest_payload`); JSON-serialisable so this also works
+            through the ``arq`` backend.
 
     The request handler that enqueued this must have already committed the
     document row (a separate connection needs it to exist before the chunk
     rows' foreign key can be inserted) and the uploaded bytes to storage (this
     handler cannot read a request body).
+
+    V4-18 (R-V4-65): the embedder is resolved on a short read-only session and
+    warmed (a first fastembed download is ~90 s on a cold cache) **before** the
+    ingest session opens, so a model download never sits inside a database
+    transaction.
     """
     kb_id = str(payload["kb_id"])
     document_id = str(payload["document_id"])
     storage_key = str(payload["storage_key"])
     filename = str(payload["filename"])
     mime = str(payload["mime"])
+    raw_origin = payload.get("origin")
+    origin = str(raw_origin) if raw_origin is not None else None
 
     storage = default_storage(ctx.settings)
     try:
@@ -856,9 +896,28 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
         return
 
     async with ctx.database.session() as session:
-        store = get_lancedb_store(ctx.settings.data_dir)
         embedder = await resolve_embedder(ctx.settings, session, ctx.vault)
-        await ingest_into_session(
+    try:
+        await warm_embedder(embedder)
+    except Exception as exc:  # noqa: BLE001 - recorded on the document, never raised
+        log.warning(
+            "kb_ingest_warmup_failed", kb_id=kb_id, document_id=document_id, error_type=type(exc).__name__
+        )
+        async with ctx.database.session() as session:
+            await _finish_document(
+                session,
+                document_id=document_id,
+                kb_id=kb_id,
+                status="failed",
+                chunk_count=await _document_chunk_count(session, document_id),
+                error=f"the embedding model could not be loaded ({type(exc).__name__})",
+            )
+            await _audit_seed_ingest(session, origin, kb_id=kb_id, document_id=document_id, status="failed")
+        return
+
+    store = get_lancedb_store(ctx.settings.data_dir)
+    async with ctx.database.session() as session:
+        outcome = await ingest_into_session(
             session,
             store=store,
             embedder=embedder,
@@ -869,8 +928,39 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
             data=data,
             on_progress=progress_writer(ctx.database, document_id),
         )
+        await _audit_seed_ingest(session, origin, kb_id=kb_id, document_id=document_id, status=outcome.status)
     # V5-04: compact the table the ingest just appended to (and index it once large).
     await _optimize_after_ingest(store, kb_id)
+
+
+async def warm_embedder(embedder: Embedder) -> None:
+    """Load ``embedder``'s model now if it has one (``warm()``, duck-typed like ``token_counter``).
+
+    Raises:
+        Exception: Whatever the model load raised (a failed download).
+    """
+    warm = getattr(embedder, "warm", None)
+    if warm is not None:
+        await warm()
+
+
+async def _audit_seed_ingest(
+    session: AsyncSession, origin: str | None, *, kb_id: str, document_id: str, status: str
+) -> None:
+    """Add a ``kb.seed_ingest`` audit row for a platform-seeded document (a no-op without ``origin``)."""
+    if origin is None:
+        return
+    kb = await _load_kb(session, kb_id)
+    record_audit(
+        session,
+        workspace_id=kb.workspace_id if kb is not None else None,
+        actor_type="system",
+        actor_id=None,
+        action="kb.seed_ingest",
+        target_type="kb_document",
+        target_id=document_id,
+        payload={"origin": origin, "kb_id": kb_id, "status": status},
+    )
 
 
 async def _optimize_after_ingest(store: VectorStore, kb_id: str) -> None:

@@ -170,7 +170,7 @@ def resolve_greeting_mode(configured: GreetingMode, *, has_tts: bool) -> Greetin
 
     `AgentActivity.say()` raises `RuntimeError` when the session has no TTS
     unless the realtime model advertises `capabilities.supports_say`. Neither
-    `livekit-plugins-google` nor `livekit-plugins-openai` 1.8.2 sets that flag,
+    `livekit-plugins-google` nor `livekit-plugins-openai` 1.8.3 sets that flag,
     so a realtime session without a TTS must greet through `generate_reply`.
 
     Args:

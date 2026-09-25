@@ -1,13 +1,22 @@
 /**
  * `lkap.ui.request` handling for the composite panel (CONTRACTS-V2 §4.4 and
- * the V2-10 → V2-11 wire contract): `form`, `show_block`, `navigate`.
+ * the V2-10 → V2-11 wire contract): `request`, `form`, `show_block`,
+ * `navigate`.
  *
  * `PanelDefinition` is a module object while the scroll target and the
  * confirm dialog live in the mounted component, so — like the notebook's
  * `openPacketDialog` — requests reach the component through a module-level
  * listener set. Every request is answered **at once**: the browser only sees
- * ≈3 s (`show_block`) / ≈8 s (`form`) of the worker's RPC timeout, and the
- * form itself is driven by block state, not by this RPC.
+ * ≈3 s (`show_block`) / ≈8 s (`request` / the legacy `form`) of the worker's
+ * RPC timeout.
+ *
+ * `request` (V5-02, the generic blocking request on any requestable block)
+ * and `form` (its deprecated, one-release alias) share one handler: both
+ * only bring the block into view. The pending marker itself — `status ==
+ * "requested"` — is already in the block's own state, patched by the agent
+ * *before* either RPC is sent, so a reconnecting browser needs no RPC at all
+ * to render the pending question (`composite/use-block-request.ts` reads
+ * `status` directly, never this module). One code path, two method names.
  */
 import type { UiRequest, UiRequestResult } from "@/contracts/lkap-contracts";
 
@@ -53,11 +62,14 @@ function blockIdOf(payload: Record<string, unknown> | undefined): string | null 
 export function handleCompositeRequest(request: UiRequest): UiRequestResult {
   const payload = request.payload ?? {};
   switch (request.method) {
+    case "request":
     case "form": {
-      // The block already shows the form from state (`status: "requested"`);
-      // this only brings it into view. Always ack immediately (wire step 2).
+      // The block already shows its question from state (`status:
+      // "requested"`); this only brings it into view. Always ack
+      // immediately (wire step 2) — the agent logs and keeps waiting on any
+      // RPC failure either way, so there is nothing to fail on here.
       const blockId = blockIdOf(payload);
-      if (!blockId) return { ok: false, payload: { error: "form needs a `block_id`" } };
+      if (!blockId) return { ok: false, payload: { error: `${request.method} needs a \`block_id\`` } };
       emit({ kind: "reveal", blockId, focus: true });
       return { ok: true, payload: {} };
     }

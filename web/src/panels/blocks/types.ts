@@ -1,4 +1,4 @@
-import type { BlockSpec } from "@/contracts/lkap-contracts";
+import type { BlockSpec, RequestableState } from "@/contracts/lkap-contracts";
 import type { PanelProps } from "@/panels/registry";
 
 
@@ -12,7 +12,7 @@ import type { PanelProps } from "@/panels/registry";
  * - `panel`: the panel's props (envelope, asset URLs, transcript, `perform`).
  * - `title`: the resolved heading (`spec.title` → the type's default; `null`
  *   renders no heading).
- * - `highlighted`: `show_block` / a `form` request just pointed at this block.
+ * - `highlighted`: `show_block` / a `form` or `request` just pointed at this block.
  */
 export interface BlockRenderProps<S = Record<string, unknown>> {
   spec: BlockSpec;
@@ -21,6 +21,15 @@ export interface BlockRenderProps<S = Record<string, unknown>> {
   title: string | null;
   highlighted?: boolean;
 }
+
+/**
+ * The pending/answered lifecycle of any requestable block (CONTRACTS-V2
+ * §4.4 `RequestableState`, V5-02). `"requested"` is the pending marker a
+ * renderer (and `useBlockRequest`, `composite/use-block-request.ts`) reads
+ * straight from block state — never from the `request`/`form` RPC, so a
+ * reconnecting browser renders it from the snapshot alone.
+ */
+export type RequestableStatus = NonNullable<RequestableState["status"]>;
 
 /** DOM id of a block's frame, the scroll/focus target for `show_block`. */
 export function blockDomId(blockId: string): string {

@@ -24,8 +24,10 @@ import livekit.agents
 import pytest
 import respx
 import structlog
-from fakes.fake_api import FakeApi
+from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_ctx import FakePackSessionContext, FakeRunContext, default_agent_config
+from fakes.fake_llm import FakeLLM
+from fakes.fake_tts import FakeTTS
 from livekit.agents import (
     Agent,
     AgentSession,
@@ -39,14 +41,18 @@ from livekit.agents import (
 from livekit.agents.llm import ToolFlag
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr
 from livekit.agents.voice.events import ToolCallEnded, ToolCallStarted, ToolCallUpdated, ToolReplyUpdated
+from lkap_contracts.flow import FlowSpec
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     NEVER_BACKGROUND_TOOLS,
     HttpToolDefinition,
     ToolExecution,
 )
+from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
 
+from lkap_agent.main import run_session
 from lkap_agent.observability import SessionObserver
+from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
 from lkap_agent.session_builder import ASYNC_TOOL_OPTIONS
 from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
 from lkap_agent.text_mode import inject_user_text, rewind
@@ -1066,3 +1072,80 @@ def test_the_feed_shows_a_tracked_tool_from_its_start_and_upserts_by_call_id() -
         ("tool:c1", "done", "Lookup item finished"),
     ]
     assert rows[1].detail == {"message": "Halfway."}
+
+
+# ------------------------------------ V4-19: a policy-wrapped sibling in a handoff batch
+
+
+class _FlowFactory(ProviderFactory):
+    def __init__(self, conversation: llm.LLM[Any]) -> None:
+        self.conversation = conversation
+
+    def build_all(self, resolved: Any, *, optional: Any = None) -> BuiltProviders:
+        return BuiltProviders(llm=self.conversation, tts=FakeTTS(), workflow_llm=FakeLLM(["{}"]))
+
+
+HANDOFF_FLOW: dict[str, Any] = {
+    "nodes": [
+        {"id": "start", "kind": "start", "greeting": "Hi."},
+        {"id": "claims", "kind": "agent", "label": "Claims", "instructions": "You are the claims desk."},
+        {"id": "billing", "kind": "agent", "label": "Billing", "instructions": "You are the billing desk."},
+        {"id": "g", "kind": "global", "instructions": "You work for Acme.", "tools": ["lookup_item"]},
+    ],
+    "edges": [
+        {"id": "a", "source": "start", "target": "claims", "condition": "The caller wants a claim."},
+        {"id": "b", "source": "start", "target": "billing", "condition": "The caller asks about a bill."},
+    ],
+}
+
+
+@pytest.mark.parametrize("mode", ["background", "auto"])
+@respx.mock
+async def test_real_sdk_a_policy_sibling_of_an_edge_gets_no_router_reply_and_is_cancelled(mode: str) -> None:
+    """R-V4-64 composes with `run_with_policy` (2b's shape): the announce asks for no router reply.
+
+    The sibling's first `ctx.update()` is its batch output; the handoff marks it
+    `reply_required=False`, the router's drain cancels the still-running read tool
+    (D-V4-37), and the claims node is the first to speak.
+    """
+    respx.get(API_URL).mock(side_effect=_slow_ok)
+    base = resolved_config(channel="text", tools=[_http_definition(mode=mode)])
+    config = base.config.model_copy(update={"flow": FlowSpec.model_validate(HANDOFF_FLOW)})
+    resolved = base.model_copy(update={"config": config})
+    scripted = ScriptedLLM(
+        ["Hi.", [ToolCall("go_to_claims"), ToolCall("lookup_item", {"item_id": "42"})], "Claims desk here."]
+    )
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        FakeApi(resolved),
+        factory=_FlowFactory(scripted),
+        session_starter=starter,
+        declarative_tools_builder=lambda defs: build_http_tools(
+            defs, platform_allowed_hosts=["api.example.com"]
+        ),
+    )
+    await run_session(ctx, deps)
+    session = starter.session
+    assert session is not None
+    await asyncio.wait_for(_until(lambda: starter.assistant_turns() == ["Hi."]), 5)
+    recorder = _Recorder(session)
+
+    await session.run(user_input="I'd like to file a claim.")
+    await recorder.wait_for(lambda u: u.type == "tool_call_ended")
+    await asyncio.wait_for(_until(lambda: "Claims desk here." in starter.assistant_turns()), 5)
+    await asyncio.sleep(0.2)  # room for a stray reply to land
+
+    assert session.current_agent.id == "claims"
+    assert starter.assistant_turns() == ["Hi.", "Claims desk here."]
+    # The policy announced, so the batch held an output that asked for a reply.
+    assert "tool_call_updated" in recorder.kinds()
+    assert "ended(cancelled)" in recorder.kinds()
+    # Greeting, batch, claims node: the router generated nothing from the announce.
+    assert len(scripted.calls) == 3
+    claims_ctx, claims_tools, _choice = scripted.calls[2]
+    assert "go_to_claims" not in claims_tools
+    outputs = [i for i in claims_ctx.items if i.type == "function_call_output" and i.name == "lookup_item"]
+    (announce,) = outputs  # the announce rode into the claims node's first generation
+    assert "Working on lookup item." in announce.output
+    await ctx.fire_shutdown("done")

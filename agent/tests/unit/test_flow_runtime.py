@@ -38,7 +38,8 @@ class ToolCall:
         self.arguments = arguments or {}
 
 
-Step = str | ToolCall
+#: A text reply, one tool call, or a batch of parallel tool calls in one generation.
+Step = str | ToolCall | list[ToolCall]
 
 
 class _ScriptedStream(llm.LLMStream):
@@ -48,11 +49,13 @@ class _ScriptedStream(llm.LLMStream):
 
     async def _run(self) -> None:
         step = self._step
-        if isinstance(step, ToolCall):
-            call = llm.FunctionToolCall(
-                name=step.name, arguments=json.dumps(step.arguments), call_id=f"call-{step.name}"
-            )
-            delta = llm.ChoiceDelta(role="assistant", tool_calls=[call])
+        if isinstance(step, ToolCall | list):
+            calls = [step] if isinstance(step, ToolCall) else step
+            tool_calls = [
+                llm.FunctionToolCall(name=c.name, arguments=json.dumps(c.arguments), call_id=f"call-{c.name}")
+                for c in calls
+            ]
+            delta = llm.ChoiceDelta(role="assistant", tool_calls=tool_calls)
         else:
             delta = llm.ChoiceDelta(role="assistant", content=step)
         self._event_ch.send_nowait(llm.ChatChunk(id="scripted", delta=delta))
@@ -65,6 +68,8 @@ class ScriptedLLM(llm.LLM[Any]):
         super().__init__()
         self.steps: list[Step] = list(steps)
         self.calls: list[tuple[str, list[str], dict[str, str]]] = []
+        #: The full context of each call, in the same order as `calls`.
+        self.contexts: list[llm.ChatContext] = []
 
     @property
     def model(self) -> str:
@@ -87,6 +92,7 @@ class ScriptedLLM(llm.LLM[Any]):
             t.info.name: (t.info.description or "") for t in tools or [] if isinstance(t, llm.FunctionTool)
         }
         self.calls.append((prompt, sorted(descriptions), descriptions))
+        self.contexts.append(chat_ctx.copy())
         step = self.steps.pop(0) if self.steps else "Okay."
         return _ScriptedStream(
             self, step=step, chat_ctx=chat_ctx, tools=list(tools or []), conn_options=conn_options
@@ -599,3 +605,118 @@ async def test_flow_node_background_tools_run_blocking_until_livekit_agents_1_8_
     await ctx.fire_shutdown("done")
     infos = [e.payload["message"] for e in api.events_of("info")]
     assert any("1.8.3" in message and "lookup_item" in message for message in infos)
+
+
+# ------------------------------- V4-19: no draining-node reply after a handoff (R-V4-64)
+
+
+SIBLING_FLOW: dict[str, Any] = {
+    "nodes": [
+        {"id": "start", "kind": "start", "greeting": "Hi."},
+        {"id": "claims", "kind": "agent", "label": "Claims", "instructions": "You are the claims desk."},
+        {"id": "billing", "kind": "agent", "label": "Billing", "instructions": "You are the billing desk."},
+        {"id": "g", "kind": "global", "instructions": "You work for Acme.", "tools": ["lookup_policy"]},
+    ],
+    "edges": [
+        {"id": "a", "source": "start", "target": "claims", "condition": "The caller wants a claim."},
+        {"id": "b", "source": "start", "target": "billing", "condition": "The caller asks about a bill."},
+    ],
+}
+
+CLAIMS_LINE = "Claims desk: what is your policy number?"
+POLICY_OUTPUT = "Policy P-1 is active."
+USER_LINE = "I'd like to file a claim."
+
+
+def _lookup_policy(delay_s: float) -> Any:
+    """A plain (blocking) global tool that answers after `delay_s`."""
+    from livekit.agents import function_tool  # noqa: PLC0415
+
+    async def _run() -> str:
+        await asyncio.sleep(delay_s)
+        return POLICY_OUTPUT
+
+    return function_tool(_run, name="lookup_policy", description="Look up the caller's policy.")
+
+
+async def _start_sibling_flow(conversation: ScriptedLLM, delay_s: float) -> RoomlessStarter:
+    api = FakeApi(_flow_config(SIBLING_FLOW))
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        api,
+        factory=_FlowFactory(conversation, FakeLLM(["{}"])),
+        session_starter=starter,
+        builtin_tools_builder=lambda *_a: [_lookup_policy(delay_s)],
+    )
+    await run_session(ctx, deps)
+    assert starter.session is not None
+    await _wait_for(lambda: "assistant:Hi." in _history_kinds(starter))
+    return starter
+
+
+def _after_user(starter: RoomlessStarter) -> list[str]:
+    kinds = _history_kinds(starter)
+    return kinds[kinds.index(f"user:{USER_LINE}") + 1 :]
+
+
+def _pair_in(ctx: llm.ChatContext, name: str) -> tuple[bool, list[str]]:
+    calls = [i for i in ctx.items if i.type == "function_call" and i.name == name]
+    outputs = [i.output for i in ctx.items if i.type == "function_call_output" and i.name == name]
+    return bool(calls), outputs
+
+
+@pytest.mark.parametrize(
+    ("batch", "delay_s"),
+    [
+        # The 2a shape: the sibling finishes 1.5 s after the edge tool.
+        ([ToolCall("go_to_claims"), ToolCall("lookup_policy")], 1.5),
+        # The sibling finishes first (listed first, no await).
+        ([ToolCall("lookup_policy"), ToolCall("go_to_claims")], 0.0),
+    ],
+    ids=["sibling-after-edge", "sibling-before-edge"],
+)
+async def test_handoff_batch_the_router_never_replies_and_the_target_answers_first(
+    batch: list[ToolCall], delay_s: float
+) -> None:
+    """R-V4-64: an edge + a sibling in one batch → no router message; the claims node speaks first."""
+    conversation = ScriptedLLM(["Hi.", batch, CLAIMS_LINE])
+    starter = await _start_sibling_flow(conversation, delay_s)
+    session = starter.session
+    assert session is not None
+    assert starter.agent.id == "start"
+
+    await session.run(user_input=USER_LINE)
+    await _wait_for(lambda: session.current_agent.id == "claims", timeout_s=5.0)
+    await _wait_for(lambda: f"assistant:{CLAIMS_LINE}" in _history_kinds(starter), timeout_s=5.0)
+    await asyncio.sleep(0.2)  # room for a stray reply to land
+
+    # Nothing between the caller's line and the handoff; the first message after it is the target's.
+    assert _after_user(starter) == ["handoff:start->claims", f"assistant:{CLAIMS_LINE}"]
+    # Only the greeting, the batch and the claims node's reply reached the LLM: no router tool reply.
+    assert len(conversation.calls) == 3
+    assert "You are the claims desk." in conversation.calls[2][0]
+    state = session.userdata
+    assert isinstance(state, FlowUserdata)
+    assert state.flow.path == ["start", "claims"]
+    # The sibling's call/output pair rode into the claims node's context, and its first
+    # generation saw it; the edge's own pair is dropped (the claims node has no such tool).
+    claims = session.current_agent
+    assert _pair_in(claims.chat_ctx, "lookup_policy") == (True, [POLICY_OUTPUT])
+    assert _pair_in(conversation.contexts[2], "lookup_policy") == (True, [POLICY_OUTPUT])
+    assert _pair_in(conversation.contexts[2], "go_to_claims") == (False, [])
+
+
+async def test_a_batch_without_an_edge_still_gets_its_tool_reply() -> None:
+    """R-V4-64 is scoped to handoffs: a sibling alone is answered as before."""
+    conversation = ScriptedLLM(["Hi.", [ToolCall("lookup_policy")], "Your policy is active."])
+    starter = await _start_sibling_flow(conversation, 0.0)
+    session = starter.session
+    assert session is not None
+
+    await session.run(user_input=USER_LINE)
+    await _wait_for(lambda: len(conversation.calls) >= 3)
+    await _wait_for(lambda: "assistant:Your policy is active." in _history_kinds(starter))
+
+    assert session.current_agent.id == "start"
+    assert _after_user(starter) == ["assistant:Your policy is active."]

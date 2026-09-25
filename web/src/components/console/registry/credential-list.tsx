@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { FlaskConicalIcon, KeyRoundIcon, MoreHorizontalIcon, PencilIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
+import { FlaskConicalIcon, KeyRoundIcon, MoreHorizontalIcon, PencilIcon, PlugIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,16 +30,27 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
-import { useAgents, useCredentials, useDeleteCredential, useProviders, useTools } from "@/components/console/lib/api-hooks";
+import { useAgents, useCredentials, useDeleteCredential, useDisableApps, useEnableApps, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import { CredentialDialog, type CredentialDialogMode } from "@/components/console/registry/credential-dialog";
 import { OUTCOME_LABEL, OUTCOME_TONE, useCredentialTest } from "@/components/console/registry/credential-test";
 import { KIND_LABEL, credentialDisplay, kindRank } from "@/components/console/registry/provider-meta";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
+import { appsErrorMessage, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { pluralize } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, CredentialOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
+
+/**
+ * `lkap_contracts.tool_providers` module-level constants (not pydantic
+ * models, so `lkap_contracts.export` never puts them in the generated
+ * `.d.ts` — that file carries types only). Mirrored here as literals rather
+ * than imported.
+ */
+const COMPOSIO_PROVIDER_ID = "composio";
+const TOOL_PROVIDER_ACCOUNT = "tool-provider-account";
 
 /** How long the inline test result stays as a chip before it settles to "Tested … ago" (§4.5). */
 export const TEST_CHIP_MS = 10_000;
@@ -132,7 +143,13 @@ export function CredentialList() {
   );
 
   const rows = React.useMemo(() => {
-    const items = [...(credentialsQuery.data?.items ?? [])];
+    // Composio's connected apps (`provider_id: "tool-provider-account"`) are
+    // not vault keys a builder manages here — they carry no secret and have
+    // no generic Test/Rotate/Delete story (docs/v5/_asks.md #4: the api
+    // route doesn't refuse them yet, so this list hides them client-side
+    // until it does). The workspace's own Composio key (`provider_id:
+    // "composio"`) is an ordinary row, just with extra actions below.
+    const items = (credentialsQuery.data?.items ?? []).filter((c) => c.provider_id !== TOOL_PROVIDER_ACCOUNT);
     const titleFor = (spec: ProviderSpec | undefined, providerId: string) =>
       spec ? credentialDisplay(spec, registry).title : providerId;
     return items.sort((a, b) => {
@@ -215,14 +232,14 @@ export function CredentialList() {
       {
         id: "test",
         header: "Last test",
-        cell: (row) => <TestStatus credentialId={row.id} />,
+        cell: (row) => (row.provider_id === COMPOSIO_PROVIDER_ID ? <ComposioTestStatus /> : <TestStatus credentialId={row.id} />),
       },
       {
         id: "actions",
         header: <span className="sr-only">Actions</span>,
         align: "end",
         interactive: true,
-        cell: (row) => <RowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />,
+        cell: (row) => <CredentialRowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />,
       },
     ];
 
@@ -236,7 +253,7 @@ export function CredentialList() {
           <div className="flex flex-col gap-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} />
-              <RowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />
+              <CredentialRowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-[0.8125rem] text-muted-foreground">
               <CredentialKind spec={specs.get(row.provider_id)} registry={registry} />
@@ -244,7 +261,7 @@ export function CredentialList() {
               <UsageCell usage={usage.get(row.id) ?? NO_USAGE} />
             </div>
             <div className="pl-[2.125rem]">
-              <TestStatus credentialId={row.id} />
+              {row.provider_id === COMPOSIO_PROVIDER_ID ? <ComposioTestStatus /> : <TestStatus credentialId={row.id} />}
             </div>
           </div>
         )}
@@ -391,6 +408,130 @@ function TestStatus({ credentialId }: { credentialId: string }) {
         <span className="text-[0.8125rem] text-muted-foreground">Not tested</span>
       )}
     </span>
+  );
+}
+
+/**
+ * The Composio row's status cell: the same persisted chip Tools -> Apps'
+ * header shows (`useComposioStatus`, docs/v5/COMPOSIO.md §6, D-V5-C13) — one
+ * source of truth, so the two screens can never disagree.
+ */
+function ComposioTestStatus() {
+  const { status } = useComposioStatus();
+  const chip = composioStatusChip(status);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <StatusChip tone={chip.tone} dot size="sm">
+        {chip.label}
+      </StatusChip>
+      {status?.last_test_at ? <RelativeTime iso={status.last_test_at} className="text-[0.8125rem] text-muted-foreground" /> : null}
+    </span>
+  );
+}
+
+/** Dispatches to the Composio-specific menu (docs/v5/COMPOSIO.md §6, D-V5-C13) or the generic one. */
+function CredentialRowActions(props: {
+  credential: CredentialOut;
+  onOpenDialog: (mode: CredentialDialogMode, credential: CredentialOut) => void;
+  onDelete: (credential: CredentialOut) => void;
+}) {
+  if (props.credential.provider_id === COMPOSIO_PROVIDER_ID) {
+    return <ComposioRowActions credential={props.credential} onDelete={props.onDelete} />;
+  }
+  return <RowActions {...props} />;
+}
+
+/**
+ * The Composio row's menu: **Validate** (the same stored-key test, through
+ * the shared `useComposioStatus` hook so the header chip here and on Tools ->
+ * Apps update together), **Rotate** (`EnableComposioDialog` in `rotate`
+ * mode — a new key on this same credential id), **Disable** / **Enable**
+ * (the workspace's Apps toggle — confirmed, since it pauses every tool that
+ * uses a connected app) and **Remove key** (the generic delete flow,
+ * renamed: this is the one destructive, no-way-back action).
+ */
+function ComposioRowActions({ credential, onDelete }: { credential: CredentialOut; onDelete: (credential: CredentialOut) => void }) {
+  const { status, validate, validating } = useComposioStatus();
+  const enableApps = useEnableApps();
+  const disableApps = useDisableApps();
+  const { canWrite } = useWriteAccess("admin");
+  const [rotateOpen, setRotateOpen] = React.useState(false);
+  const [disableConfirmOpen, setDisableConfirmOpen] = React.useState(false);
+
+  async function handleToggle() {
+    try {
+      if (status?.enabled) {
+        await disableApps.mutateAsync();
+        toast.success("Apps turned off");
+      } else {
+        await enableApps.mutateAsync();
+        toast.success("Apps turned on");
+      }
+    } catch (error) {
+      toast.error(`Couldn't update — ${appsErrorMessage(error)}`);
+    }
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${credential.label}`}>
+            <MoreHorizontalIcon aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem disabled={validating} onSelect={() => void validate()}>
+            <FlaskConicalIcon aria-hidden="true" />
+            Validate
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canWrite} onSelect={() => setRotateOpen(true)}>
+            <RefreshCwIcon aria-hidden="true" />
+            Rotate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canWrite}
+            onSelect={() => (status?.enabled ? setDisableConfirmOpen(true) : void handleToggle())}
+          >
+            <PlugIcon aria-hidden="true" />
+            {status?.enabled ? "Disable" : "Enable"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" disabled={!canWrite} onSelect={() => onDelete(credential)}>
+            <TrashIcon aria-hidden="true" />
+            Remove key
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <EnableComposioDialog mode="rotate" credentialId={credential.id} open={rotateOpen} onOpenChange={setRotateOpen} />
+      <Dialog open={disableConfirmOpen} onOpenChange={setDisableConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Turn off Apps?</DialogTitle>
+            <DialogDescription>
+              The key and every connection are kept. Tools that use them switch off until you turn Apps back on.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDisableConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+              disabled={disableApps.isPending}
+              onClick={async () => {
+                await handleToggle();
+                setDisableConfirmOpen(false);
+              }}
+            >
+              {disableApps.isPending ? "Working…" : "Turn off"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

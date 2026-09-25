@@ -11,11 +11,18 @@ the conditions; the highest-priority edge is the one recorded in the `handoff`
 event.
 
 The tool body delegates to :meth:`FlowRuntime.take_edge`, which returns the
-next node's `FlowNodeAgent` (livekit-agents 1.8.2 hands off when a tool
+next node's `FlowNodeAgent` (livekit-agents 1.8.3 hands off when a tool
 returns an `Agent`: `voice.generation.make_tool_output` sets `agent_task`, and
-a bare `Agent` return sets `reply_required=False`, so the old node does not
-speak again), `None` for a terminal node (the tool already spoke), or a short
-string the model reads when the transition cannot happen.
+a bare `Agent` return sets the edge's own `reply_required=False`), `None` for a
+terminal node (the tool already spoke), or a short string the model reads when
+the transition cannot happen.
+
+The SDK decides whether the old node replies over the whole batch of parallel
+calls, so a sibling tool's output (a plain result, or a background tool's
+announce) would still make the draining node speak with its own instructions
+before the next node. :meth:`FlowRuntime.on_function_tools_executed` marks the
+batch `reply_required=False` once it hands off and carries its pairs into the
+next node (R-V4-64, V4-19).
 """
 
 from __future__ import annotations

@@ -40,7 +40,9 @@ with the agent. `template_id` wins over `pack_id`: the pack is the
 starter's. Pass `patch` to adjust the seed in the same call. What the
 connection cannot run is switched off rather than failing the create: DTMF
 stays off until SIP is reachable, recording until Egress and a storage
-config exist.
+config exist. Seeded knowledge is ingested in the background and is ready
+when its documents are, usually within seconds: `kb_get` shows each
+document's status (`pending`, then `ready`).
 
 ## 3. Follow its next steps
 

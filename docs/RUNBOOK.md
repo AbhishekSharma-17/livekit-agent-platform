@@ -224,7 +224,8 @@ It dumps Postgres (when configured) and tars `LKAP_DATA_DIR` (local storage, Lan
   sqlite3 api/data/lkap.db ".backup /somewhere/outside/api/data/lkap-$(date +%s).db"
   ```
   SQLite DDL is not transactional, so a failed chain leaves `alembic_version` out of step with the schema.
-- **To restore:** stop the api, then copy the file back.
+- **WAL mode (V4-18, R-V4-65).** The api opens SQLite with `journal_mode=WAL` and `busy_timeout=10000`, so readers never wait for a writer and a second writer waits up to 10 s instead of failing with `database is locked`. WAL is persistent: the first api start converts an existing `lkap.db`, and `lkap.db-wal` / `lkap.db-shm` appear beside it. Back up with `sqlite3 … ".backup …"` (above), which includes the WAL; a plain file copy while the api runs must copy all three files, or stop the api first. Postgres is unaffected.
+- **To restore:** stop the api, then copy the file back (and delete any stale `lkap.db-wal` / `lkap.db-shm` beside it).
 - **A full downgrade is lossy:** it drops v2 tables such as connections and channels. See `docs/v2/_briefs/migration-rehearsal.md`.
 
 ## 7. Key and secret rotation

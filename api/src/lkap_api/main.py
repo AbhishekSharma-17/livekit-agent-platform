@@ -31,6 +31,7 @@ from lkap_api.custom_models.router import router as model_test_router
 from lkap_api.db.session import Database
 from lkap_api.errors import ApiError
 from lkap_api.jobs.handlers import load_all_handlers
+from lkap_api.kb.embed import warm_default_embedder
 from lkap_api.logging import configure_logging, get_logger
 from lkap_api.packs import router as packs_router
 from lkap_api.routers import (
@@ -279,13 +280,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await _startup(app, resolved)
         sweep_task: asyncio.Task[None] = asyncio.create_task(sweep_loop(app.state.db, resolved))
         app.state.sweep_task = sweep_task
+        # V4-18 (R-V4-65): load the fastembed model now (fire-and-forget; never fails startup).
+        warmup_task: asyncio.Task[None] = asyncio.create_task(warm_default_embedder(resolved))
+        app.state.embedder_warmup_task = warmup_task
         log.info("api_started", version=__version__, agent_name=resolved.agent_name)
         try:
             yield
         finally:
-            sweep_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await sweep_task
+            for task in (sweep_task, warmup_task):
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
             database: Database | None = getattr(app.state, "db", None)
             if database is not None:
                 await database.dispose()

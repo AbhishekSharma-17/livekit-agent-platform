@@ -176,6 +176,18 @@ class FastEmbedEmbedder:
                     )
         return self._model
 
+    async def warm(self) -> None:
+        """Load (and on a cold cache, download) the model now instead of on first use.
+
+        V4-18 (R-V4-65): called by the api lifespan at startup and by the
+        ``kb_ingest`` job before its ingest session opens, so the download
+        never sits inside a database transaction.
+
+        Raises:
+            Exception: Whatever the model load raised (a failed download).
+        """
+        await self._get_model()
+
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed ``texts`` with the local ONNX model, off the event loop."""
         if not texts:
@@ -333,6 +345,32 @@ def clear_embedder_cache() -> None:
     _FASTEMBED_CACHE.clear()
 
 
+def uses_fastembed(settings: Settings) -> bool:
+    """Whether ``LKAP_EMBEDDER`` selects the local fastembed model (the default)."""
+    return (settings.embedder or "fastembed").strip() in {"", "fastembed"}
+
+
+async def warm_default_embedder(settings: Settings) -> None:
+    """Load the process-wide fastembed model once; never raises (V4-18, R-V4-65).
+
+    The api lifespan runs this as a fire-and-forget task at startup, so the
+    first knowledge ingest (a starter's seeds, an upload) finds the model
+    loaded. A remote embedder (``LKAP_EMBEDDER=<provider>:<credential>``) has
+    nothing to load and is skipped. A failure (no network on a cold cache, a
+    bad ``LKAP_EMBED_MODEL``) is logged as ``fastembed_warmup_failed``; the
+    ingest job retries the load before its own first write.
+    """
+    if not uses_fastembed(settings):
+        return
+    model = settings.embed_model or FASTEMBED_MODEL
+    try:
+        await get_fastembed_embedder(settings.data_dir, model).warm()
+    except Exception as exc:  # noqa: BLE001 - a warm-up must never fail startup
+        log.warning("fastembed_warmup_failed", model=model, error_type=type(exc).__name__)
+        return
+    log.info("fastembed_warmup_done", model=model)
+
+
 #: The dotted class path of every registry embedding entry :func:`resolve_embedder`
 #: can build with a credential (`openai-embedding`, `openrouter-embedding`).
 OPENAI_EMBEDDER_CLASS = "lkap_api.kb.embed.OpenAIEmbedder"
@@ -391,7 +429,7 @@ async def resolve_embedder(settings: Settings, db: AsyncSession, vault: Vault) -
             under another provider.
     """
     value = (settings.embedder or "fastembed").strip()
-    if value in {"", "fastembed"}:
+    if uses_fastembed(settings):
         return get_fastembed_embedder(settings.data_dir, settings.embed_model or FASTEMBED_MODEL)
     scheme, separator, credential_id = value.partition(":")
     legacy = scheme == _LEGACY_OPENAI_SCHEME

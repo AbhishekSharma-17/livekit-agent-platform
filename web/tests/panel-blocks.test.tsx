@@ -256,7 +256,7 @@ describe("form block", () => {
     });
   });
 
-  it("submits the values through perform as form_submit", async () => {
+  it("submits the values through perform as block_submit (V5-03: the form path moved onto the generic requestable-block machinery)", async () => {
     const perform = vi.fn(async () => ({ ok: true, payload: {} }));
     render(<Block spec={spec} {...panelProps({ perform })} />);
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "priya@example.com" } });
@@ -266,7 +266,7 @@ describe("form block", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(perform).toHaveBeenCalledTimes(1));
     expect(perform).toHaveBeenCalledWith({
-      action: "form_submit",
+      action: "block_submit",
       payload: {
         block_id: "intake",
         values: {
@@ -291,13 +291,32 @@ describe("form block", () => {
     expect(screen.getByLabelText("Email").getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("dismisses with {block_id, cancelled: true}", async () => {
+  it("dismisses with block_submit {block_id, cancelled: true}", async () => {
     const perform = vi.fn(async () => ({ ok: true, payload: {} }));
     render(<Block spec={spec} {...panelProps({ perform })} />);
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     await waitFor(() =>
-      expect(perform).toHaveBeenCalledWith({ action: "form_submit", payload: { block_id: "intake", cancelled: true } }),
+      expect(perform).toHaveBeenCalledWith({ action: "block_submit", payload: { block_id: "intake", cancelled: true } }),
     );
+  });
+
+  it("shows a plain dismissal message once cancelled, with no Send/Not now controls", () => {
+    const state = fixtureUiState({ intake: { ...BLOCK_FIXTURE_STATES.form, status: "cancelled" } });
+    render(<Block spec={spec} {...panelProps({ state })} />);
+    expect(screen.getByText("You dismissed this without answering.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Not now" })).toBeNull();
+  });
+
+  it("re-arms from a reconnect snapshot alone: a fresh block instance already at status=requested renders pending without any request/form RPC", () => {
+    // No `handleCompositeRequest` call anywhere in this test — the snapshot
+    // (`BLOCK_FIXTURE_STATES.form`, `status: "requested"`) is the only thing
+    // driving the render, exactly as it is after a browser reconnect.
+    const perform = vi.fn(async () => ({ ok: true, payload: {} }));
+    render(<Block spec={spec} {...panelProps({ perform })} />);
+    expect(screen.getByRole("form", { name: "Your details" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    expect(perform).not.toHaveBeenCalled();
   });
 
   it("shows the agent's refusal and lets the caller retry", async () => {

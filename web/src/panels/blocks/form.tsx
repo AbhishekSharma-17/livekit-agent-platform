@@ -2,13 +2,16 @@
 
 /**
  * `form` block — a JSON-schema form the agent asks the caller to fill in
- * (CONTRACTS-V2 §4.4, the V2-10 → V2-11 wire contract).
+ * (CONTRACTS-V2 §4.4, the V2-10 → V2-11 wire contract; V5-02/V5-03 moved it
+ * onto the generic requestable-block machinery).
  *
- * The block renders from **state**, never from the `form` RPC: the worker sets
- * `status: "requested"` (with `values` = the prefill) before it sends the RPC,
- * and after a reconnect only the snapshot carries it. The RPC just scrolls
- * here (`composite/requests.ts`). Answers go back through `perform`:
- * `form_submit {block_id, values}`, or `{block_id, cancelled: true}`.
+ * The block renders from **state**, never from the `request` / legacy `form`
+ * RPC: the worker sets `status: "requested"` (with `values` = the prefill)
+ * before it sends the RPC, and after a reconnect only the snapshot carries
+ * it. The RPC just scrolls here (`composite/requests.ts`). Answers go back
+ * through `useBlockRequest` (`composite/use-block-request.ts`): `block_submit
+ * {block_id, values}`, or `{block_id, cancelled: true}` — the one path every
+ * requestable block's renderer now shares.
  *
  * Schema subset (the worker's `fields_to_schema`): `properties` in field
  * order, each `{title, type: string|number|integer|boolean, format?: date|email,
@@ -23,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { FormBlockState } from "@/contracts/lkap-contracts";
 import { formatTime } from "@/lib/format";
+import { useBlockRequest } from "@/panels/composite/use-block-request";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
 import { BlockFrame } from "./frame";
@@ -202,7 +206,11 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-/** The editable form for one request; remounted (fresh draft) per request. */
+/**
+ * The editable form for one request; remounted (fresh draft **and** fresh
+ * `useBlockRequest` — `sending`/`error` reset too) per request, keyed by the
+ * question's schema and prefill (`FormBlock`'s `requestKey`).
+ */
 function FormEditor({
   blockId,
   title,
@@ -219,26 +227,10 @@ function FormEditor({
   const baseId = useId();
   const [draft, setDraft] = useState<Draft>(() => toDraft(fields, prefill));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [sending, setSending] = useState<"submit" | "cancel" | null>(null);
-  const [sendError, setSendError] = useState<string | null>(null);
-
-  async function send(
-    payload: { block_id: string; values: Record<string, unknown> } | { block_id: string; cancelled: true },
-  ) {
-    setSendError(null);
-    try {
-      const result = (await perform({ action: "form_submit", payload })) as
-        | { ok?: boolean; error?: string | null }
-        | undefined;
-      if (result && result.ok === false) {
-        setSendError(result.error || "The agent didn't accept the form. Try again.");
-        setSending(null);
-      }
-    } catch (error) {
-      setSendError(error instanceof Error ? error.message : "Couldn't reach the agent. Try again.");
-      setSending(null);
-    }
-  }
+  // Mounted only while `status === "requested"` (`FormBlock` below); passing
+  // that literal, rather than threading the live status through, is what it
+  // is while this component is mounted at all.
+  const { sending, error: sendError, submit, cancel } = useBlockRequest(blockId, "requested", perform);
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -246,14 +238,12 @@ function FormEditor({
     const { values, errors: found } = coerceForm(fields, draft);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    setSending("submit");
-    void send({ block_id: blockId, values });
+    void submit(values);
   }
 
   function onCancel() {
     if (sending) return;
-    setSending("cancel");
-    void send({ block_id: blockId, cancelled: true });
+    void cancel();
   }
 
   return (
@@ -310,15 +300,10 @@ export function FormBlock({ spec, data, panel, title, highlighted }: BlockRender
   let body: React.ReactNode;
   if (status === "requested") {
     body = (
-      <FormEditor
-        key={requestKey}
-        blockId={spec.id}
-        title={title}
-        fields={fields}
-        prefill={prefill}
-        perform={panel.perform}
-      />
+      <FormEditor key={requestKey} blockId={spec.id} title={title} fields={fields} prefill={prefill} perform={panel.perform} />
     );
+  } else if (status === "cancelled") {
+    body = <PanelEmpty>You dismissed this without answering.</PanelEmpty>;
   } else if (status === "submitted") {
     const shown = fields.length > 0 ? fields.map((f) => [f.label, prefill[f.name]] as const) : Object.entries(prefill);
     body = (

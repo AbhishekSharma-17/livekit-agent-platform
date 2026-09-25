@@ -4,8 +4,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentPublicOut, UiState } from "@/contracts/lkap-contracts";
-import { GenericPanel } from "@/panels/generic";
-import type { PanelProps } from "@/panels/registry";
+import { GENERIC_PANEL, GenericPanel } from "@/panels/generic";
+import { resolvePanel, type PanelProps } from "@/panels/registry";
 
 import genericFixture from "./fixtures/generic_ui_state.json";
 
@@ -183,6 +183,30 @@ describe("GenericPanel", () => {
     expect(screen.getByText("The agent has not run any tools yet.")).toBeTruthy();
     expect(screen.queryByText("Show raw state")).toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+});
+
+describe("the generic panel and the V5-03 generic request/submit protocol", () => {
+  it("is not blocksAware and declares no handleRequest — a `request` (or `form`, `show_block`) has nothing to target here", () => {
+    // V5-03 generalises `form`'s request/submit machinery to every requestable
+    // block, but only `blocksAware` panels (the composite panel) render
+    // `UiState.blocks` at all. The generic panel renders the envelope only,
+    // so `resolvePanel("generic")` — what a session actually looks up — must
+    // keep declining every `lkap.ui.request` politely rather than guessing.
+    expect(resolvePanel("generic")).toBe(GENERIC_PANEL);
+    expect(GENERIC_PANEL.blocksAware).toBeUndefined();
+    expect(GENERIC_PANEL.handleRequest).toBeUndefined();
+  });
+
+  it("ignores state.blocks entirely, even when a snapshot carries a pending requestable block", () => {
+    const withBlocks: UiState = {
+      ...FIXTURE,
+      blocks: { intake: { schema: {}, values: {}, status: "requested", submitted_at: null } },
+    };
+    render(<GenericPanel {...props({ state: withBlocks })} />);
+    // Same envelope-only render as the plain fixture — no form, no crash.
+    expect(screen.getByText("In review")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   });
 });
 

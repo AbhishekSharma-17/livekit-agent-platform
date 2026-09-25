@@ -23,6 +23,7 @@ import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useAgents, useMaterialiseAppActions, useToolProviderActions } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
 import type { ActionRisk } from "@/components/console/tools/apps/types";
+import type { AppActionsPickOut } from "@/contracts/lkap-contracts";
 
 const RISK_LABEL: Record<ActionRisk, string> = { read: "Read", write: "Writes", destructive: "Destructive" };
 const RISK_TONE: Record<ActionRisk, StatusTone> = { read: "success", write: "info", destructive: "danger" };
@@ -43,6 +44,16 @@ export interface ActionsDialogProps {
    * from inside the agent editor too.
    */
   presetAgentId?: string;
+  /**
+   * V5-48: called with the api's result right after a successful "Add as
+   * tools", before the dialog closes — the caller can merge
+   * `tools_created`/`tools_existing` into its own view of `tool_ids`
+   * instead of only refetching (`ConnectedAppsCard`'s
+   * `handleActionsAdded`: the attach already happened server-side as this
+   * agent's own config save, so an open editor's stale in-memory
+   * `tool_ids` would otherwise clobber it on the next Save).
+   */
+  onAdded?: (result: AppActionsPickOut) => void;
 }
 
 /**
@@ -60,6 +71,7 @@ export function ActionsDialog({
   open,
   onOpenChange,
   presetAgentId,
+  onAdded,
 }: ActionsDialogProps) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -119,7 +131,7 @@ export function ActionsDialog({
     // `AppActionsPickIn.actions` is typed as a non-empty tuple (`min_length=1`).
     const picked = Array.from(checked) as [string, ...string[]];
     try {
-      await materialise.mutateAsync({
+      const result = await materialise.mutateAsync({
         connection_id: connectionId,
         actions: picked,
         agent_id: attachAgentId || null,
@@ -130,6 +142,7 @@ export function ActionsDialog({
           ? `Added ${checked.size} action(s) from ${toolkitName} and attached to the agent`
           : `Added ${checked.size} action(s) from ${toolkitName}`,
       );
+      onAdded?.(result);
       onOpenChange(false);
     } catch (error) {
       toast.error(`Couldn't add actions — ${appsErrorMessage(error)}`);

@@ -84,6 +84,8 @@ function stubApi(overrides: (call: Call) => { status: number; body: unknown } | 
   return calls;
 }
 
+let latest: AgentEditorForm | null = null;
+
 function Harness({ agent = AGENT }: { agent?: AgentOut }) {
   const client = React.useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
   const form = useForm<AgentEditorForm>({
@@ -91,6 +93,7 @@ function Harness({ agent = AGENT }: { agent?: AgentOut }) {
     defaultValues: toFormValues(agent),
     mode: "onChange",
   });
+  latest = form.watch();
   return (
     <QueryClientProvider client={client}>
       <FormProvider {...form}>
@@ -153,6 +156,34 @@ describe("ConnectedAppsCard", () => {
   it('in "Use picked actions" mode, an app\'s Actions button opens the picker preselected to attach to this agent, and posts materialise with this agent_id', async () => {
     const calls = stubApi((call) => {
       if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture()]) };
+      if (call.url.endsWith("/tools") && call.method === "GET") {
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                id: "tool-1",
+                name: "googlecalendar_list_repos",
+                kind: "provider",
+                agent_id: null,
+                enabled: true,
+                created_at: "2026-09-01T00:00:00Z",
+                updated_at: "2026-09-01T00:00:00Z",
+                definition: {
+                  kind: "provider",
+                  name: "googlecalendar_list_repos",
+                  description: "List repos",
+                  parameters: {},
+                  tool_slug: "GITHUB_LIST_REPOS",
+                  connection_id: "conn_github",
+                  subject: "ws:ws1",
+                },
+              },
+            ],
+            total: 1,
+          },
+        };
+      }
       return undefined;
     });
     const { container } = render(<Harness />);
@@ -170,6 +201,77 @@ describe("ConnectedAppsCard", () => {
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("/materialise") && c.method === "POST")).toBe(true));
     const call = calls.find((c) => c.url.endsWith("/materialise"))!;
     expect(call.body?.agent_id).toBe(AGENT.id);
+
+    // The attach happened server-side as this agent's own config save
+    // (`attach_tools`) — without merging the result into this form's
+    // `tool_ids`, the next Save from this open editor would post the stale
+    // (empty) list and silently un-attach the action just added.
+    await waitFor(() => expect(latest?.config.tools.tool_ids).toContain("tool-1"));
+    // And it's visible right away as an attached-action chip, not just in
+    // `tool_ids` — a materialised action is a *shared* tool with no row of
+    // its own in this agent's "owned tools" query.
+    expect(await screen.findByText("googlecalendar_list_repos")).toBeTruthy();
+  });
+
+  it("removing an attached action chip detaches it (tool_ids), without deleting the tool", async () => {
+    stubApi((call) => {
+      if (call.url.includes("/tools") && call.method === "GET") {
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                id: "tool-1",
+                name: "googlecalendar_list_repos",
+                kind: "provider",
+                agent_id: null,
+                enabled: true,
+                created_at: "2026-09-01T00:00:00Z",
+                updated_at: "2026-09-01T00:00:00Z",
+                definition: {
+                  kind: "provider",
+                  name: "googlecalendar_list_repos",
+                  description: "List repos",
+                  parameters: {},
+                  tool_slug: "GITHUB_LIST_REPOS",
+                  connection_id: "conn_github",
+                  subject: "ws:ws1",
+                },
+              },
+            ],
+            total: 1,
+          },
+        };
+      }
+      return undefined;
+    });
+    const agentWithTool = {
+      ...AGENT,
+      config: { ...AGENT.config, tools: { tool_ids: ["tool-1"], apps: { mode: "actions" } } },
+    } as unknown as AgentOut;
+    render(<Harness agent={agentWithTool} />);
+    await screen.findByText("Connected apps", { selector: "h2" });
+
+    const chip = await screen.findByText("googlecalendar_list_repos");
+    fireEvent.click(within(chip.closest("li")!).getByRole("button", { name: /Remove/ }));
+
+    await waitFor(() => expect(latest?.config.tools.tool_ids ?? []).not.toContain("tool-1"));
+  });
+
+  it("keeps the mode picker reachable (data-issue-path intact) when the workspace turns Apps off but this agent is still on a dynamic mode", async () => {
+    stubApi((call) => (call.url.includes("/tool-providers/composio/status") ? { status: 200, body: appsStatusFixture({ enabled: false }) } : undefined));
+    const agentInServerMode = {
+      ...AGENT,
+      config: { ...AGENT.config, tools: { apps: { mode: "server" } } },
+    } as unknown as AgentOut;
+    const { container } = render(<Harness agent={agentInServerMode} />);
+
+    // Not the pure onboarding empty state — the picker (and its
+    // `data-issue-path`, which `apps_issues`' `tools.apps.mode` error needs
+    // to focus) must stay reachable so a builder can fix it.
+    expect(await screen.findByText(/turned off for this workspace/)).toBeTruthy();
+    expect(container.querySelector('[data-issue-path="tools.apps.mode"]')).toBeTruthy();
+    expect(screen.queryByText("Apps aren't set up yet")).toBeNull();
   });
 
   it("in the app-server mode, a destructive action starts unchecked in \"Actions the agent may take\"", async () => {
@@ -187,6 +289,56 @@ describe("ConnectedAppsCard", () => {
     const destructiveCheckbox = await screen.findByRole("checkbox", { name: /Delete a repository/ });
     expect(readCheckbox.getAttribute("aria-checked")).toBe("true");
     expect(destructiveCheckbox.getAttribute("aria-checked")).toBe("false");
+  });
+});
+
+describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_asks.md #25)", () => {
+  it("does not strip config.tools.apps.mode on a resolver parse (a z.object with no `apps` field silently drops it)", async () => {
+    // A fully valid config (unlike the other fixtures' minimal `AGENT`, whose
+    // incomplete `pipeline` is fine for component tests but would fail this
+    // resolver on unrelated fields, leaving `result.values` = {} either way).
+    const values: AgentEditorForm = {
+      name: "Claims",
+      description: "",
+      ui_panel_id: "generic",
+      mode: "prompt",
+      connection_id: null,
+      limits: { max_concurrent_sessions: 5, max_session_duration_s: 1800, rate_per_ip_per_min: 6, rate_per_agent_per_min: 60 },
+      allowed_origins: [],
+      config: {
+        instructions: "Hi",
+        pipeline: {
+          mode: "cascaded",
+          stt: { provider_id: "deepgram" },
+          llm: { provider_id: "openai" },
+          tts: { provider_id: "deepgram-tts" },
+          avatar_options: { participant_name: "Avatar", video_quality: null, idle_timeout_s: null, max_duration_s: null },
+          turn_handling: {},
+        },
+        voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true, thinking_sound: "none" },
+        capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
+        tools: {
+          builtin_disabled: [],
+          http_request_enabled: false,
+          tool_ids: [],
+          max_tool_steps: 3,
+          execution_default: "blocking",
+          builtin_execution: {},
+          apps: { mode: "server", allowed_toolkits: ["github"], denied_actions: [], router: { search: true, execute: true, manage_connections: false } },
+        },
+        knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
+        pack_settings: {},
+        timezone: "UTC",
+        recording: { enabled: false, audio_only: true, storage_config_id: null, retention_days: null },
+        panel: { panel_id: "composite", layout: "side", blocks: [] },
+        telephony: { transfer_targets: [] },
+      },
+    } as unknown as AgentEditorForm;
+
+    const result = await zodResolver(agentEditorFormSchema)(values, undefined, { fields: {}, shouldUseNativeValidation: false });
+    expect(result.errors).toEqual({});
+    expect((result.values as AgentEditorForm).config.tools.apps?.mode).toBe("server");
+    expect((result.values as AgentEditorForm).config.tools.apps?.allowed_toolkits).toEqual(["github"]);
   });
 });
 

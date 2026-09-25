@@ -157,6 +157,49 @@ describe("ToolsTab", () => {
       expect(await screen.findByText("How this agent uses apps")).toBeTruthy();
       expect(screen.queryByText("Apps aren't set up yet")).toBeNull();
     });
+
+    it("keeps a Composio app server / tool finder row out of the MCP servers section (it's managed from the card above)", async () => {
+      // `tool_providers/provisioning.py` creates these with this exact
+      // `agent_id`, so `useTools(agent.id)` would otherwise return them here
+      // too, with the usual editable MCP row.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.includes("/providers")) return jsonResponse(PROVIDERS);
+          if (url.includes("/packs")) return jsonResponse({ items: [{ manifest: { id: "generic", tool_names: ["custom_pack_tool"] } }] });
+          if (url.includes("/tool-providers/composio/status")) return jsonResponse({ enabled: true, credential_id: "cred-1", connections: 0 });
+          if (url.includes("/tool-providers/composio/connections")) return jsonResponse({ items: [], total: 0 });
+          if (url.includes("/tools")) {
+            return jsonResponse({
+              items: [
+                {
+                  id: "tool-server",
+                  name: "composio_app_server",
+                  kind: "mcp",
+                  agent_id: AGENT.id,
+                  enabled: true,
+                  created_at: "2026-09-01T00:00:00Z",
+                  updated_at: "2026-09-01T00:00:00Z",
+                  definition: {
+                    kind: "mcp",
+                    name: "composio_app_server",
+                    url: "https://backend.composio.dev/v3/mcp/abc",
+                    origin: { provider: "composio", kind: "server", remote_id: "abc" },
+                  },
+                },
+              ],
+              total: 1,
+            });
+          }
+          return jsonResponse({});
+        }),
+      );
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(screen.getByText("No MCP servers yet")).toBeTruthy();
+      expect(screen.queryByText("composio_app_server")).toBeNull();
+    });
   });
 
   it("says the pack registers no code tools when its manifest lists none", async () => {

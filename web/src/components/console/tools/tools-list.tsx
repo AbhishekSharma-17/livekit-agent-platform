@@ -33,8 +33,16 @@ function isProviderTool(tool: ToolOut): boolean {
   return "tool_slug" in tool.definition;
 }
 
-/** A Composio-provisioned MCP server or Tool Router session (docs/v5/COMPOSIO.md §3, §6) — managed from the agent's Connected apps card, not edited here. */
-function originOf(tool: ToolOut): "server" | "router" | null {
+/**
+ * A Composio-provisioned MCP server or Tool Router session (docs/v5/COMPOSIO.md
+ * §3, §6) — managed from the agent's Connected apps card, not edited here.
+ * Exported so `tools-tab.tsx` (agent-scoped) can filter these out of its own
+ * "MCP servers" section too: `provisioning.py` creates them with
+ * `agent_id=agent.id`, so `useTools(agentId)` returns them there, and
+ * without the filter they'd show with the usual Edit/Delete/attach
+ * controls, contradicting the read-only rule this file enforces below.
+ */
+export function originOf(tool: ToolOut): "server" | "router" | null {
   if (!("origin" in tool.definition) || !tool.definition.origin) return null;
   return tool.definition.origin.kind;
 }

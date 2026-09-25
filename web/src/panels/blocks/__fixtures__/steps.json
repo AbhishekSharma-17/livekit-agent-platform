@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "id": "greeting", "label": "Welcome", "status": "done", "at": 1777000000 },
+    { "id": "incident", "label": "What happened", "status": "done", "note": "Kitchen fire, stove top", "at": 1777000090 },
+    { "id": "evidence", "label": "Photos and documents", "status": "active", "at": 1777000200 },
+    { "id": "wrap_up", "label": "Next steps", "status": "pending" }
+  ],
+  "current": "evidence"
+}

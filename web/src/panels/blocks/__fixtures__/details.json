@@ -1,0 +1,10 @@
+{
+  "items": [
+    { "key": "claim_no", "label": "Claim number", "value": "CLM-20931", "type": "string", "updated_at": 1777000300 },
+    { "key": "policy", "label": "Policy", "value": "H0-44721", "type": "string", "updated_at": 1777000310 },
+    { "key": "date_of_loss", "label": "Date of loss", "value": "2026-09-21", "type": "date", "updated_at": 1777000320 },
+    { "key": "estimate", "label": "Estimated repair", "value": 4200, "type": "money", "updated_at": 1777000330 },
+    { "key": "phone", "label": "Call-back number", "value": null, "type": "phone" },
+    { "key": "stage", "label": "Stage", "value": "First notice", "type": "badge", "tone": "info", "updated_at": 1777000340 }
+  ]
+}

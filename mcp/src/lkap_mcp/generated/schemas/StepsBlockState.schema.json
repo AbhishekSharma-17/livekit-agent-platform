@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "StepItem": {
+      "description": "One step of a ``steps`` timeline.",
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "At"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "active",
+            "done",
+            "skipped",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "StepItem",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/StepsBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A progress timeline: ``set_steps``, or the flow position with ``source=\"flow\"`` (V5-08).\n\nA ``custom`` block with ``kind == \"flow_progress\"`` keeps its raw flow\nmirror; the console renders it with the ``steps`` renderer (D-V5-33).",
+  "properties": {
+    "current": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Current"
+    },
+    "steps": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StepItem"
+      },
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "title": "StepsBlockState",
+  "type": "object"
+}

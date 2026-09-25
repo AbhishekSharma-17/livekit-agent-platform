@@ -1,0 +1,13 @@
+{
+  "prompt": "Was anyone injured?",
+  "options": [
+    { "id": "no", "label": "No" },
+    { "id": "minor", "label": "Yes, minor injuries", "tone": "warning" },
+    { "id": "serious", "label": "Yes, serious injuries", "hint": "We will call you back first", "tone": "danger" }
+  ],
+  "multi": false,
+  "selected": [],
+  "reveal": null,
+  "status": "requested",
+  "submitted_at": null
+}

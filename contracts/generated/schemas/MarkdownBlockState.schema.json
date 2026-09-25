@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/MarkdownBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Rich text in a strict Markdown subset, never raw HTML (``show_text``, V5-08).",
+  "properties": {
+    "markdown": {
+      "default": "",
+      "title": "Markdown",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "title": "MarkdownBlockState",
+  "type": "object"
+}

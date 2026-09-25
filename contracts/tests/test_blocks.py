@@ -77,3 +77,46 @@ def test_panel_paths_address_each_block_by_index() -> None:
 def test_the_default_composite_blocks_validate() -> None:
     blocks = [BlockSpec.model_validate(block) for block in DEFAULT_COMPOSITE_BLOCKS]
     assert validate_panel_block_configs(blocks) == []
+
+
+# ------------------------------------------------------------- V5-08: the block quartet
+
+
+@pytest.mark.parametrize(
+    ("block_type", "config"),
+    [
+        ("choices", {}),
+        ("choices", {"multi": True, "layout": "chips", "max_options": 4}),
+        ("details", {"columns": 2, "fields": [{"key": "claim_no", "label": "Claim no."}]}),
+        ("details", {"fields": [{"key": "amount", "label": "Amount", "type": "money"}]}),
+        ("markdown", {"max_chars": 2000, "allow_links": True}),
+        ("steps", {"steps": [{"id": "intake", "label": "Intake"}], "source": "flow"}),
+        ("steps", {"show_notes": False}),
+    ],
+)
+def test_quartet_valid_configs_have_no_issues(block_type: BlockType, config: dict[str, Any]) -> None:
+    assert validate_block_config(_spec(block_type, config)) == []
+
+
+@pytest.mark.parametrize(
+    ("block_type", "config", "path"),
+    [
+        ("choices", {"layout": "grid"}, "config.layout"),
+        ("choices", {"max_options": 1}, "config.max_options"),
+        ("choices", {"options": []}, "config.options"),
+        ("details", {"columns": 3}, "config.columns"),
+        ("details", {"fields": [{"key": "a", "label": "A", "type": "colour"}]}, "config.fields[0].type"),
+        ("details", {"fields": [{"key": "a", "label": "A"}, {"key": "a", "label": "B"}]}, "config.fields"),
+        ("markdown", {"max_chars": 50}, "config.max_chars"),
+        ("markdown", {"html": True}, "config.html"),
+        ("steps", {"source": "pack"}, "config.source"),
+        ("steps", {"steps": [{"id": "", "label": "x"}]}, "config.steps[0].id"),
+        ("steps", {"steps": [{"id": "a", "label": "A"}, {"id": "a", "label": "B"}]}, "config.steps"),
+    ],
+)
+def test_quartet_invalid_configs_are_errors_at_the_offending_key(
+    block_type: BlockType, config: dict[str, Any], path: str
+) -> None:
+    issues = validate_block_config(_spec(block_type, config))
+    assert [i.path for i in issues] == [path]
+    assert all(i.severity == "error" for i in issues)

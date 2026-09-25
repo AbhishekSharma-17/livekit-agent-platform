@@ -71,7 +71,8 @@ describe("preview scene registry", () => {
 
   it("V2-11: the blocks scene shoots every block type filled and empty, plus a submitted form", () => {
     const names = SCENES.blocks.combos.map((combo) => combo.name);
-    expect(names).toHaveLength(25);
+    // 16 block types (V5-08 added choices, details, markdown, steps) × filled/empty + the submitted form.
+    expect(names).toHaveLength(33);
     expect(names).toContain("form-submitted");
     expect(names).toContain("document-filled");
     expect(names).toContain("kb_citations-empty");

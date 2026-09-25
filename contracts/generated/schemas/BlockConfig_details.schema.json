@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "DetailsFieldConfig": {
+      "additionalProperties": false,
+      "description": "One starting row of a ``details`` card (the agent fills the value and may add rows).",
+      "properties": {
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "date",
+            "money",
+            "phone",
+            "email",
+            "badge"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "DetailsFieldConfig",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/BlockConfig_details.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``details``: one or two columns, and the rows the card starts with.",
+  "properties": {
+    "columns": {
+      "default": 1,
+      "maximum": 2,
+      "minimum": 1,
+      "title": "Columns",
+      "type": "integer"
+    },
+    "fields": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DetailsFieldConfig"
+      },
+      "title": "Fields",
+      "type": "array"
+    }
+  },
+  "title": "BlockConfig_details",
+  "type": "object"
+}

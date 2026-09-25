@@ -3,6 +3,19 @@
     "McpServerOrigin": {
       "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
       "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
         "kind": {
           "enum": [
             "server",

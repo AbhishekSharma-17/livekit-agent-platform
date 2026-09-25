@@ -2047,6 +2047,7 @@ export interface McpServerDefinition {
  * via the `definition` "McpServerOrigin".
  */
 export interface McpServerOrigin {
+  config_hash?: string | null;
   kind: "server" | "router";
   provider?: "composio";
   remote_id: string;

@@ -194,6 +194,8 @@ class McpServerOrigin(BaseModel):
     kind: McpOriginKind
     remote_id: str = Field(min_length=1, max_length=200)
     """The provider's id for it (a Tool Router session id)."""
+    config_hash: str | None = Field(default=None, max_length=64)
+    """A fingerprint of what the api asked the provider for; a save that changes it re-provisions."""
 
 
 class McpServerDefinition(BaseModel):

@@ -1,5 +1,171 @@
 {
   "$defs": {
+    "CostDriver": {
+      "description": "One estimate-vs-actual comparison row; a list is sorted by ``|delta_usd|``, largest first.",
+      "properties": {
+        "actual_quantity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Quantity"
+        },
+        "actual_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Usd"
+        },
+        "delta_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "actual - estimated; null when either side is unpriced.",
+          "title": "Delta Usd"
+        },
+        "estimated_quantity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Quantity"
+        },
+        "estimated_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Usd"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "more minutes",
+            "fewer minutes",
+            "more talk",
+            "less talk",
+            "longer prompts",
+            "more turns",
+            "unpriced line",
+            "price changed",
+            "not estimated",
+            "as estimated"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "slot": {
+          "enum": [
+            "stt",
+            "llm",
+            "tts",
+            "realtime",
+            "avatar",
+            "workflow_llm",
+            "image_gen",
+            "embedding",
+            "turn_detection",
+            "vad",
+            "livekit_agent",
+            "livekit_participant",
+            "livekit_sip",
+            "livekit_egress",
+            "qa_judge"
+          ],
+          "title": "Slot",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "tokens_in",
+            "tokens_out",
+            "audio_s_in",
+            "audio_s_out",
+            "chars",
+            "minutes",
+            "images",
+            "text_tokens_in",
+            "text_tokens_out",
+            "audio_tokens_in",
+            "audio_tokens_out",
+            "cached_tokens_in",
+            "requests"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slot",
+        "provider_id",
+        "unit",
+        "reason"
+      ],
+      "title": "CostDriver",
+      "type": "object"
+    },
     "CostLine": {
       "description": "One priced usage line of a session.\n\n``cost_usd`` is ``None`` with ``note=\"no price\"`` when the price table has\nno entry — an unknown price is never reported as zero.",
       "properties": {
@@ -43,6 +209,24 @@
           "default": null,
           "title": "Note"
         },
+        "price_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "workspace",
+                "live",
+                "table"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Which price source priced the line (null when unpriced).",
+          "title": "Price Source"
+        },
         "provider_id": {
           "title": "Provider Id",
           "type": "string"
@@ -67,7 +251,13 @@
             "audio_s_out",
             "chars",
             "minutes",
-            "images"
+            "images",
+            "text_tokens_in",
+            "text_tokens_out",
+            "audio_tokens_in",
+            "audio_tokens_out",
+            "cached_tokens_in",
+            "requests"
           ],
           "title": "Unit",
           "type": "string"
@@ -87,6 +277,36 @@
           ],
           "default": null,
           "title": "Unit Price Usd"
+        },
+        "vendor_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What was reconciled, e.g. \"12 generations\".",
+          "title": "Vendor Ref"
+        },
+        "vendor_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor's own charge for this line, when reconciled.",
+          "title": "Vendor Usd"
         }
       },
       "required": [
@@ -100,8 +320,61 @@
   },
   "$id": "lkap-contracts/SessionCost.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "The cost block of ``SessionDetailOut``.",
+  "description": "The cost block of ``SessionDetailOut``: actual lines, and the estimate snapshotted at creation.",
   "properties": {
+    "drivers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CostDriver"
+      },
+      "title": "Drivers",
+      "type": "array"
+    },
+    "estimate_as_of": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimate As Of"
+    },
+    "estimate_per_minute_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimate Per Minute Usd"
+    },
+    "estimated_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The creation-time estimate: per-minute mid x actual minutes + per-session lines. Null for a session without a snapshot (never back-filled).",
+      "title": "Estimated Usd"
+    },
     "lines": {
       "default": [],
       "items": {
@@ -109,6 +382,35 @@
       },
       "title": "Lines",
       "type": "array"
+    },
+    "price_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Price Version"
+    },
+    "reconciled_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vendors' own charge, when reconciled.",
+      "title": "Reconciled Usd"
     },
     "total_usd": {
       "anyOf": [
@@ -125,6 +427,35 @@
       ],
       "default": null,
       "title": "Total Usd"
+    },
+    "variance_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Variance Pct"
+    },
+    "variance_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "total_usd - estimated_usd, when both exist.",
+      "title": "Variance Usd"
     }
   },
   "title": "SessionCost",

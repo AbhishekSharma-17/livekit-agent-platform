@@ -843,10 +843,10 @@ def test_livekit_inference_models_have_a_sourced_price(provider_id: str, model: 
     assert price.source_url == "https://www.livekit.com/pricing/inference"
 
 
-def test_ambiguous_inference_models_stay_unpriced() -> None:
-    """gpt-oss-120b (two backend rates) and inworld-tts-2 (no matching catalog entry)."""
-    assert pricing.lookup("livekit-inference-llm", "openai/gpt-oss-120b", "tokens_in") is None
-    assert pricing.lookup("livekit-inference-tts", "inworld/inworld-tts-2", "chars") is None
+def test_inference_models_with_two_routes_are_priced_at_the_higher_one() -> None:
+    """gpt-oss-120b is priced at the Groq route (R-V4-58); inworld-tts-2 is priced since V4-15."""
+    assert pricing.lookup("livekit-inference-llm", "openai/gpt-oss-120b", "tokens_in") is not None
+    assert pricing.lookup("livekit-inference-tts", "inworld/inworld-tts-2", "chars") is not None
 
 
 # ------------------------------------------------------------------------------ fleet

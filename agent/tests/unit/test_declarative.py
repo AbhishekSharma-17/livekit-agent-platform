@@ -17,7 +17,13 @@ import respx
 from fakes.fake_ctx import FakeRunContext
 from livekit.agents import RunContext, ToolError
 from livekit.agents.llm import ToolFlag
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecution
+from lkap_contracts.tools import (
+    HttpToolDefinition,
+    McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
+    ToolExecution,
+)
 
 from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
 from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers, build_mcp_toolsets
@@ -360,3 +366,46 @@ class TestBuildMcpToolsets:
         (toolset,) = build_mcp_servers([McpServerDefinition(name="crm", url="https://mcp.example.com/mcp")])
 
         assert isinstance(toolset, MCPToolset)
+
+
+class TestComposioToolFinder:
+    """V5-47 (COMPOSIO.md D-V5-C7): the tool finder's meta tools under the execution policy."""
+
+    def test_multi_execute_is_never_backgrounded_whatever_it_declares(self) -> None:
+        """Tripwire: running actions found at run time always waits for the result."""
+        defn = McpServerDefinition(
+            name="composio_tool_finder",
+            url="https://backend.composio.dev/tool_router/trs_1/mcp",
+            allowed_tools=["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL"],
+            tool_options={
+                "COMPOSIO_SEARCH_TOOLS": ToolExecution(mode="auto", announce="One moment"),
+                "COMPOSIO_MULTI_EXECUTE_TOOL": ToolExecution(mode="background", cancellable=True),
+            },
+            origin=McpServerOrigin(kind="router", remote_id="trs_1"),
+        )
+
+        (toolset,) = build_mcp_toolsets([defn])
+
+        policies = policy_of(toolset)
+        assert isinstance(policies, dict)
+        multi = policies["COMPOSIO_MULTI_EXECUTE_TOOL"].resolved
+        assert multi.mode == "blocking"
+        assert multi.cancellable is False
+        assert multi.downgraded_from == "background"
+        assert policies["COMPOSIO_SEARCH_TOOLS"].resolved.mode == "auto"
+        assert toolset._tool_options["COMPOSIO_MULTI_EXECUTE_TOOL"]["flags"] == ToolFlag.NONE
+
+    def test_provider_and_http_definitions_share_the_declarative_builder(self) -> None:
+        provider = ProviderToolDefinition(
+            name="acmecrm_list_contacts",
+            description="List contacts.",
+            parameters={"type": "object", "properties": {}},
+            tool_slug="ACMECRM_LIST_CONTACTS",
+            connection_id="conn1",
+            subject="ws:w1",
+            headers={"x-api-key": "ak_placeholder_resolved"},
+        )
+
+        tools = build_http_tools([_base_def(), provider])
+
+        assert [tool.info.name for tool in tools] == ["lookup_item", "acmecrm_list_contacts"]

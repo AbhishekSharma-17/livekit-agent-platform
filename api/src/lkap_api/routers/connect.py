@@ -61,6 +61,7 @@ from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.auth.roles import role_at_least, scope_allows
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.service import mint_session_token
+from lkap_api.costs.snapshot import attach_estimate
 from lkap_api.db.models import Agent, new_id
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
@@ -276,6 +277,8 @@ async def connect(
         },
         background_tasks=background_tasks,
     )
+    # D-V4-43: the estimate snapshot runs after the response, off the token path.
+    background_tasks.add_task(attach_estimate, database, session_id, embedder=settings.embedder)
     public_agent = to_public(agent, settings)
     return ConnectResponse(
         serverUrl=minted.server_url,

@@ -60,6 +60,7 @@ from lkap_contracts.ui_protocol import UiState
 
 from lkap_agent.config_client import ConfigClientProtocol
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.provider import REAUTH_MESSAGE
 
 __all__ = [
     "LatencyCollector",
@@ -323,16 +324,21 @@ class SessionObserver:
             started = self._tool_started_at.pop(update.call_id, None)
             duration_ms = int((time.time() - started) * 1000) if started is not None else None
             preview = (update.message or "")[:_RESULT_PREVIEW_CHARS]
+            tool_name = self._tool_names.pop(update.call_id, "")
             self.record(
                 "tool_call_ended",
                 {
                     "call_id": update.call_id,
-                    "tool": self._tool_names.pop(update.call_id, ""),
+                    "tool": tool_name,
                     "status": update.status,
                     "duration_ms": duration_ms,
                     "result_preview": preview,
                 },
             )
+            if update.status == "error" and REAUTH_MESSAGE in (update.message or ""):
+                # V5-47 (COMPOSIO.md D-V5-C9): a connected app's action failed because its
+                # connection needs a person; the console shows "Needs reconnect".
+                self.record("tool_needs_reauth", {"call_id": update.call_id, "tool": tool_name})
             logger.debug(
                 "tool call ended",
                 call_id=update.call_id,

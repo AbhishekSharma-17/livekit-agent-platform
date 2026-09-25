@@ -13,6 +13,7 @@ import json
 import sys
 import types
 from collections.abc import AsyncIterator, Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -595,6 +596,23 @@ async def test_list_templates_is_the_catalogue_in_gallery_order(admin: httpx.Asy
     assert items[0]["pack"]["id"] == "generic"
     receptionist = items[EXPECTED_IDS.index("receptionist")]["template"]
     assert receptionist["instructions"] and receptionist["voice"] == {"user_away_timeout_s": 20}
+
+
+async def test_starters_with_a_priced_pipeline_carry_an_estimate(admin: httpx.AsyncClient) -> None:
+    """V4-15 (D-V4-42): an estimate at list prices and default assumptions, or null when nothing is priced."""
+    items = (await admin.get("/v1/templates")).json()["items"]
+
+    priced = [item for item in items if item["estimate"] is not None]
+    assert priced, "at least one starter runs on priced LiveKit Inference models"
+    for item in priced:
+        estimate = item["estimate"]
+        low, mid, high = (
+            Decimal(estimate[k]) for k in ("per_minute_usd_low", "per_minute_usd_mid", "per_minute_usd_high")
+        )
+        assert Decimal(0) < low <= mid <= high
+        assert estimate["as_of"]
+    one = (await admin.get("/v1/templates/blank")).json()
+    assert one["estimate"] == next(i["estimate"] for i in items if i["template"]["id"] == "blank")
 
 
 async def test_an_installed_pack_without_a_starter_gets_a_derived_entry(

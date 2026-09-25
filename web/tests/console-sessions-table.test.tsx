@@ -228,6 +228,31 @@ describe("SessionsTable — columns, links, pagination", () => {
   });
 });
 
+describe("SessionsTable — Cost column (docs/v4/COSTS.md §5 item 7)", () => {
+  it("shows the actual cost with the estimate muted beside it", async () => {
+    stubApi([session({ id: "priced", cost_usd: "0.12", estimated_usd: "0.10" })]);
+    renderWithClient(<SessionsTable />);
+    const row = (await (await loadedTable()).findByText("room-1")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("$0.1200")).toBeTruthy();
+    expect(within(row).getByText("(≈ $0.1000)")).toBeTruthy();
+  });
+
+  it("falls back to the estimate alone before a session has an actual cost", async () => {
+    stubApi([session({ id: "est-only", estimated_usd: "0.04" })]);
+    renderWithClient(<SessionsTable />);
+    const row = (await (await loadedTable()).findByText("room-1")).closest("tr") as HTMLElement;
+    expect(within(row).getByText(/≈ \$0\.0400 · estimate/)).toBeTruthy();
+  });
+
+  it("never shows $0 for a session with neither figure", async () => {
+    stubApi([session({ id: "bare" })]);
+    renderWithClient(<SessionsTable />);
+    await loadedTable();
+    expect(screen.queryByText("$0")).toBeNull();
+    expect(screen.queryByText(/\$0\.00/)).toBeNull();
+  });
+});
+
 describe("SessionsTable — filters", () => {
   const rows = [
     session({ id: "1", agent_id: "a-1", agent_name: "Claims desk", room_name: "room-web", status: "ended", channel: "web", connection_id: "c-1" }),

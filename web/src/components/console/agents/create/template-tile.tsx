@@ -6,6 +6,7 @@ import { CheckIcon, ZapIcon } from "lucide-react";
 import { Icon } from "@/components/shared/icon";
 import { RadioGroupItem } from "@/components/ui/radio-group";
 import { useProviders } from "@/components/console/lib/api-hooks";
+import { formatUsdPerMin } from "@/components/console/lib/cost-hooks";
 import { credentialHome } from "@/components/console/registry/provider-meta";
 import type { TemplateOut } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
@@ -106,6 +107,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
   const badges = templateBadges(template, effectiveKeyProviderIds, providers);
   const inference = runsOnInference(template);
   const radioId = `template-${template.id.replace(/[^a-z0-9_-]/gi, "-")}`;
+  const estimateUsd = item.estimate ? formatUsdPerMin(item.estimate.per_minute_usd_mid) : null;
 
   return (
     <div
@@ -157,11 +159,20 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
           </span>
         ) : null}
 
-        {badges.length > 0 || inference ? (
+        {badges.length > 0 || inference || estimateUsd ? (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             {badges.map((badge) => (
               <TemplateBadgePill key={badge.kind} badge={badge} />
             ))}
+            {estimateUsd ? (
+              <span
+                data-slot="template-estimate"
+                title={`Estimate at list prices as of ${item.estimate?.as_of}, before your own usage`}
+                className="inline-flex h-5 items-center rounded-xs bg-muted px-1.5 text-[0.6875rem] leading-none font-medium tracking-[0.01em] whitespace-nowrap text-muted-foreground"
+              >
+                {estimateUsd} · estimate
+              </span>
+            ) : null}
             {inference ? (
               <span className="inline-flex items-center gap-1 text-[0.6875rem] leading-4 text-muted-foreground">
                 <Icon as={ZapIcon} size="sm" className="size-3" />

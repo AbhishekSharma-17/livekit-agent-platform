@@ -635,3 +635,36 @@ describe("TemplateTile — 'Keys present' through the credential home (V4-04, R-
     await waitFor(() => expect(screen.getByText("Needs keys")).toBeTruthy());
   });
 });
+
+describe("TemplateTile — the '≈ $/min' estimate pill (docs/v4/COSTS.md §5 item 4)", () => {
+  function renderTile(item: (typeof TEMPLATES)["items"][number]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ providers: [] }) }) as Response),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <RadioGroupRoot value={item.template.id} onValueChange={() => {}}>
+          <TemplateTile item={item} selected providers={new Map()} keyProviderIds={new Set()} />
+        </RadioGroupRoot>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("shows the pill with the estimate's date in its title", () => {
+    const base = templateById("blank");
+    const item = { ...base, estimate: { per_minute_usd_mid: "0.04", per_minute_usd_low: "0.03", per_minute_usd_high: "0.05", as_of: "2026-09-23", unpriced: 0 } };
+    renderTile(item);
+    const pill = screen.getByText(/estimate/, { selector: '[data-slot="template-estimate"]' });
+    expect(pill.textContent).toContain("$0.0400");
+    expect(pill.getAttribute("title")).toBe("Estimate at list prices as of 2026-09-23, before your own usage");
+  });
+
+  it("shows no pill when nothing is priced (estimate is null)", () => {
+    const base = templateById("blank");
+    const item = { ...base, estimate: null };
+    renderTile(item);
+    expect(screen.queryByText(/estimate/, { selector: '[data-slot="template-estimate"]' })).toBeNull();
+  });
+});

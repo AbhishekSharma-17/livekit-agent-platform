@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/PriceQuoteItemIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One provider/model to quote.",
+  "properties": {
+    "model": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "provider_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Provider Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider_id"
+  ],
+  "title": "PriceQuoteItemIn",
+  "type": "object"
+}

@@ -386,6 +386,82 @@ def test_main_exits_zero_and_reports_a_crash(tmp_path: Path, monkeypatch: pytest
     assert SECRET not in body
 
 
+# ------------------------------------------------------------------------ prices (V4-15, D-V4-40)
+def _openrouter_prices(prompt: str) -> dict[str, Any]:
+    """OpenRouter's twin of `openai-llm gpt-4.1` (table: $2.00/1M in, $8.00/1M out)."""
+    return {"data": [{"id": "openai/gpt-4.1", "pricing": {"prompt": prompt, "completion": "0.000008"}}]}
+
+
+def _livekit_payload(sonic_amount: str) -> str:
+    return (
+        '1:["$","div",null,{"models":[{"model_id":"cartesia/sonic-3","provider_id":"cartesia",'
+        '"pricing_current":{"as_of":"2026-09-21","rates":[{"metric":"character_usage",'
+        '"unit":{"currency":"USD","measure":"characters","per":1000000},'
+        f'"unit_price":{{"build":{{"amount":"{sonic_amount}","amount_micros":1}},'
+        '"ship":{"amount":"50.00"},"scale":{"amount":"37.50"}}}]}},'
+        '{"model_id":"deepgram/nova-3","pricing_current":{"rates":[{"unit_price":'
+        '{"build":{"amount":"0.0048"},"scale":{"amount":"0.0042"}}}]}}]}]'
+    )
+
+
+@pytest.mark.parametrize(("prompt", "flagged"), [("0.00000206", True), ("0.00000202", False)])
+def test_openrouter_price_drift_flags_three_percent_not_one(prompt: str, flagged: bool) -> None:
+    rows = drift.openrouter_price_drift(_openrouter_prices(prompt))
+    hits = [r for r in rows if (r.provider_id, r.model, r.unit) == ("openai-llm", "gpt-4.1", "tokens_in")]
+    assert bool(hits) is flagged
+    if flagged:
+        assert hits[0].live_source == "openrouter"
+        assert hits[0].diff_pct == pytest.approx(3.0)
+
+
+@pytest.mark.parametrize(("amount", "flagged"), [("51.50", True), ("50.50", False)])
+def test_livekit_price_drift_flags_three_percent_not_one(amount: str, flagged: bool) -> None:
+    rows = drift.livekit_price_drift(_livekit_payload(amount))
+    hits = [r for r in rows if r.model == "cartesia/sonic-3"]
+    assert bool(hits) is flagged
+    assert not [r for r in rows if r.model == "deepgram/nova-3"]  # $0.0048/min matches
+
+
+def test_a_livekit_payload_without_records_is_unusable() -> None:
+    with pytest.raises(ValueError):
+        drift.livekit_price_drift("<html>not a payload</html>")
+
+
+def test_price_stale_lists_rows_older_than_ninety_days() -> None:
+    from lkap_contracts import pricing
+
+    now = drift.dt.datetime(2027, 3, 1, tzinfo=drift.dt.UTC)
+    stale = drift.price_stale(now)
+    assert len(stale) == len(pricing.PRICES) + len(pricing.INFRA_PRICES)
+    assert drift.price_stale(drift.dt.datetime(2026, 9, 26, tzinfo=drift.dt.UTC)) == []
+
+
+async def test_price_sections_skip_an_unavailable_livekit_payload_as_one_row() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "openrouter.ai":
+            return httpx.Response(200, json=_openrouter_prices("0.00000206"))
+        return httpx.Response(503, text="unavailable")
+
+    report = await _run(httpx.MockTransport(handler), env={}, only={"prices"}, prices=True)
+
+    assert [row.provider_id for row in report.price_skipped] == ["livekit-inference"]
+    assert "LiveKit payload unavailable" in report.price_skipped[0].reason
+    assert any(row.model == "gpt-4.1" for row in report.price_drift)
+    body = drift.render_markdown(report)
+    assert "## `price_drift`" in body and "## `price_stale`" in body
+    assert "LiveKit payload unavailable" in body
+
+
+def test_main_with_no_network_still_exits_zero_with_price_sections(tmp_path: Path) -> None:
+    fixtures = tmp_path / "fx"
+    fixtures.mkdir()
+    out = tmp_path / "out"
+    code = drift.main(["--only", "prices", "--fixtures", str(fixtures), "--out", str(out)], env={})
+    assert code == 0
+    data = json.loads((out / "catalog-drift.json").read_text(encoding="utf-8"))
+    assert {row["provider_id"] for row in data["price_skipped"]} == {"openrouter", "livekit-inference"}
+
+
 def test_fixture_names_prefer_the_query_specific_file() -> None:
     names = drift.fixture_names(httpx.URL("https://openrouter.ai/api/v1/models?supported_parameters=tools"))
     assert names == [

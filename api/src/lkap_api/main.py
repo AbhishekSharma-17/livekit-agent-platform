@@ -40,6 +40,7 @@ from lkap_api.routers import (
     calls,
     connect,
     connections,
+    costs,
     fleet,
     fleet_internal,
     flows,
@@ -178,6 +179,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(calls.router)
     app.include_router(text_sessions.router)
     app.include_router(tool_providers_router)  # V5-18: connected apps (Composio)
+    app.include_router(costs.router)
     _include_knowledge_router(app)
 
 

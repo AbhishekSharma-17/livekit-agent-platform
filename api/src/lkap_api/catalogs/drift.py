@@ -45,10 +45,12 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
+from lkap_contracts import pricing
 from lkap_contracts.api_models import CatalogItem
 from lkap_contracts.providers import ProviderSpec, available_providers, credential_home
 from pydantic import BaseModel, Field
@@ -160,8 +162,31 @@ class Checked(BaseModel):
     upstream_count: int
 
 
+class PriceDrift(BaseModel):
+    """A table price that differs from its live twin by more than :data:`PRICE_TOLERANCE_PCT` (D-V4-40)."""
+
+    provider_id: str
+    model: str | None
+    unit: str
+    table_usd_per_unit: Decimal
+    table_as_of: str
+    live_usd_per_unit: Decimal
+    live_source: Literal["openrouter", "livekit"]
+    diff_pct: float
+
+
+class PriceStale(BaseModel):
+    """A table row older than ``pricing.PRICE_STALE_DAYS``."""
+
+    provider_id: str
+    model: str | None
+    unit: str
+    as_of: str
+    age_days: int
+
+
 class DriftReport(BaseModel):
-    """The four D-V4-27 sections plus the entries that were compared."""
+    """The four D-V4-27 sections, the two price sections (D-V4-40), and the entries compared."""
 
     generated_at: dt.datetime
     checked: list[Checked] = Field(default_factory=list)
@@ -169,6 +194,9 @@ class DriftReport(BaseModel):
     upstream_new: list[UpstreamNew] = Field(default_factory=list)
     deprecation_notices: list[DeprecationNotice] = Field(default_factory=list)
     skipped: list[Skipped] = Field(default_factory=list)
+    price_drift: list[PriceDrift] = Field(default_factory=list)
+    price_stale: list[PriceStale] = Field(default_factory=list)
+    price_skipped: list[Skipped] = Field(default_factory=list)
     error: str | None = None
 
 
@@ -329,6 +357,7 @@ async def run(
     specs: Iterable[ProviderSpec] | None = None,
     adapter_lookup: Callable[[str], CatalogAdapter | None] = get_adapter,
     now: dt.datetime | None = None,
+    prices: bool = False,
 ) -> DriftReport:
     """Fetch, filter and compare every selected entry; never raises for a vendor error.
 
@@ -339,6 +368,7 @@ async def run(
         specs: The registry entries to consider (default: every available one).
         adapter_lookup: Resolves ``CatalogSpec.adapter`` (default: the api's adapter tree).
         now: The report timestamp (default: the current UTC time).
+        prices: Also fill the price sections (D-V4-40: OpenRouter twins, the LiveKit payload, stale rows).
 
     Returns:
         The :class:`DriftReport`.
@@ -422,7 +452,174 @@ async def run(
     order = {spec.id: index for index, spec in enumerate(model_entries(specs))}
     report.checked.sort(key=lambda row: order.get(row.provider_id, 0))
     report.skipped.sort(key=lambda row: order.get(row.provider_id, 0))
+    if prices:
+        await run_prices(client, report, now=report.generated_at)
     return report
+
+
+# ----------------------------------------------------------------------------- prices
+#: A table price further than this from its live twin is reported (D-V4-40).
+PRICE_TOLERANCE_PCT = 2.0
+
+#: OpenRouter's keyless list including speech models (the twins of the table rows).
+OPENROUTER_PRICES_URL = f"{pricing.OPENROUTER_MODELS_URL}?output_modalities=all"
+
+#: LiveKit's pricing page as a Next.js RSC payload: **unofficial** (livekit/agents#7420 asks for
+#: an API), read by this report only, never as a price source; the trailing slash matters.
+LIVEKIT_PRICING_URL = "https://www.livekit.com/pricing/inference/"
+
+#: How the LiveKit page states a table unit: ``(scale, what)`` — ``usd_per_unit × scale`` is the page figure.
+_LIVEKIT_SCALE: dict[str, Decimal] = {
+    "audio_s_in": Decimal(60),  # $/minute of connection time
+    "tokens_in": Decimal(1_000_000),
+    "tokens_out": Decimal(1_000_000),
+    "cached_tokens_in": Decimal(1_000_000),
+    "chars": Decimal(1_000_000),
+}
+
+_MODEL_ID = re.compile(r'"model_id"\s*:\s*"(?P<id>[^"]+)"')
+_BUILD_AMOUNT = re.compile(r'"build"\s*:\s*\{[^{}]*?"amount"\s*:\s*"?(?P<amount>\d+(?:\.\d+)?)')
+
+
+def _diff_pct(table: Decimal, live: Decimal) -> float:
+    if table == 0:
+        return 0.0 if live == 0 else 100.0
+    return float(abs(live - table) / table * 100)
+
+
+def price_stale(now: dt.datetime, rows: Iterable[pricing.Price] | None = None) -> list[PriceStale]:
+    """Every table row older than ``PRICE_STALE_DAYS``."""
+    out: list[PriceStale] = []
+    for row in rows if rows is not None else [*pricing.PRICES, *pricing.INFRA_PRICES]:
+        try:
+            age = (now.date() - dt.date.fromisoformat(row.as_of)).days
+        except ValueError:
+            age = pricing.PRICE_STALE_DAYS + 1
+        if age > pricing.PRICE_STALE_DAYS:
+            out.append(
+                PriceStale(
+                    provider_id=row.provider_id, model=row.model, unit=row.unit, as_of=row.as_of, age_days=age
+                )
+            )
+    return out
+
+
+def openrouter_price_drift(body: Any, rows: Iterable[pricing.Price] | None = None) -> list[PriceDrift]:
+    """Compare every table row that has an OpenRouter twin with OpenRouter's listed price."""
+    sheet: dict[str, Mapping[str, Any]] = {}
+    data = body.get("data") if isinstance(body, Mapping) else None
+    for raw in data if isinstance(data, list) else []:
+        if (
+            isinstance(raw, Mapping)
+            and isinstance(raw.get("id"), str)
+            and isinstance(raw.get("pricing"), Mapping)
+        ):
+            sheet[raw["id"]] = raw["pricing"]
+    out: list[PriceDrift] = []
+    for row in rows if rows is not None else pricing.PRICES:
+        twin = pricing.OPENROUTER_TWINS.get((row.provider_id, row.model or ""))
+        key = pricing.openrouter_key(row.provider_id, row.unit)
+        listed = sheet.get(twin) if twin else None
+        if listed is None or key is None:
+            continue
+        try:
+            live = Decimal(str(listed.get(key)))
+        except (ArithmeticError, ValueError):
+            continue
+        if not live.is_finite() or live < 0:
+            continue
+        diff = _diff_pct(row.usd_per_unit, live)
+        if diff > PRICE_TOLERANCE_PCT:
+            out.append(
+                PriceDrift(
+                    provider_id=row.provider_id,
+                    model=row.model,
+                    unit=row.unit,
+                    table_usd_per_unit=row.usd_per_unit,
+                    table_as_of=row.as_of,
+                    live_usd_per_unit=live,
+                    live_source="openrouter",
+                    diff_pct=round(diff, 2),
+                )
+            )
+    return out
+
+
+def livekit_price_drift(payload: str, rows: Iterable[pricing.Price] | None = None) -> list[PriceDrift]:
+    """Compare every ``livekit-inference-*`` row with LiveKit's RSC payload, leniently.
+
+    The payload's shape is not documented, so each model's segment (from its
+    ``"model_id"`` to the next one) is searched for every Build-tier ``amount``;
+    a row is reported only when **none** of them is within the tolerance of the
+    table's page figure (``usd_per_unit`` × 60 for $/min, × 1e6 for $/1M).
+    A model the payload does not mention is not reported.
+
+    Raises:
+        ValueError: The payload carries no model records at all (reported as unavailable).
+    """
+    matches = list(_MODEL_ID.finditer(payload))
+    if not matches:
+        raise ValueError("no model records in the payload")
+    segments: dict[str, list[Decimal]] = {}
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(payload)
+        amounts = [Decimal(m["amount"]) for m in _BUILD_AMOUNT.finditer(payload, match.end(), end)]
+        segments.setdefault(match["id"], []).extend(amounts)
+    out: list[PriceDrift] = []
+    for row in rows if rows is not None else pricing.PRICES:
+        scale = _LIVEKIT_SCALE.get(row.unit)
+        if not row.provider_id.startswith("livekit-inference-") or scale is None or row.model is None:
+            continue
+        found = segments.get(row.model) or []
+        if not found:
+            continue
+        figure = row.usd_per_unit * scale
+        closest = min(found, key=lambda amount: abs(amount - figure))
+        diff = _diff_pct(figure, closest)
+        if diff > PRICE_TOLERANCE_PCT:
+            out.append(
+                PriceDrift(
+                    provider_id=row.provider_id,
+                    model=row.model,
+                    unit=row.unit,
+                    table_usd_per_unit=row.usd_per_unit,
+                    table_as_of=row.as_of,
+                    live_usd_per_unit=closest / scale,
+                    live_source="livekit",
+                    diff_pct=round(diff, 2),
+                )
+            )
+    return out
+
+
+async def run_prices(client: httpx.AsyncClient, report: DriftReport, *, now: dt.datetime) -> None:
+    """Fill the report's ``price_drift``/``price_stale``/``price_skipped``; never raises for a fetch."""
+    report.price_stale = price_stale(now)
+    try:
+        body = await asyncio.wait_for(
+            get_json(client, OPENROUTER_PRICES_URL, vendor="OpenRouter", headers={}), FETCH_BUDGET_S
+        )
+        report.price_drift.extend(openrouter_price_drift(body))
+    except (CatalogAdapterError, httpx.HTTPError, TimeoutError, ValueError) as exc:
+        report.price_skipped.append(
+            Skipped(
+                provider_id="openrouter",
+                reason=f"OpenRouter prices unavailable: {_failure_reason('OpenRouter', exc)}",
+            )
+        )
+    try:
+        response = await asyncio.wait_for(
+            client.get(LIVEKIT_PRICING_URL, headers={"RSC": "1"}), FETCH_BUDGET_S
+        )
+        response.raise_for_status()
+        report.price_drift.extend(livekit_price_drift(response.text))
+    except (httpx.HTTPError, TimeoutError, ValueError) as exc:
+        log.info("price_drift_livekit_unavailable", error_type=type(exc).__name__)
+        report.price_skipped.append(
+            Skipped(
+                provider_id="livekit-inference", reason=f"LiveKit payload unavailable ({type(exc).__name__})"
+            )
+        )
 
 
 # ----------------------------------------------------------------------------- render
@@ -478,6 +675,37 @@ def render_markdown(report: DriftReport) -> str:
         ]
     else:
         lines.append("None.")
+
+    lines += [
+        "",
+        f"## `price_drift`: table prices more than {PRICE_TOLERANCE_PCT:g} % from their live twin",
+        "",
+        "A prompt to re-read the vendor's page, never an automatic edit (LiveKit's payload is unofficial).",
+        "",
+    ]
+    if report.price_drift:
+        lines += [
+            f"- `{row.provider_id}` {_code(row.model or '(any model)')} `{row.unit}`: table "
+            f"{row.table_usd_per_unit:.10f} (as_of {row.table_as_of}) vs {row.live_source} "
+            f"{row.live_usd_per_unit:.10f} ({row.diff_pct:+.1f} %)"
+            for row in report.price_drift
+        ]
+    else:
+        lines.append("None.")
+    lines += ["", f"## `price_stale`: rows older than {pricing.PRICE_STALE_DAYS} days", ""]
+    if report.price_stale:
+        lines += [
+            f"- `{row.provider_id}` {_code(row.model or '(any model)')} `{row.unit}`: as_of {row.as_of} "
+            f"({row.age_days} days)"
+            for row in report.price_stale
+        ]
+    else:
+        lines.append("None.")
+    if report.price_skipped:
+        lines += [
+            "",
+            *[f"- price check skipped, `{row.provider_id}`: {row.reason}" for row in report.price_skipped],
+        ]
 
     lines += ["", "## `skipped`", ""]
     if report.skipped:
@@ -569,7 +797,8 @@ def _parser() -> argparse.ArgumentParser:
 async def _amain(args: argparse.Namespace, env: Mapping[str, str]) -> DriftReport:
     transport = fixture_transport(args.fixtures) if args.fixtures is not None else None
     async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
-        return await run(client, env=env, only=parse_only(args.only))
+        only = parse_only(args.only)
+        return await run(client, env=env, only=only, prices=only is None or "prices" in only)
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:

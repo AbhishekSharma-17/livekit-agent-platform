@@ -1,0 +1,82 @@
+{
+  "$id": "lkap-contracts/AnalyticsDriver.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit).",
+  "properties": {
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Cost Usd"
+    },
+    "estimated_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Usd"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "share_pct": {
+      "title": "Share Pct",
+      "type": "number"
+    },
+    "unit": {
+      "enum": [
+        "tokens_in",
+        "tokens_out",
+        "audio_s_in",
+        "audio_s_out",
+        "chars",
+        "minutes",
+        "images",
+        "text_tokens_in",
+        "text_tokens_out",
+        "audio_tokens_in",
+        "audio_tokens_out",
+        "cached_tokens_in",
+        "requests"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider_id",
+    "unit",
+    "cost_usd",
+    "share_pct"
+  ],
+  "title": "AnalyticsDriver",
+  "type": "object"
+}

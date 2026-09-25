@@ -2018,6 +2018,39 @@ async def test_the_validator_names_unreviewed_destructive_actions(
     assert not [issue for issue in after["issues"] if issue["path"] == "tools.apps.denied_actions"]
 
 
+async def test_the_resolve_step_drops_an_unreviewed_destructive_action_of_an_older_app_server(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps resolved"))["id"])
+    assert (await _set_apps(admin_client, agent_id, mode="server")).status_code == 200
+    row = (await _origin_rows(database, agent_id))[0]
+    async with database.session() as session:
+        # An app server provisioned before R-V5-9 preloaded the destructive action too.
+        stored = await session.get(Tool, row.id)
+        assert stored is not None
+        definition = dict(stored.definition)
+        definition["allowed_tools"] = [DELETE_EVENT, FREE_SLOTS]
+        definition["tool_options"] = {
+            **definition["tool_options"],
+            DELETE_EVENT: {"mode": "blocking", "cancellable": False, "max_duration_s": 20},
+        }
+        stored.definition = definition
+        await session.commit()
+    session_id = (await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})).json()["sessionId"]
+
+    resolved = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+
+    server = next(tool for tool in resolved["tools"] if tool["kind"] == "mcp")
+    assert server["allowed_tools"] == [FREE_SLOTS]
+    assert set(server["tool_options"]) == {FREE_SLOTS}
+
+
 def _server_definition(*names: str, kind: McpOriginKind = "server") -> McpServerDefinition:
     return McpServerDefinition(
         name="composio_app_server",

@@ -19,15 +19,28 @@ from livekit.agents import RunContext, ToolError
 from livekit.agents.llm import ToolFlag
 from lkap_contracts.tools import (
     HttpToolDefinition,
+    McpHeaderAuth,
+    McpOAuthAuth,
     McpServerDefinition,
     McpServerOrigin,
     ProviderToolDefinition,
     ToolExecution,
 )
 
-from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
-from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers, build_mcp_toolsets
+from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT, Settings
+from lkap_agent.tools.declarative import (
+    build_guarded_mcp_servers,
+    build_http_tools,
+    build_mcp_servers,
+    build_mcp_toolsets,
+)
 from lkap_agent.tools.execution import bind_agent_policy, policy_of
+
+
+@pytest.fixture(autouse=True)
+def _worker_settings(settings: Settings) -> Settings:
+    """`build_mcp_toolsets` reads `LKAP_MCP_ALLOWED_HOSTS` from the worker's settings (V5-09)."""
+    return settings
 
 
 @dataclass
@@ -409,3 +422,42 @@ class TestComposioToolFinder:
         tools = build_http_tools([_base_def(), provider])
 
         assert [tool.info.name for tool in tools] == ["lookup_item", "acmecrm_list_contacts"]
+
+
+class TestMcpAuth:
+    """V5-09: the worker reads `auth`; header auth is today's headers, oauth waits for V5-16."""
+
+    def test_header_auth_sends_its_resolved_headers(self) -> None:
+        defn = McpServerDefinition(
+            name="crm",
+            url="https://mcp.example.com/mcp",
+            auth=McpHeaderAuth(headers={"x-api-key": "resolved-key"}),
+        )
+
+        (server,) = build_guarded_mcp_servers([defn])
+
+        assert server._headers == {"x-api-key": "resolved-key"}
+
+    def test_a_legacy_headers_definition_still_sends_them(self) -> None:
+        defn = McpServerDefinition(name="crm", url="https://mcp.example.com/mcp", headers={"x-api-key": "k"})
+
+        (server,) = build_guarded_mcp_servers([defn])
+
+        assert isinstance(defn.auth, McpHeaderAuth)
+        assert server._headers == {"x-api-key": "k"}
+
+    def test_no_auth_sends_no_headers(self) -> None:
+        (server,) = build_guarded_mcp_servers(
+            [McpServerDefinition(name="docs", url="https://mcp.example.com/mcp")]
+        )
+
+        assert not server._headers
+
+    def test_an_oauth_server_is_skipped_until_the_worker_can_sign_in(self) -> None:
+        skipped: list[str] = []
+        defn = McpServerDefinition(name="crm", url="https://mcp.example.com/mcp", auth=McpOAuthAuth())
+
+        servers = build_guarded_mcp_servers([defn], on_skipped=lambda _d, reason: skipped.append(reason))
+
+        assert servers == []
+        assert skipped and "not supported" in skipped[0]

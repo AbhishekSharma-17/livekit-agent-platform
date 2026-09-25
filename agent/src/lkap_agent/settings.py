@@ -23,6 +23,10 @@ DEFAULT_AGENT_NAME = "lkap-agent"
 DEFAULT_HTTP_TOOL_USER_AGENT = "LKAP/0.1 (+https://github.com/AbhishekSharma-17/livekit-agent-platform)"
 
 
+#: `LKAP_MCP_ALLOWED_HOSTS` value that reuses the HTTP-tool list (D-V5-4's override).
+MCP_HOSTS_HTTP_ALIAS = "@http"
+
+
 class Settings(BaseSettings):
     """Agent worker settings.
 
@@ -88,6 +92,11 @@ class Settings(BaseSettings):
     api_base_url: str
     packs: str = "packs.insurance_claim,packs.generic"
     http_tool_allowed_hosts: str = ""
+    #: `LKAP_MCP_ALLOWED_HOSTS` (V5-09, D-V5-4): comma-separated MCP server hosts. Empty = any
+    #: public `https` host; non-empty = a ceiling no MCP server may leave; `@http` = reuse
+    #: `LKAP_HTTP_TOOL_ALLOWED_HOSTS` (empty then allows nothing). The api reads the same
+    #: variable at save time and for the connection test.
+    mcp_allowed_hosts: str = ""
     #: `LKAP_HTTP_TOOL_USER_AGENT`: the `User-Agent` declarative HTTP tools and the
     #: built-in `http_request` send when the tool's own headers set none. Operators
     #: should put their own contact URL or email here.
@@ -113,6 +122,19 @@ class Settings(BaseSettings):
     def http_tool_allowed_hosts_list(self) -> list[str]:
         """`LKAP_HTTP_TOOL_ALLOWED_HOSTS` split into a host allowlist (may be empty)."""
         return [h.strip() for h in self.http_tool_allowed_hosts.split(",") if h.strip()]
+
+    @property
+    def mcp_host_ceiling(self) -> frozenset[str] | None:
+        """`LKAP_MCP_ALLOWED_HOSTS` as a ceiling: `None` = no ceiling, a set = the only hosts.
+
+        `@http` returns the HTTP-tool list, so an empty one allows no MCP server at all.
+        """
+        raw = self.mcp_allowed_hosts.strip()
+        source = self.http_tool_allowed_hosts if raw == MCP_HOSTS_HTTP_ALIAS else raw
+        hosts = frozenset(h.strip().lower().rstrip(".") for h in source.split(",") if h.strip())
+        if raw != MCP_HOSTS_HTTP_ALIAS and not hosts:
+            return None
+        return hosts
 
 
 @lru_cache(maxsize=1)

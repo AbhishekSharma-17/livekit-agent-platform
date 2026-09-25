@@ -3,10 +3,15 @@
 Mirrors the `config_service.VALIDATORS` hook-list pattern already used in this
 codebase: a package that owns a job's business logic (`kb.ingest`,
 `webhooks.delivery`, `qa.job`, and this package's own `usage_daily_rollup`)
-imports :func:`job` and decorates its handler, instead of a central module
-importing every package's internals. A kind reserved by another package
-(`jobs.kinds.CONNECTION_PROBE` etc.) simply has no handler here until that
-package lands and registers one.
+imports :func:`job` and decorates its handler. A kind reserved by another
+package (`jobs.kinds.CONNECTION_PROBE` etc.) simply has no handler here until
+that package lands and registers one.
+
+Decorating a handler only registers it once its module is actually imported,
+so something has to import every owning module at least once per process —
+:func:`lkap_api.jobs.handlers.load_all_handlers` is that single list (ask #25:
+before it existed, the `arq` worker imported none of them and only the api
+process, via its routers, ended up with a full registry).
 """
 
 from __future__ import annotations

@@ -683,14 +683,54 @@ def test_a_batch_mixing_silent_and_speaking_tools_keeps_its_reply() -> None:
     assert event.has_tool_reply
 
 
-def test_cascaded_mode_never_cancels_a_tool_reply() -> None:
-    """`reply_required` is read only by realtime models; a cascaded LLM always answers."""
+@pytest.mark.parametrize(("version", "silenced"), [("1.8.3", True), ("1.9.0", True), ("1.8.2", False)])
+def test_cascaded_mode_honours_silent_reply_from_livekit_agents_1_8_3(
+    monkeypatch: pytest.MonkeyPatch, version: str, silenced: bool
+) -> None:
+    """R-V4-68: the pipeline path reads `has_tool_reply` since 1.8.3; below it, the LLM always answers."""
+    monkeypatch.setattr("livekit.agents.__version__", version)
     agent = _agent(resolved_config(mode="cascaded"), _SilentPack())
     event = _tools_executed("sync_claim_packet")
 
     agent.on_function_tools_executed(event)
 
-    assert event.has_tool_reply
+    assert event.has_tool_reply is not silenced
+
+
+@pytest.mark.parametrize("version", ["1.8.2", "1.8.3"])
+@pytest.mark.parametrize("mode", ["realtime", "half_cascade"])
+def test_realtime_models_honour_silent_reply_on_every_sdk_version(
+    monkeypatch: pytest.MonkeyPatch, mode: PipelineMode, version: str
+) -> None:
+    """R-V4-68 changes cascaded only: realtime models were already silenced before 1.8.3."""
+    monkeypatch.setattr("livekit.agents.__version__", version)
+    agent = _agent(resolved_config(mode=mode), _SilentPack())
+    event = _tools_executed("sync_claim_packet")
+
+    agent.on_function_tools_executed(event)
+
+    assert not event.has_tool_reply
+
+
+def test_cascaded_mode_keeps_the_reply_of_a_tool_without_silent_reply() -> None:
+    """On 1.8.3 only `silent_reply` tools go quiet; a mixed batch is still answered."""
+    agent = _agent(resolved_config(mode="cascaded"), _SilentPack())
+    plain = _tools_executed("lookup_policy")
+    mixed = _tools_executed("sync_claim_packet", "lookup_policy")
+
+    agent.on_function_tools_executed(plain)
+    agent.on_function_tools_executed(mixed)
+
+    assert plain.has_tool_reply
+    assert mixed.has_tool_reply
+
+
+def test_the_cascaded_note_keeps_short_acknowledgements_for_tools_that_answer() -> None:
+    """R-V4-68: the note no longer claims every tool result is voiced."""
+    note = PIPELINE_NOTES["cascaded"]
+    assert "one short clause" in note
+    assert "Every tool result comes back to you" not in note
+    assert "silently" in note
 
 
 # ------------------------------------------------------------ session builder

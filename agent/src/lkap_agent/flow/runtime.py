@@ -18,7 +18,11 @@ installed SDK):
   output of the batch is marked `reply_required=False` in the synchronous
   `function_tools_executed` handler), and the batch's call/output pairs are
   carried into the next node, whose `on_enter` answers from them
-  (:meth:`FlowRuntime.on_function_tools_executed`).
+  (:meth:`FlowRuntime.on_function_tools_executed`). A background tool the
+  step change cancels leaves a "Cancelled: …" pair in the node the caller is
+  on, and a non-cancellable one's late result is carried there too, with a
+  `flow_late_result` info event (R-V4-69,
+  :meth:`FlowRuntime.on_tool_execution_updated`).
 * **transition_speech** is queued with `session.say()` inside the tool:
   speech scheduling is not paused yet at tool time, and the old activity's
   `drain()` waits for every queued speech before the next node starts, so the
@@ -59,8 +63,15 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
-from livekit.agents import Agent, FunctionToolsExecutedEvent, RunContext, get_job_context
+from livekit.agents import (
+    Agent,
+    FunctionToolsExecutedEvent,
+    RunContext,
+    ToolExecutionUpdatedEvent,
+    get_job_context,
+)
 from livekit.agents import llm as lk_llm
+from livekit.agents.voice.events import ToolCallEnded, ToolCallStarted
 from lkap_contracts.agent_config import ResolvedAgentConfig, effective_qa
 from lkap_contracts.flow import (
     AgentNode,
@@ -98,6 +109,7 @@ if TYPE_CHECKING:
     from lkap_agent.flow.node_agent import FlowNodeAgent
 
 __all__ = [
+    "CANCELLED_BY_STEP_CHANGE",
     "EXTRACTION_TIMEOUT_S",
     "NO_CONDITION_CLAUSE",
     "ROUTER_INSTRUCTIONS",
@@ -140,6 +152,11 @@ TRANSITION_RULE: Final[str] = (
 )
 #: The transitions list's clause for an edge without a condition.
 NO_CONDITION_CLAUSE: Final[str] = "this step is done"
+#: The output a step change leaves for a background tool it cancelled (R-V4-69 a).
+CANCELLED_BY_STEP_CHANGE: Final[str] = (
+    "Cancelled: the conversation moved to the next step before this lookup finished. "
+    "Call it again if the caller still needs it."
+)
 
 #: A node that talks: an agent node, or the start node acting as a router.
 ConversationNode = AgentNode | StartNode
@@ -270,8 +287,17 @@ class FlowRuntime:
         self._warned: set[str] = set()
         #: Edge call id → the node agent that call returned, until its batch is executed.
         self._handoff_targets: dict[str, Agent] = {}
+        #: The node the caller is on: the entered node, or a handoff's target before it
+        #: enters (R-V4-69). `None` until the first node enters.
+        self._caller_node: Agent | None = None
+        #: Running tool call id → (the node it started in, its call), until it ends.
+        self._running_calls: dict[str, tuple[Agent | None, lk_llm.FunctionCall]] = {}
+        #: Serialises carries into a node's context (each copies the context when it runs).
+        self._carry_lock = asyncio.Lock()
         # R-V4-64: synchronous, so it runs before the SDK reads `has_tool_reply`.
         ctx.session.on("function_tools_executed", self.on_function_tools_executed)
+        # R-V4-69: cancellations and late results of a node's tools after a step change.
+        ctx.session.on("tool_execution_updated", self.on_tool_execution_updated)
 
     # ------------------------------------------------------------------ build
 
@@ -442,6 +468,7 @@ class FlowRuntime:
     def enter(self, agent: FlowNodeAgent, handoff: tuple[str, str, str] | None) -> None:
         """Book-keeping when `agent` becomes the active node (from its `on_enter`)."""
         self.current_agent = agent
+        self._caller_node = agent
         node = agent.node
         if node.id != self.state.current_node:
             self.state.current_node = node.id
@@ -533,8 +560,10 @@ class FlowRuntime:
         So when the batch hands off, every output is marked
         `reply_required=False` (`cancel_tool_reply`, the SDK's public knob; a
         `ToolResult` returned by the tool cannot reach a background tool's
-        announce). A background sibling still running is cancelled by the old
-        activity's drain (D-V4-37). Realtime models with server-side tool
+        announce). A background sibling still running is cancelled (or, if not
+        cancellable, awaited) by the old activity's drain (D-V4-37); either
+        outcome reaches the target through :meth:`on_tool_execution_updated`
+        (R-V4-69). Realtime models with server-side tool
         replies (`auto_tool_reply_generation`, e.g. Gemini Live) honour it only
         where the plugin can send the result silently (Gemini: `SILENT`
         scheduling, i.e. `tool_behavior=NON_BLOCKING`, not on Vertex); elsewhere
@@ -566,22 +595,109 @@ class FlowRuntime:
                 tools=[call.name for call in ev.function_calls],
             )
         if len(targets) == 1:
+            self._caller_node = targets[0]
             self._carry_batch(targets[0], ev)
 
     def _carry_batch(self, target: Agent, ev: FunctionToolsExecutedEvent) -> None:
         """Add the batch's call/output pairs to `target`'s context (see above)."""
-        chat_ctx = target.chat_ctx.copy()
-        known = {item.id for item in chat_ctx.items}
-        items: list[lk_llm.ChatItem] = [
-            *(call for call in ev.function_calls if call.id not in known),
-            *(out for out in ev.function_call_outputs if out.id not in known),
-        ]
-        if not items:
-            return
-        chat_ctx.insert(items)
-        task = asyncio.create_task(target.update_chat_ctx(chat_ctx), name="lkap_flow_carry_batch")
+        self._carry(target, [*ev.function_calls, *ev.function_call_outputs], name="lkap_flow_carry_batch")
+
+    def _carry(self, target: Agent, items: list[lk_llm.ChatItem], *, name: str) -> None:
+        """Insert `items` into `target`'s context in a tracked task (`settle()` awaits it).
+
+        The context is copied when the task runs, under a lock, so two carries
+        scheduled back to back (a batch, then a cancellation) never overwrite
+        each other; items already present (by id) are skipped. `update_chat_ctx`
+        filters them to `target`'s tools, like `Agent.__init__`'s copy.
+        """
+
+        async def _run() -> None:
+            async with self._carry_lock:
+                chat_ctx = target.chat_ctx.copy()
+                known = {item.id for item in chat_ctx.items}
+                new = [item for item in items if item.id not in known]
+                if not new:
+                    return
+                chat_ctx.insert(new)
+                await target.update_chat_ctx(chat_ctx)
+
+        task = asyncio.create_task(_run(), name=name)
         self._pending.add(task)
         task.add_done_callback(self._pending.discard)
+
+    def on_tool_execution_updated(self, ev: ToolExecutionUpdatedEvent) -> None:
+        """Carry a node's cancelled or late tool results to the node the caller is on (R-V4-69).
+
+        A step change drains the old node's activity: livekit-agents 1.8.3
+        cancels its cancellable tools and awaits the rest
+        (`AgentActivity.aclose` → `_ToolExecutor.drain`) **before** the next
+        node's activity starts, so both land here while the target has no
+        activity yet (`update_chat_ctx` is a plain assignment) and its
+        `on_enter` `settle()` awaits the carry.
+
+        * **Cancelled** (`tool_call_ended{cancelled}`): the target already holds
+          the tool's announce ("still in progress") and would otherwise promise a
+          result that never comes. A synthetic call/output pair under the SDK's
+          terminal id (``{call_id}_final``, as `RunContext._make_update_pair`
+          builds it; never a second output for the announce's call id) says it
+          was cancelled by the step change and may be called again.
+        * **Late result** (`tool_call_ended{done|error}` with the deferred
+          ``{call_id}_final`` id): a non-cancellable tool's final pair was
+          inserted into the closed node's context and `session.history`, and its
+          reply was dropped (`_deliver_reply` → `ActivityClosedError`). The same
+          pair is carried into the target, which uses it on its next reply; no
+          reply is forced. One `info` event `flow_late_result` is recorded.
+
+        A tool that ends in the node the caller is on is left to the SDK.
+        Registered on the session as a synchronous handler.
+        """
+        update = ev.update
+        if isinstance(update, ToolCallStarted):
+            owner = self._caller_node or getattr(self.services.ctx.session, "current_agent", None)
+            self._running_calls[update.function_call.call_id] = (owner, update.function_call)
+            return
+        if not isinstance(update, ToolCallEnded):
+            return
+        owner, call = self._running_calls.pop(update.call_id, (None, None))
+        target = self._caller_node
+        if owner is None or call is None or target is None or owner is target:
+            return
+        if update.status == "cancelled":
+            self._carry_cancelled(target, call)
+        elif update.id != update.call_id:
+            self._carry_late_result(owner, target, call, update.id)
+
+    def _carry_cancelled(self, target: Agent, call: lk_llm.FunctionCall) -> None:
+        call_id = f"{call.call_id}_final"
+        items: list[lk_llm.ChatItem] = [
+            lk_llm.FunctionCall(call_id=call_id, name=call.name, arguments=call.arguments),
+            lk_llm.FunctionCallOutput(
+                call_id=call_id, name=call.name, output=CANCELLED_BY_STEP_CHANGE, is_error=False
+            ),
+        ]
+        logger.info("flow step change cancelled a tool", tool=call.name, node=_agent_id(target))
+        self._carry(target, items, name="lkap_flow_carry_cancelled")
+
+    def _carry_late_result(
+        self, owner: Agent, target: Agent, call: lk_llm.FunctionCall, entry_id: str
+    ) -> None:
+        try:
+            history = self.services.ctx.session.history.items
+        except Exception:
+            history = []
+        items: list[lk_llm.ChatItem] = [
+            item
+            for item in history
+            if isinstance(item, lk_llm.FunctionCall | lk_llm.FunctionCallOutput) and item.call_id == entry_id
+        ]
+        if not items:
+            logger.debug("late tool result not found in the history", tool=call.name, entry_id=entry_id)
+            return
+        source, to = _agent_id(owner), _agent_id(target)
+        logger.info("flow late tool result carried", tool=call.name, source=source, target=to)
+        payload = {"message": "flow_late_result", "tool": call.name, "call_id": call.call_id}
+        self._record("info", {**payload, "from": source, "to": to})
+        self._carry(target, items, name="lkap_flow_carry_late_result")
 
     async def fallback(self, source: FlowNodeAgent) -> None:
         """Take `source`'s fallback edge outside a tool (the `max_turns` guard)."""
@@ -595,6 +711,7 @@ class FlowRuntime:
             return
         result = await self.transition(source, edge, reason="max_turns")
         if result is not None and not isinstance(result, str):
+            self._caller_node = result
             source.session.update_agent(result)
 
     async def _finish(self, source: FlowNodeAgent, end: EndNode, edge: FlowEdge, reason: str) -> None:
@@ -791,6 +908,11 @@ def _audio_output_on(session: Any) -> bool:
     """Whether the session publishes audio (mirrors the check in `AgentActivity.say`)."""
     output = getattr(session, "output", None)
     return bool(getattr(output, "audio", None) is not None and getattr(output, "audio_enabled", False))
+
+
+def _agent_id(agent: Agent) -> str:
+    """A node agent's id (the node id, `Agent.id = node.id`)."""
+    return str(getattr(agent, "id", "") or "")
 
 
 def _extract_names(node: FlowNode) -> set[str]:

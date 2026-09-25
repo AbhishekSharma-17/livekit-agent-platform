@@ -75,11 +75,13 @@ from lkap_contracts.providers import (
     get,
     validate_model_id,
 )
+from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     NON_BLOCKING_MODES,
     HttpToolDefinition,
     McpServerDefinition,
+    ProviderToolDefinition,
     ToolDefinition,
     never_background,
 )
@@ -225,6 +227,9 @@ class ValidationContext:
     tool_definitions_by_id: Mapping[str, Mapping[str, Any]] | None = None
     """``{tool_id: definition JSON}`` for every tool row of the workspace (V4-12, the execution
     checks of :func:`tool_execution_issues`); ``None`` skips the per-tool checks."""
+    connection_statuses: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    """``{connection_id: status}`` of every connected-app row (V5-47, COMPOSIO.md §4): the status
+    V5-18 mirrors into ``credentials.last_test_message`` (``active``, ``expired`` …)."""
 
     def fingerprint_for(self, ref: ProviderRef) -> str | None:
         """The fingerprint of the credential ``ref`` uses, if it uses one."""
@@ -451,6 +456,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(connection_flag_issues(ctx))
     findings.extend(knowledge_auto_inject_issues(ctx))
     findings.extend(tool_execution_issues(ctx))
+    findings.extend(apps_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -811,6 +817,90 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
     return issues
 
 
+#: Connection statuses that stop an app's actions (D-V5-C9).
+BROKEN_CONNECTION_STATUSES: frozenset[str] = frozenset({"expired", "failed", "inactive"})
+
+
+def apps_issues(ctx: ValidationContext) -> list[Issue]:
+    """The connected-apps checks of V5-47 (docs/v5/COMPOSIO.md §4).
+
+    * ``tools.apps.mode`` other than ``off`` without a Composio key, or with Composio turned off
+      for the workspace → error at ``tools.apps.mode``.
+    * The tool finder with ``manage_connections`` on → warning: a phone caller cannot open a
+      sign-in link (it only helps text and web chats).
+    * An attached ``provider`` tool whose connection is gone, or expired, failed or disconnected
+      → error naming the app; one whose key is not a Composio key → error.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        Issues at ``tools.apps.*`` and ``tools[i].definition.*``.
+    """
+    tools = ctx.config.tools
+    apps = tools.apps
+    issues: list[Issue] = []
+    has_key = COMPOSIO_PROVIDER_ID in set(ctx.credential_providers.values())
+    if apps.mode != "off":
+        if not has_key:
+            issues.append(
+                Issue(
+                    path="tools.apps.mode",
+                    message="connected apps need a Composio key: add one under Tools, Apps, Enable Composio",
+                )
+            )
+        elif COMPOSIO_PROVIDER_ID in ctx.disabled_provider_ids:
+            issues.append(
+                Issue(
+                    path="tools.apps.mode",
+                    message="Apps are turned off for this workspace; enable Composio again under Tools, Apps",
+                )
+            )
+    if apps.mode == "router" and apps.router.manage_connections:
+        issues.append(
+            Issue(
+                path="tools.apps.router.manage_connections",
+                message="a phone caller cannot open a sign-in link: letting the agent connect apps only "
+                "helps text and web chats",
+                severity="warning",
+            )
+        )
+    definitions = ctx.tool_definitions_by_id
+    if definitions is None:
+        return issues
+    for index, tool_id in enumerate(tools.tool_ids):
+        definition = definitions.get(tool_id)
+        if not isinstance(definition, Mapping) or definition.get("kind") != "provider":
+            continue
+        base = f"tools[{index}].definition"
+        app = str(definition.get("toolkit") or definition.get("name") or tool_id)
+        connection_id = definition.get("connection_id")
+        status = ctx.connection_statuses.get(connection_id) if isinstance(connection_id, str) else None
+        if status is None:
+            issues.append(
+                Issue(path=f"{base}.connection_id", message=f"the '{app}' app is no longer connected")
+            )
+        elif status in BROKEN_CONNECTION_STATUSES:
+            issues.append(
+                Issue(
+                    path=f"{base}.connection_id",
+                    message=f"the '{app}' app needs to be reconnected (status {status}); reconnect it "
+                    "under Tools, Apps",
+                )
+            )
+        credential_id = definition.get("credential_id")
+        if (
+            isinstance(credential_id, str)
+            and ctx.credential_providers.get(credential_id) != COMPOSIO_PROVIDER_ID
+        ):
+            issues.append(
+                Issue(
+                    path=f"{base}.credential_id", message=f"'{app}' actions need the workspace's Composio key"
+                )
+            )
+    return issues
+
+
 def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
     """Capability-flag checks against the agent's connection (ARCHITECTURE-V2 D-V2-4).
 
@@ -958,6 +1048,16 @@ async def validation_context_for(
         .all()
     )
     credential_providers = {row[0]: row[1] for row in credential_rows}
+    connection_statuses = {
+        row[0]: row[1] or "unknown"
+        for row in (
+            await db.execute(
+                select(Credential.id, Credential.last_test_message).where(
+                    Credential.workspace_id == workspace_id, Credential.provider_id == TOOL_PROVIDER_ACCOUNT
+                )
+            )
+        ).tuples()
+    }
     tool_rows = (
         (
             await db.execute(
@@ -994,6 +1094,7 @@ async def validation_context_for(
         known_kb_ids=kb_ids,
         tool_names_by_id=tool_names_by_id,
         tool_definitions_by_id=tool_definitions_by_id,
+        connection_statuses=connection_statuses,
         telephony_policy=await _telephony_policy(db, workspace_id),
         credential_fingerprints={row[0]: row[2] for row in credential_rows},
         model_records=await _model_records(db, workspace_id),
@@ -1307,7 +1408,9 @@ def resolve_tool_definition(definition: ToolDefinition, secrets: Mapping[str, st
 
     The worker never sees credential ids or the vault (CONTRACTS §9), so the api
     substitutes ``{{ secret.NAME }}`` in the url, headers and body template and
-    clears ``credential_id``. **The result contains secrets.**
+    clears ``credential_id``. A ``provider`` definition (V5-47) has only headers to fill
+    (the Composio key); an origin-tagged MCP definition is filled like any MCP one.
+    **The result contains secrets.**
     """
     if isinstance(definition, HttpToolDefinition):
         return definition.model_copy(
@@ -1319,6 +1422,15 @@ def resolve_tool_definition(definition: ToolDefinition, secrets: Mapping[str, st
                     if definition.body_template is not None
                     else None
                 ),
+                "credential_id": None,
+            }
+        )
+    if isinstance(definition, ProviderToolDefinition):
+        # V5-47 (COMPOSIO.md §4): the Composio key rides the `x-api-key` header, like an app
+        # server's; `connection_id` and `subject` stay (the worker sends the subject).
+        return definition.model_copy(
+            update={
+                "headers": {k: substitute_secrets(v, secrets) for k, v in definition.headers.items()},
                 "credential_id": None,
             }
         )

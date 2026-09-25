@@ -1,0 +1,54 @@
+# V5-47 live check: Composio on agents (pending the user's key)
+
+Status: **not run.** V5-47 landed offline: every Composio call in the tests goes to `FakeComposio` (`api/tests/fakes/composio.py`) or to `httpx.MockTransport`; nothing here has called Composio with a real key, and no key was available to the implementer. The steps are `COMPOSIO.md` §9 steps 4–9, driven through `lkap_mcp` first (the console steps need V5-48). V5-18's steps 1–3 (`docs/v5/_briefs/v5-18-live.md`) come first: a saved key and one connected low-risk app.
+
+Live rules (HANDOFF rule 3, PLAN-V5 §0.1): a scratch api on its own port and DB, a worker under a fresh agent name (never `lkap-agent`), an **Operator** key minted for the run (Apps writes need `providers:write`, the mode needs `agents:write`) and revoked at the end (R-V4-17), `Demo — ` objects only, cleaned up. Record pass or fail with the evidence (status codes, counts, event types, latencies) and the date. Never record the key, a connected-account id, a session id in full (the first four characters are enough), a project or person name, or any vendor URL other than `backend.composio.dev`.
+
+## Steps
+
+| # | Step | Expect | Result |
+|---|---|---|---|
+| 4a | `apps_actions(toolkit=<the connected app>, important=true)`, pick one `read` action; `apps_add_tools(connection_id, actions=[<it>], agent_id=<Demo — Blank agent>)` | `tools_created` has one id; `agent_get` shows it in `tools.tool_ids` and `tools.apps.mode == "actions"`; `config_version` moved by one; `agent_validate` ok. The tool's definition: `kind: provider`, name `<app>_<action>`, `result_path: "data"`, `max_result_chars: 1500`, `execution.mode: auto`. | pending |
+| 4b | `apps_add_tools` the same action again | `tools_created: []`, `tools_existing` = the first id. | pending |
+| 5 | `chat_start` / `chat_send` on the agent with a turn that needs the action | The activity feed shows the tool running; the reply uses its result; session events include `tool_call_started`/`tool_call_ended` for the tool. Record whether the call needed `connected_account_id` (it is not sent; see "Facts" below). Cost line: one `requests` line under `composio` once V4-15's pricing is merged, else "counted, no price". | pending |
+| 6a | Scratch agent `Demo — Apps scratch`: `agent_apps_mode(mode="router", allowed_toolkits=[<app>])` | `ok`; `agent_get` shows one `mcp` tool row `composio_tool_finder` with `origin.kind: router`, `allowed_tools` = search, get-schemas, multi-execute; its url host is `backend.composio.dev` (**if Composio answers with another host the save is refused with a 422 — record the host's shape here and raise it**). Audit: `apps.router.create`. | pending |
+| 6b | `agent_apps_mode(mode="router")` again, unchanged | No new session (the audit shows no second `apps.router.create`). | pending |
+| 6c | Text chat: "what can you do with my <app>?" then a follow-up that needs a read | `COMPOSIO_SEARCH_TOOLS` runs (activity row), then `COMPOSIO_MULTI_EXECUTE_TOOL`; record the meta tools the MCP server actually listed (compare with the fact table). In a browser session record EOU→first-audio p50 for this agent and for step 5's agent (the latency note). | pending |
+| 7 | `agent_apps_mode(mode="server")` on the scratch agent (the connection has picked actions) | One `composio_app_server` row, `origin.kind: server`; its tool list in a chat matches the picked actions exactly (record whether the listed names equal the action slugs); the router session of step 6 is deleted (`apps.router.delete` audit). | pending |
+| 8a | `apps_disconnect(id, confirm=true)` (not purge) | The tool of step 4 is switched off; `agent_validate` on the Demo agent reports the app needs reconnecting. | pending |
+| 8b | Re-enable just the tool (or keep the connection but let the sign-in expire at the vendor) and chat | The agent says the app needs to be reconnected by an admin, reads no link; the session has a `tool_needs_reauth` event. | pending |
+| 8c | Reconnect in the console (Tools, Apps) | The tool is on again; a chat turn works. | pending |
+| 9 | Cleanup: `agent_apps_mode(mode="off")` on the scratch agent, delete it, `apps_disconnect(purge=true)` after deleting the tools, revoke the run's key | No Tool Router session left for the scratch agent (`apps.router.delete` / `apps.server.delete` audits); record the free-tier figure the dashboard shows. | pending |
+
+## Vendor facts (checked for V5-47 on 2026-09-25)
+
+"Verified" = read on that date from the named Composio documentation page and coded to. "Unverified" = not stated on any page read; the code's assumption is given and the live run confirms or corrects it (record only "confirmed" / "differs: <field names>").
+
+| Fact | Status | What the code does |
+|---|---|---|
+| The MCP server API (`/api/v3.1/mcp/servers`, `/mcp/{id}`, instances …) is deprecated in favour of a session's MCP endpoint | **verified on 2026-09-25** from the API reference's MCP section index (every MCP endpoint marked deprecated; "Use a session's MCP endpoint instead"). The single `POST /mcp/servers` page carries no notice, and the MCP overview page recommends sessions "for most use cases" | Both the app server (`server`) and the tool finder (`router`) are Tool Router sessions (`POST /api/v3.1/tool_router/session`). The adapter keeps `create_mcp_server`/`delete_mcp_server` (V5-18) but nothing calls them. |
+| `POST /api/v3.1/tool_router/session` body: `user_id` (required), `toolkits`, `auth_configs` (toolkit → id), `connected_accounts` (toolkit → [ids]), `manage_connections {enable, callback_url, enable_wait_for_connections, enable_connection_removal}`, `tools` (toolkit → config), `workbench {enable, …}`, `tags`, `preload {tools: [slugs] \| "all"}`, `search {enable}`, `execute {enable_multi_execute}` | **verified on 2026-09-25** from the API reference page "Create a new tool router session" | Sent: `toolkits`, `connected_accounts` (the chosen connections' accounts), `manage_connections.enable`, `workbench.enable=false`, `search.enable`, `execute.enable_multi_execute`, and for `server` also `tools` and `preload.tools`. |
+| Allow/deny shapes: `toolkits: {"enable": [...]}` or `{"disable": [...]}` (mutually exclusive); `tools: {<toolkit>: {"enable": [...]}}` or `{<toolkit>: {"disable": [...]}}`; tags `{"enable"\|"disable"}` inside a toolkit | **verified on 2026-09-25** from the docs page "Configuring sessions" (the REST reference types these as objects without naming the keys) | `server`: `tools[tk].enable` = the picked actions minus `denied_actions`; `router`: `tools[tk].disable` = `denied_actions`. Closes asks #5's "field shapes unverified". |
+| Response: `session_id`, `mcp {type: "http", url}`, `tool_router_tools[]`, `config_version`, `config`, `warnings[]` | **verified on 2026-09-25** from the same reference page | `session_id` → `origin.remote_id`; `mcp.url` → the MCP row's url after the host check. |
+| The code-execution block is `workbench` on the REST API (`sandbox` in the SDK) | **verified on 2026-09-25** from the reference page "Get a tool router session" (the `config` echo names `workbench` with `enable`, `sandbox_size` …); the "Configuring sessions" page uses the SDK's `sandbox` | Sends `workbench: {enable: false}` (removes the remote workbench and bash tools). |
+| A session with the meta tools off and `preload.tools` set lists exactly those tools on its MCP endpoint (the SDK's "direct tools" preset) | **unverified** — the reference says preloaded tools are exposed; the preset itself is an SDK constant, not a REST field | `server` mode sends `search.enable=false`, `execute.enable_multi_execute=false`, `preload.tools=[…]`, and the MCP row's `allowed_tools` = those slugs (step 7 checks the tool names equal the slugs). |
+| The host of `mcp.url` | **unverified** — the reference example is a placeholder | Required to be `https` on `backend.composio.dev` (D-V5-C10); anything else is refused at save (422) and the session deleted. Step 6a records the real shape. |
+| The session MCP endpoint wants `x-api-key` | **unverified** — the Tool Router overview says to use `session.mcp.url` with `session.mcp.headers` without naming them; the MCP overview requires `x-api-key` for MCP servers when `require_mcp_api_key` is on | The MCP row sends `x-api-key: {{ secret.api_key }}` (substituted at resolve). |
+| `tool_router_tools` list | **unverified** (the reference shows `["string"]`) | Allowed meta tools: `COMPOSIO_SEARCH_TOOLS`, `COMPOSIO_GET_TOOL_SCHEMAS`, `COMPOSIO_MULTI_EXECUTE_TOOL`, plus `COMPOSIO_MANAGE_CONNECTIONS`/`COMPOSIO_WAIT_FOR_CONNECTIONS` only with `manage_connections`; remote bash/workbench/skill/feedback tools never. |
+| `DELETE /api/v3.1/tool_router/session/{id}` | **unverified** as a REST path on the pages read this time (the SDK's `sessions.delete(id)`; V5-18's brief saw the route in the reference; "a deleted session returns 404") | Delete on replace / `off` / agent delete, best effort; a 404 counts as deleted. |
+| Execute without `connected_account_id` | **unverified** — the execute reference marks it optional | The worker sends `user_id` (the connection's subject) only; the connected-account id stays in the api's encrypted connection row. If Composio needs the id when a subject has two accounts for one app, file an ask for `routers/internal.py` to decrypt the connection row and fill `ProviderToolDefinition.connected_account_id` at resolve (the contract field exists; asks row below). |
+| Execute error shape (`successful: false`, `error` as text or `{message, code, slug, status, suggested_fix}`) | **verified on 2026-09-25** by V5-18 from the execute reference; auth-shaped markers in `code`/`slug`/`message` are a heuristic (**unverified** against a real expired account) | Auth-shaped → "This app needs to be reconnected by an admin" + `tool_needs_reauth`; else the first sentence, links removed. |
+| Free-tier figure | pending (D-V5-1) | — |
+
+## Migration rehearsal (`v5_010_tool_provider_kind`)
+
+`down_revision = "v4_002_provider_models"` (main's head when V5-47 started; the coordinator re-chains it after `v4_003_session_estimates` and `v5_001_knowledge_p0`). Rehearsed on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the implementer's scratchpad — never `api/data/lkap.db` — on 2026-09-25:
+
+| Step | Result |
+|---|---|
+| `upgrade head` | at `v5_010_tool_provider_kind`; `ck_tools_kind_valid` includes `provider`; `ix_tools_workspace` kept; the seed's tool row kept |
+| insert a `provider` row | accepted |
+| `downgrade v4_002_provider_models` | the `provider` row deleted, the seed's row kept, the narrow CHECK restored (a new `provider` insert is refused) |
+| `upgrade head` again | at head; a `provider` insert accepted |
+
+`api/tests/test_migration_v5_010.py` repeats the three steps on every run. Postgres: the same `batch_alter_table` runs as a plain `ALTER TABLE … DROP CONSTRAINT / ADD CONSTRAINT`; the coordinator's Postgres CI job covers it.

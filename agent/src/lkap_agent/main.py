@@ -1384,7 +1384,8 @@ def _assemble(
             resolved.config.tools.builtin_disabled,
             resolved.config.tools.http_request_enabled,
         ),
-        *deps.declarative_tools_builder([t for t in resolved.tools if t.kind == "http"]),
+        # V5-47: `provider` (a connected app's action) is built by the same declarative builder.
+        *deps.declarative_tools_builder([t for t in resolved.tools if t.kind in ("http", "provider")]),
         *pack.tools(session_ctx),
         *(
             telephony.tools(config=resolved.config, shutdown=lambda reason: ctx.shutdown(reason=reason))

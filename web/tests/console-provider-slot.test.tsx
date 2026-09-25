@@ -7,6 +7,8 @@ import { FormProvider, useForm } from "react-hook-form";
 
 import { DEFAULT_AVATAR_OPTIONS } from "@/components/console/agents/defaults";
 import { ProvidersTab } from "@/components/console/agents/tabs/providers-tab";
+import { EditorContextProvider, type EditorContextValue } from "@/components/console/agents/editor/editor-context";
+import { resetEstimateSettings } from "@/components/console/lib/cost-hooks";
 import { ModelCombobox } from "@/components/console/registry/model-combobox";
 import {
   connectionDisabledReason,
@@ -19,7 +21,7 @@ import {
 import { ProviderSlotCard } from "@/components/console/registry/provider-slot-card";
 import { ProviderSlotEditor, type SlotConstraints } from "@/components/console/registry/provider-slot-editor";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
-import type { ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
+import type { AgentOut, ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
 import providersJson from "../../contracts/generated/providers.json";
 
 /**
@@ -480,5 +482,137 @@ describe("ProvidersTab", () => {
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent);
     expect(titles).toEqual(["Realtime model", "Text-to-speech"]);
+  });
+});
+
+function makeAgentOut(overrides: Partial<AgentOut> = {}): AgentOut {
+  return {
+    id: "agent-1",
+    slug: "agent-1",
+    name: "Test agent",
+    description: "",
+    pack_id: "generic",
+    ui_panel_id: "generic",
+    published: false,
+    config_version: 1,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    mode: "prompt",
+    connection_id: null,
+    limits: {},
+    allowed_origins: [],
+    config: {
+      v: 2,
+      instructions: "Be helpful.",
+      pipeline: { mode: "cascaded", stt: inferenceStt, llm: null, tts: null },
+      voice: {},
+      capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: false },
+      tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+      knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
+      panel: { panel_id: "generic", layout: "wide", blocks: [] },
+      recording: { enabled: false, audio_only: true, storage_config_id: null, retention_days: null },
+      pack_settings: {},
+      timezone: "UTC",
+    },
+    ...overrides,
+  } as AgentOut;
+}
+
+const EDITOR_CONTEXT_STUB: EditorContextValue = {
+  agent: makeAgentOut(),
+  sections: [],
+  activeSection: "providers",
+  goToSection: () => {},
+  issues: [],
+  focusIssue: () => {},
+};
+
+/** `ProvidersTab` inside a minimal `EditorContextProvider`, so `useDraftCostEstimate` has an agent to price. */
+function TabWithEstimate({ values }: { values: Partial<AgentEditorForm["config"]> }) {
+  return (
+    <EditorContextProvider value={EDITOR_CONTEXT_STUB}>
+      <TabHarness values={values} />
+    </EditorContextProvider>
+  );
+}
+
+describe("ProvidersTab — cost estimate (docs/v4/COSTS.md §5 item 2)", () => {
+  const COST_ESTIMATE = {
+    per_minute_usd: { low: "0.03", mid: "0.04", high: "0.05" },
+    session_minutes: 5,
+    channel: "web",
+    lines: [
+      {
+        slot: "stt",
+        label: "Caller's speech → text",
+        provider_id: "deepgram-stt",
+        model: "nova-3",
+        unit: "audio_s_in",
+        quantity_per_min: "60",
+        usd_per_min: "0.0048",
+        quote: { provider_id: "deepgram-stt", unit: "audio_s_in", usd_per_unit: "0.00008", source: "table", as_of: "2026-09-23" },
+      },
+      {
+        slot: "llm",
+        label: "Agent's thinking",
+        provider_id: "acme-llm",
+        model: null,
+        unit: "tokens_in",
+        note: "no price",
+      },
+    ],
+    assumptions: [],
+    unpriced: ["Agent's thinking — acme-llm"],
+    priced_share: 0.5,
+    price_version: "2026-09-23",
+    as_of: "2026-09-23",
+    sources: ["table"],
+    caveats: [],
+  };
+
+  function stubFetch() {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.includes("/cost-estimates/assumptions")) {
+        return { ok: true, status: 200, json: async () => ({ assumptions: [], sessions_sampled: 0 }) } as Response;
+      }
+      if (url.includes("/cost-estimates") && method === "POST") {
+        return { ok: true, status: 200, json: async () => COST_ESTIMATE } as Response;
+      }
+      if (url.includes("/providers")) return { ok: true, status: 200, json: async () => ({ providers: REGISTRY }) } as Response;
+      if (url.includes("auth/me")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ user: { id: "u1", email: "a@b.test" }, workspaces: [{ id: "w1", name: "W", slug: "w", role: "admin" }] }),
+        } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ items: [], total: 0 }) } as Response;
+    });
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", stubFetch());
+    // `EDITOR_CONTEXT_STUB` estimates the same fixed agent id in every test
+    // here; the settings cache/localStorage is per-agent and module-level
+    // (by design — every surface reading one agent shares it), so it must
+    // be cleared between tests in this file.
+    resetEstimateSettings();
+  });
+
+  it("shows the same '≈ $/min · estimate' figure in the Pipeline header as the rail would", async () => {
+    withClient(<TabWithEstimate values={{}} />);
+    await waitFor(() => expect(screen.getByText(/≈ \$0\.0400\/min · estimate/)).toBeTruthy(), { timeout: 3000 });
+  });
+
+  it("shows a priced slot's own chip and 'no price' with Set a price for an unpriced, admin-only slot", async () => {
+    withClient(<TabWithEstimate values={{}} />);
+    const sttCard = await screen.findByRole("region", { name: "Speech-to-text" });
+    await waitFor(() => expect(within(sttCard).getByText(/≈ \$0\.0048\/min · estimate/)).toBeTruthy(), { timeout: 3000 });
+
+    const llmCard = screen.getByRole("region", { name: "Language model" });
+    await waitFor(() => expect(within(llmCard).getByText("no price")).toBeTruthy(), { timeout: 3000 });
+    expect(within(llmCard).getByRole("button", { name: "Set a price" })).toBeTruthy();
   });
 });

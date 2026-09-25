@@ -1648,6 +1648,66 @@
       "title": "TelephonyConfig",
       "type": "object"
     },
+    "TemplateEstimate": {
+      "description": "A starter's per-minute estimate at list prices and default assumptions (docs/v4/COSTS.md §3.1).",
+      "properties": {
+        "as_of": {
+          "description": "The oldest `as_of` among the prices used.",
+          "title": "As Of",
+          "type": "string"
+        },
+        "per_minute_usd_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Per Minute Usd High"
+        },
+        "per_minute_usd_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Per Minute Usd Low"
+        },
+        "per_minute_usd_mid": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Per Minute Usd Mid"
+        },
+        "unpriced": {
+          "default": 0,
+          "description": "How many estimate lines have no price.",
+          "title": "Unpriced",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "per_minute_usd_mid",
+        "per_minute_usd_low",
+        "per_minute_usd_high",
+        "as_of"
+      ],
+      "title": "TemplateEstimate",
+      "type": "object"
+    },
     "TemplateRequirements": {
       "description": "What the workspace needs before the starter does everything it promises.",
       "properties": {
@@ -2034,6 +2094,18 @@
       "default": false,
       "title": "Derived",
       "type": "boolean"
+    },
+    "estimate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TemplateEstimate"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "An estimate at list prices before any usage; null when nothing is priced."
     },
     "pack": {
       "$ref": "#/$defs/PackManifest"

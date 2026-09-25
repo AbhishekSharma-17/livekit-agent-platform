@@ -479,7 +479,13 @@ class ProviderSpec(BaseModel):
             "Unset means no model test; never set on vad, turn_detection or noise_cancellation."
         ),
     )
-    price_ref: str | None = None
+    price_ref: str | None = Field(
+        None,
+        description=(
+            "Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. "
+            "`openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows."
+        ),
+    )
     notes: str | None = None
     package: str
     python_class: str
@@ -882,7 +888,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="nova-3",
         # Public list (R-V4-9): a catalog, never the credential test.
         catalog=CatalogSpec(adapter="deepgram_stt_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
-        price_ref="deepgram-stt",
         docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",
         get_key_url="https://console.deepgram.com/",
         probe="deepgram_listen",
@@ -912,7 +917,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gpt-4.1",
         catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
-        price_ref="openai-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
         get_key_url="https://platform.openai.com/api-keys",
         probe="openai_chat",
@@ -933,7 +937,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gemini-2.5-flash",
         catalog=_gemini_catalog(_GEMINI_LLM_FILTER),
         test="gemini_models",
-        price_ref="google-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/gemini/",
         get_key_url="https://aistudio.google.com/apikey",
         probe="gemini_generate",
@@ -1002,7 +1005,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gpt-4o-mini-tts",
         catalog=_openai_catalog(_OPENAI_TTS_FILTER),
         test="openai_models",
-        price_ref="openai-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/openai/",
         get_key_url="https://platform.openai.com/api-keys",
         probe="openai_speech",
@@ -1732,7 +1734,6 @@ _FULL: list[ProviderSpec] = [
         default_model="aura-2-andromeda-en",
         # Public list (R-V4-9): a catalog, never the credential test.
         catalog=CatalogSpec(adapter="deepgram_tts_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
-        price_ref="deepgram-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/deepgram/",
         probe="deepgram_speak",
     ),
@@ -2378,6 +2379,7 @@ _NEW: list[ProviderSpec] = [
         default_model="gpt-4.1",
         catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
+        price_ref="openai-llm",
         notes="Distinct class from openai.LLM (chat completions); uses the Responses API over "
         "a websocket by default.",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",

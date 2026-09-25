@@ -90,6 +90,7 @@ RECIPE_NAMES: Final[tuple[str, ...]] = (
     "test-a-custom-model",
     "diagnose-a-session",
     "connect-an-app",  # V5-18
+    "estimate-agent-cost",  # V4-15
 )
 
 #: The 7 prompts of AGENT-ACCESS.md §3.2.

@@ -15,6 +15,7 @@ from typing import Annotated, Any, Literal
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.common import Issue
 from lkap_contracts.flow import FlowSpec
+from lkap_contracts.tool_providers import AppsMode, AppsRouterOptions
 from pydantic import Field, ValidationError
 
 from lkap_mcp.client import ApiFailure, LkapClient
@@ -377,6 +378,67 @@ def register(registry: Registry) -> None:
         updated = await _update(client, agent["id"], {"config": config})
         validation, warnings = await validate_saved(ctx, updated["id"])
         return ToolResult.success({"agent": updated, "validation": validation}, warnings=warnings)
+
+    @registry.tool(scopes={"agents:write"}, annotations=IDEMPOTENT_WRITE, data="AgentOut")
+    async def agent_apps_mode(
+        id_or_slug: str,
+        mode: Annotated[
+            Literal["actions", "server", "router", "off"],
+            Field(
+                description="actions = the picked app actions attached as tools (recommended); server = "
+                "one app server offering the picked actions; router = a tool finder that looks actions "
+                "up during the conversation (slower replies); off = neither server"
+            ),
+        ],
+        allowed_toolkits: Annotated[
+            list[str] | None,
+            Field(
+                description="Apps the server or finder may use (toolkit slugs); empty = every connected app"
+            ),
+        ] = None,
+        denied_actions: Annotated[
+            list[str] | None, Field(description="Action slugs the server or finder must never run")
+        ] = None,
+        router: Annotated[
+            AppsRouterOptions | None,
+            Field(description="Tool finder flags: search, execute, manage_connections (off by default)"),
+        ] = None,
+        plan: bool = False,
+    ) -> ToolResult:
+        """Choose how an agent uses connected apps; saving provisions the app server or tool finder.
+
+        The api creates (or reuses) the Composio session on save and attaches it as a managed MCP
+        server; ``off`` or another mode removes it. Picked actions attach with ``apps_add_tools``.
+        """
+        agent = await resolve_agent(client, id_or_slug)
+        config = dict(agent.get("config") or {})
+        tools = dict(config.get("tools") or {})
+        apps: dict[str, Any] = dict(tools.get("apps") or {})
+        apps["mode"] = mode
+        if allowed_toolkits is not None:
+            apps["allowed_toolkits"] = [slug.strip().lower() for slug in allowed_toolkits if slug.strip()]
+        if denied_actions is not None:
+            apps["denied_actions"] = [slug.strip().upper() for slug in denied_actions if slug.strip()]
+        if router is not None:
+            apps["router"] = router.model_dump(mode="json")
+        try:
+            tools["apps"] = AppsMode.model_validate(apps).model_dump(mode="json")
+        except ValidationError as error:
+            return ToolResult.fail("invalid_input", "tools.apps is invalid", issues=config_issues(error))
+        config["tools"] = tools
+        path = f"/v1/agents/{seg(agent['id'])}"
+        if plan:
+            return planned(request("PUT", path, {"config": config}))
+        updated = await _update(client, agent["id"], {"config": config})
+        validation, warnings = await validate_saved(ctx, updated["id"])
+        steps: list[str] = []
+        if mode in ("server", "router"):
+            steps.append("Replies can be slower: the agent looks actions up during the conversation.")
+        if mode == "actions":
+            steps.append("Attach actions with apps_add_tools(connection_id, actions, agent_id=...).")
+        return ToolResult.success(
+            {"agent": updated, "validation": validation}, warnings=warnings, next_steps=steps
+        )
 
     @registry.tool(
         scopes={"agents:read"},

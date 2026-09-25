@@ -23,6 +23,7 @@ import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useAgents, useMaterialiseAppActions, useToolProviderActions } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
 import type { ActionRisk } from "@/components/console/tools/apps/types";
+import type { AppActionsPickOut } from "@/contracts/lkap-contracts";
 
 const RISK_LABEL: Record<ActionRisk, string> = { read: "Read", write: "Writes", destructive: "Destructive" };
 const RISK_TONE: Record<ActionRisk, StatusTone> = { read: "success", write: "info", destructive: "danger" };
@@ -35,6 +36,24 @@ export interface ActionsDialogProps {
   pickedActions: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * V5-48: opened from an agent's own Connected apps card — preselects
+   * "attach to" that agent (docs/v5/COMPOSIO.md §6: "reusing V5-22's picker
+   * with 'attach to this agent' preselected"). Still an editable select, not
+   * a lock, so a builder can pick a different agent or "Don't attach yet"
+   * from inside the agent editor too.
+   */
+  presetAgentId?: string;
+  /**
+   * V5-48: called with the api's result right after a successful "Add as
+   * tools", before the dialog closes — the caller can merge
+   * `tools_created`/`tools_existing` into its own view of `tool_ids`
+   * instead of only refetching (`ConnectedAppsCard`'s
+   * `handleActionsAdded`: the attach already happened server-side as this
+   * agent's own config save, so an open editor's stale in-memory
+   * `tool_ids` would otherwise clobber it on the next Save).
+   */
+  onAdded?: (result: AppActionsPickOut) => void;
 }
 
 /**
@@ -44,13 +63,22 @@ export interface ActionsDialogProps {
  * rather than becoming a tool right away — the copy here says "Add as
  * tools", never promising a tool exists yet.
  */
-export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedActions, open, onOpenChange }: ActionsDialogProps) {
+export function ActionsDialog({
+  connectionId,
+  toolkitSlug,
+  toolkitName,
+  pickedActions,
+  open,
+  onOpenChange,
+  presetAgentId,
+  onAdded,
+}: ActionsDialogProps) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [featuredOnly, setFeaturedOnly] = React.useState(false);
   const [checked, setChecked] = React.useState<Set<string>>(new Set());
   const [confirmDestructive, setConfirmDestructive] = React.useState(false);
-  const [attachAgentId, setAttachAgentId] = React.useState("");
+  const [attachAgentId, setAttachAgentId] = React.useState(presetAgentId ?? "");
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -58,14 +86,18 @@ export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedAc
   }, [search]);
 
   React.useEffect(() => {
-    if (!open) {
-      setChecked(new Set());
-      setConfirmDestructive(false);
-      setAttachAgentId("");
-      setSearch("");
-      setFeaturedOnly(false);
+    if (open) {
+      // Re-preset every time the dialog opens (it stays mounted with
+      // `open=false` between opens in some callers), so switching which
+      // connection's Actions button was clicked doesn't carry over a stale pick.
+      setAttachAgentId(presetAgentId ?? "");
+      return;
     }
-  }, [open]);
+    setChecked(new Set());
+    setConfirmDestructive(false);
+    setSearch("");
+    setFeaturedOnly(false);
+  }, [open, presetAgentId]);
 
   const actionsQuery = useToolProviderActions(open ? toolkitSlug : null, {
     query: debouncedSearch || undefined,
@@ -99,7 +131,7 @@ export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedAc
     // `AppActionsPickIn.actions` is typed as a non-empty tuple (`min_length=1`).
     const picked = Array.from(checked) as [string, ...string[]];
     try {
-      await materialise.mutateAsync({
+      const result = await materialise.mutateAsync({
         connection_id: connectionId,
         actions: picked,
         agent_id: attachAgentId || null,
@@ -110,6 +142,7 @@ export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedAc
           ? `Added ${checked.size} action(s) from ${toolkitName} and attached to the agent`
           : `Added ${checked.size} action(s) from ${toolkitName}`,
       );
+      onAdded?.(result);
       onOpenChange(false);
     } catch (error) {
       toast.error(`Couldn't add actions — ${appsErrorMessage(error)}`);
@@ -152,14 +185,26 @@ export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedAc
               <ul className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
                 {items.map((action) => {
                   const alreadyPicked = pickedSet.has(action.slug.toUpperCase());
+                  // "Picks only ever add" (D-V5-C7) locks the checkbox in the
+                  // generic Tools → Apps picker, where a pick has no single
+                  // agent to attach to. From an agent's own Connected apps
+                  // card (`presetAgentId` set) that lock dead-ends: the
+                  // connection already picked "List repos" for agent A, so
+                  // agent B's card would show it checked-and-unremovable
+                  // with no way to attach it — even though re-materialising
+                  // an existing slug is exactly how the api attaches it
+                  // (`tools_existing`, merged into `tool_ids` by
+                  // `onAdded`/`handleActionsAdded`). Only lock it outside
+                  // that flow.
+                  const locked = alreadyPicked && !presetAgentId;
                   const inputId = `action-${action.slug}`;
                   const risk: ActionRisk = action.risk ?? "write";
                   return (
                     <li key={action.slug} className="flex items-start gap-2 rounded-md border border-border p-2.5">
                       <Checkbox
                         id={inputId}
-                        checked={alreadyPicked || checked.has(action.slug)}
-                        disabled={alreadyPicked}
+                        checked={locked || checked.has(action.slug)}
+                        disabled={locked}
                         onCheckedChange={() => toggle(action.slug)}
                         className="mt-0.5"
                       />

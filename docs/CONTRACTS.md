@@ -204,6 +204,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_PUBLIC_BASE_URL` | opt | — | — | used in connect response for asset links; also the origin of the Apps sign-in return address (`/v1/tool-providers/composio/callback`), falling back to the api's own url (V5-18) |
 | `LKAP_PACKS` | opt | opt | — | default `packs.insurance_claim,packs.generic` |
 | `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | — | opt | — | comma list; empty = only per-tool allowlist |
+| `LKAP_MCP_ALLOWED_HOSTS` | opt | opt | — | comma list of MCP server hosts (V5-09, D-V5-4); empty = any public `https` host that passes the network guard, non-empty = a ceiling, `@http` = reuse `LKAP_HTTP_TOOL_ALLOWED_HOSTS` (then empty allows nothing). Set the same value on both |
 | `LKAP_LOG_LEVEL` / `LKAP_LOG_JSON` | opt | opt | — | `INFO` / `false` |
 | `LKAP_EMBEDDER` | opt | — | — | `fastembed` (default) or `openai:<credential_id>` |
 | `LKAP_VISION_MAX_FRAME_AGE_S` | — | opt | — | default `8` |
@@ -257,6 +258,42 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   `expired`, `failed` or `inactive` is an error naming the app.
 - **Events.** `tool_needs_reauth {call_id, tool}` when an action fails because its app needs a person to
   reconnect it (the model is told "This app needs to be reconnected by an admin"; no link is ever spoken).
+
+### MCP servers: auth, host policy, connection test (V5-09)
+
+`docs/research-v4/tools-and-integrations.md` §4.3.1, §4.3.6, §4.3.7, §4.3.10; D-V5-4, D-V5-11. No migration.
+
+- **Auth union.** `McpServerDefinition.auth: McpAuth = McpNoAuth()`, where `McpAuth` is
+  `McpNoAuth{kind: "none"} | McpHeaderAuth{kind: "header", headers, credential_id} |
+  McpOAuthAuth{kind: "oauth", credential_id, registration: auto|preregistered, client_id,
+  client_secret_ref, scopes, subject: workspace|agent}` discriminated on `kind`. Header values may use
+  `{{ secret.NAME }}` from an `http-tool-secret` bag. The pre-V5-09 top-level `headers` and
+  `credential_id` stay as **deprecated mirrors**: set without `auth` (or with `auth.kind == "none"`) they
+  fold into header auth; with `auth` set they are filled from it (`credential_id` also mirrors an OAuth
+  credential); a value that disagrees with `auth` is a validation error. Stored rows need no data
+  migration: they load as header auth and re-save with `auth` (plus the mirrors, for readers that have
+  not moved to `auth`). `kind: "oauth"` is refused at save and at test with `422`
+  `details.reason = "oauth_not_available"` until V5-14.
+- **Host policy.** At save (`_check_payload`), before a test connection, and on the worker at connect
+  time, an MCP url must pass the network guard (`net_guard.check_url`; the worker's `check_url_public`),
+  be `https` (the api allows plain `http` only to a loopback host in `LKAP_ENV=dev`; the worker, which
+  refuses loopback anyway, requires `https`), and sit on `LKAP_MCP_ALLOWED_HOSTS` when that is set.
+  The ceiling applies to provider-provisioned servers too (list the provider's host when Apps are used).
+  The api answers `422 blocked_destination`; the worker skips the server with a warning and a session
+  event, and the session starts with its other tools.
+- **Connection test.** `POST /v1/tools/{id}/test` (admin) → `McpTestResult{ok, tool_names, tool_count,
+  cached_at, duration_ms, reason: blocked_destination|needs_auth|unreachable|protocol_error|http_error,
+  error}`. The api connects with the stored auth (secrets substituted as for a session) through the
+  guarded client (no redirects), runs `initialize`, `notifications/initialized` and `tools/list` (up to
+  five `nextCursor` pages; JSON or event-stream answers), and stores the snapshot as
+  `cached_tools: list[McpToolSnapshot{name, description, input_schema}]` and `cached_at` on the
+  definition (at most 200 tools, descriptions cut to 1,000 characters, an input schema over 16 KB
+  dropped). A save that sends no snapshot keeps the stored one while the url is unchanged. The worker
+  still lists tools itself at session start; the api strips `cached_tools` from the resolved config.
+- **Upgrade tripwire.** `agent/tests/unit/test_sdk_tripwires.py` fails when livekit-agents'
+  `MCPServerHTTP.__init__` gains `auth`, when `_create_http_client` or its two call sites change, when
+  livekit-agents stops pinning `mcp<2`, or when the pinned version moves off 1.8.3; the file says what to
+  do (shrink `GuardedMCPServerHTTP` per research §4.3.10).
 
 ---
 

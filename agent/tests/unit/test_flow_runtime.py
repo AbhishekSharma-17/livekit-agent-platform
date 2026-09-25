@@ -525,3 +525,74 @@ async def test_nodes_get_their_own_tools_and_knowledge_and_publish_progress() ->
     assert block_id == "progress"
     assert state["current_node"] == "collect"
     assert state["path"] == ["start", "collect"]
+
+
+# ------------------------------------------ V4-12: background tools wait for 1.8.3 on flows
+
+
+BACKGROUND_FLOW: dict[str, Any] = {
+    "nodes": [
+        {"id": "start", "kind": "start"},
+        {
+            "id": "lookup",
+            "kind": "agent",
+            "label": "Look it up",
+            "instructions": "Look the item up.",
+            "tools": ["lookup_item", "crm"],
+        },
+    ],
+    "edges": [{"id": "e1", "source": "start", "target": "lookup"}],
+}
+
+
+async def test_flow_node_background_tools_run_blocking_until_livekit_agents_1_8_3() -> None:
+    """R-V4-39: #7321 can drop a handoff in 1.8.2, so a flow node never backgrounds a tool."""
+    from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecution  # noqa: PLC0415
+
+    from lkap_agent.tools.declarative import build_http_tools  # noqa: PLC0415
+
+    http = HttpToolDefinition(
+        name="lookup_item",
+        description="Look up an item.",
+        parameters={"type": "object", "properties": {}},
+        method="GET",
+        url="https://api.example.com/items",
+        allowed_hosts=["api.example.com"],
+        execution=ToolExecution(mode="background"),
+    )
+    mcp = McpServerDefinition(
+        name="crm",
+        url="https://mcp.example.com/mcp",
+        tool_options={"search": ToolExecution(mode="background", report_progress=True)},
+    )
+    mcp_calls: list[dict[str, Any]] = []
+
+    def _mcp_builder(defs: list[Any], **kwargs: Any) -> list[Any]:
+        mcp_calls.append({"names": [d.name for d in defs], **kwargs})
+        return []
+
+    resolved = _flow_config(BACKGROUND_FLOW, tools=[http, mcp])
+    api = FakeApi(resolved)
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        api,
+        factory=_FlowFactory(ScriptedLLM(["Hi."]), FakeLLM(["{}"])),
+        session_starter=starter,
+        declarative_tools_builder=lambda defs: build_http_tools(
+            defs, platform_allowed_hosts=["api.example.com"]
+        ),
+        mcp_servers_builder=_mcp_builder,
+    )
+
+    await run_session(ctx, deps)
+
+    agent = starter.agent
+    assert isinstance(agent, FlowNodeAgent) and agent.id == "lookup"
+    (tool,) = [t for t in agent.tools if getattr(t, "id", None) == "lookup_item"]
+    assert tool.info.flags == llm.ToolFlag.NONE
+    assert tool.info.on_duplicate == "allow"
+    assert {"names": ["crm"], "flow_node": True} in mcp_calls
+    await ctx.fire_shutdown("done")
+    infos = [e.payload["message"] for e in api.events_of("info")]
+    assert any("1.8.3" in message and "lookup_item" in message for message in infos)

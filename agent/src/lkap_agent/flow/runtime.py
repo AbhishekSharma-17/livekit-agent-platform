@@ -198,7 +198,9 @@ class FlowServices:
     has_tts: bool
     #: MCP server rows (`resolved.tools` of kind `mcp`); nodes pick theirs by name.
     mcp_definitions: list[McpServerDefinition] = field(default_factory=list)
-    mcp_servers_builder: Callable[[list[Any]], list[Any]] = lambda _defs: []
+    #: Builds `MCPToolset`s for a node's MCP rows (`declarative.build_mcp_toolsets`, or its
+    #: `build_mcp_servers` alias); called with `flow_node=True` (the 1.8.3 gate, R-V4-39).
+    mcp_servers_builder: Callable[..., list[Any]] = lambda _defs, **_kwargs: []
     vision_max_frame_age_s: float = 8.0
     record_event: Callable[[str, dict[str, Any]], None] | None = None
     #: Ends the job (end nodes); defaults to `get_job_context().shutdown`.
@@ -374,15 +376,15 @@ class FlowRuntime:
         tools.extend(build_edge_tools(self, node.id, self._out.get(node.id, [])))
         return tools
 
-    def mcp_servers_for(self, node: ConversationNode) -> list[Any]:
-        """Fresh MCP server objects for the node's MCP tool rows (by name)."""
+    def mcp_toolsets_for(self, node: ConversationNode) -> list[Any]:
+        """Fresh `MCPToolset`s for the node's MCP tool rows (by name); the node's activity closes them."""
         defs = [self._mcp_by_name[n] for n in self._tool_names_for(node) if n in self._mcp_by_name]
         if not defs:
             return []
         try:
-            return list(self.services.mcp_servers_builder(defs))
+            return list(self.services.mcp_servers_builder(defs, flow_node=True))
         except Exception:
-            logger.warning("could not build the node's MCP servers", node=node.id, exc_info=True)
+            logger.warning("could not build the node's MCP toolsets", node=node.id, exc_info=True)
             return []
 
     def kb_ids_for(self, node: ConversationNode) -> list[str]:

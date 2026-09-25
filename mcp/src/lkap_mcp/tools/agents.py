@@ -220,7 +220,15 @@ def register(registry: Registry) -> None:
         save_with_errors: bool = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Change an agent: merge-patch (or replace) its config, rename, rebind; validated before saving."""
+        """Change an agent: merge-patch (or replace) its config, rename, rebind; validated before saving.
+
+        Background tools (docs ``concepts/tools``): ``patch={"tools": {"execution_default": "auto"}}``
+        lets the read tools (GET HTTP tools, ``search_knowledge``, ``http_request`` GETs,
+        ``describe_current_frame``) announce and finish in the background; writes, MCP tools,
+        telephony, forms and flow edges never follow it. ``tools.builtin_execution[name]`` sets
+        one read built-in; ``voice.thinking_sound`` plays a clip during blocking waits. Keep
+        ``tools.max_tool_steps`` at 4 or more with a background default.
+        """
         if patch is not None and config is not None:
             return ToolResult.fail("invalid_input", "pass either patch or config, not both")
         agent = await resolve_agent(client, id_or_slug)

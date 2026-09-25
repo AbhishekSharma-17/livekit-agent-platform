@@ -77,6 +77,7 @@ from typing import Any, Protocol
 from livekit.agents import llm
 
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.execution import cancel_running
 
 __all__ = [
     "TextModeError",
@@ -187,6 +188,9 @@ async def rewind(session: _SessionLike, turn_index: int) -> None:
     Raises:
         TextModeError: An invalid ``turn_index``.
     """
+    # A background tool still running belongs to the conversation being cut away;
+    # its result would land after the rewind (docs/v4/BACKGROUND-TOOLS.md D-V4-34).
+    cancel_running(session)
     await _truncate_and_sync(session, turn_index)
     session.generate_reply()
 
@@ -206,6 +210,8 @@ async def inject_user_text(session: _SessionLike, text: str, *, turn_index: int 
         TextModeError: An invalid ``turn_index``.
     """
     if turn_index is not None:
+        # Editing a turn rewinds too: work started after it no longer belongs to the conversation.
+        cancel_running(session)
         await _truncate_and_sync(session, turn_index)
     session.generate_reply(user_input=text)
 

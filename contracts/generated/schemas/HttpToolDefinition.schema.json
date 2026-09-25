@@ -1,4 +1,123 @@
 {
+  "$defs": {
+    "ToolExecution": {
+      "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+      "properties": {
+        "announce": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Announce"
+        },
+        "auto_threshold_ms": {
+          "default": 700,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Auto Threshold Ms",
+          "type": "integer"
+        },
+        "cancellable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cancellable"
+        },
+        "duplicate_scope": {
+          "default": "name_and_args",
+          "enum": [
+            "name",
+            "name_and_args"
+          ],
+          "title": "Duplicate Scope",
+          "type": "string"
+        },
+        "filler_delay_s": {
+          "default": 4.0,
+          "maximum": 30,
+          "minimum": 0.5,
+          "title": "Filler Delay S",
+          "type": "number"
+        },
+        "filler_interval_s": {
+          "default": 8.0,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Filler Interval S",
+          "type": "number"
+        },
+        "fillers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Fillers",
+          "type": "array"
+        },
+        "max_duration_s": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Max Duration S",
+          "type": "number"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "blocking",
+                "background",
+                "auto"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "on_duplicate": {
+          "anyOf": [
+            {
+              "enum": [
+                "allow",
+                "reject",
+                "replace",
+                "confirm"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Duplicate"
+        },
+        "report_progress": {
+          "default": false,
+          "title": "Report Progress",
+          "type": "boolean"
+        }
+      },
+      "title": "ToolExecution",
+      "type": "object"
+    }
+  },
   "$id": "lkap-contracts/HttpToolDefinition.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "An HTTP call exposed to the model as a raw-schema function tool.",
@@ -38,6 +157,9 @@
     "description": {
       "title": "Description",
       "type": "string"
+    },
+    "execution": {
+      "$ref": "#/$defs/ToolExecution"
     },
     "headers": {
       "additionalProperties": {

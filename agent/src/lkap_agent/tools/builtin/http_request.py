@@ -11,6 +11,7 @@ when a platform allowlist is configured.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Literal
 
 import httpx
@@ -22,6 +23,14 @@ from lkap_agent.tools._http_safety import (
     check_url_allowed,
     guarded_transport,
     truncate,
+)
+from lkap_agent.tools.execution import (
+    ResolvedExecution,
+    ToolPolicy,
+    attach_policy,
+    blocking_policy,
+    run_with_policy,
+    tool_flags,
 )
 
 HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
@@ -35,6 +44,7 @@ def build_http_request_tool(
     *,
     platform_allowed_hosts: list[str] | None = None,
     user_agent: str | None = None,
+    execution: ResolvedExecution | None = None,
 ) -> FunctionTool[..., Any]:
     """Build the generic `http_request` tool bound to `ctx`.
 
@@ -44,10 +54,16 @@ def build_http_request_tool(
             this module never reads `Settings` directly (keeps it
             test-friendly, per docs/CONTRACTS.md §3).
         user_agent: `LKAP_HTTP_TOOL_USER_AGENT`, sent as `User-Agent` (asks #29).
+        execution: The tool's execution policy (docs/v4/BACKGROUND-TOOLS.md); `None`
+            runs it blocking. It is a read tool only per call: a GET runs under the
+            policy, any other method always runs blocking (D-V4-32).
     """
     headers = {"User-Agent": user_agent} if user_agent else None
+    policy = execution or blocking_policy("http_request")
+    write_policy = replace(policy, mode="blocking", fillers=())
+    flags, on_duplicate, duplicate_scope = tool_flags(policy)
 
-    @function_tool
+    @function_tool(flags=flags, on_duplicate=on_duplicate, duplicate_scope=duplicate_scope)
     async def http_request(
         context: RunContext[Any], method: HttpMethod, url: str, body: str | None = None
     ) -> str:
@@ -58,6 +74,14 @@ def build_http_request_tool(
             url: Full request URL; its host must be on the platform's outbound allowlist.
             body: Optional raw request body (sent as-is for POST/PUT/PATCH).
         """
+        result: str = await run_with_policy(
+            context,
+            policy if method == "GET" else write_policy,
+            lambda: _request(context, method, url, body),
+        )
+        return result
+
+    async def _request(context: RunContext[Any], method: HttpMethod, url: str, body: str | None) -> str:
         try:
             check_url_allowed(url, tool_allowed_hosts=None, platform_allowed_hosts=platform_allowed_hosts)
         except HttpToolSecurityError as exc:
@@ -80,4 +104,4 @@ def build_http_request_tool(
         )
         return truncate(response.text, DEFAULT_MAX_RESULT_CHARS)
 
-    return http_request
+    return attach_policy(http_request, ToolPolicy(resolved=policy))

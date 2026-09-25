@@ -10,6 +10,7 @@ from lkap_contracts.agent_config import (
     PipelineConfig,
     PipelineMode,
 )
+from lkap_contracts.tools import ToolExecution
 from lkap_contracts.ui_protocol import BlockSpec
 
 
@@ -26,6 +27,10 @@ class ToolMeta(BaseModel):
     name: str
     silent_reply: bool = False
     activity_label: str | None = None
+    execution: ToolExecution | None = None
+    """Opt this pack tool into the SDK's async-tool executor (docs/v4/BACKGROUND-TOOLS.md);
+    ``None`` leaves the tool exactly as the pack wrote it. A pack tool never follows the
+    agent's ``tools.execution_default``."""
 
 
 class PackManifest(BaseModel):

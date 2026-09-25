@@ -158,6 +158,7 @@ export interface LkapContracts {
   ToolDefinition?: ToolDefinition;
   ToolDryRunRequest?: ToolDryRunRequest;
   ToolDryRunResult?: ToolDryRunResult;
+  ToolExecution?: ToolExecution;
   ToolMeta?: ToolMeta;
   ToolOut?: ToolOut;
   ToolPage?: ToolPage;
@@ -600,9 +601,45 @@ export interface TransferTarget {
  */
 export interface ToolsConfig {
   builtin_disabled?: string[];
+  builtin_execution?: {
+    [k: string]: ToolExecution;
+  };
+  execution_default?: "blocking" | "background" | "auto";
   http_request_enabled?: boolean;
   max_tool_steps?: number;
   tool_ids?: string[];
+}
+/**
+ * How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).
+ *
+ * The agent-level default (``ToolsConfig.execution_default``) only ever reaches read
+ * tools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The
+ * tools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolExecution".
+ */
+export interface ToolExecution {
+  announce?: string | null;
+  auto_threshold_ms?: number;
+  cancellable?: boolean | null;
+  duplicate_scope?: "name" | "name_and_args";
+  filler_delay_s?: number;
+  filler_interval_s?: number;
+  /**
+   * @maxItems 5
+   */
+  fillers?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string];
+  max_duration_s?: number;
+  mode?: ("blocking" | "background" | "auto") | null;
+  on_duplicate?: ("allow" | "reject" | "replace" | "confirm") | null;
+  report_progress?: boolean;
 }
 /**
  * Greeting and conversational behaviour.
@@ -616,6 +653,7 @@ export interface VoiceConfig {
   greeting?: string;
   greeting_mode?: "say" | "generate";
   language?: string;
+  thinking_sound?: "none" | "keyboard_typing" | "keyboard_typing2" | "office_ambience";
   user_away_timeout_s?: number | null;
 }
 /**
@@ -1421,6 +1459,7 @@ export interface HttpToolDefinition {
   body_template?: string | null;
   credential_id?: string | null;
   description: string;
+  execution?: ToolExecution;
   headers?: {
     [k: string]: string;
   };
@@ -1652,6 +1691,9 @@ export interface McpServerDefinition {
   name: string;
   sse_read_timeout_s?: number;
   timeout_s?: number;
+  tool_options?: {
+    [k: string]: ToolExecution;
+  };
   url: string;
 }
 /**
@@ -2940,6 +2982,7 @@ export interface ToolDryRunResult {
  */
 export interface ToolMeta {
   activity_label?: string | null;
+  execution?: ToolExecution | null;
   name: string;
   silent_reply?: boolean;
 }

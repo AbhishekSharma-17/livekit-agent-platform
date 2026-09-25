@@ -26,17 +26,24 @@ from livekit.agents import (
     ChatContext,
     ConversationItemAddedEvent,
     FunctionToolsExecutedEvent,
+    ToolExecutionUpdatedEvent,
+    function_tool,
     llm,
 )
+from livekit.agents.llm import ToolFlag
+from livekit.agents.voice.events import ToolCallEnded, ToolCallStarted, ToolCallUpdated
 from lkap_contracts.agent_config import PipelineMode, ResolvedAgentConfig
 from lkap_contracts.api_models import KbHit
+from lkap_contracts.flow import FlowSpec
 from lkap_contracts.packs import ToolMeta
 from lkap_contracts.providers import ModelCapabilities
+from lkap_contracts.tools import HttpToolDefinition, ToolExecution
 from packs.base import FrameSnapshot
 
 from lkap_agent import platform_agent as platform_agent_module
 from lkap_agent.packs.loader import NullPack, null_manifest
 from lkap_agent.platform_agent import (
+    IN_PROGRESS_NOTE,
     PIPELINE_NOTES,
     PlatformAgent,
     SessionContext,
@@ -47,6 +54,8 @@ from lkap_agent.platform_agent import (
 )
 from lkap_agent.providers.factory import BuiltProviders
 from lkap_agent.session_builder import SessionBuilder, build_turn_handling, llm_capabilities_of
+from lkap_agent.tools import execution as execution_module
+from lkap_agent.tools.declarative import build_http_tools
 
 
 class _SilentPack(NullPack):
@@ -948,3 +957,220 @@ async def test_room_options_honour_capabilities_chat_input(chat_input: bool, exp
     plan = SessionBuilder().build(resolved_config(chat_input=chat_input), providers)
 
     assert plan.room_options.text_input is expected
+
+
+# ------------------------------------------------------- background tools (V4-12)
+
+
+class _Session:
+    """A weak-referenceable stand-in for `AgentSession` (the policy registry is per session)."""
+
+
+def _bg_context(config: ResolvedAgentConfig, ui: FakeUiChannel) -> SessionContext:
+    ctx = _context(config, ui=ui)
+    ctx.session = cast(Any, _Session())
+    return ctx
+
+
+def _with_tools(config: ResolvedAgentConfig, **tools_fields: Any) -> ResolvedAgentConfig:
+    tools = config.config.tools.model_copy(update=tools_fields)
+    return config.model_copy(update={"config": config.config.model_copy(update={"tools": tools})})
+
+
+def _http_def(**execution_fields: Any) -> HttpToolDefinition:
+    return HttpToolDefinition(
+        name="lookup_item",
+        description="Look up an item.",
+        parameters={"type": "object", "properties": {}},
+        method="GET",
+        url="https://api.example.com/items",
+        allowed_hosts=["api.example.com"],
+        execution=ToolExecution(**execution_fields),
+    )
+
+
+def _activity(ui: FakeUiChannel) -> list[Any]:
+    return [op.value for patch in ui.patches for op in patch if op.path == "/activity"]
+
+
+def _started(call_id: str, name: str = "lookup_item") -> ToolExecutionUpdatedEvent:
+    call = llm.FunctionCall(call_id=call_id, name=name, arguments="{}")
+    return ToolExecutionUpdatedEvent(update=ToolCallStarted(function_call=call))
+
+
+def _updated(call_id: str, message: str) -> ToolExecutionUpdatedEvent:
+    return ToolExecutionUpdatedEvent(update=ToolCallUpdated(id=call_id, call_id=call_id, message=message))
+
+
+def _ended(call_id: str, status: Any, message: str | None = None) -> ToolExecutionUpdatedEvent:
+    return ToolExecutionUpdatedEvent(
+        update=ToolCallEnded(id=call_id + "_final", call_id=call_id, message=message, status=status)
+    )
+
+
+@pytest.mark.parametrize("mode", ["cascaded", "realtime", "half_cascade"])
+def test_every_pipeline_note_says_what_in_progress_means(mode: PipelineMode) -> None:
+    assert IN_PROGRESS_NOTE in PIPELINE_NOTES[mode]
+    assert "never invent the result" in compose_instructions("Be brief.", mode=mode)
+
+
+@pytest.mark.parametrize(
+    ("status", "headline"),
+    [
+        ("done", "Lookup item finished"),
+        ("error", "Lookup item failed: upstream said no"),
+        ("cancelled", "Lookup item cancelled"),
+    ],
+)
+async def test_on_tool_execution_upserts_one_activity_row_per_call(status: str, headline: str) -> None:
+    ui = FakeUiChannel()
+    config = _with_tools(resolved_config(), execution_default="auto")
+    tools = build_http_tools([_http_def()], platform_allowed_hosts=["api.example.com"])
+    agent = PlatformAgent(ctx=_bg_context(config, ui), pack=NullPack(), tools=list(tools), has_tts=True)
+
+    agent.on_tool_execution(_started("call-1"))
+    agent.on_tool_execution(_updated("call-1", "Working on lookup item."))
+    agent.on_tool_execution(_ended("call-1", status, "upstream said no" if status == "error" else "ok"))
+    await _drain_hook_tasks(agent)
+
+    rows = _activity(ui)
+    assert [(r.id, r.phase) for r in rows] == [
+        ("tool:call-1", "running"),
+        ("tool:call-1", "running"),
+        ("tool:call-1", status),
+    ]
+    assert rows[0].headline == "Lookup item started"
+    assert rows[1].headline == "Working on lookup item."
+    assert rows[1].detail == {"message": "Working on lookup item."}
+    assert rows[2].headline == headline
+    assert rows[2].duration_ms is not None and rows[2].duration_ms >= 0
+    assert [r.id for r in ui.state.activity] == ["tool:call-1"]
+
+
+async def test_on_tool_execution_a_fast_blocking_tool_leaves_no_row() -> None:
+    ui = FakeUiChannel()
+    agent = PlatformAgent(ctx=_bg_context(resolved_config(), ui), pack=NullPack(), has_tts=True)
+
+    agent.on_tool_execution(_started("call-1", "current_time"))
+    agent.on_tool_execution(_ended("call-1", "done", "noon"))
+    await _drain_hook_tasks(agent)
+
+    assert _activity(ui) == []
+
+
+async def test_on_tool_execution_a_slow_blocking_tool_appears_after_a_second(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(execution_module, "SLOW_BLOCKING_S", 0.02)
+    ui = FakeUiChannel()
+    agent = PlatformAgent(ctx=_bg_context(resolved_config(), ui), pack=NullPack(), has_tts=True)
+
+    agent.on_tool_execution(_started("call-1", "escalate_to_human"))
+    await asyncio.sleep(0.05)
+    agent.on_tool_execution(_ended("call-1", "done", "ok"))
+    await _drain_hook_tasks(agent)
+
+    assert [r.phase for r in _activity(ui)] == ["running", "done"]
+
+
+def test_platform_agent_binds_http_tools_to_the_agent_default() -> None:
+    tools = build_http_tools([_http_def()], platform_allowed_hosts=["api.example.com"])
+    assert tools[0].info.flags == ToolFlag.NONE
+
+    config = _with_tools(resolved_config(), execution_default="auto")
+    ctx = _bg_context(config, FakeUiChannel())
+    agent = PlatformAgent(ctx=ctx, pack=NullPack(), tools=list(tools), has_tts=True)
+
+    (bound,) = [t for t in agent.tools if getattr(t, "id", None) == "lookup_item"]
+    assert bound.info.flags == ToolFlag.CANCELLABLE
+    assert bound.info.on_duplicate == "reject"
+
+
+class _OptInPack(NullPack):
+    """A pack with one tool opted into the executor and one left alone."""
+
+    def tool_meta(self) -> list[ToolMeta]:
+        return [
+            ToolMeta(
+                name="start_workflow",
+                activity_label="Claims team",
+                execution=ToolExecution(mode="background"),
+            ),
+            ToolMeta(name="lookup_policy"),
+        ]
+
+
+def _pack_tools() -> list[Any]:
+    @function_tool
+    async def start_workflow(topic: str) -> str:
+        """Start the workflow.
+
+        Args:
+            topic: What it is about.
+        """
+        return topic
+
+    @function_tool
+    async def lookup_policy(policy_id: str) -> str:
+        """Look up a policy.
+
+        Args:
+            policy_id: The policy number.
+        """
+        return policy_id
+
+    return [start_workflow, lookup_policy]
+
+
+def test_platform_agent_wraps_only_the_pack_tools_that_opt_in() -> None:
+    start, lookup = _pack_tools()
+    ctx = _bg_context(resolved_config(), FakeUiChannel())
+    agent = PlatformAgent(ctx=ctx, pack=_OptInPack(), tools=[start, lookup], has_tts=True)
+
+    by_name = {getattr(t, "id", None): t for t in agent.tools}
+    assert by_name["lookup_policy"] is lookup
+    assert by_name["start_workflow"] is not start
+    policy = execution_module.policy_of(by_name["start_workflow"])
+    assert isinstance(policy, execution_module.ToolPolicy)
+    assert policy.resolved.mode == "background"
+    assert policy.resolved.label == "Claims team"
+
+
+def test_platform_agent_puts_mcp_toolsets_in_its_tools() -> None:
+    toolset = llm.Toolset(id="mcp_crm")
+    legacy = llm.Toolset(id="mcp_legacy")
+
+    agent = PlatformAgent(
+        ctx=_bg_context(resolved_config(), FakeUiChannel()),
+        pack=NullPack(),
+        mcp_toolsets=[toolset],
+        mcp_servers=[legacy],
+        has_tts=True,
+    )
+
+    assert toolset in agent.tools and legacy in agent.tools
+    assert not agent.mcp_servers
+
+
+def test_a_flow_agent_records_one_info_event_when_it_keeps_background_tools_blocking() -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+    flow = FlowSpec.model_validate({"nodes": [{"id": "start", "kind": "start"}]})
+    base = _with_tools(resolved_config(), execution_default="auto")
+    config = base.model_copy(update={"config": base.config.model_copy(update={"flow": flow})})
+    ctx = _bg_context(config, FakeUiChannel())
+    tools = build_http_tools([_http_def()], platform_allowed_hosts=["api.example.com"])
+
+    for _ in range(2):
+        agent = PlatformAgent(
+            ctx=ctx,
+            pack=NullPack(),
+            tools=list(tools),
+            has_tts=True,
+            record_event=lambda kind, payload: events.append((kind, payload)),
+        )
+        (bound,) = [t for t in agent.tools if getattr(t, "id", None) == "lookup_item"]
+        assert bound.info.flags == ToolFlag.NONE
+
+    assert len(events) == 1
+    kind, payload = events[0]
+    assert kind == "info" and "lookup_item" in payload["message"] and "1.8.3" in payload["message"]

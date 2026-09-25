@@ -9,10 +9,14 @@ from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.providers import ModelCapabilities
 from lkap_contracts.telephony import TelephonyConfig
-from lkap_contracts.tools import ToolDefinition
+from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
 from lkap_contracts.ui_protocol import BlockSpec
 
 PipelineMode = Literal["realtime", "cascaded", "half_cascade"]
+
+#: ``VoiceConfig.thinking_sound``: the three ``BuiltinAudioClip``s of livekit-agents 1.8.2 that
+#: suit a wait (``KEYBOARD_TYPING``, ``KEYBOARD_TYPING2``, ``OFFICE_AMBIENCE``), or none.
+ThinkingSound = Literal["none", "keyboard_typing", "keyboard_typing2", "office_ambience"]
 
 #: Slots of :attr:`ResolvedAgentConfig.resolved`.
 ProviderSlot = Literal[
@@ -49,6 +53,7 @@ __all__ = [
     "ResolvedAgentConfig",
     "ResolvedProvider",
     "TelephonyConfig",
+    "ThinkingSound",
     "ToolsConfig",
     "VoiceConfig",
     "pipeline_issues",
@@ -96,6 +101,8 @@ class VoiceConfig(BaseModel):
     allow_interruptions: bool = True
     user_away_timeout_s: float | None = 15.0
     first_speaker: Literal["agent", "user"] = "agent"
+    thinking_sound: ThinkingSound = "none"
+    """A built-in clip played while the agent waits on a blocking tool (never on the text channel)."""
 
 
 class CapabilitiesConfig(BaseModel):
@@ -115,6 +122,11 @@ class ToolsConfig(BaseModel):
     http_request_enabled: bool = False
     tool_ids: list[str] = []
     max_tool_steps: int = 3
+    execution_default: ToolExecutionMode = "blocking"
+    """How read tools run when they set no mode of their own: GET HTTP tools and the built-ins
+    in ``BACKGROUNDABLE_BUILTINS``. Never reaches writes, MCP tools, telephony, forms or flow edges."""
+    builtin_execution: dict[str, ToolExecution] = {}
+    """Per built-in execution settings, keyed by a name in ``BACKGROUNDABLE_BUILTINS``."""
 
 
 class KnowledgeConfig(BaseModel):

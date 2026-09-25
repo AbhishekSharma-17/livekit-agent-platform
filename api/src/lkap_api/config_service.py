@@ -75,7 +75,14 @@ from lkap_contracts.providers import (
     get,
     validate_model_id,
 )
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
+from lkap_contracts.tools import (
+    BACKGROUNDABLE_BUILTINS,
+    NON_BLOCKING_MODES,
+    HttpToolDefinition,
+    McpServerDefinition,
+    ToolDefinition,
+    never_background,
+)
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -215,6 +222,9 @@ class ValidationContext:
     catalog_items: Mapping[str, Mapping[str, CatalogItem]] = dataclasses.field(default_factory=dict)
     """``{provider_id: {item_id: item}}`` from the workspace's cached live ``models`` catalogs,
     fresh or stale, for the providers the config uses (V4-07)."""
+    tool_definitions_by_id: Mapping[str, Mapping[str, Any]] | None = None
+    """``{tool_id: definition JSON}`` for every tool row of the workspace (V4-12, the execution
+    checks of :func:`tool_execution_issues`); ``None`` skips the per-tool checks."""
 
     def fingerprint_for(self, ref: ProviderRef) -> str | None:
         """The fingerprint of the credential ``ref`` uses, if it uses one."""
@@ -440,6 +450,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
 
     findings.extend(connection_flag_issues(ctx))
     findings.extend(knowledge_auto_inject_issues(ctx))
+    findings.extend(tool_execution_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -697,6 +708,109 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
     return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
 
 
+#: Below this many tool steps, a chain of background announcements can exhaust the budget
+#: (each first update spends one step; docs/v4/BACKGROUND-TOOLS.md §5, R-V4-35).
+MIN_TOOL_STEPS_FOR_BACKGROUND = 4
+
+
+def _execution_mode(raw: object) -> str | None:
+    """The ``mode`` of a raw ``ToolExecution`` JSON object, or ``None``."""
+    if not isinstance(raw, Mapping):
+        return None
+    mode = raw.get("mode")
+    return mode if isinstance(mode, str) else None
+
+
+def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
+    """The background-tool checks of V4-12 (docs/v4/BACKGROUND-TOOLS.md D-V4-32, R-V4-35/36).
+
+    * ``tools.builtin_execution`` names a built-in outside ``BACKGROUNDABLE_BUILTINS`` → error.
+    * ``tools.execution_default`` is not ``blocking`` while ``max_tool_steps`` is below
+      :data:`MIN_TOOL_STEPS_FOR_BACKGROUND` → warning (chained announcements spend steps).
+    * Per attached tool row (``tools[i]`` is the i-th ``tools.tool_ids`` entry), read from the
+      stored JSON so a row that no longer parses is still reported:
+      an HTTP tool with ``silent_reply`` and a non-blocking mode → error (the contract refuses it
+      on save; a row written before the contract did is caught here); a never-list tool name
+      with a non-blocking mode → error; an MCP ``tool_options`` name outside ``allowed_tools``
+      → error; an MCP tool with a non-blocking mode and ``report_progress`` off → warning
+      (the model is told nothing, so the tool is not announced).
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        Issues at ``tools.builtin_execution.<name>``, ``tools.max_tool_steps`` and
+        ``tools[i].definition...``.
+    """
+    tools = ctx.config.tools
+    issues: list[Issue] = []
+    for name in sorted(set(tools.builtin_execution) - BACKGROUNDABLE_BUILTINS):
+        issues.append(
+            Issue(
+                path=f"tools.builtin_execution.{name}",
+                message=f"'{name}' always runs blocking; only "
+                f"{', '.join(sorted(BACKGROUNDABLE_BUILTINS))} can run in the background",
+            )
+        )
+    if tools.execution_default != "blocking" and tools.max_tool_steps < MIN_TOOL_STEPS_FOR_BACKGROUND:
+        issues.append(
+            Issue(
+                path="tools.max_tool_steps",
+                message=f"read tools run '{tools.execution_default}' by default and each announcement "
+                f"spends a tool step; with max_tool_steps {tools.max_tool_steps} a chain of lookups can "
+                f"run out of steps — use {MIN_TOOL_STEPS_FOR_BACKGROUND} or more",
+                severity="warning",
+            )
+        )
+    definitions = ctx.tool_definitions_by_id
+    if definitions is None:
+        return issues
+    for index, tool_id in enumerate(tools.tool_ids):
+        definition = definitions.get(tool_id)
+        if not isinstance(definition, Mapping):
+            continue
+        base = f"tools[{index}].definition"
+        name = str(definition.get("name") or tool_id)
+        if definition.get("kind", "http") == "http":
+            mode = _execution_mode(definition.get("execution"))
+            if mode in NON_BLOCKING_MODES and definition.get("silent_reply"):
+                issues.append(
+                    Issue(
+                        path=f"{base}.execution.mode",
+                        message=f"'{name}' has silent_reply on, which would swallow its background "
+                        "announcement; turn one of them off",
+                    )
+                )
+            if mode in NON_BLOCKING_MODES and never_background(name):
+                issues.append(Issue(path=f"{base}.execution.mode", message=f"'{name}' always runs blocking"))
+            continue
+        options = definition.get("tool_options")
+        if not isinstance(options, Mapping):
+            continue
+        allowed = definition.get("allowed_tools")
+        for tool_name, raw in options.items():
+            path = f"{base}.tool_options.{tool_name}"
+            if isinstance(allowed, list) and tool_name not in allowed:
+                issues.append(
+                    Issue(path=path, message=f"'{tool_name}' is not one of this server's allowed_tools")
+                )
+            mode = _execution_mode(raw)
+            if mode not in NON_BLOCKING_MODES:
+                continue
+            if never_background(str(tool_name)):
+                issues.append(Issue(path=f"{path}.mode", message=f"'{tool_name}' always runs blocking"))
+            elif not (isinstance(raw, Mapping) and raw.get("report_progress")):
+                issues.append(
+                    Issue(
+                        path=f"{path}.report_progress",
+                        message=f"'{tool_name}' runs in the background but forwards no progress "
+                        "messages: the model will not announce this tool",
+                        severity="warning",
+                    )
+                )
+    return issues
+
+
 def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
     """Capability-flag checks against the agent's connection (ARCHITECTURE-V2 D-V2-4).
 
@@ -844,9 +958,17 @@ async def validation_context_for(
         .all()
     )
     credential_providers = {row[0]: row[1] for row in credential_rows}
-    tool_names_by_id = dict(
-        (await db.execute(select(Tool.id, Tool.name).where(Tool.workspace_id == workspace_id))).tuples().all()
+    tool_rows = (
+        (
+            await db.execute(
+                select(Tool.id, Tool.name, Tool.definition).where(Tool.workspace_id == workspace_id)
+            )
+        )
+        .tuples()
+        .all()
     )
+    tool_names_by_id = {row[0]: row[1] for row in tool_rows}
+    tool_definitions_by_id = {row[0]: row[2] for row in tool_rows if isinstance(row[2], dict)}
     tool_ids = frozenset(tool_names_by_id)
     kb_ids = frozenset(
         (
@@ -871,6 +993,7 @@ async def validation_context_for(
         known_tool_ids=tool_ids,
         known_kb_ids=kb_ids,
         tool_names_by_id=tool_names_by_id,
+        tool_definitions_by_id=tool_definitions_by_id,
         telephony_policy=await _telephony_policy(db, workspace_id),
         credential_fingerprints={row[0]: row[2] for row in credential_rows},
         model_records=await _model_records(db, workspace_id),

@@ -54,17 +54,21 @@ against livekit-agents 1.8.2:
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Final, cast
 
 from livekit.agents import NOT_GIVEN, AgentSession, TurnHandlingOptions
 from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions
+from livekit.agents.voice.tool_executor import AsyncToolOptions
 from lkap_contracts.agent_config import (
     AgentConfig,
     AvatarOptions,
     PipelineMode,
     ResolvedAgentConfig,
     ResolvedProvider,
+    ThinkingSound,
 )
 from lkap_contracts.providers import ModelCapabilities
 
@@ -72,6 +76,7 @@ from lkap_agent.logging import get_logger
 from lkap_agent.providers.factory import BuiltProviders
 
 __all__ = [
+    "ASYNC_TOOL_OPTIONS",
     "AVATAR_OPTION_KWARGS",
     "SessionBuilder",
     "SessionPlan",
@@ -81,6 +86,7 @@ __all__ = [
     "is_text_channel",
     "llm_capabilities_of",
     "prepare_resolved",
+    "start_thinking_sound",
 ]
 
 logger = get_logger(__name__)
@@ -110,6 +116,55 @@ _AVATAR_PARTICIPANT_NAME_KWARG: Final[str] = "avatar_participant_name"
 
 #: The Inference turn detector whose `version` the connection flags may force.
 _INFERENCE_TURN_DETECTOR_ID: Final[str] = "inference-turn-detector"
+
+# Voice-safe prompt templates for the SDK's async-tool executor (docs/v4/BACKGROUND-TOOLS.md
+# D-V4-35). livekit-agents 1.8.2 (`voice/tool_executor.py`) renders each with `str.format`
+# and a fixed argument set: `update` gets {function_name, call_id, message}, the duplicate
+# templates {function_name, fnc_calls_json, fnc_calls_text}, the reply templates {call_ids};
+# any other brace would raise at runtime. The SDK defaults speak tool names and call ids;
+# these instruct the model instead, so it paraphrases and never reads an id aloud.
+_UPDATE_TEMPLATE: Final[str] = (
+    "Background work for `{function_name}` reports: {message}\n"
+    "Tell the user briefly, in one "
+    "clause, and continue; do not invent anything the message does not say."
+)
+_REPLY_AT_TAIL_TEMPLATE: Final[str] = (
+    "A background task just finished. Say what it found in one or two sentences, naturally, then continue."
+)
+_REPLY_MAYBE_COVERED_TEMPLATE: Final[str] = (
+    "A background task just finished. If you already told the user everything it found, answer with "
+    "nothing at all. Otherwise say only what you have not said yet, in one or two sentences, naturally."
+)
+_DUPLICATE_REJECT_TEMPLATE: Final[str] = "That is already being looked up; tell the user it is on its way."
+_DUPLICATE_CONFIRM_TEMPLATE: Final[str] = (
+    "That is already running; tell the user it is on its way. Call it again with "
+    "`lk_agents_confirm_duplicate` set to true only if the user asks for it to run a second time."
+)
+#: The realtime model voices each update itself (Gemini: `NON_BLOCKING`/`WHEN_IDLE`), so its
+#: update asks for the spoken acknowledgement directly.
+_REALTIME_UPDATE_TEMPLATE: Final[str] = (
+    "Background work for `{function_name}` reports: {message}\n"
+    "Say so to the user in one short "
+    "clause and carry on; do not invent anything the message does not say."
+)
+
+
+def _async_tool_options(update_template: str) -> AsyncToolOptions:
+    return AsyncToolOptions(
+        update_template=update_template,
+        duplicate_reject_template=_DUPLICATE_REJECT_TEMPLATE,
+        duplicate_confirm_template=_DUPLICATE_CONFIRM_TEMPLATE,
+        reply_at_tail_template=_REPLY_AT_TAIL_TEMPLATE,
+        reply_maybe_covered_template=_REPLY_MAYBE_COVERED_TEMPLATE,
+    )
+
+
+#: `AgentSession(tool_handling={"async_options": ASYNC_TOOL_OPTIONS[mode]})`, one per pipeline mode.
+ASYNC_TOOL_OPTIONS: Final[dict[PipelineMode, AsyncToolOptions]] = {
+    "cascaded": _async_tool_options(_UPDATE_TEMPLATE),
+    "half_cascade": _async_tool_options(_UPDATE_TEMPLATE),
+    "realtime": _async_tool_options(_REALTIME_UPDATE_TEMPLATE),
+}
 
 
 def is_text_channel(resolved: ResolvedAgentConfig) -> bool:
@@ -204,6 +259,9 @@ class SessionPlan:
     #: What the api resolved about the cascaded LLM (`ResolvedProvider.capabilities`, V4-08);
     #: the worker hands it to `SessionContext.llm_capabilities`.
     llm_capabilities: ModelCapabilities | None = None
+    #: `voice.thinking_sound`, or `"none"` on the text channel (no audio out, R-V4-38);
+    #: the worker plays it through a `BackgroundAudioPlayer` while the agent is thinking.
+    thinking_sound: ThinkingSound = "none"
 
     @property
     def needs_generate_reply_greeting(self) -> bool:
@@ -362,6 +420,7 @@ class SessionBuilder:
             turn_handling=turn_handling,
             max_tool_steps=config.tools.max_tool_steps,
             user_away_timeout=config.voice.user_away_timeout_s,
+            tool_handling={"async_options": ASYNC_TOOL_OPTIONS[mode]},
         )
 
         room_options = RoomOptions(
@@ -400,6 +459,7 @@ class SessionBuilder:
             mode=mode,
             text_only=text_only,
             llm_capabilities=llm_capabilities_of(resolved),
+            thinking_sound="none" if text_only else config.voice.thinking_sound,
         )
 
     @staticmethod
@@ -431,3 +491,65 @@ class SessionBuilder:
         """
         caps = resolved.config.capabilities
         return realtime_model and (caps.camera or caps.screen_share)
+
+
+#: `VoiceConfig.thinking_sound` → the `BuiltinAudioClip` member it plays (verified in 1.8.2,
+#: `voice/background_audio.py`).
+THINKING_SOUND_CLIPS: Final[dict[str, str]] = {
+    "keyboard_typing": "KEYBOARD_TYPING",
+    "keyboard_typing2": "KEYBOARD_TYPING2",
+    "office_ambience": "OFFICE_AMBIENCE",
+}
+
+#: Playback volume of the thinking sound (BACKGROUND-TOOLS.md §4.2).
+THINKING_SOUND_VOLUME: Final[float] = 0.6
+
+
+async def start_thinking_sound(
+    plan: SessionPlan, room: Any, *, player_factory: Callable[..., Any] | None = None
+) -> Callable[[str], Awaitable[None]] | None:
+    """Start a `BackgroundAudioPlayer` whose thinking sound plays during blocking tool waits.
+
+    `BackgroundAudioPlayer(thinking_sound=...)` plays only while
+    `agent_state == "thinking"` (the blocking wait and the inline part of an `auto`
+    tool); it publishes its own track, so it is heard on SIP legs too. Called after
+    `session.start`: nothing starts on the text channel, without a configured sound,
+    or when the session has no audio output. A failure to start is logged and the
+    call goes on silently.
+
+    Args:
+        plan: The built session plan (`thinking_sound`, `text_only`, `session`).
+        room: The connected room the player publishes to.
+        player_factory: Test seam; defaults to `livekit.agents.BackgroundAudioPlayer`.
+
+    Returns:
+        A shutdown callback (``async (reason) -> None``) that closes the player, or
+        `None` when nothing was started.
+    """
+    sound = plan.thinking_sound
+    if sound == "none" or plan.text_only:
+        return None
+    output = getattr(plan.session, "output", None)
+    if getattr(output, "audio", None) is None:
+        logger.info("thinking sound skipped: the session has no audio output", thinking_sound=sound)
+        return None
+    from livekit.agents import AudioConfig, BackgroundAudioPlayer, BuiltinAudioClip  # noqa: PLC0415
+
+    clip = BuiltinAudioClip[THINKING_SOUND_CLIPS[sound]]
+    factory = player_factory or BackgroundAudioPlayer
+    player = factory(thinking_sound=AudioConfig(clip, volume=THINKING_SOUND_VOLUME))
+    try:
+        await player.start(room=room, agent_session=plan.session)
+    except Exception:
+        logger.warning("thinking sound could not start; the call goes on without it", exc_info=True)
+        with contextlib.suppress(Exception):
+            await player.aclose()
+        return None
+    logger.info("thinking sound started", thinking_sound=sound)
+
+    async def _stop_thinking_sound(reason: str) -> None:
+        del reason
+        with contextlib.suppress(Exception):
+            await player.aclose()
+
+    return _stop_thinking_sound

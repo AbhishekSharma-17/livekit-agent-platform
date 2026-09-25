@@ -67,12 +67,41 @@ The tool's response body comes back inside an `Untrusted` envelope in
 `chat_send`'s events and in `tool_dry_run` — it is data from a third-party
 API, not an instruction.
 
+## Background tools
+
+A tool can keep the conversation going while it runs. `execution` (a
+`ToolExecution`) on `tool_create_http` or `tool_update` sets how:
+
+- `mode="blocking"` (the default): the agent waits for the result, as always.
+- `mode="background"`: the agent says it is on it at once (the model's own
+  words, steered by `announce`), keeps talking, and reports the result when
+  it is next idle. A result never interrupts the caller or the agent.
+- `mode="auto"`: the request runs inline for up to `auto_threshold_ms`
+  (default 700); a fast answer comes back as usual, a slow one is announced
+  and finishes in the background. The recommended setting for reads.
+
+The safety rule is mechanical. Only **GET** tools follow the agent's
+`tools.execution_default` (`agent_update(patch={"tools": {"execution_default":
+"auto"}})`); any other method runs blocking unless its own `execution.mode`
+says otherwise, and then asks before running a second copy
+(`on_duplicate="confirm"`) and is not cancelled by a hangup or a "never
+mind". `silent_reply` and a background mode on one tool is refused.
+`end_call`, forms, telephony, panel writes and flow steps always block.
+
+`fillers` are up to five lines spoken as written after `filler_delay_s` of
+silence, one per `filler_interval_s`; they need a voice (a TTS), so a
+realtime model without one and the text channel skip them. Every background
+run gives up after `max_duration_s` (default 60) with an error the agent
+voices. The session's activity feed and events show `tool_call_updated`
+and `tool_reply`. On a flow node a background tool runs blocking until the
+worker runs livekit-agents 1.8.3.
+
 ## Related tools
 
 `tool_list`, `tool_get`, `tool_create_http`, `tool_update`, `tool_dry_run`,
-`provider_key_create`, `agent_attach`.
+`provider_key_create`, `agent_attach`, `agent_update`.
 
 ## Related schemas
 
-`HttpToolDefinition`, `ToolCreate`, `ToolOut`, `ToolDryRunRequest`,
+`HttpToolDefinition`, `ToolExecution`, `ToolCreate`, `ToolOut`, `ToolDryRunRequest`,
 `ToolDryRunResult`, `CredentialCreate`.

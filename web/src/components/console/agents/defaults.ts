@@ -22,6 +22,7 @@ export const DEFAULT_VOICE: Required<VoiceConfig> = {
   allow_interruptions: true,
   user_away_timeout_s: 15.0,
   first_speaker: "agent",
+  thinking_sound: "none",
 };
 
 export const DEFAULT_CAPABILITIES: Required<CapabilitiesConfig> = {
@@ -37,6 +38,8 @@ export const DEFAULT_TOOLS: Required<ToolsConfig> = {
   http_request_enabled: false,
   tool_ids: [],
   max_tool_steps: 3,
+  execution_default: "blocking",
+  builtin_execution: {},
 };
 
 export const DEFAULT_KNOWLEDGE: Required<KnowledgeConfig> = {

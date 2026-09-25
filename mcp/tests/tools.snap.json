@@ -502,6 +502,8 @@
                 "$ref": "#/$defs/ToolsConfig",
                 "default": {
                   "builtin_disabled": [],
+                  "builtin_execution": {},
+                  "execution_default": "blocking",
                   "http_request_enabled": false,
                   "max_tool_steps": 3,
                   "tool_ids": []
@@ -524,6 +526,7 @@
                   "greeting": "Hello! How can I help you today?",
                   "greeting_mode": "say",
                   "language": "en",
+                  "thinking_sound": "none",
                   "user_away_timeout_s": 15.0
                 }
               }
@@ -1518,6 +1521,123 @@
             "title": "TelephonyConfig",
             "type": "object"
           },
+          "ToolExecution": {
+            "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+            "properties": {
+              "announce": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Announce"
+              },
+              "auto_threshold_ms": {
+                "default": 700,
+                "maximum": 5000,
+                "minimum": 0,
+                "title": "Auto Threshold Ms",
+                "type": "integer"
+              },
+              "cancellable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cancellable"
+              },
+              "duplicate_scope": {
+                "default": "name_and_args",
+                "enum": [
+                  "name",
+                  "name_and_args"
+                ],
+                "title": "Duplicate Scope",
+                "type": "string"
+              },
+              "filler_delay_s": {
+                "default": 4.0,
+                "maximum": 30,
+                "minimum": 0.5,
+                "title": "Filler Delay S",
+                "type": "number"
+              },
+              "filler_interval_s": {
+                "default": 8.0,
+                "maximum": 60,
+                "minimum": 1,
+                "title": "Filler Interval S",
+                "type": "number"
+              },
+              "fillers": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "title": "Fillers",
+                "type": "array"
+              },
+              "max_duration_s": {
+                "default": 60,
+                "exclusiveMinimum": 0,
+                "maximum": 600,
+                "title": "Max Duration S",
+                "type": "number"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "blocking",
+                      "background",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Mode"
+              },
+              "on_duplicate": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "allow",
+                      "reject",
+                      "replace",
+                      "confirm"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "On Duplicate"
+              },
+              "report_progress": {
+                "default": false,
+                "title": "Report Progress",
+                "type": "boolean"
+              }
+            },
+            "title": "ToolExecution",
+            "type": "object"
+          },
           "ToolsConfig": {
             "description": "Built-in tool gating plus references to admin-authored tool rows.",
             "properties": {
@@ -1528,6 +1648,24 @@
                 },
                 "title": "Builtin Disabled",
                 "type": "array"
+              },
+              "builtin_execution": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ToolExecution"
+                },
+                "default": {},
+                "title": "Builtin Execution",
+                "type": "object"
+              },
+              "execution_default": {
+                "default": "blocking",
+                "enum": [
+                  "blocking",
+                  "background",
+                  "auto"
+                ],
+                "title": "Execution Default",
+                "type": "string"
               },
               "http_request_enabled": {
                 "default": false,
@@ -1734,6 +1872,17 @@
               "language": {
                 "default": "en",
                 "title": "Language",
+                "type": "string"
+              },
+              "thinking_sound": {
+                "default": "none",
+                "enum": [
+                  "none",
+                  "keyboard_typing",
+                  "keyboard_typing2",
+                  "office_ambience"
+                ],
+                "title": "Thinking Sound",
                 "type": "string"
               },
               "user_away_timeout_s": {
@@ -2963,6 +3112,8 @@
                 "$ref": "#/$defs/ToolsConfig",
                 "default": {
                   "builtin_disabled": [],
+                  "builtin_execution": {},
+                  "execution_default": "blocking",
                   "http_request_enabled": false,
                   "max_tool_steps": 3,
                   "tool_ids": []
@@ -2985,6 +3136,7 @@
                   "greeting": "Hello! How can I help you today?",
                   "greeting_mode": "say",
                   "language": "en",
+                  "thinking_sound": "none",
                   "user_away_timeout_s": 15.0
                 }
               }
@@ -3979,6 +4131,123 @@
             "title": "TelephonyConfig",
             "type": "object"
           },
+          "ToolExecution": {
+            "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+            "properties": {
+              "announce": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Announce"
+              },
+              "auto_threshold_ms": {
+                "default": 700,
+                "maximum": 5000,
+                "minimum": 0,
+                "title": "Auto Threshold Ms",
+                "type": "integer"
+              },
+              "cancellable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cancellable"
+              },
+              "duplicate_scope": {
+                "default": "name_and_args",
+                "enum": [
+                  "name",
+                  "name_and_args"
+                ],
+                "title": "Duplicate Scope",
+                "type": "string"
+              },
+              "filler_delay_s": {
+                "default": 4.0,
+                "maximum": 30,
+                "minimum": 0.5,
+                "title": "Filler Delay S",
+                "type": "number"
+              },
+              "filler_interval_s": {
+                "default": 8.0,
+                "maximum": 60,
+                "minimum": 1,
+                "title": "Filler Interval S",
+                "type": "number"
+              },
+              "fillers": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "title": "Fillers",
+                "type": "array"
+              },
+              "max_duration_s": {
+                "default": 60,
+                "exclusiveMinimum": 0,
+                "maximum": 600,
+                "title": "Max Duration S",
+                "type": "number"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "blocking",
+                      "background",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Mode"
+              },
+              "on_duplicate": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "allow",
+                      "reject",
+                      "replace",
+                      "confirm"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "On Duplicate"
+              },
+              "report_progress": {
+                "default": false,
+                "title": "Report Progress",
+                "type": "boolean"
+              }
+            },
+            "title": "ToolExecution",
+            "type": "object"
+          },
           "ToolsConfig": {
             "description": "Built-in tool gating plus references to admin-authored tool rows.",
             "properties": {
@@ -3989,6 +4258,24 @@
                 },
                 "title": "Builtin Disabled",
                 "type": "array"
+              },
+              "builtin_execution": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ToolExecution"
+                },
+                "default": {},
+                "title": "Builtin Execution",
+                "type": "object"
+              },
+              "execution_default": {
+                "default": "blocking",
+                "enum": [
+                  "blocking",
+                  "background",
+                  "auto"
+                ],
+                "title": "Execution Default",
+                "type": "string"
               },
               "http_request_enabled": {
                 "default": false,
@@ -4195,6 +4482,17 @@
               "language": {
                 "default": "en",
                 "title": "Language",
+                "type": "string"
+              },
+              "thinking_sound": {
+                "default": "none",
+                "enum": [
+                  "none",
+                  "keyboard_typing",
+                  "keyboard_typing2",
+                  "office_ambience"
+                ],
+                "title": "Thinking Sound",
                 "type": "string"
               },
               "user_away_timeout_s": {
@@ -7023,6 +7321,125 @@
       "description": "Create an HTTP tool an agent can call (hosts allowlisted), optionally dry-running it.",
       "gate": null,
       "inputSchema": {
+        "$defs": {
+          "ToolExecution": {
+            "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+            "properties": {
+              "announce": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Announce"
+              },
+              "auto_threshold_ms": {
+                "default": 700,
+                "maximum": 5000,
+                "minimum": 0,
+                "title": "Auto Threshold Ms",
+                "type": "integer"
+              },
+              "cancellable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cancellable"
+              },
+              "duplicate_scope": {
+                "default": "name_and_args",
+                "enum": [
+                  "name",
+                  "name_and_args"
+                ],
+                "title": "Duplicate Scope",
+                "type": "string"
+              },
+              "filler_delay_s": {
+                "default": 4.0,
+                "maximum": 30,
+                "minimum": 0.5,
+                "title": "Filler Delay S",
+                "type": "number"
+              },
+              "filler_interval_s": {
+                "default": 8.0,
+                "maximum": 60,
+                "minimum": 1,
+                "title": "Filler Interval S",
+                "type": "number"
+              },
+              "fillers": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "title": "Fillers",
+                "type": "array"
+              },
+              "max_duration_s": {
+                "default": 60,
+                "exclusiveMinimum": 0,
+                "maximum": 600,
+                "title": "Max Duration S",
+                "type": "number"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "blocking",
+                      "background",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Mode"
+              },
+              "on_duplicate": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "allow",
+                      "reject",
+                      "replace",
+                      "confirm"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "On Duplicate"
+              },
+              "report_progress": {
+                "default": false,
+                "title": "Report Progress",
+                "type": "boolean"
+              }
+            },
+            "title": "ToolExecution",
+            "type": "object"
+          }
+        },
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -7074,6 +7491,18 @@
             "default": null,
             "description": "Arguments for a dry run right after creating",
             "title": "Dry Run Args"
+          },
+          "execution": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolExecution"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How the tool runs: mode 'blocking' (default), 'background' (announce at once, answer when the agent is idle) or 'auto' (inline if fast, else background). Only GET tools follow the agent's tools.execution_default; any other method runs blocking unless it sets a mode here, and then asks before running twice. Fillers are spoken as written and need a voice (a TTS)."
           },
           "headers": {
             "anyOf": [
@@ -7204,6 +7633,125 @@
       "description": "Attach a remote MCP server as a tool source (the worker connects to it at session time).",
       "gate": null,
       "inputSchema": {
+        "$defs": {
+          "ToolExecution": {
+            "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+            "properties": {
+              "announce": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Announce"
+              },
+              "auto_threshold_ms": {
+                "default": 700,
+                "maximum": 5000,
+                "minimum": 0,
+                "title": "Auto Threshold Ms",
+                "type": "integer"
+              },
+              "cancellable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cancellable"
+              },
+              "duplicate_scope": {
+                "default": "name_and_args",
+                "enum": [
+                  "name",
+                  "name_and_args"
+                ],
+                "title": "Duplicate Scope",
+                "type": "string"
+              },
+              "filler_delay_s": {
+                "default": 4.0,
+                "maximum": 30,
+                "minimum": 0.5,
+                "title": "Filler Delay S",
+                "type": "number"
+              },
+              "filler_interval_s": {
+                "default": 8.0,
+                "maximum": 60,
+                "minimum": 1,
+                "title": "Filler Interval S",
+                "type": "number"
+              },
+              "fillers": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "title": "Fillers",
+                "type": "array"
+              },
+              "max_duration_s": {
+                "default": 60,
+                "exclusiveMinimum": 0,
+                "maximum": 600,
+                "title": "Max Duration S",
+                "type": "number"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "blocking",
+                      "background",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Mode"
+              },
+              "on_duplicate": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "allow",
+                      "reject",
+                      "replace",
+                      "confirm"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "On Duplicate"
+              },
+              "report_progress": {
+                "default": false,
+                "title": "Report Progress",
+                "type": "boolean"
+              }
+            },
+            "title": "ToolExecution",
+            "type": "object"
+          }
+        },
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -7274,6 +7822,22 @@
             "maximum": 60,
             "title": "Timeout S",
             "type": "number"
+          },
+          "tool_options": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ToolExecution"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Per MCP tool name: how it runs (a ToolExecution; names must be in allowed_tools when set). MCP tools never follow the agent default; a background tool is announced only through the server's progress messages (report_progress=true).",
+            "title": "Tool Options"
           },
           "url": {
             "title": "Url",
@@ -7461,7 +8025,138 @@
       "description": "Change a tool with a merge patch over its name, enabled flag, agent and definition.",
       "gate": null,
       "inputSchema": {
+        "$defs": {
+          "ToolExecution": {
+            "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+            "properties": {
+              "announce": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Announce"
+              },
+              "auto_threshold_ms": {
+                "default": 700,
+                "maximum": 5000,
+                "minimum": 0,
+                "title": "Auto Threshold Ms",
+                "type": "integer"
+              },
+              "cancellable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cancellable"
+              },
+              "duplicate_scope": {
+                "default": "name_and_args",
+                "enum": [
+                  "name",
+                  "name_and_args"
+                ],
+                "title": "Duplicate Scope",
+                "type": "string"
+              },
+              "filler_delay_s": {
+                "default": 4.0,
+                "maximum": 30,
+                "minimum": 0.5,
+                "title": "Filler Delay S",
+                "type": "number"
+              },
+              "filler_interval_s": {
+                "default": 8.0,
+                "maximum": 60,
+                "minimum": 1,
+                "title": "Filler Interval S",
+                "type": "number"
+              },
+              "fillers": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "title": "Fillers",
+                "type": "array"
+              },
+              "max_duration_s": {
+                "default": 60,
+                "exclusiveMinimum": 0,
+                "maximum": 600,
+                "title": "Max Duration S",
+                "type": "number"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "blocking",
+                      "background",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Mode"
+              },
+              "on_duplicate": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "allow",
+                      "reject",
+                      "replace",
+                      "confirm"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "On Duplicate"
+              },
+              "report_progress": {
+                "default": false,
+                "title": "Report Progress",
+                "type": "boolean"
+              }
+            },
+            "title": "ToolExecution",
+            "type": "object"
+          }
+        },
         "properties": {
+          "execution": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolExecution"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "HTTP tools only: replaces definition.execution (pass patch={} to change nothing else). How the tool runs: mode 'blocking' (default), 'background' (announce at once, answer when the agent is idle) or 'auto' (inline if fast, else background). Only GET tools follow the agent's tools.execution_default; any other method runs blocking unless it sets a mode here, and then asks before running twice. Fillers are spoken as written and need a voice (a TTS)."
+          },
           "patch": {
             "additionalProperties": true,
             "description": "Merge patch over {name, enabled, agent_id, definition}",

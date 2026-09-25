@@ -21,6 +21,14 @@ from livekit.agents import FunctionTool, RunContext, function_tool
 from lkap_contracts.api_models import KbHit
 from packs.base import PackSessionContext
 
+from lkap_agent.tools.execution import (
+    ResolvedExecution,
+    ToolPolicy,
+    attach_policy,
+    blocking_policy,
+    run_with_policy,
+    tool_flags,
+)
 from lkap_agent.ui.blocks import block_ids_of_type, session_block_specs
 
 __all__ = ["build_search_knowledge_tool", "cite_sources"]
@@ -44,16 +52,21 @@ async def cite_sources(ctx: PackSessionContext, hits: list[KbHit]) -> None:
             ctx.log.debug("cite_sources failed", block_id=block_id, exc_info=True)
 
 
-def build_search_knowledge_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
-    """Build the `search_knowledge` tool bound to `ctx`."""
+def build_search_knowledge_tool(
+    ctx: PackSessionContext, *, execution: ResolvedExecution | None = None
+) -> FunctionTool[..., Any]:
+    """Build the `search_knowledge` tool bound to `ctx`.
 
-    @function_tool
-    async def search_knowledge(context: RunContext[Any], query: str) -> str:
-        """Search the agent's attached knowledge bases for relevant passages.
+    Args:
+        ctx: The session's `PackSessionContext`.
+        execution: The tool's execution policy (docs/v4/BACKGROUND-TOOLS.md); `None`
+            runs it blocking, as before. A warm local store answers in tens of
+            milliseconds, so `auto` returns inline; a slow remote store announces.
+    """
+    policy = execution or blocking_policy("search_knowledge")
+    flags, on_duplicate, duplicate_scope = tool_flags(policy)
 
-        Args:
-            query: The question or topic to search for.
-        """
+    async def _search(query: str) -> str:
         # Always the agent's own knowledge bases (kb_ids=None -> the api's default of
         # `knowledge.kb_ids`); DECISIONS-W2 §D-W2-12 removed the `kb` filter.
         hits = await ctx.kb.search(query, k=ctx.config.knowledge.top_k)
@@ -64,4 +77,14 @@ def build_search_knowledge_tool(ctx: PackSessionContext) -> FunctionTool[..., An
             [{"source": hit.filename, "text": hit.text, "score": round(hit.score, 3)} for hit in hits]
         )
 
-    return search_knowledge
+    @function_tool(flags=flags, on_duplicate=on_duplicate, duplicate_scope=duplicate_scope)
+    async def search_knowledge(context: RunContext[Any], query: str) -> str:
+        """Search the agent's attached knowledge bases for relevant passages.
+
+        Args:
+            query: The question or topic to search for.
+        """
+        result: str = await run_with_policy(context, policy, lambda: _search(query))
+        return result
+
+    return attach_policy(search_knowledge, ToolPolicy(resolved=policy))

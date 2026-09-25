@@ -56,6 +56,27 @@ again any time you change the definition:
 { "id_or_slug": "<agent>", "tool_ids": ["<the tool id>"] }
 ```
 
+## 5. Optional: let a slow lookup run in the background
+
+A GET tool that can take seconds need not hold the conversation. Set its
+execution so the agent says it is on it and reports back when it is idle:
+
+`tool_update(...)`
+```json
+{
+  "tool_id": "<the tool id>",
+  "patch": {},
+  "execution": {
+    "mode": "auto",
+    "announce": "Looking that customer up now.",
+    "fillers": ["Still checking."]
+  }
+}
+```
+Then `agent_validate`: it warns when the agent's `tools.max_tool_steps` is
+below 4 with a background default. A POST tool opts in the same way and then
+asks before running twice.
+
 ## Related concepts
 
-`lkap_explain("tools-http")`, `lkap_explain("providers-and-keys")`.
+`lkap_explain("tools-http")` (its "Background tools" section), `lkap_explain("providers-and-keys")`.

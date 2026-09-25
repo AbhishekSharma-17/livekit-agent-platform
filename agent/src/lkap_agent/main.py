@@ -692,6 +692,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     plan.session.on("function_tools_executed", agent.on_function_tools_executed)
     # F-03: drives the pack's `on_agent_turn_completed` hook.
     plan.session.on("conversation_item_added", agent.on_conversation_item)
+    # V4-12 (D-V4-38): background and slow tools feed the activity block.
+    plan.session.on("tool_execution_updated", agent.on_tool_execution)
     plan.session.on("error", _vision_degrade_handler(agent, observer))
     # D-W2-9e: a closed AgentSession (end_call, an error) must end the job too;
     # the shutdown callback posts the summary.
@@ -730,6 +732,13 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         return
     if telephony is not None:
         telephony.start()
+    # V4-12: `voice.thinking_sound` during blocking tool waits (never on the text channel);
+    # the player is closed in the shutdown path.
+    from lkap_agent.session_builder import start_thinking_sound  # noqa: PLC0415
+
+    stop_thinking_sound = await start_thinking_sound(plan, ctx.room)
+    if stop_thinking_sound is not None:
+        ctx.add_shutdown_callback(stop_thinking_sound)
     observer.record(
         "session_started",
         {

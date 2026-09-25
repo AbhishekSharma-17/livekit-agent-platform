@@ -15,11 +15,13 @@ from typing import Any, cast
 
 import pytest
 from fakes.fake_api import FakeApi, resolved_config
+from fakes.fake_ctx import FakeRunContext
 from fakes.fake_llm import FakeLLM
 from fakes.fake_room import FakeRoom
 from fakes.fake_tts import FakeTTS
 from livekit import rtc
 from livekit.agents import llm
+from lkap_contracts.tools import ToolExecution
 from lkap_contracts.ui_protocol import RPC_AGENT_ACTION, AgentAction, AgentActionResult
 from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
 
@@ -32,6 +34,7 @@ from lkap_agent.text_mode import (
     rewind,
     truncate_to_turn,
 )
+from lkap_agent.tools.execution import resolve_execution, run_with_policy
 from lkap_agent.ui.channel import UiChannel
 
 
@@ -121,6 +124,36 @@ async def test_rewind_truncates_and_regenerates_once() -> None:
     assert [i.text_content for i in session.agent.updated[-1].items] == ["You are helpful.", "hi"]
     assert session.generate_reply_calls == [{}]
     assert session.interrupt_calls == 1
+
+
+async def test_rewind_cancels_running_background_work_first() -> None:
+    """V4-12 (D-V4-34): a background tool's result must not land in a rewound conversation."""
+    session = _FakeSession(_conversation())
+    context = FakeRunContext()
+    context.session = cast(Any, session)
+    policy = resolve_execution(
+        name="lookup_item",
+        kind="http",
+        is_read=True,
+        declared=ToolExecution(mode="background"),
+        agent_default="blocking",
+        flow_node=False,
+    )
+    started = asyncio.Event()
+
+    async def _work() -> str:
+        started.set()
+        await asyncio.sleep(60)
+        return "late"
+
+    call = asyncio.create_task(run_with_policy(cast(Any, context), policy, _work))
+    await started.wait()
+
+    await rewind(session, 1)
+
+    with pytest.raises(asyncio.CancelledError):
+        await call
+    assert session.generate_reply_calls == [{}]
 
 
 async def test_rewind_survives_interrupt_raising() -> None:

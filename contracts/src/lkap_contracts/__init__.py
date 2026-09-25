@@ -243,14 +243,21 @@ from lkap_contracts.templates import (
     ToolSeed,
 )
 from lkap_contracts.tools import (
+    BACKGROUNDABLE_BUILTINS,
     BLOCK_TOOL_NAMES,
     BLOCK_TOOL_TYPES,
     BUILTIN_TOOL_NAMES,
+    NEVER_BACKGROUND_TOOLS,
     UPDATABLE_BLOCK_TYPES,
     VISION_TOOL_NAMES,
+    DuplicatePolicy,
+    DuplicateScope,
     HttpToolDefinition,
     McpServerDefinition,
     ToolDefinition,
+    ToolExecution,
+    ToolExecutionMode,
+    never_background,
 )
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
@@ -291,6 +298,7 @@ from lkap_contracts.ui_protocol import (
 
 __all__ = [
     "ACTIVITY_RING_SIZE",
+    "BACKGROUNDABLE_BUILTINS",
     "BLOCK_CONFIG_MODELS",
     "BLOCK_TOOL_NAMES",
     "BLOCK_TOOL_TYPES",
@@ -302,6 +310,7 @@ __all__ = [
     "ID_LIKE_FIELD_NAMES",
     "MODEL_ID_PATTERN",
     "MODEL_KINDS",
+    "NEVER_BACKGROUND_TOOLS",
     "PRICES",
     "PRICE_VERSION",
     "PUBLIC_CATALOG_ADAPTERS",
@@ -375,6 +384,8 @@ __all__ = [
     "DispatchRulePage",
     "DocumentBlockConfig",
     "DocumentBlockState",
+    "DuplicatePolicy",
+    "DuplicateScope",
     "EditorSection",
     "EmptyBlockConfig",
     "EndNode",
@@ -499,6 +510,8 @@ __all__ = [
     "ToolDefinition",
     "ToolDryRunRequest",
     "ToolDryRunResult",
+    "ToolExecution",
+    "ToolExecutionMode",
     "ToolMeta",
     "ToolOut",
     "ToolPage",
@@ -554,6 +567,7 @@ __all__ = [
     "looks_like_secret",
     "lookup",
     "mvp_providers",
+    "never_background",
     "pipeline_issues",
     "validate_block_config",
     "validate_id_value",

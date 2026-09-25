@@ -18,6 +18,16 @@ set (`GET/PUT .../evals`; the runner is V5-05) and the explicit re-index
 before V5-01 gain their locators. The response models that carry the new
 fields are api-local subclasses of the contracts models until the contracts
 ask in `docs/v5/_asks.md` lands.
+
+V5-04 (knowledge search): both search routes run
+:class:`~lkap_api.kb.service.KnowledgeService` and accept `mode`
+(`vector`/`hybrid`), `rerank` (`none`/`local`) and `min_score`, defaulting to
+the pre-V5-04 behaviour; every hit carries its locators (`meta`) and the score
+of each stage that ran. The worker route skips a knowledge base built by
+another embedder with a warning instead of refusing the whole search. Deletes
+no longer write the vector store: they delete the SQL rows and enqueue
+`kb_delete` (`kb/jobs.py`), so in production only the jobs process writes
+vectors (D-V5-12).
 """
 
 from __future__ import annotations
@@ -36,7 +46,6 @@ from lkap_contracts.api_models import (
     KbImportIn,
     KbOut,
     KbSearchRequest,
-    KbSearchResponse,
 )
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import delete, func, select
@@ -44,7 +53,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
-from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbDocument, KbEval, KnowledgeBase, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, ServiceDep, SettingsDep, VaultDep
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
@@ -59,7 +67,9 @@ from lkap_api.kb.ingest import (
     import_policy,
     upload_storage_key,
 )
-from lkap_api.kb.search import search_kbs
+from lkap_api.kb.jobs import enqueue_kb_delete
+from lkap_api.kb.rerank import Reranker, get_local_reranker
+from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService, RerankMode, SearchMode
 from lkap_api.kb.store import VectorStore, get_lancedb_store
 from lkap_api.logging import get_logger
 from lkap_api.storage.base import StorageBackend, UploadTooLargeError
@@ -179,6 +189,32 @@ class KbEvalSetOut(BaseModel):
     total: int
 
 
+class _SearchOptions(BaseModel):
+    """The V5-04 search options; every default is the pre-V5-04 behaviour."""
+
+    mode: SearchMode = Field(
+        default="vector",
+        description="`vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).",
+    )
+    rerank: RerankMode = Field(
+        default="none", description="`local` rescores the top candidates with the local cross-encoder."
+    )
+    min_score: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Drop hits whose `score` is below this; the response's `dropped` counts them.",
+    )
+
+
+class KnowledgeSearchIn(KbSearchRequest, _SearchOptions):
+    """`POST /v1/knowledge-bases/{id}/search` (the console's test search)."""
+
+
+class InternalKnowledgeSearchIn(InternalKbSearchRequest, _SearchOptions):
+    """`POST /internal/v1/kb/search` (the worker)."""
+
+
 class KbReindexIn(BaseModel):
     """`POST /v1/knowledge-bases/{id}/reindex`: every document, or only these."""
 
@@ -217,6 +253,14 @@ async def get_embedder(settings: SettingsDep, db: DbDep, vault: VaultDep) -> Emb
 
 
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
+
+
+def get_reranker(settings: SettingsDep) -> Reranker:
+    """Return the process-wide local cross-encoder for ``LKAP_RERANK_MODEL`` (loaded on first rerank)."""
+    return get_local_reranker(settings.data_dir, settings.rerank_model)
+
+
+RerankerDep = Annotated[Reranker, Depends(get_reranker)]
 
 
 # --------------------------------------------------------------------------- helpers
@@ -308,26 +352,6 @@ async def _load_evals(db: AsyncSession, kb_id: str) -> list[KbEval]:
         .scalars()
         .all()
     )
-
-
-async def _checked_kbs(db: AsyncSession, kb_ids: list[str], embedder: Embedder) -> None:
-    """Refuse a search when any of ``kb_ids`` was built by another embedder (worker path).
-
-    The worker's ids come from a resolved agent config, so this read is
-    deliberately cross-workspace; unknown ids are ignored exactly as the
-    search itself ignores them.
-    """
-    if not kb_ids:
-        return
-    rows = (
-        await db.execute(
-            select(KnowledgeBase)
-            .where(KnowledgeBase.id.in_(kb_ids))
-            .execution_options(**{CROSS_WORKSPACE_OPTION: True})
-        )
-    ).scalars()
-    for row in rows:
-        check_kb_embedder(row, embedder)
 
 
 async def _recompute_chunk_count(db: AsyncSession, kb: KnowledgeBase) -> None:
@@ -526,14 +550,19 @@ async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) 
     "/{kb_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a knowledge base",
-    description="Removes the knowledge base, its documents/chunks and its vector table.",
+    description=(
+        "Removes the knowledge base, its documents, chunks and evaluation set at once, then removes "
+        "its vectors in a background job (with the default in-process jobs, before this returns)."
+    ),
 )
-async def delete_kb(kb_id: str, db: DbDep, store: VectorStoreDep, ctx: AdminCtxDep) -> Response:
-    """Delete a knowledge base and its LanceDB table."""
+async def delete_kb(kb_id: str, db: DbDep, jobs: JobsDep, ctx: AdminCtxDep) -> Response:
+    """Delete a knowledge base's rows, then enqueue its vector cleanup (D-V5-12: single writer)."""
     row = await _load_kb(db, ctx, kb_id)
     await db.delete(row)
-    await db.flush()
-    await store.delete_kb(kb_id)
+    # Durable before the job runs on its own connection (and before the
+    # response): a failed cleanup job leaves only invisible vectors behind.
+    await db.commit()
+    await enqueue_kb_delete(jobs, kb_id)
     log.info("kb_deleted", kb_id=kb_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -663,18 +692,24 @@ async def list_documents(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KnowledgeDo
     "/{kb_id}/documents/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a document",
-    description="Removes the document, its chunks (cascade) and its vectors.",
+    description=(
+        "Removes the document and its chunks at once (it no longer appears in listings or search), "
+        "then removes its vectors in a background job (with the default in-process jobs, before "
+        "this returns)."
+    ),
 )
 async def delete_document(
-    kb_id: str, document_id: str, db: DbDep, store: VectorStoreDep, ctx: AdminCtxDep
+    kb_id: str, document_id: str, db: DbDep, jobs: JobsDep, ctx: AdminCtxDep
 ) -> Response:
-    """Delete one document and its vectors."""
+    """Delete one document's rows, then enqueue its vector cleanup (D-V5-12: single writer)."""
     kb = await _load_kb(db, ctx, kb_id)
     document = await _load_document(db, kb_id, document_id)
     await db.delete(document)
     await db.flush()
-    await store.delete_document(kb_id, document_id)
     await _recompute_chunk_count(db, kb)
+    # Durable before the job runs on its own connection (and before the response).
+    await db.commit()
+    await enqueue_kb_delete(jobs, kb_id, document_id)
     log.info("kb_document_deleted", kb_id=kb_id, document_id=document_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -682,27 +717,41 @@ async def delete_document(
 # --------------------------------------------------------------------------- search
 @admin_router.post(
     "/{kb_id}/search",
-    response_model=KbSearchResponse,
+    response_model=KnowledgeSearchResponse,
     summary="Test search a knowledge base",
     description=(
-        "Runs the same retrieval the agent uses, for the console's Knowledge tab. 422 "
+        "Runs the same retrieval the agent uses, for the console's Knowledge tab. `mode` `hybrid` "
+        "adds keyword matches (exact policy numbers, form names) fused with the vector list by rank; "
+        "`rerank` `local` rescores the top candidates with the local cross-encoder; `min_score` drops "
+        "weaker hits (`dropped` counts them). Each hit shows every stage that ran for it "
+        "(`vector_score`, `lexical_rank`, `fused_score`, `rerank_score`), `score` is the one that "
+        "decided (`score_source`), and `meta` holds its locators (heading path, page, offsets). 422 "
         "`kb_embedder_mismatch` when the knowledge base was built by another embedder than the one "
         "configured now."
     ),
 )
 async def search_kb(
     kb_id: str,
-    payload: KbSearchRequest,
+    payload: KnowledgeSearchIn,
     db: DbDep,
     store: VectorStoreDep,
     embedder: EmbedderDep,
+    reranker: RerankerDep,
     ctx: AdminCtxDep,
-) -> KbSearchResponse:
+) -> KnowledgeSearchResponse:
     """Search one knowledge base."""
     _check_k(payload.k)
     check_kb_embedder(await _load_kb(db, ctx, kb_id), embedder)
-    hits = await search_kbs(db, store, embedder, kb_ids=[kb_id], query=payload.query, k=payload.k)
-    return KbSearchResponse(hits=hits)
+    service = KnowledgeService(db, store=store, embedder=embedder, reranker=reranker)
+    return await service.search(
+        [kb_id],
+        payload.query,
+        payload.k,
+        min_score=payload.min_score,
+        rerank=payload.rerank,
+        mode=payload.mode,
+        workspace_id=ctx.workspace_id,
+    )
 
 
 # --------------------------------------------------------------------------- evals (V5-01; runner: V5-05)
@@ -853,22 +902,32 @@ def _skipped(
 
 @internal_router.post(
     "/search",
-    response_model=KbSearchResponse,
+    response_model=KnowledgeSearchResponse,
     summary="Search knowledge bases (worker only)",
     description=(
-        "Cross-KB retrieval the agent calls for `search_knowledge` and RAG auto-injection. 422 "
-        "`kb_embedder_mismatch` when any listed knowledge base was built by another embedder."
+        "Cross-KB retrieval the agent calls for `search_knowledge` and RAG auto-injection. The "
+        "knowledge bases are searched concurrently, each with a timeout. `mode`, `rerank` and "
+        "`min_score` work as on the admin test search and default to plain vector search. A "
+        "knowledge base that is unknown, built by another embedder, slow or failing is skipped and "
+        "named in `warnings`; the others still answer."
     ),
 )
 async def internal_search_kb(
-    payload: InternalKbSearchRequest,
+    payload: InternalKnowledgeSearchIn,
     db: DbDep,
     store: VectorStoreDep,
     embedder: EmbedderDep,
+    reranker: RerankerDep,
     _service: ServiceDep,
-) -> KbSearchResponse:
+) -> KnowledgeSearchResponse:
     """Search across the given knowledge bases (worker-only)."""
     _check_k(payload.k)
-    await _checked_kbs(db, payload.kb_ids, embedder)
-    hits = await search_kbs(db, store, embedder, kb_ids=payload.kb_ids, query=payload.query, k=payload.k)
-    return KbSearchResponse(hits=hits)
+    service = KnowledgeService(db, store=store, embedder=embedder, reranker=reranker)
+    return await service.search(
+        payload.kb_ids,
+        payload.query,
+        payload.k,
+        min_score=payload.min_score,
+        rerank=payload.rerank,
+        mode=payload.mode,
+    )

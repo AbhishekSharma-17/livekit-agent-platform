@@ -69,6 +69,7 @@ from lkap_agent.tools.execution import (
     policy_of,
     register_policies,
     resolve_execution,
+    sdk_version_at_least,
     wrap_tool,
 )
 from lkap_agent.ui.blocks import block_ids_of_type, initial_block_states, resolve_block_specs
@@ -100,9 +101,10 @@ IN_PROGRESS_NOTE: Final[str] = (
 PIPELINE_NOTES: Final[dict[PipelineMode, str]] = {
     "cascaded": (
         "Pipeline notes: you are speaking through a cascaded voice pipeline. "
-        "Every tool result comes back to you and you will voice a reply, so keep "
-        'tool acknowledgements to one short clause ("Checking that now.") and '
-        f"never read raw tool output aloud. {IN_PROGRESS_NOTE}"
+        "Most tool results come back to you for a spoken reply; keep that "
+        'acknowledgement to one short clause ("Checking that now.") and never read '
+        "raw tool output aloud. A few tools finish silently and need no reply at all. "
+        f"{IN_PROGRESS_NOTE}"
     ),
     "realtime": (
         "Pipeline notes: you are a realtime speech model. Some tools finish in the "
@@ -118,6 +120,9 @@ PIPELINE_NOTES: Final[dict[PipelineMode, str]] = {
         f"your context when ready. {IN_PROGRESS_NOTE}"
     ),
 }
+
+#: First livekit-agents whose cascaded (pipeline) path honours `reply_required` (R-V4-68).
+SILENT_REPLY_PIPELINE_MIN_SDK: Final[str] = "1.8.3"
 
 #: Pipeline modes whose conversational model is a `RealtimeModel`.
 _REALTIME_MODEL_MODES: Final[frozenset[PipelineMode]] = frozenset({"realtime", "half_cascade"})
@@ -679,12 +684,17 @@ class PlatformAgent(Agent):
         `has_tool_reply` immediately after emitting the event, so a coroutine
         handler would run after the decision has already been made.
 
-        `reply_required` is only honoured by realtime models — which both the
-        `realtime` and the `half_cascade` pipeline run; cascaded LLMs always
-        answer a tool output, which is why the cascaded pipeline note tells the
-        model to keep acknowledgements short instead.
+        Realtime models (the `realtime` and `half_cascade` pipelines) have
+        always honoured `reply_required`. The cascaded pipeline honours it from
+        livekit-agents 1.8.3 (`AgentActivity._pipeline_reply_task_impl` reads
+        `has_tool_reply`), so there a `silent_reply` batch is silenced too
+        (R-V4-68); below 1.8.3 a cascaded LLM answers every tool output.
         """
-        if self._ctx.pipeline_mode not in _REALTIME_MODEL_MODES or not self._silent_reply_tools:
+        if not self._silent_reply_tools:
+            return
+        if self._ctx.pipeline_mode not in _REALTIME_MODEL_MODES and not sdk_version_at_least(
+            SILENT_REPLY_PIPELINE_MIN_SDK
+        ):
             return
         names = {call.name for call in ev.function_calls}
         if names and names <= self._silent_reply_tools:

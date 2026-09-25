@@ -82,6 +82,10 @@ class FlowNodeAgent(PlatformAgent):
             record_event=services.record_event,
             instructions=runtime.instructions_for(node),
             agent_options=options,
+            # R-V4-71: the session's one `function_tools_executed` handler is the entry
+            # node's, but every node carries the same set; the entry node alone logs.
+            silent_reply_tools=services.silent_reply_tools,
+            report_silent_reply_unhonoured=entry,
         )
         # D-W2-8 R5 is session-wide: a node entered after vision was disabled keeps it off.
         self._vision_disabled = runtime.vision_disabled

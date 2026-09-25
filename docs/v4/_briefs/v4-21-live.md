@@ -4,13 +4,13 @@ Status: **protocol only, not run.** No session ids yet. This is the coordinator'
 
 The repo is public: no token, key, host, phone number or transcript beyond the quoted turns goes in this file. Session ids and agent ids are fine. A failing step becomes an ask with the log line. Never patch during the run (R-V4-20).
 
-**Scope limit (ask #170):** the wiring reaches plain (prompt) agents only. On a **flow** agent the entry `FlowNodeAgent` is built without the names, so this check uses non-flow agents. Don't run it on a flow agent until #170 is ruled.
+**Flow agents (ask #170, done):** `_assemble`'s flow branch passes the same names to `FlowServices.silent_reply_tools`, and every `FlowNodeAgent` carries them. The session's one `function_tools_executed` handler is the entry node's, and only the entry node logs the "not honoured" line, so that line appears once per session. Step 3 checks this on a flow agent.
 
 ## Before you start
 
 1. **Worker restart.** After the merge, the user restarts their `lkap-agent` worker. The run never restarts, signals or kills it. Record the SDK version from the startup line (`starting worker {"version": …}`). Expect **1.8.3**. On a lower version, step 1's cascaded case is expected to keep the reply and to log `silent_reply is not honoured by this cascaded pipeline` once per session. Record that and stop.
-2. **Key (R-V4-17 rule 1).** Mint one Builder key named `v421-live` with `agents:read, sessions:read, agents:write, sessions:write` and `expires_at` +1 day. Keep it only in a 0600 MCP config in the scratchpad. Revoke it in step 3.
-3. **Objects touched.** One new tool, `demo_silent_status`, and one new scratch agent per mode, all deleted in step 3. Capture `agent_list` and `tool_list` before step 1 and after step 3. The diff must be empty.
+2. **Key (R-V4-17 rule 1).** Mint one Builder key named `v421-live` with `agents:read, sessions:read, agents:write, sessions:write` and `expires_at` +1 day. Keep it only in a 0600 MCP config in the scratchpad. Revoke it in step 4.
+3. **Objects touched.** One new tool, `demo_silent_status`, and three new scratch agents (cascaded, realtime, flow), all deleted in step 4. Capture `agent_list` and `tool_list` before step 1 and after step 4. The diff must be empty.
 4. **The tool (R-V4-18: `httpbin.org` only).** Create it **through the console's HTTP tool dialog** (V4-13). This checks that the console's `silent_reply` switch reaches the worker:
    - `demo_silent_status`: GET `https://httpbin.org/get`, `allowed_hosts=["httpbin.org"]`, `timeout_s=10`, `max_result_chars=2000`, **Silent reply on**, execution left at **blocking** (the validator refuses `silent_reply` with a background or automatic mode). Description: "Record the caller's status in the notebook. Call this whenever the caller says 'update my status'. Returns nothing to say."
    - Check with `tool_get` that `silent_reply` is `true`.
@@ -32,9 +32,18 @@ Then `chat_send("Thanks. What can you help me with?")`. The model answers normal
 
 Repeat step 1 on `Demo — Silent realtime`: the `blank` starter switched to `pipeline.mode = "realtime"` with the workspace's realtime model. Use a voice call or the text channel, whichever the workspace's realtime model supports. The pass criteria are the same. Note for Gemini Live: the server generates tool replies itself (`auto_tool_reply_generation`) and honours `reply_required=False` only with `SILENT` scheduling, i.e. `tool_behavior=NON_BLOCKING`, not on Vertex (ask #150). If the realtime model still narrates, record the model id and the plugin's "Gemini will answer it anyway" log line. That is a known plugin limit, not a V4-21 failure.
 
-## Step 3: clean-up
+## Step 3: flow agent (cascaded)
 
-Delete both scratch agents and `demo_silent_status`, revoke `v421-live`, and capture `agent_list` / `tool_list` again. The diff against the "before" capture must be empty.
+Create `Demo — Silent flow` from the `receptionist` starter (a cascaded flow, the default LLM, not changed). Attach `demo_silent_status`. In `config.flow`, add `"demo_silent_status"` to the `identify` node's `tools` and change nothing else. Run `agent_flow_validate`, then `agent_update(patch={"flow": …})`, then `agent_validate` (expect 0 errors). Run `chat_start`, then `chat_send("Please update my status.")`.
+
+Pass when all of these hold:
+- the same three criteria as step 1, with the session `path` still on `identify` after the call (a silent tool doesn't move the flow);
+- then `chat_send` the turns that move the flow to `collect_booking` (the caller's name and a fictional 555-01xx number). The flow transitions normally, and the node's next message is its own;
+- the worker log for the session has no `silent_reply is not honoured` line on 1.8.3. On a worker below 1.8.3 it has **exactly one** such line for the whole session, including after the transition. Record it either way.
+
+## Step 4: clean-up
+
+Delete the three scratch agents and `demo_silent_status`, revoke `v421-live`, and capture `agent_list` / `tool_list` again. The diff against the "before" capture must be empty.
 
 ## Run log
 

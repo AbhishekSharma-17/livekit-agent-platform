@@ -1427,6 +1427,7 @@ def _assemble(
                 shutdown=lambda reason: ctx.shutdown(reason=reason),
                 transfer=telephony.flow_transfer if telephony is not None else None,
                 initial_variables=seed_variables(resolved.variables),
+                silent_reply_tools=silent_http,
             )
         )
     else:

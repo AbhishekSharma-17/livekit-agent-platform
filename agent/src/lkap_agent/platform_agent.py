@@ -245,6 +245,7 @@ class PlatformAgent(Agent):
         instructions: str | None = None,
         agent_options: dict[str, Any] | None = None,
         silent_reply_tools: frozenset[str] = frozenset(),
+        report_silent_reply_unhonoured: bool = True,
     ) -> None:
         """Create the agent for one session.
 
@@ -271,6 +272,9 @@ class PlatformAgent(Agent):
             silent_reply_tools: Names of the session's HTTP tool definitions with
                 `silent_reply=True` (R-V4-71, computed by `main._assemble`); they
                 join the pack's `silent_reply` tools.
+            report_silent_reply_unhonoured: Whether this agent logs the one
+                "not honoured below 1.8.3" line. A flow builds one agent per
+                node, so only its entry node passes `True` (once per session).
         """
         self._ctx = ctx
         self._pack = pack
@@ -287,7 +291,8 @@ class PlatformAgent(Agent):
         )
         silent = {meta.name for meta in pack.tool_meta() if meta.silent_reply}
         silent |= silent_reply_tools
-        self._report_silent_reply_unhonoured(silent_reply_tools)
+        if report_silent_reply_unhonoured:
+            self._report_silent_reply_unhonoured(silent_reply_tools)
         if ctx.pipeline_mode in _REALTIME_MODEL_MODES and getattr(ctx, "channel", "web") != "text":
             # On the text channel `request_form` answers at once with a line the
             # model must act on (asks #30), so its reply is never suppressed there.
@@ -365,7 +370,8 @@ class PlatformAgent(Agent):
 
         A cascaded pipeline honours `reply_required` only from livekit-agents
         1.8.3 (R-V4-68); below it the flag is kept but not honoured, and saying
-        so beats ignoring it silently. `__init__` runs once per session.
+        so beats ignoring it silently. Called from `__init__`, which runs once
+        per session for a prompt agent; a flow calls it for its entry node only.
         """
         if not names or self._ctx.pipeline_mode in _REALTIME_MODEL_MODES:
             return

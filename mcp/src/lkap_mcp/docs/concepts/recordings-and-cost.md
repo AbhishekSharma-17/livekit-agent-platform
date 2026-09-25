@@ -58,6 +58,23 @@ enters the workspace's own per-unit price in USD with
 `GET /v1/workspace/prices`. A workspace price wins over OpenRouter's live
 sheet, which wins over the table. The estimate-agent-cost recipe walks through all of it.
 
+## Reconciliation
+
+Actual cost is computed at list prices. For OpenRouter an admin can also have
+LKAP read what OpenRouter itself charged: opt in with
+`api_request(method="PUT", path="/v1/workspaces/{workspace}", body={"settings": {"cost": {"reconcile": ["openrouter"]}}})`
+(the prices stored beside it are kept). From the next session on, the worker
+reports the id of every LLM request (ids only, never the conversation), and
+shortly after the call ends LKAP looks each one up with the workspace's
+OpenRouter key. `session_get` then shows `reconciled_usd` (what OpenRouter
+charged) and, on the LLM's input line, `vendor_usd` with `vendor_ref`
+("12 generations"; the charge covers input and output together). A request
+OpenRouter has not recorded yet is retried once 30 seconds later. No other
+vendor is reconciled: OpenAI and Anthropic report cost only to admin keys and
+only per day, and Deepgram's per-request charge needs a project id the
+credential form does not ask for yet. Vendor invoices may still differ
+(included minutes, volume tiers, taxes).
+
 ## Related tools
 
 `cost_estimate`, `pricing_quote`, `cost_summary`, `session_get`,

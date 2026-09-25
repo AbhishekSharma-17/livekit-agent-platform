@@ -24,6 +24,12 @@ USAGE_DAILY_ROLLUP = "usage_daily_rollup"
 #: the delete routes in `routers/knowledge.py`; handler in `kb/jobs.py`.
 KB_DELETE = "kb_delete"
 
+#: V4-17 (docs/v4/COSTS.md D-V4-45): looks up the vendor's own charge for a finished
+#: session's per-request ids (OpenRouter `/generation`) and writes `vendor_usd` /
+#: `reconciled_usd`. Enqueued after the session summary commits, only when the
+#: workspace opted in; handler in `jobs/reconcile.py`.
+COST_RECONCILE = "cost_reconcile"
+
 #: Reserved for other packages' handlers (PLAN-V2 §"V2-08" scope line); this
 #: package never enqueues these itself.
 CONNECTION_PROBE = "connection_probe"

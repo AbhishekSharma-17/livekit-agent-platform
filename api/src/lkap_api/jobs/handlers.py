@@ -40,6 +40,7 @@ def load_all_handlers() -> frozenset[str]:
     """
     from lkap_api import sessions_sweep as _sessions_sweep  # noqa: F401 - registers session_orphan_event
     from lkap_api.fleet import sweep as _fleet_sweep  # noqa: F401 - registers worker_sweep
+    from lkap_api.jobs import reconcile as _jobs_reconcile  # noqa: F401 - registers cost_reconcile
     from lkap_api.jobs import rollup as _jobs_rollup  # noqa: F401 - registers usage_daily_rollup
     from lkap_api.kb import ingest as _kb_ingest  # noqa: F401 - registers kb_ingest
     from lkap_api.kb import jobs as _kb_jobs  # noqa: F401 - registers kb_delete

@@ -1557,6 +1557,12 @@
       ],
       "default": null,
       "title": "Template Id"
+    },
+    "workspace_averages": {
+      "default": false,
+      "description": "Replace the defaults with the workspace's own session averages when it has at least 10 ended sessions (the session snapshot always does).",
+      "title": "Workspace Averages",
+      "type": "boolean"
     }
   },
   "title": "CostEstimateRequest",

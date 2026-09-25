@@ -1496,6 +1496,10 @@ export interface CostEstimateRequest {
    */
   config?: AgentConfig | null;
   template_id?: string | null;
+  /**
+   * Replace the defaults with the workspace's own session averages when it has at least 10 ended sessions (the session snapshot always does).
+   */
+  workspace_averages?: boolean;
 }
 /**
  * One priced usage line of a session.

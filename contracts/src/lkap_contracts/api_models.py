@@ -883,6 +883,11 @@ class CostEstimateRequest(BaseModel):
         default=None, description="Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`)."
     )
     channel: EstimateChannel = "web"
+    workspace_averages: bool = Field(
+        default=False,
+        description="Replace the defaults with the workspace's own session averages when it has "
+        "at least 10 ended sessions (the session snapshot always does).",
+    )
 
     @model_validator(mode="after")
     def _at_most_one_source(self) -> "CostEstimateRequest":

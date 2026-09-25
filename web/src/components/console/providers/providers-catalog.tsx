@@ -34,6 +34,11 @@ const TAB_GROUPS: { id: string; label: string; kinds: ProviderKind[] }[] = [
   { id: "embedding", label: KIND_LABEL.embedding, kinds: ["embedding"] },
   { id: "image_gen", label: KIND_LABEL.image_gen, kinds: ["image_gen"] },
   { id: "secret_bag", label: KIND_LABEL.secret_bag, kinds: ["secret_bag"] },
+  // docs/v5/_asks.md #4 (V5-18): this page had no group for `tool_provider`,
+  // so Composio showed only in the Keys dialog. `ProviderRow` renders it
+  // read-only (see there) since its "Enable" is a different flow — Tools ->
+  // Apps' Enable/Disable, not the generic per-connection install toggle.
+  { id: "tool_provider", label: KIND_LABEL.tool_provider, kinds: ["tool_provider"] },
 ];
 const TAB_IDS = new Set(TAB_GROUPS.map((t) => t.id));
 const DEFAULT_TAB = TAB_GROUPS[0]!.id;

@@ -33,12 +33,14 @@ from lkap_agent.providers.factory import (
     ProviderFactory,
 )
 from lkap_agent.session_builder import (
+    AMBIENT_SOUND_VOLUME,
     ASYNC_TOOL_OPTIONS,
     AVATAR_OPTION_KWARGS,
     THINKING_SOUND_VOLUME,
     SessionBuilder,
     factory_view,
     prepare_resolved,
+    start_background_audio,
     start_thinking_sound,
 )
 
@@ -457,3 +459,91 @@ async def test_a_thinking_sound_that_fails_to_start_is_skipped() -> None:
 
     assert await start_thinking_sound(plan, object(), player_factory=_factory) is None
     assert broken[0].closed == 1
+
+
+# ------------------------------------------------ V5-07: ambient sound (one player with both clips)
+
+
+def _recording_factory() -> tuple[list[_FakePlayer], Any]:
+    players: list[_FakePlayer] = []
+
+    def _factory(**kwargs: Any) -> _FakePlayer:
+        players.append(_FakePlayer(**kwargs))
+        return players[-1]
+
+    return players, _factory
+
+
+async def test_the_plan_carries_the_ambient_sound_except_on_the_text_channel() -> None:
+    assert _plan_for("cascaded").ambient_sound == "none"
+    assert _plan_for("realtime", ambient_sound="city_ambience").ambient_sound == "city_ambience"
+    text_config = prepare_resolved(resolved_config(channel="text"))
+    cfg = text_config.config.model_copy(
+        update={"voice": text_config.config.voice.model_copy(update={"ambient_sound": "office_ambience"})}
+    )
+    text_plan = SessionBuilder().build(
+        text_config.model_copy(update={"config": cfg}), BuiltProviders(llm=object())
+    )
+    assert text_plan.ambient_sound == "none"
+
+
+async def test_one_player_carries_the_ambient_clip_and_the_thinking_sound() -> None:
+    from livekit.agents import BuiltinAudioClip  # noqa: PLC0415
+
+    plan = _plan_for("cascaded", thinking_sound="keyboard_typing", ambient_sound="office_ambience")
+    plan = dataclasses.replace(plan, session=_with_audio_out())
+    players, factory = _recording_factory()
+
+    stop = await start_background_audio(plan, object(), player_factory=factory)
+
+    assert stop is not None
+    (player,) = players
+    assert player.kwargs["ambient_sound"].source is BuiltinAudioClip.OFFICE_AMBIENCE
+    assert player.kwargs["ambient_sound"].volume == AMBIENT_SOUND_VOLUME
+    assert player.kwargs["thinking_sound"].source is BuiltinAudioClip.KEYBOARD_TYPING
+    await stop("done")
+    assert player.closed == 1
+
+
+@pytest.mark.parametrize("sound", ["city_ambience", "forest_ambience", "crowded_room", "hold_music"])
+async def test_an_ambient_clip_alone_starts_the_player(sound: str) -> None:
+    from livekit.agents import BuiltinAudioClip  # noqa: PLC0415
+
+    plan = dataclasses.replace(_plan_for("cascaded", ambient_sound=sound), session=_with_audio_out())
+    players, factory = _recording_factory()
+
+    assert await start_background_audio(plan, object(), player_factory=factory) is not None
+    (player,) = players
+    assert set(player.kwargs) == {"ambient_sound"}
+    assert player.kwargs["ambient_sound"].source is BuiltinAudioClip[sound.upper()]
+
+
+def test_every_ambient_sound_names_a_builtin_clip() -> None:
+    from livekit.agents import BuiltinAudioClip  # noqa: PLC0415
+    from lkap_contracts.turn_handling import AMBIENT_SOUNDS  # noqa: PLC0415
+
+    assert {clip.name.lower() for clip in BuiltinAudioClip} == set(AMBIENT_SOUNDS)
+
+
+async def test_the_ambient_clip_starts_only_with_audio_output() -> None:
+    def _never(**_kwargs: Any) -> Any:
+        raise AssertionError("no player expected")
+
+    silent = _plan_for("cascaded", ambient_sound="office_ambience")
+    assert silent.session.output.audio is None
+    assert await start_background_audio(silent, object(), player_factory=_never) is None
+    text_plan = dataclasses.replace(silent, text_only=True, session=_with_audio_out())
+    assert await start_background_audio(text_plan, object(), player_factory=_never) is None
+
+
+async def test_an_uploaded_ambient_clip_is_not_played_yet() -> None:
+    def _never(**_kwargs: Any) -> Any:
+        raise AssertionError("no player expected")
+
+    plan = dataclasses.replace(_plan_for("cascaded", ambient_sound="asset:clip_1"), session=_with_audio_out())
+    assert await start_background_audio(plan, object(), player_factory=_never) is None
+
+    both = dataclasses.replace(plan, thinking_sound="keyboard_typing")
+    players, factory = _recording_factory()
+    assert await start_background_audio(both, object(), player_factory=factory) is not None
+    assert set(players[0].kwargs) == {"thinking_sound"}

@@ -26,6 +26,12 @@ registry's `default_model="silero"` is informational), and all three are
 lenient by default: a failed build falls back to the session's defaults
 (prewarmed Silero, the Inference turn detector, no noise filter) instead of
 failing the call.
+
+**Conversation tuning (V5-07)**: two pure helpers shape what those slots build.
+:func:`telephony_noise_cancellation` swaps a noise filter for its phone-tuned
+variant (the registry's ``telephony_variant``), and :func:`turn_detector_kwargs`
+turns ``PipelineConfig.turn_detector`` into constructor kwargs for the LiveKit
+turn detector. ``session_builder.prepare_resolved`` decides when to apply them.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ from dataclasses import fields as dataclass_fields
 from typing import Any, Final
 
 from lkap_contracts.agent_config import PipelineMode, ProviderSlot, ResolvedAgentConfig, ResolvedProvider
+from lkap_contracts.connections import TurnDetectorMode
 from lkap_contracts.providers import ProviderKind, ProviderSpec
 from lkap_contracts.providers import get as get_spec
 
@@ -56,6 +63,9 @@ __all__ = [
     "ProviderBuildError",
     "ProviderFactory",
     "SLOT_KINDS",
+    "TELEPHONY_VARIANT_DROPPED_KWARGS",
+    "telephony_noise_cancellation",
+    "turn_detector_kwargs",
 ]
 
 logger = get_logger(__name__)
@@ -99,6 +109,75 @@ _INFERENCE_PREFIX: Final[str] = "livekit-inference-"
 #: Secret kwargs an Inference provider must never receive (it authenticates with
 #: the worker's own LiveKit credentials from env).
 _INFERENCE_FORBIDDEN_KWARGS: Final[tuple[str, ...]] = ("api_key", "api_secret")
+
+
+#: Kwargs of a noise filter's default constructor that its telephony variant does not take.
+#: livekit-plugins-krisp 0.4.2 ``viva_filter.py``: ``KrispVivaFilterFrameProcessor(*, mode, auth_provider,
+#: model_path, noise_suppression_level, ...)`` vs ``voice_isolation_telephony(*, auth_provider,
+#: noise_suppression_level)``, which fixes the mode itself. livekit-plugins-noise-cancellation 0.3.2
+#: ``BVC()`` and ``BVCTelephony()`` take nothing.
+TELEPHONY_VARIANT_DROPPED_KWARGS: Final[dict[str, tuple[str, ...]]] = {
+    "krisp-noise-cancellation": ("mode", "model_path"),
+}
+
+
+def telephony_noise_cancellation(provider: ResolvedProvider) -> ResolvedProvider | None:
+    """The phone-tuned variant of a resolved noise filter, or ``None`` when it has none.
+
+    The variant is the registry entry's ``telephony_variant`` (a dotted path the
+    factory imports like any ``python_class``); kwargs the variant does not take
+    are dropped (:data:`TELEPHONY_VARIANT_DROPPED_KWARGS`). Both variants return
+    what ``AudioInputOptions.noise_cancellation`` accepts: an
+    ``rtc.NoiseCancellationOptions`` or an ``rtc.FrameProcessor`` (livekit-agents
+    1.8.3 ``voice/room_io/types.py:253``).
+
+    Args:
+        provider: The resolved ``noise_cancellation`` slot.
+
+    Returns:
+        A copy that builds the variant, or ``None`` for an unknown id or an entry
+        without a telephony variant.
+    """
+    try:
+        spec = get_spec(provider.provider_id)
+    except KeyError:
+        return None
+    if spec.kind != "noise_cancellation" or spec.telephony_variant is None:
+        return None
+    if provider.python_class == spec.telephony_variant:
+        return provider
+    dropped = TELEPHONY_VARIANT_DROPPED_KWARGS.get(spec.id, ())
+    kwargs = {key: value for key, value in provider.kwargs.items() if key not in dropped}
+    return provider.model_copy(update={"python_class": spec.telephony_variant, "kwargs": kwargs})
+
+
+def turn_detector_kwargs(
+    *, mode: str | None, unlikely_threshold: float | None, connection_mode: TurnDetectorMode
+) -> dict[str, Any]:
+    """Constructor kwargs of ``inference.TurnDetector`` for ``PipelineConfig.turn_detector``.
+
+    livekit-agents 1.8.3 ``inference/eot/detector.py:35-47``: ``version`` absent lets the
+    SDK pick (hosted ``v1`` on LiveKit Cloud and in dev mode, else the local ``v1-mini``,
+    ``detector.py:57-61``); an explicit ``v1`` raises without Inference credentials
+    (``detector.py:92-100``), so ``hosted`` never forces it. ``local`` (or a connection
+    without hosted Inference, ARCHITECTURE-V2 D-V2-4) pins ``v1-mini``.
+    ``unlikely_threshold`` overrides the calibrated per-language default
+    (``languages.py:41-60``; the SDK logs a warning when it is set, ``detector.py:151-167``).
+
+    Args:
+        mode: ``TurnDetectorSettings.mode`` (``hosted``, ``local`` or ``None``).
+        unlikely_threshold: ``TurnDetectorSettings.unlikely_threshold``.
+        connection_mode: The connection's ``turn_detector_mode``.
+
+    Returns:
+        Only the kwargs that differ from the SDK's own choice; empty = nothing to set.
+    """
+    kwargs: dict[str, Any] = {}
+    if mode == "local" or connection_mode == "local":
+        kwargs["version"] = "v1-mini"
+    if unlikely_threshold is not None:
+        kwargs["unlikely_threshold"] = unlikely_threshold
+    return kwargs
 
 
 @dataclass(slots=True)

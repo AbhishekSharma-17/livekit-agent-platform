@@ -81,7 +81,8 @@ __all__ = [
 
 logger = get_logger(__name__)
 
-ToolKind = Literal["builtin", "http", "mcp", "pack"]
+#: ``provider`` = a connected app's action (V5-47, ``tools/provider.py``).
+ToolKind = Literal["builtin", "http", "mcp", "pack", "provider"]
 
 
 #: Flow-node tools stay blocking below this SDK (livekit/agents #7321: in 1.8.2 a
@@ -205,8 +206,8 @@ def resolve_execution(
 
     Args:
         name: The model-facing tool name.
-        kind: Where the tool comes from; the agent default reaches only ``builtin``
-            and ``http`` read tools, never ``mcp`` or ``pack`` tools.
+        kind: Where the tool comes from; the agent default reaches only ``builtin``,
+            ``http`` and ``provider`` read tools, never ``mcp`` or ``pack`` tools.
         is_read: A GET HTTP tool, or a built-in in ``BACKGROUNDABLE_BUILTINS``.
         declared: The tool's own :class:`ToolExecution`, if any.
         agent_default: ``AgentConfig.tools.execution_default``.
@@ -221,7 +222,7 @@ def resolve_execution(
     """
     spec = declared or ToolExecution()
     shown = label or tool_label(name)
-    default_applies = is_read and kind in ("builtin", "http")
+    default_applies = is_read and kind in ("builtin", "http", "provider")
     mode: ToolExecutionMode = spec.mode or (agent_default if default_applies else "blocking")
     downgraded_from: ToolExecutionMode | None = None
 

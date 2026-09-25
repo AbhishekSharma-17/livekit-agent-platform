@@ -74,7 +74,12 @@ from lkap_agent.tools.execution import (
     sdk_version_at_least,
     wrap_tool,
 )
-from lkap_agent.ui.blocks import block_ids_of_type, initial_block_states, resolve_block_specs
+from lkap_agent.ui.blocks import (
+    VOICE_ONLY_CHANNELS,
+    block_ids_of_type,
+    initial_block_states,
+    resolve_block_specs,
+)
 from lkap_agent.ui.channel import BARGE_IN
 from lkap_agent.vision import encode_jpeg_data_url
 
@@ -292,6 +297,10 @@ class PlatformAgent(Agent):
             # On the text channel `request_form` answers at once with a line the
             # model must act on (asks #30), so its reply is never suppressed there.
             silent |= _REALTIME_SILENT_BUILTINS
+            if getattr(ctx, "channel", "web") in VOICE_ONLY_CHANNELS:
+                # On a phone call `request_choice` shows nothing and answers at once
+                # (`{"channel": "voice_only"}`): the model must ask out loud, so keep its reply.
+                silent -= {"request_choice"}
         self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
         if instructions is None:

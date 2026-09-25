@@ -49,6 +49,7 @@ __all__ = [
     "ENVELOPE_BLOCK_TYPES",
     "FULL_PAGE_BBOX",
     "OPEN_CITATION",
+    "VOICE_ONLY_CHANNELS",
     "block_ids_of_type",
     "block_path",
     "choice_selection_error",
@@ -92,6 +93,9 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "markdown": MarkdownBlockState,
     "steps": StepsBlockState,
 }
+
+#: Session channels with no screen: panel blocks are invisible there (V5-08).
+VOICE_ONLY_CHANNELS: Final[frozenset[str]] = frozenset({"sip_in", "sip_out"})
 
 #: `block_action` name a `kb_citations` block sends when the user taps a citation (E1).
 OPEN_CITATION: Final[str] = "open_citation"

@@ -16,7 +16,7 @@ answer by voice instead: the model then calls `resolve_choice`.
   is not announced back to it.
 * **phone channels** (`sip_in`, `sip_out`): nothing is shown (the caller has no
   screen); the tool answers `{"channel": "voice_only"}` at once and the model
-  asks out loud.
+  asks out loud (`PlatformAgent` does not silence the reply there, in any mode).
 * **text channel**: a typed chat has no panel to tap (asks #30), so the tool
   answers at once and the model asks in the conversation.
 """
@@ -27,13 +27,18 @@ import json
 from typing import Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
-from lkap_contracts.common import SessionChannel
 from lkap_contracts.ui_protocol import UiPatchOp
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
 from lkap_agent.tools.builtin.request_form import BACKGROUND_FORM_MODES
-from lkap_agent.ui.blocks import choice_selection_error, describe_blocks, pick_block, session_block_specs
+from lkap_agent.ui.blocks import (
+    VOICE_ONLY_CHANNELS,
+    choice_selection_error,
+    describe_blocks,
+    pick_block,
+    session_block_specs,
+)
 
 __all__ = [
     "CHOICE_TIMEOUT_S",
@@ -50,9 +55,6 @@ CHOICE_TIMEOUT_S: Final[float] = 60.0
 
 #: `ChoicesBlockConfig.max_options` default.
 DEFAULT_MAX_OPTIONS: Final[int] = 8
-
-#: Channels with no screen: the block is invisible there.
-VOICE_ONLY_CHANNELS: Final[frozenset[SessionChannel]] = frozenset({"sip_in", "sip_out"})
 
 #: `via` value `resolve_choice` puts in the answer, so the background waiter stays quiet.
 VIA_VOICE: Final[str] = "voice"

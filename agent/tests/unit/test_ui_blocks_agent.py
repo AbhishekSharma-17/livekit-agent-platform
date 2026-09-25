@@ -277,6 +277,21 @@ def test_request_choice_reply_is_cancelled_on_realtime_models(mode: Any, silence
     assert event.has_tool_reply is not silenced
 
 
+@pytest.mark.parametrize("mode", ["realtime", "half_cascade"])
+@pytest.mark.parametrize("channel_name", ["sip_in", "sip_out"])
+def test_request_choice_reply_is_kept_on_a_phone_call(mode: Any, channel_name: Any) -> None:
+    """On a phone call the tool answers `voice_only` at once; the model must ask out loud."""
+    agent, *_ = _agent(_config(CHOICE_PANEL, mode=mode))
+    agent.context.channel = channel_name
+    phone_agent = PlatformAgent(ctx=agent.context, pack=NullPack(), has_tts=True)
+    choice = _tools_executed("request_choice")
+    phone_agent.on_function_tools_executed(choice)
+    assert choice.has_tool_reply is True
+    form = _tools_executed("request_form")
+    phone_agent.on_function_tools_executed(form)
+    assert form.has_tool_reply is False
+
+
 def test_barge_in_handler_is_registered_once_per_session() -> None:
     session = _RecordingSession()
     agent, *_ = _agent(_config(CHOICE_PANEL), session=session)

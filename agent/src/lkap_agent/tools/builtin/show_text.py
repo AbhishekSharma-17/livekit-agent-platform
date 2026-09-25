@@ -18,8 +18,7 @@ from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.ui_protocol import MarkdownBlockState
 from packs.base import PackSessionContext
 
-from lkap_agent.tools.builtin.request_choice import VOICE_ONLY_CHANNELS
-from lkap_agent.ui.blocks import describe_blocks, pick_block, session_block_specs
+from lkap_agent.ui.blocks import VOICE_ONLY_CHANNELS, describe_blocks, pick_block, session_block_specs
 
 __all__ = ["DEFAULT_MAX_CHARS", "build_show_text_tool", "contains_html"]
 

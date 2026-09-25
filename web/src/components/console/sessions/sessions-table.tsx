@@ -19,6 +19,7 @@ import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { StatusChip } from "@/components/shared/status-chip";
 import { useAgents } from "@/components/console/lib/api-hooks";
+import { formatUsd } from "@/components/console/lib/cost-hooks";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import type { SessionOut } from "@/contracts/lkap-contracts";
 import { formatDuration } from "@/lib/format";
@@ -222,6 +223,12 @@ export function SessionsTable() {
       align: "end",
       cell: (session) => <span className="font-mono tabular-nums text-muted-foreground">{usageTurns(session.usage) ?? "—"}</span>,
     },
+    {
+      id: "cost",
+      header: "Cost",
+      align: "end",
+      cell: (session) => <CostCell session={session} />,
+    },
   ];
 
   const first = filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
@@ -345,6 +352,28 @@ function durationText(session: SessionOut): string {
   return ms === null ? "—" : formatDuration(ms);
 }
 
+/**
+ * The list's Cost column (docs/v4/COSTS.md §5 item 7): the actual cost, with
+ * the creation-time estimate muted beside it when both exist — "$0.12 (≈
+ * $0.10)". A session with no actual cost yet falls back to just the
+ * estimate; one with neither shows "—" (never "$0" for an unpriced/pending
+ * session — `cost_usd`/`estimated_usd` are `null`, not zero, until priced).
+ */
+export function CostCell({ session }: { session: SessionOut }) {
+  const actual = formatUsd(session.cost_usd);
+  const estimate = formatUsd(session.estimated_usd);
+  if (actual && estimate) {
+    return (
+      <span className="font-mono tabular-nums text-foreground">
+        {actual} <span className="text-muted-foreground">(≈ {estimate})</span>
+      </span>
+    );
+  }
+  if (actual) return <span className="font-mono tabular-nums text-foreground">{actual}</span>;
+  if (estimate) return <span className="font-mono tabular-nums text-muted-foreground">≈ {estimate} · estimate</span>;
+  return <span className="text-muted-foreground">—</span>;
+}
+
 function StartedCell({ session }: { session: SessionOut }) {
   if (session.started_at) return <RelativeTime iso={session.started_at} className="text-muted-foreground" />;
   return (
@@ -395,6 +424,7 @@ function SessionCard({ session }: { session: SessionOut }) {
         <span className="font-mono tabular-nums text-foreground">{durationText(session)}</span>
         {channel ? <span>{channel}</span> : null}
         <span>{pipelineModeLabel(session.pipeline_mode)}</span>
+        <CostCell session={session} />
       </div>
     </div>
   );

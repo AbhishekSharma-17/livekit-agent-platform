@@ -10,6 +10,7 @@ import { VendorMark } from "@/components/shared/vendor-mark";
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
 import { displayMessage } from "@/components/console/agents/editor/validation-map";
 import { useCredentials } from "@/components/console/lib/api-hooks";
+import { formatUsdPerMin } from "@/components/console/lib/cost-hooks";
 import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
 import { isCustomModelId, ModelSummary, useModelCatalog } from "@/components/console/registry/model-combobox";
 import { TestedChip, useTestedState } from "@/components/console/registry/model-test-panel";
@@ -29,6 +30,20 @@ import { isSendableModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
 import type { ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
 
+/**
+ * A slot's own share of the agent's per-minute estimate (docs/v4/COSTS.md §5
+ * item 2), passed in by the caller rather than fetched here: the card is
+ * rendered outside any `FormProvider` in its own tests, so it must stay
+ * form/query-agnostic (the caller — `ProvidersTab` — is the one place that
+ * has both the shared estimate and this slot's key).
+ */
+export interface SlotCostEstimate {
+  /** This slot's `EstimateLine.usd_per_min`; `null` means unpriced ("no price"), not free. */
+  usdPerMin: string | number | null;
+  /** Opens the "Your prices" dialog prefilled for this slot's unpriced line; omitted when there's nothing to price or the viewer can't. */
+  onSetPrice?: () => void;
+}
+
 export interface ProviderSlotCardProps extends ProviderSlotEditorProps {
   /** Card title, sentence case ("Speech-to-text"). */
   title: string;
@@ -47,6 +62,8 @@ export interface ProviderSlotCardProps extends ProviderSlotEditorProps {
   notice?: React.ReactNode;
   /** Config-relative path (`pipeline.stt`) — lets "Show field" focus this card. */
   issuePath?: string;
+  /** This slot's estimated ≈ $/min chip (omit when there's no shared estimate in view). */
+  costEstimate?: SlotCostEstimate;
 }
 
 /**
@@ -66,6 +83,7 @@ export function ProviderSlotCard({
   errorTone = "error",
   notice,
   issuePath,
+  costEstimate,
   ...editorProps
 }: ProviderSlotCardProps) {
   const { kind, value, providers: providersProp, idPrefix } = editorProps;
@@ -106,6 +124,7 @@ export function ProviderSlotCard({
               {description ? <p className="text-xs text-pretty text-muted-foreground">{description}</p> : null}
             </div>
             <ProviderSlotSummary value={value} providers={providers} kind={kind} />
+            {costEstimate ? <SlotCostChip estimate={costEstimate} /> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1 self-start">
             {onRemove ? (
@@ -144,6 +163,33 @@ export function ProviderSlotCard({
         </CollapsibleContent>
       </section>
     </Collapsible>
+  );
+}
+
+/**
+ * The slot's own "≈ $0.020/min · estimate" chip (docs/v4/COSTS.md §5 item 2):
+ * a muted "no price" with a "Set a price" link when `onSetPrice` is given
+ * (an admin, and this line has none), nothing at all when the caller has no
+ * shared estimate to show.
+ */
+function SlotCostChip({ estimate }: { estimate: SlotCostEstimate }) {
+  const usd = formatUsdPerMin(estimate.usdPerMin);
+  if (usd) {
+    return <p className="text-[0.8125rem] text-muted-foreground">{usd} · estimate</p>;
+  }
+  return (
+    <p className="flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground">
+      no price
+      {estimate.onSetPrice ? (
+        <button
+          type="button"
+          onClick={estimate.onSetPrice}
+          className="rounded-xs font-medium text-brand-text underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Set a price
+        </button>
+      ) : null}
+    </p>
   );
 }
 

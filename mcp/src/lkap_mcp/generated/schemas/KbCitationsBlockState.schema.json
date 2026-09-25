@@ -1,15 +1,78 @@
 {
   "$defs": {
     "KbCitation": {
-      "description": "One retrieved chunk cited to the user.",
+      "description": "One retrieved chunk cited to the user.\n\nThe locators (V5-08) come from the chunk's ingest metadata (V5-01) and are\nabsent for chunks ingested before it. Tapping a citation sends\n``block_action {name: \"open_citation\", data: {chunk_id}}``; the worker\nopens the source page in a ``document`` block when it has the source.",
       "properties": {
+        "char_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Char End"
+        },
+        "char_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Char Start"
+        },
         "chunk_id": {
           "title": "Chunk Id",
           "type": "string"
         },
+        "document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Id"
+        },
         "filename": {
           "title": "Filename",
           "type": "string"
+        },
+        "heading_path": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading Path"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
         },
         "score": {
           "title": "Score",

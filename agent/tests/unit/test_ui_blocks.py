@@ -35,6 +35,7 @@ from pydantic import ValidationError
 from lkap_agent.packs.loader import null_manifest
 from lkap_agent.ui.blocks import (
     block_path,
+    flow_steps_state,
     initial_block_state,
     initial_block_states,
     pick_block,
@@ -325,8 +326,15 @@ async def test_cite_sets_items_from_kb_hits() -> None:
     await channel.cite("sources", [hit])
     patch = UiPatch.model_validate_json(room.local_participant.sent_text[-1].text)
     assert [(op.op, op.path) for op in patch.ops] == [("set", "/blocks/sources/items")]
+    # V5-08: the citation carries the hit's document id (the locators only when the hit has them).
     assert channel.state.blocks["sources"]["items"] == [
-        {"chunk_id": "c1", "filename": "policy.pdf", "score": 0.91, "text": "Deductible is 500."}
+        {
+            "chunk_id": "c1",
+            "filename": "policy.pdf",
+            "score": 0.91,
+            "text": "Deductible is 500.",
+            "document_id": "d1",
+        }
     ]
     assert events[-1] == ("block_update", {"block_id": "sources", "block_type": "kb_citations", "op": "cite"})
 
@@ -513,3 +521,200 @@ async def test_show_block_sends_a_show_block_request() -> None:
 
 def test_initial_block_states_is_keyed_by_block_id() -> None:
     assert list(initial_block_states(L8_BLOCKS)) == [s.id for s in L8_BLOCKS]
+
+
+# ================================================================ V5-08: the block quartet
+
+
+def test_quartet_initial_states_seed_from_config() -> None:
+    choices = initial_block_state(
+        BlockSpec(id="c", type="choices", config={"multi": True, "layout": "chips"})
+    )
+    assert choices == {
+        "status": "idle",
+        "submitted_at": None,
+        "prompt": "",
+        "options": [],
+        "multi": True,
+        "selected": [],
+        "reveal": None,
+    }
+    details = initial_block_state(
+        BlockSpec(
+            id="d", type="details", config={"columns": 2, "fields": [{"key": "claim_no", "label": "Claim"}]}
+        )
+    )
+    assert details == {
+        "items": [
+            {
+                "key": "claim_no",
+                "label": "Claim",
+                "value": None,
+                "type": "string",
+                "tone": None,
+                "updated_at": None,
+            }
+        ]
+    }
+    assert initial_block_state(BlockSpec(id="m", type="markdown", config={"max_chars": 500})) == {
+        "markdown": "",
+        "title": None,
+        "updated_at": None,
+    }
+    steps = initial_block_state(
+        BlockSpec(id="s", type="steps", config={"steps": [{"id": "a", "label": "A"}], "source": "flow"})
+    )
+    assert steps == {
+        "steps": [{"id": "a", "label": "A", "status": "pending", "note": None, "at": None}],
+        "current": None,
+    }
+
+
+def test_choices_state_is_validated_on_set_block() -> None:
+    with pytest.raises(ValidationError):
+        validate_block_state("choices", {"selected": "no"})
+    with pytest.raises(ValidationError):
+        validate_block_state("steps", {"steps": [{"id": "a", "label": "A", "status": "later"}]})
+
+
+NODES = [("collect", "Collect"), ("photos", "Photos"), ("confirm", "Confirm")]
+
+
+@pytest.mark.parametrize(
+    ("path", "current", "finished", "statuses", "active"),
+    [
+        (["start", "collect"], "collect", False, ["active", "pending", "pending"], "collect"),
+        (["start", "collect", "photos"], "photos", False, ["done", "active", "pending"], "photos"),
+        (["start", "confirm"], "confirm", False, ["skipped", "skipped", "active"], "confirm"),
+        (["start", "collect", "confirm", "done"], "done", True, ["done", "skipped", "done"], None),
+        (["start"], "start", False, ["pending", "pending", "pending"], None),
+    ],
+)
+def test_flow_steps_state_follows_the_path(
+    path: list[str], current: str, finished: bool, statuses: list[str], active: str | None
+) -> None:
+    state = flow_steps_state({}, nodes=NODES, path=path, current=current, finished=finished)
+    assert [s["status"] for s in state["steps"]] == statuses
+    assert [s["label"] for s in state["steps"]] == ["Collect", "Photos", "Confirm"]
+    assert state["current"] == active
+
+
+def test_flow_steps_state_prefers_the_configured_steps() -> None:
+    config = {"steps": [{"id": "confirm", "label": "Check it"}, {"id": "ghost", "label": "Not a node"}]}
+    state = flow_steps_state(
+        config, nodes=NODES, path=["start", "confirm"], current="confirm", finished=False
+    )
+    assert [(s["id"], s["label"], s["status"]) for s in state["steps"]] == [
+        ("confirm", "Check it", "active"),
+        ("ghost", "Not a node", "pending"),
+    ]
+
+
+# ------------------------------------------------------------- open_citation (E1)
+
+CITATION_BLOCKS = [
+    BlockSpec(id="sources", type="kb_citations", order=0),
+    BlockSpec(id="doc", type="document", order=1),
+]
+
+
+def _hit(**meta: Any) -> KbHit:
+    hit = KbHit(chunk_id="c1", document_id="d1", filename="policy.pdf", score=0.9, text="Fire is covered.")
+    if meta:
+        object.__setattr__(hit, "meta", meta)  # V5-04 adds `KbHit.meta`; until then a stand-in
+    return hit
+
+
+async def test_cite_carries_the_hit_locators() -> None:
+    channel, _room, _events = _channel(CITATION_BLOCKS)
+    await channel.cite("sources", [_hit(page=3, heading_path=["Cover", "Fire"], char_start=10, char_end=40)])
+    assert channel.state.blocks["sources"]["items"] == [
+        {
+            "chunk_id": "c1",
+            "filename": "policy.pdf",
+            "score": 0.9,
+            "text": "Fire is covered.",
+            "document_id": "d1",
+            "page": 3,
+            "heading_path": ["Cover", "Fire"],
+            "char_start": 10,
+            "char_end": 40,
+        }
+    ]
+
+
+async def test_open_citation_shows_the_cited_page_in_the_document_block() -> None:
+    pack_actions: list[str] = []
+
+    async def _pack(block_id: str, name: str, data: dict[str, Any]) -> dict[str, Any]:
+        pack_actions.append(name)
+        return {}
+
+    channel, room, _events = _channel(CITATION_BLOCKS, on_block_action=_pack)
+    _ack(room)
+    await channel.cite("sources", [_hit(page=3, heading_path=["Cover", "Fire"])])
+    asset_id = await channel.push_asset(b"%PDF", "application/pdf", "document", meta={"document_id": "d1"})
+
+    result = await _action(
+        room, "block_action", {"block_id": "sources", "name": "open_citation", "data": {"chunk_id": "c1"}}
+    )
+    assert result.ok and result.payload == {"opened": "document", "block_id": "doc", "page": 3}
+    assert channel.state.blocks["doc"] == {
+        "asset_id": asset_id,
+        "url": None,
+        "page": 3,
+        "highlights": [{"page": 3, "bbox": [0.0, 0.0, 1.0, 1.0], "note": "Cover › Fire"}],
+    }
+    await _until(
+        lambda: any(
+            UiRequest.model_validate_json(c.payload).method == "show_block"
+            for c in room.local_participant.rpc_calls
+        )
+    )
+    assert pack_actions == []  # the platform handles it; packs never see open_citation
+
+
+async def test_open_citation_without_a_source_returns_the_citation_for_a_preview() -> None:
+    channel, room, _events = _channel(CITATION_BLOCKS)
+    await channel.cite("sources", [_hit(page=2)])
+    result = await _action(
+        room, "block_action", {"block_id": "sources", "name": "open_citation", "data": {"index": 0}}
+    )
+    assert result.payload["opened"] is False and result.payload["reason"] == "no_source"
+    assert result.payload["citation"]["page"] == 2
+    assert channel.state.blocks["doc"]["asset_id"] is None
+
+
+async def test_open_citation_without_a_document_block_or_citation() -> None:
+    channel, room, _events = _channel([BlockSpec(id="sources", type="kb_citations")])
+    await channel.cite("sources", [_hit()])
+    no_doc = await _action(
+        room, "block_action", {"block_id": "sources", "name": "open_citation", "data": {"chunk_id": "c1"}}
+    )
+    assert no_doc.payload["reason"] == "no_document_block"
+    unknown = await _action(
+        room, "block_action", {"block_id": "sources", "name": "open_citation", "data": {"chunk_id": "zz"}}
+    )
+    assert unknown.payload == {"opened": False, "reason": "unknown_citation"}
+
+
+# ---------------------------------------------------------------- submit_block
+
+
+async def test_submit_block_refuses_unknown_and_non_requestable_blocks() -> None:
+    channel, _room, _events = _channel()
+    with pytest.raises(ValueError, match="unknown block"):
+        await channel.submit_block("nope", {})
+    with pytest.raises(ValueError, match="cannot be submitted"):
+        await channel.submit_block("costs", {})
+
+
+async def test_a_choices_answer_that_is_not_an_option_is_not_stored() -> None:
+    channel, room, _events = _channel([BlockSpec(id="pick", type="choices")])
+    await channel.patch_block(
+        "pick", [UiPatchOp(op="set", path="/options", value=[{"id": "no", "label": "No"}])]
+    )
+    result = await _action(room, "block_submit", {"block_id": "pick", "values": {"selected": ["maybe"]}})
+    assert result.ok
+    assert channel.state.blocks["pick"]["selected"] == []
+    assert channel.state.blocks["pick"]["status"] == "submitted"

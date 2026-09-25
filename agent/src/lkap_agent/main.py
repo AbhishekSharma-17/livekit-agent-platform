@@ -680,7 +680,12 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     if not meta.session_id:
         bind_session_context(session_id=resolved.session_id, agent_id=resolved.agent_id, job_id=job_id)
 
-    observer = SessionObserver(session_id=resolved.session_id, client=deps.config_client)
+    observer = SessionObserver(
+        session_id=resolved.session_id,
+        client=deps.config_client,
+        # V4-17 (D-V4-45): the workspace's reconciliation opt-in; empty collects no ids.
+        cost_reconcile=resolved.cost_reconcile,
+    )
     eager: _EagerShutdownContext | None = None
     if is_text_channel(resolved):
         # asks #33: post a typed chat's summary as soon as it ends, not after the SDK's teardown.
@@ -753,13 +758,14 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         return
     if telephony is not None:
         telephony.start()
-    # V4-12: `voice.thinking_sound` during blocking tool waits (never on the text channel);
-    # the player is closed in the shutdown path.
-    from lkap_agent.session_builder import start_thinking_sound  # noqa: PLC0415
+    # V4-12 / V5-07: one background player for `voice.thinking_sound` (blocking tool waits) and
+    # `voice.ambient_sound` (the whole call); never on the text channel or without audio out.
+    # The player is closed in the shutdown path.
+    from lkap_agent.session_builder import start_background_audio  # noqa: PLC0415
 
-    stop_thinking_sound = await start_thinking_sound(plan, ctx.room)
-    if stop_thinking_sound is not None:
-        ctx.add_shutdown_callback(stop_thinking_sound)
+    stop_background_audio = await start_background_audio(plan, ctx.room)
+    if stop_background_audio is not None:
+        ctx.add_shutdown_callback(stop_background_audio)
     observer.record(
         "session_started",
         {
@@ -1384,7 +1390,8 @@ def _assemble(
             resolved.config.tools.builtin_disabled,
             resolved.config.tools.http_request_enabled,
         ),
-        *deps.declarative_tools_builder([t for t in resolved.tools if t.kind == "http"]),
+        # V5-47: `provider` (a connected app's action) is built by the same declarative builder.
+        *deps.declarative_tools_builder([t for t in resolved.tools if t.kind in ("http", "provider")]),
         *pack.tools(session_ctx),
         *(
             telephony.tools(config=resolved.config, shutdown=lambda reason: ctx.shutdown(reason=reason))

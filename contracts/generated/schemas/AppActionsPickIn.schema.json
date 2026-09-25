@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/AppActionsPickIn.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.\n\nUntil the ``provider`` tool kind exists (V5-47) the picks are stored on the\nconnection and returned; V5-47 turns them into tools (attached to\n``agent_id`` when given).",
+  "description": "``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.\n\nThe picks are stored on the connection and each becomes a ``provider`` tool\n(one per action, reused when it exists), attached to ``agent_id`` when given.",
   "properties": {
     "actions": {
       "items": {

@@ -7,14 +7,17 @@ import { AudioWaveformIcon, EyeOffIcon, PlusIcon, type LucideIcon } from "lucide
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icon } from "@/components/shared/icon";
-import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
+import { useDraftCostEstimate, useSectionIssues } from "@/components/console/agents/editor/editor-context";
+import { formatUsdPerMin } from "@/components/console/lib/cost-hooks";
 import { useProviders } from "@/components/console/lib/api-hooks";
-import { ProviderSlotCard } from "@/components/console/registry/provider-slot-card";
+import { useWriteAccess } from "@/components/console/lib/roles";
+import { ProviderSlotCard, type SlotCostEstimate } from "@/components/console/registry/provider-slot-card";
 import { isKnownTextOnlyLlm, type ProviderKind } from "@/components/console/registry/provider-meta";
+import { WorkspacePricesDialog, type WorkspacePricePrefill } from "@/components/console/settings/workspace-prices-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { cn } from "@/lib/utils";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
-import type { ProviderSpec } from "@/contracts/lkap-contracts";
+import type { EstimateLine, ProviderSpec } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
 
 type SlotKey = "stt" | "llm" | "tts" | "realtime" | "avatar" | "image_gen" | "workflow_llm";
@@ -91,6 +94,12 @@ export function ProvidersTab() {
   const [visionPickerOpen, setVisionPickerOpen] = React.useState(false);
   // Set by the vision note's link: the next open of the LLM model list is filtered to vision models.
   const [visionRequested, setVisionRequested] = React.useState(false);
+  // docs/v4/COSTS.md §5 item 2: the same shared estimate the rail's Cost row
+  // shows, so the header figure and the rail's always agree.
+  const costEstimate = useDraftCostEstimate();
+  const { canWrite: isAdmin } = useWriteAccess("admin");
+  const [pricesOpen, setPricesOpen] = React.useState(false);
+  const [pricesPrefill, setPricesPrefill] = React.useState<WorkspacePricePrefill | null>(null);
 
   if (isLoading) {
     return <ProvidersSkeleton />;
@@ -121,10 +130,28 @@ export function ProvidersTab() {
     }
   }
 
+  /** This slot's own line in the shared estimate (`EstimateLine.slot` names match `SlotKey` 1:1), if any. */
+  function slotLine(key: SlotKey): EstimateLine | undefined {
+    return costEstimate.estimate?.lines?.find((line) => line.slot === key);
+  }
+
   function renderSlot(key: SlotKey, optional: boolean) {
     const def = SLOTS[key];
     const problem = slotError(key);
     const isLlmWithNote = key === "llm" && showVisionNote;
+    const line = slotLine(key);
+    const slotCostEstimate: SlotCostEstimate | undefined = line
+      ? {
+          usdPerMin: line.usd_per_min ?? null,
+          onSetPrice:
+            isAdmin && line.usd_per_min == null && line.usd_per_session == null
+              ? () => {
+                  setPricesPrefill({ provider_id: line.provider_id, model: line.model ?? null, unit: line.unit });
+                  setPricesOpen(true);
+                }
+              : undefined,
+        }
+      : undefined;
     return (
       <Controller
         key={key}
@@ -178,6 +205,7 @@ export function ProvidersTab() {
                 />
               ) : undefined
             }
+            costEstimate={slotCostEstimate}
           />
         )}
       />
@@ -187,6 +215,8 @@ export function ProvidersTab() {
   const pipelineSlots = PIPELINE_SLOTS[mode] ?? PIPELINE_SLOTS.cascaded;
   const optionalShown = OPTIONAL_SLOTS.filter(({ key }) => Boolean(pipeline?.[key]) || added.has(key));
   const optionalHidden = OPTIONAL_SLOTS.filter(({ key }) => !pipeline?.[key] && !added.has(key));
+
+  const headerUsd = formatUsdPerMin(costEstimate.estimate?.per_minute_usd?.mid ?? null);
 
   return (
     <div className="flex flex-col gap-8">
@@ -198,7 +228,11 @@ export function ProvidersTab() {
         />
       </Group>
 
-      <Group title="Pipeline" description={pipelineSlots.length > 1 ? "In the order a turn flows through them." : undefined}>
+      <Group
+        title="Pipeline"
+        description={pipelineSlots.length > 1 ? "In the order a turn flows through them." : undefined}
+        aside={headerUsd ? <span className="text-[0.8125rem] text-muted-foreground">{headerUsd} · estimate</span> : undefined}
+      >
         <ol className="flex flex-col" aria-label="Pipeline slots">
           {pipelineSlots.map((key, index) => (
             <li key={key} className="flex flex-col">
@@ -233,18 +267,33 @@ export function ProvidersTab() {
           </div>
         ) : null}
       </Group>
+      <WorkspacePricesDialog open={pricesOpen} onOpenChange={setPricesOpen} prefill={pricesPrefill} />
     </div>
   );
 }
 
-function Group({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function Group({
+  title,
+  description,
+  aside,
+  children,
+}: {
+  title: string;
+  description?: string;
+  /** A trailing figure on the header row (the pipeline group's "≈ $/min · estimate"). */
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const id = React.useId();
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <h2 id={id} className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em] text-balance text-foreground">
-          {title}
-        </h2>
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 id={id} className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em] text-balance text-foreground">
+            {title}
+          </h2>
+          {aside}
+        </div>
         {description ? <p className="max-w-[65ch] text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">{description}</p> : null}
       </div>
       {children}

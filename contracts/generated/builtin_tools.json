@@ -3,23 +3,46 @@
     "update_block",
     "show_document",
     "table_append",
-    "request_form"
+    "request_form",
+    "request_choice",
+    "resolve_choice",
+    "set_details",
+    "show_text",
+    "set_steps"
   ],
   "block_tool_types": {
+    "request_choice": [
+      "choices"
+    ],
     "request_form": [
       "form"
     ],
+    "resolve_choice": [
+      "choices"
+    ],
+    "set_details": [
+      "details"
+    ],
+    "set_steps": [
+      "steps"
+    ],
     "show_document": [
       "document"
+    ],
+    "show_text": [
+      "markdown"
     ],
     "table_append": [
       "table"
     ],
     "update_block": [
       "custom",
+      "details",
       "document",
       "gallery",
       "kb_citations",
+      "markdown",
+      "steps",
       "table",
       "transcript",
       "video"

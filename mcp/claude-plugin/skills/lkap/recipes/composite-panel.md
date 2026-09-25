@@ -5,7 +5,7 @@ instead of the default four-block layout.
 
 ## 1. Design the block list
 
-Pick from the twelve block types (`lkap_explain("panels-and-blocks")`); a
+Pick from the sixteen block types (`lkap_explain("panels-and-blocks")`); a
 support-triage agent might want a checklist, a table it appends to, and the
 transcript with tool calls visible:
 
@@ -33,6 +33,29 @@ transcript with tool calls visible:
   }
 }
 ```
+
+An intake agent that asks quick questions, keeps a summary card and shows
+where the caller is might add the newer blocks instead:
+
+```json
+[
+  { "id": "quick_answers", "type": "choices", "config": { "layout": "buttons", "max_options": 4 } },
+  {
+    "id": "claim_details",
+    "type": "details",
+    "config": { "columns": 2, "fields": [
+      { "key": "claim_no", "label": "Claim number" },
+      { "key": "date_of_loss", "label": "Date of loss", "type": "date" }
+    ] }
+  },
+  { "id": "recap", "type": "markdown", "config": { "max_chars": 4000 } },
+  { "id": "progress", "type": "steps", "config": { "source": "flow" } }
+]
+```
+
+The agent gets `request_choice` / `resolve_choice`, `set_details` and
+`show_text` for them; the `steps` block follows the agent's flow on its own
+(give it `"source": "manual"` and it gets `set_steps` instead).
 
 ## 2. Validate
 

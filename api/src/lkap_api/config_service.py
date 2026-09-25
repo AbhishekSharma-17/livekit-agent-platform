@@ -50,7 +50,7 @@ import datetime as dt
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 from urllib.parse import quote, urlparse
 
 from lkap_contracts.agent_config import (
@@ -71,18 +71,29 @@ from lkap_contracts.providers import (
     ProviderKind,
     ProviderSpec,
     WorkerImage,
+    by_kind,
     credential_home,
     get,
     validate_model_id,
 )
+from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT, action_risk
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     NON_BLOCKING_MODES,
     HttpToolDefinition,
     McpServerDefinition,
+    ProviderToolDefinition,
     ToolDefinition,
     never_background,
 )
+from lkap_contracts.turn_handling import (
+    CONVERSATION_PRESETS,
+    REALTIME_IGNORED_KEYS,
+    TurnHandlingOptions,
+    resolve_turn_handling,
+    turn_handling_dict,
+)
+from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -225,6 +236,9 @@ class ValidationContext:
     tool_definitions_by_id: Mapping[str, Mapping[str, Any]] | None = None
     """``{tool_id: definition JSON}`` for every tool row of the workspace (V4-12, the execution
     checks of :func:`tool_execution_issues`); ``None`` skips the per-tool checks."""
+    connection_statuses: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    """``{connection_id: status}`` of every connected-app row (V5-47, COMPOSIO.md §4): the status
+    V5-18 mirrors into ``credentials.last_test_message`` (``active``, ``expired`` …)."""
 
     def fingerprint_for(self, ref: ProviderRef) -> str | None:
         """The fingerprint of the credential ``ref`` uses, if it uses one."""
@@ -421,7 +435,8 @@ def validate(ctx: ValidationContext) -> ValidationResult:
 
     _validate_modes(ctx, findings)
 
-    for key in pipeline.turn_handling:
+    stored_turn_handling = turn_handling_dict(pipeline.turn_handling)
+    for key in stored_turn_handling:
         if key == "turn_detection":
             findings.add(
                 "error",
@@ -430,6 +445,18 @@ def validate(ctx: ValidationContext) -> ValidationResult:
             )
         elif key not in TURN_HANDLING_KEYS:
             findings.add("warning", "pipeline.turn_handling", f"unknown key '{key}' will be ignored")
+    try:
+        TurnHandlingOptions.model_validate(stored_turn_handling)
+    except ValidationError as exc:
+        # V5-07: the contract keeps a dict whose typed keys do not validate (compatibility);
+        # say which value the session may refuse instead of failing the save.
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        findings.add(
+            "warning",
+            f"pipeline.turn_handling.{where}",
+            f"'{where}' does not look right ({first['msg']}); the call may fail to start with it",
+        )
 
     if ctx.known_tool_ids is not None:
         for tool_id in config.tools.tool_ids:
@@ -451,6 +478,10 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(connection_flag_issues(ctx))
     findings.extend(knowledge_auto_inject_issues(ctx))
     findings.extend(tool_execution_issues(ctx))
+    findings.extend(apps_issues(ctx))
+    findings.extend(conversation_preset_issues(ctx))
+    findings.extend(telephony_noise_cancellation_issues(ctx))
+    findings.extend(choices_on_phone_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -663,6 +694,41 @@ def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings:
             findings.add("error", label, f"field '{field_spec.name}' is required for provider '{spec.id}'")
 
 
+#: Shown on a `choices` block of an agent set up for phone calls (V5-08).
+CHOICES_ON_PHONE_MESSAGE: Final[str] = (
+    "callers on a phone line cannot see or tap choices; on a call the agent asks the question "
+    "out loud instead"
+)
+
+
+def choices_on_phone_issues(ctx: ValidationContext) -> list[Issue]:
+    """Warn that a `choices` block is invisible to callers on a phone line (V5-08, B1).
+
+    Validators never see which channels reach an agent (phone numbers and
+    dispatch rules live elsewhere), so an agent counts as set up for phone
+    calls when it has a phone-only setting: keypad input
+    (``capabilities.dtmf``) or transfer destinations
+    (``telephony.transfer_targets``). On such calls ``request_choice`` shows
+    nothing and answers ``{"channel": "voice_only"}``; the agent still works
+    on the web, so this is a warning. A built-in check called from
+    :func:`validate` directly.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        One warning per ``choices`` block, at ``panel.blocks[i]``.
+    """
+    config = ctx.config
+    if not (config.capabilities.dtmf or config.telephony.transfer_targets):
+        return []
+    return [
+        Issue(path=f"panel.blocks[{index}]", message=CHOICES_ON_PHONE_MESSAGE, severity="warning")
+        for index, block in enumerate(config.panel.blocks)
+        if block.type == "choices"
+    ]
+
+
 def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
     """A tip that knowledge auto-inject and preemptive generation do not mix.
 
@@ -688,7 +754,10 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
     knowledge = ctx.config.knowledge
     if not knowledge.auto_inject or not knowledge.kb_ids:
         return []
-    preemptive = ctx.config.pipeline.turn_handling.get("preemptive_generation")
+    pipeline = ctx.config.pipeline
+    preemptive = resolve_turn_handling(pipeline.conversation_preset, pipeline.turn_handling).get(
+        "preemptive_generation"
+    )
     explicit = preemptive.get("enabled") if isinstance(preemptive, dict) else None
     if explicit is False:
         return []
@@ -706,6 +775,104 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
             "auto-inject off and let the agent call the search_knowledge tool"
         )
     return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
+
+
+#: Plain names of the ``turn_handling`` keys a preset sets, for warnings the console shows.
+_PLAIN_TURN_KEYS: dict[str, str] = {
+    "endpointing": "how long to wait before replying",
+    "interruption": "how easily the caller interrupts",
+    "preemptive_generation": "replying while the caller is still finishing",
+}
+
+
+def conversation_preset_issues(ctx: ValidationContext) -> list[Issue]:
+    """A conversation preset on a realtime pipeline: say which of its settings do nothing (V5-07).
+
+    With ``mode == "realtime"`` the model decides when the caller has finished and
+    handles interruptions itself, and preemptive generation runs only for a text LLM
+    (livekit-agents 1.8.3 ``agent_activity.py:2319`` and ``:2574``), so every key a
+    preset sets is ignored. In ``half_cascade`` only preemptive generation is (the
+    realtime model still writes the reply); the wait times apply when the model hands
+    turn-taking to the worker.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        At most one warning, at ``pipeline.conversation_preset``.
+    """
+    pipeline = ctx.config.pipeline
+    preset = pipeline.conversation_preset
+    if preset == "custom":
+        return []
+    set_by_preset = CONVERSATION_PRESETS[preset]
+    if pipeline.mode == "realtime":
+        ignored = [key for key in REALTIME_IGNORED_KEYS if key in set_by_preset]
+        reason = "a realtime model decides when the caller has finished and handles interruptions itself"
+    elif pipeline.mode == "half_cascade":
+        ignored = [key for key in ("preemptive_generation",) if key in set_by_preset]
+        reason = "early replies need a text model, and here the realtime model writes the reply"
+    else:
+        return []
+    if not ignored:
+        return []
+    names = ", ".join(f"{_PLAIN_TURN_KEYS[key]} ({key})" for key in ignored)
+    return [
+        Issue(
+            path="pipeline.conversation_preset",
+            message=f"The '{preset}' preset changes less than it says here: {reason}, so these "
+            f"settings are ignored: {names}",
+            severity="warning",
+        )
+    ]
+
+
+def _telephony_filter_offered() -> bool:
+    """Whether any registry noise filter with a phone variant is offered (a test seam)."""
+    return any(
+        spec.telephony_variant is not None and spec.availability == "available"
+        for spec in by_kind("noise_cancellation", status=None)
+    )
+
+
+def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
+    """The ``telephony`` preset where phone noise cancellation cannot run (V5-07, D-V5-30).
+
+    The preset tunes turn-taking everywhere and, on a phone call, switches the noise
+    filter to its phone variant (turning the LiveKit Cloud one on when none is set).
+    That filter is LiveKit Cloud only (``noise_cancellation_tier == "krisp"``), and it
+    needs a registry entry with a phone variant that the workers carry. Nothing is
+    checked without a connection.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        At most one warning, at ``pipeline.conversation_preset``.
+    """
+    connection = ctx.connection
+    if connection is None or ctx.config.pipeline.conversation_preset != "telephony":
+        return []
+    where = _connection_label(connection)
+    if connection.capabilities.noise_cancellation_tier != "krisp":
+        message = (
+            f"The phone call preset tunes turn-taking only: noise cancellation for phone calls "
+            f"needs LiveKit Cloud, which {where} does not offer"
+        )
+    else:
+        ref = ctx.config.pipeline.noise_cancellation
+        spec = _spec_or_none(ref.provider_id) if ref is not None else None
+        if spec is not None and spec.telephony_variant is not None:
+            return []
+        if spec is None and _telephony_filter_offered():
+            return []
+        message = (
+            f"The phone call preset keeps the noise filter '{spec.label}' as it is: it has no phone version"
+            if spec is not None
+            else "The phone call preset tunes turn-taking only: no noise filter for phone calls is "
+            "available on this platform yet"
+        )
+    return [Issue(path="pipeline.conversation_preset", message=message, severity="warning")]
 
 
 #: Below this many tool steps, a chain of background announcements can exhaust the budget
@@ -809,6 +976,132 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
                     )
                 )
     return issues
+
+
+#: Connection statuses that stop an app's actions (D-V5-C9).
+BROKEN_CONNECTION_STATUSES: frozenset[str] = frozenset({"expired", "failed", "inactive"})
+
+
+def apps_issues(ctx: ValidationContext) -> list[Issue]:
+    """The connected-apps checks of V5-47 (docs/v5/COMPOSIO.md §4).
+
+    * ``tools.apps.mode`` other than ``off`` without a Composio key, or with Composio turned off
+      for the workspace → error at ``tools.apps.mode``.
+    * The tool finder with ``manage_connections`` on → warning: a phone caller cannot open a
+      sign-in link (it only helps text and web chats).
+    * An attached ``provider`` tool whose connection is gone, or expired, failed or disconnected
+      → error naming the app; one whose key is not a Composio key → error.
+    * The app server or tool finder with destructive actions in scope that are not in
+      ``reviewed_actions`` → warning at ``tools.apps.denied_actions`` naming them: the api
+      blocks them until the builder reviews them (R-V5-9). In scope here are the workspace's
+      picked actions of the agent's apps (what an app server offers); a tool finder can also
+      reach destructive actions nobody picked, which only provisioning sees (it reads the
+      catalogue) and blocks all the same.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        Issues at ``tools.apps.*`` and ``tools[i].definition.*``.
+    """
+    tools = ctx.config.tools
+    apps = tools.apps
+    issues: list[Issue] = []
+    has_key = COMPOSIO_PROVIDER_ID in set(ctx.credential_providers.values())
+    if apps.mode != "off":
+        if not has_key:
+            issues.append(
+                Issue(
+                    path="tools.apps.mode",
+                    message="connected apps need a Composio key: add one under Tools, Apps, Enable Composio",
+                )
+            )
+        elif COMPOSIO_PROVIDER_ID in ctx.disabled_provider_ids:
+            issues.append(
+                Issue(
+                    path="tools.apps.mode",
+                    message="Apps are turned off for this workspace; enable Composio again under Tools, Apps",
+                )
+            )
+    if apps.mode == "router" and apps.router.manage_connections:
+        issues.append(
+            Issue(
+                path="tools.apps.router.manage_connections",
+                message="a phone caller cannot open a sign-in link: letting the agent connect apps only "
+                "helps text and web chats",
+                severity="warning",
+            )
+        )
+    definitions = ctx.tool_definitions_by_id
+    if definitions is None:
+        return issues
+    if apps.mode in ("server", "router"):
+        issues.extend(_unreviewed_destructive_issues(ctx, definitions))
+    for index, tool_id in enumerate(tools.tool_ids):
+        definition = definitions.get(tool_id)
+        if not isinstance(definition, Mapping) or definition.get("kind") != "provider":
+            continue
+        base = f"tools[{index}].definition"
+        app = str(definition.get("toolkit") or definition.get("name") or tool_id)
+        connection_id = definition.get("connection_id")
+        status = ctx.connection_statuses.get(connection_id) if isinstance(connection_id, str) else None
+        if status is None:
+            issues.append(
+                Issue(path=f"{base}.connection_id", message=f"the '{app}' app is no longer connected")
+            )
+        elif status in BROKEN_CONNECTION_STATUSES:
+            issues.append(
+                Issue(
+                    path=f"{base}.connection_id",
+                    message=f"the '{app}' app needs to be reconnected (status {status}); reconnect it "
+                    "under Tools, Apps",
+                )
+            )
+        credential_id = definition.get("credential_id")
+        if (
+            isinstance(credential_id, str)
+            and ctx.credential_providers.get(credential_id) != COMPOSIO_PROVIDER_ID
+        ):
+            issues.append(
+                Issue(
+                    path=f"{base}.credential_id", message=f"'{app}' actions need the workspace's Composio key"
+                )
+            )
+    return issues
+
+
+def _unreviewed_destructive_issues(
+    ctx: ValidationContext, definitions: Mapping[str, Mapping[str, Any]]
+) -> list[Issue]:
+    """The warning naming picked destructive actions the builder has not reviewed (R-V5-9)."""
+    apps = ctx.config.tools.apps
+    allowed = {slug.lower() for slug in apps.allowed_toolkits}
+    reviewed = {slug.upper() for slug in apps.reviewed_actions}
+    unreviewed: set[str] = set()
+    for definition in definitions.values():
+        if definition.get("kind") != "provider":
+            continue
+        slug = str(definition.get("tool_slug") or "").upper()
+        toolkit = str(definition.get("toolkit") or "").lower()
+        connection_id = definition.get("connection_id")
+        if not slug or (allowed and toolkit not in allowed):
+            continue
+        if not isinstance(connection_id, str) or connection_id not in ctx.connection_statuses:
+            continue
+        if action_risk(slug) == "destructive" and slug not in reviewed:
+            unreviewed.add(slug)
+    if not unreviewed:
+        return []
+    names = ", ".join(sorted(unreviewed))
+    return [
+        Issue(
+            path="tools.apps.denied_actions",
+            message=f"blocked until reviewed in the Connected apps card: {names} "
+            "(these actions delete, remove or move money, so the agent cannot use them until you "
+            "allow or deny each one)",
+            severity="warning",
+        )
+    ]
 
 
 def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
@@ -958,6 +1251,16 @@ async def validation_context_for(
         .all()
     )
     credential_providers = {row[0]: row[1] for row in credential_rows}
+    connection_statuses = {
+        row[0]: row[1] or "unknown"
+        for row in (
+            await db.execute(
+                select(Credential.id, Credential.last_test_message).where(
+                    Credential.workspace_id == workspace_id, Credential.provider_id == TOOL_PROVIDER_ACCOUNT
+                )
+            )
+        ).tuples()
+    }
     tool_rows = (
         (
             await db.execute(
@@ -994,6 +1297,7 @@ async def validation_context_for(
         known_kb_ids=kb_ids,
         tool_names_by_id=tool_names_by_id,
         tool_definitions_by_id=tool_definitions_by_id,
+        connection_statuses=connection_statuses,
         telephony_policy=await _telephony_policy(db, workspace_id),
         credential_fingerprints={row[0]: row[2] for row in credential_rows},
         model_records=await _model_records(db, workspace_id),
@@ -1307,7 +1611,9 @@ def resolve_tool_definition(definition: ToolDefinition, secrets: Mapping[str, st
 
     The worker never sees credential ids or the vault (CONTRACTS §9), so the api
     substitutes ``{{ secret.NAME }}`` in the url, headers and body template and
-    clears ``credential_id``. **The result contains secrets.**
+    clears ``credential_id``. A ``provider`` definition (V5-47) has only headers to fill
+    (the Composio key); an origin-tagged MCP definition is filled like any MCP one.
+    **The result contains secrets.**
     """
     if isinstance(definition, HttpToolDefinition):
         return definition.model_copy(
@@ -1319,6 +1625,15 @@ def resolve_tool_definition(definition: ToolDefinition, secrets: Mapping[str, st
                     if definition.body_template is not None
                     else None
                 ),
+                "credential_id": None,
+            }
+        )
+    if isinstance(definition, ProviderToolDefinition):
+        # V5-47 (COMPOSIO.md §4): the Composio key rides the `x-api-key` header, like an app
+        # server's; `connection_id` and `subject` stay (the worker sends the subject).
+        return definition.model_copy(
+            update={
+                "headers": {k: substitute_secrets(v, secrets) for k, v in definition.headers.items()},
                 "credential_id": None,
             }
         )

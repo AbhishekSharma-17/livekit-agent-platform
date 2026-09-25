@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "StepConfig": {
+      "additionalProperties": false,
+      "description": "One starting step of a ``steps`` block (with ``source=\"flow\"``, ``id`` names a flow node).",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "StepConfig",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/BlockConfig_steps.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``steps``: the starting steps, who drives them, and whether notes show under a step.\n\n``source=\"flow\"`` follows the agent's flow (the worker writes it on every\nstep change and registers no tool); ``\"manual\"`` is driven by ``set_steps``.",
+  "properties": {
+    "show_notes": {
+      "default": true,
+      "title": "Show Notes",
+      "type": "boolean"
+    },
+    "source": {
+      "default": "manual",
+      "enum": [
+        "flow",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "steps": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StepConfig"
+      },
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "title": "BlockConfig_steps",
+  "type": "object"
+}

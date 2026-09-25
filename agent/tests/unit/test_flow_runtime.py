@@ -821,6 +821,67 @@ async def test_a_non_cancellable_sibling_s_late_result_is_carried_into_the_targe
     assert (events[0]["from"], events[0]["to"]) == ("start", "claims")
 
 
+# ------------------------------------------ V5-08: a `steps` block follows the flow (D-V5-33)
+
+
+async def test_a_flow_steps_block_and_a_flow_progress_block_both_follow_the_flow() -> None:
+    from lkap_contracts.ui_protocol import BlockSpec  # noqa: PLC0415
+
+    resolved = _flow_config(INTAKE_FLOW)
+    panel = resolved.config.panel.model_copy(
+        update={
+            "blocks": [
+                BlockSpec(id="progress", type="custom", config={"kind": "flow_progress"}),
+                BlockSpec(id="steps", type="steps", config={"source": "flow"}),
+                BlockSpec(id="mine", type="steps"),  # driven by set_steps: the flow leaves it alone
+            ]
+        }
+    )
+    resolved = resolved.model_copy(update={"config": resolved.config.model_copy(update={"panel": panel})})
+    ui = _RecordingUi()
+    conversation = ScriptedLLM(
+        ["Hi, this is intake.", ToolCall("go_to_confirm"), "Is Ada Lovelace right?", ToolCall("go_to_done")]
+    )
+    api = FakeApi(resolved)
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        api,
+        factory=_FlowFactory(conversation, FakeLLM([json.dumps({"name": "Ada Lovelace"})])),
+        session_starter=starter,
+        ui_channel_factory=lambda **_kw: ui,
+    )
+    await run_session(ctx, deps)
+    session = starter.session
+    assert session is not None
+
+    def latest(block_id: str) -> dict[str, Any]:
+        return [state for bid, state in ui.blocks if bid == block_id][-1]
+
+    await _wait_for(lambda: any(bid == "steps" for bid, _ in ui.blocks))
+    # Compatibility: the custom flow_progress block keeps its raw FlowState mirror.
+    assert latest("progress")["current_node"] == "collect"
+    assert latest("steps") == {
+        "steps": [
+            {"id": "collect", "label": "Collect name", "status": "active", "note": None, "at": None},
+            {"id": "confirm", "label": "Confirm", "status": "pending", "note": None, "at": None},
+        ],
+        "current": "collect",
+    }
+
+    await session.run(user_input="My name is Ada Lovelace.")
+    await _wait_for(lambda: latest("steps")["current"] == "confirm")
+    assert [s["status"] for s in latest("steps")["steps"]] == ["done", "active"]
+    assert latest("progress")["path"] == ["start", "collect", "confirm"]
+
+    await session.run(user_input="Yes, that's right.")
+    await _wait_for(lambda: bool(ctx.shutdown_reasons))
+    await _wait_for(lambda: latest("steps")["current"] is None)
+    assert [s["status"] for s in latest("steps")["steps"]] == ["done", "done"]
+    assert latest("progress")["disposition"] == "completed"
+    assert not any(bid == "mine" for bid, _ in ui.blocks)
+
+
 # ---------------------------- V4-21: an HTTP tool's silent_reply on flow agents (R-V4-71, ask #170)
 
 

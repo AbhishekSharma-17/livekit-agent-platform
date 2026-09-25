@@ -18,6 +18,15 @@ Two deviations from the plan text, both verified against livekit-agents 1.8.2:
   exists but warns on construction, and subscribing to `metrics_collected` makes
   `AgentSession` log a deprecation warning on every session, so neither is used;
   per-turn latency rides along on `ChatMessage.metrics` instead.
+  **Exception (V4-17, D-V4-45):** when the workspace opted into cost
+  reconciliation (`ResolvedAgentConfig.cost_reconcile` non-empty) the observer
+  does subscribe to `metrics_collected`: it is the only place the SDK exposes
+  each LLM/STT/TTS call's vendor `request_id` (OpenRouter's `gen-…` id for its
+  `/generation` lookup). The SDK's deprecation warning is then expected, once
+  per session, and an `info` line says why just before it. The ids travel as
+  one `metrics {kind: "provider_requests"}` event just before the summary;
+  never a prompt, a completion or a secret. The vendor's in-band cost field on
+  a streamed response is not read (the SDK's stream parser drops it).
 
 The v2 per-session latency (`SessionLatency`, CONTRACTS-V2 §4.6; PLAN-V2 V2-07
 names it "metrics_collected latency") is therefore computed from the same
@@ -36,6 +45,7 @@ import contextlib
 import math
 import re
 import time
+from collections.abc import Sequence
 from typing import Any, Final
 
 import structlog
@@ -44,10 +54,12 @@ from livekit.agents import (
     AgentStateChangedEvent,
     ConversationItemAddedEvent,
     ErrorEvent,
+    MetricsCollectedEvent,
     SessionUsageUpdatedEvent,
     ToolExecutionUpdatedEvent,
 )
 from livekit.agents import llm as lk_llm
+from livekit.agents.metrics import LLMMetrics, STTMetrics, TTSMetrics
 from lkap_contracts.api_models import (
     SessionEventIn,
     SessionLatency,
@@ -60,9 +72,12 @@ from lkap_contracts.ui_protocol import UiState
 
 from lkap_agent.config_client import ConfigClientProtocol
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.provider import REAUTH_MESSAGE
 
 __all__ = [
+    "MAX_PROVIDER_REQUEST_IDS",
     "LatencyCollector",
+    "ProviderRequestCollector",
     "SessionObserver",
     "bind_session_context",
     "percentile",
@@ -81,6 +96,8 @@ _RESULT_PREVIEW_CHARS: Final[int] = 240
 _REDACTED_ARG_KEYS: Final[frozenset[str]] = frozenset(
     {"api_key", "apikey", "authorization", "password", "secret", "token"}
 )
+#: D-V4-45: the most per-request ids one session reports; later ones are only counted.
+MAX_PROVIDER_REQUEST_IDS: Final[int] = 2000
 
 
 #: `ChatMessage.metrics` keys (seconds) → the `SessionLatency` figure they feed.
@@ -210,7 +227,17 @@ class SessionObserver:
         session_id: str,
         client: ConfigClientProtocol,
         flush_interval_s: float = _FLUSH_INTERVAL_S,
+        cost_reconcile: Sequence[str] = (),
     ) -> None:
+        """Build an observer for one session.
+
+        Args:
+            session_id: The api's session id.
+            client: Where events, metrics and the summary are posted.
+            flush_interval_s: How long a non-full event buffer waits.
+            cost_reconcile: ``ResolvedAgentConfig.cost_reconcile`` (V4-17). Non-empty
+                subscribes to ``metrics_collected`` and posts the per-request ids.
+        """
         self._session_id = session_id
         self._client = client
         self._flush_interval_s = flush_interval_s
@@ -222,6 +249,10 @@ class SessionObserver:
         self._tool_names: dict[str, str] = {}
         self._latency = LatencyCollector()
         self._closed = False
+        self._cost_reconcile = tuple(cost_reconcile)
+        self._requests: ProviderRequestCollector | None = (
+            ProviderRequestCollector() if self._cost_reconcile else None
+        )
         #: The transcript posted with the summary (the QA judge scores exactly this).
         self.transcript: list[TranscriptTurn] = []
 
@@ -279,6 +310,13 @@ class SessionObserver:
         session.on("tool_execution_updated", self._on_tool_execution)
         session.on("session_usage_updated", self._on_usage)
         session.on("error", self._on_error)
+        if self._requests is not None:
+            logger.info(
+                "metrics_collected subscribed for cost reconciliation; "
+                "the SDK's deprecation warning that follows is expected",
+                vendors=list(self._cost_reconcile),
+            )
+            session.on("metrics_collected", self._on_metrics)
 
     # Handlers below are plain `def`: livekit emits synchronously and a coroutine
     # handler would be scheduled as a task, running after the framework has
@@ -323,16 +361,21 @@ class SessionObserver:
             started = self._tool_started_at.pop(update.call_id, None)
             duration_ms = int((time.time() - started) * 1000) if started is not None else None
             preview = (update.message or "")[:_RESULT_PREVIEW_CHARS]
+            tool_name = self._tool_names.pop(update.call_id, "")
             self.record(
                 "tool_call_ended",
                 {
                     "call_id": update.call_id,
-                    "tool": self._tool_names.pop(update.call_id, ""),
+                    "tool": tool_name,
                     "status": update.status,
                     "duration_ms": duration_ms,
                     "result_preview": preview,
                 },
             )
+            if update.status == "error" and REAUTH_MESSAGE in (update.message or ""):
+                # V5-47 (COMPOSIO.md D-V5-C9): a connected app's action failed because its
+                # connection needs a person; the console shows "Needs reconnect".
+                self.record("tool_needs_reauth", {"call_id": update.call_id, "tool": tool_name})
             logger.debug(
                 "tool call ended",
                 call_id=update.call_id,
@@ -367,6 +410,10 @@ class SessionObserver:
 
     def _on_error(self, ev: ErrorEvent) -> None:
         self.record("error", {"message": str(ev.error)})
+
+    def _on_metrics(self, ev: MetricsCollectedEvent) -> None:
+        if self._requests is not None:
+            self._requests.add(ev.metrics)
 
     # ----------------------------------------------------------------- summary
 
@@ -413,6 +460,21 @@ class SessionObserver:
                 logger.warning("could not build the transcript from session history", exc_info=True)
         self.transcript = transcript
 
+        if self._requests is not None:
+            # Appended directly (`record` is closed by now); it rides the last flush,
+            # so the api has it when the summary below prices the session.
+            self._buffer.append(
+                SessionEventIn(
+                    ts=time.time(),
+                    type="metrics",
+                    payload={"kind": "provider_requests", "data": self._requests.data()},
+                )
+            )
+            logger.info(
+                "provider request ids posted",
+                ids=self._requests.kept,
+                dropped=self._requests.dropped,
+            )
         self._buffer.append(SessionEventIn(ts=time.time(), type="session_ended", payload={"reason": reason}))
         # The summary is the one terminal write: a failed event or metrics post
         # must not skip it (asks #33).
@@ -445,6 +507,62 @@ class SessionObserver:
             status=summary.status,
             turns=len(transcript),
         )
+
+
+class ProviderRequestCollector:
+    """Per-request vendor ids of a session's LLM, STT and TTS calls (V4-17, D-V4-45).
+
+    Keeps ``{request_id, provider, model}`` only. ``provider``/``model`` are the
+    SDK's display strings (``Metadata.model_provider``/``model_name``), which the
+    api never trusts for pricing: it maps each kind to its pipeline slot instead.
+    At most :data:`MAX_PROVIDER_REQUEST_IDS` ids across the three kinds; later
+    ones are counted in ``dropped``. A repeated id (a streamed STT/TTS request
+    reports several metrics under one id) is kept once. Realtime model metrics
+    are ignored: no vendor that reconciles has a realtime model (R-V4-8).
+    """
+
+    def __init__(self, *, limit: int = MAX_PROVIDER_REQUEST_IDS) -> None:
+        self._limit = limit
+        self._seen: set[tuple[str, str]] = set()
+        self._by_kind: dict[str, list[dict[str, str | None]]] = {"llm": [], "stt": [], "tts": []}
+        self.dropped = 0
+
+    @property
+    def kept(self) -> int:
+        """How many ids are held."""
+        return len(self._seen)
+
+    def add(self, metrics: Any) -> None:
+        """Record one ``metrics_collected`` payload; anything but LLM/STT/TTS is ignored."""
+        if isinstance(metrics, LLMMetrics):
+            kind = "llm"
+        elif isinstance(metrics, STTMetrics):
+            kind = "stt"
+        elif isinstance(metrics, TTSMetrics):
+            kind = "tts"
+        else:
+            return
+        request_id = metrics.request_id
+        if not request_id or (kind, request_id) in self._seen:
+            return
+        if len(self._seen) >= self._limit:
+            self.dropped += 1
+            return
+        self._seen.add((kind, request_id))
+        meta = metrics.metadata
+        self._by_kind[kind].append(
+            {
+                "request_id": request_id,
+                "provider": meta.model_provider if meta is not None else None,
+                "model": meta.model_name if meta is not None else None,
+            }
+        )
+
+    def data(self) -> dict[str, Any]:
+        """The event's ``data``: ``{llm, stt, tts, dropped}``."""
+        out: dict[str, Any] = {kind: list(rows) for kind, rows in self._by_kind.items()}
+        out["dropped"] = self.dropped
+        return out
 
 
 def _dump(obj: Any) -> dict[str, Any]:

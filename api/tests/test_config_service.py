@@ -14,9 +14,21 @@ from conftest import create_agent, inference_config
 from lkap_contracts.agent_config import KnowledgeConfig, ProviderRef, ToolsConfig
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
 from lkap_contracts.providers import get
-from lkap_contracts.tools import ToolExecution
+from lkap_contracts.tools import (
+    McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
+    ToolExecution,
+)
 
-from lkap_api.config_service import ValidationContext, register_validator, validate, validate_agent_config
+from lkap_api.config_service import (
+    ValidationContext,
+    apps_issues,
+    register_validator,
+    resolve_tool_definition,
+    validate,
+    validate_agent_config,
+)
 from lkap_api.custom_models.capabilities import resolve_capabilities
 from lkap_api.custom_models.validation import custom_model_issues
 
@@ -557,3 +569,403 @@ async def test_a_tool_with_silent_reply_and_a_background_mode_is_refused_on_save
 
     assert response.status_code == 422
     assert "silent_reply" in response.text
+
+
+# ------------------------------------------------------------------ V5-47: connected apps
+def _apps_ctx(
+    apps: dict[str, Any] | None = None,
+    *,
+    tool_ids: list[str] | None = None,
+    definitions: dict[str, dict[str, Any]] | None = None,
+    credentials: dict[str, str] | None = None,
+    statuses: dict[str, str] | None = None,
+    disabled: frozenset[str] = frozenset(),
+) -> ValidationContext:
+    config = inference_config(
+        tools=ToolsConfig.model_validate({"tool_ids": tool_ids or [], "apps": apps or {}})
+    )
+    return ValidationContext(
+        config=config,
+        credential_providers=credentials if credentials is not None else {"key1": "composio"},
+        disabled_provider_ids=disabled,
+        tool_definitions_by_id=definitions or {},
+        connection_statuses=statuses or {},
+    )
+
+
+def _provider_definition(**overrides: Any) -> dict[str, Any]:
+    return {
+        "kind": "provider",
+        "name": "acmecrm_list_contacts",
+        "toolkit": "acmecrm",
+        "connection_id": "conn1",
+        "credential_id": "key1",
+        **overrides,
+    }
+
+
+def _paths(ctx: ValidationContext) -> dict[str, str]:
+    return {issue.path: issue.severity for issue in apps_issues(ctx)}
+
+
+def test_apps_off_by_default_raises_nothing() -> None:
+    assert apps_issues(_apps_ctx(credentials={})) == []
+
+
+@pytest.mark.parametrize("mode", ["actions", "server", "router"])
+def test_apps_mode_without_a_composio_key_is_an_error(mode: str) -> None:
+    assert _paths(_apps_ctx({"mode": mode}, credentials={})) == {"tools.apps.mode": "error"}
+
+
+def test_apps_mode_with_composio_turned_off_is_an_error() -> None:
+    issues = apps_issues(_apps_ctx({"mode": "router"}, disabled=frozenset({"composio"})))
+
+    assert [issue.path for issue in issues] == ["tools.apps.mode"]
+    assert "turned off" in issues[0].message
+
+
+def test_router_manage_connections_is_a_warning() -> None:
+    ctx = _apps_ctx({"mode": "router", "router": {"manage_connections": True}})
+
+    assert _paths(ctx) == {"tools.apps.router.manage_connections": "warning"}
+
+
+@pytest.mark.parametrize(
+    ("status", "problem"),
+    [("active", False), ("expired", True), ("failed", True), ("inactive", True), (None, True)],
+)
+def test_a_provider_tool_with_a_broken_connection_is_an_error(status: str | None, problem: bool) -> None:
+    ctx = _apps_ctx(
+        {"mode": "actions"},
+        tool_ids=["t1"],
+        definitions={"t1": _provider_definition()},
+        statuses={"conn1": status} if status is not None else {},
+    )
+
+    issues = apps_issues(ctx)
+
+    assert bool(issues) is problem
+    if problem:
+        assert issues[0].path == "tools[0].definition.connection_id"
+        assert "acmecrm" in issues[0].message
+
+
+def test_a_provider_tool_whose_key_is_not_composio_is_an_error() -> None:
+    ctx = _apps_ctx(
+        tool_ids=["t1"],
+        definitions={"t1": _provider_definition(credential_id="other")},
+        credentials={"key1": "composio", "other": "http-tool-secret"},
+        statuses={"conn1": "active"},
+    )
+
+    assert _paths(ctx) == {"tools[0].definition.credential_id": "error"}
+
+
+def test_apps_issues_run_as_part_of_validate() -> None:
+    result = validate(_apps_ctx({"mode": "router"}, credentials={}))
+
+    assert result.ok is False
+    assert any(issue.path == "tools.apps.mode" for issue in result.issues)
+
+
+def test_resolve_substitutes_the_key_into_a_provider_definition() -> None:
+    definition = ProviderToolDefinition(
+        name="acmecrm_list_contacts",
+        description="List contacts.",
+        parameters={"type": "object", "properties": {}},
+        tool_slug="ACMECRM_LIST_CONTACTS",
+        connection_id="conn1",
+        credential_id="key1",
+        subject="ws:w1",
+    )
+
+    resolved = resolve_tool_definition(definition, {"api_key": "ak_placeholder_value"})
+
+    assert isinstance(resolved, ProviderToolDefinition)
+    assert resolved.headers == {"x-api-key": "ak_placeholder_value"}
+    assert resolved.credential_id is None
+    assert (resolved.connection_id, resolved.subject) == ("conn1", "ws:w1")
+    assert definition.headers == {"x-api-key": "{{ secret.api_key }}"}, "the stored copy is unchanged"
+
+
+def test_resolve_substitutes_the_key_into_an_origin_tagged_mcp_definition() -> None:
+    definition = McpServerDefinition(
+        name="composio_tool_finder",
+        url="https://backend.composio.dev/tool_router/trs_1/mcp",
+        headers={"x-api-key": "{{ secret.api_key }}"},
+        credential_id="key1",
+        origin=McpServerOrigin(kind="router", remote_id="trs_1"),
+    )
+
+    resolved = resolve_tool_definition(definition, {"api_key": "ak_placeholder_value"})
+
+    assert isinstance(resolved, McpServerDefinition)
+    assert resolved.headers == {"x-api-key": "ak_placeholder_value"}
+    assert resolved.credential_id is None
+    assert resolved.origin == definition.origin
+
+
+# ---------------------------------------------- conversation tuning (V5-07)
+
+
+def _stored_configs() -> list[tuple[str, dict[str, Any]]]:
+    """Every agent config the repository ships: the v1 seed rows, the templates, the packs."""
+    import sqlite3  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    from lkap_contracts.migrate import agent_config_v1_to_v2  # noqa: PLC0415
+    from packs.generic.manifest import MANIFEST as GENERIC  # noqa: PLC0415
+    from packs.insurance_claim.manifest import MANIFEST as INSURANCE  # noqa: PLC0415
+
+    from lkap_api.templates.catalog import load_catalog  # noqa: PLC0415
+
+    found: list[tuple[str, dict[str, Any]]] = []
+    seed = Path(__file__).parent / "fixtures" / "v1_seed.sqlite"
+    with sqlite3.connect(seed) as db:
+        for slug, panel, raw in db.execute("SELECT slug, ui_panel_id, config FROM agents ORDER BY slug"):
+            found.append((f"seed:{slug}", agent_config_v1_to_v2(json.loads(raw), panel)))
+    for template in load_catalog():
+        if template.pipeline is not None:
+            config = inference_config().model_dump(mode="json")
+            config["pipeline"] = template.pipeline.model_dump(mode="json")
+            found.append((f"template:{template.id}", config))
+    for manifest in (GENERIC, INSURANCE):
+        config = inference_config().model_dump(mode="json")
+        config["pipeline"] = manifest.recommended_pipeline.model_dump(mode="json")
+        found.append((f"pack:{manifest.id}", config))
+    return found
+
+
+def test_every_stored_config_keeps_its_turn_handling_and_behaviour() -> None:
+    """Compatibility rule (PLAN-V5 §0.1): saved configs resolve exactly as before V5-07."""
+    from lkap_contracts.agent_config import AgentConfig  # noqa: PLC0415
+    from lkap_contracts.turn_handling import resolve_turn_handling  # noqa: PLC0415
+
+    configs = _stored_configs()
+    assert len(configs) >= 5
+
+    for name, raw in configs:
+        stored = dict(raw["pipeline"].get("turn_handling") or {})
+        config = AgentConfig.model_validate(raw)
+        pipeline = config.pipeline
+        assert pipeline.conversation_preset == "custom", name
+        assert pipeline.turn_detector is None, name
+        assert config.voice.ambient_sound == "none", name
+        assert pipeline.turn_handling == stored, name
+        assert resolve_turn_handling(pipeline.conversation_preset, pipeline.turn_handling) == stored, name
+        issues = validate(ValidationContext(config=config)).issues
+        assert not [i for i in issues if i.path.startswith("pipeline.conversation_preset")], name
+
+
+def _realtime_config(**pipeline: Any) -> Any:
+    from lkap_contracts.agent_config import AgentConfig, PipelineConfig  # noqa: PLC0415
+
+    return AgentConfig(
+        instructions="Help.",
+        pipeline=PipelineConfig.model_validate(
+            {"mode": "realtime", "realtime": {"provider_id": "google-realtime"}, **pipeline}
+        ),
+    )
+
+
+def _preset_issues(result: Any) -> list[Any]:
+    return [i for i in result.issues if i.path == "pipeline.conversation_preset"]
+
+
+@pytest.mark.parametrize("preset", ["patient", "balanced", "snappy", "telephony"])
+def test_a_preset_on_a_realtime_pipeline_warns_which_settings_are_ignored(preset: str) -> None:
+    result = validate(ValidationContext(config=_realtime_config(conversation_preset=preset)))
+
+    (issue,) = _preset_issues(result)
+    assert issue.severity == "warning"
+    assert "endpointing" in issue.message and "interruption" in issue.message
+    assert ("preemptive_generation" in issue.message) is (preset == "snappy")
+
+
+def test_custom_on_a_realtime_pipeline_does_not_warn() -> None:
+    config = _realtime_config(turn_handling={"endpointing": {"min_delay": 0.4}})
+
+    assert _preset_issues(validate(ValidationContext(config=config))) == []
+
+
+@pytest.mark.parametrize("preset", ["patient", "balanced", "snappy", "telephony"])
+def test_a_preset_on_a_cascaded_pipeline_does_not_warn(preset: str) -> None:
+    config = inference_config()
+    config.pipeline.conversation_preset = preset  # type: ignore[assignment]
+
+    assert _preset_issues(validate(ValidationContext(config=config))) == []
+
+
+@pytest.mark.parametrize(("preset", "warns"), [("snappy", True), ("patient", False)])
+def test_half_cascade_warns_only_about_early_replies(preset: str, warns: bool) -> None:
+    config = _realtime_config(mode="half_cascade", conversation_preset=preset)
+
+    issues = _preset_issues(validate(ValidationContext(config=config)))
+
+    if warns:
+        (issue,) = issues
+        assert "preemptive_generation" in issue.message and "endpointing" not in issue.message
+    else:
+        assert issues == []
+
+
+def _connection(tier: str) -> Any:
+    from lkap_contracts.connections import ConnectionCapabilities  # noqa: PLC0415
+
+    from lkap_api.config_service import ConnectionContext  # noqa: PLC0415
+
+    caps = ConnectionCapabilities(noise_cancellation_tier=tier, inference_available=True)  # type: ignore[arg-type]
+    return ConnectionContext(connection_id="c1", name="Demo phone", capabilities=caps)
+
+
+def _telephony_config() -> Any:
+    config = inference_config()
+    config.pipeline.conversation_preset = "telephony"
+    return config
+
+
+def test_telephony_preset_without_cloud_noise_cancellation_warns() -> None:
+    result = validate(ValidationContext(config=_telephony_config(), connection=_connection("none")))
+
+    (issue,) = _preset_issues(result)
+    assert issue.severity == "warning"
+    assert "needs LiveKit Cloud" in issue.message and "Demo phone" in issue.message
+
+
+def test_telephony_preset_warns_while_no_phone_noise_filter_is_offered() -> None:
+    """Today both Cloud filters are deferred (not in the worker image), so the preset tunes turns only."""
+    result = validate(ValidationContext(config=_telephony_config(), connection=_connection("krisp")))
+
+    (issue,) = _preset_issues(result)
+    assert "no noise filter for phone calls is available on this platform yet" in issue.message
+    assert "tunes turn-taking only" in issue.message
+
+
+def test_telephony_preset_on_cloud_with_an_offered_filter_does_not_warn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import lkap_api.config_service as config_service  # noqa: PLC0415
+
+    monkeypatch.setattr(config_service, "_telephony_filter_offered", lambda: True)
+
+    result = validate(ValidationContext(config=_telephony_config(), connection=_connection("krisp")))
+
+    assert _preset_issues(result) == []
+
+
+def test_telephony_preset_with_a_filter_that_has_a_phone_version_does_not_warn() -> None:
+    config = _telephony_config()
+    config.pipeline.noise_cancellation = ProviderRef(provider_id="legacy-noise-cancellation")
+
+    result = validate(ValidationContext(config=config, connection=_connection("krisp")))
+
+    assert _preset_issues(result) == []
+
+
+def test_telephony_preset_with_a_filter_without_a_phone_version_says_it_is_kept() -> None:
+    config = _telephony_config()
+    config.pipeline.noise_cancellation = ProviderRef(provider_id="ai-coustics-noise-cancellation")
+
+    (issue,) = _preset_issues(validate(ValidationContext(config=config, connection=_connection("krisp"))))
+
+    assert "keeps the noise filter 'ai-coustics' as it is" in issue.message
+
+
+@pytest.mark.parametrize("tier", ["none", "krisp"])
+def test_other_presets_never_get_the_telephony_warning(tier: str) -> None:
+    config = inference_config()
+    config.pipeline.conversation_preset = "snappy"
+
+    assert _preset_issues(validate(ValidationContext(config=config, connection=_connection(tier)))) == []
+
+
+def test_telephony_preset_without_a_connection_is_not_checked() -> None:
+    assert _preset_issues(validate(ValidationContext(config=_telephony_config()))) == []
+
+
+def test_snappy_preset_with_auto_inject_gets_the_discarded_reply_tip() -> None:
+    config = inference_config(knowledge=KnowledgeConfig(kb_ids=["kb-1"], auto_inject=True))
+    config.pipeline.conversation_preset = "snappy"
+
+    (issue,) = _knowledge_issues(validate_agent_config(config, credential_providers={}))
+
+    assert "discards the preemptive reply" in issue.message
+
+
+def test_a_turn_handling_value_of_the_wrong_type_warns_but_saves() -> None:
+    config = inference_config()
+    config.pipeline.turn_handling = {"endpointing": {"min_delay": "soon"}}
+
+    result = validate_agent_config(config, credential_providers={})
+
+    assert result.ok is True
+    (issue,) = [i for i in result.issues if i.path.startswith("pipeline.turn_handling.")]
+    assert issue.path == "pipeline.turn_handling.endpointing.min_delay"
+    assert issue.severity == "warning"
+
+
+def test_a_typed_turn_handling_dict_does_not_warn() -> None:
+    config = inference_config()
+    config.pipeline.turn_handling = {
+        "endpointing": {"mode": "dynamic", "min_delay": 0.4},
+        "interruption": {"min_words": 2, "false_interruption_timeout": None},
+    }
+
+    result = validate_agent_config(config, credential_providers={})
+
+    assert [i for i in result.issues if i.path.startswith("pipeline.turn_handling")] == []
+
+
+# ------------------------------------------------------------------ V5-49: unreviewed destructive actions
+def _picked(slug: str, *, toolkit: str = "acmecrm", connection_id: str = "conn1") -> dict[str, Any]:
+    return _provider_definition(
+        name=slug.lower(), tool_slug=slug, toolkit=toolkit, connection_id=connection_id
+    )
+
+
+_PICKED = {
+    "t1": _picked("ACMECRM_DELETE_CONTACT"),
+    "t2": _picked("ACMECRM_LIST_CONTACTS"),
+    "t3": _picked("MAIL_REMOVE_LABEL", toolkit="mail", connection_id="conn2"),
+}
+
+
+@pytest.mark.parametrize(
+    ("apps", "expected"),
+    [
+        pytest.param({"mode": "server"}, ["ACMECRM_DELETE_CONTACT", "MAIL_REMOVE_LABEL"], id="all-apps"),
+        pytest.param(
+            {"mode": "router", "allowed_toolkits": ["acmecrm"]},
+            ["ACMECRM_DELETE_CONTACT"],
+            id="allowed-apps-only",
+        ),
+        pytest.param(
+            {"mode": "server", "reviewed_actions": ["acmecrm_delete_contact", "MAIL_REMOVE_LABEL"]},
+            [],
+            id="all-reviewed",
+        ),
+        pytest.param({"mode": "actions"}, [], id="actions-mode-has-no-deny-list"),
+    ],
+)
+def test_unreviewed_destructive_actions_are_a_warning_naming_them(
+    apps: dict[str, Any], expected: list[str]
+) -> None:
+    ctx = _apps_ctx(apps, definitions=_PICKED, statuses={"conn1": "active", "conn2": "active"})
+
+    flagged = [issue for issue in apps_issues(ctx) if issue.path == "tools.apps.denied_actions"]
+
+    if not expected:
+        assert flagged == []
+        return
+    assert len(flagged) == 1
+    assert flagged[0].severity == "warning"
+    assert "blocked until reviewed in the Connected apps card" in flagged[0].message
+    for slug in expected:
+        assert slug in flagged[0].message
+    assert "ACMECRM_LIST_CONTACTS" not in flagged[0].message
+
+
+def test_unreviewed_destructive_warning_skips_a_removed_connection() -> None:
+    ctx = _apps_ctx({"mode": "server"}, definitions={"t1": _picked("ACMECRM_DELETE_CONTACT")}, statuses={})
+
+    assert "tools.apps.denied_actions" not in _paths(ctx)

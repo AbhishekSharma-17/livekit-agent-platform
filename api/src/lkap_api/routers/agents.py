@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Response, status
 from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.api_models import (
@@ -29,6 +29,8 @@ from lkap_contracts.api_models import (
     AgentPublicOut,
     AgentUpdate,
     ConfigVersionOut,
+    CostEstimate,
+    CostEstimateRequest,
     Issue,
     Page,
     ValidationResult,
@@ -39,7 +41,7 @@ from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext
+from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext, require
 from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import connection_context_for, validate_in_db
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
@@ -54,16 +56,21 @@ from lkap_api.errors import (
     UnprocessableEntityError,
 )
 from lkap_api.flows import derived_mode, pack_tool_names_for
+from lkap_api.jobs.deps import JobsDep
+from lkap_api.jobs.kinds import KB_INGEST
+from lkap_api.jobs.service import JobsService
 from lkap_api.kb.embed import resolve_embedder
-from lkap_api.kb.seed import import_kb_seeds, import_pack_kb_seeds
-from lkap_api.kb.store import get_lancedb_store
+from lkap_api.kb.seed import SeedImport, import_kb_seeds, import_pack_kb_seeds
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
+from lkap_api.routers.costs import estimate_for_request
 from lkap_api.settings import Settings
+from lkap_api.storage.resolve import default_storage
 from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
 from lkap_api.templates.router import resolve_template
 from lkap_api.templates.seed import apply_tool_seeds, seed_from_template
+from lkap_api.tool_providers.provisioning import AppsProvisionerDep  # V5-47
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -336,14 +343,19 @@ async def _seed_from(
     *,
     workspace_id: str,
     connection_id: str | None,
-) -> AgentConfig:
-    """Seed a config from a starter (catalogue or derived) and import its knowledge seeds.
+) -> tuple[AgentConfig, SeedImport]:
+    """Seed a config from a starter (catalogue or derived) and stage its knowledge seeds.
 
     TEMPLATES §4 steps 1–5: :func:`~lkap_api.templates.seed.seed_from_template`
     builds the config; the pack's ``kb_seeds`` (read from the pack's package)
     and then the template's (read from its catalogue directory) become the
     config's ``knowledge.kb_ids``. Tool rows need the agent row and are created
     by the caller.
+
+    V4-18 (R-V4-65): the seed files become ``pending`` documents with their
+    bytes in storage; nothing is embedded here. The returned
+    :class:`~lkap_api.kb.seed.SeedImport` carries one ``KB_INGEST`` payload per
+    file, which the caller enqueues after it commits (:func:`_enqueue_seed_ingests`).
     """
     connection = await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id)
     config = seed_from_template(
@@ -352,35 +364,56 @@ async def _seed_from(
         credentials_by_provider=await _credentials_by_provider(db, workspace_id),
         connection=connection,
     )
+    seeds = SeedImport()
     if manifest.kb_seeds or template.kb_seeds:
+        # Metadata only (model id and width for the new knowledge bases): no model is loaded.
         embedder = await resolve_embedder(settings, db, vault)
-        store = get_lancedb_store(settings.data_dir)
-        kb_ids: list[str] = []
+        storage = default_storage(settings)
         if manifest.kb_seeds:
-            kb_ids += await import_pack_kb_seeds(
-                db=db,
-                store=store,
-                embedder=embedder,
-                packs=settings.packs_list,
-                pack_id=manifest.id,
-                seeds=manifest.kb_seeds,
-                workspace_id=workspace_id,
+            seeds.extend(
+                await import_pack_kb_seeds(
+                    db=db,
+                    storage=storage,
+                    embedder=embedder,
+                    packs=settings.packs_list,
+                    pack_id=manifest.id,
+                    seeds=manifest.kb_seeds,
+                    workspace_id=workspace_id,
+                )
             )
         if template.kb_seeds:
-            kb_ids += await import_kb_seeds(
-                db=db,
-                store=store,
-                embedder=embedder,
-                root=template_root(template.id),
-                source_label=f"template:{template.id}",
-                seeds=template.kb_seeds,
-                workspace_id=workspace_id,
+            seeds.extend(
+                await import_kb_seeds(
+                    db=db,
+                    storage=storage,
+                    embedder=embedder,
+                    root=template_root(template.id),
+                    source_label=f"template:{template.id}",
+                    seeds=template.kb_seeds,
+                    workspace_id=workspace_id,
+                )
             )
-        config.knowledge.kb_ids = list(dict.fromkeys(kb_ids))
+        config.knowledge.kb_ids = list(dict.fromkeys(seeds.kb_ids))
         log.info(
-            "kb_seeds_imported", template_id=template.id, pack_id=manifest.id, kb_ids=config.knowledge.kb_ids
+            "kb_seeds_imported",
+            template_id=template.id,
+            pack_id=manifest.id,
+            kb_ids=config.knowledge.kb_ids,
+            documents_pending=len(seeds.ingest_payloads),
         )
-    return config
+    return config, seeds
+
+
+async def _enqueue_seed_ingests(
+    jobs: JobsService, seeds: SeedImport, background_tasks: BackgroundTasks | None
+) -> None:
+    """Enqueue one ``KB_INGEST`` job per staged seed document (after the caller's commit).
+
+    With the ``inline`` backend and ``background_tasks`` the jobs run after the
+    response is sent; with ``arq`` the ``jobs`` process runs them.
+    """
+    for payload in seeds.ingest_payloads:
+        await jobs.enqueue(KB_INGEST, payload, background_tasks=background_tasks)
 
 
 async def _seed_config(
@@ -391,15 +424,15 @@ async def _seed_config(
     *,
     workspace_id: str = DEFAULT_WORKSPACE_ID,
     connection_id: str | None = None,
-) -> tuple[AgentConfig, str]:
-    """Build a config from a pack's derived starter (R-V4-3); returns ``(config, ui_panel_id)``."""
+) -> tuple[AgentConfig, str, SeedImport]:
+    """Build a config from a pack's derived starter (R-V4-3); returns ``(config, ui_panel_id, seeds)``."""
     manifest = get_manifest(settings.packs_list, pack_id)
     if manifest is None:
         raise UnprocessableEntityError(
             f"pack '{pack_id}' is not installed; send an explicit config or set LKAP_PACKS",
             details={"packs": settings.packs_list},
         )
-    config = await _seed_from(
+    config, seeds = await _seed_from(
         db,
         settings,
         vault,
@@ -408,7 +441,7 @@ async def _seed_config(
         workspace_id=workspace_id,
         connection_id=connection_id,
     )
-    return config, manifest.ui_panel_id
+    return config, manifest.ui_panel_id, seeds
 
 
 #: ``ProviderRef.fields`` names that choose where a provider's traffic goes.
@@ -543,7 +576,14 @@ def _raise_template_with_config() -> None:
     ),
 )
 async def create_agent(
-    payload: AgentCreate, db: DbDep, settings: SettingsDep, vault: VaultDep, ctx: AdminCtxDep
+    payload: AgentCreate,
+    db: DbDep,
+    settings: SettingsDep,
+    vault: VaultDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
+    jobs: JobsDep,
+    background_tasks: BackgroundTasks,
 ) -> AgentOut:
     """Create an agent from a starter template, an explicit config or its pack's defaults.
 
@@ -551,15 +591,21 @@ async def create_agent(
     create the template's tool rows (they are agent-scoped), point
     ``tools.tool_ids`` at them, validate, then snapshot version 1. One
     transaction: a validation failure rolls the row and its tools back.
+
+    V4-18 (R-V4-65): knowledge seeds are staged as ``pending`` documents in
+    that transaction; it is committed here, and only then is one
+    ``KB_INGEST`` job enqueued per document, so the response never waits for
+    an embedding model and the write lock is never held through its load.
     """
     connection_id = await _workspace_connection_id(db, ctx.workspace_id, payload.connection_id)
     template: StarterTemplate | None = None
+    seeds = SeedImport()
     if payload.template_id is not None:
         if payload.config is not None:
             _raise_template_with_config()
         template, manifest = resolve_template(settings.packs_list, payload.template_id)
         pack_id = template.pack_id
-        config = await _seed_from(
+        config, seeds = await _seed_from(
             db,
             settings,
             vault,
@@ -571,7 +617,7 @@ async def create_agent(
         panel_id = manifest.ui_panel_id
     elif payload.config is None:
         pack_id = payload.pack_id
-        config, panel_id = await _seed_config(
+        config, panel_id, seeds = await _seed_config(
             db, settings, vault, pack_id, workspace_id=ctx.workspace_id, connection_id=connection_id
         )
     else:
@@ -607,12 +653,21 @@ async def create_agent(
             db, config, workspace_id=ctx.workspace_id, connection_id=connection_id, pack_id=pack_id
         )
     )
+    # V5-47 (COMPOSIO.md D-V5-C11): provision the app server / tool finder of `tools.apps`.
+    config = await apps.on_save(db, ctx, row, config)
+    row.config = config.model_dump(mode="json")
     template_id = template.id if template is not None else None
     if template_id is None and payload.config is None:
         template_id = derived_template_id(pack_id)
     note = f"created from template {template_id}" if template_id else "created"
     _snapshot_version(db, row, created_by=ctx.actor.id, note=note)
     await db.flush()
+    if seeds.ingest_payloads:
+        # Committed explicitly (not just flushed): each job opens its own
+        # connection (with `arq`, in another process, possibly before this
+        # request's session closes) and needs the document rows to be durable.
+        await db.commit()
+        await _enqueue_seed_ingests(jobs, seeds, background_tasks)
     log.info("agent_created", agent_id=row.id, slug=row.slug, pack_id=row.pack_id, template_id=template_id)
     return to_out(row)
 
@@ -700,7 +755,13 @@ async def get_agent(
         "derived from `config.flow` (nodes ⇒ `flow`); a `mode` that disagrees is a 422."
     ),
 )
-async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: AdminCtxDep) -> AgentOut:
+async def update_agent(
+    agent_id: str,
+    payload: AgentUpdate,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
+) -> AgentOut:
     """Apply a partial update to an agent."""
     row = await load_scoped_agent(db, ctx, agent_id)
     # R-V2-12: `mode` follows `config.flow`; a disagreeing `mode` is a 422 before anything changes.
@@ -728,6 +789,8 @@ async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: Admi
                 pack_id=row.pack_id,
             )
         )
+        # V5-47 (COMPOSIO.md D-V5-C11): provision the app server / tool finder of `tools.apps`.
+        payload.config = await apps.on_save(db, ctx, row, payload.config)
         new_config: dict[str, Any] = payload.config.model_dump(mode="json")
         row.mode = derived_mode(payload.config)
         if new_config != row.config:
@@ -761,6 +824,7 @@ async def delete_agent(
     agent_id: str,
     db: DbDep,
     ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
     purge: bool = Query(default=False, description="Cascade-delete sessions of an archived agent"),
 ) -> Response:
     """Delete an agent that has no sessions, or purge an archived one that does.
@@ -778,11 +842,13 @@ async def delete_agent(
         # FK, which would otherwise raise the same `IntegrityError` this
         # branch exists to avoid.
         await db.execute(delete(SessionRow).where(SessionRow.agent_id == row.id))
+    app_sessions = await apps.before_delete(db, ctx, row)  # V5-47
     await db.delete(row)
     try:
         await db.flush()
     except IntegrityError as exc:
         raise ConflictError("agent still has sessions; delete them first, or archive and purge it") from exc
+    await apps.after_delete(db, ctx, row.id, app_sessions)  # V5-47: its Composio sessions, best effort
     log.info("agent_deleted", agent_id=agent_id, purged=purge)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -949,3 +1015,32 @@ async def validate_agent(agent_id: str, db: DbDep, ctx: AdminCtxDep) -> Validati
         connection_id=row.connection_id,
         pack_id=row.pack_id,
     )
+
+
+@router.post(
+    "/{agent_id}/cost-estimate",
+    response_model=CostEstimate,
+    summary="Estimate this agent's cost per minute",
+    description=(
+        "An **estimate** at list prices (never a bill) of what the agent's saved config costs per "
+        "minute and per call; the same handler as `POST /v1/cost-estimates` with `agent_id` set. "
+        "The body is optional: assumption overrides, the channel, workspace averages."
+    ),
+)
+async def estimate_agent_cost(
+    agent_id: str,
+    db: DbDep,
+    settings: SettingsDep,
+    ctx: Annotated[WorkspaceContext, Depends(require("viewer", "agents:read"))],
+    payload: Annotated[CostEstimateRequest | None, Body()] = None,
+) -> CostEstimate:
+    """Estimate the agent's saved configuration (read-only; nothing is stored).
+
+    Raises:
+        UnprocessableEntityError: The body names a template or a draft config.
+    """
+    body = payload or CostEstimateRequest()
+    if body.template_id is not None or body.config is not None:
+        raise UnprocessableEntityError("this route estimates the agent in the path; drop template_id/config")
+    request = body.model_copy(update={"agent_id": agent_id})
+    return await estimate_for_request(db, ctx, settings, request)

@@ -13,6 +13,7 @@ import json
 import sys
 import types
 from collections.abc import AsyncIterator, Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,14 @@ from lkap_contracts.tools import BLOCK_TOOL_NAMES, BUILTIN_TOOL_NAMES
 from sqlalchemy import select, update
 
 from lkap_api.config_service import host_allowed
-from lkap_api.db.models import Agent, AgentConfigVersion, KnowledgeBase, LiveKitConnection, Tool
+from lkap_api.db.models import (
+    Agent,
+    AgentConfigVersion,
+    KbDocument,
+    KnowledgeBase,
+    LiveKitConnection,
+    Tool,
+)
 from lkap_api.db.session import Database
 from lkap_api.flows import allowed_tool_names
 from lkap_api.kb.embed import FakeEmbedder
@@ -118,6 +126,8 @@ async def templates_app(real_packs: Settings, database: Database, monkeypatch: p
         return FakeEmbedder()
 
     monkeypatch.setattr("lkap_api.routers.agents.resolve_embedder", _fake_embedder)
+    # V4-18: seeds are ingested by the `kb_ingest` job, which resolves its own embedder.
+    monkeypatch.setattr("lkap_api.kb.ingest.resolve_embedder", _fake_embedder)
     await _set_default_caps(database, sip_enabled=False, egress_enabled=False)
     application = create_app(real_packs)
     application.state.db = database
@@ -409,6 +419,22 @@ async def test_every_starter_creates_validates_and_seeds_its_rows(
             .scalars()
             .all()
         )
+        documents = (
+            (
+                await session.execute(
+                    select(KbDocument).where(KbDocument.kb_id.in_(config["knowledge"]["kb_ids"]))
+                )
+            )
+            .scalars()
+            .all()
+        )
+    # V4-18: every seed file is a document, ingested by its `kb_ingest` job (run
+    # before the ASGI test client returns) into `ready`.
+    seed_files = [file for seed in (*template.kb_seeds, *manifest.kb_seeds) for file in seed.files]
+    assert sorted(document.filename for document in documents) == sorted(seed_files)
+    assert all(document.status == "ready" for document in documents), [
+        (d.filename, d.error) for d in documents
+    ]
     assert sorted(config["tools"]["tool_ids"]) == sorted(tool.id for tool in tools)
     assert len(tools) == len(template.tool_seeds)
     assert {tool.name for tool in tools} == {seed.definition.name for seed in template.tool_seeds}
@@ -595,6 +621,23 @@ async def test_list_templates_is_the_catalogue_in_gallery_order(admin: httpx.Asy
     assert items[0]["pack"]["id"] == "generic"
     receptionist = items[EXPECTED_IDS.index("receptionist")]["template"]
     assert receptionist["instructions"] and receptionist["voice"] == {"user_away_timeout_s": 20}
+
+
+async def test_starters_with_a_priced_pipeline_carry_an_estimate(admin: httpx.AsyncClient) -> None:
+    """V4-15 (D-V4-42): an estimate at list prices and default assumptions, or null when nothing is priced."""
+    items = (await admin.get("/v1/templates")).json()["items"]
+
+    priced = [item for item in items if item["estimate"] is not None]
+    assert priced, "at least one starter runs on priced LiveKit Inference models"
+    for item in priced:
+        estimate = item["estimate"]
+        low, mid, high = (
+            Decimal(estimate[k]) for k in ("per_minute_usd_low", "per_minute_usd_mid", "per_minute_usd_high")
+        )
+        assert Decimal(0) < low <= mid <= high
+        assert estimate["as_of"]
+    one = (await admin.get("/v1/templates/blank")).json()
+    assert one["estimate"] == next(i["estimate"] for i in items if i["template"]["id"] == "blank")
 
 
 async def test_an_installed_pack_without_a_starter_gets_a_derived_entry(

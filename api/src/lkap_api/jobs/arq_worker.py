@@ -14,6 +14,7 @@ from typing import Any
 from arq.connections import RedisSettings
 
 from lkap_api.db.session import Database
+from lkap_api.jobs.handlers import load_all_handlers
 from lkap_api.jobs.service import JobsService
 from lkap_api.jobs.settings import get_jobs_settings
 from lkap_api.logging import configure_logging, get_logger
@@ -21,6 +22,15 @@ from lkap_api.settings import get_settings
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
+
+# ask #25: register every job kind's handler at import time, not just this
+# package's own `usage_daily_rollup` (`jobs/__init__.py`'s side effect). The
+# api process gets the rest as a side effect of importing every router;
+# this process imports no router, so without this call every other kind
+# (`kb_ingest`, `kb_delete`, `webhook_delivery`, `qa_scoring`,
+# `recording_finalize`, `worker_sweep`, `call_event`, `session_orphan_event`)
+# would fail "no handler registered for kind".
+load_all_handlers()
 
 
 async def run_job(ctx: dict[str, Any], job_id: str) -> None:

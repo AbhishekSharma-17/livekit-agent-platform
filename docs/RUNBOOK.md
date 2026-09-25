@@ -58,6 +58,8 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `LKAP_PUBLIC_BASE_URL` | ✓ | | | | public `https://` origin of the api, needed for Cloud-hosted pools (§3) |
 | `LKAP_API_BASE_URL` | ✓ | ✓ | ✓ | | `http://127.0.0.1:8080`. On the api it is the url handed to workers (worker env, deploy bundle); unset falls back to `LKAP_PUBLIC_BASE_URL`, then to a guess from `PORT`, which the api logs as `worker_callback_url_derived_from_port`. |
 | `LKAP_EMBEDDER` | ✓ | | | | the knowledge-base embedder, platform-wide: `fastembed` (default, local), `<provider_id>:<credential_id>` for an OpenAI-shaped embedding entry (`openai-embedding`, `openrouter-embedding`; the credential must be stored under that entry's credential home), or the legacy `openai:<credential_id>`. |
+| `LKAP_EMBED_MODEL` | ✓ | | | | the local fastembed model `LKAP_EMBEDDER=fastembed` runs; default `BAAI/bge-small-en-v1.5` (384 dimensions). Every knowledge base records its model and width when it is created, and a search from a different model is refused (`422 kb_embedder_mismatch`, naming the knowledge base), so change it only for new knowledge bases or re-create the old ones. Knowledge bases created before V5-01 are not recorded and are never refused. |
+| `LKAP_RERANK_MODEL` | ✓ | | | | the local cross-encoder knowledge search reranks with (fastembed `TextCrossEncoder`, used from V5-04); default `Xenova/ms-marco-MiniLM-L-6-v2`. |
 | `LKAP_NET_ALLOW_PRIVATE_HOSTS` | ✓ | | | | comma list of host names, IPs or CIDRs the outbound network guard may reach although they are private. Unset = `localhost,127.0.0.1,::1` in `dev`, nothing in `prod` (§5.1). |
 | `LKAP_CONNECTION_ID` | | optional | | | the connection a worker serves. Unset means the default connection. |
 | `LKAP_AGENT_NAME` | | optional | | | must equal the connection's `agent_name` (default `lkap-agent`) |
@@ -222,7 +224,8 @@ It dumps Postgres (when configured) and tars `LKAP_DATA_DIR` (local storage, Lan
   sqlite3 api/data/lkap.db ".backup /somewhere/outside/api/data/lkap-$(date +%s).db"
   ```
   SQLite DDL is not transactional, so a failed chain leaves `alembic_version` out of step with the schema.
-- **To restore:** stop the api, then copy the file back.
+- **WAL mode (V4-18, R-V4-65).** The api opens SQLite with `journal_mode=WAL` and `busy_timeout=10000`, so readers never wait for a writer and a second writer waits up to 10 s instead of failing with `database is locked`. WAL is persistent: the first api start converts an existing `lkap.db`, and `lkap.db-wal` / `lkap.db-shm` appear beside it. Back up with `sqlite3 … ".backup …"` (above), which includes the WAL; a plain file copy while the api runs must copy all three files, or stop the api first. Postgres is unaffected.
+- **To restore:** stop the api, then copy the file back (and delete any stale `lkap.db-wal` / `lkap.db-shm` beside it).
 - **A full downgrade is lossy:** it drops v2 tables such as connections and channels. See `docs/v2/_briefs/migration-rehearsal.md`.
 
 ## 7. Key and secret rotation

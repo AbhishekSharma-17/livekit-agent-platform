@@ -12,12 +12,17 @@ import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
+import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import type { ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 
 /** `method + host` per docs/UI_UX_SPEC.md §7.6 item 4 ("method + host"), not the full URL template. */
 export function requestSummary(tool: ToolOut): string {
+  if ("tool_slug" in tool.definition) {
+    // V5-47: a connected app's action has no URL of its own; show the app it belongs to.
+    return `App action · ${tool.definition.toolkit || "app"}`;
+  }
   if (tool.definition.kind === "http") {
     let host = tool.definition.url;
     try {
@@ -85,6 +90,24 @@ export function ToolRow({
             agentId={agentId}
             tool={tool}
             secretBagSpec={secretBagSpec}
+            onSaved={onSaved}
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
+                <PencilIcon className="size-3.5" />
+              </Button>
+            }
+          />
+        ) : tool.kind === "provider" ? (
+          // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
+          <ProviderToolEditorDialog
+            tool={tool as ToolOut & { definition: ProviderToolDefinition }}
             onSaved={onSaved}
             trigger={
               <Button

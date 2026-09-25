@@ -23,9 +23,11 @@ import { BUILTIN_TOOLS, type BuiltinToolInfo } from "@/components/console/lib/co
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { BuiltinExecutionDialog } from "@/components/console/agents/tabs/builtin-execution-dialog";
+import { ConnectedAppsCard } from "@/components/console/agents/tabs/connected-apps-card";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ToolRow } from "@/components/console/tools/tool-row";
+import { originOf } from "@/components/console/tools/tools-list";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { cn } from "@/lib/utils";
 import type { AgentOut, ToolExecution, ToolOut } from "@/contracts/lkap-contracts";
@@ -130,7 +132,11 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
 
   const ownTools = ownToolsQuery.data?.items ?? [];
   const httpTools = ownTools.filter((t) => t.kind === "http");
-  const mcpTools = ownTools.filter((t) => t.kind === "mcp");
+  // A Composio app server / tool finder is created with this exact
+  // `agent_id` (`tool_providers/provisioning.py`), so it would otherwise
+  // show here too, editable — it's managed from the Connected apps card
+  // above instead (`originOf`, docs/v5/COMPOSIO.md §6).
+  const mcpTools = ownTools.filter((t) => t.kind === "mcp" && !originOf(t));
   const sharedAttachable = (allToolsQuery.data?.items ?? []).filter(
     (t) => t.agent_id === null && !(toolIds ?? []).includes(t.id),
   );
@@ -245,6 +251,8 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           </Collapsible>
         </SectionRow>
       </Section>
+
+      <ConnectedAppsCard agentId={agent.id} />
 
       <Section
         id="tools-http"

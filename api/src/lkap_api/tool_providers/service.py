@@ -70,6 +70,7 @@ from lkap_api.db.models import Agent, Credential, Tool, WorkspaceProvider, utcno
 from lkap_api.errors import ApiError, ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
+from lkap_api.tool_providers import materialise
 from lkap_api.tool_providers.adapter import (
     AdapterFactory,
     ToolProviderAdapter,
@@ -96,6 +97,11 @@ CATALOG_CACHE_MAX: Final = 512
 
 #: Pasted-key tests per workspace per minute.
 KEY_TEST_PER_MIN: Final = 10
+
+#: Page size and page cap of the destructive-action scan (R-V5-9). The page size is the
+#: console picker's, so the scan shares its cache entries; 20 pages cover 1000 actions per app.
+DESTRUCTIVE_SCAN_LIMIT: Final = 50
+DESTRUCTIVE_SCAN_PAGES: Final = 20
 
 #: Where the console shows Apps (the callback's redirect target).
 CONSOLE_APPS_PATH: Final = "/console/tools"
@@ -749,6 +755,45 @@ async def list_actions(
     )
 
 
+def _tools_fetch(adapter: ToolProviderAdapter, toolkit: str, cursor: str | None) -> Callable[[], Any]:
+    async def fetch() -> dict[str, Any]:
+        return await adapter.list_tools(toolkit=toolkit, cursor=cursor, limit=DESTRUCTIVE_SCAN_LIMIT)
+
+    return fetch
+
+
+async def destructive_actions(
+    adapter: ToolProviderAdapter, credential: Credential, cache: CatalogCache, toolkit: str
+) -> list[str]:
+    """Every destructive action of one app in the vendor catalogue (R-V5-9), upper-cased and sorted.
+
+    Walks the app's action pages with the catalogue's risk rule (``action_risk``), up to
+    :data:`DESTRUCTIVE_SCAN_PAGES` pages, through the same cache entries as the console's
+    Actions list.
+
+    Raises:
+        ApiError: Composio refused or failed a page (the caller must not provision a tool
+            finder whose destructive actions it could not list).
+    """
+    found: set[str] = set()
+    cursor: str | None = None
+    for _ in range(DESTRUCTIVE_SCAN_PAGES):
+        key = _cache_key(credential, "tools", toolkit, "", False, cursor or "", DESTRUCTIVE_SCAN_LIMIT)
+        page = await _cached(cache, key, _tools_fetch(adapter, toolkit, cursor), refresh=False)
+        for raw in _list(page.get("items")):
+            item = _dict(raw)
+            slug = _str(item.get("slug"))
+            tags = [str(t) for t in _list(item.get("tags")) if isinstance(t, str)]
+            if slug and action_risk(slug, tags) == "destructive":
+                found.add(slug.upper())
+        cursor = _str(page.get("next_cursor")) or None
+        if cursor is None:
+            break
+    else:
+        log.warning("apps_destructive_scan_truncated", toolkit=toolkit, pages=DESTRUCTIVE_SCAN_PAGES)
+    return sorted(found)
+
+
 # ============================================================================ connections
 async def _connection_rows(db: AsyncSession, workspace_id: str) -> list[Credential]:
     return list(
@@ -800,8 +845,8 @@ async def bound_tools(
 ) -> list[Tool]:
     """Tools whose definition binds one of these Composio keys or app connections.
 
-    Today that is an MCP tool pointed at Composio with the key bound; V5-47's
-    ``provider`` tools add the ``connection_id`` binding.
+    That is an MCP tool pointed at Composio with the key bound (the app server or
+    tool finder) and every ``provider`` tool (key and ``connection_id``).
     """
     keys, conns = set(credential_ids), set(connection_ids)
     if not keys and not conns:
@@ -1353,10 +1398,12 @@ async def pick_actions(
     ctx: WorkspaceContext,
     payload: AppActionsPickIn,
 ) -> AppActionsPickOut:
-    """Store picked actions on the connection (V5-47 turns them into tools).
+    """Pick actions of a connected app: store them and turn each into a ``provider`` tool.
 
     Every slug must be an action of the connection's app; a destructive one
-    needs ``allow_destructive`` (D-V5-C7).
+    needs ``allow_destructive`` (D-V5-C7). Each action becomes one tool
+    (reused when it exists, :mod:`.materialise`); with ``agent_id`` the tools
+    are attached to that agent as a new config version (V5-47).
     """
     conn = await load_connection(db, vault, ctx.workspace_id, payload.connection_id)
     if conn.status != "active":
@@ -1370,7 +1417,7 @@ async def pick_actions(
         if conn.agent_id is not None and conn.agent_id != payload.agent_id:
             raise UnprocessableEntityError("this app is connected for another agent only")
     wanted = list(dict.fromkeys(slug.strip().upper() for slug in payload.actions if slug.strip()))
-    adapter, _ = await workspace_adapter(db, vault, factory, ctx.workspace_id)
+    adapter, key = await workspace_adapter(db, vault, factory, ctx.workspace_id)
     try:
         listed = await adapter.list_tools(toolkit=conn.toolkit, tool_slugs=wanted, limit=max(len(wanted), 1))
     except ToolProviderError as exc:
@@ -1393,6 +1440,20 @@ async def pick_actions(
     conn.picked_actions = list(dict.fromkeys([*conn.picked_actions, *wanted]))
     conn.save(vault)
     await db.flush()
+    made = await materialise.materialise_actions(
+        db,
+        ctx,
+        actions=[known[slug] for slug in wanted],
+        toolkit=conn.toolkit,
+        connection_id=conn.id,
+        subject=conn.subject,
+        connection_agent_id=conn.agent_id,
+        key=key,
+    )
+    if payload.agent_id is not None:
+        await materialise.attach_tools(
+            db, ctx, payload.agent_id, made.tool_ids, note=f"attached {conn.toolkit} actions"
+        )
     _audit(
         db,
         ctx,
@@ -1402,9 +1463,14 @@ async def pick_actions(
         actions=wanted,
         agent_id=payload.agent_id,
         destructive=destructive,
+        tools_created=len(made.created),
     )
     return AppActionsPickOut(
-        connection_id=conn.id, picked_actions=conn.picked_actions, agent_id=payload.agent_id
+        connection_id=conn.id,
+        picked_actions=conn.picked_actions,
+        agent_id=payload.agent_id,
+        tools_created=made.created,
+        tools_existing=made.existing,
     )
 
 
@@ -1534,6 +1600,8 @@ async def expire_stale_connections(db: AsyncSession, vault: Vault, *, now: dt.da
 
 __all__ = [
     "CATALOG_TTL_S",
+    "DESTRUCTIVE_SCAN_LIMIT",
+    "DESTRUCTIVE_SCAN_PAGES",
     "FLOW_TTL",
     "KEY_TEST_PER_MIN",
     "AppConnection",
@@ -1547,6 +1615,7 @@ __all__ = [
     "api_error",
     "connect",
     "console_redirect",
+    "destructive_actions",
     "disconnect",
     "expire_stale_connections",
     "get_toolkit",

@@ -1,0 +1,161 @@
+{
+  "$defs": {
+    "ChoiceOption": {
+      "description": "One option of a ``choices`` block (V5-08).",
+      "properties": {
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "image_asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Asset Id"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChoiceOption",
+      "type": "object"
+    },
+    "ChoiceReveal": {
+      "description": "The right answer of a quiz-style ``choices`` block, shown once revealed.",
+      "properties": {
+        "correct": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Correct",
+          "type": "array"
+        },
+        "explanation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Explanation"
+        }
+      },
+      "title": "ChoiceReveal",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ChoicesBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Quick replies the caller taps or answers by voice (``request_choice``, V5-08).\n\n``selected`` holds the chosen option ids once ``status`` is ``submitted``\n(a single-choice block holds one). A generic ``block_submit`` answers with\n``values: {selected: [...]}``.",
+  "properties": {
+    "multi": {
+      "default": false,
+      "title": "Multi",
+      "type": "boolean"
+    },
+    "options": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ChoiceOption"
+      },
+      "title": "Options",
+      "type": "array"
+    },
+    "prompt": {
+      "default": "",
+      "title": "Prompt",
+      "type": "string"
+    },
+    "reveal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChoiceReveal"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "selected": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Selected",
+      "type": "array"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    }
+  },
+  "title": "ChoicesBlockState",
+  "type": "object"
+}

@@ -102,6 +102,10 @@ BlockType = Literal[
     "video",
     "kb_citations",
     "custom",
+    "choices",
+    "details",
+    "markdown",
+    "steps",
 ]
 
 
@@ -203,18 +207,115 @@ class VideoBlockState(BaseModel):
 
 
 class KbCitation(BaseModel):
-    """One retrieved chunk cited to the user."""
+    """One retrieved chunk cited to the user.
+
+    The locators (V5-08) come from the chunk's ingest metadata (V5-01) and are
+    absent for chunks ingested before it. Tapping a citation sends
+    ``block_action {name: "open_citation", data: {chunk_id}}``; the worker
+    opens the source page in a ``document`` block when it has the source.
+    """
 
     chunk_id: str
     filename: str
     score: float
     text: str
+    document_id: str | None = None
+    page: int | None = None
+    heading_path: list[str] | None = None
+    char_start: int | None = None
+    char_end: int | None = None
 
 
 class KbCitationsBlockState(BaseModel):
     """Knowledge-base hits backing the agent's last answer."""
 
     items: list[KbCitation] = []
+
+
+class ChoiceOption(BaseModel):
+    """One option of a ``choices`` block (V5-08)."""
+
+    id: str = Field(min_length=1)
+    label: str
+    hint: str | None = None
+    tone: Tone | None = None
+    image_asset_id: str | None = None
+
+
+class ChoiceReveal(BaseModel):
+    """The right answer of a quiz-style ``choices`` block, shown once revealed."""
+
+    correct: list[str] = []
+    explanation: str | None = None
+
+
+class ChoicesBlockState(RequestableState):
+    """Quick replies the caller taps or answers by voice (``request_choice``, V5-08).
+
+    ``selected`` holds the chosen option ids once ``status`` is ``submitted``
+    (a single-choice block holds one). A generic ``block_submit`` answers with
+    ``values: {selected: [...]}``.
+    """
+
+    prompt: str = ""
+    options: list[ChoiceOption] = []
+    multi: bool = False
+    selected: list[str] = []
+    reveal: ChoiceReveal | None = None
+
+
+#: How a ``details`` value is formatted.
+DetailsValueType = Literal["string", "number", "date", "money", "phone", "email", "badge"]
+
+
+class DetailsItem(BaseModel):
+    """One key-value row of a ``details`` card; ``set_details`` upserts by ``key``."""
+
+    key: str = Field(min_length=1)
+    label: str
+    value: str | float | None = None
+    type: DetailsValueType = "string"
+    tone: Tone | None = None
+    updated_at: float | None = None
+
+
+class DetailsBlockState(BaseModel):
+    """A key-value summary card, "what we have so far" (``set_details``, V5-08)."""
+
+    items: list[DetailsItem] = []
+
+
+class MarkdownBlockState(BaseModel):
+    """Rich text in a strict Markdown subset, never raw HTML (``show_text``, V5-08)."""
+
+    markdown: str = ""
+    title: str | None = None
+    updated_at: float | None = None
+
+
+#: Where one step of a ``steps`` block stands.
+StepStatus = Literal["pending", "active", "done", "skipped", "failed"]
+
+
+class StepItem(BaseModel):
+    """One step of a ``steps`` timeline."""
+
+    id: str = Field(min_length=1)
+    label: str
+    status: StepStatus = "pending"
+    note: str | None = None
+    at: float | None = None
+
+
+class StepsBlockState(BaseModel):
+    """A progress timeline: ``set_steps``, or the flow position with ``source="flow"`` (V5-08).
+
+    A ``custom`` block with ``kind == "flow_progress"`` keeps its raw flow
+    mirror; the console renders it with the ``steps`` renderer (D-V5-33).
+    """
+
+    steps: list[StepItem] = []
+    current: str | None = None
 
 
 class UiState(BaseModel):

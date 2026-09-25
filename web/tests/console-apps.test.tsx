@@ -360,6 +360,73 @@ describe("ActionsDialog", () => {
     expect(bodyField(call, ["allow_destructive"])).toBe(false);
   });
 
+  it("V5-48: presetAgentId preselects 'attach to this agent' and posts materialise with that agent_id", async () => {
+    const calls = stubApi((call) => {
+      if (call.url.includes("/agents")) return { status: 200, body: { items: [{ id: "agent-1", name: "Claims" }], total: 1 } };
+      return undefined;
+    });
+    renderWithClient(
+      <ActionsDialog
+        connectionId="conn_github"
+        toolkitSlug="github"
+        toolkitName="GitHub"
+        pickedActions={[]}
+        open
+        onOpenChange={() => {}}
+        presetAgentId="agent-1"
+      />,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "GitHub actions" });
+    await within(dialog).findByText("List repositories");
+    // Preselected, not just available: the submit button already reads the
+    // "…and attach to agent" copy before anything is touched.
+    expect(await within(dialog).findByRole("button", { name: "Add as tools and attach to agent" })).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /List repositories/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add as tools and attach to agent" }));
+
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/tool-providers/composio/materialise") && c.method === "POST")).toBe(true));
+    const call = calls.find((c) => c.url.endsWith("/tool-providers/composio/materialise"))!;
+    expect(bodyField(call, ["agent_id"])).toBe("agent-1");
+  });
+
+  it("V5-48: from an agent's card, an action already picked for the connection is NOT locked — it can be attached to this agent too", async () => {
+    // Regression: `pickedActions` is connection-level (`AppConnectionOut.picked_actions`),
+    // not per-agent. Without this, an action another agent already picked
+    // would show checked-and-disabled here, with no way to attach it to
+    // *this* agent — even though re-materialising an existing slug is
+    // exactly how the api attaches it (`tools_existing`).
+    const calls = stubApi((call) => {
+      if (call.url.includes("/agents")) return { status: 200, body: { items: [{ id: "agent-2", name: "Support" }], total: 1 } };
+      return undefined;
+    });
+    renderWithClient(
+      <ActionsDialog
+        connectionId="conn_github"
+        toolkitSlug="github"
+        toolkitName="GitHub"
+        pickedActions={[actionFixture().slug]}
+        open
+        onOpenChange={() => {}}
+        presetAgentId="agent-2"
+      />,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "GitHub actions" });
+    const checkbox = await within(dialog).findByRole("checkbox", { name: /List repositories/ });
+    expect(isDisabled(checkbox)).toBe(false);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    // The "Added" chip stays, as information, alongside the now-clickable checkbox.
+    expect(within(dialog).getByText("Added")).toBeTruthy();
+
+    fireEvent.click(checkbox);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add as tools and attach to agent" }));
+
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/tool-providers/composio/materialise") && c.method === "POST")).toBe(true));
+    const call = calls.find((c) => c.url.endsWith("/tool-providers/composio/materialise"))!;
+    expect(bodyField(call, ["actions"])).toEqual([actionFixture().slug]);
+    expect(bodyField(call, ["agent_id"])).toBe("agent-2");
+  });
+
   it("shows already-picked actions as checked and locked", async () => {
     stubApi();
     renderWithClient(

@@ -479,8 +479,29 @@ class ProviderSpec(BaseModel):
             "Unset means no model test; never set on vad, turn_detection or noise_cancellation."
         ),
     )
-    price_ref: str | None = None
+    price_ref: str | None = Field(
+        None,
+        description=(
+            "Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. "
+            "`openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows."
+        ),
+    )
     notes: str | None = None
+    telephony_variant: str | None = Field(
+        None,
+        description=(
+            "noise_cancellation only (V5-07, D-V5-30): the dotted path of the variant tuned for phone "
+            "audio. The worker builds it instead of `python_class` on a phone call when the agent uses "
+            "the `telephony` conversation preset. Unset = the entry has no telephony variant."
+        ),
+    )
+    price_note: str | None = Field(
+        None,
+        description=(
+            "A plain-language price line the console shows beside the provider when it is metered "
+            "outside the price table (V5-07: LiveKit Cloud noise cancellation)."
+        ),
+    )
     package: str
     python_class: str
     requires_credential: bool = True
@@ -577,6 +598,8 @@ def _full(
     notes: str | None = None,
     docs_url: str | None = None,
     get_key_url: str | None = None,
+    telephony_variant: str | None = None,
+    price_note: str | None = None,
 ) -> ProviderSpec:
     """Build a full-breadth entry added by V2-05 (CONTRACTS-V2 §7, PLAN-V2 §8 R-V2-1).
 
@@ -618,6 +641,8 @@ def _full(
         notes=notes,
         docs_url=docs_url,
         get_key_url=get_key_url,
+        telephony_variant=telephony_variant,
+        price_note=price_note,
     )
 
 
@@ -882,7 +907,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="nova-3",
         # Public list (R-V4-9): a catalog, never the credential test.
         catalog=CatalogSpec(adapter="deepgram_stt_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
-        price_ref="deepgram-stt",
         docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",
         get_key_url="https://console.deepgram.com/",
         probe="deepgram_listen",
@@ -912,7 +936,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gpt-4.1",
         catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
-        price_ref="openai-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
         get_key_url="https://platform.openai.com/api-keys",
         probe="openai_chat",
@@ -933,7 +956,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gemini-2.5-flash",
         catalog=_gemini_catalog(_GEMINI_LLM_FILTER),
         test="gemini_models",
-        price_ref="google-llm",
         docs_url="https://docs.livekit.io/agents/models/llm/gemini/",
         get_key_url="https://aistudio.google.com/apikey",
         probe="gemini_generate",
@@ -1002,7 +1024,6 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gpt-4o-mini-tts",
         catalog=_openai_catalog(_OPENAI_TTS_FILTER),
         test="openai_models",
-        price_ref="openai-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/openai/",
         get_key_url="https://platform.openai.com/api-keys",
         probe="openai_speech",
@@ -1732,7 +1753,6 @@ _FULL: list[ProviderSpec] = [
         default_model="aura-2-andromeda-en",
         # Public list (R-V4-9): a catalog, never the credential test.
         catalog=CatalogSpec(adapter="deepgram_tts_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
-        price_ref="deepgram-tts",
         docs_url="https://docs.livekit.io/agents/models/tts/deepgram/",
         probe="deepgram_speak",
     ),
@@ -1896,6 +1916,13 @@ _FULL: list[ProviderSpec] = [
 ]
 
 
+#: The per-minute price line of LiveKit Cloud's noise cancellation (research-v4
+#: panels-and-capabilities C5, the LiveKit pricing page at planning time).
+_CLOUD_NC_PRICE_NOTE = (
+    "Billed by LiveKit Cloud: the first 1,000 minutes a month are included, then about $0.0012 a minute."
+)
+
+
 #: Entries with no v1 catalogue stub at all: the ~70 packages the research-v2
 #: catalog (`docs/research-v2/livekit-plugins-catalog.md` §5) found beyond
 #: what v1 already listed, plus the three new kinds (`vad`, `turn_detection`,
@@ -1991,11 +2018,13 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(name="noise_suppression_level", label="Noise suppression level", type="number"),
         ],
         capabilities=ProviderCapabilities(cloud_only=True, platforms=["linux-x86_64", "linux-aarch64"]),
-        notes="Deferred (asks #56): livekit-plugins-krisp has no 1.8.2 release on PyPI (it is versioned "
-        "independently, latest 0.4.2), so the lockstep ==1.8.2 pin of CONTRACTS-V2 §7 cannot install, "
-        "and 0.4.2 is unverified against the 1.8.2 plugin ABI. Ships a native "
-        "livekit-plugins-krisp-internal wheel. Re-enable after an import check of a compatible release "
-        "in the full image.",
+        telephony_variant="livekit.plugins.krisp.voice_isolation_telephony",
+        price_note=_CLOUD_NC_PRICE_NOTE,
+        notes="Deferred (asks #56): livekit-plugins-krisp is versioned independently of the agents "
+        "release and is not in the worker image. V5-07 read 0.4.2 (requires livekit-agents>=1.8.2): "
+        "`viva_filter.py` defines `voice_isolation_telephony(*, auth_provider, noise_suppression_level)`, "
+        "the telephony variant, which takes no `mode`. Ships a native livekit-plugins-krisp-internal "
+        "wheel. Re-enable after an import check in the full image.",
         docs_url="https://docs.livekit.io/agents/build/audio/#noise-cancellation",
     ),
     # ---------------------------------------------------------------- avatars (new)
@@ -2378,6 +2407,7 @@ _NEW: list[ProviderSpec] = [
         default_model="gpt-4.1",
         catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
+        price_ref="openai-llm",
         notes="Distinct class from openai.LLM (chat completions); uses the Responses API over "
         "a websocket by default.",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
@@ -3102,15 +3132,21 @@ _DEFERRED: list[ProviderSpec] = [
     _full(
         "legacy-noise-cancellation",
         "noise_cancellation",
-        "Noise Cancellation (legacy)",
+        "Noise Cancellation (LiveKit Cloud)",
         "LiveKit",
         "livekit-plugins-noise-cancellation",
-        "UNVERIFIED",
+        "livekit.plugins.noise_cancellation.BVC",
         availability="deferred",
         requires_credential=False,
-        notes="Out-of-tree (not in the 1.8.2 monorepo clone); only requires_dist (livekit>=0.21.3) is known "
-        "from PyPI metadata. Likely the older client/room-level Krisp BVC wrapper, distinct from the in-tree "
-        "livekit-plugins-krisp. Left deferred rather than guessing a class path.",
+        capabilities=ProviderCapabilities(cloud_only=True),
+        telephony_variant="livekit.plugins.noise_cancellation.BVCTelephony",
+        price_note=_CLOUD_NC_PRICE_NOTE,
+        notes="Out-of-tree, LiveKit Cloud only. V5-07 read 0.3.2 (requires livekit>=0.21.3): "
+        "`plugin.py` defines `NC()`, `BVC()` and `BVCTelephony()`, each returning an "
+        "`rtc.NoiseCancellationOptions` that `AudioInputOptions.noise_cancellation` accepts "
+        "(livekit-agents 1.8.3 `voice/room_io/types.py:253`). Deferred until the package is in the worker "
+        "image (docs/v5/_asks.md).",
+        docs_url="https://docs.livekit.io/agents/build/audio/#noise-cancellation",
     ),
     _full(
         "ai-coustics-noise-cancellation",

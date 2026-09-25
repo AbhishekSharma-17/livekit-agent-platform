@@ -57,7 +57,7 @@ from lkap_contracts.flow import (
     VariableSpec,
 )
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
-from lkap_contracts.pricing import Price
+from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
 from lkap_contracts.qa import QaVerdict, SessionQaIn
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
@@ -66,6 +66,8 @@ from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
     ToolDefinition,
     ToolExecution,
     builtin_tools_document,
@@ -77,11 +79,15 @@ from lkap_contracts.ui_protocol import (
     BlockRequestPayload,
     BlockSpec,
     BlockSubmitPayload,
+    ChoicesBlockState,
+    DetailsBlockState,
     DocumentBlockState,
     FormBlockState,
     GalleryBlockState,
     KbCitationsBlockState,
+    MarkdownBlockState,
     RequestableState,
+    StepsBlockState,
     TableBlockState,
     TranscriptBlockState,
     UiPatch,
@@ -146,6 +152,10 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "TranscriptBlockState": TranscriptBlockState,
     "VideoBlockState": VideoBlockState,
     "KbCitationsBlockState": KbCitationsBlockState,
+    "ChoicesBlockState": ChoicesBlockState,
+    "DetailsBlockState": DetailsBlockState,
+    "MarkdownBlockState": MarkdownBlockState,
+    "StepsBlockState": StepsBlockState,
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
     "RequestableState": RequestableState,
@@ -166,9 +176,13 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "CatalogFilter": CatalogFilter,
     "PageSpec": PageSpec,
     "Price": Price,
+    "PriceQuote": PriceQuote,
+    "WorkspacePrice": WorkspacePrice,
     # tools
     "HttpToolDefinition": HttpToolDefinition,
     "McpServerDefinition": McpServerDefinition,
+    "McpServerOrigin": McpServerOrigin,
+    "ProviderToolDefinition": ProviderToolDefinition,
     "ToolExecution": ToolExecution,
     # api models
     "Page": api_models.Page,
@@ -225,6 +239,22 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "RecordingOut": api_models.RecordingOut,
     "AnalyticsBucket": api_models.AnalyticsBucket,
     "AnalyticsSummary": api_models.AnalyticsSummary,
+    "AnalyticsDriver": api_models.AnalyticsDriver,
+    # cost estimates and price quotes (V4-15, docs/v4/COSTS.md §3.1)
+    "TemplateEstimate": api_models.TemplateEstimate,
+    "CostDriver": api_models.CostDriver,
+    "Assumption": api_models.Assumption,
+    "EstimateLine": api_models.EstimateLine,
+    "MoneyRange": api_models.MoneyRange,
+    "CostEstimate": api_models.CostEstimate,
+    "CostEstimateRequest": api_models.CostEstimateRequest,
+    "CostAssumptionsOut": api_models.CostAssumptionsOut,
+    "PriceQuoteItemIn": api_models.PriceQuoteItemIn,
+    "PriceQuotesRequest": api_models.PriceQuotesRequest,
+    "PriceQuoteItem": api_models.PriceQuoteItem,
+    "PriceQuotesResponse": api_models.PriceQuotesResponse,
+    "WorkspacePricesIn": api_models.WorkspacePricesIn,
+    "WorkspacePricesOut": api_models.WorkspacePricesOut,
     "SessionEventOut": api_models.SessionEventOut,
     "SessionEventIn": api_models.SessionEventIn,
     "SessionEventsIn": api_models.SessionEventsIn,

@@ -18,6 +18,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -551,7 +552,7 @@ class Tool(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("kind IN ('http','mcp')", name="kind_valid"),
+        CheckConstraint("kind IN ('http','mcp','provider')", name="kind_valid"),  # V5-47 (v5_010)
         Index("ix_tools_workspace", "workspace_id"),
     )
 
@@ -570,6 +571,13 @@ class KnowledgeBase(Base):
     storage_config_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("storage_configs.id", ondelete="SET NULL"), nullable=True
     )
+    #: V5-01: the vector width and the embedding model that built this KB,
+    #: recorded at creation (or, for a KB created before V5-01, on its next
+    #: successful ingest) and checked before every query. `NULL` = unchecked.
+    dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedder_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: V5-01: `{max_tokens, overlap}` of the structure-aware chunker; `NULL` = the defaults.
+    chunking: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
@@ -593,13 +601,22 @@ class KbDocument(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: V5-01: the ingest job's embedded chunks / total, written every 50 chunks
+    #: and `1.0` when `ready`; `NULL` for a document ingested before V5-01.
+    progress: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
     __table_args__ = (CheckConstraint("status IN ('pending','ready','failed')", name="status_valid"),)
 
 
 class KbChunk(Base):
-    """A chunk of a document; the vector with the same id lives in LanceDB."""
+    """A chunk of a document; the vector with the same id lives in LanceDB.
+
+    `meta` (V5-01) holds the chunk's locators: `filename`, `heading_path`
+    (list of headings), `page` (1-based or `None`), and `char_start` /
+    `char_end` into the document's extracted text. Chunks ingested before
+    V5-01 carry `filename` only until their document is re-indexed.
+    """
 
     __tablename__ = "kb_chunks"
 
@@ -611,6 +628,33 @@ class KbChunk(Base):
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_kb_chunks_kb_document", "kb_id", "document_id"),)
+
+
+class KbEval(Base):
+    """V5-01: one golden question of a knowledge base's evaluation set (the runner is V5-05).
+
+    Scored as found when a top-k hit is `expected_document_id` or contains
+    `expected_text`; at least one of the two is set (enforced by the api).
+    `expected_document_id` has no foreign key on purpose: an eval whose
+    document was deleted is reported `skipped`, not silently dropped.
+    """
+
+    __tablename__ = "kb_evals"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    kb_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_document_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    expected_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (Index("ix_kb_evals_kb", "kb_id"),)
 
 
 class AgentKnowledgeBase(Base):
@@ -663,6 +707,11 @@ class Session(Base):
     recording_object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     recording_duration_s: Mapped[float | None] = mapped_column(Numeric(12, 3, asdecimal=False), nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    #: The `CostEstimate` snapshotted after creation at the pinned config version
+    #: (docs/v4/COSTS.md D-V4-43, `v4_003`); `None` for older sessions — never back-filled.
+    estimate: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    estimated_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    reconciled_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
     latency: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     disposition: Mapped[str | None] = mapped_column(String(128), nullable=True)
     variables: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
@@ -752,12 +801,22 @@ class SessionCost(Base):
     unit_price_usd: Mapped[float] = mapped_column(Numeric(18, 9, asdecimal=False), nullable=False)
     cost_usd: Mapped[float] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=False)
     price_version: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    #: Which price source priced the line (`pricing.PriceSource`, `v4_003`).
+    price_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="table", server_default="table"
+    )
+    #: The vendor's own charge for this line once reconciled (V4-17), and what was reconciled.
+    vendor_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    vendor_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
-            "unit IN ('tokens_in','tokens_out','audio_s_in','audio_s_out','chars','minutes','images')",
+            "unit IN ('tokens_in','tokens_out','audio_s_in','audio_s_out','chars','minutes','images',"
+            "'text_tokens_in','text_tokens_out','audio_tokens_in','audio_tokens_out',"
+            "'cached_tokens_in','requests')",
             name="unit_valid",
         ),
+        CheckConstraint("price_source IN ('table','live','workspace')", name="price_source_valid"),
         Index("ix_session_costs_session", "session_id"),
     )
 
@@ -780,6 +839,8 @@ class UsageDaily(Base):
         Numeric(12, 6, asdecimal=False), nullable=False, default=0, server_default="0"
     )
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    #: Sum of the day's sessions' `estimated_usd` (`v4_003`); `None` when none had an estimate.
+    estimated_usd: Mapped[float | None] = mapped_column(Numeric(14, 6, asdecimal=False), nullable=True)
 
 
 # -------------------------------------------------------------- webhooks and jobs

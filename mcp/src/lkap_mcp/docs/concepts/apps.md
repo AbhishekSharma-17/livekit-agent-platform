@@ -57,18 +57,50 @@ everything (`purge=true` deletes the entry too).
 ## Picking actions for agents
 
 `apps_add_tools(connection_id, actions=[...], agent_id=...)` records which
-actions agents may use. A destructive action needs `allow_destructive=true`:
-ask the user first. The agent side of Apps (actions as agent tools, an app
-server, or letting the agent find tools itself) arrives in a later release;
-until then the picks are stored on the connection.
+actions agents may use and turns each into an agent tool of kind `provider`
+(named `<app>_<action>`, inputs pinned, one per action and reused when picked
+again). With `agent_id` the tools are attached to that agent. A destructive
+action needs `allow_destructive=true`: ask the user first, and it always
+waits for its result.
+
+## How agents use apps
+
+An agent's `tools.apps.mode` (set with `agent_apps_mode`) chooses:
+
+- `actions` (recommended) — the picked actions, attached as tools. Reads run
+  while the conversation continues; writes wait for their result.
+- `server` — one managed app server offering the picked actions of the
+  allowed apps.
+- `router` — a tool finder: the agent searches Composio's actions and runs
+  them during the conversation. Replies are slower. Letting the agent start
+  a sign-in (`router.manage_connections`) is off by default and never works
+  on a phone call.
+- `off` — the default; nothing is provisioned.
+
+In `server` and `router` modes a destructive action (delete, remove, send
+money) stays blocked until the user reviews it: list it in
+`reviewed_actions` (`agent_apps_mode(reviewed_actions=[...])`, or tick it in
+the console's Connected apps card) to allow it, and add it to
+`denied_actions` as well to keep it blocked. Ask the user before reviewing
+one. Validation warns with the names of the ones still blocked.
+
+The platform provisions the server or finder when the agent is saved and
+attaches it as a managed MCP server (read-only in the tools list); changing
+the settings replaces it, `off` or deleting the agent removes it. Only
+Composio's own host is ever contacted. When an app's sign-in has expired, the
+agent says the app needs to be reconnected by an admin — it never reads out
+a sign-in link — and the session records `tool_needs_reauth`. A tool's
+inputs can be compared with Composio's current ones with
+`POST /v1/tool-providers/composio/tools/{id}/refresh-schema`.
 
 ## Related tools
 
 `apps_list`, `apps_actions`, `apps_connect`, `apps_connections`,
 `apps_connection_status`, `apps_disconnect`, `apps_add_tools`,
-`provider_key_create`, `provider_key_test`.
+`agent_apps_mode`, `provider_key_create`, `provider_key_test`.
 
 ## Related schemas
 
 `ToolkitPage`, `ToolkitOut`, `AppActionPage`, `AppConnectIn`, `AppConnectOut`,
-`AppConnectionPage`, `AppConnectionOut`, `AppActionsPickOut`, `AppsStatusOut`.
+`AppConnectionPage`, `AppConnectionOut`, `AppActionsPickOut`, `AppsStatusOut`,
+`AppsMode`, `ProviderToolDefinition`.

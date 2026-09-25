@@ -20,6 +20,7 @@ with existing exports (``ConnectionOut`` is the LiveKit connection).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Final, Literal
 
@@ -213,9 +214,8 @@ class AppsStatusOut(BaseModel):
 class AppActionsPickIn(BaseModel):
     """``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.
 
-    Until the ``provider`` tool kind exists (V5-47) the picks are stored on the
-    connection and returned; V5-47 turns them into tools (attached to
-    ``agent_id`` when given).
+    The picks are stored on the connection and each becomes a ``provider`` tool
+    (one per action, reused when it exists), attached to ``agent_id`` when given.
     """
 
     connection_id: str
@@ -233,8 +233,111 @@ class AppActionsPickOut(BaseModel):
     picked_actions: list[str]
     agent_id: str | None = None
     tools_created: list[str] = Field(
-        default_factory=list, description="Tool ids created (empty until V5-47 lands)"
+        default_factory=list, description="Ids of the agent tools created for the picked actions"
     )
+    tools_existing: list[str] = Field(
+        default_factory=list, description="Ids of tools that already existed for picked actions"
+    )
+
+
+# ------------------------------------------------------------- agents (V5-47)
+#: How an agent uses connected apps (D-V5-C6). ``actions``: the picked actions attached as
+#: ``provider`` tools (recommended); ``server``: one app server exposing the allowed apps'
+#: picked actions; ``router``: a tool finder whose search/execute tools find actions at run
+#: time; ``off``: none of the provisioned servers (attached ``provider`` tools still run).
+AppsModeName = Literal["actions", "server", "router", "off"]
+
+#: The Tool Router meta tools (D-V5-C7; the live list is recorded in ``docs/v5/_briefs/v5-47-live.md``).
+ROUTER_SEARCH_TOOLS: Final[tuple[str, ...]] = ("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS")
+ROUTER_EXECUTE_TOOLS: Final[tuple[str, ...]] = ("COMPOSIO_MULTI_EXECUTE_TOOL",)
+ROUTER_CONNECTION_TOOLS: Final[tuple[str, ...]] = (
+    "COMPOSIO_MANAGE_CONNECTIONS",
+    "COMPOSIO_WAIT_FOR_CONNECTIONS",
+)
+#: Meta tools never attached, whatever the flags: remote code, skills and feedback.
+ROUTER_EXCLUDED_TOOLS: Final[tuple[str, ...]] = (
+    "COMPOSIO_REMOTE_BASH_TOOL",
+    "COMPOSIO_REMOTE_WORKBENCH",
+    "COMPOSIO_SEARCH_SKILLS",
+    "COMPOSIO_USE_SKILL",
+    "COMPOSIO_MANAGE_SKILL",
+    "COMPOSIO_SUBMIT_FEEDBACK",
+)
+
+
+class AppsRouterOptions(BaseModel):
+    """What the tool finder may do (D-V5-C7)."""
+
+    search: bool = Field(True, description="Let the agent look actions up during the conversation")
+    execute: bool = Field(True, description="Let the agent run the actions it found")
+    manage_connections: bool = Field(
+        False,
+        description="Let the agent offer a sign-in link for an app that is not connected yet "
+        "(text and web chats only: a phone caller cannot open a link)",
+    )
+
+
+class AppsMode(BaseModel):
+    """``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).
+
+    The default ``off`` changes nothing for an agent saved before this field existed.
+    """
+
+    mode: AppsModeName = "off"
+    allowed_toolkits: list[str] = Field(
+        default_factory=list,
+        max_length=50,
+        description="Apps the app server or tool finder may use (toolkit slugs); empty = every "
+        "connected app of the agent",
+    )
+    denied_actions: list[str] = Field(
+        default_factory=list,
+        max_length=500,
+        description="Actions the app server or tool finder must never run (action slugs)",
+    )
+    reviewed_actions: list[str] = Field(
+        default_factory=list,
+        max_length=500,
+        description="Destructive actions the builder has decided about (action slugs, R-V5-9); "
+        "denied_actions says which way. An unreviewed destructive action is blocked",
+    )
+    router: AppsRouterOptions = Field(default_factory=AppsRouterOptions)
+
+
+def effective_denied_actions(apps: AppsMode, destructive_in_scope: Iterable[str]) -> list[str]:
+    """The actions an app server or tool finder must not run (R-V5-9), sorted and upper-cased.
+
+    ``denied_actions`` plus every destructive action in scope the builder has not reviewed:
+    ``denied_actions | (destructive_in_scope - reviewed_actions)``. So an unreviewed
+    destructive action is blocked whatever the console did, a reviewed one that is not
+    denied stays allowed, and a reviewed one that is denied stays denied. With
+    ``reviewed_actions=[]`` every destructive action in scope is denied, which is the deny
+    list the V5-48 console seeded client-side.
+
+    Args:
+        apps: The agent's ``tools.apps``.
+        destructive_in_scope: The destructive action slugs the agent's allowed apps expose
+            (``action_risk(slug) == "destructive"``).
+
+    Returns:
+        The effective deny list.
+    """
+    denied = {slug.strip().upper() for slug in apps.denied_actions if slug.strip()}
+    reviewed = {slug.strip().upper() for slug in apps.reviewed_actions if slug.strip()}
+    scope = {slug.strip().upper() for slug in destructive_in_scope if slug.strip()}
+    return sorted(denied | (scope - reviewed))
+
+
+def router_allowed_tools(options: AppsRouterOptions) -> list[str]:
+    """The meta tools a tool finder attaches for ``options`` (D-V5-C7), in a stable order."""
+    names: list[str] = []
+    if options.search:
+        names.extend(ROUTER_SEARCH_TOOLS)
+    if options.execute:
+        names.extend(ROUTER_EXECUTE_TOOLS)
+    if options.manage_connections:
+        names.extend(ROUTER_CONNECTION_TOOLS)
+    return names
 
 
 #: Registered in ``export.py`` with one line (``**TOOL_PROVIDER_MODELS``).
@@ -254,6 +357,8 @@ TOOL_PROVIDER_MODELS: dict[str, type[BaseModel]] = {
     "AppsStatusOut": AppsStatusOut,
     "AppActionsPickIn": AppActionsPickIn,
     "AppActionsPickOut": AppActionsPickOut,
+    "AppsMode": AppsMode,
+    "AppsRouterOptions": AppsRouterOptions,
 }
 
 #: Action slugs whose name marks them destructive (D-V5-7): never picked without
@@ -294,6 +399,10 @@ __all__ = [
     "COMPOSIO_PROVIDER_ID",
     "DESTRUCTIVE_MARKERS",
     "READ_MARKERS",
+    "ROUTER_CONNECTION_TOOLS",
+    "ROUTER_EXCLUDED_TOOLS",
+    "ROUTER_EXECUTE_TOOLS",
+    "ROUTER_SEARCH_TOOLS",
     "TOOL_PROVIDER_ACCOUNT",
     "TOOL_PROVIDER_MODELS",
     "ActionRisk",
@@ -309,6 +418,9 @@ __all__ = [
     "AppKeyTestIn",
     "AppKeyTestOut",
     "AppReconnectIn",
+    "AppsMode",
+    "AppsModeName",
+    "AppsRouterOptions",
     "AppsStatusOut",
     "AuthOption",
     "ConnectMethod",
@@ -319,5 +431,7 @@ __all__ = [
     "ToolkitPage",
     "action_risk",
     "agent_subject",
+    "effective_denied_actions",
+    "router_allowed_tools",
     "workspace_subject",
 ]

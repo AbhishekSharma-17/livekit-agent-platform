@@ -26,7 +26,7 @@ from fakes.fake_room import FakeRoom
 from livekit import rtc
 from livekit.agents import AgentSession
 from livekit.agents.llm.mcp import MCPServerHTTP, MCPToolset
-from lkap_contracts.tools import McpServerDefinition, ToolExecution
+from lkap_contracts.tools import McpServerDefinition, McpServerOrigin, ToolExecution
 from test_main import FakeJobContext, _deps, _metadata
 
 from lkap_agent.main import run_session
@@ -318,3 +318,52 @@ async def test_a_platform_agent_lists_the_toolset_s_tools_to_the_llm_after_start
     assert listed["lookup_policy"].info.on_duplicate == "confirm"
     assert endpoint.hosts() == {"mcp.example.com"}
     await session.aclose()
+
+
+# --------------------------------------------------- V5-47: provider-provisioned servers
+_ORIGIN = McpServerOrigin(kind="router", remote_id="trs_1")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://mcp.example.com/tool_router/trs_1/mcp",
+        "http://backend.composio.dev/tool_router/trs_1/mcp",
+        "https://backend.composio.dev:8443/tool_router/trs_1/mcp",
+        "https://user:pw@backend.composio.dev/tool_router/trs_1/mcp",
+        "https://backend.composio.dev.example.com/mcp",
+    ],
+)
+def test_an_origin_tagged_server_off_the_composio_host_is_refused(url: str) -> None:
+    skipped: list[tuple[str, str]] = []
+
+    servers = build_guarded_mcp_servers(
+        [_definition(url=url, name="composio_tool_finder", origin=_ORIGIN)],
+        on_skipped=lambda d, reason: skipped.append((d.name, reason)),
+    )
+
+    assert servers == []
+    assert [name for name, _ in skipped] == ["composio_tool_finder"]
+    assert "backend.composio.dev" in skipped[0][1]
+
+
+def test_an_origin_tagged_server_on_the_composio_host_is_built() -> None:
+    (server,) = build_guarded_mcp_servers(
+        [
+            _definition(
+                url="https://backend.composio.dev/tool_router/trs_1/mcp",
+                name="composio_tool_finder",
+                headers={"x-api-key": "ak_placeholder_resolved"},
+                origin=_ORIGIN,
+            )
+        ]
+    )
+
+    assert isinstance(server, GuardedMCPServerHTTP)
+    assert server.url == "https://backend.composio.dev/tool_router/trs_1/mcp"
+
+
+def test_a_plain_server_elsewhere_is_unaffected_by_the_pin() -> None:
+    (server,) = build_guarded_mcp_servers([_definition()])
+
+    assert server.url == PUBLIC_URL

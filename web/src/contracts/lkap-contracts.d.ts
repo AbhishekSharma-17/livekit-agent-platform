@@ -13,7 +13,7 @@ export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNo
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ToolDefinition".
  */
-export type ToolDefinition = HttpToolDefinition | McpServerDefinition;
+export type ToolDefinition = HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
 
 export interface LkapContracts {
   ActivityEvent?: ActivityEvent;
@@ -28,6 +28,7 @@ export interface LkapContracts {
   AgentPublicOut?: AgentPublicOut;
   AgentUpdate?: AgentUpdate;
   AnalyticsBucket?: AnalyticsBucket;
+  AnalyticsDriver?: AnalyticsDriver;
   AnalyticsSummary?: AnalyticsSummary;
   AppActionOut?: AppActionOut;
   AppActionPage?: AppActionPage;
@@ -41,7 +42,10 @@ export interface LkapContracts {
   AppKeyTestIn?: AppKeyTestIn;
   AppKeyTestOut?: AppKeyTestOut;
   AppReconnectIn?: AppReconnectIn;
+  AppsMode?: AppsMode;
+  AppsRouterOptions?: AppsRouterOptions;
   AppsStatusOut?: AppsStatusOut;
+  Assumption?: Assumption;
   AvatarOptions?: AvatarOptions;
   BlockRequestPayload?: BlockRequestPayload;
   BlockSpec?: BlockSpec;
@@ -56,6 +60,7 @@ export interface LkapContracts {
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
+  ChoicesBlockState?: ChoicesBlockState;
   ConfigVersionOut?: ConfigVersionOut;
   ConfigVersionPage?: ConfigVersionPage;
   ConnectRequest?: ConnectRequest;
@@ -68,12 +73,17 @@ export interface LkapContracts {
   ConnectionRotateIn?: ConnectionRotateIn;
   ConnectionTestResult?: ConnectionTestResult;
   ConnectionUpdate?: ConnectionUpdate;
+  CostAssumptionsOut?: CostAssumptionsOut;
+  CostDriver?: CostDriver;
+  CostEstimate?: CostEstimate;
+  CostEstimateRequest?: CostEstimateRequest;
   CostLine?: CostLine;
   CredentialCreate?: CredentialCreate;
   CredentialOut?: CredentialOut;
   CredentialPage?: CredentialPage;
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
+  DetailsBlockState?: DetailsBlockState;
   DispatchMetadata?: DispatchMetadata;
   DispatchRuleCreate?: DispatchRuleCreate;
   DispatchRuleOut?: DispatchRuleOut;
@@ -82,6 +92,7 @@ export interface LkapContracts {
   EndNode?: EndNode;
   ErrorBody?: ErrorBody;
   ErrorResponse?: ErrorResponse;
+  EstimateLine?: EstimateLine;
   FleetActionIn?: FleetActionIn;
   FleetDesired?: FleetDesired;
   FleetStatus?: FleetStatus;
@@ -111,12 +122,15 @@ export interface LkapContracts {
   KbSearchRequest?: KbSearchRequest;
   KbSearchResponse?: KbSearchResponse;
   KbSeed?: KbSeed;
+  MarkdownBlockState?: MarkdownBlockState;
   McpServerDefinition?: McpServerDefinition;
+  McpServerOrigin?: McpServerOrigin;
   Me?: Me;
   ModelCapabilities?: ModelCapabilities;
   ModelIdRules?: ModelIdRules;
   ModelTestRequest?: ModelTestRequest;
   ModelTestResult?: ModelTestResult;
+  MoneyRange?: MoneyRange;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
   NumbersRefreshIn?: NumbersRefreshIn;
@@ -132,6 +146,11 @@ export interface LkapContracts {
   PhoneNumberPage?: PhoneNumberPage;
   PhoneNumberUpdate?: PhoneNumberUpdate;
   Price?: Price;
+  PriceQuote?: PriceQuote;
+  PriceQuoteItem?: PriceQuoteItem;
+  PriceQuoteItemIn?: PriceQuoteItemIn;
+  PriceQuotesRequest?: PriceQuotesRequest;
+  PriceQuotesResponse?: PriceQuotesResponse;
   ProbeResult?: ProbeResult;
   ProviderModelDeclare?: ProviderModelDeclare;
   ProviderModelOut?: ProviderModelOut;
@@ -139,6 +158,7 @@ export interface LkapContracts {
   ProviderOut?: ProviderOut;
   ProviderSettingsIn?: ProviderSettingsIn;
   ProviderSpec?: ProviderSpec;
+  ProviderToolDefinition?: ProviderToolDefinition;
   ProvidersResponse?: ProvidersResponse;
   QaConfig?: QaConfig;
   QaNode?: QaNode;
@@ -166,8 +186,10 @@ export interface LkapContracts {
   SessionSummaryIn?: SessionSummaryIn;
   StartNode?: StartNode;
   StarterTemplate?: StarterTemplate;
+  StepsBlockState?: StepsBlockState;
   TableBlockState?: TableBlockState;
   TelephonyConfig?: TelephonyConfig;
+  TemplateEstimate?: TemplateEstimate;
   TemplateOut?: TemplateOut;
   TemplatesResponse?: TemplatesResponse;
   ToolCreate?: ToolCreate;
@@ -209,6 +231,9 @@ export interface LkapContracts {
   WorkerRegisterIn?: WorkerRegisterIn;
   WorkerRegisterOut?: WorkerRegisterOut;
   WorkspaceMembership?: WorkspaceMembership;
+  WorkspacePrice?: WorkspacePrice;
+  WorkspacePricesIn?: WorkspacePricesIn;
+  WorkspacePricesOut?: WorkspacePricesOut;
 }
 /**
  * A tool call, workflow run or escalation rendered as a "team feed" entry.
@@ -538,7 +563,11 @@ export interface BlockSpec {
     | "transcript"
     | "video"
     | "kb_citations"
-    | "custom";
+    | "custom"
+    | "choices"
+    | "details"
+    | "markdown"
+    | "steps";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -553,6 +582,7 @@ export interface BlockSpec {
 export interface PipelineConfig {
   avatar?: ProviderRef | null;
   avatar_options?: AvatarOptions;
+  conversation_preset?: "patient" | "balanced" | "snappy" | "telephony" | "custom";
   image_gen?: ProviderRef | null;
   llm?: ProviderRef | null;
   mode?: "realtime" | "cascaded" | "half_cascade";
@@ -561,9 +591,12 @@ export interface PipelineConfig {
   stt?: ProviderRef | null;
   tts?: ProviderRef | null;
   turn_detection?: ProviderRef | null;
-  turn_handling?: {
-    [k: string]: unknown;
-  };
+  turn_detector?: TurnDetectorSettings | null;
+  turn_handling?:
+    | TurnHandlingOptions
+    | {
+        [k: string]: unknown;
+      };
   vad?: ProviderRef | null;
   workflow_llm?: ProviderRef | null;
 }
@@ -578,6 +611,87 @@ export interface AvatarOptions {
   max_duration_s?: number | null;
   participant_name?: string;
   video_quality?: ("low" | "medium" | "high" | "very_high") | null;
+}
+/**
+ * ``PipelineConfig.turn_detector``: the end-of-turn model's placement and sensitivity.
+ *
+ * Applies to the LiveKit turn detector (``inference.TurnDetector``, 1.8.3
+ * ``inference/eot/detector.py:35-47``) and to the local plugin model, on top of the
+ * connection's ``turn_detector_mode``: a connection without hosted Inference always
+ * runs the local model, whatever ``mode`` says.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TurnDetectorSettings".
+ */
+export interface TurnDetectorSettings {
+  mode?: ("hosted" | "local") | null;
+  unlikely_threshold?: number | null;
+}
+/**
+ * ``AgentSession(turn_handling=...)`` as the console edits it (SDK ``turn.py:260``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TurnHandlingOptions".
+ */
+export interface TurnHandlingOptions {
+  endpointing?: EndpointingOptions | null;
+  interruption?: InterruptionOptions | null;
+  preemptive_generation?: PreemptiveGenerationOptions | null;
+  turn_detection?: ("stt" | "vad" | "realtime_llm" | "manual") | null;
+  user_turn_limit?: UserTurnLimitOptions | null;
+  [k: string]: unknown;
+}
+/**
+ * When the caller's turn counts as finished (SDK ``EndpointingOptions``, ``turn.py:113``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EndpointingOptions".
+ */
+export interface EndpointingOptions {
+  alpha?: number | null;
+  max_delay?: number | null;
+  min_delay?: number | null;
+  mode?: ("fixed" | "dynamic") | null;
+  [k: string]: unknown;
+}
+/**
+ * How the caller interrupts the agent (SDK ``InterruptionOptions``, ``turn.py:150``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InterruptionOptions".
+ */
+export interface InterruptionOptions {
+  enabled?: boolean | null;
+  false_interruption_timeout?: number | null;
+  min_duration?: number | null;
+  min_words?: number | null;
+  mode?: ("adaptive" | "vad") | null;
+  resume_false_interruption?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * Start the reply before the caller's turn is confirmed (SDK ``turn.py:201``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PreemptiveGenerationOptions".
+ */
+export interface PreemptiveGenerationOptions {
+  enabled?: boolean | null;
+  max_retries?: number | null;
+  max_speech_duration?: number | null;
+  preemptive_tts?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * Stop a caller who talks too long without a reply (SDK ``turn.py:231``; off by default).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UserTurnLimitOptions".
+ */
+export interface UserTurnLimitOptions {
+  max_duration?: number | null;
+  max_words?: number | null;
+  [k: string]: unknown;
 }
 /**
  * Post-call scoring of the session by an LLM judge.
@@ -637,6 +751,7 @@ export interface TransferTarget {
  * via the `definition` "ToolsConfig".
  */
 export interface ToolsConfig {
+  apps?: AppsMode;
   builtin_disabled?: string[];
   builtin_execution?: {
     [k: string]: ToolExecution;
@@ -645,6 +760,56 @@ export interface ToolsConfig {
   http_request_enabled?: boolean;
   max_tool_steps?: number;
   tool_ids?: string[];
+}
+/**
+ * ``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).
+ *
+ * The default ``off`` changes nothing for an agent saved before this field existed.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppsMode".
+ */
+export interface AppsMode {
+  /**
+   * Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent
+   *
+   * @maxItems 50
+   */
+  allowed_toolkits?: string[];
+  /**
+   * Actions the app server or tool finder must never run (action slugs)
+   *
+   * @maxItems 500
+   */
+  denied_actions?: string[];
+  mode?: "actions" | "server" | "router" | "off";
+  /**
+   * Destructive actions the builder has decided about (action slugs, R-V5-9); denied_actions says which way. An unreviewed destructive action is blocked
+   *
+   * @maxItems 500
+   */
+  reviewed_actions?: string[];
+  router?: AppsRouterOptions;
+}
+/**
+ * What the tool finder may do (D-V5-C7).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppsRouterOptions".
+ */
+export interface AppsRouterOptions {
+  /**
+   * Let the agent run the actions it found
+   */
+  execute?: boolean;
+  /**
+   * Let the agent offer a sign-in link for an app that is not connected yet (text and web chats only: a phone caller cannot open a link)
+   */
+  manage_connections?: boolean;
+  /**
+   * Let the agent look actions up during the conversation
+   */
+  search?: boolean;
 }
 /**
  * How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).
@@ -686,6 +851,7 @@ export interface ToolExecution {
  */
 export interface VoiceConfig {
   allow_interruptions?: boolean;
+  ambient_sound?: string;
   first_speaker?: "agent" | "user";
   greeting?: string;
   greeting_mode?: "say" | "generate";
@@ -806,11 +972,59 @@ export interface AgentUpdate {
  * via the `definition` "AnalyticsBucket".
  */
 export interface AnalyticsBucket {
+  /**
+   * actual / estimated x 100 over the sessions that have both figures.
+   */
+  accuracy_pct?: number | null;
   cost_usd?: number | string | null;
+  estimated_usd?: number | string | null;
   failed?: number;
   key: string;
   minutes?: number;
   sessions?: number;
+  sessions_estimated?: number;
+}
+/**
+ * One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit).
+ *
+ * When the top drivers do not cover the range's total, one synthetic row
+ * ``provider_id="other"`` (no model, no unit) carries the remainder (R-V4-62).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AnalyticsDriver".
+ */
+export interface AnalyticsDriver {
+  cost_usd: number | string;
+  estimated_usd?: number | string | null;
+  model?: string | null;
+  /**
+   * A registry id, or "other" for the synthetic remainder row.
+   */
+  provider_id: string;
+  /**
+   * This row's share of the range's total actual cost (every row sums to 100).
+   */
+  share_pct: number;
+  /**
+   * Null only on the synthetic "other" row.
+   */
+  unit?:
+    | (
+        | "tokens_in"
+        | "tokens_out"
+        | "audio_s_in"
+        | "audio_s_out"
+        | "chars"
+        | "minutes"
+        | "images"
+        | "text_tokens_in"
+        | "text_tokens_out"
+        | "audio_tokens_in"
+        | "audio_tokens_out"
+        | "cached_tokens_in"
+        | "requests"
+      )
+    | null;
 }
 /**
  * ``GET /v1/analytics/summary``.
@@ -819,12 +1033,22 @@ export interface AnalyticsBucket {
  * via the `definition` "AnalyticsSummary".
  */
 export interface AnalyticsSummary {
+  /**
+   * actual / estimated x 100 over the sessions that have both figures.
+   */
+  accuracy_pct?: number | null;
   by_agent?: AnalyticsBucket[];
   by_day?: AnalyticsBucket[];
   cost_usd?: number | string | null;
+  estimated_usd?: number | string | null;
   failed?: number;
   minutes?: number;
   sessions?: number;
+  sessions_estimated?: number;
+  /**
+   * At most 8, largest first, then an "other" row when they do not cover the total.
+   */
+  top_drivers?: AnalyticsDriver[];
 }
 /**
  * One Composio tool (an app's action), trimmed.
@@ -864,9 +1088,8 @@ export interface AppActionPage {
 /**
  * ``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.
  *
- * Until the ``provider`` tool kind exists (V5-47) the picks are stored on the
- * connection and returned; V5-47 turns them into tools (attached to
- * ``agent_id`` when given).
+ * The picks are stored on the connection and each becomes a ``provider`` tool
+ * (one per action, reused when it exists), attached to ``agent_id`` when given.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AppActionsPickIn".
@@ -895,9 +1118,13 @@ export interface AppActionsPickOut {
   connection_id: string;
   picked_actions: string[];
   /**
-   * Tool ids created (empty until V5-47 lands)
+   * Ids of the agent tools created for the picked actions
    */
   tools_created?: string[];
+  /**
+   * Ids of tools that already existed for picked actions
+   */
+  tools_existing?: string[];
 }
 /**
  * One field the Connect dialog asks for (never a stored value).
@@ -1047,6 +1274,22 @@ export interface AppsStatusOut {
    * Tools switched off while the provider is disabled
    */
   paused_tools?: number;
+}
+/**
+ * One named input of the usage model (docs/v4/COSTS.md D-V4-41).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "Assumption".
+ */
+export interface Assumption {
+  high?: number | null;
+  key: string;
+  label: string;
+  low?: number | null;
+  source: "default" | "workspace" | "request";
+  source_url?: string | null;
+  unit?: string | null;
+  value: number | string;
 }
 /**
  * ``UiRequest.payload`` for ``method == "request"`` (V5-02).
@@ -1234,6 +1477,48 @@ export interface CatalogResponse {
   total?: number | null;
 }
 /**
+ * Quick replies the caller taps or answers by voice (``request_choice``, V5-08).
+ *
+ * ``selected`` holds the chosen option ids once ``status`` is ``submitted``
+ * (a single-choice block holds one). A generic ``block_submit`` answers with
+ * ``values: {selected: [...]}``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChoicesBlockState".
+ */
+export interface ChoicesBlockState {
+  multi?: boolean;
+  options?: ChoiceOption[];
+  prompt?: string;
+  reveal?: ChoiceReveal | null;
+  selected?: string[];
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
+}
+/**
+ * One option of a ``choices`` block (V5-08).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChoiceOption".
+ */
+export interface ChoiceOption {
+  hint?: string | null;
+  id: string;
+  image_asset_id?: string | null;
+  label: string;
+  tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
+}
+/**
+ * The right answer of a quiz-style ``choices`` block, shown once revealed.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChoiceReveal".
+ */
+export interface ChoiceReveal {
+  correct?: string[];
+  explanation?: string | null;
+}
+/**
  * One row of ``GET /v1/agents/{id}/versions``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1413,6 +1698,256 @@ export interface ConnectionUpdate {
   worker_image?: ("slim" | "full") | null;
 }
 /**
+ * ``GET /v1/cost-estimates/assumptions``: the workspace's effective assumptions.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CostAssumptionsOut".
+ */
+export interface CostAssumptionsOut {
+  assumptions: Assumption[];
+  /**
+   * Ended sessions the workspace averages came from.
+   */
+  sessions_sampled?: number;
+}
+/**
+ * One estimate-vs-actual comparison row; a list is sorted by ``|delta_usd|``, largest first.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CostDriver".
+ */
+export interface CostDriver {
+  actual_quantity?: number | string | null;
+  actual_usd?: number | string | null;
+  /**
+   * actual - estimated; null when either side is unpriced.
+   */
+  delta_usd?: number | string | null;
+  estimated_quantity?: number | string | null;
+  estimated_usd?: number | string | null;
+  model?: string | null;
+  provider_id: string;
+  reason:
+    | "more minutes"
+    | "fewer minutes"
+    | "more talk"
+    | "less talk"
+    | "longer prompts"
+    | "more turns"
+    | "unpriced line"
+    | "price changed"
+    | "not estimated"
+    | "as estimated";
+  slot:
+    | "stt"
+    | "llm"
+    | "tts"
+    | "realtime"
+    | "avatar"
+    | "workflow_llm"
+    | "image_gen"
+    | "embedding"
+    | "turn_detection"
+    | "vad"
+    | "livekit_agent"
+    | "livekit_participant"
+    | "livekit_sip"
+    | "livekit_egress"
+    | "qa_judge";
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
+}
+/**
+ * What an agent configuration is estimated to cost per minute, at list prices.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CostEstimate".
+ */
+export interface CostEstimate {
+  /**
+   * The oldest `as_of` among the quotes used.
+   */
+  as_of: string;
+  assumptions?: Assumption[];
+  caveats?: string[];
+  channel: "web" | "phone" | "text";
+  lines?: EstimateLine[];
+  /**
+   * Null when every line is unpriced.
+   */
+  per_minute_usd?: MoneyRange | null;
+  per_session_usd?: MoneyRange | null;
+  price_version: string;
+  /**
+   * Priced lines / all lines, 0-1.
+   */
+  priced_share?: number;
+  session_minutes: number;
+  sources?: ("workspace" | "live" | "table")[];
+  /**
+   * A plain description of every unpriced line.
+   */
+  unpriced?: string[];
+}
+/**
+ * One line of a per-minute estimate.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EstimateLine".
+ */
+export interface EstimateLine {
+  /**
+   * The plain-language label, e.g. "Agent's voice".
+   */
+  label: string;
+  model?: string | null;
+  note?: string | null;
+  provider_id: string;
+  /**
+   * Null for a per-session line.
+   */
+  quantity_per_min?: number | string | null;
+  quantity_per_session?: number | string | null;
+  quote?: PriceQuote | null;
+  slot:
+    | "stt"
+    | "llm"
+    | "tts"
+    | "realtime"
+    | "avatar"
+    | "workflow_llm"
+    | "image_gen"
+    | "embedding"
+    | "turn_detection"
+    | "vad"
+    | "livekit_agent"
+    | "livekit_participant"
+    | "livekit_sip"
+    | "livekit_egress"
+    | "qa_judge";
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
+  /**
+   * Null when unpriced.
+   */
+  usd_per_min?: number | string | null;
+  usd_per_session?: number | string | null;
+}
+/**
+ * A resolved price with its provenance (D-V4-39): what every estimate and cost line carries.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PriceQuote".
+ */
+export interface PriceQuote {
+  /**
+   * ISO date: the row's `as_of` (table), the fetch date (live), the edit date (workspace).
+   */
+  as_of: string;
+  currency?: "USD";
+  /**
+   * live: the catalog cache row's fetch time.
+   */
+  fetched_at?: string | null;
+  free_tier_note?: string | null;
+  model?: string | null;
+  /**
+   * A workspace price's own note.
+   */
+  note?: string | null;
+  /**
+   * The registry entry priced (after `price_ref` aliasing).
+   */
+  provider_id: string;
+  source: "workspace" | "live" | "table";
+  /**
+   * The vendor page (table), the API endpoint (live), or null (a workspace price).
+   */
+  source_url?: string | null;
+  /**
+   * A table row older than PRICE_STALE_DAYS, or a live sheet past its cache TTL.
+   */
+  stale?: boolean;
+  tier_note?: string | null;
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
+  usd_per_unit: number | string;
+}
+/**
+ * A low / mid / high band in USD (a band from stated assumptions, not a confidence interval).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MoneyRange".
+ */
+export interface MoneyRange {
+  high: number | string;
+  low: number | string;
+  mid: number | string;
+}
+/**
+ * ``POST /v1/cost-estimates``: exactly one of ``agent_id``, ``template_id``, ``config``.
+ *
+ * ``POST /v1/agents/{id}/cost-estimate`` takes the same body with none of the three.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CostEstimateRequest".
+ */
+export interface CostEstimateRequest {
+  agent_id?: string | null;
+  /**
+   * Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`).
+   */
+  assumptions?: {
+    [k: string]: number | string;
+  } | null;
+  channel?: "web" | "phone" | "text";
+  /**
+   * An unsaved draft; validated, never stored.
+   */
+  config?: AgentConfig | null;
+  template_id?: string | null;
+  /**
+   * Replace the defaults with the workspace's own session averages when it has at least 10 ended sessions (the session snapshot always does).
+   */
+  workspace_averages?: boolean;
+}
+/**
  * One priced usage line of a session.
  *
  * ``cost_usd`` is ``None`` with ``note="no price"`` when the price table has
@@ -1425,10 +1960,35 @@ export interface CostLine {
   cost_usd?: number | string | null;
   model?: string | null;
   note?: string | null;
+  /**
+   * Which price source priced the line (null when unpriced).
+   */
+  price_source?: ("workspace" | "live" | "table") | null;
   provider_id: string;
   quantity: number | string;
-  unit: "tokens_in" | "tokens_out" | "audio_s_in" | "audio_s_out" | "chars" | "minutes" | "images";
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
   unit_price_usd?: number | string | null;
+  /**
+   * What was reconciled, e.g. "12 generations".
+   */
+  vendor_ref?: string | null;
+  /**
+   * The vendor's own charge for this line, when reconciled.
+   */
+  vendor_usd?: number | string | null;
 }
 /**
  * ``POST /v1/credentials`` — secret values are write-only and never returned.
@@ -1489,6 +2049,29 @@ export interface CredentialUpdate {
   secrets?: {
     [k: string]: string;
   } | null;
+}
+/**
+ * A key-value summary card, "what we have so far" (``set_details``, V5-08).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DetailsBlockState".
+ */
+export interface DetailsBlockState {
+  items?: DetailsItem[];
+}
+/**
+ * One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DetailsItem".
+ */
+export interface DetailsItem {
+  key: string;
+  label: string;
+  tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
+  type?: "string" | "number" | "date" | "money" | "phone" | "email" | "badge";
+  updated_at?: number | null;
+  value?: string | number | null;
 }
 /**
  * Serialised as JSON into ``RoomAgentDispatch.metadata``.
@@ -1836,12 +2419,22 @@ export interface KbCitationsBlockState {
 /**
  * One retrieved chunk cited to the user.
  *
+ * The locators (V5-08) come from the chunk's ingest metadata (V5-01) and are
+ * absent for chunks ingested before it. Tapping a citation sends
+ * ``block_action {name: "open_citation", data: {chunk_id}}``; the worker
+ * opens the source page in a ``document`` block when it has the source.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "KbCitation".
  */
 export interface KbCitation {
+  char_end?: number | null;
+  char_start?: number | null;
   chunk_id: string;
+  document_id?: string | null;
   filename: string;
+  heading_path?: string[] | null;
+  page?: number | null;
   score: number;
   text: string;
 }
@@ -1967,6 +2560,17 @@ export interface KbSeed {
   kb_name: string;
 }
 /**
+ * Rich text in a strict Markdown subset, never raw HTML (``show_text``, V5-08).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MarkdownBlockState".
+ */
+export interface MarkdownBlockState {
+  markdown?: string;
+  title?: string | null;
+  updated_at?: number | null;
+}
+/**
  * A streamable-HTTP MCP server attached to the agent.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1980,12 +2584,25 @@ export interface McpServerDefinition {
   };
   kind?: "mcp";
   name: string;
+  origin?: McpServerOrigin | null;
   sse_read_timeout_s?: number;
   timeout_s?: number;
   tool_options?: {
     [k: string]: ToolExecution;
   };
   url: string;
+}
+/**
+ * Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpServerOrigin".
+ */
+export interface McpServerOrigin {
+  config_hash?: string | null;
+  kind: "server" | "router";
+  provider?: "composio";
+  remote_id: string;
 }
 /**
  * ``GET /v1/auth/me``.
@@ -2355,11 +2972,91 @@ export interface PhoneNumberUpdate {
  */
 export interface Price {
   as_of: string;
+  free_tier_note?: string | null;
   model?: string | null;
   provider_id: string;
   source_url: string;
-  unit: "tokens_in" | "tokens_out" | "audio_s_in" | "audio_s_out" | "chars" | "minutes" | "images";
+  tier_note?: string | null;
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
   usd_per_unit: number | string;
+}
+/**
+ * The quotes for one provider/model, with that slot's own per-minute share.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PriceQuoteItem".
+ */
+export interface PriceQuoteItem {
+  kind?:
+    | (
+        | "realtime"
+        | "stt"
+        | "llm"
+        | "tts"
+        | "avatar"
+        | "vad"
+        | "turn_detection"
+        | "noise_cancellation"
+        | "image_gen"
+        | "embedding"
+        | "secret_bag"
+        | "tool_provider"
+      )
+    | null;
+  model?: string | null;
+  note?: string | null;
+  /**
+   * This slot's own share of a minute at default assumptions (an estimate).
+   */
+  per_minute_usd?: number | string | null;
+  provider_id: string;
+  quotes?: PriceQuote[];
+}
+/**
+ * One provider/model to quote.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PriceQuoteItemIn".
+ */
+export interface PriceQuoteItemIn {
+  model?: string | null;
+  provider_id: string;
+}
+/**
+ * ``POST /v1/pricing/quotes``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PriceQuotesRequest".
+ */
+export interface PriceQuotesRequest {
+  /**
+   * @maxItems 100
+   */
+  items: PriceQuoteItemIn[];
+}
+/**
+ * ``POST /v1/pricing/quotes``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PriceQuotesResponse".
+ */
+export interface PriceQuotesResponse {
+  as_of: string;
+  items: PriceQuoteItem[];
+  price_version: string;
 }
 /**
  * ``PUT /v1/providers/{id}/models/{model_id}``: what an admin says the model can do.
@@ -2462,6 +3159,13 @@ export interface ProviderOut {
   models?: ModelSpec[];
   notes?: string | null;
   package: string;
+  /**
+   * A plain-language price line the console shows beside the provider when it is metered outside the price table (V5-07: LiveKit Cloud noise cancellation).
+   */
+  price_note?: string | null;
+  /**
+   * Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. `openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows.
+   */
   price_ref?: string | null;
   /**
    * The api's 'Test model' probe adapter for this entry (docs/v4/CUSTOM-MODELS.md D-V4-26): a capped POST with a payload, deliberately separate from `test` (a GET that lists). Unset means no model test; never set on vad, turn_detection or noise_cancellation.
@@ -2471,6 +3175,10 @@ export interface ProviderOut {
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
   status?: "mvp" | "deferred";
+  /**
+   * noise_cancellation only (V5-07, D-V5-30): the dotted path of the variant tuned for phone audio. The worker builds it instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset. Unset = the entry has no telephony variant.
+   */
+  telephony_variant?: string | null;
   test?: string | null;
   v?: 1 | 2;
   vendor: string;
@@ -2602,6 +3310,13 @@ export interface ProviderSpec {
   models?: ModelSpec[];
   notes?: string | null;
   package: string;
+  /**
+   * A plain-language price line the console shows beside the provider when it is metered outside the price table (V5-07: LiveKit Cloud noise cancellation).
+   */
+  price_note?: string | null;
+  /**
+   * Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. `openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows.
+   */
   price_ref?: string | null;
   /**
    * The api's 'Test model' probe adapter for this entry (docs/v4/CUSTOM-MODELS.md D-V4-26): a capped POST with a payload, deliberately separate from `test` (a GET that lists). Unset means no model test; never set on vad, turn_detection or noise_cancellation.
@@ -2611,6 +3326,10 @@ export interface ProviderSpec {
   requires_credential?: boolean;
   secret_fields?: FieldSpec[];
   status?: "mvp" | "deferred";
+  /**
+   * noise_cancellation only (V5-07, D-V5-30): the dotted path of the variant tuned for phone audio. The worker builds it instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset. Unset = the entry has no telephony variant.
+   */
+  telephony_variant?: string | null;
   test?: string | null;
   v?: 1 | 2;
   vendor: string;
@@ -2618,6 +3337,45 @@ export interface ProviderSpec {
   verified_at?: string | null;
   verified_note?: string | null;
   worker_image?: "slim" | "full" | "isolated";
+}
+/**
+ * One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).
+ *
+ * Created by materialisation (``POST /v1/tool-providers/composio/materialise``): the
+ * parameters are pinned from the provider's schema at import, the description is its first
+ * sentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``
+ * on the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``
+ * placeholder that the api substitutes from ``credential_id`` when a session resolves, as
+ * for HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's
+ * ``user_id`` copied from it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderToolDefinition".
+ */
+export interface ProviderToolDefinition {
+  connected_account_id?: string | null;
+  connection_id: string;
+  credential_id?: string | null;
+  description: string;
+  execution?: ToolExecution;
+  headers?: {
+    [k: string]: string;
+  };
+  kind?: "provider";
+  max_result_chars?: number;
+  name: string;
+  parameters: {
+    [k: string]: unknown;
+  };
+  provider?: "composio";
+  result_path?: string | null;
+  risk?: "read" | "write" | "destructive";
+  schema_version?: string | null;
+  silent_reply?: boolean;
+  subject: string;
+  timeout_s?: number;
+  tool_slug: string;
+  toolkit?: string;
 }
 /**
  * ``GET /v1/providers``.
@@ -2740,6 +3498,7 @@ export interface ResolvedAgentConfig {
   config: AgentConfig;
   config_version: number;
   connection?: ConnectionInfo;
+  cost_reconcile?: string[];
   installed_provider_ids?: string[] | null;
   kb_ids: string[];
   pack_id: string;
@@ -2750,7 +3509,7 @@ export interface ResolvedAgentConfig {
     [k: string]: ResolvedProvider;
   };
   session_id: string;
-  tools: (HttpToolDefinition | McpServerDefinition)[];
+  tools: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition)[];
   ui_panel_id: string;
   v?: 2;
   variables?: {
@@ -2774,14 +3533,31 @@ export interface ResolvedProvider {
   python_class: string;
 }
 /**
- * The cost block of ``SessionDetailOut``.
+ * The cost block of ``SessionDetailOut``: actual lines, and the estimate snapshotted at creation.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "SessionCost".
  */
 export interface SessionCost {
+  drivers?: CostDriver[];
+  estimate_as_of?: string | null;
+  estimate_per_minute_usd?: number | string | null;
+  /**
+   * The creation-time estimate: per-minute mid x actual minutes + per-session lines. Null for a session without a snapshot (never back-filled).
+   */
+  estimated_usd?: number | string | null;
   lines?: CostLine[];
+  price_version?: string | null;
+  /**
+   * The vendors' own charge, when reconciled.
+   */
+  reconciled_usd?: number | string | null;
   total_usd?: number | string | null;
+  variance_pct?: number | null;
+  /**
+   * total_usd - estimated_usd, when both exist.
+   */
+  variance_usd?: number | string | null;
 }
 /**
  * Session detail, including the transcript and the final UI state.
@@ -2804,11 +3580,16 @@ export interface SessionDetailOut {
   disposition?: string | null;
   ended_at?: string | null;
   error?: string | null;
+  /**
+   * The creation-time estimate (docs/v4/COSTS.md D-V4-43); null without one.
+   */
+  estimated_usd?: number | string | null;
   final_ui_state?: UiState | null;
   id: string;
   latency?: SessionLatency;
   pipeline_mode: "realtime" | "cascaded" | "half_cascade";
   qa?: QaOut | null;
+  reconciled_usd?: number | string | null;
   recording?: RecordingOut;
   recording_status?: "none" | "requested" | "active" | "ready" | "failed";
   room_name: string;
@@ -2998,8 +3779,13 @@ export interface SessionOut {
   disposition?: string | null;
   ended_at?: string | null;
   error?: string | null;
+  /**
+   * The creation-time estimate (docs/v4/COSTS.md D-V4-43); null without one.
+   */
+  estimated_usd?: number | string | null;
   id: string;
   pipeline_mode: "realtime" | "cascaded" | "half_cascade";
+  reconciled_usd?: number | string | null;
   recording_status?: "none" | "requested" | "active" | "ready" | "failed";
   room_name: string;
   started_at?: string | null;
@@ -3208,6 +3994,32 @@ export interface ToolSeed {
   enabled?: boolean;
 }
 /**
+ * A progress timeline: ``set_steps``, or the flow position with ``source="flow"`` (V5-08).
+ *
+ * A ``custom`` block with ``kind == "flow_progress"`` keeps its raw flow
+ * mirror; the console renders it with the ``steps`` renderer (D-V5-33).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StepsBlockState".
+ */
+export interface StepsBlockState {
+  current?: string | null;
+  steps?: StepItem[];
+}
+/**
+ * One step of a ``steps`` timeline.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StepItem".
+ */
+export interface StepItem {
+  at?: number | null;
+  id: string;
+  label: string;
+  note?: string | null;
+  status?: "pending" | "active" | "done" | "skipped" | "failed";
+}
+/**
  * Tabular data the agent appends rows to.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -3232,6 +4044,25 @@ export interface TableColumn {
   type?: "string" | "number" | "boolean" | "date";
 }
 /**
+ * A starter's per-minute estimate at list prices and default assumptions (docs/v4/COSTS.md §3.1).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TemplateEstimate".
+ */
+export interface TemplateEstimate {
+  /**
+   * The oldest `as_of` among the prices used.
+   */
+  as_of: string;
+  per_minute_usd_high: number | string;
+  per_minute_usd_low: number | string;
+  per_minute_usd_mid: number | string;
+  /**
+   * How many estimate lines have no price.
+   */
+  unpriced?: number;
+}
+/**
  * One starter, merged (``instructions.md`` folded in) plus the pack it layers on.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -3239,6 +4070,10 @@ export interface TableColumn {
  */
 export interface TemplateOut {
   derived?: boolean;
+  /**
+   * An estimate at list prices before any usage; null when nothing is priced.
+   */
+  estimate?: TemplateEstimate | null;
   pack: PackManifest;
   template: StarterTemplate;
 }
@@ -3259,9 +4094,9 @@ export interface TemplatesResponse {
  */
 export interface ToolCreate {
   agent_id?: string | null;
-  definition: HttpToolDefinition | McpServerDefinition;
+  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
   enabled?: boolean;
-  kind: "http" | "mcp";
+  kind: "http" | "mcp" | "provider";
   name: string;
 }
 /**
@@ -3308,10 +4143,10 @@ export interface ToolMeta {
 export interface ToolOut {
   agent_id?: string | null;
   created_at: string;
-  definition: HttpToolDefinition | McpServerDefinition;
+  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
   enabled?: boolean;
   id: string;
-  kind: "http" | "mcp";
+  kind: "http" | "mcp" | "provider";
   name: string;
   updated_at: string;
 }
@@ -3702,4 +4537,55 @@ export interface WorkerRegisterIn {
 export interface WorkerRegisterOut {
   agent_name?: string;
   connection_id: string;
+}
+/**
+ * A price an admin typed in for the workspace (the ``workspace`` source), in USD.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkspacePrice".
+ */
+export interface WorkspacePrice {
+  /**
+   * ISO date the price was set.
+   */
+  as_of: string;
+  model?: string | null;
+  note?: string | null;
+  provider_id: string;
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
+  usd_per_unit: number | string;
+}
+/**
+ * ``PUT /v1/workspace/prices``: the full list (replaces the stored one).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkspacePricesIn".
+ */
+export interface WorkspacePricesIn {
+  /**
+   * @maxItems 100
+   */
+  prices: WorkspacePrice[];
+}
+/**
+ * ``GET``/``PUT /v1/workspace/prices``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WorkspacePricesOut".
+ */
+export interface WorkspacePricesOut {
+  prices?: WorkspacePrice[];
 }

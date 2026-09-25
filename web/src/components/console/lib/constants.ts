@@ -74,11 +74,16 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   {
     name: "update_block",
     label: "Update blocks",
-    help: "Lets the agent change what a table, document, gallery, sources, transcript, video or pack block shows.",
+    help: "Lets the agent change what a table, document, gallery, sources, transcript, video, details, text, steps or pack block shows.",
   },
   { name: "show_document", label: "Show documents", help: "Lets the agent open a document on a page and highlight it." },
   { name: "table_append", label: "Add table rows", help: "Lets the agent add rows to a table as it collects them." },
   { name: "request_form", label: "Ask with a form", help: "Lets the agent ask the caller to fill in a form and wait for it." },
+  { name: "request_choice", label: "Ask with choices", help: "Lets the agent show options the caller taps or answers by voice." },
+  { name: "resolve_choice", label: "Record spoken choices", help: "Lets the agent mark the option the caller said out loud." },
+  { name: "set_details", label: "Fill in details", help: "Lets the agent add facts to the details card as the caller confirms them." },
+  { name: "show_text", label: "Show text", help: "Lets the agent show longer text, such as a recap, on the caller's screen." },
+  { name: "set_steps", label: "Update steps", help: "Lets the agent mark steps as done when the block is not following the flow." },
 ];
 
 /**

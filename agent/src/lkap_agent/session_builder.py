@@ -50,6 +50,23 @@ against livekit-agents 1.8.3:
 * A ``channel="text"`` session (CONTRACTS-V2 D-V2-15 scaffolding; rewind is
   V2-18) runs with audio input and output off and typed input on; the audio
   slots are dropped before anything is constructed.
+
+Conversation tuning (V5-07, docs/v5/PLAN-V5.md):
+
+* ``pipeline.conversation_preset`` is expanded here, at build time, by
+  `lkap_contracts.turn_handling.resolve_turn_handling` (``custom`` = the stored
+  `turn_handling` unchanged); the stored config never holds the expanded dict.
+* ``pipeline.turn_detector`` becomes constructor kwargs of the LiveKit turn
+  detector in :func:`prepare_resolved` (a synthesized `inference-turn-detector`
+  slot when none is configured), so `unlikely_threshold` reaches
+  `inference.TurnDetector(...)` without a second construction path.
+* The ``telephony`` preset on a phone call swaps the noise filter for its
+  telephony variant (the registry's ``telephony_variant``: `BVCTelephony()`,
+  `krisp.voice_isolation_telephony()`), and turns the LiveKit Cloud filter on
+  when the agent has none and one is offered (D-V5-30). A web session keeps
+  the configured filter as it is.
+* ``voice.ambient_sound`` plays through the same `BackgroundAudioPlayer` as the
+  thinking sound (:func:`start_background_audio`), only with audio output.
 """
 
 from __future__ import annotations
@@ -70,12 +87,16 @@ from lkap_contracts.agent_config import (
     ResolvedProvider,
     ThinkingSound,
 )
-from lkap_contracts.providers import ModelCapabilities
+from lkap_contracts.providers import ModelCapabilities, ProviderSpec, by_kind
+from lkap_contracts.providers import get as get_spec
+from lkap_contracts.turn_handling import resolve_turn_handling
 
 from lkap_agent.logging import get_logger
-from lkap_agent.providers.factory import BuiltProviders
+from lkap_agent.providers.factory import BuiltProviders, telephony_noise_cancellation, turn_detector_kwargs
+from lkap_agent.telephony import is_sip_channel
 
 __all__ = [
+    "AMBIENT_SOUND_VOLUME",
     "ASYNC_TOOL_OPTIONS",
     "AVATAR_OPTION_KWARGS",
     "SessionBuilder",
@@ -86,6 +107,7 @@ __all__ = [
     "is_text_channel",
     "llm_capabilities_of",
     "prepare_resolved",
+    "start_background_audio",
     "start_thinking_sound",
 ]
 
@@ -116,6 +138,10 @@ _AVATAR_PARTICIPANT_NAME_KWARG: Final[str] = "avatar_participant_name"
 
 #: The Inference turn detector whose `version` the connection flags may force.
 _INFERENCE_TURN_DETECTOR_ID: Final[str] = "inference-turn-detector"
+
+#: The local plugin detector (`MultilingualModel(unlikely_threshold=...)`, the only kwarg it
+#: takes: `tests/fixtures/plugin_signatures.json`).
+_PLUGIN_TURN_DETECTOR_ID: Final[str] = "turn-detector-plugin"
 
 # Voice-safe prompt templates for the SDK's async-tool executor (docs/v4/BACKGROUND-TOOLS.md
 # D-V4-35). livekit-agents 1.8.2 (`voice/tool_executor.py`) renders each with `str.format`
@@ -195,6 +221,11 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
       detector without a `version` is pinned to the local `v1-mini` model
       (ARCHITECTURE-V2 D-V2-4), avoiding a failed hosted attempt first.
 
+    * **Turn detector settings** (`PipelineConfig.turn_detector`, V5-07): see
+      :func:`_apply_turn_detector_settings`.
+    * **Telephony noise cancellation** (the `telephony` preset on a phone call,
+      V5-07): see :func:`_apply_telephony_noise_cancellation`.
+
     Args:
         resolved: The config fetched from the api.
 
@@ -220,7 +251,110 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
         slots["turn_detection"] = detector.model_copy(
             update={"kwargs": {**detector.kwargs, "version": "v1-mini"}}
         )
+    _apply_turn_detector_settings(resolved, slots)
+    _apply_telephony_noise_cancellation(resolved, slots)
     return resolved.model_copy(update={"resolved": slots})
+
+
+def _client_side_turns(resolved: ResolvedAgentConfig) -> bool:
+    """Whether the session runs its own turn detection (every audio mode except `realtime`)."""
+    return resolved.config.pipeline.mode != "realtime" and not is_text_channel(resolved)
+
+
+def _apply_turn_detector_settings(resolved: ResolvedAgentConfig, slots: dict[Any, ResolvedProvider]) -> None:
+    """Carry `PipelineConfig.turn_detector` into the `turn_detection` slot's kwargs (in place).
+
+    * No slot: an `inference-turn-detector` slot is synthesized with
+      :func:`~lkap_agent.providers.factory.turn_detector_kwargs`, so the factory
+      builds `inference.TurnDetector(version=..., unlikely_threshold=...)` and
+      `main._assemble` skips its default detector (it builds one only while
+      `providers.turn_detection is None`). Settings that change nothing (for
+      example `mode="hosted"` on a hosted connection) synthesize nothing.
+    * An Inference slot: the settings fill the kwargs the slot does not set itself.
+    * The local plugin slot: only `unlikely_threshold` (its one kwarg).
+
+    Nothing happens without settings, in `realtime` mode or on the text channel
+    (no client-side turns; `SessionBuilder.build` would ignore the slot).
+    """
+    settings = resolved.config.pipeline.turn_detector
+    if settings is None or not _client_side_turns(resolved):
+        return
+    wanted = turn_detector_kwargs(
+        mode=settings.mode,
+        unlikely_threshold=settings.unlikely_threshold,
+        connection_mode=resolved.connection.capabilities.turn_detector_mode,
+    )
+    detector = slots.get("turn_detection")
+    if detector is None:
+        if wanted:
+            spec = get_spec(_INFERENCE_TURN_DETECTOR_ID)
+            slots["turn_detection"] = ResolvedProvider(
+                provider_id=spec.id, python_class=spec.python_class, model=None, kwargs=wanted
+            )
+        return
+    if detector.provider_id == _INFERENCE_TURN_DETECTOR_ID:
+        kwargs = {**wanted, **{k: v for k, v in detector.kwargs.items() if v is not None}}
+    elif detector.provider_id == _PLUGIN_TURN_DETECTOR_ID and settings.unlikely_threshold is not None:
+        kwargs = dict(detector.kwargs)
+        if kwargs.get("unlikely_threshold") is None:
+            kwargs["unlikely_threshold"] = settings.unlikely_threshold
+    else:
+        return
+    slots["turn_detection"] = detector.model_copy(update={"kwargs": kwargs})
+
+
+def _noise_cancellation_specs() -> list[ProviderSpec]:
+    """Every registry noise filter, in registry order (a test seam)."""
+    return by_kind("noise_cancellation", status=None)
+
+
+def _offered_telephony_filter(resolved: ResolvedAgentConfig) -> ResolvedProvider | None:
+    """The noise filter the `telephony` preset turns on when the agent configured none.
+
+    The first registry entry with a telephony variant that is offered, needs no
+    key, is installed on the worker pool (when the pool reported its list) and,
+    when Cloud-only, runs on a connection with Cloud noise cancellation.
+    """
+    installed = resolved.installed_provider_ids
+    tier = resolved.connection.capabilities.noise_cancellation_tier
+    for spec in _noise_cancellation_specs():
+        if (
+            spec.telephony_variant is not None
+            and spec.availability == "available"
+            and not spec.requires_credential
+            and (installed is None or spec.id in installed)
+            and (not spec.capabilities.cloud_only or tier == "krisp")
+        ):
+            return ResolvedProvider(
+                provider_id=spec.id, python_class=spec.python_class, model=None, kwargs={}
+            )
+    return None
+
+
+def _apply_telephony_noise_cancellation(
+    resolved: ResolvedAgentConfig, slots: dict[Any, ResolvedProvider]
+) -> None:
+    """Use the phone-tuned noise filter for the `telephony` preset on a phone call (in place).
+
+    D-V5-30: the preset is the per-agent opt-in, so an agent without a filter gets
+    the offered LiveKit Cloud one (:func:`_offered_telephony_filter`); a filter
+    without a telephony variant is kept as it is. A web session is never changed.
+    """
+    pipeline = resolved.config.pipeline
+    if pipeline.conversation_preset != "telephony" or not is_sip_channel(resolved.channel):
+        return
+    current = slots.get("noise_cancellation") or _offered_telephony_filter(resolved)
+    if current is None:
+        logger.info("telephony preset: no noise filter with a phone variant is available on this connection")
+        return
+    variant = telephony_noise_cancellation(current)
+    if variant is None:
+        logger.info(
+            "telephony preset: the noise filter has no phone variant; keeping it",
+            provider_id=current.provider_id,
+        )
+        return
+    slots["noise_cancellation"] = variant
 
 
 def llm_capabilities_of(resolved: ResolvedAgentConfig) -> ModelCapabilities | None:
@@ -262,6 +396,11 @@ class SessionPlan:
     #: `voice.thinking_sound`, or `"none"` on the text channel (no audio out, R-V4-38);
     #: the worker plays it through a `BackgroundAudioPlayer` while the agent is thinking.
     thinking_sound: ThinkingSound = "none"
+    #: `voice.ambient_sound` (V5-07), or `"none"` on the text channel; played for the whole call
+    #: by the same `BackgroundAudioPlayer` as the thinking sound.
+    ambient_sound: str = "none"
+    #: `pipeline.conversation_preset` the session was built with (for logs and tests).
+    conversation_preset: str = "custom"
 
     @property
     def needs_generate_reply_greeting(self) -> bool:
@@ -389,7 +528,7 @@ class SessionBuilder:
 
         auto_inject = auto_inject_active(config)
         turn_handling = build_turn_handling(
-            config.pipeline.turn_handling,
+            resolve_turn_handling(config.pipeline.conversation_preset, config.pipeline.turn_handling),
             allow_interruptions=config.voice.allow_interruptions,
             turn_detector=detector,
             disable_preemptive=auto_inject,
@@ -449,6 +588,7 @@ class SessionBuilder:
             video_input=room_options.video_input,
             max_tool_steps=config.tools.max_tool_steps,
             preemptive_generation=preemptive_enabled,
+            conversation_preset=config.pipeline.conversation_preset,
         )
         return SessionPlan(
             session=session,
@@ -460,6 +600,8 @@ class SessionBuilder:
             text_only=text_only,
             llm_capabilities=llm_capabilities_of(resolved),
             thinking_sound="none" if text_only else config.voice.thinking_sound,
+            ambient_sound="none" if text_only else config.voice.ambient_sound,
+            conversation_preset=config.pipeline.conversation_preset,
         )
 
     @staticmethod
@@ -504,21 +646,26 @@ THINKING_SOUND_CLIPS: Final[dict[str, str]] = {
 #: Playback volume of the thinking sound (BACKGROUND-TOOLS.md §4.2).
 THINKING_SOUND_VOLUME: Final[float] = 0.6
 
+#: Playback volume of the ambient clip: under the voice, never over it.
+AMBIENT_SOUND_VOLUME: Final[float] = 0.4
 
-async def start_thinking_sound(
+
+async def start_background_audio(
     plan: SessionPlan, room: Any, *, player_factory: Callable[..., Any] | None = None
 ) -> Callable[[str], Awaitable[None]] | None:
-    """Start a `BackgroundAudioPlayer` whose thinking sound plays during blocking tool waits.
+    """Start one `BackgroundAudioPlayer` for the thinking sound and the ambient clip.
 
-    `BackgroundAudioPlayer(thinking_sound=...)` plays only while
-    `agent_state == "thinking"` (the blocking wait and the inline part of an `auto`
-    tool); it publishes its own track, so it is heard on SIP legs too. Called after
-    `session.start`: nothing starts on the text channel, without a configured sound,
-    or when the session has no audio output. A failure to start is logged and the
-    call goes on silently.
+    `BackgroundAudioPlayer(ambient_sound=..., thinking_sound=...)` (livekit-agents 1.8.3
+    `voice/background_audio.py:135-143`) publishes one track mixing both: the ambient clip
+    loops for the whole call, the thinking sound plays only while `agent_state ==
+    "thinking"` (the blocking wait and the inline part of an `auto` tool). It is heard on
+    SIP legs too. Called after `session.start`: nothing starts on the text channel, with
+    neither sound set, or when the session has no audio output. An `asset:<id>` ambient
+    clip is not played yet (a later package serves uploaded clips). A failure to start is
+    logged and the call goes on silently.
 
     Args:
-        plan: The built session plan (`thinking_sound`, `text_only`, `session`).
+        plan: The built session plan (`thinking_sound`, `ambient_sound`, `text_only`, `session`).
         room: The connected room the player publishes to.
         player_factory: Test seam; defaults to `livekit.agents.BackgroundAudioPlayer`.
 
@@ -526,30 +673,51 @@ async def start_thinking_sound(
         A shutdown callback (``async (reason) -> None``) that closes the player, or
         `None` when nothing was started.
     """
-    sound = plan.thinking_sound
-    if sound == "none" or plan.text_only:
+    if plan.text_only:
+        return None
+    thinking = plan.thinking_sound
+    ambient = plan.ambient_sound
+    if ambient.startswith("asset:"):
+        logger.warning("uploaded ambient clips are not played yet; the call goes on without one")
+        ambient = "none"
+    if thinking == "none" and ambient == "none":
         return None
     output = getattr(plan.session, "output", None)
     if getattr(output, "audio", None) is None:
-        logger.info("thinking sound skipped: the session has no audio output", thinking_sound=sound)
+        logger.info(
+            "background audio skipped: the session has no audio output",
+            thinking_sound=thinking,
+            ambient_sound=ambient,
+        )
         return None
     from livekit.agents import AudioConfig, BackgroundAudioPlayer, BuiltinAudioClip  # noqa: PLC0415
 
-    clip = BuiltinAudioClip[THINKING_SOUND_CLIPS[sound]]
+    kwargs: dict[str, Any] = {}
+    if thinking != "none":
+        kwargs["thinking_sound"] = AudioConfig(
+            BuiltinAudioClip[THINKING_SOUND_CLIPS[thinking]], volume=THINKING_SOUND_VOLUME
+        )
+    if ambient != "none":
+        # `AMBIENT_SOUNDS` are the `BuiltinAudioClip` member names lower-cased (`background_audio.py:29-36`).
+        kwargs["ambient_sound"] = AudioConfig(BuiltinAudioClip[ambient.upper()], volume=AMBIENT_SOUND_VOLUME)
     factory = player_factory or BackgroundAudioPlayer
-    player = factory(thinking_sound=AudioConfig(clip, volume=THINKING_SOUND_VOLUME))
+    player = factory(**kwargs)
     try:
         await player.start(room=room, agent_session=plan.session)
     except Exception:
-        logger.warning("thinking sound could not start; the call goes on without it", exc_info=True)
+        logger.warning("background audio could not start; the call goes on without it", exc_info=True)
         with contextlib.suppress(Exception):
             await player.aclose()
         return None
-    logger.info("thinking sound started", thinking_sound=sound)
+    logger.info("background audio started", thinking_sound=thinking, ambient_sound=ambient)
 
-    async def _stop_thinking_sound(reason: str) -> None:
+    async def _stop_background_audio(reason: str) -> None:
         del reason
         with contextlib.suppress(Exception):
             await player.aclose()
 
-    return _stop_thinking_sound
+    return _stop_background_audio
+
+
+#: The V4-12 name, kept for callers and tests written before the ambient clip (V5-07).
+start_thinking_sound = start_background_audio

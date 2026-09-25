@@ -339,6 +339,7 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/tool-providers/composio/toolkits",
     "/v1/tool-providers/composio/toolkits/{slug}",
     "/v1/tool-providers/composio/toolkits/{slug}/actions",
+    "/v1/tool-providers/composio/tools/{tool_id}/refresh-schema",
     "/v1/tools",
     "/v1/tools/{tool_id}",
     "/v1/tools/{tool_id}/dry-run",
@@ -352,6 +353,12 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/workspaces/{workspace_id}/invites",
     "/v1/workspaces/{workspace_id}/members",
     "/v1/workspaces/{workspace_id}/members/{user_id}",
+    # V4-15: cost estimates, price quotes and workspace prices (`lkap_api/routers/costs.py`).
+    "/v1/agents/{agent_id}/cost-estimate",
+    "/v1/cost-estimates",
+    "/v1/cost-estimates/assumptions",
+    "/v1/pricing/quotes",
+    "/v1/workspace/prices",
 )
 
 
@@ -466,6 +473,9 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "agent_archive": frozenset({"id_or_slug", "archive", "confirm"}),
     "agent_versions": frozenset({"id_or_slug", "get", "restore", "confirm", "plan"}),
     "agent_attach": frozenset({"id_or_slug", "kb_ids", "tool_ids", "remove", "plan"}),
+    "agent_apps_mode": frozenset(
+        {"id_or_slug", "mode", "allowed_toolkits", "denied_actions", "reviewed_actions", "router", "plan"}
+    ),
     "agent_limits": frozenset({"id_or_slug", "limits", "allowed_origins", "plan"}),
     "agent_flow_validate": frozenset({"id_or_slug", "flow"}),
     # 4.5 knowledge bases
@@ -525,6 +535,20 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "session_get": frozenset({"session_id", "include_transcript", "include_recording_url"}),
     "session_events": frozenset({"session_id", "after_id", "types", "limit"}),
     "session_rescore": frozenset({"session_id", "confirm"}),
+    # V4-15 costs (docs/v4/COSTS.md §6)
+    "cost_estimate": frozenset(
+        {
+            "agent_id_or_slug",
+            "template_id",
+            "config",
+            "session_minutes",
+            "assumptions",
+            "channel",
+            "workspace_averages",
+        }
+    ),
+    "pricing_quote": frozenset({"provider_id", "model"}),
+    "cost_summary": frozenset({"range"}),
     # 4.9 webhooks
     "webhook_list": frozenset(),
     "webhook_create": frozenset({"url", "events", "description", "plan"}),

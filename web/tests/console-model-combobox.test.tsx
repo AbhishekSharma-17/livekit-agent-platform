@@ -132,7 +132,13 @@ describe("ModelCombobox — groups", () => {
     expect(catalogCalls).toHaveLength(1);
     expect(catalogCalls[0].url).toContain("limit=1000");
     expect(catalogCalls[0].url).toContain(`credential_id=${CREDENTIAL.id}`);
-    expect(anyCallCarries(calls, "gemini-x")).toBe(false);
+    // V4-16 adds one `POST /pricing/quotes` per open, for the catalog's *own*
+    // ids (fired once, from the just-fetched list) — it necessarily carries
+    // ids like `google/gemini-x-0`, which is not "what was typed" (D-V4-25's
+    // actual concern: the catalog/vendor-search calls must never see the
+    // search text). Excluded here on that basis, not silenced.
+    const searchableCalls = calls.filter((c) => !c.url.includes("/pricing/quotes"));
+    expect(anyCallCarries(searchableCalls, "gemini-x")).toBe(false);
   });
 
   it("lists this workspace's custom models under “Your custom models”, each with its tested chip", async () => {
@@ -176,6 +182,58 @@ describe("ModelCombobox — groups", () => {
     expect(within(catalog).getByText("Acme Seer")).toBeTruthy();
     expect(within(catalog).queryByText("Gemini X 7")).toBeNull();
     expect(within(catalog).queryByText(/Acme model/)).toBeNull();
+  });
+});
+
+describe("ModelCombobox — trailing price figures (docs/v4/COSTS.md §5 item 3)", () => {
+  function pricingHandler() {
+    return (req: { method: string; url: string; body: unknown }) => {
+      if (!req.url.includes("/pricing/quotes") || req.method !== "POST") return undefined;
+      const items = (req.body as { items: { provider_id: string; model: string }[] }).items;
+      return {
+        body: {
+          price_version: "2026-09-23",
+          as_of: "2026-09-23",
+          items: items.map(({ provider_id, model }) => {
+            if (model === "google/gemini-3.5-flash") {
+              return { provider_id, model, per_minute_usd: "0.004" };
+            }
+            return { provider_id, model, note: "no price" };
+          }),
+        },
+      };
+    };
+  }
+
+  it("fires one POST /pricing/quotes per open (catalog settled first), figures on suggested/catalog rows, nothing on the custom row", async () => {
+    const { fetch, calls } = routeFetch({ handlers: [catalogHandler(), pricingHandler()] });
+    vi.stubGlobal("fetch", fetch);
+    withClient(<ComboHarness />);
+    // Open and start typing immediately — the regression this guards against
+    // fired quotes once for the pre-catalog suggested ids and again once the
+    // catalog page landed (two POSTs for one open).
+    await openAndType("gem");
+    await screen.findByText("Gemini X 0");
+
+    // Wait for the *catalog-inclusive* quotes response specifically (proof
+    // the second, buggy POST — fired once the catalog page lands — would
+    // already have happened if the timing gate were missing): the "no
+    // price" figure on a catalog row only exists in that response.
+    await waitFor(() => expect(within(group("Catalog")).getAllByText("no price").length).toBeGreaterThan(0));
+    await waitFor(() => expect(within(group("Suggested")).getByText("≈ $0.0040/min")).toBeTruthy());
+
+    // Now that the catalog-inclusive answer has landed, the count is final:
+    // exactly one POST, not the pre-fix suggested-only-then-catalog pair.
+    expect(calls.filter((c) => c.url.includes("/pricing/quotes"))).toHaveLength(1);
+
+    // Typing further narrows the list locally; it must not re-fire the quote.
+    fireEvent.change(screen.getByPlaceholderText(/Search models or type an id/), { target: { value: "gemini-x" } });
+    await screen.findByText("Gemini X 3");
+    expect(calls.filter((c) => c.url.includes("/pricing/quotes"))).toHaveLength(1);
+
+    const customRow = (await screen.findByText(/Use custom model:/)).closest("[cmdk-item]") as HTMLElement;
+    expect(within(customRow).queryByText(/≈ \$/)).toBeNull();
+    expect(within(customRow).queryByText("no price")).toBeNull();
   });
 });
 

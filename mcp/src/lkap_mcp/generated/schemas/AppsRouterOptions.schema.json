@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/AppsRouterOptions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the tool finder may do (D-V5-C7).",
+  "properties": {
+    "execute": {
+      "default": true,
+      "description": "Let the agent run the actions it found",
+      "title": "Execute",
+      "type": "boolean"
+    },
+    "manage_connections": {
+      "default": false,
+      "description": "Let the agent offer a sign-in link for an app that is not connected yet (text and web chats only: a phone caller cannot open a link)",
+      "title": "Manage Connections",
+      "type": "boolean"
+    },
+    "search": {
+      "default": true,
+      "description": "Let the agent look actions up during the conversation",
+      "title": "Search",
+      "type": "boolean"
+    }
+  },
+  "title": "AppsRouterOptions",
+  "type": "object"
+}

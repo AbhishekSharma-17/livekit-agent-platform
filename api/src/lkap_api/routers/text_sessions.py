@@ -24,7 +24,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from lkap_contracts.agent_config import AgentLimits
 from lkap_contracts.api_models import ConnectRequest, ConnectResponse
 from pydantic import BaseModel
@@ -33,6 +33,7 @@ from lkap_api.auth.deps import OptionalPrincipalDep, client_ip
 from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.service import mint_session_token
+from lkap_api.costs.snapshot import attach_estimate
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import new_id
 from lkap_api.deps import DbDep, SettingsDep
@@ -43,6 +44,7 @@ from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
 from lkap_api.routers.connect import (
     MAX_PARTICIPANT_METADATA_BYTES,
+    DatabaseDep,
     is_privileged,
     origin_allowed,
     request_origin,
@@ -120,6 +122,8 @@ async def start_text_session(
     principal: OptionalPrincipalDep,
     limiter: RateLimiterDep,
     factory: ClientFactoryDep,
+    database: DatabaseDep,
+    background_tasks: BackgroundTasks,
 ) -> ConnectResponse:
     """Mint a `channel="text"` participant token (see `routers.connect.connect`).
 
@@ -207,6 +211,8 @@ async def start_text_session(
             pipeline_mode=config.pipeline.mode,
         )
         await db.commit()
+    # D-V4-43: the estimate snapshot (channel "text": call minutes, no audio lines) after the response.
+    background_tasks.add_task(attach_estimate, database, session_id, embedder=settings.embedder)
     public_agent = to_public(agent, settings)
     return ConnectResponse(
         serverUrl=minted.server_url,

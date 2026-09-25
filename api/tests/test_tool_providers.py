@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Callable
 from types import SimpleNamespace
 from typing import Any
@@ -19,16 +20,25 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 from auth_helpers import key_client, make_api_key, make_workspace
+from conftest import create_agent
 from fakes.composio import VALID_KEY, ComposioWorld
 from fastapi import FastAPI
-from lkap_contracts.tool_providers import TOOL_PROVIDER_ACCOUNT, action_risk
+from lkap_contracts.tool_providers import TOOL_PROVIDER_ACCOUNT, AppsMode, AppsRouterOptions, action_risk
+from lkap_contracts.tools import (
+    TOOL_NAME_PATTERN,
+    McpOriginKind,
+    McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
+    ToolExecution,
+)
 from sqlalchemy import select
 
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID as WS
-from lkap_api.db.models import AuditLog, Credential, Tool, WorkspaceProvider
+from lkap_api.db.models import Agent, AgentConfigVersion, AuditLog, Credential, Tool, WorkspaceProvider
 from lkap_api.db.session import Database
 from lkap_api.settings import Settings
-from lkap_api.tool_providers import service
+from lkap_api.tool_providers import materialise, provisioning, service
 from lkap_api.tool_providers.adapter import (
     ToolProviderAuthError,
     ToolProviderNotFoundError,
@@ -136,6 +146,8 @@ def _mcp_def(name: str, **extra: Any) -> dict[str, Any]:
         "name": name,
         "url": "https://backend.composio.dev/v3/mcp/srv_fake?user_id=ws%3Adefault",
         "headers": {"x-api-key": "{{ secret.api_key }}"},
+        # V5-47: only an origin-tagged definition may bind the Composio key.
+        "origin": {"provider": "composio", "kind": "server", "remote_id": "trs_fake"},
         **extra,
     }
 
@@ -964,7 +976,9 @@ async def test_picks_validate_slugs_and_gate_destructive_actions(
         "GOOGLECALENDAR_FIND_FREE_SLOTS",
         "GOOGLECALENDAR_DELETE_EVENT",
     ]
-    assert confirmed.json()["tools_created"] == [], "tools arrive with V5-47"
+    assert len(read.json()["tools_created"]) == 1, "V5-47: each picked action becomes a tool"
+    assert len(confirmed.json()["tools_created"]) == 1
+    assert confirmed.json()["tools_existing"] == [], "only the new action made a tool"
     rows = await _audit_rows(database, "apps.materialise")
     assert rows[-1].payload["destructive"] == ["GOOGLECALENDAR_DELETE_EVENT"]
 
@@ -1136,6 +1150,16 @@ async def test_a_connection_row_cannot_be_created_through_provider_keys(
         (SimpleNamespace(kind="provider"), "composio", "connection_id", False),
         (
             SimpleNamespace(kind="mcp", url="https://backend.composio.dev/v3/mcp/x", origin=None),
+            "composio",
+            "credential_id",
+            False,
+        ),
+        (
+            SimpleNamespace(
+                kind="mcp",
+                url="https://backend.composio.dev/v3/mcp/x",
+                origin=SimpleNamespace(provider="composio"),
+            ),
             "composio",
             "credential_id",
             True,
@@ -1355,3 +1379,762 @@ def test_compatibility_the_registry_offers_composio_as_a_tool_provider() -> None
     spec = get("composio")
     assert spec.kind == "tool_provider" and spec.test is None and spec.catalog is None
     assert [field.name for field in spec.secret_fields] == ["api_key"]
+
+
+# ============================================================================ V5-47: agents
+# Materialisation, the app server / tool finder provisioning, bindings (COMPOSIO.md §4, §8).
+async def _active_calendar(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld
+) -> str:
+    out = await _connect(admin_client)
+    account = next(iter(world.accounts))
+    world.complete(account)
+    await _callback(client, **{**_flow_query(world), "status": "success", "connected_account_id": account})
+    return str(out["connection_id"])
+
+
+async def _pick(
+    admin_client: httpx.AsyncClient, connection_id: str, *actions: str, **extra: Any
+) -> dict[str, Any]:
+    response = await admin_client.post(
+        f"{BASE}/materialise", json={"connection_id": connection_id, "actions": list(actions), **extra}
+    )
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+async def _tool(database: Database, tool_id: str) -> Tool:
+    async with database.session() as session:
+        tool = await session.get(Tool, tool_id)
+        assert tool is not None
+        return tool
+
+
+async def _agent_config(admin_client: httpx.AsyncClient, agent_id: str) -> dict[str, Any]:
+    return dict((await admin_client.get(f"/v1/agents/{agent_id}")).json()["config"])
+
+
+async def _set_apps(admin_client: httpx.AsyncClient, agent_id: str, **apps: Any) -> httpx.Response:
+    config = await _agent_config(admin_client, agent_id)
+    config["tools"]["apps"] = {**config["tools"].get("apps", {}), **apps}
+    return await admin_client.put(f"/v1/agents/{agent_id}", json={"config": config})
+
+
+async def _new_agent(admin_client: httpx.AsyncClient, name: str = "Demo — Apps scratch") -> str:
+    return str((await create_agent(admin_client, name=name, published=False))["id"])
+
+
+async def _origin_rows(database: Database, agent_id: str) -> list[Tool]:
+    async with database.session() as session:
+        agent = await session.get(Agent, agent_id)
+        assert agent is not None
+        return await provisioning.origin_rows(session, agent.workspace_id, agent_id)
+
+
+async def _crm(admin_client: httpx.AsyncClient) -> str:
+    out = await _connect(admin_client, toolkit="acmecrm", method="api_key", fields={"api_key": APP_SECRET})
+    return str(out["connection_id"])
+
+
+@pytest.mark.parametrize(
+    ("toolkit", "slug", "expected"),
+    [
+        ("googlecalendar", "GOOGLECALENDAR_FIND_FREE_SLOTS", "googlecalendar_find_free_slots"),
+        ("acmecrm", "LIST_CONTACTS", "acmecrm_list_contacts"),
+        ("my-app", "MY-APP_GET", "my_app_get"),
+        ("9lives", "9LIVES_GET", "app_9lives_get"),
+    ],
+)
+def test_tool_name_for_is_toolkit_prefixed_lower_snake(toolkit: str, slug: str, expected: str) -> None:
+    assert materialise.tool_name_for(toolkit, slug) == expected
+
+
+def test_tool_name_for_a_long_slug_is_capped_stable_and_distinct() -> None:
+    long_a = "SALESFORCE_" + "VERY_LONG_ACTION_NAME_" * 4 + "A"
+    long_b = "SALESFORCE_" + "VERY_LONG_ACTION_NAME_" * 4 + "B"
+
+    name_a = materialise.tool_name_for("salesforce", long_a)
+
+    assert len(name_a) <= materialise.MAX_TOOL_NAME
+    assert re.fullmatch(TOOL_NAME_PATTERN, name_a)
+    assert name_a == materialise.tool_name_for("salesforce", long_a), "stable across imports"
+    assert name_a != materialise.tool_name_for("salesforce", long_b)
+
+
+async def test_materialise_pins_schema_and_applies_the_risk_rule_and_voice_defaults(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+
+    read = await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS")
+    write = await _pick(admin_client, connection_id, "GOOGLECALENDAR_CREATE_EVENT")
+    destructive = await _pick(
+        admin_client, connection_id, "GOOGLECALENDAR_DELETE_EVENT", allow_destructive=True
+    )
+
+    rows = {
+        name: await _tool(database, out["tools_created"][0])
+        for name, out in (("read", read), ("write", write), ("destructive", destructive))
+    }
+    definition = ProviderToolDefinition.model_validate(rows["read"].definition)
+    assert rows["read"].kind == "provider"
+    assert rows["read"].name == "googlecalendar_find_free_slots"
+    assert definition.description == "Finds free time slots in a calendar.", "first sentence only"
+    assert definition.parameters["properties"].keys() == {"time_min", "time_max"}
+    assert definition.schema_version == "20260901_00"
+    assert (definition.credential_id, definition.connection_id) == (key_id, connection_id)
+    assert definition.subject == f"ws:{WS}"
+    assert definition.max_result_chars == 1500
+    assert definition.result_path == "data"
+    assert definition.silent_reply is False
+    assert definition.execution.mode == "auto"
+    assert definition.execution.announce == "Let me look that up"
+    assert definition.execution.max_duration_s == 20
+    for name in ("write", "destructive"):
+        execution = ProviderToolDefinition.model_validate(rows[name].definition).execution
+        assert execution.mode == "blocking"
+        assert execution.cancellable is False
+    assert ProviderToolDefinition.model_validate(rows["destructive"].definition).risk == "destructive"
+    listed = (await admin_client.get("/v1/tools", params={"kind": "provider"})).json()
+    assert listed["total"] == 3
+    assert {item["kind"] for item in listed["items"]} == {"provider"}
+
+
+async def test_materialise_again_reuses_the_tool(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+
+    first = await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS")
+    second = await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS")
+
+    assert second["tools_created"] == []
+    assert second["tools_existing"] == first["tools_created"]
+
+
+async def test_materialise_with_an_agent_attaches_as_a_new_version_and_turns_actions_on(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Blank agent")
+    before = (await admin_client.get(f"/v1/agents/{agent_id}")).json()["config_version"]
+
+    out = await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS", agent_id=agent_id)
+
+    stored = (await admin_client.get(f"/v1/agents/{agent_id}")).json()
+    assert out["tools_created"][0] in stored["config"]["tools"]["tool_ids"]
+    assert stored["config"]["tools"]["apps"]["mode"] == "actions"
+    assert stored["config_version"] == before + 1
+    async with database.session() as session:
+        versions = (
+            (await session.execute(select(AgentConfigVersion).where(AgentConfigVersion.agent_id == agent_id)))
+            .scalars()
+            .all()
+        )
+    assert {v.config_version for v in versions} == {before, before + 1}
+    resaved = await admin_client.put(f"/v1/agents/{agent_id}", json={"config": stored["config"]})
+    assert resaved.status_code == 200, resaved.text
+
+
+async def test_refresh_schema_diffs_and_applies_only_when_asked(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+    picked = await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS")
+    tool_id = picked["tools_created"][0]
+    action = world.tools["googlecalendar"][0]
+    action["input_parameters"]["properties"]["calendar_id"] = {"type": "string"}
+    del action["input_parameters"]["properties"]["time_max"]
+    action["version"] = "20260920_00"
+
+    dry = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema")
+    unchanged = ProviderToolDefinition.model_validate((await _tool(database, tool_id)).definition)
+    applied = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema", params={"apply": "true"})
+    after = ProviderToolDefinition.model_validate((await _tool(database, tool_id)).definition)
+
+    assert dry.status_code == 200, dry.text
+    body = dry.json()
+    assert body["changed"] is True
+    assert body["applied"] is False
+    assert (body["added"], body["removed"]) == (["calendar_id"], ["time_max"])
+    assert (body["schema_version_before"], body["schema_version_after"]) == ("20260901_00", "20260920_00")
+    assert "calendar_id" not in unchanged.parameters["properties"]
+    assert applied.json()["applied"] is True
+    assert "calendar_id" in after.parameters["properties"]
+    assert after.schema_version == "20260920_00"
+
+
+async def test_refresh_schema_refuses_a_non_provider_tool(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    tool_id = await _add_tool(database, _mcp_def("plain"))
+
+    response = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema")
+
+    assert response.status_code == 404
+
+
+# ------------------------------------------------------------------------ provider bindings
+def _provider_body(connection_id: str, key_id: str | None, **overrides: Any) -> dict[str, Any]:
+    definition = {
+        "kind": "provider",
+        "name": "acmecrm_list_contacts",
+        "description": "List contacts.",
+        "parameters": {"type": "object", "properties": {}},
+        "tool_slug": "ACMECRM_LIST_CONTACTS",
+        "toolkit": "acmecrm",
+        "connection_id": connection_id,
+        "credential_id": key_id,
+        "subject": f"ws:{WS}",
+        **overrides,
+    }
+    return {"kind": "provider", "name": definition["name"], "definition": definition}
+
+
+async def test_a_provider_tool_binds_the_key_and_a_connection_of_its_own_subject(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    connection_id = await _crm(admin_client)
+
+    ok = await admin_client.post("/v1/tools", json=_provider_body(connection_id, key_id))
+    wrong_subject = await admin_client.post(
+        "/v1/tools", json=_provider_body(connection_id, key_id, subject="ws:someone-else")
+    )
+    key_as_connection = await admin_client.post("/v1/tools", json=_provider_body(key_id, key_id))
+    no_key = await admin_client.post("/v1/tools", json=_provider_body(connection_id, None))
+    connection_as_key = await admin_client.post(
+        "/v1/tools", json=_provider_body(connection_id, connection_id)
+    )
+
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["kind"] == "provider"
+    assert wrong_subject.status_code == 422
+    assert key_as_connection.status_code == 422
+    assert no_key.status_code == 422
+    assert connection_as_key.status_code == 422
+
+
+async def test_an_app_connected_for_one_agent_serves_only_that_agents_tools(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    owner = await _new_agent(admin_client, "Demo — Owner")
+    other = await _new_agent(admin_client, "Demo — Other")
+    out = await _connect(
+        admin_client,
+        toolkit="acmecrm",
+        method="api_key",
+        subject="agent",
+        agent_id=owner,
+        fields={"api_key": APP_SECRET},
+    )
+    body = _provider_body(out["connection_id"], key_id, subject=f"agent:{owner}")
+
+    mine = await admin_client.post("/v1/tools", json={**body, "agent_id": owner})
+    theirs = await admin_client.post("/v1/tools", json={**body, "agent_id": other})
+    shared = await admin_client.post("/v1/tools", json=body)
+
+    assert mine.status_code == 201, mine.text
+    assert theirs.status_code == 422
+    assert shared.status_code == 422
+
+
+# ------------------------------------------------------------------------ provisioning
+async def test_router_mode_provisions_one_session_on_save_idempotently(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+
+    saved = await _set_apps(admin_client, agent_id, mode="router")
+    again = await _set_apps(admin_client, agent_id, mode="router")
+
+    assert saved.status_code == 200, saved.text
+    assert again.status_code == 200, again.text
+    creates = world.calls_of("create_router_session")
+    assert len(creates) == 1, "a save that changes nothing makes no vendor call"
+    options = creates[0].kwargs["options"]
+    assert creates[0].kwargs["subject"] == f"ws:{WS}"
+    assert options["toolkits"] == {"enable": ["acmecrm"]}
+    assert options["search"] == {"enable": True}
+    assert options["execute"] == {"enable_multi_execute": True}
+    assert options["manage_connections"] == {"enable": False}
+    assert options["workbench"] == {"enable": False}
+    assert list(options["connected_accounts"]) == ["acmecrm"]
+    rows = await _origin_rows(database, agent_id)
+    assert len(rows) == 1
+    definition = rows[0].definition
+    assert rows[0].name == provisioning.ROUTER_TOOL_NAME
+    assert definition["origin"]["kind"] == "router"
+    assert definition["origin"]["remote_id"] in world.sessions
+    assert definition["url"].startswith("https://backend.composio.dev/")
+    assert definition["headers"] == {"x-api-key": "{{ secret.api_key }}"}
+    assert definition["credential_id"] == key_id
+    assert definition["allowed_tools"] == [
+        "COMPOSIO_SEARCH_TOOLS",
+        "COMPOSIO_GET_TOOL_SCHEMAS",
+        "COMPOSIO_MULTI_EXECUTE_TOOL",
+    ]
+    multi = definition["tool_options"]["COMPOSIO_MULTI_EXECUTE_TOOL"]
+    assert multi["mode"] == "blocking"
+    assert multi["cancellable"] is False
+    assert definition["tool_options"]["COMPOSIO_SEARCH_TOOLS"]["mode"] == "auto"
+    assert rows[0].id in (await _agent_config(admin_client, agent_id))["tools"]["tool_ids"]
+    assert len(await _audit_rows(database, "apps.router.create")) == 1
+
+
+async def test_changing_the_router_flags_replaces_the_session_and_off_deletes_it(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+    await _set_apps(admin_client, agent_id, mode="router")
+    first = next(iter(world.sessions))
+
+    flagged = await _set_apps(
+        admin_client, agent_id, router={"search": True, "execute": True, "manage_connections": True}
+    )
+
+    assert flagged.status_code == 200, flagged.text
+    assert first not in world.sessions, "the old session is deleted at Composio"
+    assert len(world.sessions) == 1
+    row = (await _origin_rows(database, agent_id))[0]
+    assert "COMPOSIO_MANAGE_CONNECTIONS" in row.definition["allowed_tools"]
+    tool_id = row.id
+
+    off = await _set_apps(admin_client, agent_id, mode="off")
+
+    assert off.status_code == 200, off.text
+    assert world.sessions == {}
+    assert await _origin_rows(database, agent_id) == []
+    assert tool_id not in (await _agent_config(admin_client, agent_id))["tools"]["tool_ids"]
+    assert len(await _audit_rows(database, "apps.router.delete")) == 1
+
+
+async def test_deleting_the_agent_deletes_its_session(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+    await _set_apps(admin_client, agent_id, mode="router")
+    assert len(world.sessions) == 1
+
+    deleted = await admin_client.delete(f"/v1/agents/{agent_id}")
+
+    assert deleted.status_code == 204, deleted.text
+    assert world.sessions == {}
+
+
+async def test_server_mode_preloads_the_picked_actions_with_meta_tools_off(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+    await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS", "GOOGLECALENDAR_CREATE_EVENT")
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    saved = await _set_apps(
+        admin_client, agent_id, mode="server", denied_actions=["GOOGLECALENDAR_CREATE_EVENT"]
+    )
+
+    assert saved.status_code == 200, saved.text
+    options = world.calls_of("create_router_session")[0].kwargs["options"]
+    assert options["tools"] == {"googlecalendar": {"enable": ["GOOGLECALENDAR_FIND_FREE_SLOTS"]}}
+    assert options["preload"] == {"tools": ["GOOGLECALENDAR_FIND_FREE_SLOTS"]}
+    assert options["search"] == {"enable": False}
+    assert options["execute"] == {"enable_multi_execute": False}
+    row = (await _origin_rows(database, agent_id))[0]
+    assert row.name == provisioning.SERVER_TOOL_NAME
+    assert row.definition["origin"]["kind"] == "server"
+    assert row.definition["allowed_tools"] == ["GOOGLECALENDAR_FIND_FREE_SLOTS"]
+    assert row.definition["tool_options"]["GOOGLECALENDAR_FIND_FREE_SLOTS"]["mode"] == "auto"
+
+
+async def test_server_mode_without_picked_actions_is_refused_and_saves_nothing(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    refused = await _set_apps(admin_client, agent_id, mode="server")
+
+    assert refused.status_code == 422
+    assert world.calls_of("create_router_session") == []
+    assert (await _agent_config(admin_client, agent_id))["tools"]["apps"]["mode"] == "off"
+
+
+async def test_a_session_url_off_the_composio_host_is_refused_and_the_session_deleted(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+    world.session_url_base = "https://mcp.example.com/tool_router"
+
+    refused = await _set_apps(admin_client, agent_id, mode="router")
+
+    assert refused.status_code == 422
+    assert world.sessions == {}
+    assert await _origin_rows(database, agent_id) == []
+
+
+async def test_router_mode_without_a_key_is_a_validation_error(
+    admin_client: httpx.AsyncClient, world: ComposioWorld
+) -> None:
+    agent_id = await _new_agent(admin_client)
+
+    refused = await _set_apps(admin_client, agent_id, mode="router")
+
+    assert refused.status_code == 422
+    assert "Composio key" in refused.text
+    assert world.calls_of("create_router_session") == []
+
+
+async def test_an_agent_saved_before_apps_existed_provisions_nothing(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    agent_id = await _new_agent(admin_client, "Demo — Blank agent")
+    config = await _agent_config(admin_client, agent_id)
+    config["tools"].pop("apps", None)
+
+    saved = await admin_client.put(f"/v1/agents/{agent_id}", json={"config": config})
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["config"]["tools"]["apps"]["mode"] == "off"
+    assert world.calls == []
+
+
+def test_plan_session_prefers_workspace_connections_and_skips_broken_ones() -> None:
+    def conn(subject: str, toolkit: str, status: str = "active") -> service.AppConnection:
+        return service.AppConnection(
+            row=Credential(id=f"c-{toolkit}"),
+            toolkit=toolkit,
+            method="api_key",
+            subject=subject,
+            status=status,  # type: ignore[arg-type]
+            connected_account_id=f"ca-{toolkit}",
+            picked_actions=[f"{toolkit.upper()}_LIST"],
+        )
+
+    plan = provisioning.plan_session(
+        AppsMode(mode="router", router=AppsRouterOptions(search=True, execute=False)),
+        [conn("ws:w1", "crm"), conn("agent:a1", "mail"), conn("ws:w1", "calendar", "expired")],
+        workspace_id="w1",
+        agent_id="a1",
+    )
+
+    assert plan.subject == "ws:w1"
+    assert plan.toolkits == ["crm"]
+    assert plan.allowed_tools == ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS"]
+    assert plan.options["execute"] == {"enable_multi_execute": False}
+    assert plan.options["connected_accounts"] == {"crm": ["ca-crm"]}
+
+
+def test_plan_session_uses_the_agent_subject_when_only_its_own_apps_exist() -> None:
+    conn = service.AppConnection(
+        row=Credential(id="c1"),
+        toolkit="mail",
+        method="api_key",
+        subject="agent:a1",
+        status="active",
+        picked_actions=["MAIL_LIST"],
+    )
+
+    plan = provisioning.plan_session(AppsMode(mode="server"), [conn], workspace_id="w1", agent_id="a1")
+
+    assert plan.subject == "agent:a1"
+    assert plan.allowed_tools == ["MAIL_LIST"]
+
+
+async def test_a_refused_agent_delete_keeps_its_session_at_composio(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    await _crm(admin_client)
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps scratch"))["id"])
+    await _set_apps(admin_client, agent_id, mode="router")
+    connected = await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})
+    assert connected.status_code == 200, connected.text
+
+    refused = await admin_client.delete(f"/v1/agents/{agent_id}")
+
+    assert refused.status_code == 409
+    assert len(world.sessions) == 1, "the agent still exists, so its tool finder must too"
+    assert len(await _origin_rows(database, agent_id)) == 1
+
+
+async def test_the_resolved_config_carries_the_key_in_both_composio_paths(
+    admin_client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+) -> None:
+    connection_id = await _crm(admin_client)
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps resolved"))["id"])
+    await _pick(admin_client, connection_id, "ACMECRM_LIST_CONTACTS", agent_id=agent_id)
+    assert (await _set_apps(admin_client, agent_id, mode="router")).status_code == 200
+    session_id = (await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})).json()["sessionId"]
+
+    resolved = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+
+    by_kind = {tool["kind"]: tool for tool in resolved["tools"]}
+    assert set(by_kind) == {"provider", "mcp"}
+    for kind in ("provider", "mcp"):
+        assert by_kind[kind]["headers"]["x-api-key"] == VALID_KEY
+        assert by_kind[kind]["credential_id"] is None
+    assert by_kind["provider"]["subject"] == f"ws:{WS}"
+    assert by_kind["mcp"]["origin"]["kind"] == "router"
+
+
+# ------------------------------------------------------------------------ R-V5-9: reviewed_actions
+DELETE_EVENT = "GOOGLECALENDAR_DELETE_EVENT"
+FREE_SLOTS = "GOOGLECALENDAR_FIND_FREE_SLOTS"
+
+
+async def _calendar_with_delete_picked(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld
+) -> str:
+    connection_id = await _active_calendar(admin_client, client, world)
+    await _pick(admin_client, connection_id, FREE_SLOTS)
+    await _pick(admin_client, connection_id, DELETE_EVENT, allow_destructive=True)
+    return connection_id
+
+
+async def test_server_mode_blocks_an_unreviewed_destructive_action_until_it_is_reviewed(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    unreviewed = await _set_apps(admin_client, agent_id, mode="server")
+    reviewed = await _set_apps(admin_client, agent_id, reviewed_actions=[DELETE_EVENT])
+    denied = await _set_apps(admin_client, agent_id, denied_actions=[DELETE_EVENT])
+
+    assert unreviewed.status_code == 200, unreviewed.text
+    assert reviewed.status_code == 200, reviewed.text
+    assert denied.status_code == 200, denied.text
+    creates = world.calls_of("create_router_session")
+    preloads = [call.kwargs["options"]["preload"]["tools"] for call in creates]
+    assert preloads == [[FREE_SLOTS], [DELETE_EVENT, FREE_SLOTS], [FREE_SLOTS]]
+
+
+async def test_server_mode_needs_no_catalogue_call(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+    before = len(world.calls_of("list_tools"))
+
+    assert (await _set_apps(admin_client, agent_id, mode="server")).status_code == 200
+
+    assert len(world.calls_of("list_tools")) == before
+
+
+async def test_server_mode_with_only_unreviewed_destructive_picks_names_them(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    connection_id = await _active_calendar(admin_client, client, world)
+    await _pick(admin_client, connection_id, DELETE_EVENT, allow_destructive=True)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    refused = await _set_apps(admin_client, agent_id, mode="server")
+
+    assert refused.status_code == 422
+    assert "blocked until reviewed in the Connected apps card" in refused.text
+    assert DELETE_EVENT in refused.text
+    assert world.calls_of("create_router_session") == []
+
+
+async def test_router_mode_disables_the_catalogues_unreviewed_destructive_actions(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _active_calendar(admin_client, client, world)
+    agent_id = await _new_agent(admin_client)
+
+    unreviewed = await _set_apps(admin_client, agent_id, mode="router")
+    reviewed = await _set_apps(admin_client, agent_id, reviewed_actions=[DELETE_EVENT])
+
+    assert unreviewed.status_code == 200, unreviewed.text
+    assert reviewed.status_code == 200, reviewed.text
+    first, second = (call.kwargs["options"] for call in world.calls_of("create_router_session"))
+    assert first["tools"] == {"googlecalendar": {"disable": [DELETE_EVENT]}}
+    assert "tools" not in second
+    scans = world.calls_of("list_tools")
+    assert scans
+    assert all(call.kwargs["toolkit"] == "googlecalendar" for call in scans)
+    assert len(scans) == 1, "the second save reads the catalogue cache"
+
+
+@pytest.mark.parametrize("mode", ["server", "router"])
+async def test_no_reviews_provision_exactly_what_the_console_seed_did(
+    mode: str,
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+) -> None:
+    """R-V5-9 compatibility: the V5-48 card wrote each destructive action into denied_actions;
+    with reviewed_actions=[] the api denies the same ones, so the session stays the same."""
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+
+    seeded = await _set_apps(admin_client, agent_id, mode=mode, denied_actions=[DELETE_EVENT])
+    unseeded = await _set_apps(admin_client, agent_id, denied_actions=[], reviewed_actions=[])
+
+    assert seeded.status_code == 200, seeded.text
+    assert unseeded.status_code == 200, unseeded.text
+    assert len(world.calls_of("create_router_session")) == 1, "same options, same session"
+
+
+async def test_the_validator_names_unreviewed_destructive_actions(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = await _new_agent(admin_client, "Demo — Apps server")
+    await _set_apps(admin_client, agent_id, mode="server")
+
+    before = (await admin_client.post(f"/v1/agents/{agent_id}/validate")).json()
+    await _set_apps(admin_client, agent_id, reviewed_actions=[DELETE_EVENT])
+    after = (await admin_client.post(f"/v1/agents/{agent_id}/validate")).json()
+
+    flagged = [issue for issue in before["issues"] if issue["path"] == "tools.apps.denied_actions"]
+    assert len(flagged) == 1
+    assert flagged[0]["severity"] == "warning"
+    assert DELETE_EVENT in flagged[0]["message"]
+    assert FREE_SLOTS not in flagged[0]["message"]
+    assert "blocked until reviewed in the Connected apps card" in flagged[0]["message"]
+    assert not [issue for issue in after["issues"] if issue["path"] == "tools.apps.denied_actions"]
+
+
+async def test_the_resolve_step_drops_an_unreviewed_destructive_action_of_an_older_app_server(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    await _calendar_with_delete_picked(admin_client, client, world)
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps resolved"))["id"])
+    assert (await _set_apps(admin_client, agent_id, mode="server")).status_code == 200
+    row = (await _origin_rows(database, agent_id))[0]
+    async with database.session() as session:
+        # An app server provisioned before R-V5-9 preloaded the destructive action too.
+        stored = await session.get(Tool, row.id)
+        assert stored is not None
+        definition = dict(stored.definition)
+        definition["allowed_tools"] = [DELETE_EVENT, FREE_SLOTS]
+        definition["tool_options"] = {
+            **definition["tool_options"],
+            DELETE_EVENT: {"mode": "blocking", "cancellable": False, "max_duration_s": 20},
+        }
+        stored.definition = definition
+        await session.commit()
+    session_id = (await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})).json()["sessionId"]
+
+    resolved = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+
+    server = next(tool for tool in resolved["tools"] if tool["kind"] == "mcp")
+    assert server["allowed_tools"] == [FREE_SLOTS]
+    assert set(server["tool_options"]) == {FREE_SLOTS}
+
+
+def _server_definition(*names: str, kind: McpOriginKind = "server") -> McpServerDefinition:
+    return McpServerDefinition(
+        name="composio_app_server",
+        url="https://backend.composio.dev/tool_router/s1/mcp",
+        allowed_tools=list(names),
+        tool_options={name: ToolExecution(mode="blocking", cancellable=False) for name in names},
+        origin=McpServerOrigin(kind=kind, remote_id="s1", config_hash="h"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("apps", "expected"),
+    [
+        pytest.param(AppsMode(mode="server"), [FREE_SLOTS], id="unreviewed-dropped"),
+        pytest.param(
+            AppsMode(mode="server", reviewed_actions=[DELETE_EVENT]),
+            [DELETE_EVENT, FREE_SLOTS],
+            id="reviewed-kept",
+        ),
+        pytest.param(
+            AppsMode(mode="server", reviewed_actions=[DELETE_EVENT], denied_actions=[DELETE_EVENT]),
+            [FREE_SLOTS],
+            id="reviewed-and-denied-dropped",
+        ),
+    ],
+)
+def test_apply_denied_actions_filters_an_app_server(apps: AppsMode, expected: list[str]) -> None:
+    resolved = provisioning.apply_denied_actions(_server_definition(DELETE_EVENT, FREE_SLOTS), apps)
+
+    assert isinstance(resolved, McpServerDefinition)
+    assert resolved.allowed_tools == expected
+    assert sorted(resolved.tool_options) == expected
+
+
+def test_apply_denied_actions_leaves_a_tool_finder_and_other_tools_alone() -> None:
+    finder = _server_definition("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", kind="router")
+    plain = McpServerDefinition(name="docs", url="https://mcp.example.com/mcp")
+
+    assert provisioning.apply_denied_actions(finder, AppsMode(mode="router")) is finder
+    assert provisioning.apply_denied_actions(plain, AppsMode(mode="server")) is plain
+
+
+def test_plan_session_adds_the_catalogue_scope_to_a_tool_finders_deny_list() -> None:
+    conn = service.AppConnection(
+        row=Credential(id="c1"),
+        toolkit="mail",
+        method="api_key",
+        subject="ws:w1",
+        status="active",
+    )
+
+    plan = provisioning.plan_session(
+        AppsMode(mode="router", denied_actions=["MAIL_SEND"], reviewed_actions=["MAIL_REMOVE_LABEL"]),
+        [conn],
+        workspace_id="w1",
+        agent_id="a1",
+        destructive_in_scope=["MAIL_DELETE", "MAIL_REMOVE_LABEL"],
+    )
+
+    assert plan.options["tools"] == {"mail": {"disable": ["MAIL_DELETE", "MAIL_SEND"]}}
+
+
+class _PagedCatalogue:
+    """Two catalogue pages; the second action's read tag must not hide its destructive slug."""
+
+    def __init__(self) -> None:
+        self.cursors: list[str | None] = []
+
+    async def list_tools(self, *, toolkit: str, cursor: str | None, limit: int) -> dict[str, Any]:
+        self.cursors.append(cursor)
+        if cursor is None:
+            return {"items": [{"slug": "X_DELETE_A"}, {"slug": "X_LIST_A"}], "next_cursor": "p2"}
+        return {"items": [{"slug": "X_REMOVE_B", "tags": ["readOnlyHint"]}], "next_cursor": None}
+
+
+async def test_destructive_actions_walks_every_catalogue_page() -> None:
+    catalogue = _PagedCatalogue()
+
+    found = await service.destructive_actions(
+        catalogue,  # type: ignore[arg-type]
+        Credential(id="k1", workspace_id=WS, fingerprint="…abcd"),
+        service.CatalogCache(),
+        "x",
+    )
+
+    assert found == ["X_DELETE_A", "X_REMOVE_B"]
+    assert catalogue.cursors == [None, "p2"]

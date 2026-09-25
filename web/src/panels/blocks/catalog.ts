@@ -34,6 +34,10 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "transcript",
   "video",
   "custom",
+  "choices",
+  "details",
+  "markdown",
+  "steps",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -46,7 +50,16 @@ export const ENVELOPE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
 ]);
 
 /** Built-in block tools (agent `tools/builtin/__init__.py::BLOCK_TOOL_NAMES`). */
-export type BlockToolName = "update_block" | "show_document" | "table_append" | "request_form";
+export type BlockToolName =
+  | "update_block"
+  | "show_document"
+  | "table_append"
+  | "request_form"
+  | "request_choice"
+  | "resolve_choice"
+  | "set_details"
+  | "show_text"
+  | "set_steps";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -57,18 +70,27 @@ export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(
   "video",
   "kb_citations",
   "custom",
+  "details",
+  "markdown",
+  "steps",
 ]);
 
 /**
  * When the worker registers each block tool (agent
- * `build_builtin_tools`): `update_block` for any updatable block, the other
- * three for a block of their own type. `builtin_disabled` still turns them off.
+ * `build_builtin_tools`): `update_block` for any updatable block, the others
+ * for a block of their own type (`set_steps` only for a `steps` block that does
+ * not follow the flow). `builtin_disabled` still turns them off.
  */
 export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   update_block: UPDATABLE_BLOCK_TYPES,
   show_document: new Set<BlockType>(["document"]),
   table_append: new Set<BlockType>(["table"]),
   request_form: new Set<BlockType>(["form"]),
+  request_choice: new Set<BlockType>(["choices"]),
+  resolve_choice: new Set<BlockType>(["choices"]),
+  set_details: new Set<BlockType>(["details"]),
+  show_text: new Set<BlockType>(["markdown"]),
+  set_steps: new Set<BlockType>(["steps"]),
 };
 
 /** One field of a block's config form. */
@@ -84,7 +106,16 @@ export type BlockConfigField =
       default: string;
       options: readonly { value: string; label: string }[];
     }
-  | { key: "columns"; label: string; kind: "columns"; hint?: string; default: TableColumn[] };
+  | { key: "columns"; label: string; kind: "columns"; hint?: string; default: TableColumn[] }
+  | {
+      key: string;
+      label: string;
+      /** A list of small objects (`details.fields`, `steps.steps`); the composer's editor comes with V5-12. */
+      kind: "list";
+      hint?: string;
+      default: Record<string, unknown>[];
+      itemKeys: readonly string[];
+    };
 
 export interface BlockCatalogEntry {
   type: BlockType;
@@ -107,6 +138,17 @@ export const VIDEO_SOURCES = [
   { value: "agent_avatar", label: "The agent's avatar" },
   { value: "user_camera", label: "The caller's camera" },
   { value: "user_screen", label: "The caller's shared screen" },
+] as const;
+
+export const CHOICE_LAYOUTS = [
+  { value: "buttons", label: "Buttons" },
+  { value: "list", label: "List" },
+  { value: "chips", label: "Chips" },
+] as const;
+
+export const STEPS_SOURCES = [
+  { value: "manual", label: "The agent" },
+  { value: "flow", label: "The flow" },
 ] as const;
 
 export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
@@ -245,6 +287,72 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     idStem: "custom",
     configFields: [],
     filledBy: "the pack",
+  },
+  // V5-08: minimal entries (PLAN-V5 §0.1); the renderers, previews and composer
+  // editors for these four come with V5-12.
+  choices: {
+    type: "choices",
+    label: "Choices",
+    description: "Options the caller taps or answers by voice.",
+    defaultTitle: null,
+    idStem: "choices",
+    configFields: [
+      { key: "multi", label: "Allow more than one answer", kind: "boolean", default: false },
+      { key: "layout", label: "Layout", kind: "select", default: "buttons", options: CHOICE_LAYOUTS },
+      { key: "max_options", label: "Most options", kind: "integer", default: 8, min: 2 },
+    ],
+    filledBy: "request_choice",
+  },
+  details: {
+    type: "details",
+    label: "Details",
+    description: "A card of facts collected so far, such as a claim number and dates.",
+    defaultTitle: "Details",
+    idStem: "details",
+    configFields: [
+      { key: "columns", label: "Columns", kind: "integer", default: 1, min: 1 },
+      {
+        key: "fields",
+        label: "Starting rows",
+        kind: "list",
+        hint: "Rows the card starts with. The agent fills them in and may add more.",
+        default: [],
+        itemKeys: ["key", "label", "type"],
+      },
+    ],
+    filledBy: "set_details",
+  },
+  markdown: {
+    type: "markdown",
+    label: "Text",
+    description: "Longer text on screen, such as a recap or instructions.",
+    defaultTitle: null,
+    idStem: "text",
+    configFields: [
+      { key: "max_chars", label: "Longest text (characters)", kind: "integer", default: 8000, min: 200 },
+      { key: "allow_links", label: "Allow links", kind: "boolean", default: false },
+    ],
+    filledBy: "show_text",
+  },
+  steps: {
+    type: "steps",
+    label: "Steps",
+    description: "Where the caller is in the process.",
+    defaultTitle: "Progress",
+    idStem: "steps",
+    configFields: [
+      {
+        key: "steps",
+        label: "Steps",
+        kind: "list",
+        hint: "The steps to show. When the block follows the flow, use the flow's step ids.",
+        default: [],
+        itemKeys: ["id", "label"],
+      },
+      { key: "source", label: "Driven by", kind: "select", default: "manual", options: STEPS_SOURCES },
+      { key: "show_notes", label: "Show notes under steps", kind: "boolean", default: true },
+    ],
+    filledBy: "set_steps or the flow",
   },
 };
 

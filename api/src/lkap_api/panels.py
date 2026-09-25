@@ -61,15 +61,50 @@ def effective_layout(agent: Agent, pack: PackManifest | None) -> PanelLayout:
 
 
 def block_config_issues(ctx: ValidationContext) -> list[Issue]:
-    """Every panel block's ``config`` against its type's schema (R-V2-17).
+    """Every panel block's ``config`` against its type's schema (R-V2-17), plus flow steps checks.
+
+    The schemas cover the V5-08 quartet (``choices``, ``details``,
+    ``markdown``, ``steps``) through :mod:`lkap_contracts.blocks`. A ``steps``
+    block that follows the flow (``config.source == "flow"``) also gets two
+    warnings when they apply (V5-08): the agent has no flow, so the block stays
+    empty; or one of its ``steps`` ids names no agent node of the flow, so
+    that step never moves.
 
     Args:
-        ctx: The validation context; only ``ctx.config.panel`` is read.
+        ctx: The validation context; ``ctx.config.panel`` and ``ctx.config.flow`` are read.
 
     Returns:
-        One ``error`` per unknown or invalid key, at ``panel.blocks[i].config.<key>``.
+        One ``error`` per unknown or invalid key, at ``panel.blocks[i].config.<key>``;
+        the flow warnings at ``panel.blocks[i].config.source`` / ``.config.steps[j].id``.
     """
-    return validate_panel_block_configs(ctx.config.panel.blocks)
+    issues = validate_panel_block_configs(ctx.config.panel.blocks)
+    flow = ctx.config.flow
+    node_ids = {node.id for node in flow.nodes if node.kind == "agent"} if flow is not None else set()
+    for index, block in enumerate(ctx.config.panel.blocks):
+        if block.type != "steps" or block.config.get("source") != "flow":
+            continue
+        base = f"panel.blocks[{index}].config"
+        if flow is None:
+            issues.append(
+                Issue(
+                    path=f"{base}.source",
+                    message="this block follows the flow, but the agent has no flow, so it stays empty",
+                    severity="warning",
+                )
+            )
+            continue
+        steps = block.config.get("steps")
+        for j, step in enumerate(steps if isinstance(steps, list) else []):
+            step_id = step.get("id") if isinstance(step, dict) else None
+            if isinstance(step_id, str) and step_id and step_id not in node_ids:
+                issues.append(
+                    Issue(
+                        path=f"{base}.steps[{j}].id",
+                        message=f"'{step_id}' is not a step of the flow, so it never moves",
+                        severity="warning",
+                    )
+                )
+    return issues
 
 
 register_validator(block_config_issues)

@@ -55,6 +55,9 @@ from lkap_api.connections.service import (
     resolve_agent_connection,
 )
 from lkap_api.costs import cost_session
+from lkap_api.costs.service import reconcile_due
+from lkap_api.costs.snapshot import attach_estimate
+from lkap_api.costs.vendors import workspace_reconcile_vendors
 from lkap_api.custom_models.service import with_capabilities
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, Credential, LiveKitConnection, SessionEvent, SessionQa, Tool, utcnow
@@ -63,11 +66,13 @@ from lkap_api.db.session import Database
 from lkap_api.deps import DbDep, ServiceDep, SettingsDep, VaultDep
 from lkap_api.errors import ApiError, ConflictError, NotFoundError
 from lkap_api.jobs.deps import JobsDep
+from lkap_api.jobs.reconcile import enqueue_reconcile
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
 from lkap_api.settings import Settings
+from lkap_api.tool_providers.provisioning import apply_denied_actions
 from lkap_api.vault import Vault
 from lkap_api.webhooks import events as webhook_events
 
@@ -236,7 +241,9 @@ async def _build_resolved(
 
     tools: list[ToolDefinition] = []
     for row in tool_rows:
-        definition = _TOOL_ADAPTER.validate_python(row.definition)
+        # V5-49 (R-V5-9): an app server never offers an unreviewed destructive action, even
+        # one provisioned before `reviewed_actions` existed.
+        definition = apply_denied_actions(_TOOL_ADAPTER.validate_python(row.definition), config.tools.apps)
         tools.append(resolve_tool_definition(definition, secrets.get(definition.credential_id or "", {})))
 
     connection = await _session_connection(db, session, agent)
@@ -289,6 +296,8 @@ async def _build_resolved(
         installed_provider_ids=sorted(installed) if installed is not None else None,
         # R-V2-22: the session's seed variables (an outbound call's `CallCreate.variables`).
         variables=dict(session.variables or {}),
+        # V4-17 (D-V4-45): the workspace's reconciliation opt-in, `settings["cost"]["reconcile"]`.
+        cost_reconcile=await workspace_reconcile_vendors(db, agent.workspace_id),
     )
 
 
@@ -399,6 +408,8 @@ async def start_session(
         connection_id=connection.id,
         channel=payload.channel,
     )
+    # D-V4-43: the estimate snapshot runs after the response (the row is committed by then).
+    background_tasks.add_task(attach_estimate, database, session.id, embedder=settings.embedder)
     return await _build_resolved(db, vault, settings, session, agent)
 
 
@@ -635,6 +646,7 @@ async def put_summary(
     _merge_turn_count(session)
     await cost_session(db, session)
     await db.flush()
+    reconcile = await reconcile_due(db, session)
     workspace_id, terminal_status = await _summary_webhook_context(db, session)
     log.info(
         "session_finished",
@@ -645,6 +657,9 @@ async def put_summary(
     )
     await db.commit()
 
+    if reconcile:
+        # V4-17: after the commit (ask #40), and off the response path (the lookups are HTTP).
+        await enqueue_reconcile(jobs, session_id, background_tasks=background_tasks)
     if terminal_status:
         await webhooks.emit(
             database,

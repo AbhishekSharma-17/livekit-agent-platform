@@ -333,6 +333,11 @@ services:
     restart: "no"
 
 volumes:
+  # Shared by `api` and `jobs` (`/data`: LanceDB vectors, model cache). Only
+  # `jobs` writes LanceDB: knowledge ingest and deletes are both jobs
+  # (`kb_ingest`, `kb_delete`, V5-04), and `api` only queries it. Exception
+  # until V5-13: creating an agent from a starter with knowledge seeds still
+  # ingests those seeds in the `api` process.
   api-data:
   postgres-data:
   redis-data:

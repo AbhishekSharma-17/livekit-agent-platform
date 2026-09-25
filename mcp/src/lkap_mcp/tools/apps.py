@@ -203,8 +203,10 @@ def register(registry: Registry) -> None:
         ] = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Pick a connected app's actions for agents (stored on the connection; they become agent tools
-        when the agent side of Apps lands).
+        """Pick a connected app's actions and add each as an agent tool (attached to agent_id when given).
+
+        One tool per action, reused if it exists. Reads run while the conversation continues;
+        actions that change something wait for their result.
         """
         body: dict[str, Any] = {
             "connection_id": connection_id,
@@ -215,4 +217,10 @@ def register(registry: Registry) -> None:
             body["agent_id"] = agent_id
         if plan:
             return planned(request("POST", f"{BASE}/materialise", body))
-        return ToolResult.success(await client.post(f"{BASE}/materialise", body))
+        out = await client.post(f"{BASE}/materialise", body)
+        steps: list[str] = []
+        if agent_id is None and isinstance(out, dict) and out.get("tools_created"):
+            steps.append("Attach the new tools to an agent with agent_attach(tool_ids=[...]).")
+        if agent_id is not None:
+            steps.append("Validate and try it: agent_validate, then chat_start / chat_send.")
+        return ToolResult.success(out, next_steps=steps)

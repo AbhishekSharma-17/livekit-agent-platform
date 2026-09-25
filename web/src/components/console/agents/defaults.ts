@@ -23,6 +23,8 @@ export const DEFAULT_VOICE: Required<VoiceConfig> = {
   user_away_timeout_s: 15.0,
   first_speaker: "agent",
   thinking_sound: "none",
+  // V5-07: no background clip unless the agent picks one (V5-11's Conversation section edits it).
+  ambient_sound: "none",
 };
 
 export const DEFAULT_CAPABILITIES: Required<CapabilitiesConfig> = {
@@ -40,6 +42,13 @@ export const DEFAULT_TOOLS: Required<ToolsConfig> = {
   max_tool_steps: 3,
   execution_default: "blocking",
   builtin_execution: {},
+  // V5-47: connected apps are off unless the agent opts in (V5-48's card edits this).
+  apps: {
+    mode: "off",
+    allowed_toolkits: [],
+    denied_actions: [],
+    router: { search: true, execute: true, manage_connections: false },
+  },
 };
 
 export const DEFAULT_KNOWLEDGE: Required<KnowledgeConfig> = {

@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "AppsRouterOptions": {
+      "description": "What the tool finder may do (D-V5-C7).",
+      "properties": {
+        "execute": {
+          "default": true,
+          "description": "Let the agent run the actions it found",
+          "title": "Execute",
+          "type": "boolean"
+        },
+        "manage_connections": {
+          "default": false,
+          "description": "Let the agent offer a sign-in link for an app that is not connected yet (text and web chats only: a phone caller cannot open a link)",
+          "title": "Manage Connections",
+          "type": "boolean"
+        },
+        "search": {
+          "default": true,
+          "description": "Let the agent look actions up during the conversation",
+          "title": "Search",
+          "type": "boolean"
+        }
+      },
+      "title": "AppsRouterOptions",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AppsMode.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).\n\nThe default ``off`` changes nothing for an agent saved before this field existed.",
+  "properties": {
+    "allowed_toolkits": {
+      "description": "Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Allowed Toolkits",
+      "type": "array"
+    },
+    "denied_actions": {
+      "description": "Actions the app server or tool finder must never run (action slugs)",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Denied Actions",
+      "type": "array"
+    },
+    "mode": {
+      "default": "off",
+      "enum": [
+        "actions",
+        "server",
+        "router",
+        "off"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "reviewed_actions": {
+      "description": "Destructive actions the builder has decided about (action slugs, R-V5-9); denied_actions says which way. An unreviewed destructive action is blocked",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Reviewed Actions",
+      "type": "array"
+    },
+    "router": {
+      "$ref": "#/$defs/AppsRouterOptions"
+    }
+  },
+  "title": "AppsMode",
+  "type": "object"
+}

@@ -1,0 +1,15 @@
+{
+  "$id": "lkap-contracts/McpNoAuth.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The MCP server needs no credentials (a public server).",
+  "properties": {
+    "kind": {
+      "const": "none",
+      "default": "none",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "McpNoAuth",
+  "type": "object"
+}

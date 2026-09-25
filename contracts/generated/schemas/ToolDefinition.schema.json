@@ -119,8 +119,136 @@
       "title": "HttpToolDefinition",
       "type": "object"
     },
+    "McpHeaderAuth": {
+      "description": "Static request headers, typically an API key (research-v4 tools §4.3.1).\n\nHeader values may reference ``{{ secret.NAME }}``; the api substitutes them from\n``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "header",
+          "default": "header",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "McpHeaderAuth",
+      "type": "object"
+    },
+    "McpNoAuth": {
+      "description": "The MCP server needs no credentials (a public server).",
+      "properties": {
+        "kind": {
+          "const": "none",
+          "default": "none",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "McpNoAuth",
+      "type": "object"
+    },
+    "McpOAuthAuth": {
+      "description": "Sign in with the server's OAuth authorization server (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
+      "properties": {
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Id"
+        },
+        "client_secret_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Ref"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "kind": {
+          "const": "oauth",
+          "default": "oauth",
+          "title": "Kind",
+          "type": "string"
+        },
+        "registration": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "preregistered"
+          ],
+          "title": "Registration",
+          "type": "string"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scopes"
+        },
+        "subject": {
+          "default": "workspace",
+          "enum": [
+            "workspace",
+            "agent"
+          ],
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "title": "McpOAuthAuth",
+      "type": "object"
+    },
     "McpServerDefinition": {
-      "description": "A streamable-HTTP MCP server attached to the agent.",
+      "description": "A streamable-HTTP MCP server attached to the agent.\n\n``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the\npre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not\nmoved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or\nwith ``auth.kind == \"none\"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set\nthey are filled from it (``credential_id`` also mirrors an OAuth credential), and a\nvalue that disagrees with ``auth`` is an error. Stored rows need no data migration:\nthey load as header auth and re-save with ``auth``.",
       "properties": {
         "allowed_tools": {
           "anyOf": [
@@ -136,6 +264,56 @@
           ],
           "default": null,
           "title": "Allowed Tools"
+        },
+        "auth": {
+          "discriminator": {
+            "mapping": {
+              "header": "#/$defs/McpHeaderAuth",
+              "none": "#/$defs/McpNoAuth",
+              "oauth": "#/$defs/McpOAuthAuth"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/McpNoAuth"
+            },
+            {
+              "$ref": "#/$defs/McpHeaderAuth"
+            },
+            {
+              "$ref": "#/$defs/McpOAuthAuth"
+            }
+          ],
+          "title": "Auth"
+        },
+        "cached_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached At"
+        },
+        "cached_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpToolSnapshot"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Tools"
         },
         "credential_id": {
           "anyOf": [
@@ -250,6 +428,47 @@
         "remote_id"
       ],
       "title": "McpServerOrigin",
+      "type": "object"
+    },
+    "McpToolSnapshot": {
+      "description": "One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpToolSnapshot",
       "type": "object"
     },
     "ProviderToolDefinition": {

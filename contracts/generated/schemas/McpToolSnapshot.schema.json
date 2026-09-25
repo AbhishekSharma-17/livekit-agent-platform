@@ -1,0 +1,43 @@
+{
+  "$id": "lkap-contracts/McpToolSnapshot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.",
+  "properties": {
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "input_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Schema"
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "McpToolSnapshot",
+  "type": "object"
+}

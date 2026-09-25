@@ -32,6 +32,7 @@ from lkap_contracts.api_models import (
     SessionStartIn,
     SessionSummaryIn,
 )
+from lkap_contracts.common import is_iana_timezone
 from lkap_contracts.connections import ConnectionInfo, DeploymentType
 from lkap_contracts.fleet import WorkerEnv
 from lkap_contracts.qa import SessionQaIn
@@ -71,6 +72,7 @@ from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
+from lkap_api.routers.workspaces import workspace_default_timezone
 from lkap_api.settings import Settings
 from lkap_api.tool_providers.provisioning import apply_denied_actions
 from lkap_api.vault import Vault
@@ -215,6 +217,10 @@ async def _build_resolved(
 ) -> ResolvedAgentConfig:
     """Resolve a session's configuration and mark it active. **Contains secrets.**"""
     config = AgentConfig.model_validate(agent.config)
+    # R-V5-10: the effective business timezone; the worker reads it from `config.timezone`.
+    business_timezone = await _business_timezone(db, config, agent.workspace_id)
+    if config.timezone != business_timezone:
+        config = config.model_copy(update={"timezone": business_timezone})
     pack = get_manifest(settings.packs_list, agent.pack_id)
     tool_rows: list[Tool] = []
     if config.tools.tool_ids:
@@ -298,7 +304,20 @@ async def _build_resolved(
         variables=dict(session.variables or {}),
         # V4-17 (D-V4-45): the workspace's reconciliation opt-in, `settings["cost"]["reconcile"]`.
         cost_reconcile=await workspace_reconcile_vendors(db, agent.workspace_id),
+        business_timezone=business_timezone,
+        locale=config.locale,
     )
+
+
+async def _business_timezone(db: AsyncSession, config: AgentConfig, workspace_id: str) -> str:
+    """``config.timezone`` when it is an IANA name, else the workspace default, else UTC (R-V5-10).
+
+    An agent's own zone (``"UTC"`` included) always wins, so an agent saved before
+    the workspace default existed keeps the zone it has today.
+    """
+    if is_iana_timezone(config.timezone):
+        return config.timezone
+    return await workspace_default_timezone(db, workspace_id) or "UTC"
 
 
 @router.get(
@@ -579,6 +598,32 @@ async def post_recording(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+#: The ``locale`` session event (R-V5-10); its ``caller_timezone`` is copied into ``usage``.
+LOCALE_EVENT = "locale"
+
+
+async def _merge_caller_timezone(db: AsyncSession, session: SessionRow) -> None:
+    """Copy the ``locale`` event's ``caller_timezone`` into ``usage`` (R-V5-10).
+
+    Like the turn count, it rides on ``usage`` so ``SessionOut.caller_timezone`` (the
+    console's sessions list and detail, MCP ``session_get``) reads it without an
+    events query. The latest ``locale`` event wins; nothing is written without one.
+    """
+    if not isinstance(session.usage, dict) or "caller_timezone" in session.usage:
+        return
+    payload = (
+        await db.execute(
+            select(SessionEvent.payload)
+            .where(SessionEvent.session_id == session.id, SessionEvent.type == LOCALE_EVENT)
+            .order_by(SessionEvent.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    zone = payload.get("caller_timezone") if isinstance(payload, dict) else None
+    if isinstance(zone, str) and is_iana_timezone(zone):
+        session.usage = {**session.usage, "caller_timezone": zone}
+
+
 def _merge_turn_count(session: SessionRow) -> None:
     """Fold `latency.turns` into `usage` so the console's turn count has one source.
 
@@ -644,6 +689,7 @@ async def put_summary(
     session.variables = merged_variables
     session.ended_at = utcnow()
     _merge_turn_count(session)
+    await _merge_caller_timezone(db, session)
     await cost_session(db, session)
     await db.flush()
     reconcile = await reconcile_due(db, session)

@@ -17,8 +17,9 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
+import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
-import type { AppConnectionOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import type { AppConnectionOut, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 import { PageHeader } from "@/components/shared/page-header";
 import { SkeletonRows } from "@/components/shared/loading-state";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
@@ -329,8 +330,25 @@ function ToolActions({
             </Button>
           }
         />
-      ) : isProviderTool(tool) ? null : (
-        // An app action has its own editor (R-V5-8, V5-50); until then no Edit here.
+      ) : tool.kind === "provider" ? (
+        // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
+        <ProviderToolEditorDialog
+          tool={tool as ToolOut & { definition: ProviderToolDefinition }}
+          onSaved={onRefetch}
+          trigger={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${tool.name}`}
+              disabled={!canWrite}
+              title={canWrite ? undefined : writeReason}
+            >
+              <PencilIcon className="size-3.5" />
+            </Button>
+          }
+        />
+      ) : (
         <McpToolEditorDialog
           agentId={tool.agent_id ?? null}
           tool={tool}

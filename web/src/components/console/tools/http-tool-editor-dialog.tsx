@@ -29,99 +29,19 @@ import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
-import type { HttpToolDefinition, ProviderSpec, ToolExecution, ToolOut } from "@/contracts/lkap-contracts";
+import {
+  ExecutionFields,
+  RunsField,
+  executionDraftFromValue,
+  executionFromDraft,
+  isNonBlocking,
+  silentReplyConflictMessage,
+  type ExecutionDraft,
+} from "@/components/console/tools/execution-fields";
+import type { HttpToolDefinition, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-
-/**
- * Background-tool execution policy. The contract's `mode`/`cancellable`/
- * `on_duplicate` are nullable ("agent decides"); the editor spells each out
- * as an explicit "Default" option rather than guessing a value, so an
- * untouched tool keeps posting `null` and a GET tool keeps inheriting the
- * agent's "Read tools run" setting (a POST/PUT/PATCH/DELETE tool still always
- * blocks unless a mode is chosen explicitly).
- */
-type ModeDraft = "default" | "blocking" | "background" | "auto";
-type CancellableDraft = "default" | "true" | "false";
-type DuplicateDraft = "default" | "allow" | "reject" | "replace" | "confirm";
-
-interface ExecutionDraft {
-  mode: ModeDraft;
-  announce: string;
-  auto_threshold_ms: number;
-  /** One filler phrase per line; ≤ 5 lines kept (`ToolExecution.fillers`, `max_length=5`). */
-  fillersText: string;
-  filler_delay_s: number;
-  filler_interval_s: number;
-  cancellable: CancellableDraft;
-  on_duplicate: DuplicateDraft;
-  max_duration_s: number;
-}
-
-const DEFAULT_EXECUTION_DRAFT: ExecutionDraft = {
-  mode: "default",
-  announce: "",
-  auto_threshold_ms: 700,
-  fillersText: "",
-  filler_delay_s: 4,
-  filler_interval_s: 8,
-  cancellable: "default",
-  on_duplicate: "default",
-  max_duration_s: 60,
-};
-
-function fillersFromText(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 5);
-}
-
-function executionDraftFromValue(execution: ToolExecution | undefined): ExecutionDraft {
-  if (!execution) return DEFAULT_EXECUTION_DRAFT;
-  return {
-    mode: execution.mode ?? "default",
-    announce: execution.announce ?? "",
-    auto_threshold_ms: execution.auto_threshold_ms ?? 700,
-    fillersText: (execution.fillers ?? []).join("\n"),
-    filler_delay_s: execution.filler_delay_s ?? 4,
-    filler_interval_s: execution.filler_interval_s ?? 8,
-    cancellable: execution.cancellable === null || execution.cancellable === undefined
-      ? "default"
-      : execution.cancellable
-        ? "true"
-        : "false",
-    on_duplicate: execution.on_duplicate ?? "default",
-    max_duration_s: execution.max_duration_s ?? 60,
-  };
-}
-
-function executionFromDraft(draft: ExecutionDraft): ToolExecution {
-  return {
-    mode: draft.mode === "default" ? null : draft.mode,
-    announce: draft.announce.trim() === "" ? null : draft.announce,
-    auto_threshold_ms: draft.auto_threshold_ms,
-    fillers: fillersFromText(draft.fillersText) as ToolExecution["fillers"],
-    filler_delay_s: draft.filler_delay_s,
-    filler_interval_s: draft.filler_interval_s,
-    cancellable: draft.cancellable === "default" ? null : draft.cancellable === "true",
-    on_duplicate: draft.on_duplicate === "default" ? null : draft.on_duplicate,
-    duplicate_scope: "name_and_args",
-    max_duration_s: draft.max_duration_s,
-  };
-}
-
-/** An explicit choice of "In the background" or "Automatic" — not "Default" (inherits the agent setting) or "Blocking". */
-function isNonBlocking(mode: ModeDraft): boolean {
-  return mode === "background" || mode === "auto";
-}
-
-/** The api validator's exact wording (`config_service.py::tool_execution_issues`). */
-function silentReplyConflictMessage(name: string): string {
-  return `'${name || "this tool"}' has silent_reply on, which would swallow its background announcement; turn one of them off`;
-}
 
 /**
  * Best-effort hostname extraction for pre-filling `allowed_hosts` from a URL
@@ -343,9 +263,13 @@ export function HttpToolEditorDialog({
                   />
                 </Field>
                 <div className="sm:col-span-2">
-                  <Field label="Description (shown to the model)" htmlFor={`${uid}-description`}>
+                  {/* `${uid}-description-field`, not `${uid}-description` — that id is the
+                      dialog's own `DialogDescription` (`aria-describedby`), and a duplicate
+                      id would make this field's label bind to the wrong (non-labellable)
+                      element. */}
+                  <Field label="Description (shown to the model)" htmlFor={`${uid}-description-field`}>
                     <Textarea
-                      id={`${uid}-description`}
+                      id={`${uid}-description-field`}
                       rows={2}
                       value={draft.description}
                       onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
@@ -466,33 +390,13 @@ export function HttpToolEditorDialog({
                     onChange={(e) => setDraft((d) => ({ ...d, max_result_chars: Number(e.target.value) }))}
                   />
                 </Field>
-                <Field
-                  label="Runs"
-                  htmlFor={`${uid}-execution-mode`}
-                  error={executionConflictMessage}
-                  hint={
-                    isRead
-                      ? 'Left at "Agent default", this follows the agent\'s "Read tools run" setting (Instructions & voice → Conversation).'
-                      : 'This tool changes something, so "Agent default" always blocks; choose a mode below to change that.'
-                  }
-                >
-                  <Select
-                    value={draft.execution.mode}
-                    onValueChange={(v) =>
-                      setDraft((d) => ({ ...d, execution: { ...d.execution, mode: v as ModeDraft } }))
-                    }
-                  >
-                    <SelectTrigger id={`${uid}-execution-mode`} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Agent default</SelectItem>
-                      <SelectItem value="blocking">Blocking</SelectItem>
-                      <SelectItem value="background">In the background</SelectItem>
-                      <SelectItem value="auto">Automatic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                <RunsField
+                  uid={uid}
+                  mode={draft.execution.mode}
+                  onChange={(mode) => setDraft((d) => ({ ...d, execution: { ...d.execution, mode } }))}
+                  isRead={isRead}
+                  errorMessage={executionConflictMessage}
+                />
                 <Field
                   inline
                   label="Silent reply"
@@ -511,164 +415,12 @@ export function HttpToolEditorDialog({
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Execution</h3>
-              <p className="text-[0.8125rem] text-muted-foreground">
-                How this tool behaves while it runs. &quot;Blocking&quot; waits for the result before the agent
-                replies; the other modes let the agent keep talking.
-              </p>
-              {!isRead ? (
-                <p className="text-[0.8125rem] text-muted-foreground">
-                  This tool changes something; the agent asks before running it twice.
-                </p>
-              ) : null}
-              {isNonBlocking(draft.execution.mode) ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field
-                    label="What the agent says first"
-                    htmlFor={`${uid}-execution-announce`}
-                    optional
-                    hint='Its own words; default "Working on <name>."'
-                  >
-                    <Input
-                      id={`${uid}-execution-announce`}
-                      value={draft.execution.announce}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, execution: { ...d.execution, announce: e.target.value } }))
-                      }
-                      placeholder="Fetching that now."
-                    />
-                  </Field>
-                  {draft.execution.mode === "auto" ? (
-                    <Field
-                      label="Switches to background after"
-                      htmlFor={`${uid}-execution-threshold`}
-                      hint="Milliseconds."
-                    >
-                      <Input
-                        id={`${uid}-execution-threshold`}
-                        type="number"
-                        inputMode="numeric"
-                        value={draft.execution.auto_threshold_ms}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            execution: { ...d.execution, auto_threshold_ms: Number(e.target.value) },
-                          }))
-                        }
-                      />
-                    </Field>
-                  ) : null}
-                  <Field
-                    label="Can be cancelled"
-                    htmlFor={`${uid}-execution-cancellable`}
-                    hint="Default: read tools can be cancelled; tools that change something can't."
-                  >
-                    <Select
-                      value={draft.execution.cancellable}
-                      onValueChange={(v) =>
-                        setDraft((d) => ({
-                          ...d,
-                          execution: { ...d.execution, cancellable: v as ExecutionDraft["cancellable"] },
-                        }))
-                      }
-                    >
-                      <SelectTrigger id={`${uid}-execution-cancellable`} className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Default</SelectItem>
-                        <SelectItem value="true">Yes</SelectItem>
-                        <SelectItem value="false">No</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field
-                    label="Repeated calls"
-                    htmlFor={`${uid}-execution-duplicate`}
-                    hint="Default: reject a repeat of a read tool already running; ask again before repeating anything that changes something."
-                  >
-                    <Select
-                      value={draft.execution.on_duplicate}
-                      onValueChange={(v) =>
-                        setDraft((d) => ({
-                          ...d,
-                          execution: { ...d.execution, on_duplicate: v as ExecutionDraft["on_duplicate"] },
-                        }))
-                      }
-                    >
-                      <SelectTrigger id={`${uid}-execution-duplicate`} className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Default</SelectItem>
-                        <SelectItem value="reject">Reject the repeat</SelectItem>
-                        <SelectItem value="confirm">Ask again to confirm</SelectItem>
-                        <SelectItem value="replace">Replace the running call</SelectItem>
-                        <SelectItem value="allow">Allow it</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="Give up after" htmlFor={`${uid}-execution-max-duration`} hint="Seconds.">
-                    <Input
-                      id={`${uid}-execution-max-duration`}
-                      type="number"
-                      inputMode="numeric"
-                      value={draft.execution.max_duration_s}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          execution: { ...d.execution, max_duration_s: Number(e.target.value) },
-                        }))
-                      }
-                    />
-                  </Field>
-                </div>
-              ) : null}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <Field
-                    label="Fillers while waiting"
-                    htmlFor={`${uid}-execution-fillers`}
-                    optional
-                    hint="One phrase per line, up to five. Spoken as written; needs a voice."
-                  >
-                    <Textarea
-                      id={`${uid}-execution-fillers`}
-                      rows={3}
-                      className="text-sm"
-                      value={draft.execution.fillersText}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, execution: { ...d.execution, fillersText: e.target.value } }))
-                      }
-                      placeholder={"Still checking.\nAlmost there."}
-                    />
-                  </Field>
-                </div>
-                <Field label="First filler after" htmlFor={`${uid}-execution-filler-delay`} hint="Seconds.">
-                  <Input
-                    id={`${uid}-execution-filler-delay`}
-                    type="number"
-                    inputMode="numeric"
-                    value={draft.execution.filler_delay_s}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, execution: { ...d.execution, filler_delay_s: Number(e.target.value) } }))
-                    }
-                  />
-                </Field>
-                <Field label="Then every" htmlFor={`${uid}-execution-filler-interval`} hint="Seconds.">
-                  <Input
-                    id={`${uid}-execution-filler-interval`}
-                    type="number"
-                    inputMode="numeric"
-                    value={draft.execution.filler_interval_s}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        execution: { ...d.execution, filler_interval_s: Number(e.target.value) },
-                      }))
-                    }
-                  />
-                </Field>
-              </div>
+              <ExecutionFields
+                uid={uid}
+                draft={draft.execution}
+                onChange={(execution) => setDraft((d) => ({ ...d, execution }))}
+                isRead={isRead}
+              />
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">

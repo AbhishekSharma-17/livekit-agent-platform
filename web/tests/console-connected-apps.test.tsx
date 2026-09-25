@@ -85,6 +85,7 @@ function stubApi(overrides: (call: Call) => { status: number; body: unknown } | 
 }
 
 let latest: AgentEditorForm | null = null;
+let latestDirty: boolean | null = null;
 
 function Harness({ agent = AGENT }: { agent?: AgentOut }) {
   const client = React.useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
@@ -94,6 +95,7 @@ function Harness({ agent = AGENT }: { agent?: AgentOut }) {
     mode: "onChange",
   });
   latest = form.watch();
+  latestDirty = form.formState.isDirty;
   return (
     <QueryClientProvider client={client}>
       <FormProvider {...form}>
@@ -290,6 +292,101 @@ describe("ConnectedAppsCard", () => {
     expect(readCheckbox.getAttribute("aria-checked")).toBe("true");
     expect(destructiveCheckbox.getAttribute("aria-checked")).toBe("false");
   });
+
+  describe("R-V5-9: reviewed_actions, not a client-side reseed", () => {
+    it('shows "Blocked until you review it" for an unreviewed destructive action, and never writes denied_actions just from mounting or picking a mode', async () => {
+      stubApi((call) => {
+        if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture(), ACTION_DELETE_REPO]) };
+        return undefined;
+      });
+      // An agent already in "server" mode: the destructive list renders
+      // without any user interaction, so this isolates "just opening the
+      // tab" (mount) from a mode pick, which is itself a real edit.
+      const agentInServerMode = {
+        ...AGENT,
+        config: { ...AGENT.config, tools: { apps: { mode: "server", allowed_toolkits: ["github"] } } },
+      } as unknown as AgentOut;
+      render(<Harness agent={agentInServerMode} />);
+      await screen.findByText("Connected apps", { selector: "h2" });
+
+      await screen.findByRole("checkbox", { name: /Delete a repository/ });
+      expect(screen.getByText("Blocked until you review it")).toBeTruthy();
+      // No client-side seed (ask #47's bug): `denied_actions` stays exactly
+      // what was loaded — empty — and merely opening the tab never marks
+      // the form dirty (the card's own acceptance bullet).
+      expect(latest?.config.tools.apps?.denied_actions ?? []).toEqual([]);
+      expect(latestDirty).toBe(false);
+    });
+
+    it("ticking an unreviewed destructive action writes reviewed_actions and clears any stale denied_actions entry", async () => {
+      stubApi((call) => {
+        if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture(), ACTION_DELETE_REPO]) };
+        return undefined;
+      });
+      // A pre-V5-49 agent whose old client-side seed left a stale deny entry
+      // for an action the builder never actually reviewed.
+      const agentWithStaleDeny = {
+        ...AGENT,
+        config: {
+          ...AGENT.config,
+          tools: { apps: { mode: "server", allowed_toolkits: ["github"], denied_actions: ["GITHUB_DELETE_REPO"] } },
+        },
+      } as unknown as AgentOut;
+      render(<Harness agent={agentWithStaleDeny} />);
+      await screen.findByText("Connected apps", { selector: "h2" });
+
+      const destructiveCheckbox = await screen.findByRole("checkbox", { name: /Delete a repository/ });
+      expect(destructiveCheckbox.getAttribute("aria-checked")).toBe("false");
+      fireEvent.click(destructiveCheckbox);
+
+      await waitFor(() => expect(latest?.config.tools.apps?.reviewed_actions ?? []).toContain("GITHUB_DELETE_REPO"));
+      expect(latest?.config.tools.apps?.denied_actions ?? []).not.toContain("GITHUB_DELETE_REPO");
+      expect(screen.queryByText("Blocked until you review it")).toBeNull();
+    });
+
+    it("mounting with reviewed_actions already set shows the action checked, with no badge", async () => {
+      stubApi((call) => {
+        if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture(), ACTION_DELETE_REPO]) };
+        return undefined;
+      });
+      const reviewedAgent = {
+        ...AGENT,
+        config: {
+          ...AGENT.config,
+          tools: { apps: { mode: "server", allowed_toolkits: ["github"], reviewed_actions: ["GITHUB_DELETE_REPO"] } },
+        },
+      } as unknown as AgentOut;
+      render(<Harness agent={reviewedAgent} />);
+      await screen.findByText("Connected apps", { selector: "h2" });
+
+      const destructiveCheckbox = await screen.findByRole("checkbox", { name: /Delete a repository/ });
+      expect(destructiveCheckbox.getAttribute("aria-checked")).toBe("true");
+      expect(screen.queryByText("Blocked until you review it")).toBeNull();
+      expect(latestDirty).toBe(false);
+    });
+
+    it("unticking a reviewed (allowed) destructive action writes denied_actions, leaving reviewed_actions untouched", async () => {
+      stubApi((call) => {
+        if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture(), ACTION_DELETE_REPO]) };
+        return undefined;
+      });
+      const reviewedAgent = {
+        ...AGENT,
+        config: {
+          ...AGENT.config,
+          tools: { apps: { mode: "server", allowed_toolkits: ["github"], reviewed_actions: ["GITHUB_DELETE_REPO"] } },
+        },
+      } as unknown as AgentOut;
+      render(<Harness agent={reviewedAgent} />);
+      await screen.findByText("Connected apps", { selector: "h2" });
+
+      const destructiveCheckbox = await screen.findByRole("checkbox", { name: /Delete a repository/ });
+      fireEvent.click(destructiveCheckbox);
+
+      await waitFor(() => expect(latest?.config.tools.apps?.denied_actions ?? []).toContain("GITHUB_DELETE_REPO"));
+      expect(latest?.config.tools.apps?.reviewed_actions ?? []).toContain("GITHUB_DELETE_REPO");
+    });
+  });
 });
 
 describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_asks.md #25)", () => {
@@ -324,7 +421,18 @@ describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_
           max_tool_steps: 3,
           execution_default: "blocking",
           builtin_execution: {},
-          apps: { mode: "server", allowed_toolkits: ["github"], denied_actions: [], router: { search: true, execute: true, manage_connections: false } },
+          apps: {
+            mode: "server",
+            allowed_toolkits: ["github"],
+            denied_actions: [],
+            // R-V5-9 (V5-50): `reviewed_actions` must survive the same
+            // `z.custom<AppsMode>()` passthrough `denied_actions` already
+            // does — `AppsMode` gained the field additively (V5-49) and
+            // `z.custom` with no predicate never strips nested keys, so no
+            // `lib/schemas.ts` edit was needed; this pins that.
+            reviewed_actions: ["GITHUB_DELETE_REPO"],
+            router: { search: true, execute: true, manage_connections: false },
+          },
         },
         knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
         pack_settings: {},
@@ -339,6 +447,7 @@ describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_
     expect(result.errors).toEqual({});
     expect((result.values as AgentEditorForm).config.tools.apps?.mode).toBe("server");
     expect((result.values as AgentEditorForm).config.tools.apps?.allowed_toolkits).toEqual(["github"]);
+    expect((result.values as AgentEditorForm).config.tools.apps?.reviewed_actions).toEqual(["GITHUB_DELETE_REPO"]);
   });
 });
 
@@ -395,6 +504,10 @@ function stubToolsListApi(tools: ToolOut[]) {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      // `useWriteAccess`'s floor gates `ToolActions`' Edit/Delete buttons
+      // (`disabled={!canWrite}`) — without a workspace role here they stay
+      // disabled and a `fireEvent.click` on them never opens a dialog.
+      if (url.includes("/auth/me")) return jsonResponse({ user: { id: "u1" }, workspaces: [{ id: "ws1", name: "WS", role: "admin", slug: "ws" }] });
       if (url.includes("/providers")) return jsonResponse(PROVIDERS);
       if (url.includes("/tool-providers/composio/connections")) return jsonResponse(connectionPage([connectionFixture({ id: "conn_github", toolkit: "googlecalendar", toolkit_name: "Google Calendar" })]));
       if (url.includes("/tools")) return jsonResponse(page);
@@ -483,5 +596,18 @@ describe("ToolsList — read-only rows for Composio-origin entries (docs/v5/_ask
     expect(table.getByText("MCP")).toBeTruthy();
     expect(table.getByRole("button", { name: "Edit my_mcp_server" })).toBeTruthy();
     expect(table.getByRole("button", { name: "Delete my_mcp_server" })).toBeTruthy();
+  });
+
+  it("Edit on a provider-kind row opens the app-action editor, never the MCP one (ask #46, R-V5-8) — the reachable path: tools-list.tsx's ToolActions", async () => {
+    stubToolsListApi([providerTool()]);
+    renderToolsList();
+
+    await waitFor(() => expect(tableScope().getByText("googlecalendar_find_free_slots")).toBeTruthy());
+    const editButton = tableScope().getByRole("button", { name: "Edit googlecalendar_find_free_slots" }) as HTMLButtonElement;
+    await waitFor(() => expect(editButton.disabled).toBe(false));
+    fireEvent.click(editButton);
+
+    expect(await screen.findByText("Edit App action")).toBeTruthy();
+    expect(screen.queryByText("Edit MCP server")).toBeNull();
   });
 });

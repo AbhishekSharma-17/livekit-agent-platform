@@ -7,6 +7,18 @@
       "title": "As Of",
       "type": "string"
     },
+    "free_tier_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Free Tier Note"
+    },
     "model": {
       "anyOf": [
         {
@@ -27,6 +39,18 @@
       "title": "Source Url",
       "type": "string"
     },
+    "tier_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tier Note"
+    },
     "unit": {
       "enum": [
         "tokens_in",
@@ -35,7 +59,13 @@
         "audio_s_out",
         "chars",
         "minutes",
-        "images"
+        "images",
+        "text_tokens_in",
+        "text_tokens_out",
+        "audio_tokens_in",
+        "audio_tokens_out",
+        "cached_tokens_in",
+        "requests"
       ],
       "title": "Unit",
       "type": "string"

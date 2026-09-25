@@ -4,11 +4,14 @@
 whenever a tool binds a ``composio`` key or a connected-app row. Two bindings
 are allowed:
 
-* an ``mcp`` definition pointed at Composio (``https`` on the Composio host;
-  V5-47 switches this to its ``origin.provider == "composio"`` tag) may bind
-  the ``composio`` key for its ``x-api-key`` header;
+* an ``mcp`` definition tagged ``origin.provider == "composio"`` (the app
+  server or tool finder the api provisions, V5-47) whose url is ``https`` on
+  the Composio host may bind the ``composio`` key for its ``x-api-key``
+  header;
 * a ``provider`` definition (V5-47) may bind the ``composio`` key as
-  ``credential_id`` and a connected-app row as ``connection_id``.
+  ``credential_id`` and a connected-app row as ``connection_id``; its
+  ``subject`` must be the connection's, and a connection made for one agent
+  serves only that agent's tools (:func:`provider_connection_problem`).
 
 Anything else — above all an ``http`` tool, which could send the key to any
 host — is refused.
@@ -64,8 +67,8 @@ def composio_binding_problem(
     if kind == "mcp" and field == "credential_id" and provider_id == COMPOSIO_PROVIDER_ID:
         origin = getattr(definition, "origin", None)
         origin_provider = getattr(origin, "provider", None) if origin is not None else None
-        if origin_provider not in (None, "composio"):
-            return "only a Composio app server may use the Composio key"
+        if origin_provider != "composio":
+            return "only a Composio app server (origin provider 'composio') may use the Composio key"
         if not is_composio_url(str(getattr(definition, "url", ""))):
             return f"the Composio key may only be sent to https://{COMPOSIO_HOST}"
         return None
@@ -74,4 +77,31 @@ def composio_binding_problem(
     return "the Composio key can only be used by Composio app servers and actions, never an HTTP tool"
 
 
-__all__ = ["composio_binding_problem", "is_composio_credential", "is_composio_url"]
+def provider_connection_problem(
+    *, definition_subject: str, connection_subject: str, tool_agent_id: str | None
+) -> str | None:
+    """Why a ``provider`` tool may not use a connection, or ``None`` (checklist §4 item 6).
+
+    Args:
+        definition_subject: The tool's ``subject``.
+        connection_subject: The connection row's subject (``ws:<id>`` or ``agent:<id>``).
+        tool_agent_id: The tool row's owning agent (``None`` = shared).
+
+    Returns:
+        A value-free reason, or ``None``.
+    """
+    if definition_subject != connection_subject:
+        return "the tool's subject must be its connection's subject"
+    if connection_subject.startswith("agent:"):
+        owner = connection_subject.removeprefix("agent:")
+        if tool_agent_id != owner:
+            return "an app connected for one agent can only be used by that agent's own tools"
+    return None
+
+
+__all__ = [
+    "composio_binding_problem",
+    "is_composio_credential",
+    "is_composio_url",
+    "provider_connection_problem",
+]

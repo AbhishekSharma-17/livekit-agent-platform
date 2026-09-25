@@ -17,12 +17,14 @@ import { usePacks, useProviders, useTools } from "@/components/console/lib/api-h
 import { BUILTIN_TOOLS, CAPABILITY_META, type CapabilityKey } from "@/components/console/lib/constants";
 import { panelMeta } from "@/components/shared/panel-meta";
 import { useTemplate } from "@/components/console/agents/create/use-templates";
+import { formatUsd } from "@/components/console/lib/cost-hooks";
 import type { AgentEditorForm, ProviderRefForm } from "@/components/console/lib/schemas";
 import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { useEditorContext } from "./editor-context";
+import { CostEstimateDialog } from "./cost-estimate-dialog";
+import { useDraftCostEstimate, useEditorContext } from "./editor-context";
 import { publicUrl } from "./publish-popover";
 import type { ResolvedEditorSlots } from "./registry";
 import { connectionTypeLabel, useAgentConnection } from "./use-connection";
@@ -73,11 +75,15 @@ const RailNavigateContext = React.createContext<(() => void) | undefined>(undefi
 interface RailRowProps {
   label: string;
   section?: string;
+  /** An action row (e.g. the Cost row opening the estimate dialog) instead of a section link. */
+  onClick?: () => void;
+  /** Accessible name for an `onClick` row (a `section` row derives its own). */
+  actionLabel?: string;
   children: React.ReactNode;
 }
 
-/** A labelled rail row; with `section` the whole row is a button to that section. */
-function RailRow({ label, section, children }: RailRowProps) {
+/** A labelled rail row; with `section` (or `onClick`) the whole row is a button. */
+function RailRow({ label, section, onClick, actionLabel, children }: RailRowProps) {
   const ctx = useEditorContext();
   const onNavigate = React.useContext(RailNavigateContext);
   const canLink = Boolean(section && ctx?.sections.some((s) => s.id === section));
@@ -87,6 +93,23 @@ function RailRow({ label, section, children }: RailRowProps) {
       <span className="min-w-0 text-[0.8125rem] leading-[1.125rem]">{children}</span>
     </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={actionLabel ?? label}
+        className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--dur-2) ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      >
+        {body}
+        <Icon
+          as={ChevronRightIcon}
+          size="sm"
+          className="absolute top-3.5 right-3 text-muted-foreground opacity-0 transition-opacity duration-(--dur-2) group-hover/rail-row:opacity-100 group-focus-visible/rail-row:opacity-100"
+        />
+      </button>
+    );
+  }
   if (!canLink || !section || !ctx) {
     return <div className="flex flex-col gap-1 px-4 py-3">{body}</div>;
   }
@@ -254,6 +277,8 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
   const toolsQuery = useTools(agent.id);
   const connectionQuery = useAgentConnection(agent.connection_id);
   const descriptionId = React.useId();
+  const costEstimate = useDraftCostEstimate();
+  const [costDialogOpen, setCostDialogOpen] = React.useState(false);
 
   const providers = providersQuery.data?.providers ?? [];
   const pack = packsQuery.data?.items.find((item) => item.manifest.id === agent.pack_id)?.manifest;
@@ -330,6 +355,27 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
             ))}
           </ol>
         </RailRow>
+        <RailRow
+          label="Cost"
+          onClick={() => setCostDialogOpen(true)}
+          actionLabel="Cost: open the cost estimate"
+        >
+          {costEstimate.estimate?.per_minute_usd ? (
+            <span className="flex flex-col gap-0.5">
+              <span>
+                ≈ {formatUsd(costEstimate.estimate.per_minute_usd.mid) ?? "—"}/min · estimate
+              </span>
+              <span className="text-xs text-muted-foreground">
+                typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? "—"}–
+                {formatUsd(costEstimate.estimate.per_minute_usd.high) ?? "—"}
+              </span>
+            </span>
+          ) : costEstimate.isLoading ? (
+            <span className="text-muted-foreground">Estimating…</span>
+          ) : (
+            <span className="text-muted-foreground">No price set yet</span>
+          )}
+        </RailRow>
         <RailRow label="Capabilities" section="panel">
           <ul className="flex flex-wrap gap-1.5">
             {CAPABILITY_KEYS.map((key) => {
@@ -405,6 +451,7 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
       </div>
     </aside>
     </div>
+    <CostEstimateDialog open={costDialogOpen} onOpenChange={setCostDialogOpen} />
     </RailNavigateContext.Provider>
   );
 }

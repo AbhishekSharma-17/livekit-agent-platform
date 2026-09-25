@@ -9,6 +9,7 @@ from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.providers import ModelCapabilities
 from lkap_contracts.telephony import TelephonyConfig
+from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
 from lkap_contracts.ui_protocol import BlockSpec
 
@@ -39,6 +40,7 @@ ProviderSlot = Literal[
 __all__ = [
     "AgentConfig",
     "AgentLimits",
+    "AppsMode",
     "AvatarOptions",
     "CapabilitiesConfig",
     "ConnectionInfo",
@@ -127,6 +129,9 @@ class ToolsConfig(BaseModel):
     in ``BACKGROUNDABLE_BUILTINS``. Never reaches writes, MCP tools, telephony, forms or flow edges."""
     builtin_execution: dict[str, ToolExecution] = {}
     """Per built-in execution settings, keyed by a name in ``BACKGROUNDABLE_BUILTINS``."""
+    apps: AppsMode = AppsMode()
+    """Connected apps (docs/v5/COMPOSIO.md D-V5-C6): ``off`` by default. The api provisions the
+    app server or tool finder on save and attaches it through ``tool_ids``."""
 
 
 class KnowledgeConfig(BaseModel):

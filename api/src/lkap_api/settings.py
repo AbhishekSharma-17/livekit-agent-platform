@@ -18,6 +18,11 @@ from lkap_api.db.constants import DEFAULT_OWNER_EMAIL
 #: Minimum length of a static secret in ``LKAP_ENV=prod`` (REVIEW-FINAL F-08).
 MIN_SECRET_LENGTH = 32
 
+#: V5-01 (K §2 P0-7): the local knowledge-base models. Defaults only — the
+#: running values are ``LKAP_EMBED_MODEL`` and ``LKAP_RERANK_MODEL``.
+DEFAULT_EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+DEFAULT_RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
+
 
 def weak_secret_problem(value: str) -> str | None:
     """Return why a static secret is too weak for production, or ``None``.
@@ -80,6 +85,14 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
     embedder: str = "fastembed"
+    #: `LKAP_EMBED_MODEL`: the fastembed model `LKAP_EMBEDDER=fastembed` runs.
+    #: A knowledge base records the model and its width when it is created and
+    #: refuses queries from any other (`422 kb_embedder_mismatch`), so changing
+    #: this does not silently mix vectors of two models.
+    embed_model: str = DEFAULT_EMBED_MODEL
+    #: `LKAP_RERANK_MODEL`: the local cross-encoder the knowledge search can
+    #: rerank with (fastembed `TextCrossEncoder`; used from V5-04).
+    rerank_model: str = DEFAULT_RERANK_MODEL
     bootstrap_credentials_json: str | None = None
     bootstrap_owner_email: str = DEFAULT_OWNER_EMAIL
     bootstrap_owner_password: str | None = None

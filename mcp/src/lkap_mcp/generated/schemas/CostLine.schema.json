@@ -43,6 +43,24 @@
       "default": null,
       "title": "Note"
     },
+    "price_source": {
+      "anyOf": [
+        {
+          "enum": [
+            "workspace",
+            "live",
+            "table"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Which price source priced the line (null when unpriced).",
+      "title": "Price Source"
+    },
     "provider_id": {
       "title": "Provider Id",
       "type": "string"
@@ -67,7 +85,13 @@
         "audio_s_out",
         "chars",
         "minutes",
-        "images"
+        "images",
+        "text_tokens_in",
+        "text_tokens_out",
+        "audio_tokens_in",
+        "audio_tokens_out",
+        "cached_tokens_in",
+        "requests"
       ],
       "title": "Unit",
       "type": "string"
@@ -87,6 +111,36 @@
       ],
       "default": null,
       "title": "Unit Price Usd"
+    },
+    "vendor_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What was reconciled, e.g. \"12 generations\".",
+      "title": "Vendor Ref"
+    },
+    "vendor_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vendor's own charge for this line, when reconciled.",
+      "title": "Vendor Usd"
     }
   },
   "required": [

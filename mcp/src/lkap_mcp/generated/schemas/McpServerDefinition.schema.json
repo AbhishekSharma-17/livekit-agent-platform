@@ -1,5 +1,49 @@
 {
   "$defs": {
+    "McpServerOrigin": {
+      "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "kind": {
+          "enum": [
+            "server",
+            "router"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "remote_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Remote Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "remote_id"
+      ],
+      "title": "McpServerOrigin",
+      "type": "object"
+    },
     "ToolExecution": {
       "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
       "properties": {
@@ -166,6 +210,17 @@
     "name": {
       "title": "Name",
       "type": "string"
+    },
+    "origin": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/McpServerOrigin"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "sse_read_timeout_s": {
       "default": 300,

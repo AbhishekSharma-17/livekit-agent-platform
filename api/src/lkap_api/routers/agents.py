@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Query, Response, status
 from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.api_models import (
@@ -29,6 +29,8 @@ from lkap_contracts.api_models import (
     AgentPublicOut,
     AgentUpdate,
     ConfigVersionOut,
+    CostEstimate,
+    CostEstimateRequest,
     Issue,
     Page,
     ValidationResult,
@@ -39,7 +41,7 @@ from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext
+from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext, require
 from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import connection_context_for, validate_in_db
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
@@ -60,10 +62,12 @@ from lkap_api.kb.store import get_lancedb_store
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
+from lkap_api.routers.costs import estimate_for_request
 from lkap_api.settings import Settings
 from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
 from lkap_api.templates.router import resolve_template
 from lkap_api.templates.seed import apply_tool_seeds, seed_from_template
+from lkap_api.tool_providers.provisioning import AppsProvisionerDep  # V5-47
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -543,7 +547,12 @@ def _raise_template_with_config() -> None:
     ),
 )
 async def create_agent(
-    payload: AgentCreate, db: DbDep, settings: SettingsDep, vault: VaultDep, ctx: AdminCtxDep
+    payload: AgentCreate,
+    db: DbDep,
+    settings: SettingsDep,
+    vault: VaultDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
 ) -> AgentOut:
     """Create an agent from a starter template, an explicit config or its pack's defaults.
 
@@ -607,6 +616,9 @@ async def create_agent(
             db, config, workspace_id=ctx.workspace_id, connection_id=connection_id, pack_id=pack_id
         )
     )
+    # V5-47 (COMPOSIO.md D-V5-C11): provision the app server / tool finder of `tools.apps`.
+    config = await apps.on_save(db, ctx, row, config)
+    row.config = config.model_dump(mode="json")
     template_id = template.id if template is not None else None
     if template_id is None and payload.config is None:
         template_id = derived_template_id(pack_id)
@@ -700,7 +712,13 @@ async def get_agent(
         "derived from `config.flow` (nodes ⇒ `flow`); a `mode` that disagrees is a 422."
     ),
 )
-async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: AdminCtxDep) -> AgentOut:
+async def update_agent(
+    agent_id: str,
+    payload: AgentUpdate,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
+) -> AgentOut:
     """Apply a partial update to an agent."""
     row = await load_scoped_agent(db, ctx, agent_id)
     # R-V2-12: `mode` follows `config.flow`; a disagreeing `mode` is a 422 before anything changes.
@@ -728,6 +746,8 @@ async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: Admi
                 pack_id=row.pack_id,
             )
         )
+        # V5-47 (COMPOSIO.md D-V5-C11): provision the app server / tool finder of `tools.apps`.
+        payload.config = await apps.on_save(db, ctx, row, payload.config)
         new_config: dict[str, Any] = payload.config.model_dump(mode="json")
         row.mode = derived_mode(payload.config)
         if new_config != row.config:
@@ -761,6 +781,7 @@ async def delete_agent(
     agent_id: str,
     db: DbDep,
     ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
     purge: bool = Query(default=False, description="Cascade-delete sessions of an archived agent"),
 ) -> Response:
     """Delete an agent that has no sessions, or purge an archived one that does.
@@ -778,11 +799,13 @@ async def delete_agent(
         # FK, which would otherwise raise the same `IntegrityError` this
         # branch exists to avoid.
         await db.execute(delete(SessionRow).where(SessionRow.agent_id == row.id))
+    app_sessions = await apps.before_delete(db, ctx, row)  # V5-47
     await db.delete(row)
     try:
         await db.flush()
     except IntegrityError as exc:
         raise ConflictError("agent still has sessions; delete them first, or archive and purge it") from exc
+    await apps.after_delete(db, ctx, row.id, app_sessions)  # V5-47: its Composio sessions, best effort
     log.info("agent_deleted", agent_id=agent_id, purged=purge)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -949,3 +972,32 @@ async def validate_agent(agent_id: str, db: DbDep, ctx: AdminCtxDep) -> Validati
         connection_id=row.connection_id,
         pack_id=row.pack_id,
     )
+
+
+@router.post(
+    "/{agent_id}/cost-estimate",
+    response_model=CostEstimate,
+    summary="Estimate this agent's cost per minute",
+    description=(
+        "An **estimate** at list prices (never a bill) of what the agent's saved config costs per "
+        "minute and per call; the same handler as `POST /v1/cost-estimates` with `agent_id` set. "
+        "The body is optional: assumption overrides, the channel, workspace averages."
+    ),
+)
+async def estimate_agent_cost(
+    agent_id: str,
+    db: DbDep,
+    settings: SettingsDep,
+    ctx: Annotated[WorkspaceContext, Depends(require("viewer", "agents:read"))],
+    payload: Annotated[CostEstimateRequest | None, Body()] = None,
+) -> CostEstimate:
+    """Estimate the agent's saved configuration (read-only; nothing is stored).
+
+    Raises:
+        UnprocessableEntityError: The body names a template or a draft config.
+    """
+    body = payload or CostEstimateRequest()
+    if body.template_id is not None or body.config is not None:
+        raise UnprocessableEntityError("this route estimates the agent in the path; drop template_id/config")
+    request = body.model_copy(update={"agent_id": agent_id})
+    return await estimate_for_request(db, ctx, settings, request)

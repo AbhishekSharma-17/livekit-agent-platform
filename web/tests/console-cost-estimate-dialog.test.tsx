@@ -9,6 +9,7 @@ import { FormProvider, useForm } from "react-hook-form";
 
 import { CostEstimateDialog } from "@/components/console/agents/editor/cost-estimate-dialog";
 import { EditorContextProvider, type EditorContextValue } from "@/components/console/agents/editor/editor-context";
+import { resetEstimateSettings } from "@/components/console/lib/cost-hooks";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { AgentOut } from "@/contracts/lkap-contracts";
 
@@ -42,6 +43,12 @@ beforeEach(() => {
     },
   );
   Element.prototype.scrollIntoView = vi.fn();
+  // Every `DialogHarness` in this file estimates the same fixed agent id —
+  // without this, "Use my workspace's averages" flipped on in one test
+  // would still read as on in the next (the settings cache/localStorage is
+  // module-level and per-agent, by design, so every surface reading the
+  // same agent shares one object).
+  resetEstimateSettings();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -141,7 +148,19 @@ function stubFetch(role: "admin" | "builder", sessionsSampled = 3) {
       return { ok: true, status: 200, json: async () => ({ assumptions: COST_ESTIMATE.assumptions, sessions_sampled: sessionsSampled }) } as Response;
     }
     if (url.includes("/cost-estimates") && method === "POST") {
-      return { ok: true, status: 200, json: async () => COST_ESTIMATE } as Response;
+      // Mirrors R-V4-46: once the request carries `workspace_averages:
+      // true`, the answer's assumption comes back `source: "workspace"`
+      // with the workspace's own value, not the default.
+      const workspaceAverages = (body as { workspace_averages?: boolean } | undefined)?.workspace_averages === true;
+      const estimate = workspaceAverages
+        ? {
+            ...COST_ESTIMATE,
+            assumptions: COST_ESTIMATE.assumptions.map((a) =>
+              a.key === "agent_talk_ratio" ? { ...a, value: 0.52, source: "workspace" as const } : a,
+            ),
+          }
+        : COST_ESTIMATE;
+      return { ok: true, status: 200, json: async () => estimate } as Response;
     }
     if (url.includes("/workspace/prices")) {
       return { ok: true, status: 200, json: async () => ({ prices: [] }) } as Response;
@@ -238,7 +257,7 @@ describe("CostEstimateDialog", () => {
     );
   });
 
-  it("disables 'Use my workspace's averages' under 10 sessions and posts workspace_averages once enabled", async () => {
+  it("disables 'Use my workspace's averages' under 10 sessions, posts workspace_averages once enabled, and marks the assumption's source", async () => {
     const { fetch, calls } = stubFetch("admin", 12);
     vi.stubGlobal("fetch", fetch);
     withClient(<DialogHarness />);
@@ -253,6 +272,10 @@ describe("CostEstimateDialog", () => {
       );
       expect(posted).toBeTruthy();
     });
+    // The response's `Assumption.source: "workspace"` is visible, and the
+    // field itself now shows the workspace's own value (not the default).
+    await waitFor(() => expect(within(dialog).getByText("Your workspace's average")).toBeTruthy());
+    expect((await within(dialog).findByLabelText("How much the agent talks") as HTMLInputElement).value).toBe("0.52");
   });
 
   it("needs-10-sessions notice and a disabled toggle when the workspace has fewer", async () => {

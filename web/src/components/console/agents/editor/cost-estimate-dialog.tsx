@@ -219,13 +219,14 @@ function AssumptionField({
   const id = `cost-estimate-assumption-${assumption.key}`;
   const [text, setText] = React.useState(String(value ?? assumption.value));
   const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hasOverride = value !== undefined;
 
   React.useEffect(() => {
-    setText(String(value ?? assumption.value));
-    // Only re-sync from the source when the *identity* of what drives it changes,
-    // not on every keystroke this field itself just made.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assumption.key]);
+    // Only track the server's own value while the viewer hasn't overridden
+    // this field — otherwise "Use my workspace's averages" changing the
+    // *default* (0.45 → 0.52) would silently overwrite what they just typed.
+    if (!hasOverride) setText(String(assumption.value));
+  }, [assumption.key, assumption.value, hasOverride]);
 
   function commit(next: string) {
     setText(next);
@@ -247,6 +248,11 @@ function AssumptionField({
         onChange={(event) => commit(event.target.value)}
         className="h-9"
       />
+      {assumption.source !== "default" ? (
+        <p className="text-xs text-muted-foreground">
+          {assumption.source === "workspace" ? "Your workspace's average" : "Edited for this estimate"}
+        </p>
+      ) : null}
     </div>
   );
 }

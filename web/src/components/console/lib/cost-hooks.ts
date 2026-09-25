@@ -164,6 +164,32 @@ function writeSettings(scope: string, next: EstimateSettings): void {
 }
 
 /**
+ * Clears one scope's cached/stored estimate settings, or every scope when
+ * omitted. Exported for tests: the cache is module-level (by design, so
+ * every surface reading the same agent shares one object), which means
+ * settings otherwise leak between `it()` blocks in the same test file that
+ * reuse an agent id — call this in `beforeEach`.
+ */
+export function resetEstimateSettings(scope?: string): void {
+  if (scope) {
+    settingsCache.delete(scope);
+    try {
+      window.localStorage.removeItem(settingsStorageKey(scope));
+    } catch {
+      // ignore
+    }
+    return;
+  }
+  const scopes = [...settingsCache.keys()];
+  settingsCache.clear();
+  try {
+    for (const key of scopes) window.localStorage.removeItem(settingsStorageKey(key));
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * The estimate dialog's assumption overrides, "Use my workspace's averages"
  * and channel, shared by every surface that estimates the same agent (or
  * draft, under `"draft"`) so "the header figure equals the rail's" holds by

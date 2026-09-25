@@ -185,6 +185,51 @@ describe("ModelCombobox — groups", () => {
   });
 });
 
+describe("ModelCombobox — trailing price figures (docs/v4/COSTS.md §5 item 3)", () => {
+  function pricingHandler() {
+    return (req: { method: string; url: string; body: unknown }) => {
+      if (!req.url.includes("/pricing/quotes") || req.method !== "POST") return undefined;
+      const items = (req.body as { items: { provider_id: string; model: string }[] }).items;
+      return {
+        body: {
+          price_version: "2026-09-23",
+          as_of: "2026-09-23",
+          items: items.map(({ provider_id, model }) => {
+            if (model === "google/gemini-3.5-flash") {
+              return { provider_id, model, per_minute_usd: "0.004" };
+            }
+            return { provider_id, model, note: "no price" };
+          }),
+        },
+      };
+    };
+  }
+
+  it("fires one POST /pricing/quotes per open (catalog settled first), figures on suggested/catalog rows, nothing on the custom row", async () => {
+    const { fetch, calls } = routeFetch({ handlers: [catalogHandler(), pricingHandler()] });
+    vi.stubGlobal("fetch", fetch);
+    withClient(<ComboHarness />);
+    // Open and start typing immediately — the regression this guards against
+    // fired quotes once for the pre-catalog suggested ids and again once the
+    // catalog page landed (two POSTs for one open).
+    await openAndType("gem");
+    await screen.findByText("Gemini X 0");
+
+    await waitFor(() => {
+      const quoteCalls = calls.filter((c) => c.url.includes("/pricing/quotes"));
+      expect(quoteCalls).toHaveLength(1);
+    });
+
+    await waitFor(() => expect(within(group("Suggested")).getByText("≈ $0.0040/min")).toBeTruthy());
+    const catalog = group("Catalog");
+    await waitFor(() => expect(within(catalog).getAllByText("no price").length).toBeGreaterThan(0));
+
+    const customRow = (await screen.findByText(/Use custom model:/)).closest("[cmdk-item]") as HTMLElement;
+    expect(within(customRow).queryByText(/≈ \$/)).toBeNull();
+    expect(within(customRow).queryByText("no price")).toBeNull();
+  });
+});
+
 describe("ModelCombobox — the vendor search row (OpenRouter only)", () => {
   it("offers “Search OpenRouter for …” on openrouter-llm and sends search_vendor=true only when picked", async () => {
     const { fetch, calls } = routeFetch({

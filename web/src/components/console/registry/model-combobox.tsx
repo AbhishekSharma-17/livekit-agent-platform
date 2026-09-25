@@ -184,7 +184,11 @@ function LiveModelCombobox(props: ModelComboboxProps & { provider: ModelCombobox
   }, [catalogQuery.data, provider.id]);
   const quotesQuery = usePriceQuotes(
     quoteIds.map((id) => ({ provider_id: provider.id, model: id })),
-    { enabled: open && quoteIds.length > 0 },
+    // Wait for the catalog's first load to settle before quoting: firing as
+    // soon as `open` flips true (before the catalog page has arrived) would
+    // quote only the suggested ids, then quote again once the catalog data
+    // changes `quoteIds` — two requests for one open, not one.
+    { enabled: open && quoteIds.length > 0 && !catalogQuery.isLoading },
   );
   const priceQuotes = React.useMemo(() => {
     const map = new Map<string, string>();

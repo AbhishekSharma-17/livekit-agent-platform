@@ -8,6 +8,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { DEFAULT_AVATAR_OPTIONS } from "@/components/console/agents/defaults";
 import { ProvidersTab } from "@/components/console/agents/tabs/providers-tab";
 import { EditorContextProvider, type EditorContextValue } from "@/components/console/agents/editor/editor-context";
+import { resetEstimateSettings } from "@/components/console/lib/cost-hooks";
 import { ModelCombobox } from "@/components/console/registry/model-combobox";
 import {
   connectionDisabledReason,
@@ -593,6 +594,11 @@ describe("ProvidersTab — cost estimate (docs/v4/COSTS.md §5 item 2)", () => {
 
   beforeEach(() => {
     vi.stubGlobal("fetch", stubFetch());
+    // `EDITOR_CONTEXT_STUB` estimates the same fixed agent id in every test
+    // here; the settings cache/localStorage is per-agent and module-level
+    // (by design — every surface reading one agent shares it), so it must
+    // be cleared between tests in this file.
+    resetEstimateSettings();
   });
 
   it("shows the same '≈ $/min · estimate' figure in the Pipeline header as the rail would", async () => {

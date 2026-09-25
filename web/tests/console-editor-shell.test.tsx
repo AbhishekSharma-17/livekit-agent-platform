@@ -8,6 +8,7 @@ import { FileTextIcon, PlugIcon, WorkflowIcon, WrenchIcon } from "lucide-react";
 
 import { AgentEditor } from "@/components/console/agents/agent-editor";
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
+import { resetEstimateSettings } from "@/components/console/lib/cost-hooks";
 import type { EditorSectionDef, EditorSectionProps } from "@/components/console/agents/editor/types";
 import { guardedHref } from "@/components/console/agents/editor/unsaved-guard";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
@@ -316,6 +317,10 @@ beforeEach(() => {
   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
   Element.prototype.scrollIntoView = vi.fn();
   searchParams = new URLSearchParams();
+  // Every `renderEditor()` here estimates the same fixed agent id by
+  // default; the cost-estimate settings cache/localStorage is per-agent and
+  // module-level (by design), so it must not leak between tests.
+  resetEstimateSettings();
 });
 
 afterEach(() => {

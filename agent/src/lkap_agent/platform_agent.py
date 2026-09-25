@@ -15,7 +15,9 @@
   the pack's `default_panel`, and binds the block callbacks on the UI channel:
   `block_action` → the pack's optional `on_block_action`, a form submitted
   after its tool stopped waiting → a reply, and `block_update` /
-  `form_submitted` session events (CONTRACTS-V2 §4.4).
+  `form_submitted` session events (CONTRACTS-V2 §4.4),
+* cancels pending generic block requests (`request_choice`) when the caller
+  starts speaking; forms stay open (R-V5-1).
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -72,7 +74,13 @@ from lkap_agent.tools.execution import (
     sdk_version_at_least,
     wrap_tool,
 )
-from lkap_agent.ui.blocks import block_ids_of_type, initial_block_states, resolve_block_specs
+from lkap_agent.ui.blocks import (
+    VOICE_ONLY_CHANNELS,
+    block_ids_of_type,
+    initial_block_states,
+    resolve_block_specs,
+)
+from lkap_agent.ui.channel import BARGE_IN
 from lkap_agent.vision import encode_jpeg_data_url
 
 __all__ = [
@@ -136,9 +144,13 @@ _KB_INJECT_TIMEOUT_S: Final[float] = 3.0
 #: How the retrieved knowledge is framed for the model.
 _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
 
-#: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form`
-#: returns `None` and its result arrives later as a background result.
-_REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset({"request_form"})
+#: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form` and
+#: `request_choice` (R-V5-1) return `None` and their result arrives later as a
+#: background result.
+_REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset({"request_form", "request_choice"})
+
+#: `SessionContext.userdata` key: the barge-in handler is registered (once per session, V5-08).
+_BARGE_IN_KEY: Final[str] = "_lkap_barge_in_wired"
 
 #: `SessionContext.userdata` key: the flow-node downgrade was already recorded (R-V4-39).
 _FLOW_DOWNGRADE_KEY: Final[str] = "_lkap_flow_background_downgrade_reported"
@@ -285,6 +297,10 @@ class PlatformAgent(Agent):
             # On the text channel `request_form` answers at once with a line the
             # model must act on (asks #30), so its reply is never suppressed there.
             silent |= _REALTIME_SILENT_BUILTINS
+            if getattr(ctx, "channel", "web") in VOICE_ONLY_CHANNELS:
+                # On a phone call `request_choice` shows nothing and answers at once
+                # (`{"channel": "voice_only"}`): the model must ask out loud, so keep its reply.
+                silent -= {"request_choice"}
         self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
         if instructions is None:
@@ -431,11 +447,47 @@ class PlatformAgent(Agent):
                 on_unsolicited_form=self._on_unsolicited_form,
                 record_event=self._ctx.record_event,
             )
+        self._wire_barge_in()
         logger.debug(
             "panel blocks initialised",
             panel_id=self._ctx.config.panel.panel_id,
             blocks=[f"{spec.id}:{spec.type}" for spec in specs],
         )
+
+    def _wire_barge_in(self) -> None:
+        """Register :meth:`on_user_state_changed` on the session, once per session (R-V5-1).
+
+        The worker's own `user_state_changed` handler (the idle timer) lives in
+        `main.py`; this one is registered here, where the requestable tools'
+        agent is built. Flow nodes share the session context, so only the
+        first agent registers it; the handler reads the shared UI channel.
+        """
+        userdata = getattr(self._ctx, "userdata", None)
+        on = getattr(self._ctx.session, "on", None)
+        if not isinstance(userdata, dict) or userdata.get(_BARGE_IN_KEY) or not callable(on):
+            return
+        userdata[_BARGE_IN_KEY] = True
+        on("user_state_changed", self.on_user_state_changed)
+
+    def on_user_state_changed(self, ev: Any) -> None:
+        """Barge-in: the caller speaking cancels every pending generic request (D-V5-34, R-V5-1).
+
+        Synchronous (the channel releases the waiters at once). Only requests
+        sent with `method="request"` (`request_choice` and later requestable
+        tools) are released: a pending `request_form` stays open, as in v2.
+        """
+        if getattr(ev, "new_state", None) != "speaking":
+            return
+        cancel = getattr(self._ctx.ui, "cancel_pending", None)
+        if not callable(cancel):
+            return
+        try:
+            released = cancel(BARGE_IN, methods=["request"])
+        except Exception:
+            logger.debug("barge-in could not cancel pending requests", exc_info=True)
+            return
+        if released:
+            logger.debug("barge-in cancelled pending requests", block_ids=released)
 
     async def _on_block_action(self, block_id: str, name: str, data: dict[str, Any]) -> dict[str, Any]:
         """`block_action` → the pack's optional `on_block_action` (default no-op).
@@ -450,10 +502,13 @@ class PlatformAgent(Agent):
         return dict(result or {})
 
     async def _on_unsolicited_form(self, block_id: str, values: dict[str, Any]) -> None:
-        """A form arrived after its tool stopped waiting: let the model react to it."""
+        """An answer arrived after its tool stopped waiting: let the model react to it.
+
+        Block-type neutral (R-V5-1): the same wording for a late form and a late choice.
+        """
         instructions = (
-            f"The user just submitted the {block_id} form with these values: {json.dumps(values)}. "
-            "Acknowledge them briefly and continue."
+            f"The user just submitted the {block_id} block on screen with these values: "
+            f"{json.dumps(values)}. Acknowledge them briefly and continue."
         )
         try:
             self.session.generate_reply(instructions=instructions)

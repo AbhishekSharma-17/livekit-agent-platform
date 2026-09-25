@@ -36,19 +36,48 @@ VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", 
 #: Panel-block tools (CONTRACTS-V2 §4.4). Not in :data:`BUILTIN_TOOL_NAMES`: each is
 #: registered only when the panel has a block it can write (``builtin_disabled``
 #: still switches it off).
-BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = ("update_block", "show_document", "table_append", "request_form")
+BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
+    "update_block",
+    "show_document",
+    "table_append",
+    "request_form",
+    "request_choice",
+    "resolve_choice",
+    "set_details",
+    "show_text",
+    "set_steps",
+)
 
-#: Block types whose state ``update_block`` may write (envelope blocks and forms have their own tools).
+#: Block types whose state ``update_block`` may write (envelope blocks, forms and
+#: choices have their own tools: a request's status belongs to the request).
 UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
-    {"document", "gallery", "table", "transcript", "video", "kb_citations", "custom"}
+    {
+        "document",
+        "gallery",
+        "table",
+        "transcript",
+        "video",
+        "kb_citations",
+        "custom",
+        "details",
+        "markdown",
+        "steps",
+    }
 )
 
 #: Each block tool → the panel block types that make the worker register it.
+#: ``set_steps`` is further limited to a ``steps`` block whose ``config.source`` is
+#: not ``"flow"`` (the flow writes those itself, V5-08).
 BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "update_block": UPDATABLE_BLOCK_TYPES,
     "show_document": frozenset({"document"}),
     "table_append": frozenset({"table"}),
     "request_form": frozenset({"form"}),
+    "request_choice": frozenset({"choices"}),
+    "resolve_choice": frozenset({"choices"}),
+    "set_details": frozenset({"details"}),
+    "show_text": frozenset({"markdown"}),
+    "set_steps": frozenset({"steps"}),
 }
 
 
@@ -127,6 +156,13 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "transfer_call",
         "send_dtmf",
         "request_form",
+        # The V5-08 block tools: a request waits for the caller (D-V5-34); the
+        # others write the panel, like update_block.
+        "request_choice",
+        "resolve_choice",
+        "set_details",
+        "show_text",
+        "set_steps",
         "escalate_to_human",
         "update_block",
         "show_document",

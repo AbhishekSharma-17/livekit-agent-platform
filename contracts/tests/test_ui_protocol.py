@@ -9,9 +9,18 @@ from pydantic import ValidationError
 from lkap_contracts.ui_protocol import (
     AgentAction,
     BlockRequestPayload,
+    BlockSpec,
     BlockSubmitPayload,
+    ChoiceOption,
+    ChoicesBlockState,
+    DetailsBlockState,
+    DetailsItem,
     FormBlockState,
+    KbCitation,
+    MarkdownBlockState,
     RequestableState,
+    StepItem,
+    StepsBlockState,
     UiRequest,
     UiRequestResult,
 )
@@ -126,3 +135,92 @@ def test_block_submit_payload_needs_exactly_one_answer(bad: dict[str, Any]) -> N
 
 def test_ui_request_result_is_unchanged() -> None:
     assert set(UiRequestResult.model_fields) == {"ok", "payload"}
+
+
+# ------------------------------------------------------------- V5-08: the block quartet
+
+
+def test_choices_block_state_is_requestable_and_holds_selected_ids() -> None:
+    state = ChoicesBlockState.model_validate(
+        {
+            "prompt": "Was anyone injured?",
+            "options": [
+                {"id": "no", "label": "No"},
+                {"id": "minor", "label": "Yes, minor", "tone": "warning"},
+            ],
+            "selected": ["no"],
+            "status": "submitted",
+            "submitted_at": 1.0,
+        }
+    )
+    assert isinstance(state, RequestableState)
+    assert state.selected == ["no"] and state.options[1].tone == "warning"
+    assert ChoicesBlockState().model_dump() == {
+        "status": "idle",
+        "submitted_at": None,
+        "prompt": "",
+        "options": [],
+        "multi": False,
+        "selected": [],
+        "reveal": None,
+    }
+
+
+def test_choice_option_ids_are_non_empty() -> None:
+    with pytest.raises(ValidationError):
+        ChoiceOption(id="", label="x")
+
+
+def test_details_items_carry_text_numbers_or_nothing() -> None:
+    state = DetailsBlockState.model_validate(
+        {
+            "items": [
+                {"key": "claim_no", "label": "Claim no.", "value": "CLM-1"},
+                {"key": "amount", "label": "Amount", "value": 1250.5, "type": "money"},
+                {"key": "date", "label": "Date", "value": None, "type": "date"},
+            ]
+        }
+    )
+    assert [i.value for i in state.items] == ["CLM-1", 1250.5, None]
+    with pytest.raises(ValidationError):
+        DetailsItem(key="a", label="A", type="colour")  # type: ignore[arg-type]
+
+
+def test_markdown_block_state_defaults_to_empty_text() -> None:
+    assert MarkdownBlockState().model_dump() == {"markdown": "", "title": None, "updated_at": None}
+
+
+@pytest.mark.parametrize("status", ["pending", "active", "done", "skipped", "failed"])
+def test_step_item_accepts_every_status(status: str) -> None:
+    assert StepItem.model_validate({"id": "a", "label": "A", "status": status}).status == status
+
+
+def test_step_item_rejects_an_unknown_status() -> None:
+    with pytest.raises(ValidationError):
+        StepItem.model_validate({"id": "a", "label": "A", "status": "later"})
+
+
+def test_steps_block_state_defaults() -> None:
+    assert StepsBlockState().model_dump() == {"steps": [], "current": None}
+
+
+def test_kb_citation_locators_are_optional() -> None:
+    old = KbCitation.model_validate({"chunk_id": "c", "filename": "f.pdf", "score": 0.5, "text": "t"})
+    assert old.document_id is None and old.page is None and old.heading_path is None
+    new = KbCitation(
+        chunk_id="c",
+        filename="f.pdf",
+        score=0.5,
+        text="t",
+        document_id="d1",
+        page=3,
+        heading_path=["Policy", "Exclusions"],
+        char_start=10,
+        char_end=40,
+    )
+    assert KbCitation.model_validate_json(new.model_dump_json()) == new
+
+
+def test_the_four_new_block_types_are_block_types() -> None:
+    for block_type in ("choices", "details", "markdown", "steps"):
+        assert BlockSpec(id="b", type=block_type).type == block_type  # type: ignore[arg-type]

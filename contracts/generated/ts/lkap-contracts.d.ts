@@ -60,6 +60,7 @@ export interface LkapContracts {
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
+  ChoicesBlockState?: ChoicesBlockState;
   ConfigVersionOut?: ConfigVersionOut;
   ConfigVersionPage?: ConfigVersionPage;
   ConnectRequest?: ConnectRequest;
@@ -82,6 +83,7 @@ export interface LkapContracts {
   CredentialPage?: CredentialPage;
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
+  DetailsBlockState?: DetailsBlockState;
   DispatchMetadata?: DispatchMetadata;
   DispatchRuleCreate?: DispatchRuleCreate;
   DispatchRuleOut?: DispatchRuleOut;
@@ -120,6 +122,7 @@ export interface LkapContracts {
   KbSearchRequest?: KbSearchRequest;
   KbSearchResponse?: KbSearchResponse;
   KbSeed?: KbSeed;
+  MarkdownBlockState?: MarkdownBlockState;
   McpServerDefinition?: McpServerDefinition;
   McpServerOrigin?: McpServerOrigin;
   Me?: Me;
@@ -183,6 +186,7 @@ export interface LkapContracts {
   SessionSummaryIn?: SessionSummaryIn;
   StartNode?: StartNode;
   StarterTemplate?: StarterTemplate;
+  StepsBlockState?: StepsBlockState;
   TableBlockState?: TableBlockState;
   TelephonyConfig?: TelephonyConfig;
   TemplateEstimate?: TemplateEstimate;
@@ -559,7 +563,11 @@ export interface BlockSpec {
     | "transcript"
     | "video"
     | "kb_citations"
-    | "custom";
+    | "custom"
+    | "choices"
+    | "details"
+    | "markdown"
+    | "steps";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -1463,6 +1471,48 @@ export interface CatalogResponse {
   total?: number | null;
 }
 /**
+ * Quick replies the caller taps or answers by voice (``request_choice``, V5-08).
+ *
+ * ``selected`` holds the chosen option ids once ``status`` is ``submitted``
+ * (a single-choice block holds one). A generic ``block_submit`` answers with
+ * ``values: {selected: [...]}``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChoicesBlockState".
+ */
+export interface ChoicesBlockState {
+  multi?: boolean;
+  options?: ChoiceOption[];
+  prompt?: string;
+  reveal?: ChoiceReveal | null;
+  selected?: string[];
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
+}
+/**
+ * One option of a ``choices`` block (V5-08).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChoiceOption".
+ */
+export interface ChoiceOption {
+  hint?: string | null;
+  id: string;
+  image_asset_id?: string | null;
+  label: string;
+  tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
+}
+/**
+ * The right answer of a quiz-style ``choices`` block, shown once revealed.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChoiceReveal".
+ */
+export interface ChoiceReveal {
+  correct?: string[];
+  explanation?: string | null;
+}
+/**
  * One row of ``GET /v1/agents/{id}/versions``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1995,6 +2045,29 @@ export interface CredentialUpdate {
   } | null;
 }
 /**
+ * A key-value summary card, "what we have so far" (``set_details``, V5-08).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DetailsBlockState".
+ */
+export interface DetailsBlockState {
+  items?: DetailsItem[];
+}
+/**
+ * One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DetailsItem".
+ */
+export interface DetailsItem {
+  key: string;
+  label: string;
+  tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
+  type?: "string" | "number" | "date" | "money" | "phone" | "email" | "badge";
+  updated_at?: number | null;
+  value?: string | number | null;
+}
+/**
  * Serialised as JSON into ``RoomAgentDispatch.metadata``.
  *
  * IDs ONLY. The browser can read this, so it must never contain secrets,
@@ -2340,12 +2413,22 @@ export interface KbCitationsBlockState {
 /**
  * One retrieved chunk cited to the user.
  *
+ * The locators (V5-08) come from the chunk's ingest metadata (V5-01) and are
+ * absent for chunks ingested before it. Tapping a citation sends
+ * ``block_action {name: "open_citation", data: {chunk_id}}``; the worker
+ * opens the source page in a ``document`` block when it has the source.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "KbCitation".
  */
 export interface KbCitation {
+  char_end?: number | null;
+  char_start?: number | null;
   chunk_id: string;
+  document_id?: string | null;
   filename: string;
+  heading_path?: string[] | null;
+  page?: number | null;
   score: number;
   text: string;
 }
@@ -2469,6 +2552,17 @@ export interface KbSearchResponse {
 export interface KbSeed {
   files: string[];
   kb_name: string;
+}
+/**
+ * Rich text in a strict Markdown subset, never raw HTML (``show_text``, V5-08).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MarkdownBlockState".
+ */
+export interface MarkdownBlockState {
+  markdown?: string;
+  title?: string | null;
+  updated_at?: number | null;
 }
 /**
  * A streamable-HTTP MCP server attached to the agent.
@@ -3891,6 +3985,32 @@ export interface RequiredKey {
 export interface ToolSeed {
   definition: HttpToolDefinition;
   enabled?: boolean;
+}
+/**
+ * A progress timeline: ``set_steps``, or the flow position with ``source="flow"`` (V5-08).
+ *
+ * A ``custom`` block with ``kind == "flow_progress"`` keeps its raw flow
+ * mirror; the console renders it with the ``steps`` renderer (D-V5-33).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StepsBlockState".
+ */
+export interface StepsBlockState {
+  current?: string | null;
+  steps?: StepItem[];
+}
+/**
+ * One step of a ``steps`` timeline.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StepItem".
+ */
+export interface StepItem {
+  at?: number | null;
+  id: string;
+  label: string;
+  note?: string | null;
+  status?: "pending" | "active" | "done" | "skipped" | "failed";
 }
 /**
  * Tabular data the agent appends rows to.

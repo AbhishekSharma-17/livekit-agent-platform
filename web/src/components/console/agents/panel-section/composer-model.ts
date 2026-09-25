@@ -127,10 +127,15 @@ export interface BlockToolStatus {
 }
 
 const TOOL_NEEDS: Record<BlockToolName, string> = {
-  update_block: "Add a table, document, gallery, sources, transcript, video or pack block first",
+  update_block: "Add a table, document, gallery, sources, transcript, video, details, text, steps or pack block first",
   show_document: "Add a document block first",
   table_append: "Add a table block first",
   request_form: "Add a form block first",
+  request_choice: "Add a choices block first",
+  resolve_choice: "Add a choices block first",
+  set_details: "Add a details block first",
+  show_text: "Add a text block first",
+  set_steps: "Add a steps block first",
 };
 
 /**

@@ -20,12 +20,16 @@ import { normalizeUiState, type UiStateStore } from "@/lib/ui-state";
 import type { BlockType } from "@/panels/composite/layout";
 
 import genericUiState from "../../../../tests/fixtures/generic_ui_state.json";
+import choicesState from "./choices.json";
+import detailsState from "./details.json";
 import documentState from "./document.json";
 import formRequested from "./form.requested.json";
 import formSubmitted from "./form.submitted.json";
 import galleryState from "./gallery.json";
 import kbCitationsState from "./kb_citations.json";
 import layout from "./layout.json";
+import markdownState from "./markdown.json";
+import stepsState from "./steps.json";
 import tableState from "./table.json";
 import transcriptState from "./transcript.json";
 import videoState from "./video.json";
@@ -54,6 +58,11 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   transcript: { type: "transcript", state: transcriptState },
   video: { type: "video", state: videoState },
   kb_citations: { type: "kb_citations", state: kbCitationsState },
+  // V5-08: the quartet's states (renderers and scenes come with V5-12).
+  choices: { type: "choices", state: choicesState },
+  details: { type: "details", state: detailsState },
+  markdown: { type: "markdown", state: markdownState },
+  steps: { type: "steps", state: stepsState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -110,6 +119,10 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     transcript: transcriptState,
     activity: {},
     pack: {},
+    injured: choicesState,
+    claim: detailsState,
+    recap: markdownState,
+    progress: stepsState,
   };
 }
 

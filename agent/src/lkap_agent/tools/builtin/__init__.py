@@ -32,10 +32,15 @@ from .escalate_to_human import build_escalate_to_human_tool
 from .http_request import build_http_request_tool
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
+from .request_choice import build_request_choice_tool
 from .request_form import build_request_form_tool
+from .resolve_choice import build_resolve_choice_tool
 from .search_knowledge import build_search_knowledge_tool
+from .set_details import build_set_details_tool
 from .set_status import build_set_status_tool
+from .set_steps import build_set_steps_tool, manual_steps_blocks
 from .show_document import build_show_document_tool
+from .show_text import build_show_text_tool
 from .table_append import build_table_append_tool
 from .update_block import UPDATABLE_BLOCK_TYPES, build_update_block_tool
 
@@ -51,10 +56,15 @@ __all__ = [
     "build_http_request_tool",
     "build_pin_frame_tool",
     "build_push_note_tool",
+    "build_request_choice_tool",
     "build_request_form_tool",
+    "build_resolve_choice_tool",
     "build_search_knowledge_tool",
+    "build_set_details_tool",
     "build_set_status_tool",
+    "build_set_steps_tool",
     "build_show_document_tool",
+    "build_show_text_tool",
     "build_table_append_tool",
     "build_update_block_tool",
 ]
@@ -118,7 +128,9 @@ def build_builtin_tools(
         registered only when `AgentConfig.panel.blocks` has a block they
         write: `update_block` for any non-envelope block, `show_document` /
         `table_append` / `request_form` for a `document` / `table` / `form`
-        block.
+        block, `request_choice` and `resolve_choice` for a `choices` block,
+        `set_details` / `show_text` for a `details` / `markdown` block, and
+        `set_steps` for a `steps` block that does not follow the flow (V5-08).
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -187,5 +199,15 @@ def build_builtin_tools(
         tools.append(build_table_append_tool(ctx))
     if "form" in block_types and _want("request_form"):
         tools.append(build_request_form_tool(ctx))
+    if "choices" in block_types and _want("request_choice"):
+        tools.append(build_request_choice_tool(ctx))
+    if "choices" in block_types and _want("resolve_choice"):
+        tools.append(build_resolve_choice_tool(ctx))
+    if "details" in block_types and _want("set_details"):
+        tools.append(build_set_details_tool(ctx))
+    if "markdown" in block_types and _want("show_text"):
+        tools.append(build_show_text_tool(ctx))
+    if manual_steps_blocks(list(ctx.config.panel.blocks)) and _want("set_steps"):
+        tools.append(build_set_steps_tool(ctx))
 
     return tools

@@ -182,6 +182,10 @@ export const BLOCK_TYPE_VALUES = [
   "video",
   "kb_citations",
   "custom",
+  "choices",
+  "details",
+  "markdown",
+  "steps",
 ] as const;
 
 /** Block ids key `UiState.blocks` and appear in patch paths: no `/`, no spaces. */

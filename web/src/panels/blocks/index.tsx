@@ -50,6 +50,15 @@ const TableBlock = lazy(() => import("./table"));
 // detail, the composer preview) don't pull livekit-client in.
 const VideoBlock = lazy(() => import("./video"));
 
+/** A block type this web build has no renderer for yet. */
+function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
+  return (
+    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
+      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
+    </BlockFrame>
+  );
+}
+
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -64,6 +73,11 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   video: VideoBlock as AnyBlockComponent,
   kb_citations: KbCitationsBlock as AnyBlockComponent,
   custom: CustomBlock,
+  // V5-08 added these types to the contract; their renderers come with V5-12.
+  choices: NotRenderedYetBlock,
+  details: NotRenderedYetBlock,
+  markdown: NotRenderedYetBlock,
+  steps: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

@@ -12,7 +12,7 @@ code, not the block system).
 
 Every `BlockSpec.config` is validated against its type's own strict schema
 (unknown keys are rejected) — `lkap_describe("block", type)` returns that
-schema. The twelve block types:
+schema. The sixteen block types:
 
 | Type | Config | What it shows |
 |---|---|---|
@@ -28,6 +28,14 @@ schema. The twelve block types:
 | `transcript` | `show_tools` | The live transcript, optionally interleaved with tool calls. |
 | `video` | `source` (`agent_avatar`/`user_camera`/`user_screen`/`track:<sid>`), `muted` | A video tile. |
 | `custom` | `kind` + any pack-declared JSON (all public) | A pack-rendered block outside the built-in set. |
+| `choices` | `multi`, `layout` (`buttons`/`list`/`chips`), `max_options` (2–20, default 8) | Options the caller taps or answers out loud (yes/no, "which policy?", a quick poll). |
+| `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows) | A key-value card of facts collected so far; `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
+| `markdown` | `max_chars` (200–50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
+| `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
+
+Tapping a `kb_citations` entry asks the agent to open the cited page: when the
+session holds that document and the panel has a `document` block, the page
+opens there with the section highlighted.
 
 ## The tools blocks give the agent
 
@@ -35,10 +43,27 @@ Attaching a block registers matching worker tools automatically (on top of
 `config.tools.builtin_disabled`, which can still turn one off):
 
 - `update_block` — writes state into any of `document`, `gallery`, `table`,
-  `transcript`, `video`, `kb_citations`, `custom`.
+  `transcript`, `video`, `kb_citations`, `custom`, `details`, `markdown`,
+  `steps`.
   `show_document` — points a `document` block at a url. `table_append` —
   appends one row to a `table` block. `request_form` — asks the user to
   fill in a `form` block and returns their answers.
+- `request_choice` (a `choices` block) — shows a question with options and
+  waits for the caller's tap; it returns `{selected}`. If the caller starts
+  speaking while the options are up, the request is withdrawn (a pending form
+  is not). `resolve_choice` records an option the caller said out loud. On a
+  phone call nothing is shown and the agent asks out loud.
+- `set_details` (a `details` block) — adds or updates rows by `key`, quietly.
+- `show_text` (a `markdown` block) — replaces the text; the agent speaks a
+  one-line summary. Raw HTML and text over `max_chars` are refused.
+- `set_steps` (a `steps` block with `source: "manual"`) — marks steps
+  `pending`, `active`, `done`, `skipped` or `failed`. A `source: "flow"`
+  block has no tool.
+
+`agent_validate` warns when a `choices` block sits on an agent set up for
+phone calls (keypad input or transfer destinations: phone callers see no
+screen), and when a `source: "flow"` steps block has no flow to follow or
+names a step the flow does not have.
 
 ## Building a composite panel
 
@@ -57,4 +82,5 @@ Attaching a block registers matching worker tools automatically (on top of
 
 `PanelLayout`, `BlockSpec`, `FormBlockState`, `DocumentBlockState`,
 `GalleryBlockState`, `TableBlockState`, `TranscriptBlockState`,
-`VideoBlockState`, `KbCitationsBlockState`.
+`VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
+`DetailsBlockState`, `MarkdownBlockState`, `StepsBlockState`.

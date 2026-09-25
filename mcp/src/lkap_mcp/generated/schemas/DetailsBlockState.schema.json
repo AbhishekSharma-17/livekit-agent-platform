@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "DetailsItem": {
+      "description": "One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.",
+      "properties": {
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tone"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "date",
+            "money",
+            "phone",
+            "email",
+            "badge"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "DetailsItem",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/DetailsBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A key-value summary card, \"what we have so far\" (``set_details``, V5-08).",
+  "properties": {
+    "items": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DetailsItem"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "title": "DetailsBlockState",
+  "type": "object"
+}

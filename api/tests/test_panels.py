@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 from conftest import create_agent, inference_config
-from lkap_contracts.agent_config import PanelLayout
+from lkap_contracts.agent_config import CapabilitiesConfig, PanelLayout
+from lkap_contracts.flow import FlowSpec
 from lkap_contracts.ui_protocol import BlockSpec
 
+from lkap_api.config_service import CHOICES_ON_PHONE_MESSAGE, ValidationContext, validate
 from lkap_api.db.models import Agent
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
@@ -108,3 +111,77 @@ async def test_resolve_and_connect_layouts_are_byte_identical(
     resolved_response = await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")
 
     assert connect_response.json()["agent"]["panel"] == resolved_response.json()["panel"]
+
+
+# ================================================================ V5-08: the block quartet
+
+FLOW = FlowSpec.model_validate(
+    {
+        "nodes": [
+            {"id": "start", "kind": "start"},
+            {"id": "collect", "kind": "agent", "label": "Collect", "instructions": "Ask for the details."},
+        ],
+        "edges": [{"id": "e1", "source": "start", "target": "collect"}],
+    }
+)
+
+
+def _issues(blocks: list[BlockSpec], **kwargs: object) -> list[tuple[str, str, str]]:
+    config = inference_config(panel=PanelLayout(blocks=blocks), **kwargs)
+    result = validate(ValidationContext(config=config))
+    return [(i.path, i.severity, i.message) for i in result.issues if i.path.startswith("panel.")]
+
+
+@pytest.mark.parametrize(
+    ("block", "path"),
+    [
+        (BlockSpec(id="c", type="choices", config={"layout": "grid"}), "panel.blocks[0].config.layout"),
+        (BlockSpec(id="d", type="details", config={"columns": 3}), "panel.blocks[0].config.columns"),
+        (BlockSpec(id="m", type="markdown", config={"html": True}), "panel.blocks[0].config.html"),
+        (BlockSpec(id="s", type="steps", config={"source": "pack"}), "panel.blocks[0].config.source"),
+    ],
+)
+def test_quartet_block_configs_are_checked_on_save(block: BlockSpec, path: str) -> None:
+    assert [(p, sev) for p, sev, _ in _issues([block])] == [(path, "error")]
+
+
+def test_valid_quartet_blocks_have_no_panel_issues() -> None:
+    blocks = [
+        BlockSpec(id="c", type="choices", config={"multi": True}),
+        BlockSpec(id="d", type="details", config={"fields": [{"key": "claim_no", "label": "Claim"}]}),
+        BlockSpec(id="m", type="markdown"),
+        BlockSpec(
+            id="s", type="steps", config={"steps": [{"id": "collect", "label": "Collect"}], "source": "flow"}
+        ),
+    ]
+    assert _issues(blocks, flow=FLOW) == []
+
+
+def test_a_flow_steps_block_on_an_agent_without_a_flow_is_a_warning() -> None:
+    [(path, severity, message)] = _issues([BlockSpec(id="s", type="steps", config={"source": "flow"})])
+    assert (path, severity) == ("panel.blocks[0].config.source", "warning")
+    assert "no flow" in message
+
+
+def test_a_flow_steps_block_naming_an_unknown_step_is_a_warning() -> None:
+    block = BlockSpec(
+        id="s",
+        type="steps",
+        config={"source": "flow", "steps": [{"id": "collect", "label": "A"}, {"id": "ghost", "label": "B"}]},
+    )
+    [(path, severity, message)] = _issues([block], flow=FLOW)
+    assert (path, severity) == ("panel.blocks[0].config.steps[1].id", "warning")
+    assert "'ghost'" in message
+
+
+def test_a_choices_block_on_a_phone_agent_is_a_warning() -> None:
+    blocks = [BlockSpec(id="n", type="notes"), BlockSpec(id="c", type="choices")]
+    phone = _issues(blocks, capabilities=CapabilitiesConfig(dtmf=True))
+    assert phone == [("panel.blocks[1]", "warning", CHOICES_ON_PHONE_MESSAGE)]
+    assert _issues(blocks) == []
+
+
+def test_agents_without_the_new_blocks_validate_as_before() -> None:
+    """Compatibility: no new issue for a panel that has none of the four blocks."""
+    blocks = [BlockSpec(id="t", type="table"), BlockSpec(id="k", type="kb_citations")]
+    assert _issues(blocks, capabilities=CapabilitiesConfig(dtmf=True)) == []

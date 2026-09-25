@@ -1,0 +1,32 @@
+{
+  "$id": "lkap-contracts/BlockConfig_choices.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``choices``: single or multiple answers, how the options are laid out, how many at most.",
+  "properties": {
+    "layout": {
+      "default": "buttons",
+      "enum": [
+        "buttons",
+        "list",
+        "chips"
+      ],
+      "title": "Layout",
+      "type": "string"
+    },
+    "max_options": {
+      "default": 8,
+      "maximum": 20,
+      "minimum": 2,
+      "title": "Max Options",
+      "type": "integer"
+    },
+    "multi": {
+      "default": false,
+      "title": "Multi",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_choices",
+  "type": "object"
+}

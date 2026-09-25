@@ -431,7 +431,11 @@
             "transcript",
             "video",
             "kb_citations",
-            "custom"
+            "custom",
+            "choices",
+            "details",
+            "markdown",
+            "steps"
           ],
           "title": "Type",
           "type": "string"

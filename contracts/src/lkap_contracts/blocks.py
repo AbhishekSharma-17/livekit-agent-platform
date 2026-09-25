@@ -17,6 +17,13 @@ schemas by a vitest parity test):
   ``track:<sid>``) and ``muted``;
 * the envelope blocks (``status``, ``notes``, ``checklist``, ``activity``) and
   ``form``, ``gallery``, ``kb_citations`` → no keys;
+* ``choices`` → ``multi``, ``layout`` (``buttons`` / ``list`` / ``chips``),
+  ``max_options`` (V5-08);
+* ``details`` → ``columns`` (1 or 2) and ``fields: [{key, label, type}]``, the
+  starting rows (seeded as ``items`` with no value);
+* ``markdown`` → ``max_chars`` and ``allow_links``;
+* ``steps`` → ``steps: [{id, label}]`` (seeded as pending), ``source``
+  (``flow`` / ``manual``) and ``show_notes``;
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -34,13 +41,19 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from lkap_contracts.common import Issue
-from lkap_contracts.ui_protocol import BlockSpec, BlockType
+from lkap_contracts.ui_protocol import BlockSpec, BlockType, DetailsValueType
 
 __all__ = [
     "BLOCK_CONFIG_MODELS",
+    "ChoicesBlockConfig",
     "CustomBlockConfig",
+    "DetailsBlockConfig",
+    "DetailsFieldConfig",
     "DocumentBlockConfig",
     "EmptyBlockConfig",
+    "MarkdownBlockConfig",
+    "StepConfig",
+    "StepsBlockConfig",
     "TableBlockConfig",
     "TableColumnConfig",
     "TranscriptBlockConfig",
@@ -106,6 +119,71 @@ class VideoBlockConfig(_StrictConfig):
     muted: bool = False
 
 
+class ChoicesBlockConfig(_StrictConfig):
+    """``choices``: single or multiple answers, how the options are laid out, how many at most."""
+
+    multi: bool = False
+    layout: Literal["buttons", "list", "chips"] = "buttons"
+    max_options: int = Field(default=8, ge=2, le=20)
+
+
+class DetailsFieldConfig(_StrictConfig):
+    """One starting row of a ``details`` card (the agent fills the value and may add rows)."""
+
+    key: str = Field(min_length=1)
+    label: str
+    type: DetailsValueType = "string"
+
+
+class DetailsBlockConfig(_StrictConfig):
+    """``details``: one or two columns, and the rows the card starts with."""
+
+    columns: int = Field(default=1, ge=1, le=2)
+    fields: list[DetailsFieldConfig] = []
+
+    @field_validator("fields")
+    @classmethod
+    def _unique_keys(cls, value: list[DetailsFieldConfig]) -> list[DetailsFieldConfig]:
+        keys = [f.key for f in value]
+        if len(set(keys)) != len(keys):
+            raise ValueError("field keys must be unique")
+        return value
+
+
+class MarkdownBlockConfig(_StrictConfig):
+    """``markdown``: the longest text the agent may show, and whether links are clickable."""
+
+    max_chars: int = Field(default=8000, ge=200, le=50000)
+    allow_links: bool = False
+
+
+class StepConfig(_StrictConfig):
+    """One starting step of a ``steps`` block (with ``source="flow"``, ``id`` names a flow node)."""
+
+    id: str = Field(min_length=1)
+    label: str
+
+
+class StepsBlockConfig(_StrictConfig):
+    """``steps``: the starting steps, who drives them, and whether notes show under a step.
+
+    ``source="flow"`` follows the agent's flow (the worker writes it on every
+    step change and registers no tool); ``"manual"`` is driven by ``set_steps``.
+    """
+
+    steps: list[StepConfig] = []
+    source: Literal["flow", "manual"] = "manual"
+    show_notes: bool = True
+
+    @field_validator("steps")
+    @classmethod
+    def _unique_ids(cls, value: list[StepConfig]) -> list[StepConfig]:
+        ids = [s.id for s in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("step ids must be unique")
+        return value
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -133,6 +211,10 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "transcript": TranscriptBlockConfig,
     "video": VideoBlockConfig,
     "custom": CustomBlockConfig,
+    "choices": ChoicesBlockConfig,
+    "details": DetailsBlockConfig,
+    "markdown": MarkdownBlockConfig,
+    "steps": StepsBlockConfig,
 }
 
 

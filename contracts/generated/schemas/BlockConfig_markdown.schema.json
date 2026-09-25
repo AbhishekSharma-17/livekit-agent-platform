@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/BlockConfig_markdown.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``markdown``: the longest text the agent may show, and whether links are clickable.",
+  "properties": {
+    "allow_links": {
+      "default": false,
+      "title": "Allow Links",
+      "type": "boolean"
+    },
+    "max_chars": {
+      "default": 8000,
+      "maximum": 50000,
+      "minimum": 200,
+      "title": "Max Chars",
+      "type": "integer"
+    }
+  },
+  "title": "BlockConfig_markdown",
+  "type": "object"
+}

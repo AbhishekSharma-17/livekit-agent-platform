@@ -23,6 +23,10 @@ const SCHEMA_FILE: Record<string, string> = {
   transcript: "TranscriptBlockState",
   video: "VideoBlockState",
   kb_citations: "KbCitationsBlockState",
+  choices: "ChoicesBlockState",
+  details: "DetailsBlockState",
+  markdown: "MarkdownBlockState",
+  steps: "StepsBlockState",
 };
 
 type JsonSchema = {

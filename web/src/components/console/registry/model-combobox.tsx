@@ -8,6 +8,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { useCredentials, useProviderModels, useProviders } from "@/components/console/lib/api-hooks";
+import { formatUsdPerMin, usePriceQuotes } from "@/components/console/lib/cost-hooks";
 import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
 import { TestedChip, testedStateFor } from "@/components/console/registry/model-test-panel";
 import { CATALOG_FULL_LIMIT, useCatalog } from "@/hooks/useCatalog";
@@ -131,6 +132,8 @@ interface LiveData {
   vendorQuery: string | null;
   setVendorQuery: (query: string | null) => void;
   rules: ModelIdRules | null | undefined;
+  /** `model id -> "≈ $0.004/min"`, from the one `POST /v1/pricing/quotes` this open fired (docs/v4/COSTS.md §5 item 3). */
+  priceQuotes: Map<string, string>;
 }
 
 const NO_LIVE_DATA: LiveData = {
@@ -143,7 +146,11 @@ const NO_LIVE_DATA: LiveData = {
   vendorQuery: null,
   setVendorQuery: () => {},
   rules: undefined,
+  priceQuotes: new Map(),
 };
+
+/** Most pairs a `POST /v1/pricing/quotes` call is asked for at once (the route's own cap). */
+const PRICE_QUOTE_CAP = 100;
 
 function LiveModelCombobox(props: ModelComboboxProps & { provider: ModelComboboxProvider }) {
   const { provider, credentialId = null, rules: rulesProp } = props;
@@ -168,6 +175,30 @@ function LiveModelCombobox(props: ModelComboboxProps & { provider: ModelCombobox
       ? credentials.data?.items.find((item) => item.id === credentialId)?.fingerprint
       : undefined;
 
+  // The visible ids as of this open (suggested first, then the catalog page):
+  // one batched request per open, never re-fired while typing narrows the list (D-V4-47).
+  const quoteIds = React.useMemo(() => {
+    const ids = [...props.models.map((m) => m.id), ...(catalogQuery.data?.items ?? []).map((item) => item.id)];
+    return Array.from(new Set(ids)).slice(0, PRICE_QUOTE_CAP);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `props.models` is a fresh array per render; its content is what matters
+  }, [catalogQuery.data, provider.id]);
+  const quotesQuery = usePriceQuotes(
+    quoteIds.map((id) => ({ provider_id: provider.id, model: id })),
+    // Wait for the catalog's first load to settle before quoting: firing as
+    // soon as `open` flips true (before the catalog page has arrived) would
+    // quote only the suggested ids, then quote again once the catalog data
+    // changes `quoteIds` — two requests for one open, not one.
+    { enabled: open && quoteIds.length > 0 && !catalogQuery.isLoading },
+  );
+  const priceQuotes = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of quotesQuery.data?.items ?? []) {
+      if (!item.model) continue;
+      map.set(item.model, formatUsdPerMin(item.per_minute_usd) ?? "no price");
+    }
+    return map;
+  }, [quotesQuery.data]);
+
   const live: LiveData = {
     catalogItems: catalogQuery.data?.items ?? [],
     vendorItems: vendorQuery ? (vendorSearchQuery.data?.items ?? []) : [],
@@ -178,6 +209,7 @@ function LiveModelCombobox(props: ModelComboboxProps & { provider: ModelCombobox
     vendorQuery,
     setVendorQuery,
     rules,
+    priceQuotes,
   };
   return (
     <ModelComboboxView
@@ -325,14 +357,17 @@ function ModelComboboxView({
                     className="items-start"
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm text-foreground">{model.label}</span>
-                        {model.id === defaultModel ? (
-                          <span className="rounded-xs bg-muted px-1 text-[0.6875rem] leading-4 font-medium text-muted-foreground">
-                            Default
-                          </span>
-                        ) : null}
-                        {model.supports_video ? <CapabilityBadge kind="vision" /> : null}
+                      <span className="flex flex-wrap items-center justify-between gap-1.5">
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="text-sm text-foreground">{model.label}</span>
+                          {model.id === defaultModel ? (
+                            <span className="rounded-xs bg-muted px-1 text-[0.6875rem] leading-4 font-medium text-muted-foreground">
+                              Default
+                            </span>
+                          ) : null}
+                          {model.supports_video ? <CapabilityBadge kind="vision" /> : null}
+                        </span>
+                        <ModelPriceHint priceQuotes={live.priceQuotes} modelId={model.id} />
                       </span>
                       <span className="truncate font-mono text-xs text-muted-foreground">{model.id}</span>
                       {model.note ? <span className="text-xs text-muted-foreground">{model.note}</span> : null}
@@ -363,11 +398,14 @@ function ModelComboboxView({
                     className="items-start"
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span className="min-w-0 truncate text-sm text-foreground" title={item.label}>
-                          {item.label}
+                      <span className="flex flex-wrap items-center justify-between gap-1.5">
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="min-w-0 truncate text-sm text-foreground" title={item.label}>
+                            {item.label}
+                          </span>
+                          {catalogSaysVision(item.meta) === true ? <CapabilityBadge kind="vision" /> : null}
                         </span>
-                        {catalogSaysVision(item.meta) === true ? <CapabilityBadge kind="vision" /> : null}
+                        <ModelPriceHint priceQuotes={live.priceQuotes} modelId={item.id} />
                       </span>
                       <span className="truncate font-mono text-xs text-muted-foreground" title={item.id}>
                         {item.id}
@@ -445,6 +483,18 @@ function dedupe(items: CatalogItem[]): CatalogItem[] {
     out.push(item);
   }
   return out;
+}
+
+/**
+ * A row's own "≈ $0.004/min" (docs/v4/COSTS.md §5 item 3), muted "no price"
+ * when the one batched quote for this open came back with nothing priced,
+ * and nothing at all when there is no quote in view yet (no `provider`, or
+ * the request hasn't answered) — never a flash of "no price" while loading.
+ */
+function ModelPriceHint({ priceQuotes, modelId }: { priceQuotes: Map<string, string>; modelId: string }) {
+  const usd = priceQuotes.get(modelId);
+  if (!usd) return null;
+  return <span className="shrink-0 font-mono text-xs text-muted-foreground">{usd}</span>;
 }
 
 /** Label first, id second (mono); custom ids show "Custom model". */

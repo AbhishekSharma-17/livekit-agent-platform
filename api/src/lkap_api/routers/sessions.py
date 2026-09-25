@@ -44,7 +44,7 @@ from lkap_api import (
     recordings,  # registers egress_ended/recording_finalize handlers; resolve_storage_row below
 )
 from lkap_api.auth.deps import WorkspaceContext
-from lkap_api.costs import config_for_session, render_cost
+from lkap_api.costs import config_for_session, cost_context, render_cost
 from lkap_api.db.models import Agent, LiveKitConnection, SessionEvent, SessionQa, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import SessionCost as SessionCostRow
@@ -90,6 +90,8 @@ def _to_out(row: SessionRow, agent_name: str) -> SessionOut:
         channel=cast(SessionChannel, row.channel),
         connection_id=row.connection_id,
         cost_usd=Decimal(str(row.cost_usd)) if row.cost_usd is not None else None,
+        estimated_usd=Decimal(str(row.estimated_usd)) if row.estimated_usd is not None else None,
+        reconciled_usd=Decimal(str(row.reconciled_usd)) if row.reconciled_usd is not None else None,
         disposition=row.disposition,
         recording_status=cast(_RecordingStatus, row.recording_status),
     )
@@ -256,7 +258,7 @@ async def get_session(
         .scalars()
         .all()
     )
-    cost = render_cost(row, persisted_costs, config)
+    cost = render_cost(row, persisted_costs, config, await cost_context(db, row, config))
     latency = SessionLatencyOut.model_validate(row.latency) if row.latency else SessionLatencyOut()
     recording = await _recording_out(db, vault, settings, row, config)
     return SessionDetailOut(

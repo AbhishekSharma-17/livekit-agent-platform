@@ -18,6 +18,10 @@ import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 
 /** `method + host` per docs/UI_UX_SPEC.md §7.6 item 4 ("method + host"), not the full URL template. */
 export function requestSummary(tool: ToolOut): string {
+  if ("tool_slug" in tool.definition) {
+    // V5-47: a connected app's action has no URL of its own; show the app it belongs to.
+    return `App action · ${tool.definition.toolkit || "app"}`;
+  }
   if (tool.definition.kind === "http") {
     let host = tool.definition.url;
     try {

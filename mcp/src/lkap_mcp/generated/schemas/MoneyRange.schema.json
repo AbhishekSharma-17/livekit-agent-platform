@@ -1,0 +1,50 @@
+{
+  "$id": "lkap-contracts/MoneyRange.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A low / mid / high band in USD (a band from stated assumptions, not a confidence interval).",
+  "properties": {
+    "high": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "High"
+    },
+    "low": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Low"
+    },
+    "mid": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Mid"
+    }
+  },
+  "required": [
+    "low",
+    "mid",
+    "high"
+  ],
+  "title": "MoneyRange",
+  "type": "object"
+}

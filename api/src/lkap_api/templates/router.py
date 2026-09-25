@@ -13,11 +13,14 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from lkap_contracts.api_models import TemplateOut, TemplatesResponse
+from lkap_contracts import pricing
+from lkap_contracts.api_models import TemplateEstimate, TemplateOut, TemplatesResponse
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.templates import StarterTemplate
 
 from lkap_api.auth.deps import WorkspaceContext, require
+from lkap_api.costs.assumptions import default_assumptions
+from lkap_api.costs.estimate import build_estimate, table_quote, template_estimate
 from lkap_api.deps import SettingsDep
 from lkap_api.errors import NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
@@ -30,6 +33,7 @@ from lkap_api.templates.catalog import (
     load_catalog,
     missing_pack_templates,
 )
+from lkap_api.templates.seed import seed_from_template
 
 log = get_logger(__name__)
 
@@ -40,13 +44,40 @@ TemplateReaderDep = Annotated[WorkspaceContext, Depends(require("viewer", "agent
 load_catalog()
 
 
+#: ``(template id, pack id, PRICE_VERSION) -> estimate`` (D-V4-42: default assumptions, list prices).
+_ESTIMATES: dict[tuple[str, str, str], TemplateEstimate | None] = {}
+
+
+def template_estimate_for(template: StarterTemplate, manifest: PackManifest) -> TemplateEstimate | None:
+    """The gallery pill: an estimate at list prices and default assumptions, cached per price version.
+
+    ``None`` when nothing in the starter's pipeline is priced, or when its
+    config cannot be seeded (an estimate never breaks the gallery).
+    """
+    key = (template.id, manifest.id, pricing.PRICE_VERSION)
+    if key not in _ESTIMATES:
+        try:
+            config = seed_from_template(template, manifest, credentials_by_provider={})
+            estimate = build_estimate(config, default_assumptions(config), table_quote)
+            _ESTIMATES[key] = template_estimate(estimate)
+        except (ValueError, KeyError) as exc:
+            log.warning("template_estimate_failed", template_id=template.id, error=type(exc).__name__)
+            _ESTIMATES[key] = None
+    return _ESTIMATES[key]
+
+
 def gallery(packs: list[str]) -> list[TemplateOut]:
     """The starters in gallery order for the installed ``packs`` (``LKAP_PACKS``)."""
     manifests = discover_manifests(packs)
     for template in missing_pack_templates(manifests):
         log.warning("template_pack_missing", template_id=template.id, pack_id=template.pack_id)
     return [
-        TemplateOut(template=template, pack=manifest, derived=derived)
+        TemplateOut(
+            template=template,
+            pack=manifest,
+            derived=derived,
+            estimate=template_estimate_for(template, manifest),
+        )
         for template, manifest, derived in available_templates(manifests)
     ]
 

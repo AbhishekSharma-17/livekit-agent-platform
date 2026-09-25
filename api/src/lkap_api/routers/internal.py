@@ -55,6 +55,7 @@ from lkap_api.connections.service import (
     resolve_agent_connection,
 )
 from lkap_api.costs import cost_session
+from lkap_api.costs.snapshot import attach_estimate
 from lkap_api.custom_models.service import with_capabilities
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, Credential, LiveKitConnection, SessionEvent, SessionQa, Tool, utcnow
@@ -399,6 +400,8 @@ async def start_session(
         connection_id=connection.id,
         channel=payload.channel,
     )
+    # D-V4-43: the estimate snapshot runs after the response (the row is committed by then).
+    background_tasks.add_task(attach_estimate, database, session.id, embedder=settings.embedder)
     return await _build_resolved(db, vault, settings, session, agent)
 
 

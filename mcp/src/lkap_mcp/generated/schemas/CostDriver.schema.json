@@ -1,0 +1,168 @@
+{
+  "$id": "lkap-contracts/CostDriver.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One estimate-vs-actual comparison row; a list is sorted by ``|delta_usd|``, largest first.",
+  "properties": {
+    "actual_quantity": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actual Quantity"
+    },
+    "actual_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actual Usd"
+    },
+    "delta_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "actual - estimated; null when either side is unpriced.",
+      "title": "Delta Usd"
+    },
+    "estimated_quantity": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Quantity"
+    },
+    "estimated_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Usd"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "more minutes",
+        "fewer minutes",
+        "more talk",
+        "less talk",
+        "longer prompts",
+        "more turns",
+        "unpriced line",
+        "price changed",
+        "not estimated",
+        "as estimated"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "slot": {
+      "enum": [
+        "stt",
+        "llm",
+        "tts",
+        "realtime",
+        "avatar",
+        "workflow_llm",
+        "image_gen",
+        "embedding",
+        "turn_detection",
+        "vad",
+        "livekit_agent",
+        "livekit_participant",
+        "livekit_sip",
+        "livekit_egress",
+        "qa_judge"
+      ],
+      "title": "Slot",
+      "type": "string"
+    },
+    "unit": {
+      "enum": [
+        "tokens_in",
+        "tokens_out",
+        "audio_s_in",
+        "audio_s_out",
+        "chars",
+        "minutes",
+        "images",
+        "text_tokens_in",
+        "text_tokens_out",
+        "audio_tokens_in",
+        "audio_tokens_out",
+        "cached_tokens_in",
+        "requests"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slot",
+    "provider_id",
+    "unit",
+    "reason"
+  ],
+  "title": "CostDriver",
+  "type": "object"
+}

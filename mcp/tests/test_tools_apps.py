@@ -203,3 +203,76 @@ async def test_apps_list_without_a_key_explains_apps_are_not_enabled(
 
     assert result["ok"] is False
     assert result["error"]["code"] == "apps_not_enabled"
+
+
+# ------------------------------------------------------------------ V5-47: agents
+async def _agent(mcp: Any, name: str = "Demo — Apps") -> dict[str, Any]:
+    result = await mcp.call("agent_create", name=name, pack_id="generic")
+    assert result["ok"] is True, result
+    agent: dict[str, Any] = result["data"]["agent"]
+    return agent
+
+
+async def test_apps_add_tools_with_an_agent_creates_and_attaches_the_tools(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str
+) -> None:
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        agent = await _agent(mcp)
+        connected = await mcp.call(
+            "apps_connect", toolkit="acmecrm", method="api_key", fields={"api_key": APP_KEY}
+        )
+        picked = await mcp.call(
+            "apps_add_tools",
+            connection_id=connected["data"]["connection_id"],
+            actions=["ACMECRM_LIST_CONTACTS"],
+            agent_id=agent["id"],
+        )
+        stored = await mcp.call("agent_get", id_or_slug=agent["id"])
+
+    assert picked["ok"] is True, picked
+    (tool_id,) = picked["data"]["tools_created"]
+    config = stored["data"]["config"] if "config" in stored["data"] else stored["data"]["agent"]["config"]
+    assert tool_id in config["tools"]["tool_ids"]
+    assert config["tools"]["apps"]["mode"] == "actions"
+
+
+async def test_agent_apps_mode_router_provisions_on_save_and_plans_without_sending(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str
+) -> None:
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        agent = await _agent(mcp, "Demo — Apps scratch")
+        await mcp.call("apps_connect", toolkit="acmecrm", method="api_key", fields={"api_key": APP_KEY})
+        planned = await mcp.call("agent_apps_mode", id_or_slug=agent["id"], mode="router", plan=True)
+        assert world.sessions == {}, "a plan sends nothing"
+        saved = await mcp.call(
+            "agent_apps_mode",
+            id_or_slug=agent["id"],
+            mode="router",
+            allowed_toolkits=["AcmeCRM"],
+            router={"search": True, "execute": True, "manage_connections": False},
+        )
+        off = await mcp.call("agent_apps_mode", id_or_slug=agent["id"], mode="off")
+
+    assert planned["plan"][0]["method"] == "PUT"
+    assert planned["plan"][0]["body"]["config"]["tools"]["apps"]["mode"] == "router"
+    assert saved["ok"] is True, saved
+    apps = saved["data"]["agent"]["config"]["tools"]["apps"]
+    assert apps["mode"] == "router"
+    assert apps["allowed_toolkits"] == ["acmecrm"]
+    assert any("slower" in step for step in saved["next_steps"])
+    assert len(world.calls_of("create_router_session")) == 1
+    assert off["ok"] is True, off
+    assert world.sessions == {}, "off removes the tool finder"
+
+
+async def test_agent_apps_mode_needs_agents_write(key: Any, mcp_session: Any) -> None:
+    raw = await key(READ_ONLY_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        names = set(await mcp.tool_names())
+
+    assert "agent_apps_mode" not in names

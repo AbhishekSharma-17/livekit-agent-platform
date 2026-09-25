@@ -10,12 +10,17 @@ platform/pack callbacks, and `lkap.ui.request` (agent -> UI) is a thin
 
 v2 panel blocks (CONTRACTS-V2 §4.4): `UiState.blocks[<block id>]` holds each
 block's state as plain JSON (see `lkap_agent.ui.blocks`), written through
-`set_block` / `patch_block` / `cite` / `request_form` and carried by the same
-snapshot/patch stream (paths under `/blocks/<id>`). `request_form` is a
-two-channel round trip: the block state flips to `status="requested"` (so a
-reconnecting browser re-renders the form from a snapshot), a short
-`lkap.ui.request {method: "form"}` RPC asks the browser to show it, and the
-values normally come back as `lkap.agent.action {action: "form_submit"}`.
+`set_block` / `patch_block` / `cite` / `request_block` and carried by the same
+snapshot/patch stream (paths under `/blocks/<id>`).
+
+`request_block` (V5-02) is the generic blocking request every requestable
+block (`RequestableState`) uses, as a two-channel round trip: the block state
+flips to `status="requested"` (so a reconnecting browser re-renders the
+request from a snapshot), a short `lkap.ui.request {method: "request"}` RPC
+asks the browser to show it, and the answer normally comes back as
+`lkap.agent.action {action: "block_submit"}`. At most one request is pending
+per block. `request_form` is the v2 form request, now a thin alias over the
+same machinery with `method="form"` and its v2 statuses.
 
 Note on attribute naming: the byte-stream attribute and `AssetRef` field
 carrying the caption are named `caption` (docs/CONTRACTS.md §10 wins over
@@ -30,7 +35,8 @@ import mimetypes
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
-from typing import Any, Final
+from dataclasses import dataclass
+from typing import Any, Final, Literal
 
 from livekit import rtc
 from lkap_contracts.api_models import KbHit
@@ -46,11 +52,14 @@ from lkap_contracts.ui_protocol import (
     AgentAction,
     AgentActionResult,
     AssetRef,
+    BlockRequestPayload,
     BlockSpec,
+    BlockSubmitPayload,
     ChecklistItem,
     FormBlockState,
     KbCitation,
     Note,
+    RequestableState,
     StatusStamp,
     Tone,
     UiPatch,
@@ -60,12 +69,18 @@ from lkap_contracts.ui_protocol import (
     UiSnapshot,
     UiState,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from lkap_agent.logging import get_logger
-from lkap_agent.ui.blocks import block_path, initial_block_states, jsonable, validate_block_state
+from lkap_agent.ui.blocks import (
+    BLOCK_STATE_MODELS,
+    block_path,
+    initial_block_states,
+    jsonable,
+    validate_block_state,
+)
 
-__all__ = ["UiChannel"]
+__all__ = ["BARGE_IN", "REQUEST_ACK_TIMEOUT_S", "RequestMethod", "UiChannel"]
 
 #: `Pack.on_ui_action(ctx, action, payload) -> payload` shape, bound by the caller.
 OnUiAction = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -77,18 +92,25 @@ OnSetVideoSource = Callable[[str], Awaitable[None]]
 OnBlockAction = Callable[[str, str, dict[str, Any]], Awaitable[dict[str, Any]]]
 #: `rewind`/`inject_user_text` handler: `(action, payload) -> result payload` (V2-18).
 OnTextAction = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
-#: Called with `(block_id, values)` for a `form_submit` nobody is awaiting.
+#: Called with `(block_id, values)` for a `form_submit` / `block_submit` nobody is awaiting.
 OnUnsolicitedForm = Callable[[str, dict[str, Any]], Awaitable[None]]
 #: `SessionContext.record_event`-shaped session event sink.
 RecordEvent = Callable[[str, dict[str, Any]], None]
+#: The `lkap.ui.request` method a pending request was sent with: the generic
+#: `request` (V5-02) or the legacy `form` alias.
+RequestMethod = Literal["request", "form"]
 
-#: How long the `form` UI request may take to be answered. The browser should
-#: acknowledge as soon as the form is visible; the values arrive separately via
-#: `form_submit`, so this bounds only the "show the form" nudge. The receiving
-#: handler sees `responseTimeout` minus the SDK's 7 s round-trip allowance
-#: (measured live: 10 s here arrived as 3 s in the browser), so keep it well
-#: above 7 s.
-FORM_REQUEST_ACK_TIMEOUT_S: Final[float] = 15.0
+#: `cancel_pending` reason for the caller speaking over a pending request
+#: (`user_state == "speaking"`; the session wires it, V5-08).
+BARGE_IN: Final[str] = "barge_in"
+
+#: How long the `request` / `form` UI request may take to be answered. The
+#: browser should acknowledge as soon as the request is visible; the answer
+#: arrives separately via `block_submit` / `form_submit`, so this bounds only
+#: the "show it" nudge. The receiving handler sees `responseTimeout` minus the
+#: SDK's 7 s round-trip allowance (measured live: 10 s here arrived as 3 s in
+#: the browser), so keep it well above 7 s.
+REQUEST_ACK_TIMEOUT_S: Final[float] = 15.0
 #: Response timeout for the fire-and-forget `show_block` UI request (same 7 s caveat).
 SHOW_BLOCK_TIMEOUT_S: Final[float] = 10.0
 
@@ -281,6 +303,14 @@ def apply_patch_op(state: UiState, op: UiPatchOp) -> None:
         raise ValueError(f"unknown UiState field: {top!r}")
 
 
+@dataclass(slots=True)
+class _PendingRequest:
+    """The one pending request of a block: its waiter and the method it was sent with."""
+
+    future: asyncio.Future[dict[str, Any] | None]
+    method: RequestMethod
+
+
 class UiChannel:
     """Agent-side `lkap.ui.*` / `lkap.agent.action` handle for one session.
 
@@ -325,7 +355,7 @@ class UiChannel:
         self._patches_since_snapshot = 0
         self._block_specs: dict[str, BlockSpec] = {}
         self._blocks_initialized = False
-        self._pending_forms: dict[str, asyncio.Future[dict[str, Any] | None]] = {}
+        self._pending: dict[str, _PendingRequest] = {}
         self._tasks: set[asyncio.Task[Any]] = set()
         self._closed = False
         self._log = log or get_logger(__name__).bind(session_id=session_id)
@@ -335,17 +365,17 @@ class UiChannel:
         self._room.local_participant.register_rpc_method(RPC_AGENT_ACTION, self._handle_agent_action)
 
     def close(self) -> None:
-        """Unregister the RPC handler and release every pending `request_form` with `None`.
+        """Unregister the RPC handler and release every pending request with `None`.
 
         The unregister is guarded because some minimal test doubles (e.g.
         `fakes.fake_room.FakeRoom`) implement `register_rpc_method` but not the
         (rarely needed, per-session-room) `unregister_rpc_method`.
         """
         self._closed = True
-        for future in self._pending_forms.values():
-            if not future.done():
-                future.set_result(None)
-        self._pending_forms.clear()
+        for entry in self._pending.values():
+            if not entry.future.done():
+                entry.future.set_result(None)
+        self._pending.clear()
         for task in list(self._tasks):
             task.cancel()
         unregister = getattr(self._room.local_participant, "unregister_rpc_method", None)
@@ -541,15 +571,74 @@ class UiChannel:
         """
         if not ops:
             return
-        absolute = [op.model_copy(update={"path": block_path(block_id, op.path)}) for op in ops]
-        block_type = self._block_type(block_id)
-        if block_type is not None:
-            trial = UiState(blocks={block_id: copy.deepcopy(self.state.blocks.get(block_id, {}))})
-            for op in absolute:
-                apply_patch_op(trial, _normalize_block_op(op))
-            validate_block_state(block_type, trial.blocks.get(block_id) or {})
+        absolute = self._validated_block_ops(block_id, ops)
         await self.patch(absolute)
-        self._record("block_update", {"block_id": block_id, "block_type": block_type, "op": "patch"})
+        self._record(
+            "block_update", {"block_id": block_id, "block_type": self._block_type(block_id), "op": "patch"}
+        )
+
+    async def request_block(
+        self,
+        block_id: str,
+        *,
+        timeout_s: float,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Ask the user to answer requestable block `block_id` and wait (V5-02).
+
+        The caller writes the block's content first (options, schema, prompt:
+        whatever its type renders); this method only drives the request:
+
+        1. Patch `/blocks/<id>/status = "requested"` and `/submitted_at =
+           null`, validated against the block type. A reconnecting browser
+           renders the pending request from the snapshot alone.
+        2. RPC `lkap.ui.request {method: "request", payload: {block_id,
+           timeout_s, **payload}}` with a short response timeout
+           (`BlockRequestPayload`; `payload` may carry `schema` and any other
+           key the block type defines). The browser acks at once; an inline
+           `{values}` or `{cancelled: true}` answer is accepted too, and an
+           RPC failure is logged while the wait continues.
+        3. `lkap.agent.action {action: "block_submit", payload: {block_id,
+           values} | {block_id, cancelled: true}}` resolves the request.
+
+        Released with `None` (status `cancelled`) on a user cancel, a timeout
+        and `cancel_pending`; released with `None` (no status change: the new
+        request owns the block) by a second request on the same block; and
+        with `None` on session close. Realtime pipelines run the wait on the
+        session's `BackgroundRunner` and deliver an answer as an urgent
+        background result, as `request_form` does (the calling tool's job).
+
+        Args:
+            block_id: The requestable block (`RequestableState`, or a `custom`
+                or unknown block, whose state is not typed).
+            timeout_s: Seconds the user has to answer.
+            payload: Extra `BlockRequestPayload` keys for the browser.
+
+        Returns:
+            The submitted values, or `None` on cancel, timeout, barge-in, a
+            newer request or session close.
+
+        Raises:
+            ValueError: When `block_id` is a known block type that cannot be
+                requested (e.g. a `table`).
+            pydantic.ValidationError: When `timeout_s` or `payload` does not
+                fit `BlockRequestPayload`.
+        """
+        if not self._is_requestable(block_id):
+            raise ValueError(f"block {block_id!r} ({self._block_type(block_id)}) cannot be requested")
+        rpc_payload = BlockRequestPayload.model_validate(
+            {**(payload or {}), "block_id": block_id, "timeout_s": timeout_s}
+        ).model_dump(mode="json", by_alias=True, exclude_none=True)
+        ops = self._validated_block_ops(
+            block_id,
+            [
+                UiPatchOp(op="set", path="status", value="requested"),
+                UiPatchOp(op="set", path="submitted_at", value=None),
+            ],
+        )
+        return await self._await_request(
+            block_id, method="request", ops=ops, rpc_payload=rpc_payload, timeout_s=timeout_s
+        )
 
     async def request_form(
         self,
@@ -560,6 +649,11 @@ class UiChannel:
     ) -> dict[str, Any] | None:
         """Show a JSON-schema form in block `block_id` and wait for the user.
 
+        Deprecated alias of `request_block` (V5-02), kept for one release with
+        the v2 wire and statuses unchanged; no runtime warning. It runs on the
+        same pending-request machinery, so `block_submit`, `cancel_pending` and
+        `close` release it too.
+
         1. `set /blocks/<id>` = `FormBlockState{schema, values: prefill,
            status: "requested", submitted_at: null}`.
         2. RPC `lkap.ui.request {method: "form", payload: {block_id, schema,
@@ -567,43 +661,104 @@ class UiChannel:
            `values` resolves the form; `{cancelled: true}` returns `None`; any
            other answer or an RPC error is logged and the wait continues (the
            form is already visible from the block state).
-        3. `lkap.agent.action {action: "form_submit", payload: {block_id,
-           values}}` resolves the form (see `_accept_form`).
+        3. `lkap.agent.action {action: "form_submit" | "block_submit",
+           payload: {block_id, values}}` resolves the form (see `_accept_form`).
 
-        A second `request_form` on the same block releases the first with
-        `None`. On timeout the block keeps `status: "requested"`, so a late
-        submission still lands in state and reaches the agent through the
-        unsolicited-form callback.
+        Unlike the generic request, a cancel resets the block to `idle` and a
+        timeout keeps `status: "requested"`, so a late submission still lands
+        in state and reaches the agent through the unsolicited-form callback.
 
         Returns:
             The submitted values, or `None` on cancel, timeout or session close.
         """
-        if self._closed:
-            return None
-        previous = self._pending_forms.pop(block_id, None)
-        if previous is not None and not previous.done():
-            previous.set_result(None)
-        future: asyncio.Future[dict[str, Any] | None] = asyncio.get_running_loop().create_future()
-        self._pending_forms[block_id] = future
-
         prefill_values = dict(prefill or {})
         state = FormBlockState.model_validate(
             {"schema": schema, "values": prefill_values, "status": "requested"}
         ).model_dump(mode="json", by_alias=True)
+        return await self._await_request(
+            block_id,
+            method="form",
+            ops=[UiPatchOp(op="set", path=block_path(block_id), value=state)],
+            rpc_payload={"block_id": block_id, "schema": schema, "prefill": prefill_values},
+            timeout_s=timeout_s,
+        )
+
+    @property
+    def pending_requests(self) -> dict[str, RequestMethod]:
+        """Block id -> method of every request still waiting for the user.
+
+        The session reads it to decide whether a barge-in has anything to
+        cancel (V5-08 wires `cancel_pending(BARGE_IN)` on `user_state ==
+        "speaking"`).
+        """
+        return {block_id: e.method for block_id, e in self._pending.items() if not e.future.done()}
+
+    def cancel_pending(self, reason: str, *, methods: Iterable[RequestMethod] | None = None) -> list[str]:
+        """Release every pending request with `None` (e.g. `reason=BARGE_IN`).
+
+        Synchronous, so a `user_state_changed` handler can call it directly:
+        the waiters are released at once and the state patches (`cancelled`
+        for `request`, `idle` for the legacy `form`) follow on a task, skipped
+        for a block a newer request has claimed in the meantime.
+
+        Args:
+            reason: Why, recorded on the session event (`barge_in`, ...).
+            methods: Only release requests sent with these methods; `None`
+                releases all of them.
+
+        Returns:
+            The ids of the blocks whose request was released.
+        """
+        wanted = set(methods) if methods is not None else None
+        released: list[str] = []
+        for block_id, entry in list(self._pending.items()):
+            if entry.future.done() or (wanted is not None and entry.method not in wanted):
+                continue
+            entry.future.set_result(None)
+            released.append(block_id)
+            self._spawn(self._mark_cancelled(block_id, entry.method, reason))
+        if released:
+            self._log.debug("ui_requests_cancelled", block_ids=released, reason=reason)
+        return released
+
+    async def _await_request(
+        self,
+        block_id: str,
+        *,
+        method: RequestMethod,
+        ops: list[UiPatchOp],
+        rpc_payload: dict[str, Any],
+        timeout_s: float,
+    ) -> dict[str, Any] | None:
+        """Claim the block's pending slot, publish the request and wait for the answer."""
+        if self._closed:
+            return None
+        previous = self._pending.pop(block_id, None)
+        if previous is not None and not previous.future.done():
+            previous.future.set_result(None)
+        future: asyncio.Future[dict[str, Any] | None] = asyncio.get_running_loop().create_future()
+        entry = _PendingRequest(future=future, method=method)
+        self._pending[block_id] = entry
         try:
-            await self.patch([UiPatchOp(op="set", path=block_path(block_id), value=state)])
+            await self.patch(ops)
             self._record(
                 "block_update",
-                {"block_id": block_id, "block_type": "form", "op": "form_requested"},
+                {
+                    "block_id": block_id,
+                    "block_type": "form" if method == "form" else self._block_type(block_id),
+                    "op": "form_requested" if method == "form" else "block_requested",
+                },
             )
-            self._spawn(self._send_form_request(block_id, schema, prefill_values, future))
+            self._spawn(self._send_request(block_id, method, rpc_payload, future))
             return await asyncio.wait_for(future, timeout=timeout_s)
         except TimeoutError:
-            self._log.debug("form_request_timed_out", block_id=block_id, timeout_s=timeout_s)
+            self._log.debug("ui_request_timed_out", block_id=block_id, method=method, timeout_s=timeout_s)
+            if method == "request" and self._pending.get(block_id) is entry:
+                await self._mark_cancelled(block_id, method, "timeout")
             return None
         finally:
-            if self._pending_forms.get(block_id) is future:
-                del self._pending_forms[block_id]
+            if self._pending.get(block_id) is entry:
+                del self._pending[block_id]
 
     async def cite(self, block_id: str, hits: list[KbHit]) -> None:
         """Replace `/blocks/<block_id>/items` with `hits` as `KbCitation`s."""
@@ -661,6 +816,9 @@ class UiChannel:
         if action.action == "form_submit":
             return await self._handle_form_submit(action.payload)
 
+        if action.action == "block_submit":
+            return await self._handle_block_submit(action.payload)
+
         if action.action == "block_action":
             block_id = str(action.payload.get("block_id", ""))
             if not block_id:
@@ -688,13 +846,51 @@ class UiChannel:
         if self._block_type(block_id) not in (None, "form"):
             return AgentActionResult(ok=False, error=f"block {block_id!r} is not a form")
         if payload.get("cancelled") is True:
-            await self._cancel_form(block_id)
+            await self._submit(block_id, None)
             return AgentActionResult(ok=True)
         values = payload.get("values")
         if not isinstance(values, dict):
             return AgentActionResult(ok=False, error="form_submit needs a values object")
-        await self._accept_form(block_id, values)
+        await self._submit(block_id, values)
         return AgentActionResult(ok=True)
+
+    async def _handle_block_submit(self, payload: dict[str, Any]) -> AgentActionResult:
+        """`block_submit` (V5-02): the answer to a `request` (or `form`) on any requestable block."""
+        try:
+            submit = BlockSubmitPayload.model_validate(payload)
+        except ValidationError:
+            return AgentActionResult(
+                ok=False, error="block_submit needs a block_id and either a values object or cancelled: true"
+            )
+        block_id = submit.block_id
+        if block_id not in self.state.blocks and block_id not in self._block_specs:
+            return AgentActionResult(ok=False, error=f"unknown block: {block_id!r}")
+        if block_id not in self._pending and not self._is_requestable(block_id):
+            return AgentActionResult(ok=False, error=f"block {block_id!r} cannot be submitted")
+        await self._submit(block_id, None if submit.cancelled else submit.values)
+        return AgentActionResult(ok=True)
+
+    async def _submit(self, block_id: str, values: dict[str, Any] | None) -> None:
+        """Route an answer (`None` = the user cancelled) by the pending request's method.
+
+        With nothing pending, a `form` block keeps the legacy form handling and
+        every other block the generic one.
+        """
+        entry = self._pending.get(block_id)
+        method: RequestMethod
+        if entry is not None:
+            method = entry.method
+        else:
+            method = "form" if self._block_type(block_id) == "form" else "request"
+        if values is None:
+            future = entry.future if entry is not None else None
+            if future is not None and not future.done():
+                future.set_result(None)
+            await self._mark_cancelled(block_id, method, "user")
+        elif method == "form":
+            await self._accept_form(block_id, values)
+        else:
+            await self._accept_request(block_id, values)
 
     async def _accept_form(self, block_id: str, values: dict[str, Any]) -> None:
         """Store submitted `values`, record `form_submitted`, and hand them to the waiter.
@@ -712,9 +908,40 @@ class UiChannel:
             ]
         )
         self._record("form_submitted", {"block_id": block_id, "values": values})
-        future = self._pending_forms.get(block_id)
-        if future is not None and not future.done():
-            future.set_result(values)
+        await self._deliver(block_id, values)
+
+    async def _accept_request(self, block_id: str, values: dict[str, Any]) -> None:
+        """Generic submit: mark the block `submitted` and hand `values` to the waiter.
+
+        The values are stored at `.../values` only when the block's state model
+        has that field (or the block is untyped); a block that renders its
+        answer elsewhere is updated by the requesting tool.
+        """
+        values = jsonable(values)
+        ops: list[UiPatchOp] = []
+        if self._stores_values(block_id):
+            ops.append(UiPatchOp(op="set", path=block_path(block_id, "values"), value=values))
+        ops += [
+            UiPatchOp(op="set", path=block_path(block_id, "status"), value="submitted"),
+            UiPatchOp(op="set", path=block_path(block_id, "submitted_at"), value=time.time()),
+        ]
+        await self.patch(ops)
+        self._record(
+            "block_update",
+            {
+                "block_id": block_id,
+                "block_type": self._block_type(block_id),
+                "op": "block_submitted",
+                "values": values,
+            },
+        )
+        await self._deliver(block_id, values)
+
+    async def _deliver(self, block_id: str, values: dict[str, Any]) -> None:
+        """Resolve the block's waiter, or, with nobody waiting, call the unsolicited handler."""
+        entry = self._pending.get(block_id)
+        if entry is not None and not entry.future.done():
+            entry.future.set_result(values)
             return
         if self._on_unsolicited_form is not None:
             try:
@@ -722,42 +949,78 @@ class UiChannel:
             except Exception:  # noqa: BLE001 - the submission is already stored and recorded
                 self._log.warning("unsolicited form handler failed", block_id=block_id, exc_info=True)
 
-    async def _cancel_form(self, block_id: str) -> None:
-        """The user dismissed the form: release the waiter with `None` and reset the status."""
-        future = self._pending_forms.get(block_id)
-        if future is not None and not future.done():
-            future.set_result(None)
-        await self.patch([UiPatchOp(op="set", path=block_path(block_id, "status"), value="idle")])
-        self._record("block_update", {"block_id": block_id, "block_type": "form", "op": "form_cancelled"})
+    async def _mark_cancelled(self, block_id: str, method: RequestMethod, reason: str) -> None:
+        """Write the cancelled status: `cancelled` for `request`, `idle` for the legacy `form`.
 
-    async def _send_form_request(
+        Skipped when a newer request has claimed the block since the release
+        (so a late patch never hides that request) and after `close`.
+        """
+        current = self._pending.get(block_id)
+        if self._closed or (current is not None and not current.future.done()):
+            return
+        event: dict[str, Any]
+        if method == "form":
+            await self.patch([UiPatchOp(op="set", path=block_path(block_id, "status"), value="idle")])
+            event = {"block_id": block_id, "block_type": "form", "op": "form_cancelled"}
+        else:
+            await self.patch([UiPatchOp(op="set", path=block_path(block_id, "status"), value="cancelled")])
+            event = {"block_id": block_id, "block_type": self._block_type(block_id), "op": "block_cancelled"}
+        if reason != "user":
+            event["reason"] = reason
+        self._record("block_update", event)
+
+    async def _send_request(
         self,
         block_id: str,
-        schema: dict[str, Any],
-        prefill: dict[str, Any],
+        method: RequestMethod,
+        payload: dict[str, Any],
         future: asyncio.Future[dict[str, Any] | None],
     ) -> None:
         try:
-            result = await self.request_ui(
-                "form",
-                {"block_id": block_id, "schema": schema, "prefill": prefill},
-                response_timeout=FORM_REQUEST_ACK_TIMEOUT_S,
-            )
-        except Exception as exc:  # noqa: BLE001 - the form is visible from state; keep waiting
-            self._log.debug("form_request_rpc_failed", block_id=block_id, error=str(exc))
+            result = await self.request_ui(method, payload, response_timeout=REQUEST_ACK_TIMEOUT_S)
+        except Exception as exc:  # noqa: BLE001 - the request is visible from state; keep waiting
+            self._log.debug("ui_request_rpc_failed", block_id=block_id, method=method, error=str(exc))
             return
         if future.done():
             return
         if result.get("cancelled") is True:
-            await self._cancel_form(block_id)
+            await self._submit(block_id, None)
         elif isinstance(result.get("values"), dict):
-            await self._accept_form(block_id, result["values"])
+            await self._submit(block_id, result["values"])
 
     # --- helpers ----------------------------------------------------------------
 
     def _block_type(self, block_id: str) -> Any:
         spec = self._block_specs.get(block_id)
         return spec.type if spec is not None else None
+
+    def _is_requestable(self, block_id: str) -> bool:
+        """Whether a request may target the block: a `RequestableState` type, `custom` or untyped."""
+        block_type = self._block_type(block_id)
+        if block_type is None or block_type == "custom":
+            return True
+        model = BLOCK_STATE_MODELS.get(block_type)
+        return model is not None and issubclass(model, RequestableState)
+
+    def _stores_values(self, block_id: str) -> bool:
+        """Whether a generic submission is written to the block's `values` field."""
+        model = BLOCK_STATE_MODELS.get(self._block_type(block_id))
+        return model is None or "values" in model.model_fields
+
+    def _validated_block_ops(self, block_id: str, ops: list[UiPatchOp]) -> list[UiPatchOp]:
+        """Rewrite block-relative `ops` to absolute paths, checking the result fits the block type.
+
+        Raises:
+            pydantic.ValidationError: When the patched state no longer fits.
+        """
+        absolute = [op.model_copy(update={"path": block_path(block_id, op.path)}) for op in ops]
+        block_type = self._block_type(block_id)
+        if block_type is not None:
+            trial = UiState(blocks={block_id: copy.deepcopy(self.state.blocks.get(block_id, {}))})
+            for op in absolute:
+                apply_patch_op(trial, _normalize_block_op(op))
+            validate_block_state(block_type, trial.blocks.get(block_id) or {})
+        return absolute
 
     def _record(self, event_type: str, payload: dict[str, Any]) -> None:
         if self._record_event is None:

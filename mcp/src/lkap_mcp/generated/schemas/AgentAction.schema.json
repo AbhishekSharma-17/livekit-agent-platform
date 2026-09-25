@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/AgentAction.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).",
+  "description": "RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).\n\nPayload keys per action:\n\n* ``get_snapshot`` — ``{}``\n* ``set_video_source`` — ``{source: \"camera\" | \"screen\" | \"none\"}``\n* ``ui_action`` — ``{name, data}`` → ``Pack.on_ui_action``\n* ``form_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``\n  (``form`` blocks only; kept for one release beside ``block_submit``)\n* ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``\n* ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)\n* ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``\n  (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block",
   "properties": {
     "action": {
       "enum": [
@@ -11,7 +11,8 @@
         "form_submit",
         "block_action",
         "rewind",
-        "inject_user_text"
+        "inject_user_text",
+        "block_submit"
       ],
       "title": "Action",
       "type": "string"

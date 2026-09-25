@@ -215,12 +215,31 @@ export interface ActivityEvent {
 /**
  * RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).
  *
+ * Payload keys per action:
+ *
+ * * ``get_snapshot`` — ``{}``
+ * * ``set_video_source`` — ``{source: "camera" | "screen" | "none"}``
+ * * ``ui_action`` — ``{name, data}`` → ``Pack.on_ui_action``
+ * * ``form_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
+ *   (``form`` blocks only; kept for one release beside ``block_submit``)
+ * * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``
+ * * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
+ * * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
+ *   (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AgentAction".
  */
 export interface AgentAction {
   action:
-    "get_snapshot" | "set_video_source" | "ui_action" | "form_submit" | "block_action" | "rewind" | "inject_user_text";
+    | "get_snapshot"
+    | "set_video_source"
+    | "ui_action"
+    | "form_submit"
+    | "block_action"
+    | "rewind"
+    | "inject_user_text"
+    | "block_submit";
   payload?: {
     [k: string]: unknown;
   };
@@ -1413,7 +1432,7 @@ export interface FormBlockState {
   schema?: {
     [k: string]: unknown;
   };
-  status?: "idle" | "requested" | "submitted";
+  status?: "idle" | "requested" | "submitted" | "cancelled";
   submitted_at?: number | null;
   values?: {
     [k: string]: unknown;
@@ -3130,15 +3149,22 @@ export interface UiPatchOp {
  * * ``focus`` — ``{target: str}``
  * * ``request_video_source`` — ``{source: "camera" | "screen"}``
  * * ``toast`` — ``{message: str, tone?: Tone}``
- * * ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``
+ * * ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``.
+ *   Deprecated alias of ``request``, kept for one release (V5-02); its answer
+ *   may come back as ``form_submit`` or ``block_submit``.
  * * ``show_block`` — ``{block_id}``
  * * ``navigate`` — ``{url}`` (new tab; the UI confirms first)
+ * * ``request`` — ``{block_id, timeout_s, schema?}`` (V5-02): the generic
+ *   blocking request on any requestable block (:class:`RequestableState`).
+ *   The block's state already shows ``status: "requested"``, so the browser
+ *   acks at once (``{}``) and answers later with ``block_submit``; an inline
+ *   ``{values}`` or ``{cancelled: true}`` result is accepted too.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "UiRequest".
  */
 export interface UiRequest {
-  method: "open_dialog" | "focus" | "request_video_source" | "toast" | "form" | "show_block" | "navigate";
+  method: "open_dialog" | "focus" | "request_video_source" | "toast" | "form" | "show_block" | "navigate" | "request";
   payload?: {
     [k: string]: unknown;
   };

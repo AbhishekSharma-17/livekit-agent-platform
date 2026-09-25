@@ -552,12 +552,12 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 
 | ID | Owner | Wave | Status | Commit | Live | Open asks |
 |---|---|---|---|---|---|---|
-| V5-01 | Opus | 1 | planned | | | |
-| V5-02 | Opus | 1 | planned | | | |
-| V5-03 | Sonnet | 1 | planned | | | |
+| V5-01 | Opus | 1 | running | | | |
+| V5-02 | Opus | 1 | merged | 753d0c9 (+ d128e20 exports) | | |
+| V5-03 | Sonnet | 1 | running | | | |
 | V5-04 | Opus | 1 | planned | | | |
 | V5-05 | Opus | 1 | planned | | | |
-| V5-18 | Opus | 1 | planned | | needs the Composio key (present) | |
+| V5-18 | Opus | 1 | running | | needs the Composio key (present) | |
 | V5-06 | Opus | 2 | planned | | | |
 | V5-07 | Opus | 2 | planned | | | |
 | V5-08 | Opus | 2 | planned | | | |

@@ -21,11 +21,14 @@ from livekit.agents import APIConnectOptions, llm
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr
 from lkap_contracts.agent_config import ResolvedAgentConfig
 from lkap_contracts.flow import AgentNode, FlowSpec, StartNode
+from lkap_contracts.tools import ToolExecution
 from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
 
 from lkap_agent.flow import FlowNodeAgent, FlowUserdata
+from lkap_agent.flow.runtime import CANCELLED_BY_STEP_CHANGE
 from lkap_agent.main import NoopUiChannel, run_session
 from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
+from lkap_agent.tools.execution import resolve_execution, wrap_tool
 
 # ------------------------------------------------------------------ doubles
 
@@ -720,3 +723,99 @@ async def test_a_batch_without_an_edge_still_gets_its_tool_reply() -> None:
 
     assert session.current_agent.id == "start"
     assert _after_user(starter) == ["assistant:Your policy is active."]
+
+
+# ------------- V4-20: cancelled and late sibling results reach the node the caller is on (R-V4-69)
+
+
+def _background_lookup(delay_s: float, *, cancellable: bool) -> Any:
+    """`lookup_policy` as a real background tool: announces at once, answers after `delay_s`."""
+    resolved = resolve_execution(
+        name="lookup_policy",
+        kind="builtin",
+        is_read=True,
+        declared=ToolExecution(mode="background", cancellable=cancellable),
+        agent_default="blocking",
+        flow_node=True,
+    )
+    assert resolved.mode == "background" and resolved.cancellable is cancellable
+    return wrap_tool(_lookup_policy(delay_s), resolved)
+
+
+async def _start_with_tool(
+    conversation: ScriptedLLM, tool: Any
+) -> tuple[FakeApi, FakeJobContext, RoomlessStarter]:
+    api = FakeApi(_flow_config(SIBLING_FLOW))
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    deps = _deps(
+        api,
+        factory=_FlowFactory(conversation, FakeLLM(["{}"])),
+        session_starter=starter,
+        builtin_tools_builder=lambda *_a: [tool],
+    )
+    await run_session(ctx, deps)
+    assert starter.session is not None
+    await _wait_for(lambda: "assistant:Hi." in _history_kinds(starter))
+    return api, ctx, starter
+
+
+async def _hand_off_with_sibling(conversation: ScriptedLLM, starter: RoomlessStarter) -> Any:
+    session = starter.session
+    assert session is not None
+    await session.run(user_input=USER_LINE)
+    await _wait_for(lambda: session.current_agent.id == "claims", timeout_s=5.0)
+    await _wait_for(lambda: f"assistant:{CLAIMS_LINE}" in _history_kinds(starter), timeout_s=5.0)
+    await asyncio.sleep(0.2)  # room for a stray reply to land
+    # The R-V4-64 invariants hold: no router reply, the claims node speaks first.
+    assert _after_user(starter) == ["handoff:start->claims", f"assistant:{CLAIMS_LINE}"]
+    assert len(conversation.calls) == 3
+    return session.current_agent
+
+
+def _late_result_events(api: FakeApi) -> list[dict[str, Any]]:
+    return [e.payload for e in api.events_of("info") if e.payload.get("message") == "flow_late_result"]
+
+
+async def test_a_sibling_cancelled_by_the_step_change_leaves_a_cancelled_output_in_the_target() -> None:
+    """R-V4-69 (a): the claims node sees the lookup was cancelled, not only its announce."""
+    conversation = ScriptedLLM(["Hi.", [ToolCall("go_to_claims"), ToolCall("lookup_policy")], CLAIMS_LINE])
+    api, ctx, starter = await _start_with_tool(conversation, _background_lookup(30.0, cancellable=True))
+
+    claims = await _hand_off_with_sibling(conversation, starter)
+
+    called, outputs = _pair_in(claims.chat_ctx, "lookup_policy")
+    assert called
+    assert len(outputs) == 2  # the announce, then the cancellation
+    assert outputs[-1].startswith("Cancelled:")
+    assert outputs[-1] == CANCELLED_BY_STEP_CHANGE
+    assert POLICY_OUTPUT not in outputs
+    # The cancellation is its own call/output pair (the SDK's `_final` id), never a
+    # second output for the announce's call id.
+    call_ids = [i.call_id for i in claims.chat_ctx.items if i.type == "function_call_output"]
+    assert len(call_ids) == len(set(call_ids))
+    # The claims node's first generation already saw it.
+    assert _pair_in(conversation.contexts[2], "lookup_policy")[1][-1] == CANCELLED_BY_STEP_CHANGE
+    await ctx.fire_shutdown("done")
+    assert _late_result_events(api) == []
+
+
+async def test_a_non_cancellable_sibling_s_late_result_is_carried_into_the_target() -> None:
+    """R-V4-69 (b): the drain awaits it; its final pair lands in the claims node, once, no forced reply."""
+    conversation = ScriptedLLM(["Hi.", [ToolCall("go_to_claims"), ToolCall("lookup_policy")], CLAIMS_LINE])
+    api, ctx, starter = await _start_with_tool(conversation, _background_lookup(1.5, cancellable=False))
+
+    claims = await _hand_off_with_sibling(conversation, starter)
+
+    called, outputs = _pair_in(claims.chat_ctx, "lookup_policy")
+    assert called
+    assert outputs[-1] == POLICY_OUTPUT
+    assert not any(o.startswith("Cancelled:") for o in outputs)
+    # The drain waited for the result before the claims node started, so its first
+    # generation answered with the result in context.
+    assert _pair_in(conversation.contexts[2], "lookup_policy")[1][-1] == POLICY_OUTPUT
+    await ctx.fire_shutdown("done")
+    events = _late_result_events(api)
+    assert len(events) == 1
+    assert events[0]["tool"] == "lookup_policy"
+    assert (events[0]["from"], events[0]["to"]) == ("start", "claims")

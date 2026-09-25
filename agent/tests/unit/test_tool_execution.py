@@ -1146,6 +1146,10 @@ async def test_real_sdk_a_policy_sibling_of_an_edge_gets_no_router_reply_and_is_
     claims_ctx, claims_tools, _choice = scripted.calls[2]
     assert "go_to_claims" not in claims_tools
     outputs = [i for i in claims_ctx.items if i.type == "function_call_output" and i.name == "lookup_item"]
-    (announce,) = outputs  # the announce rode into the claims node's first generation
+    # The announce rode into the claims node's first generation, followed by the
+    # cancellation the step change left for it (R-V4-69, V4-20).
+    announce, cancelled = outputs
     assert "Working on lookup item." in announce.output
+    assert cancelled.output.startswith("Cancelled:")
+    assert cancelled.call_id != announce.call_id
     await ctx.fire_shutdown("done")

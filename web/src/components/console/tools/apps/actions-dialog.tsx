@@ -35,6 +35,14 @@ export interface ActionsDialogProps {
   pickedActions: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * V5-48: opened from an agent's own Connected apps card — preselects
+   * "attach to" that agent (docs/v5/COMPOSIO.md §6: "reusing V5-22's picker
+   * with 'attach to this agent' preselected"). Still an editable select, not
+   * a lock, so a builder can pick a different agent or "Don't attach yet"
+   * from inside the agent editor too.
+   */
+  presetAgentId?: string;
 }
 
 /**
@@ -44,13 +52,21 @@ export interface ActionsDialogProps {
  * rather than becoming a tool right away — the copy here says "Add as
  * tools", never promising a tool exists yet.
  */
-export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedActions, open, onOpenChange }: ActionsDialogProps) {
+export function ActionsDialog({
+  connectionId,
+  toolkitSlug,
+  toolkitName,
+  pickedActions,
+  open,
+  onOpenChange,
+  presetAgentId,
+}: ActionsDialogProps) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [featuredOnly, setFeaturedOnly] = React.useState(false);
   const [checked, setChecked] = React.useState<Set<string>>(new Set());
   const [confirmDestructive, setConfirmDestructive] = React.useState(false);
-  const [attachAgentId, setAttachAgentId] = React.useState("");
+  const [attachAgentId, setAttachAgentId] = React.useState(presetAgentId ?? "");
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -58,14 +74,18 @@ export function ActionsDialog({ connectionId, toolkitSlug, toolkitName, pickedAc
   }, [search]);
 
   React.useEffect(() => {
-    if (!open) {
-      setChecked(new Set());
-      setConfirmDestructive(false);
-      setAttachAgentId("");
-      setSearch("");
-      setFeaturedOnly(false);
+    if (open) {
+      // Re-preset every time the dialog opens (it stays mounted with
+      // `open=false` between opens in some callers), so switching which
+      // connection's Actions button was clicked doesn't carry over a stale pick.
+      setAttachAgentId(presetAgentId ?? "");
+      return;
     }
-  }, [open]);
+    setChecked(new Set());
+    setConfirmDestructive(false);
+    setSearch("");
+    setFeaturedOnly(false);
+  }, [open, presetAgentId]);
 
   const actionsQuery = useToolProviderActions(open ? toolkitSlug : null, {
     query: debouncedSearch || undefined,

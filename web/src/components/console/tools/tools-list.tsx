@@ -8,8 +8,9 @@ import { PencilIcon, PlayIcon, PlusIcon, Trash2Icon, WrenchIcon } from "lucide-r
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { StatusChip } from "@/components/shared/status-chip";
+import { VendorMark } from "@/components/shared/vendor-mark";
 import { Button } from "@/components/ui/button";
-import { useAgents, useDeleteTool, useProviders, useTools } from "@/components/console/lib/api-hooks";
+import { useAgents, useDeleteTool, useProviders, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
@@ -17,10 +18,43 @@ import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
-import type { ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import type { AppConnectionOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 import { PageHeader } from "@/components/shared/page-header";
 import { SkeletonRows } from "@/components/shared/loading-state";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+
+/**
+ * V5-47's `ProviderToolDefinition`/`McpServerOrigin` — checked structurally
+ * rather than via `tool.kind`/`definition.kind` (`docs/v5/_asks.md` #20: the
+ * generated union makes `kind` optional on the definition, so V5-47's own
+ * code checks for the field that only that variant carries).
+ */
+function isProviderTool(tool: ToolOut): boolean {
+  return "tool_slug" in tool.definition;
+}
+
+/** A Composio-provisioned MCP server or Tool Router session (docs/v5/COMPOSIO.md §3, §6) — managed from the agent's Connected apps card, not edited here. */
+function originOf(tool: ToolOut): "server" | "router" | null {
+  if (!("origin" in tool.definition) || !tool.definition.origin) return null;
+  return tool.definition.origin.kind;
+}
+
+/** "App" for a connected-app action, "App server" / "Tool finder" for a Composio-origin MCP entry, else the plain kind. */
+function kindLabel(tool: ToolOut): string {
+  if (isProviderTool(tool)) return "App";
+  const origin = originOf(tool);
+  if (origin === "server") return "App server";
+  if (origin === "router") return "Tool finder";
+  return tool.kind === "http" ? "HTTP" : "MCP";
+}
+
+/** The connected app's name for a `provider` tool's chip (looked up by `connection_id`, docs/v5/_asks.md #16). */
+function appNameFor(tool: ToolOut, connectionsById: Map<string, AppConnectionOut>): string | null {
+  if (!isProviderTool(tool)) return null;
+  const definition = tool.definition as { connection_id?: string; toolkit?: string };
+  const connection = definition.connection_id ? connectionsById.get(definition.connection_id) : undefined;
+  return connection?.toolkit_name ?? connection?.toolkit ?? definition.toolkit ?? "App";
+}
 
 /**
  * `/console/tools` (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1, §3 WP-5
@@ -35,6 +69,11 @@ export function ToolsList() {
   const toolsQuery = useTools();
   const agentsQuery = useAgents();
   const providersQuery = useProviders();
+  // Only fetched to label a `provider` tool's App chip with its connected
+  // app's name (docs/v5/_asks.md #16) — a 404/disabled-Apps response just
+  // means every such chip falls back to the tool's own `toolkit` field.
+  const connectionsQuery = useToolProviderConnections();
+  const connectionsById = new Map((connectionsQuery.data?.items ?? []).map((c) => [c.id, c]));
   const secretBagSpec = providersQuery.data?.providers.find((p) => p.kind === "secret_bag");
   const { canWrite } = useWriteAccess();
   const writeReason = writeAccessReason();
@@ -122,7 +161,15 @@ export function ToolsList() {
     {
       id: "kind",
       header: "Kind",
-      cell: (tool) => <span className="text-muted-foreground">{tool.kind === "http" ? "HTTP" : "MCP"}</span>,
+      cell: (tool) =>
+        isProviderTool(tool) ? (
+          <StatusChip tone="info" size="sm">
+            <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" />
+            App
+          </StatusChip>
+        ) : (
+          <span className="text-muted-foreground">{kindLabel(tool)}</span>
+        ),
     },
     {
       id: "scope",
@@ -177,7 +224,7 @@ export function ToolsList() {
                 <ToolActions tool={tool} secretBagSpec={secretBagSpec} onRefetch={() => void toolsQuery.refetch()} />
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{tool.kind === "http" ? "HTTP" : "MCP"}</span>
+                <span>{kindLabel(tool)}</span>
                 <span aria-hidden="true">·</span>
                 <span>{scope.label}</span>
                 <span aria-hidden="true">·</span>
@@ -234,6 +281,13 @@ function ToolActions({
     } catch (error) {
       toast.error(errorMessage(error));
     }
+  }
+
+  // A Composio-provisioned MCP server or Tool Router session (docs/v5/COMPOSIO.md
+  // §6): the agent's own Connected apps card creates, updates and removes
+  // this row as the mode changes, so no edit or delete control is offered here.
+  if (originOf(tool)) {
+    return <p className="text-right text-xs text-muted-foreground">Managed from the Connected apps card</p>;
   }
 
   return (

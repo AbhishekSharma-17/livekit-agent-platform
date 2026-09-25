@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { FlowSpec, ToolExecution } from "@/contracts/lkap-contracts";
+import type { AppsMode, FlowSpec, ToolExecution } from "@/contracts/lkap-contracts";
 
 /**
  * Hand-authored zod mirrors of the generated contract interfaces
@@ -103,6 +103,20 @@ export const toolsConfigSchema = z.object({
    */
   execution_default: z.enum(["blocking", "background", "auto"]),
   builtin_execution: z.record(z.string(), z.custom<ToolExecution>()),
+  /**
+   * V5-48 (`connected-apps-card.tsx`): `AppsMode` (docs/v5/COMPOSIO.md
+   * D-V5-C6) is a passthrough for the same reason as `builtin_execution`
+   * above — no JSON-Schema-to-zod step exists, so its nested shape (`mode`,
+   * `allowed_toolkits`, `denied_actions`, `router.{search,execute,
+   * manage_connections}`) is mirrored by hand instead of deeply validated.
+   * Without this field `z.object` would strip `config.tools.apps` on every
+   * resolver parse (the file header's warning), silently discarding the
+   * mode picker's value on save. Optional (unlike `builtin_execution`) so
+   * the many fixtures across this codebase's tests that build a `tools`
+   * value by hand, from before V5-47, don't all need updating; `DEFAULT_TOOLS`
+   * (`agents/defaults.ts`) always supplies it in the real editor.
+   */
+  apps: z.custom<AppsMode>().optional(),
 });
 
 export const knowledgeConfigSchema = z.object({

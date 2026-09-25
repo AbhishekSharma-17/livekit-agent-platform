@@ -47,7 +47,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 const EMPTY_TOOLS: ToolPage = { items: [], total: 0 };
 const PROVIDERS: ProvidersResponse = { providers: [] };
 
-function stubFetch() {
+/**
+ * V5-48's `ConnectedAppsCard` mounts inside `ToolsTab` and calls
+ * `useAppsStatus`/`useToolProviderConnections` — Apps starts "not set up" in
+ * every test here unless a test says otherwise, so the card renders its
+ * compact empty state rather than the mode picker.
+ */
+function stubFetch(appsEnabled = false) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -57,6 +63,8 @@ function stubFetch() {
           items: [{ manifest: { id: "generic", tool_names: ["custom_pack_tool"] } }],
         });
       }
+      if (url.includes("/tool-providers/composio/status")) return jsonResponse({ enabled: appsEnabled, credential_id: appsEnabled ? "cred-1" : null, connections: 0 });
+      if (url.includes("/tool-providers/composio/connections")) return jsonResponse({ items: [], total: 0 });
       if (url.includes("/tools")) return jsonResponse(EMPTY_TOOLS);
       return jsonResponse({});
     }),
@@ -128,6 +136,27 @@ describe("ToolsTab", () => {
     render(<Harness />);
     await waitFor(() => expect(screen.getByText("No HTTP tools yet")).toBeTruthy());
     expect(screen.getByText("No MCP servers yet")).toBeTruthy();
+  });
+
+  describe("Connected apps card (V5-48, docs/v5/COMPOSIO.md §6)", () => {
+    it("mounts the Connected apps card, pointing at Tools -> Apps while Apps isn't set up", async () => {
+      stubFetch(false);
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(await screen.findByText("Connected apps", { selector: "h2" })).toBeTruthy();
+      expect(screen.getByText("Apps aren't set up yet")).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Go to Apps" })).toBeTruthy();
+    });
+
+    it("shows the mode picker once Apps is enabled", async () => {
+      stubFetch(true);
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(await screen.findByText("How this agent uses apps")).toBeTruthy();
+      expect(screen.queryByText("Apps aren't set up yet")).toBeNull();
+    });
   });
 
   it("says the pack registers no code tools when its manifest lists none", async () => {

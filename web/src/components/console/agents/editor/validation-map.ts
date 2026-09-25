@@ -240,7 +240,21 @@ export function firstSectionWithIssues(
   return null;
 }
 
-/** The form field an issue points at (`pipeline.stt` → `config.pipeline.stt`), for focusing. */
+/**
+ * The form field an issue points at (`pipeline.stt` → `config.pipeline.stt`), for focusing.
+ *
+ * V5-48: `tools.apps.mode`, `tools.apps.router.manage_connections` and
+ * `tools[i].definition.*` (`apps_issues`, docs/v5/COMPOSIO.md §4) need no
+ * entry in the allowlist below — their top segment is `tools`, not the
+ * top-level `AgentOut.mode`, so they already fall through to the
+ * `config.`-prefixed branch and land on `config.tools.apps.mode` etc., the
+ * exact field name the Connected apps card binds
+ * (`connected-apps-card.tsx`'s `data-issue-path="tools.apps.mode"` is the
+ * DOM fallback `focusFieldFor` uses when `setFocus` can't reach a
+ * `Select`). `sectionForPath` also needs no new rule: `builtin-sections.tsx`
+ * already declares `"tools"` as an issue-path prefix for the Tools tab, and
+ * `tools.apps.mode` starts with `"tools."`.
+ */
 export function formPathForIssue(path: string | null): string | null {
   if (!path) return null;
   const top = path.split(".")[0];

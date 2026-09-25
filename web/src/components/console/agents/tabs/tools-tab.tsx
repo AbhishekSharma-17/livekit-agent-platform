@@ -23,6 +23,7 @@ import { BUILTIN_TOOLS, type BuiltinToolInfo } from "@/components/console/lib/co
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { BuiltinExecutionDialog } from "@/components/console/agents/tabs/builtin-execution-dialog";
+import { ConnectedAppsCard } from "@/components/console/agents/tabs/connected-apps-card";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ToolRow } from "@/components/console/tools/tool-row";
@@ -245,6 +246,8 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           </Collapsible>
         </SectionRow>
       </Section>
+
+      <ConnectedAppsCard agentId={agent.id} />
 
       <Section
         id="tools-http"

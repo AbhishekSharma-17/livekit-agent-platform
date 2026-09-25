@@ -9,12 +9,22 @@ Two audiences share this module and are combined into the single `router`
   ``net_guard``; either way ingested as a job, poll for status) and test search.
 * ``/internal/v1/kb/search`` — worker surface (`X-Service-Token`): the RAG
   lookup the agent calls for `search_knowledge` and auto-injection.
+
+V5-01 adds, on the admin surface: the embedder record on every knowledge base
+(`dimension`, `embedder_model`, `chunking`; a query from another embedder is a
+`422 kb_embedder_mismatch`), ingest `progress` on documents, the evaluation
+set (`GET/PUT .../evals`; the runner is V5-05) and the explicit re-index
+(`POST .../reindex`), which re-chunks stored documents so chunks ingested
+before V5-01 gain their locators. The response models that carry the new
+fields are api-local subclasses of the contracts models until the contracts
+ask in `docs/v5/_asks.md` lands.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import PurePosixPath
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import unquote, urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Response, UploadFile, status
@@ -23,27 +33,28 @@ from lkap_contracts.api_models import (
     InternalKbSearchRequest,
     KbCreate,
     KbDocumentOut,
-    KbDocumentPage,
     KbImportIn,
     KbOut,
-    KbPage,
     KbSearchRequest,
     KbSearchResponse,
 )
-from sqlalchemy import func, select
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
-from lkap_api.db.models import KbDocument, KnowledgeBase, utcnow
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
+from lkap_api.db.models import KbDocument, KbEval, KnowledgeBase, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, ServiceDep, SettingsDep, VaultDep
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.jobs.kinds import KB_INGEST
 from lkap_api.jobs.service import JobsService
-from lkap_api.kb.embed import Embedder, resolve_embedder
+from lkap_api.kb.embed import Embedder, check_kb_embedder, record_kb_embedder, resolve_embedder
 from lkap_api.kb.ingest import (
     IMPORT_SUFFIX,
+    ChunkingConfig,
     fetch_import_source,
     import_policy,
     upload_storage_key,
@@ -76,6 +87,119 @@ _VALID_EMBEDDER_IDS = {spec.id for spec in providers.by_kind("embedding", status
 #: with — the search endpoints are the only guaranteed enforcement point.
 MIN_K = 1
 MAX_K = 20
+
+#: The evaluation set's bounds (one `PUT` replaces the whole set).
+MAX_EVALS = 500
+MAX_EVAL_TEXT = 2000
+
+#: The file types an upload is ingested as (the rest decode as UTF-8 text).
+SUPPORTED_UPLOADS = ".md, .txt, .csv, .json, .pdf, .docx, .pptx, .xlsx and .html"
+
+
+# --------------------------------------------------------------------------- response models (V5-01)
+# Api-local until the contracts ask lands (docs/v5/_asks.md): each extends the
+# contracts model additively, so every existing client keeps parsing it.
+class KnowledgeBaseOut(KbOut):
+    """A knowledge base with its counts and the embedder that built it."""
+
+    dimension: int | None = Field(
+        default=None, description="Vector width recorded at creation; null for a KB created before V5-01."
+    )
+    embedder_model: str | None = Field(
+        default=None, description="Embedding model recorded at creation; null for a KB created before V5-01."
+    )
+    chunking: dict[str, int] | None = Field(
+        default=None, description="`{max_tokens, overlap}` of the chunker; null means the defaults."
+    )
+
+
+class KnowledgeBasePage(BaseModel):
+    """`GET /v1/knowledge-bases`."""
+
+    items: list[KnowledgeBaseOut]
+    total: int
+
+
+class KnowledgeDocumentOut(KbDocumentOut):
+    """A document, its ingestion status and progress."""
+
+    progress: float | None = Field(
+        default=None,
+        description="Embedded chunks / total while pending (every 50 chunks), 1.0 when ready; "
+        "null for a document ingested before V5-01.",
+    )
+
+
+class KnowledgeDocumentPage(BaseModel):
+    """`GET /v1/knowledge-bases/{id}/documents`."""
+
+    items: list[KnowledgeDocumentOut]
+    total: int
+
+
+EvalTag = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+
+
+class KbEvalIn(BaseModel):
+    """One golden question: found when a top-k hit is the expected document or contains the expected text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=MAX_EVAL_TEXT)
+    expected_document_id: str | None = Field(default=None, max_length=32)
+    expected_text: str | None = Field(default=None, min_length=1, max_length=MAX_EVAL_TEXT)
+    tags: list[EvalTag] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def _expects_something(self) -> KbEvalIn:
+        if self.expected_document_id is None and self.expected_text is None:
+            raise ValueError("an eval needs expected_document_id, expected_text or both")
+        return self
+
+
+class KbEvalOut(KbEvalIn):
+    """A stored eval."""
+
+    id: str
+    created_at: dt.datetime
+
+
+class KbEvalSetIn(BaseModel):
+    """`PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[KbEvalIn] = Field(max_length=MAX_EVALS)
+
+
+class KbEvalSetOut(BaseModel):
+    """The stored evaluation set, in the order it was put."""
+
+    items: list[KbEvalOut]
+    total: int
+
+
+class KbReindexIn(BaseModel):
+    """`POST /v1/knowledge-bases/{id}/reindex`: every document, or only these."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_ids: list[str] | None = Field(default=None, max_length=1000)
+
+
+class KbReindexSkipped(BaseModel):
+    """A document the re-index could not queue, and why."""
+
+    document_id: str
+    filename: str
+    reason: Literal["source_not_stored", "ingest_in_progress"]
+
+
+class KbReindexOut(BaseModel):
+    """What the re-index queued; each queued document is `pending` until its job finishes."""
+
+    queued: list[str]
+    skipped: list[KbReindexSkipped]
 
 
 # --------------------------------------------------------------------------- dependencies
@@ -132,8 +256,8 @@ async def _document_count(db: AsyncSession, kb_id: str) -> int:
     ).scalar_one()
 
 
-async def _kb_out(db: AsyncSession, row: KnowledgeBase) -> KbOut:
-    return KbOut(
+async def _kb_out(db: AsyncSession, row: KnowledgeBase) -> KnowledgeBaseOut:
+    return KnowledgeBaseOut(
         id=row.id,
         name=row.name,
         description=row.description,
@@ -142,11 +266,14 @@ async def _kb_out(db: AsyncSession, row: KnowledgeBase) -> KbOut:
         document_count=await _document_count(db, row.id),
         created_at=row.created_at,
         updated_at=row.updated_at,
+        dimension=row.dimension,
+        embedder_model=row.embedder_model,
+        chunking=ChunkingConfig.from_json(row.chunking).to_json() if row.chunking is not None else None,
     )
 
 
-def _document_out(row: KbDocument) -> KbDocumentOut:
-    return KbDocumentOut(
+def _document_out(row: KbDocument) -> KnowledgeDocumentOut:
+    return KnowledgeDocumentOut(
         id=row.id,
         kb_id=row.kb_id,
         filename=row.filename,
@@ -156,7 +283,51 @@ def _document_out(row: KbDocument) -> KbDocumentOut:
         error=row.error,
         chunk_count=row.chunk_count,
         created_at=row.created_at,
+        progress=row.progress,
     )
+
+
+def _eval_out(row: KbEval) -> KbEvalOut:
+    return KbEvalOut(
+        id=row.id,
+        question=row.question,
+        expected_document_id=row.expected_document_id,
+        expected_text=row.expected_text,
+        tags=list(row.tags or []),
+        created_at=row.created_at,
+    )
+
+
+async def _load_evals(db: AsyncSession, kb_id: str) -> list[KbEval]:
+    return list(
+        (
+            await db.execute(
+                select(KbEval).where(KbEval.kb_id == kb_id).order_by(KbEval.ordinal, KbEval.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _checked_kbs(db: AsyncSession, kb_ids: list[str], embedder: Embedder) -> None:
+    """Refuse a search when any of ``kb_ids`` was built by another embedder (worker path).
+
+    The worker's ids come from a resolved agent config, so this read is
+    deliberately cross-workspace; unknown ids are ignored exactly as the
+    search itself ignores them.
+    """
+    if not kb_ids:
+        return
+    rows = (
+        await db.execute(
+            select(KnowledgeBase)
+            .where(KnowledgeBase.id.in_(kb_ids))
+            .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+        )
+    ).scalars()
+    for row in rows:
+        check_kb_embedder(row, embedder)
 
 
 async def _recompute_chunk_count(db: AsyncSession, kb: KnowledgeBase) -> None:
@@ -234,7 +405,9 @@ async def _store_and_enqueue(
 
     Shared by the multipart upload and the url import.
     """
-    document = KbDocument(kb_id=kb.id, filename=filename, mime=mime, bytes=len(data), status="pending")
+    document = KbDocument(
+        kb_id=kb.id, filename=filename, mime=mime, bytes=len(data), status="pending", progress=0.0
+    )
     db.add(document)
     # Committed explicitly (not just flushed): the job below opens a *new*
     # connection and, with `PRAGMA foreign_keys=ON`, needs this row to already
@@ -262,33 +435,42 @@ async def _store_and_enqueue(
 # --------------------------------------------------------------------------- knowledge bases
 @admin_router.post(
     "",
-    response_model=KbOut,
+    response_model=KnowledgeBaseOut,
     status_code=status.HTTP_201_CREATED,
     summary="Create a knowledge base",
-    description="Creates an empty knowledge base; documents are uploaded and ingested separately.",
+    description=(
+        "Creates an empty knowledge base; documents are uploaded and ingested separately. The "
+        "configured embedder's model and vector width are recorded on it (`embedder_model`, "
+        "`dimension`), and a later query from a different embedder is refused with 422 "
+        "`kb_embedder_mismatch`."
+    ),
 )
-async def create_kb(payload: KbCreate, db: DbDep, ctx: AdminCtxDep) -> KbOut:
-    """Create a knowledge base row in the caller's workspace."""
+async def create_kb(
+    payload: KbCreate, db: DbDep, embedder: EmbedderDep, ctx: AdminCtxDep
+) -> KnowledgeBaseOut:
+    """Create a knowledge base row in the caller's workspace, recording the active embedder."""
     _check_embedder_id(payload.embedder_id)
     row = KnowledgeBase(
         workspace_id=ctx.workspace_id,
         name=payload.name,
         description=payload.description,
         embedder_id=payload.embedder_id,
+        chunking=ChunkingConfig().to_json(),
     )
+    record_kb_embedder(row, embedder)
     db.add(row)
     await db.flush()
-    log.info("kb_created", kb_id=row.id, name=row.name)
+    log.info("kb_created", kb_id=row.id, name=row.name, embedder_model=row.embedder_model)
     return await _kb_out(db, row)
 
 
 @admin_router.get(
     "",
-    response_model=KbPage,
+    response_model=KnowledgeBasePage,
     summary="List knowledge bases",
     description="Every knowledge base with its current chunk and document counts.",
 )
-async def list_kbs(db: DbDep, ctx: AdminCtxDep) -> KbPage:
+async def list_kbs(db: DbDep, ctx: AdminCtxDep) -> KnowledgeBasePage:
     """Return the workspace's knowledge bases, newest first."""
     in_workspace = KnowledgeBase.workspace_id == ctx.workspace_id
     rows = (
@@ -303,27 +485,27 @@ async def list_kbs(db: DbDep, ctx: AdminCtxDep) -> KbPage:
     total = (
         await db.execute(select(func.count()).select_from(KnowledgeBase).where(in_workspace))
     ).scalar_one()
-    return KbPage(items=[await _kb_out(db, row) for row in rows], total=total)
+    return KnowledgeBasePage(items=[await _kb_out(db, row) for row in rows], total=total)
 
 
 @admin_router.get(
     "/{kb_id}",
-    response_model=KbOut,
+    response_model=KnowledgeBaseOut,
     summary="Get a knowledge base",
     description="One knowledge base with its current chunk and document counts.",
 )
-async def get_kb(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KbOut:
+async def get_kb(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KnowledgeBaseOut:
     """Return one knowledge base row."""
     return await _kb_out(db, await _load_kb(db, ctx, kb_id))
 
 
 @admin_router.put(
     "/{kb_id}",
-    response_model=KbOut,
+    response_model=KnowledgeBaseOut,
     summary="Update a knowledge base",
     description="Renames a knowledge base; its embedder cannot change once it holds any chunks.",
 )
-async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) -> KbOut:
+async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) -> KnowledgeBaseOut:
     """Update a knowledge base's name, description and (if empty) embedder."""
     row = await _load_kb(db, ctx, kb_id)
     _check_embedder_id(payload.embedder_id)
@@ -359,12 +541,15 @@ async def delete_kb(kb_id: str, db: DbDep, store: VectorStoreDep, ctx: AdminCtxD
 # --------------------------------------------------------------------------- documents
 @admin_router.post(
     "/{kb_id}/documents",
-    response_model=KbDocumentOut,
+    response_model=KnowledgeDocumentOut,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload a document",
     description=(
-        "Accepts a `.md`/`.txt`/`.pdf` file, stores it `pending` and schedules ingestion "
-        "(chunk, embed, upsert) as a background task. Poll `GET .../documents` for `status`."
+        f"Accepts a {SUPPORTED_UPLOADS} file (max 25 MB), stores it `pending` and schedules ingestion "
+        "as a background job: PDFs are read page by page; Word, PowerPoint, Excel and HTML files are "
+        "converted to Markdown (headings kept, tags removed); everything else is read as UTF-8 text. "
+        "The text is split at headings, paragraphs and sentences, and every chunk records its heading "
+        "path, page and character offsets. Poll `GET .../documents` for `status` and `progress`."
     ),
 )
 async def upload_document(
@@ -374,8 +559,8 @@ async def upload_document(
     jobs: JobsDep,
     background_tasks: BackgroundTasks,
     ctx: AdminCtxDep,
-    file: Annotated[UploadFile, File(description="A .md, .txt or .pdf source document, max 25 MB")],
-) -> KbDocumentOut:
+    file: Annotated[UploadFile, File(description=f"A {SUPPORTED_UPLOADS} source document, max 25 MB")],
+) -> KnowledgeDocumentOut:
     """Create a pending document row, store the upload, and enqueue its ingestion.
 
     Raises:
@@ -400,16 +585,17 @@ async def upload_document(
 
 @admin_router.post(
     "/{kb_id}/documents/import",
-    response_model=KbDocumentOut,
+    response_model=KnowledgeDocumentOut,
     status_code=status.HTTP_201_CREATED,
     summary="Import a document from a url",
     description=(
         "The api fetches `url` itself — never the caller — through its outbound network guard: "
         "private, loopback, link-local and metadata destinations are refused (422, "
         "`details.reason=blocked_destination`) and redirects are not followed. The body is capped "
-        "at 25 MB (413) and must be `text/*`, `application/json` or `application/pdf` (415). The "
-        "document is stored `pending` and ingested as a job exactly like an upload; poll "
-        "`GET .../documents` for `status`."
+        "at 25 MB (413) and must be `text/*`, `application/json` or `application/pdf` (415); an "
+        "HTML page is converted to Markdown, never ingested as raw tags. The document is stored "
+        "`pending` and ingested as a job exactly like an upload; poll `GET .../documents` for "
+        "`status` and `progress`."
     ),
 )
 async def import_document(
@@ -421,7 +607,7 @@ async def import_document(
     client: HttpClientDep,
     background_tasks: BackgroundTasks,
     ctx: AdminCtxDep,
-) -> KbDocumentOut:
+) -> KnowledgeDocumentOut:
     """Fetch a public url and ingest it like an uploaded document (R-V3-14).
 
     Raises:
@@ -451,11 +637,11 @@ async def import_document(
 
 @admin_router.get(
     "/{kb_id}/documents",
-    response_model=KbDocumentPage,
+    response_model=KnowledgeDocumentPage,
     summary="List documents",
     description="Every document uploaded to this knowledge base and its ingestion status.",
 )
-async def list_documents(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KbDocumentPage:
+async def list_documents(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KnowledgeDocumentPage:
     """Return every document row for a knowledge base, newest first."""
     await _load_kb(db, ctx, kb_id)
     rows = (
@@ -470,7 +656,7 @@ async def list_documents(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KbDocumentP
     total = (
         await db.execute(select(func.count()).select_from(KbDocument).where(KbDocument.kb_id == kb_id))
     ).scalar_one()
-    return KbDocumentPage(items=[_document_out(row) for row in rows], total=total)
+    return KnowledgeDocumentPage(items=[_document_out(row) for row in rows], total=total)
 
 
 @admin_router.delete(
@@ -498,7 +684,11 @@ async def delete_document(
     "/{kb_id}/search",
     response_model=KbSearchResponse,
     summary="Test search a knowledge base",
-    description="Runs the same retrieval the agent uses, for the console's Knowledge tab.",
+    description=(
+        "Runs the same retrieval the agent uses, for the console's Knowledge tab. 422 "
+        "`kb_embedder_mismatch` when the knowledge base was built by another embedder than the one "
+        "configured now."
+    ),
 )
 async def search_kb(
     kb_id: str,
@@ -510,16 +700,165 @@ async def search_kb(
 ) -> KbSearchResponse:
     """Search one knowledge base."""
     _check_k(payload.k)
-    await _load_kb(db, ctx, kb_id)
+    check_kb_embedder(await _load_kb(db, ctx, kb_id), embedder)
     hits = await search_kbs(db, store, embedder, kb_ids=[kb_id], query=payload.query, k=payload.k)
     return KbSearchResponse(hits=hits)
+
+
+# --------------------------------------------------------------------------- evals (V5-01; runner: V5-05)
+@admin_router.get(
+    "/{kb_id}/evals",
+    response_model=KbEvalSetOut,
+    summary="Get the evaluation set",
+    description="The knowledge base's golden questions, in the order they were put.",
+)
+async def get_evals(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KbEvalSetOut:
+    """Return the stored evaluation set."""
+    await _load_kb(db, ctx, kb_id)
+    rows = await _load_evals(db, kb_id)
+    return KbEvalSetOut(items=[_eval_out(row) for row in rows], total=len(rows))
+
+
+@admin_router.put(
+    "/{kb_id}/evals",
+    response_model=KbEvalSetOut,
+    summary="Replace the evaluation set",
+    description=(
+        f"Replaces every golden question of the knowledge base (at most {MAX_EVALS}). Each names the "
+        "`expected_document_id` (a document of this knowledge base), an `expected_text` a correct "
+        "hit contains, or both. An empty list clears the set."
+    ),
+)
+async def put_evals(kb_id: str, payload: KbEvalSetIn, db: DbDep, ctx: AdminCtxDep) -> KbEvalSetOut:
+    """Replace the evaluation set.
+
+    Raises:
+        UnprocessableEntityError: An `expected_document_id` is not a document of this knowledge base.
+    """
+    await _load_kb(db, ctx, kb_id)
+    expected = {item.expected_document_id for item in payload.items if item.expected_document_id is not None}
+    if expected:
+        known = set(
+            (
+                await db.execute(
+                    select(KbDocument.id).where(KbDocument.kb_id == kb_id, KbDocument.id.in_(expected))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        unknown = sorted(expected - known)
+        if unknown:
+            raise UnprocessableEntityError(
+                "expected_document_id must name a document of this knowledge base",
+                details={"field": "expected_document_id", "unknown": unknown},
+            )
+    await db.execute(delete(KbEval).where(KbEval.kb_id == kb_id))
+    rows = [
+        KbEval(
+            kb_id=kb_id,
+            question=item.question,
+            expected_document_id=item.expected_document_id,
+            expected_text=item.expected_text,
+            tags=list(item.tags),
+            ordinal=ordinal,
+        )
+        for ordinal, item in enumerate(payload.items)
+    ]
+    db.add_all(rows)
+    await db.flush()
+    log.info("kb_evals_replaced", kb_id=kb_id, count=len(rows))
+    return KbEvalSetOut(items=[_eval_out(row) for row in rows], total=len(rows))
+
+
+# --------------------------------------------------------------------------- re-index (V5-01)
+@admin_router.post(
+    "/{kb_id}/reindex",
+    response_model=KbReindexOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Re-index documents",
+    description=(
+        "Re-extracts, re-chunks and re-embeds stored documents with the current chunker, so chunks "
+        "ingested before heading/page locators existed gain them. Each queued document is `pending` "
+        "until its job finishes, and its previous chunks stay searchable until the new ones replace "
+        "them. Documents whose source file was never stored (seeded from a pack or template) and "
+        "documents still being ingested are skipped and listed with the reason. Nothing is "
+        "re-indexed unless this is called."
+    ),
+)
+async def reindex_kb(
+    kb_id: str,
+    db: DbDep,
+    storage: StorageDep,
+    jobs: JobsDep,
+    background_tasks: BackgroundTasks,
+    ctx: AdminCtxDep,
+    payload: KbReindexIn | None = None,
+) -> KbReindexOut:
+    """Queue a re-ingest of every (or the listed) stored document of a knowledge base.
+
+    Raises:
+        NotFoundError: A listed document is not in this knowledge base.
+    """
+    kb = await _load_kb(db, ctx, kb_id)
+    query = select(KbDocument).where(KbDocument.kb_id == kb_id).order_by(KbDocument.created_at)
+    wanted = payload.document_ids if payload is not None else None
+    if wanted is not None:
+        query = query.where(KbDocument.id.in_(wanted))
+    documents = list((await db.execute(query)).scalars().all())
+    if wanted is not None:
+        missing = sorted(set(wanted) - {document.id for document in documents})
+        if missing:
+            raise NotFoundError(f"unknown document '{missing[0]}' in knowledge base '{kb_id}'")
+
+    queued: list[tuple[KbDocument, str]] = []
+    skipped: list[KbReindexSkipped] = []
+    for document in documents:
+        if document.status == "pending":
+            skipped.append(_skipped(document, "ingest_in_progress"))
+            continue
+        key = upload_storage_key(kb.id, document.id, document.filename)
+        try:
+            await storage.get(key)
+        except FileNotFoundError:
+            skipped.append(_skipped(document, "source_not_stored"))
+            continue
+        document.status = "pending"
+        document.progress = 0.0
+        document.error = None
+        queued.append((document, key))
+    # Durable before the jobs run on their own connections (same rule as an upload).
+    await db.commit()
+    for document, key in queued:
+        await jobs.enqueue(
+            KB_INGEST,
+            {
+                "kb_id": kb.id,
+                "document_id": document.id,
+                "storage_key": key,
+                "filename": document.filename,
+                "mime": document.mime,
+            },
+            background_tasks=background_tasks,
+        )
+    log.info("kb_reindex_queued", kb_id=kb.id, queued=len(queued), skipped=len(skipped))
+    return KbReindexOut(queued=[document.id for document, _ in queued], skipped=skipped)
+
+
+def _skipped(
+    document: KbDocument, reason: Literal["source_not_stored", "ingest_in_progress"]
+) -> KbReindexSkipped:
+    return KbReindexSkipped(document_id=document.id, filename=document.filename, reason=reason)
 
 
 @internal_router.post(
     "/search",
     response_model=KbSearchResponse,
     summary="Search knowledge bases (worker only)",
-    description="Cross-KB retrieval the agent calls for `search_knowledge` and RAG auto-injection.",
+    description=(
+        "Cross-KB retrieval the agent calls for `search_knowledge` and RAG auto-injection. 422 "
+        "`kb_embedder_mismatch` when any listed knowledge base was built by another embedder."
+    ),
 )
 async def internal_search_kb(
     payload: InternalKbSearchRequest,
@@ -530,5 +869,6 @@ async def internal_search_kb(
 ) -> KbSearchResponse:
     """Search across the given knowledge bases (worker-only)."""
     _check_k(payload.k)
+    await _checked_kbs(db, payload.kb_ids, embedder)
     hits = await search_kbs(db, store, embedder, kb_ids=payload.kb_ids, query=payload.query, k=payload.k)
     return KbSearchResponse(hits=hits)

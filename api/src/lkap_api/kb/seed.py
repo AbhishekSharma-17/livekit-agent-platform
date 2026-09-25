@@ -23,8 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.models import KbDocument, KnowledgeBase
-from lkap_api.kb.embed import Embedder
-from lkap_api.kb.ingest import ingest_into_session
+from lkap_api.kb.embed import Embedder, record_kb_embedder
+from lkap_api.kb.ingest import ChunkingConfig, ingest_into_session
 from lkap_api.kb.store import VectorStore
 from lkap_api.logging import get_logger
 
@@ -91,9 +91,13 @@ def _guess_mime(filename: str) -> str:
 
 
 async def _get_or_create_kb(
-    db: AsyncSession, *, workspace_id: str, name: str, embedder_id: str
+    db: AsyncSession, *, workspace_id: str, name: str, embedder_id: str, embedder: Embedder
 ) -> KnowledgeBase:
-    """Reuse the workspace's knowledge base called ``name`` or create it there."""
+    """Reuse the workspace's knowledge base called ``name`` or create it there.
+
+    A new knowledge base records ``embedder``'s model and width and the
+    default chunking (V5-01); a reused one is left exactly as it is.
+    """
     existing = (
         (
             await db.execute(
@@ -107,7 +111,13 @@ async def _get_or_create_kb(
     )
     if existing is not None:
         return existing
-    row = KnowledgeBase(workspace_id=workspace_id, name=name, embedder_id=embedder_id)
+    row = KnowledgeBase(
+        workspace_id=workspace_id,
+        name=name,
+        embedder_id=embedder_id,
+        chunking=ChunkingConfig().to_json(),
+    )
+    record_kb_embedder(row, embedder)
     db.add(row)
     await db.flush()
     log.info("kb_seed_kb_created", kb_id=row.id, name=name)
@@ -158,7 +168,7 @@ async def import_kb_seeds(
     kb_ids: list[str] = []
     for seed in seeds:
         kb = await _get_or_create_kb(
-            db, workspace_id=workspace_id, name=seed.kb_name, embedder_id=embedder_id
+            db, workspace_id=workspace_id, name=seed.kb_name, embedder_id=embedder_id, embedder=embedder
         )
         kb_ids.append(kb.id)
         if root is None:

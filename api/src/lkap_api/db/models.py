@@ -18,6 +18,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -570,6 +571,13 @@ class KnowledgeBase(Base):
     storage_config_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("storage_configs.id", ondelete="SET NULL"), nullable=True
     )
+    #: V5-01: the vector width and the embedding model that built this KB,
+    #: recorded at creation (or, for a KB created before V5-01, on its next
+    #: successful ingest) and checked before every query. `NULL` = unchecked.
+    dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedder_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: V5-01: `{max_tokens, overlap}` of the structure-aware chunker; `NULL` = the defaults.
+    chunking: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
@@ -593,13 +601,22 @@ class KbDocument(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: V5-01: the ingest job's embedded chunks / total, written every 50 chunks
+    #: and `1.0` when `ready`; `NULL` for a document ingested before V5-01.
+    progress: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
     __table_args__ = (CheckConstraint("status IN ('pending','ready','failed')", name="status_valid"),)
 
 
 class KbChunk(Base):
-    """A chunk of a document; the vector with the same id lives in LanceDB."""
+    """A chunk of a document; the vector with the same id lives in LanceDB.
+
+    `meta` (V5-01) holds the chunk's locators: `filename`, `heading_path`
+    (list of headings), `page` (1-based or `None`), and `char_start` /
+    `char_end` into the document's extracted text. Chunks ingested before
+    V5-01 carry `filename` only until their document is re-indexed.
+    """
 
     __tablename__ = "kb_chunks"
 
@@ -611,6 +628,33 @@ class KbChunk(Base):
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_kb_chunks_kb_document", "kb_id", "document_id"),)
+
+
+class KbEval(Base):
+    """V5-01: one golden question of a knowledge base's evaluation set (the runner is V5-05).
+
+    Scored as found when a top-k hit is `expected_document_id` or contains
+    `expected_text`; at least one of the two is set (enforced by the api).
+    `expected_document_id` has no foreign key on purpose: an eval whose
+    document was deleted is reported `skipped`, not silently dropped.
+    """
+
+    __tablename__ = "kb_evals"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    kb_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_document_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    expected_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (Index("ix_kb_evals_kb", "kb_id"),)
 
 
 class AgentKnowledgeBase(Base):

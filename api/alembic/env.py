@@ -69,6 +69,30 @@ def compare_type(
     return None
 
 
+#: Database objects the migrations create that are deliberately not ORM models
+#: (v5_001_knowledge_p0's lexical index): the SQLite FTS5 table and the shadow
+#: tables FTS5 creates for it, and the Postgres generated ``tsv`` column and its
+#: GIN index on ``kb_chunks``. Autogenerate (and so ``alembic check``) skips them.
+UNMODELLED_TABLE_PREFIX = "kb_chunks_fts"
+UNMODELLED_COLUMNS = {("kb_chunks", "tsv")}
+UNMODELLED_INDEXES = {"ix_kb_chunks_tsv"}
+
+
+def include_object(
+    obj: object, name: str | None, type_: str, reflected: bool, compare_to: object | None
+) -> bool:
+    """Leave the unmodelled lexical-index objects out of autogenerate comparisons."""
+    if type_ == "table" and name is not None and name.startswith(UNMODELLED_TABLE_PREFIX):
+        return False
+    if type_ == "column" and name is not None:
+        table = getattr(getattr(obj, "table", None), "name", None)
+        if (table, name) in UNMODELLED_COLUMNS:
+            return False
+    if type_ == "index" and name in UNMODELLED_INDEXES:
+        return False
+    return True
+
+
 def run_migrations_offline() -> None:
     """Emit SQL for the configured url without connecting."""
     context.configure(
@@ -89,6 +113,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         render_as_batch=True,
         compare_type=compare_type,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()

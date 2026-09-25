@@ -340,7 +340,10 @@ async def test_quotes_route_returns_price_version_and_slot_shares(admin_client: 
     stt, oss, tts, unknown = body["items"]
     assert Decimal(stt["per_minute_usd"]) == Decimal("0.0048")
     assert stt["kind"] == "stt" and stt["quotes"][0]["source"] == "table"
-    assert oss["per_minute_usd"] is None and oss["note"] == "no price"
+    assert oss["per_minute_usd"] is not None and oss["note"] is None  # R-V4-58: the Groq route
+    oss_in = next(q for q in oss["quotes"] if q["unit"] == "tokens_in")
+    assert Decimal(oss_in["usd_per_unit"]) == Decimal("0.15") / Decimal(1_000_000)
+    assert "Groq" in oss_in["tier_note"]
     assert Decimal(tts["per_minute_usd"]) == Decimal("0.02025")
     assert unknown["note"] == "unknown provider"
     too_many = await admin_client.post(

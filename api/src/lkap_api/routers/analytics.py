@@ -11,7 +11,9 @@ V4-15 adds the estimate side: `estimated_usd` (the creation-time snapshots),
 `sessions_estimated`, `accuracy_pct` (actual ÷ estimated × 100 over the
 sessions that have **both** figures) per total and bucket, and `top_drivers` —
 one grouped query over `session_costs` in the range, the eight largest
-(provider, model, unit) groups; `share_pct` is each one's share of those eight.
+(provider, model, unit) groups. `share_pct` is each one's share of the range's
+**total** line cost; when the eight do not cover it, a synthetic
+`provider_id="other"` row carries the remainder so the shares sum to 100 (R-V4-62).
 """
 
 from __future__ import annotations
@@ -166,7 +168,8 @@ def _estimated_by_line(estimate: Any, minutes: float) -> dict[tuple[str, str | N
     description=(
         "Session/minute/cost/failure totals for a date range, broken down by day and by agent, "
         "with the creation-time **estimate** beside the actual cost (`estimated_usd`, "
-        "`accuracy_pct` over sessions with both) and the top cost drivers. Actual cost is usage at "
+        "`accuracy_pct` over sessions with both) and the top cost drivers (`share_pct` of the range's "
+        "total, with an `other` row for the rest). Actual cost is usage at "
         "list prices (OpenRouter at its live price); vendor invoices may differ."
     ),
 )
@@ -239,22 +242,29 @@ async def analytics_summary(
             .where(*conditions)
             .group_by(SessionCostRow.provider_id, SessionCostRow.model, SessionCostRow.unit)
             .order_by(func.sum(SessionCostRow.cost_usd).desc())
-            .limit(TOP_DRIVERS)
         )
     ).all()
-    top = [(pid, model or None, unit, Decimal(str(cost or 0))) for pid, model, unit, cost in drivers]
-    top_total = sum((cost for *_, cost in top), Decimal(0))
+    groups = [(pid, model or None, unit, Decimal(str(cost or 0))) for pid, model, unit, cost in drivers]
+    total = sum((cost for *_, cost in groups), Decimal(0))
+    top = groups[:TOP_DRIVERS]
+    rest = total - sum((cost for *_, cost in top), Decimal(0))
+
+    def _share(cost: Decimal) -> float:
+        return round(float(cost / total * 100), 2) if total > 0 else 0.0
+
     top_drivers = [
         AnalyticsDriver(
             provider_id=pid,
             model=model,
             unit=cast(Unit, unit),
             cost_usd=cost,
-            share_pct=round(float(cost / top_total * 100), 2) if top_total > 0 else 0.0,
+            share_pct=_share(cost),
             estimated_usd=estimated_lines.get((pid, model, unit)),
         )
         for pid, model, unit, cost in top
     ]
+    if rest > 0:
+        top_drivers.append(AnalyticsDriver(provider_id="other", cost_usd=rest, share_pct=_share(rest)))
 
     return AnalyticsSummary(
         sessions=totals.all.sessions,

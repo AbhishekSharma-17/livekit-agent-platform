@@ -176,7 +176,7 @@ class PriceDrift(BaseModel):
 
 
 class PriceStale(BaseModel):
-    """A table row older than ``pricing.PRICE_STALE_DAYS``."""
+    """A table row older than ``pricing.PRICE_STALE_DAYS`` (``PROMO_STALE_DAYS`` for a promotional row)."""
 
     provider_id: str
     model: str | None
@@ -488,14 +488,20 @@ def _diff_pct(table: Decimal, live: Decimal) -> float:
 
 
 def price_stale(now: dt.datetime, rows: Iterable[pricing.Price] | None = None) -> list[PriceStale]:
-    """Every table row older than ``PRICE_STALE_DAYS``."""
+    """Every table row older than ``PRICE_STALE_DAYS``, or ``PROMO_STALE_DAYS`` when its ``tier_note``
+    says "promotional" (a promotion ends sooner than a list price changes; R-V4-60)."""
     out: list[PriceStale] = []
     for row in rows if rows is not None else [*pricing.PRICES, *pricing.INFRA_PRICES]:
+        limit = (
+            pricing.PROMO_STALE_DAYS
+            if "promotional" in (row.tier_note or "").lower()
+            else pricing.PRICE_STALE_DAYS
+        )
         try:
             age = (now.date() - dt.date.fromisoformat(row.as_of)).days
         except ValueError:
-            age = pricing.PRICE_STALE_DAYS + 1
-        if age > pricing.PRICE_STALE_DAYS:
+            age = limit + 1
+        if age > limit:
             out.append(
                 PriceStale(
                     provider_id=row.provider_id, model=row.model, unit=row.unit, as_of=row.as_of, age_days=age
@@ -692,7 +698,12 @@ def render_markdown(report: DriftReport) -> str:
         ]
     else:
         lines.append("None.")
-    lines += ["", f"## `price_stale`: rows older than {pricing.PRICE_STALE_DAYS} days", ""]
+    lines += [
+        "",
+        f"## `price_stale`: rows older than {pricing.PRICE_STALE_DAYS} days "
+        f"({pricing.PROMO_STALE_DAYS} for a promotional rate)",
+        "",
+    ]
     if report.price_stale:
         lines += [
             f"- `{row.provider_id}` {_code(row.model or '(any model)')} `{row.unit}`: as_of {row.as_of} "

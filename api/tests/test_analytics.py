@@ -94,9 +94,10 @@ async def test_no_estimates_means_no_accuracy(admin_client: httpx.AsyncClient, d
     assert body["sessions_estimated"] == 0
 
 
-async def test_top_drivers_are_at_most_eight_and_their_shares_sum_to_100(
+async def test_top_drivers_share_the_range_total_with_an_other_row_for_the_tail(
     admin_client: httpx.AsyncClient, database: Database
 ) -> None:
+    """R-V4-62: `share_pct` is the share of the range's total, not of the top 8."""
     agent = await create_agent(admin_client, name="Drivers")
     lines = [(f"provider-{n}", f"model-{n}", "tokens_in", 0.01 * (n + 1)) for n in range(10)]
     await _session(database, str(agent["id"]), 6, cost=0.55, estimated=0.5, lines=lines)
@@ -104,8 +105,28 @@ async def test_top_drivers_are_at_most_eight_and_their_shares_sum_to_100(
     body = (await admin_client.get("/v1/analytics/summary")).json()
     drivers = body["top_drivers"]
 
-    assert len(drivers) == 8
-    assert drivers[0]["provider_id"] == "provider-9"  # largest first
-    assert sum(d["share_pct"] for d in drivers) == pytest.approx(100.0, abs=0.1)
-    costs = [float(d["cost_usd"]) for d in drivers]
+    assert len(drivers) == 9  # the top 8, then "other"
+    top, other = drivers[:8], drivers[8]
+    assert top[0]["provider_id"] == "provider-9"  # largest first
+    costs = [float(d["cost_usd"]) for d in top]
     assert costs == sorted(costs, reverse=True)
+    assert top[0]["share_pct"] == pytest.approx(0.10 / 0.55 * 100, abs=0.01)  # of the total, not of 0.52
+    assert other["provider_id"] == "other"
+    assert other["model"] is None and other["unit"] is None and other["estimated_usd"] is None
+    assert float(other["cost_usd"]) == pytest.approx(0.03)  # provider-0 + provider-1
+    assert other["share_pct"] == pytest.approx(0.03 / 0.55 * 100, abs=0.01)
+    assert sum(d["share_pct"] for d in drivers) == pytest.approx(100.0, abs=0.1)
+
+
+async def test_top_drivers_have_no_other_row_when_eight_cover_the_total(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    agent = await create_agent(admin_client, name="Few drivers")
+    lines = [(f"provider-{n}", f"model-{n}", "tokens_in", 0.01 * (n + 1)) for n in range(3)]
+    await _session(database, str(agent["id"]), 7, cost=0.06, estimated=0.05, lines=lines)
+
+    drivers = (await admin_client.get("/v1/analytics/summary")).json()["top_drivers"]
+
+    assert [d["provider_id"] for d in drivers] == ["provider-2", "provider-1", "provider-0"]
+    assert drivers[0]["share_pct"] == pytest.approx(50.0, abs=0.01)
+    assert sum(d["share_pct"] for d in drivers) == pytest.approx(100.0, abs=0.1)

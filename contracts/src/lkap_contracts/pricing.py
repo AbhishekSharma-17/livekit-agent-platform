@@ -28,7 +28,15 @@ Rules for the table:
   than one tier, a volume discount or an included quota. Plan-included minutes
   are never converted into a rate here; that is the admin's call, as a
   workspace price.
-* A row older than :data:`PRICE_STALE_DAYS` is quoted with ``stale=True``.
+* A row older than :data:`PRICE_STALE_DAYS` is quoted with ``stale=True``. The
+  drift job reports a row whose ``tier_note`` says "promotional" at
+  :data:`PROMO_STALE_DAYS` instead (R-V4-60).
+* A TTS entry's model id (voice-shaped: ``aura-2-andromeda-en``) with no exact
+  row is priced by its **longest family prefix**: the longest row ``model`` that
+  the id starts with, followed by ``-`` (``aura-2-andromeda-en`` → ``aura-2``;
+  ``aura-2`` never prices ``aura-20``). The model-agnostic row is the last
+  fallback (R-V4-61). Other kinds do not take the step: an LLM variant
+  (``gpt-4.1-nano``) is not priced at its family's rate (``gpt-4.1``).
 
 Pseudo provider ids (not registry entries; priced from LKAP's own clocks, rows
 in :data:`INFRA_PRICES`):
@@ -83,6 +91,9 @@ PRICE_VERSION = "2026-09-25"
 
 #: A table row older than this many days is quoted ``stale``.
 PRICE_STALE_DAYS = 90
+
+#: A row whose ``tier_note`` says "promotional" is reported stale by the drift job after this many days.
+PROMO_STALE_DAYS = 30
 
 #: The endpoint the live source reads (keyless).
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
@@ -180,6 +191,23 @@ _ANTHROPIC_TIER = "standard rate (the Batch API is half price)"
 _LK_TIER = "LiveKit Build tier list price (Ship/Scale can be cheaper for speech models)"
 _LK_FREE = "each LiveKit plan includes monthly Inference credit ($2.50 on Build)"
 _DEEPGRAM_TIER = "Pay As You Go rate (the Growth plan is cheaper)"
+_GPT_OSS_ROUTES = "priced at the Groq route; LiveKit may route to Baseten ($0.10/$0.50 per 1M)"
+
+#: Deepgram's Aura-1 voice ids (they share no ``aura-1`` prefix, so each gets its own row; R-V4-61).
+_AURA_1_VOICES: tuple[str, ...] = (
+    "aura-asteria-en",
+    "aura-luna-en",
+    "aura-stella-en",
+    "aura-athena-en",
+    "aura-hera-en",
+    "aura-orion-en",
+    "aura-arcas-en",
+    "aura-perseus-en",
+    "aura-angus-en",
+    "aura-orpheus-en",
+    "aura-helios-en",
+    "aura-zeus-en",
+)
 
 
 def _row(
@@ -401,6 +429,10 @@ PRICES: list[Price] = [
     _row("deepgram-tts", None, "chars", Decimal("0.030") / _K, _DEEPGRAM, tier_note=_DEEPGRAM_TIER),
     _row("deepgram-tts", "aura-2", "chars", Decimal("0.030") / _K, _DEEPGRAM, tier_note=_DEEPGRAM_TIER),
     _row("deepgram-tts", "aura-1", "chars", Decimal("0.015") / _K, _DEEPGRAM, tier_note=_DEEPGRAM_TIER),
+    *(
+        _row("deepgram-tts", voice, "chars", Decimal("0.015") / _K, _DEEPGRAM, tier_note=_DEEPGRAM_TIER)
+        for voice in _AURA_1_VOICES
+    ),
     # ---------------------------------------------------------------- AssemblyAI, Rime, Inworld
     _row(
         "assemblyai-stt",
@@ -434,7 +466,23 @@ PRICES: list[Price] = [
     _lk("livekit-inference-stt", "assemblyai/universal-streaming", "audio_s_in", Decimal("0.0025") / _MIN),
     _lk("livekit-inference-stt", "cartesia/ink-whisper", "audio_s_in", Decimal("0.0030") / _MIN),
     _lk("livekit-inference-stt", "google/gemini-3.5-transcribe-live", "audio_s_in", Decimal("0.0095") / _MIN),
-    # LLM: $/1M tokens ÷ 1e6. `openai/gpt-oss-120b` stays unpriced: two routes, default unknown (ask #93).
+    # LLM: $/1M tokens ÷ 1e6. `openai/gpt-oss-120b` has two routes and LiveKit does not say which one a
+    # request lands on: priced at the higher (Groq) route, the other named in the note (R-V4-58).
+    *(
+        _row(
+            "livekit-inference-llm",
+            "openai/gpt-oss-120b",
+            unit,
+            Decimal(per_million) / _M,
+            _LK_INFERENCE,
+            tier_note=_GPT_OSS_ROUTES,
+            free_tier_note=_LK_FREE,
+        )
+        for unit, per_million in cast(
+            "tuple[tuple[Unit, str], ...]",
+            (("tokens_in", "0.15"), ("cached_tokens_in", "0.075"), ("tokens_out", "0.60")),
+        )
+    ),
     _lk("livekit-inference-llm", "google/gemma-4-31b-it", "tokens_in", Decimal("0.400") / _M),
     _lk("livekit-inference-llm", "google/gemma-4-31b-it", "cached_tokens_in", Decimal("0.200") / _M),
     _lk("livekit-inference-llm", "google/gemma-4-31b-it", "tokens_out", Decimal("1.200") / _M),
@@ -534,7 +582,6 @@ OPENROUTER_TWINS: dict[tuple[str, str], str] = {
     ("anthropic-llm", "claude-haiku-4-5"): "anthropic/claude-haiku-4.5",
     ("google-llm", "gemini-2.5-flash"): "google/gemini-2.5-flash",
     ("google-llm", "gemini-3.5-flash"): "google/gemini-3.5-flash",
-    ("deepgram-stt", "nova-3"): "deepgram/nova-3",
     ("deepgram-tts", "aura-2"): "deepgram/aura-2",
     ("livekit-inference-llm", "openai/gpt-4.1"): "openai/gpt-4.1",
     ("livekit-inference-llm", "openai/gpt-4o-mini"): "openai/gpt-4o-mini",
@@ -551,9 +598,11 @@ def _all_rows() -> Iterable[Price]:
 def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:
     """Return the table price for a provider/model/unit triple, or ``None`` if unknown.
 
-    The table half of :func:`quote`. A model-specific entry wins over a
-    model-agnostic one for the same provider and unit. No ``price_ref``
-    aliasing happens here.
+    The table half of :func:`quote`, in three steps for the same provider and
+    unit: the exact model row; else, for a TTS entry, the longest family prefix
+    (a row ``model`` the id starts with, followed by ``-``:
+    ``aura-2-andromeda-en`` → ``aura-2``, never ``aura-20`` or ``aura-2_x``);
+    else the model-agnostic row. No ``price_ref`` aliasing happens here.
 
     Args:
         provider_id: A registry id such as ``"openai-llm"``, or a pseudo id.
@@ -564,15 +613,24 @@ def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:
         The matching :class:`Price`, or ``None`` when the table has no entry —
         callers must record "no price", never a zero cost.
     """
+    family: Price | None = None
     fallback: Price | None = None
+    by_family = model is not None and _kind(provider_id) == "tts"
     for price in _all_rows():
         if price.provider_id != provider_id or price.unit != unit:
             continue
-        if price.model is not None and price.model == model:
-            return price
         if price.model is None:
             fallback = fallback or price
-    return fallback
+        elif price.model == model:
+            return price
+        elif (
+            by_family
+            and model is not None
+            and model.startswith(price.model + "-")
+            and (family is None or len(price.model) > len(family.model or ""))
+        ):
+            family = price
+    return family or fallback
 
 
 def price_alias(provider_id: str) -> str:

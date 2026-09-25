@@ -838,6 +838,9 @@ export interface AnalyticsBucket {
 /**
  * One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit).
  *
+ * When the top drivers do not cover the range's total, one synthetic row
+ * ``provider_id="other"`` (no model, no unit) carries the remainder (R-V4-62).
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AnalyticsDriver".
  */
@@ -845,22 +848,34 @@ export interface AnalyticsDriver {
   cost_usd: number | string;
   estimated_usd?: number | string | null;
   model?: string | null;
+  /**
+   * A registry id, or "other" for the synthetic remainder row.
+   */
   provider_id: string;
+  /**
+   * This row's share of the range's total actual cost (every row sums to 100).
+   */
   share_pct: number;
-  unit:
-    | "tokens_in"
-    | "tokens_out"
-    | "audio_s_in"
-    | "audio_s_out"
-    | "chars"
-    | "minutes"
-    | "images"
-    | "text_tokens_in"
-    | "text_tokens_out"
-    | "audio_tokens_in"
-    | "audio_tokens_out"
-    | "cached_tokens_in"
-    | "requests";
+  /**
+   * Null only on the synthetic "other" row.
+   */
+  unit?:
+    | (
+        | "tokens_in"
+        | "tokens_out"
+        | "audio_s_in"
+        | "audio_s_out"
+        | "chars"
+        | "minutes"
+        | "images"
+        | "text_tokens_in"
+        | "text_tokens_out"
+        | "audio_tokens_in"
+        | "audio_tokens_out"
+        | "cached_tokens_in"
+        | "requests"
+      )
+    | null;
 }
 /**
  * ``GET /v1/analytics/summary``.
@@ -882,7 +897,7 @@ export interface AnalyticsSummary {
   sessions?: number;
   sessions_estimated?: number;
   /**
-   * At most 8, largest first.
+   * At most 8, largest first, then an "other" row when they do not cover the total.
    */
   top_drivers?: AnalyticsDriver[];
 }

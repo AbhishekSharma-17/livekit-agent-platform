@@ -788,13 +788,19 @@ class AnalyticsBucket(BaseModel):
 
 
 class AnalyticsDriver(BaseModel):
-    """One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit)."""
+    """One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit).
 
-    provider_id: str
+    When the top drivers do not cover the range's total, one synthetic row
+    ``provider_id="other"`` (no model, no unit) carries the remainder (R-V4-62).
+    """
+
+    provider_id: str = Field(description='A registry id, or "other" for the synthetic remainder row.')
     model: str | None = None
-    unit: Unit
+    unit: Unit | None = Field(default=None, description='Null only on the synthetic "other" row.')
     cost_usd: Decimal
-    share_pct: float
+    share_pct: float = Field(
+        description="This row's share of the range's total actual cost (every row sums to 100)."
+    )
     estimated_usd: Decimal | None = None
 
 
@@ -812,7 +818,10 @@ class AnalyticsSummary(BaseModel):
     accuracy_pct: float | None = Field(
         default=None, description="actual / estimated x 100 over the sessions that have both figures."
     )
-    top_drivers: list[AnalyticsDriver] = Field(default=[], description="At most 8, largest first.")
+    top_drivers: list[AnalyticsDriver] = Field(
+        default=[],
+        description='At most 8, largest first, then an "other" row when they do not cover the total.',
+    )
 
 
 # ------------------------------------------------------------ cost estimates (V4-15)

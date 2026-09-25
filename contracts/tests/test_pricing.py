@@ -92,9 +92,16 @@ def test_only_known_zeros_are_zero() -> None:
     assert zeros[0].tier_note == "runs on the worker; no vendor charge"
 
 
-def test_ambiguous_route_stays_unpriced() -> None:
-    """ask #93: two LiveKit routes for gpt-oss-120b; which one a request lands on is unknown."""
-    assert quote("livekit-inference-llm", "openai/gpt-oss-120b", "tokens_in", now=NOW) is None
+@pytest.mark.parametrize(
+    ("unit", "per_million"),
+    [("tokens_in", "0.15"), ("cached_tokens_in", "0.075"), ("tokens_out", "0.60")],
+)
+def test_two_route_model_is_priced_at_the_higher_route_with_a_note(unit: str, per_million: str) -> None:
+    """R-V4-58: LiveKit's gpt-oss-120b routes to Groq or Baseten; the Groq (higher) route is priced."""
+    q = quote("livekit-inference-llm", "openai/gpt-oss-120b", unit, now=NOW)  # type: ignore[arg-type]
+    assert q is not None
+    assert q.usd_per_unit == Decimal(per_million) / Decimal(1_000_000)
+    assert q.tier_note and "Groq" in q.tier_note and "Baseten" in q.tier_note
 
 
 def test_realtime_rows_are_split_and_never_folded() -> None:
@@ -198,11 +205,76 @@ def test_workspace_model_specific_beats_model_agnostic() -> None:
     assert agnostic is not None and agnostic.usd_per_unit == Decimal("0.2")
 
 
+def _agnostic_deepgram_tts() -> Price:
+    return next(r for r in PRICES if r.provider_id == "deepgram-tts" and r.model is None)
+
+
 def test_table_model_specific_beats_model_agnostic() -> None:
     specific = quote("deepgram-tts", "aura-1", "chars", now=NOW)
-    agnostic = quote("deepgram-tts", "aura-2-andromeda-en", "chars", now=NOW)
+    agnostic = quote("deepgram-tts", "some-new-voice", "chars", now=NOW)
     assert specific is not None and specific.usd_per_unit == Decimal("0.000015")
-    assert agnostic is not None and agnostic.usd_per_unit == Decimal("0.00003")
+    assert agnostic is not None and agnostic.usd_per_unit == _agnostic_deepgram_tts().usd_per_unit
+
+
+def test_a_voice_id_is_priced_by_its_family_prefix() -> None:
+    """R-V4-61: `aura-2-andromeda-en` resolves to the `aura-2` row, not the agnostic one."""
+    family = next(r for r in PRICES if (r.provider_id, r.model) == ("deepgram-tts", "aura-2"))
+    assert pricing.lookup("deepgram-tts", "aura-2-andromeda-en", "chars") is family
+
+
+def test_an_aura_1_voice_gets_the_aura_1_price() -> None:
+    q = quote("deepgram-tts", "aura-asteria-en", "chars", now=NOW)
+    assert q is not None and q.usd_per_unit == Decimal("0.015") / Decimal(1_000)
+
+
+@pytest.mark.parametrize("model", ["aura-20", "aura-2_andromeda", "aura", "xaura-2-andromeda-en", None])
+def test_the_family_prefix_needs_a_dash_and_never_matches_a_substring(model: str | None) -> None:
+    """`aura-2` never prices `aura-20`, `aura-2_x` or an id that merely contains it: the agnostic row does."""
+    assert pricing.lookup("deepgram-tts", model, "chars") is _agnostic_deepgram_tts()
+
+
+def test_an_llm_variant_is_not_priced_at_its_familys_rate() -> None:
+    """The family step is for voice-shaped TTS ids: `gpt-4.1-nano-2026` is not `gpt-4.1` (20x the price)."""
+    assert pricing.lookup("openai-llm", "gpt-4.1-nano-2026", "tokens_in") is None
+
+
+def test_a_livekit_inference_tts_voice_takes_the_family_step() -> None:
+    q = quote("livekit-inference-tts", "deepgram/aura-2-thalia-en", "chars", now=NOW)
+    assert q is not None and q.usd_per_unit == Decimal("30.00") / Decimal(1_000_000)
+
+
+def test_the_longest_family_prefix_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [
+        Price(
+            provider_id="rime-tts",
+            model="fam",
+            unit="chars",
+            usd_per_unit=Decimal(1),
+            source_url="u",
+            as_of="2026-09-25",
+        ),
+        Price(
+            provider_id="rime-tts",
+            model="fam-2",
+            unit="chars",
+            usd_per_unit=Decimal(2),
+            source_url="u",
+            as_of="2026-09-25",
+        ),
+        Price(
+            provider_id="rime-tts",
+            model=None,
+            unit="chars",
+            usd_per_unit=Decimal(3),
+            source_url="u",
+            as_of="2026-09-25",
+        ),
+    ]
+    monkeypatch.setattr(pricing, "PRICES", rows)
+    hit = pricing.lookup("rime-tts", "fam-2-voice", "chars")
+    assert hit is not None and hit.usd_per_unit == Decimal(2)
+    exact = pricing.lookup("rime-tts", "fam", "chars")
+    assert exact is not None and exact.usd_per_unit == Decimal(1)
 
 
 def test_price_ref_aliases_to_another_entrys_rows() -> None:

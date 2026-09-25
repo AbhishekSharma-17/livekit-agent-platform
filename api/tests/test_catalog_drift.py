@@ -11,11 +11,13 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from lkap_contracts import pricing
 from lkap_contracts.api_models import CatalogItem
 from lkap_contracts.providers import credential_home, get
 
@@ -428,12 +430,45 @@ def test_a_livekit_payload_without_records_is_unusable() -> None:
 
 
 def test_price_stale_lists_rows_older_than_ninety_days() -> None:
-    from lkap_contracts import pricing
-
     now = drift.dt.datetime(2027, 3, 1, tzinfo=drift.dt.UTC)
     stale = drift.price_stale(now)
     assert len(stale) == len(pricing.PRICES) + len(pricing.INFRA_PRICES)
     assert drift.price_stale(drift.dt.datetime(2026, 9, 26, tzinfo=drift.dt.UTC)) == []
+
+
+@pytest.mark.parametrize(("age_days", "stale"), [(29, False), (30, False), (31, True)])
+def test_a_promotional_row_is_stale_at_thirty_days(age_days: int, stale: bool) -> None:
+    """R-V4-60: a row whose tier_note says "promotional" goes stale at 30 days, not 90."""
+    promo = pricing.Price(
+        provider_id="deepgram-stt",
+        model="nova-3",
+        unit="audio_s_in",
+        usd_per_unit=Decimal("0.00008"),
+        source_url="https://deepgram.com/pricing",
+        as_of="2026-09-25",
+        tier_note="limited-time promotional streaming rate (regular $0.0077/min)",
+    )
+    regular = promo.model_copy(update={"tier_note": "Pay As You Go rate"})
+    now = drift.dt.datetime(2026, 9, 25, tzinfo=drift.dt.UTC) + drift.dt.timedelta(days=age_days)
+    hits = drift.price_stale(now, [promo, regular])
+    assert len(hits) == (1 if stale else 0)
+    if stale:
+        assert hits[0].age_days == age_days
+
+
+def test_the_real_deepgram_promotional_rows_go_stale_before_the_rest() -> None:
+    now = drift.dt.datetime(2026, 9, 25, tzinfo=drift.dt.UTC) + drift.dt.timedelta(days=31)
+    stale = drift.price_stale(now)
+    promo = [r for r in pricing.PRICES if "promotional" in (r.tier_note or "").lower()]
+    assert promo, "the Deepgram streaming rows carry the promotion in their tier_note"
+    assert {(s.provider_id, s.model, s.unit) for s in stale} == {
+        (r.provider_id, r.model, r.unit) for r in promo
+    }
+
+
+def test_the_deepgram_nova_3_openrouter_twin_is_dropped_and_aura_2_kept() -> None:
+    assert ("deepgram-stt", "nova-3") not in pricing.OPENROUTER_TWINS
+    assert pricing.OPENROUTER_TWINS[("deepgram-tts", "aura-2")] == "deepgram/aura-2"
 
 
 async def test_price_sections_skip_an_unavailable_livekit_payload_as_one_row() -> None:

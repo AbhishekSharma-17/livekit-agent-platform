@@ -80,7 +80,7 @@
       "type": "object"
     },
     "AnalyticsDriver": {
-      "description": "One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit).",
+      "description": "One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit).\n\nWhen the top drivers do not cover the range's total, one synthetic row\n``provider_id=\"other\"`` (no model, no unit) carries the remainder (R-V4-62).",
       "properties": {
         "cost_usd": {
           "anyOf": [
@@ -123,36 +123,46 @@
           "title": "Model"
         },
         "provider_id": {
+          "description": "A registry id, or \"other\" for the synthetic remainder row.",
           "title": "Provider Id",
           "type": "string"
         },
         "share_pct": {
+          "description": "This row's share of the range's total actual cost (every row sums to 100).",
           "title": "Share Pct",
           "type": "number"
         },
         "unit": {
-          "enum": [
-            "tokens_in",
-            "tokens_out",
-            "audio_s_in",
-            "audio_s_out",
-            "chars",
-            "minutes",
-            "images",
-            "text_tokens_in",
-            "text_tokens_out",
-            "audio_tokens_in",
-            "audio_tokens_out",
-            "cached_tokens_in",
-            "requests"
+          "anyOf": [
+            {
+              "enum": [
+                "tokens_in",
+                "tokens_out",
+                "audio_s_in",
+                "audio_s_out",
+                "chars",
+                "minutes",
+                "images",
+                "text_tokens_in",
+                "text_tokens_out",
+                "audio_tokens_in",
+                "audio_tokens_out",
+                "cached_tokens_in",
+                "requests"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Unit",
-          "type": "string"
+          "default": null,
+          "description": "Null only on the synthetic \"other\" row.",
+          "title": "Unit"
         }
       },
       "required": [
         "provider_id",
-        "unit",
         "cost_usd",
         "share_pct"
       ],
@@ -247,7 +257,7 @@
     },
     "top_drivers": {
       "default": [],
-      "description": "At most 8, largest first.",
+      "description": "At most 8, largest first, then an \"other\" row when they do not cover the total.",
       "items": {
         "$ref": "#/$defs/AnalyticsDriver"
       },

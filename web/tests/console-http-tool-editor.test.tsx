@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
@@ -27,8 +27,18 @@ class ResizeObserverStub {
 
 function renderWithClient(ui: React.ReactElement) {
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+  // Radix `Select` (the V4-13 "Runs" picker) needs these in jsdom.
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.releasePointerCapture = vi.fn();
   const client = new QueryClient();
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+/** Radix `Select` mirrors every item in a hidden native `<option>` too; scope to the open listbox. */
+async function pickOption(text: string) {
+  const listbox = await screen.findByRole("listbox");
+  fireEvent.click(within(listbox).getByText(text));
 }
 
 function stubFetch() {
@@ -137,5 +147,137 @@ describe("HttpToolEditorDialog", () => {
     const calls = fetchMock.mock.calls as unknown as [string, unknown][];
     expect(calls.filter(([url]) => url !== "/api/console/auth/me")).toHaveLength(0);
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  describe("execution fields (V4-13, BACKGROUND-TOOLS.md §7)", () => {
+    /** Fills in every field the "Allowed hosts"-empty-list guard needs, nothing execution-related. */
+    function fillBasics(getByLabelText: (text: RegExp) => HTMLElement) {
+      fireEvent.change(getByLabelText(/^Name$/), { target: { value: "lookup_weather" } });
+      fireEvent.change(getByLabelText(/Allowed hosts/), { target: { value: "api.example.com" } });
+    }
+
+    it('leaves an untouched GET tool at "Agent default" and posts execution.mode: null', async () => {
+      // A tool whose console draft never touches "Runs" must not pin mode to
+      // "blocking" — that would silently override the agent's "Read tools
+      // run" setting for every GET tool ever saved through this editor.
+      const fetchMock = stubFetch();
+      const onSaved = vi.fn();
+      const { getByText, getByLabelText } = renderWithClient(
+        <HttpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={onSaved} trigger={<button>New HTTP tool</button>} />,
+      );
+      fireEvent.click(getByText("New HTTP tool"));
+      fillBasics(getByLabelText);
+
+      fireEvent.click(getByLabelText("Method"));
+      await pickOption("GET");
+
+      expect((getByLabelText("Runs") as HTMLElement).textContent).toContain("Agent default");
+
+      fireEvent.click(getByText("Save tool"));
+      await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+      const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+      const [, init] = calls.find(([url]) => !url.includes("auth/me")) as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as { definition: { execution: { mode: unknown } } };
+      expect(body.definition.execution.mode).toBeNull();
+    });
+
+    it('choosing "Automatic" shows the threshold field with 700', async () => {
+      stubFetch();
+      const { getByText, getByLabelText } = renderWithClient(
+        <HttpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>New HTTP tool</button>} />,
+      );
+      fireEvent.click(getByText("New HTTP tool"));
+
+      expect(screen.queryByLabelText("Switches to background after")).toBeNull();
+
+      fireEvent.click(getByLabelText("Runs"));
+      await pickOption("Automatic");
+
+      const threshold = await waitFor(() => getByLabelText("Switches to background after") as HTMLInputElement);
+      expect(threshold.value).toBe("700");
+    });
+
+    it("posts definition.execution matching the form", async () => {
+      const fetchMock = stubFetch();
+      const onSaved = vi.fn();
+      const { getByText, getByLabelText } = renderWithClient(
+        <HttpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={onSaved} trigger={<button>New HTTP tool</button>} />,
+      );
+      fireEvent.click(getByText("New HTTP tool"));
+      fillBasics(getByLabelText);
+
+      fireEvent.click(getByLabelText("Runs"));
+      await pickOption("In the background");
+
+      fireEvent.change(getByLabelText("What the agent says first"), { target: { value: "Fetching that now." } });
+      fireEvent.change(getByLabelText("Fillers while waiting"), { target: { value: "Still checking.\nAlmost there.\n\n  " } });
+      fireEvent.change(getByLabelText("First filler after"), { target: { value: "3" } });
+      fireEvent.change(getByLabelText("Then every"), { target: { value: "6" } });
+
+      fireEvent.click(getByLabelText("Can be cancelled"));
+      await pickOption("No");
+
+      fireEvent.click(getByLabelText("Repeated calls"));
+      await pickOption("Allow it");
+
+      fireEvent.change(getByLabelText("Give up after"), { target: { value: "45" } });
+
+      fireEvent.click(getByText("Save tool"));
+      await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+      const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+      const call = calls.find(([url]) => !url.includes("auth/me"));
+      expect(call).toBeDefined();
+      const [, init] = call as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as { definition: { execution: Record<string, unknown> } };
+      expect(body.definition.execution).toEqual({
+        mode: "background",
+        announce: "Fetching that now.",
+        auto_threshold_ms: 700,
+        fillers: ["Still checking.", "Almost there."],
+        filler_delay_s: 3,
+        filler_interval_s: 6,
+        cancellable: false,
+        on_duplicate: "allow",
+        duplicate_scope: "name_and_args",
+        max_duration_s: 45,
+      });
+    });
+
+    it('switching "Silent reply" on with "In the background" selected shows the validator message and disables Save', async () => {
+      stubFetch();
+      const { getByText, getByLabelText } = renderWithClient(
+        <HttpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>New HTTP tool</button>} />,
+      );
+      fireEvent.click(getByText("New HTTP tool"));
+      fillBasics(getByLabelText);
+
+      fireEvent.click(getByLabelText("Runs"));
+      await pickOption("In the background");
+
+      const saveButton = getByText("Save tool") as HTMLButtonElement;
+      expect(saveButton.disabled).toBe(false);
+
+      fireEvent.click(getByLabelText("Silent reply"));
+
+      await waitFor(() =>
+        expect(
+          screen.getAllByText(/has silent_reply on, which would swallow its background announcement; turn one of them off/),
+        ).not.toHaveLength(0),
+      );
+      expect(saveButton.disabled).toBe(true);
+    });
+
+    it("shows the confirm-default note for a non-GET method", async () => {
+      stubFetch();
+      const { getByText } = renderWithClient(
+        <HttpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>New HTTP tool</button>} />,
+      );
+      fireEvent.click(getByText("New HTTP tool"));
+
+      // The draft defaults to POST, so the note is visible without touching the Method field.
+      expect(getByText("This tool changes something; the agent asks before running it twice.")).toBeTruthy();
+    });
   });
 });

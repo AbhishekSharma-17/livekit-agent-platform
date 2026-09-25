@@ -50,6 +50,15 @@ export interface PanelFormSubmitAction {
   payload: { block_id: string; values: Record<string, unknown> } | { block_id: string; cancelled: true };
 }
 
+/**
+ * A requestable block's answer (V5-02, CONTRACTS-V2 §4.4): `{block_id, values}`
+ * on submit, `{block_id, cancelled: true}` on dismissal. Also answers a form.
+ */
+export interface PanelBlockSubmitAction {
+  action: "block_submit";
+  payload: { block_id: string; values: Record<string, unknown> } | { block_id: string; cancelled: true };
+}
+
 /** A block-level intent → the pack's `on_block_action(ctx, block_id, name, data)`. */
 export interface PanelBlockAction {
   action: "block_action";
@@ -61,7 +70,7 @@ export interface PanelBlockAction {
  * `ui_action` through `performUiAction` and the v2 block actions as their own
  * `lkap.agent.action` (`{v: 1, action, payload}`).
  */
-export type PanelAction = PanelUiAction | PanelFormSubmitAction | PanelBlockAction;
+export type PanelAction = PanelUiAction | PanelFormSubmitAction | PanelBlockSubmitAction | PanelBlockAction;
 
 /**
  * The `lkap.agent.action` a panel intent becomes. `ui_action` keeps the v1

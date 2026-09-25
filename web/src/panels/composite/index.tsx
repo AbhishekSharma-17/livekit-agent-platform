@@ -11,7 +11,7 @@
  *   video, form) spanning both.
  * - **State** is the envelope from `useUiState`: block state under
  *   `state.blocks[<id>]`, envelope blocks read `state.status` etc.
- * - **Requests** (`form`, `show_block`, `focus`, `navigate`) arrive through
+ * - **Requests** (`request`, `form`, `show_block`, `focus`, `navigate`) arrive through
  *   `handleRequest` → `./requests.ts` → the mounted component, which scrolls
  *   a block into view (and focuses a form's first field) or asks the visitor
  *   before opening a link.

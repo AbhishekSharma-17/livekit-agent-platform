@@ -19,7 +19,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 
-import type { PanelProps } from "@/panels/registry";
+import type { PanelBlockSubmitAction, PanelProps } from "@/panels/registry";
 
 import type { RequestableStatus } from "../blocks/types";
 
@@ -38,20 +38,10 @@ export interface UseBlockRequestResult {
   cancel: () => Promise<void>;
 }
 
-type BlockSubmitPayload =
-  | { block_id: string; values: Record<string, unknown> }
-  | { block_id: string; cancelled: true };
+type BlockSubmitPayload = PanelBlockSubmitAction["payload"];
 
-/**
- * `block_submit` is not yet in `PanelAction` (`@/panels/registry`, not an
- * exclusive file of this package) even though the contract's `AgentAction`
- * has carried it since V5-02 and `agentActionFor` already forwards any
- * action/payload pair it doesn't special-case. Filed in `docs/v5/_asks.md`
- * (ask requesting `PanelAction` grow a `block_submit` member); this cast is
- * the only thing standing in for that until the coordinator applies it.
- */
-function blockSubmitAction(payload: BlockSubmitPayload): Parameters<PanelProps["perform"]>[0] {
-  return { action: "block_submit", payload } as unknown as Parameters<PanelProps["perform"]>[0];
+function blockSubmitAction(payload: BlockSubmitPayload): PanelBlockSubmitAction {
+  return { action: "block_submit", payload };
 }
 
 /**

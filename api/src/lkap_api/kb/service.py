@@ -44,10 +44,17 @@ import asyncio
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Final, Literal
+from typing import Final
 
-from lkap_contracts.api_models import KbHit, KbSearchResponse
-from pydantic import BaseModel, Field
+from lkap_contracts.api_models import (
+    KbHit,
+    KbRerankMode,
+    KbScoreSource,
+    KbSearchMode,
+    KbSearchResponse,
+    KbSearchWarning,
+    KbSearchWarningCode,
+)
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,12 +70,11 @@ from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
 
-SearchMode = Literal["vector", "hybrid"]
-RerankMode = Literal["none", "local"]
-ScoreSource = Literal["vector", "fused", "rerank"]
-WarningCode = Literal[
-    "kb_not_found", "kb_embedder_mismatch", "kb_timeout", "kb_error", "lexical_unavailable", "rerank_failed"
-]
+#: The search vocabulary lives in contracts (asks #12/#27, moved by V5-06); the names stay here too.
+SearchMode = KbSearchMode
+RerankMode = KbRerankMode
+ScoreSource = KbScoreSource
+WarningCode = KbSearchWarningCode
 
 #: Each list (vector, lexical) and the fused list are cut to this many candidates.
 CANDIDATES: Final = 20
@@ -79,55 +85,10 @@ PER_KB_TIMEOUT_S: Final = 2.0
 
 
 # --------------------------------------------------------------------------- response models
-# Api-local until the contracts ask (docs/v5/_asks.md, V5-04) lands: each
-# extends the contracts model additively, so every existing client (the
-# worker parses `KbSearchResponse`) keeps parsing it and ignores the rest.
-class KnowledgeHit(KbHit):
-    """One retrieved chunk, its locators and the score of every stage that ran for it."""
-
-    kb_id: str = Field(description="The knowledge base the chunk belongs to.")
-    meta: dict[str, Any] = Field(
-        default_factory=dict,
-        description="The chunk's locators: `filename`, and for chunks ingested since V5-01 "
-        "`heading_path`, `page`, `char_start`, `char_end`.",
-    )
-    vector_score: float | None = Field(
-        default=None, description="Cosine similarity to the query; null when not in the vector list."
-    )
-    lexical_rank: int | None = Field(
-        default=None, description="1-based rank in the keyword list; null when not in it (or not hybrid)."
-    )
-    fused_score: float | None = Field(
-        default=None, description="Reciprocal-rank fusion, normalised to (0, 1]; hybrid mode only."
-    )
-    rerank_score: float | None = Field(
-        default=None, description="Cross-encoder relevance through a sigmoid, (0, 1); reranked hits only."
-    )
-    score_source: ScoreSource = Field(
-        default="vector", description="Which stage `score` is: `vector`, `fused` or `rerank`."
-    )
-
-
-class KnowledgeSearchWarning(BaseModel):
-    """Something the search skipped or degraded, without failing."""
-
-    code: WarningCode
-    message: str
-    kb_id: str | None = None
-
-
-class KnowledgeSearchResponse(KbSearchResponse):
-    """Search results, best first, with what was dropped or skipped on the way."""
-
-    hits: list[KnowledgeHit]  # type: ignore[assignment]
-    mode: SearchMode = "vector"
-    rerank: RerankMode = "none"
-    min_score: float | None = None
-    dropped: int = Field(default=0, description="Hits of the top `k` removed by `min_score`.")
-    warnings: list[KnowledgeSearchWarning] = Field(default_factory=list)
-    timings_ms: dict[str, float] = Field(
-        default_factory=dict, description="`embed`, `retrieve`, `rerank` and `total`, in milliseconds."
-    )
+# The contracts models since V5-06 moved them (asks #12/#27); the api-local names are aliases.
+KnowledgeHit = KbHit
+KnowledgeSearchWarning = KbSearchWarning
+KnowledgeSearchResponse = KbSearchResponse
 
 
 # --------------------------------------------------------------------------- the service

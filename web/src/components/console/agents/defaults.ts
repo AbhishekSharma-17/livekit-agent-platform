@@ -55,6 +55,14 @@ export const DEFAULT_KNOWLEDGE: Required<KnowledgeConfig> = {
   kb_ids: [],
   auto_inject: true,
   top_k: 4,
+  // V5-06: retrieval settings (V5-10's Knowledge tab edits them).
+  min_score: null,
+  prefetch: true,
+  rerank: "none",
+  mode: "hybrid",
+  max_inject_tokens: 1200,
+  skip_short_turns: true,
+  query_mode: "conversation",
 };
 
 /** `RecordingConfig` defaults (CONTRACTS-V2 §4.3). */

@@ -969,3 +969,66 @@ def test_unreviewed_destructive_warning_skips_a_removed_connection() -> None:
     ctx = _apps_ctx({"mode": "server"}, definitions={"t1": _picked("ACMECRM_DELETE_CONTACT")}, statuses={})
 
     assert "tools.apps.denied_actions" not in _paths(ctx)
+
+
+# ------------------------------------------------------------------ knowledge v2 (V5-06)
+
+
+def _retrieval_issues(**knowledge: Any) -> list[Any]:
+    config = inference_config(knowledge=KnowledgeConfig(kb_ids=["kb-1"], **knowledge))
+    result = validate(ValidationContext(config=config))
+    return [i for i in result.issues if i.path in ("knowledge.min_score", "knowledge.rerank")]
+
+
+@pytest.mark.parametrize("min_score", [-0.1, 1.2])
+def test_validate_knowledge_min_score_outside_zero_one_is_an_error(min_score: float) -> None:
+    (issue,) = _retrieval_issues(min_score=min_score)
+
+    assert (issue.path, issue.severity) == ("knowledge.min_score", "error")
+
+
+@pytest.mark.parametrize("min_score", [None, 0.0, 0.55, 1.0])
+def test_validate_knowledge_min_score_in_range_is_fine(min_score: float | None) -> None:
+    assert _retrieval_issues(min_score=min_score) == []
+
+
+def test_validate_knowledge_rerank_local_without_prefetch_warns() -> None:
+    (issue,) = _retrieval_issues(rerank="local", prefetch=False)
+
+    assert (issue.path, issue.severity) == ("knowledge.rerank", "warning")
+    assert "60 ms" in issue.message
+
+
+def test_validate_knowledge_rerank_local_with_prefetch_is_fine() -> None:
+    assert _retrieval_issues(rerank="local", prefetch=True) == []
+
+
+def test_validate_knowledge_unknown_rerank_is_an_error_until_connection_rerankers_exist() -> None:
+    (issue,) = _retrieval_issues(rerank="connection:abc123")
+
+    assert (issue.path, issue.severity) == ("knowledge.rerank", "error")
+
+
+def test_every_stored_config_resolves_hybrid_search_without_a_floor() -> None:
+    """Compatibility rule (PLAN-V5 §0.1): configs saved before V5-06 get hybrid search, no floor."""
+    from lkap_contracts.agent_config import AgentConfig  # noqa: PLC0415
+
+    from lkap_api.templates.catalog import load_catalog  # noqa: PLC0415
+
+    knowledge_sections = [(name, raw.get("knowledge", {})) for name, raw in _stored_configs()]
+    knowledge_sections += [
+        (f"template-knowledge:{t.id}", t.knowledge.model_dump(exclude_unset=True))
+        for t in load_catalog()
+        if t.knowledge is not None
+    ]
+    assert any(section for _name, section in knowledge_sections)
+
+    for name, section in knowledge_sections:
+        knowledge = AgentConfig.model_validate(
+            {**inference_config().model_dump(mode="json"), "knowledge": section}
+        ).knowledge
+        assert (knowledge.mode, knowledge.min_score, knowledge.rerank) == ("hybrid", None, "none"), name
+        assert knowledge.prefetch and knowledge.skip_short_turns, name
+        config = inference_config(knowledge=knowledge)
+        paths = {i.path for i in validate(ValidationContext(config=config)).issues}
+        assert not paths & {"knowledge.min_score", "knowledge.rerank"}, name

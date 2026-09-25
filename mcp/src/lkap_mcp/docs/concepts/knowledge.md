@@ -38,6 +38,21 @@ uses the built-in `search_knowledge` tool and, when
 {"knowledge": {"kb_ids": [...]}})`) wires a KB in; `config.knowledge.
 auto_inject` and `top_k` control the automatic behaviour above.
 
+Retrieval settings (all under `config.knowledge`, defaults in brackets):
+`mode` (`hybrid` — keyword matches fused with embedding similarity; or
+`vector`), `rerank` (`none`; `local` rescores candidates with a local
+cross-encoder, roughly 60–100 ms), `min_score` (none; a 0–1 floor — in
+`hybrid` mode without rerank the score is rank-derived, so a floor only trims
+the tail), `max_inject_tokens` (1200, the size cap of the injected note),
+`skip_short_turns` (on: "yes", "okay", "haan ji", digits and turns under three
+words never search), `query_mode` (`conversation` searches with the user's
+turn plus the agent's previous sentence and flow variables, so "and the
+deductible?" finds the right passage; `last_turn` uses the words alone) and
+`prefetch` (on: the search starts while the caller is still speaking, so the
+result is usually ready when the turn ends). A chunk injected in the last
+three turns is not injected again. `agent_validate` flags a `min_score`
+outside 0–1 and warns when `rerank="local"` runs without `prefetch`.
+
 Packs can seed knowledge bases at agent-creation time (`PackManifest.
 kb_seeds`) — the `insurance_claim` pack seeds "Insurance policy lines" and
 "Intake playbook" from its own files, already populated by the time

@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "KbReindexSkipped": {
+      "description": "A document the re-index could not queue, and why.",
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "source_not_stored",
+            "ingest_in_progress"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "filename",
+        "reason"
+      ],
+      "title": "KbReindexSkipped",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbReindexOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the re-index queued; each queued document is `pending` until its job finishes.",
+  "properties": {
+    "queued": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Queued",
+      "type": "array"
+    },
+    "skipped": {
+      "items": {
+        "$ref": "#/$defs/KbReindexSkipped"
+      },
+      "title": "Skipped",
+      "type": "array"
+    }
+  },
+  "required": [
+    "queued",
+    "skipped"
+  ],
+  "title": "KbReindexOut",
+  "type": "object"
+}

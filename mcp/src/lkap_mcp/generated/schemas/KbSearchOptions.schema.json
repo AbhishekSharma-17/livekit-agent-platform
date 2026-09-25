@@ -1,0 +1,44 @@
+{
+  "$id": "lkap-contracts/KbSearchOptions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The V5-04 search options; every default is the pre-V5-04 behaviour.",
+  "properties": {
+    "min_score": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Drop hits whose `score` is below this; the response's `dropped` counts them.",
+      "title": "Min Score"
+    },
+    "mode": {
+      "default": "vector",
+      "description": "`vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).",
+      "enum": [
+        "vector",
+        "hybrid"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "rerank": {
+      "default": "none",
+      "description": "`local` rescores the top candidates with the local cross-encoder.",
+      "enum": [
+        "none",
+        "local"
+      ],
+      "title": "Rerank",
+      "type": "string"
+    }
+  },
+  "title": "KbSearchOptions",
+  "type": "object"
+}

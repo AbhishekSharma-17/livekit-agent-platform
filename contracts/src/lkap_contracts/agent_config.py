@@ -44,6 +44,7 @@ ProviderSlot = Literal[
 #: its judge from this slot and never walks the chain itself.
 
 __all__ = [
+    "KNOWLEDGE_RERANK_VALUES",
     "AgentConfig",
     "AgentLimits",
     "AppsMode",
@@ -52,6 +53,8 @@ __all__ = [
     "ConnectionInfo",
     "ConversationPreset",
     "KnowledgeConfig",
+    "KnowledgeQueryMode",
+    "KnowledgeSearchMode",
     "PanelLayout",
     "PipelineConfig",
     "PipelineMode",
@@ -164,12 +167,59 @@ class ToolsConfig(BaseModel):
     app server or tool finder on save and attaches it through ``tool_ids``."""
 
 
+#: ``KnowledgeConfig.mode``: how a knowledge search ranks chunks (V5-04's ``KnowledgeService``).
+KnowledgeSearchMode = Literal["vector", "hybrid"]
+
+#: ``KnowledgeConfig.rerank`` values the platform implements today. The field itself is a string so
+#: a ``connection:<id>`` reranker can be accepted later (V5-20) without a contracts change; the api
+#: validator refuses anything outside this set until then.
+KNOWLEDGE_RERANK_VALUES: tuple[str, ...] = ("none", "local")
+
+#: ``KnowledgeConfig.query_mode``: what the auto-inject search query is built from.
+KnowledgeQueryMode = Literal["last_turn", "conversation"]
+
+
 class KnowledgeConfig(BaseModel):
-    """Knowledge bases attached to the agent and how they are injected."""
+    """Knowledge bases attached to the agent and how they are injected.
+
+    The v2 fields (V5-06) default so an agent saved before them retrieves at
+    least what it did: hybrid search on, no score floor, no rerank.
+    """
 
     kb_ids: list[str] = []
     auto_inject: bool = True
     top_k: int = 4
+    min_score: float | None = Field(
+        default=None,
+        description="Drop hits scoring below this (0-1); null keeps every hit. In hybrid mode without "
+        "rerank the score is rank-derived, so a floor only trims the tail of the list.",
+    )
+    prefetch: bool = Field(
+        default=True,
+        description="Start the auto-inject search on the caller's interim transcript, so the result is "
+        "usually ready when the turn ends.",
+    )
+    rerank: Literal["none", "local"] | str = Field(
+        default="none",
+        description="`local` rescores the candidates with the local cross-encoder (adds ~60-100 ms).",
+    )
+    mode: KnowledgeSearchMode = Field(
+        default="hybrid", description="`hybrid` fuses keyword matches with embedding similarity."
+    )
+    max_inject_tokens: int = Field(
+        default=1200,
+        ge=1,
+        description="Upper bound on the knowledge note added to a turn (approximate tokens).",
+    )
+    skip_short_turns: bool = Field(
+        default=True,
+        description="Skip the auto-inject search for backchannels and very short turns (yes, okay, digits).",
+    )
+    query_mode: KnowledgeQueryMode = Field(
+        default="conversation",
+        description="`conversation` searches with the last user turn plus the previous assistant sentence "
+        "and flow variables; `last_turn` with the user's words only.",
+    )
 
 
 class RecordingConfig(BaseModel):

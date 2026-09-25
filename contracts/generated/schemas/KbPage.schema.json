@@ -7,6 +7,22 @@
           "title": "Chunk Count",
           "type": "integer"
         },
+        "chunking": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`{max_tokens, overlap}` of the chunker; null means the defaults.",
+          "title": "Chunking"
+        },
         "created_at": {
           "format": "date-time",
           "title": "Created At",
@@ -16,6 +32,19 @@
           "title": "Description",
           "type": "string"
         },
+        "dimension": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vector width recorded at creation; null for a KB created before V5-01.",
+          "title": "Dimension"
+        },
         "document_count": {
           "title": "Document Count",
           "type": "integer"
@@ -23,6 +52,19 @@
         "embedder_id": {
           "title": "Embedder Id",
           "type": "string"
+        },
+        "embedder_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Embedding model recorded at creation; null for a KB created before V5-01.",
+          "title": "Embedder Model"
         },
         "id": {
           "title": "Id",

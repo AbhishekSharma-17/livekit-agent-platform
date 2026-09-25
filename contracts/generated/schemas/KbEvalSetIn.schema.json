@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "KbEvalIn": {
+      "additionalProperties": false,
+      "description": "One golden question: found when a top-k hit is the expected document or contains the expected text.",
+      "properties": {
+        "expected_document_id": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Document Id"
+        },
+        "expected_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Text"
+        },
+        "question": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "title": "KbEvalIn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbEvalSetIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one).",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/KbEvalIn"
+      },
+      "maxItems": 500,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "KbEvalSetIn",
+  "type": "object"
+}

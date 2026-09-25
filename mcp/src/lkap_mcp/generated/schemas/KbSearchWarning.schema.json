@@ -1,0 +1,41 @@
+{
+  "$id": "lkap-contracts/KbSearchWarning.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Something the search skipped or degraded, without failing.",
+  "properties": {
+    "code": {
+      "enum": [
+        "kb_not_found",
+        "kb_embedder_mismatch",
+        "kb_timeout",
+        "kb_error",
+        "lexical_unavailable",
+        "rerank_failed"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
+    "kb_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Kb Id"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "KbSearchWarning",
+  "type": "object"
+}

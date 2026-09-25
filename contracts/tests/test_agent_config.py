@@ -1,11 +1,18 @@
-"""Conversation tuning in the agent config (V5-07): typed turn handling, presets, sounds."""
+"""The agent config: conversation tuning (V5-07) and knowledge v2 (V5-06)."""
 
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from lkap_contracts.agent_config import AgentConfig, PipelineConfig, VoiceConfig
+from lkap_contracts.agent_config import (
+    KNOWLEDGE_RERANK_VALUES,
+    AgentConfig,
+    KnowledgeConfig,
+    PipelineConfig,
+    VoiceConfig,
+)
+from lkap_contracts.api_models import InternalKbSearchRequest, KbEvalIn, KbSearchRequest, KbSearchResponse
 from lkap_contracts.turn_handling import (
     AMBIENT_SOUNDS,
     CONVERSATION_PRESETS,
@@ -242,3 +249,94 @@ def test_agent_config_carries_the_new_fields_through_json() -> None:
 
     assert again == config
     assert again.pipeline.turn_detector == TurnDetectorSettings(mode="local", unlikely_threshold=0.3)
+
+
+# ------------------------------------------------------------------ knowledge v2 (V5-06)
+
+
+def test_knowledge_config_v2_defaults_keep_what_an_old_agent_retrieved() -> None:
+    """An agent saved before V5-06 (only the v1 keys) resolves to hybrid search with no floor."""
+    stored = {"kb_ids": ["kb-1"], "auto_inject": True, "top_k": 4}
+
+    knowledge = AgentConfig.model_validate(
+        {"instructions": "Help.", "pipeline": {}, "knowledge": stored}
+    ).knowledge
+
+    assert knowledge.kb_ids == ["kb-1"]
+    assert knowledge.top_k == 4
+    assert knowledge.min_score is None
+    assert knowledge.mode == "hybrid"
+    assert knowledge.rerank == "none"
+    assert knowledge.prefetch is True
+    assert knowledge.max_inject_tokens == 1200
+    assert knowledge.skip_short_turns is True
+    assert knowledge.query_mode == "conversation"
+
+
+@pytest.mark.parametrize("rerank", ["none", "local", "connection:abc123"])
+def test_knowledge_config_rerank_accepts_the_literal_set_and_connection_strings(rerank: str) -> None:
+    assert KnowledgeConfig(rerank=rerank).rerank == rerank
+
+
+@pytest.mark.parametrize(
+    "update",
+    [{"mode": "keyword"}, {"query_mode": "everything"}, {"max_inject_tokens": 0}],
+)
+def test_knowledge_config_rejects_invalid_v2_values(update: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        KnowledgeConfig.model_validate(update)
+
+
+def test_knowledge_config_min_score_range_is_left_to_the_api_validator() -> None:
+    """The [0, 1] check is an api validator error, so a stored value never fails to parse."""
+    assert KnowledgeConfig(min_score=1.5).min_score == 1.5
+
+
+def test_knowledge_config_v2_round_trips_through_json() -> None:
+    config = AgentConfig(
+        instructions="Help.",
+        pipeline=PipelineConfig(),
+        knowledge=KnowledgeConfig(
+            kb_ids=["kb-1"],
+            min_score=0.4,
+            prefetch=False,
+            rerank="local",
+            mode="vector",
+            max_inject_tokens=600,
+            skip_short_turns=False,
+            query_mode="last_turn",
+        ),
+    )
+
+    assert AgentConfig.model_validate_json(config.model_dump_json()) == config
+    assert set(KNOWLEDGE_RERANK_VALUES) == {"none", "local"}
+
+
+def test_kb_hit_and_response_parse_a_pre_v5_04_payload() -> None:
+    """The worker keeps parsing an older api's search answer (every new field has a default)."""
+    payload = {
+        "hits": [{"chunk_id": "c1", "document_id": "d1", "filename": "a.md", "score": 0.8, "text": "t"}]
+    }
+
+    response = KbSearchResponse.model_validate(payload)
+
+    hit = response.hits[0]
+    assert hit.kb_id is None
+    assert hit.meta == {}
+    assert hit.score_source == "vector"
+    assert response.mode == "vector"
+    assert response.warnings == []
+
+
+def test_kb_search_requests_default_to_the_pre_v5_04_behaviour() -> None:
+    request = InternalKbSearchRequest(kb_ids=["kb-1"], query="q")
+
+    assert (request.mode, request.rerank, request.min_score) == ("vector", "none", None)
+    with pytest.raises(ValidationError):
+        KbSearchRequest(query="q", min_score=1.2)
+
+
+def test_kb_eval_in_needs_an_expectation() -> None:
+    with pytest.raises(ValidationError):
+        KbEvalIn(question="What is covered?")
+    assert KbEvalIn(question="What is covered?", expected_text="water damage").tags == []

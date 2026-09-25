@@ -10,8 +10,43 @@
       "title": "K",
       "type": "integer"
     },
+    "min_score": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Drop hits whose `score` is below this; the response's `dropped` counts them.",
+      "title": "Min Score"
+    },
+    "mode": {
+      "default": "vector",
+      "description": "`vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).",
+      "enum": [
+        "vector",
+        "hybrid"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
     "query": {
       "title": "Query",
+      "type": "string"
+    },
+    "rerank": {
+      "default": "none",
+      "description": "`local` rescores the top candidates with the local cross-encoder.",
+      "enum": [
+        "none",
+        "local"
+      ],
+      "title": "Rerank",
       "type": "string"
     }
   },

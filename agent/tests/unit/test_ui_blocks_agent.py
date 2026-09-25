@@ -223,7 +223,7 @@ async def test_injected_knowledge_is_logged_at_info_with_counts_only() -> None:
     agent, _channel, _room, _ = _agent(_config(GENERIC_PANEL, kb_ids=["kb-1"]), kb=FakeKbClient(hits))
     with capture_logs() as logs:
         await agent.on_user_turn_completed(
-            ChatContext.empty(), llm.ChatMessage(role="user", content=["Flood?"])
+            ChatContext.empty(), llm.ChatMessage(role="user", content=["Is flood damage covered?"])
         )
 
     [entry] = [e for e in logs if e["event"] == "injected knowledge"]
@@ -236,7 +236,9 @@ async def test_auto_injected_knowledge_is_cited_into_the_citations_block() -> No
     hits = [KbHit(chunk_id="c1", document_id="d1", filename="policy.md", score=0.9, text="Flood is covered.")]
     panel = PanelLayout(blocks=[BlockSpec(id="sources", type="kb_citations")])
     agent, channel, _room, _ = _agent(_config(panel, kb_ids=["kb-1"]), kb=FakeKbClient(hits))
-    await agent.on_user_turn_completed(ChatContext.empty(), llm.ChatMessage(role="user", content=["Flood?"]))
+    await agent.on_user_turn_completed(
+        ChatContext.empty(), llm.ChatMessage(role="user", content=["Is flood damage covered?"])
+    )
     assert channel.state.blocks["sources"]["items"][0]["text"] == "Flood is covered."
 
 

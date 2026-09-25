@@ -1,0 +1,30 @@
+{
+  "$id": "lkap-contracts/KbReindexSkipped.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A document the re-index could not queue, and why.",
+  "properties": {
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "filename": {
+      "title": "Filename",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "source_not_stored",
+        "ingest_in_progress"
+      ],
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "document_id",
+    "filename",
+    "reason"
+  ],
+  "title": "KbReindexSkipped",
+  "type": "object"
+}

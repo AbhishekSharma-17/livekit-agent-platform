@@ -16,8 +16,7 @@ V5-01 adds, on the admin surface: the embedder record on every knowledge base
 set (`GET/PUT .../evals`; the runner is V5-05) and the explicit re-index
 (`POST .../reindex`), which re-chunks stored documents so chunks ingested
 before V5-01 gain their locators. The response models that carry the new
-fields are api-local subclasses of the contracts models until the contracts
-ask in `docs/v5/_asks.md` lands.
+fields live in contracts since V5-06 (asks #12/#27).
 
 V5-04 (knowledge search): both search routes run
 :class:`~lkap_api.kb.service.KnowledgeService` and accept `mode`
@@ -32,7 +31,6 @@ vectors (D-V5-12).
 
 from __future__ import annotations
 
-import datetime as dt
 from pathlib import PurePosixPath
 from typing import Annotated, Literal
 from urllib.parse import unquote, urlsplit
@@ -40,14 +38,22 @@ from urllib.parse import unquote, urlsplit
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Response, UploadFile, status
 from lkap_contracts import providers
 from lkap_contracts.api_models import (
+    KB_MAX_EVAL_TEXT,
+    KB_MAX_EVALS,
     InternalKbSearchRequest,
     KbCreate,
     KbDocumentOut,
+    KbEvalOut,
+    KbEvalSetIn,
+    KbEvalSetOut,
     KbImportIn,
     KbOut,
+    KbReindexIn,
+    KbReindexOut,
+    KbReindexSkipped,
     KbSearchRequest,
 )
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,7 +75,7 @@ from lkap_api.kb.ingest import (
 )
 from lkap_api.kb.jobs import enqueue_kb_delete
 from lkap_api.kb.rerank import Reranker, get_local_reranker
-from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService, RerankMode, SearchMode
+from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService
 from lkap_api.kb.store import VectorStore, get_lancedb_store
 from lkap_api.logging import get_logger
 from lkap_api.storage.base import StorageBackend, UploadTooLargeError
@@ -98,29 +104,20 @@ _VALID_EMBEDDER_IDS = {spec.id for spec in providers.by_kind("embedding", status
 MIN_K = 1
 MAX_K = 20
 
-#: The evaluation set's bounds (one `PUT` replaces the whole set).
-MAX_EVALS = 500
-MAX_EVAL_TEXT = 2000
+#: The evaluation set's bounds (one `PUT` replaces the whole set); pinned in contracts.
+MAX_EVALS = KB_MAX_EVALS
+MAX_EVAL_TEXT = KB_MAX_EVAL_TEXT
 
 #: The file types an upload is ingested as (the rest decode as UTF-8 text).
 SUPPORTED_UPLOADS = ".md, .txt, .csv, .json, .pdf, .docx, .pptx, .xlsx and .html"
 
 
 # --------------------------------------------------------------------------- response models (V5-01)
-# Api-local until the contracts ask lands (docs/v5/_asks.md): each extends the
-# contracts model additively, so every existing client keeps parsing it.
-class KnowledgeBaseOut(KbOut):
-    """A knowledge base with its counts and the embedder that built it."""
-
-    dimension: int | None = Field(
-        default=None, description="Vector width recorded at creation; null for a KB created before V5-01."
-    )
-    embedder_model: str | None = Field(
-        default=None, description="Embedding model recorded at creation; null for a KB created before V5-01."
-    )
-    chunking: dict[str, int] | None = Field(
-        default=None, description="`{max_tokens, overlap}` of the chunker; null means the defaults."
-    )
+# The contracts models since V5-06 moved them (asks #12/#27); the api-local names are aliases.
+KnowledgeBaseOut = KbOut
+KnowledgeDocumentOut = KbDocumentOut
+KnowledgeSearchIn = KbSearchRequest
+InternalKnowledgeSearchIn = InternalKbSearchRequest
 
 
 class KnowledgeBasePage(BaseModel):
@@ -130,112 +127,11 @@ class KnowledgeBasePage(BaseModel):
     total: int
 
 
-class KnowledgeDocumentOut(KbDocumentOut):
-    """A document, its ingestion status and progress."""
-
-    progress: float | None = Field(
-        default=None,
-        description="Embedded chunks / total while pending (every 50 chunks), 1.0 when ready; "
-        "null for a document ingested before V5-01.",
-    )
-
-
 class KnowledgeDocumentPage(BaseModel):
     """`GET /v1/knowledge-bases/{id}/documents`."""
 
     items: list[KnowledgeDocumentOut]
     total: int
-
-
-EvalTag = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
-
-
-class KbEvalIn(BaseModel):
-    """One golden question: found when a top-k hit is the expected document or contains the expected text."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    question: str = Field(min_length=1, max_length=MAX_EVAL_TEXT)
-    expected_document_id: str | None = Field(default=None, max_length=32)
-    expected_text: str | None = Field(default=None, min_length=1, max_length=MAX_EVAL_TEXT)
-    tags: list[EvalTag] = Field(default_factory=list, max_length=20)
-
-    @model_validator(mode="after")
-    def _expects_something(self) -> KbEvalIn:
-        if self.expected_document_id is None and self.expected_text is None:
-            raise ValueError("an eval needs expected_document_id, expected_text or both")
-        return self
-
-
-class KbEvalOut(KbEvalIn):
-    """A stored eval."""
-
-    id: str
-    created_at: dt.datetime
-
-
-class KbEvalSetIn(BaseModel):
-    """`PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[KbEvalIn] = Field(max_length=MAX_EVALS)
-
-
-class KbEvalSetOut(BaseModel):
-    """The stored evaluation set, in the order it was put."""
-
-    items: list[KbEvalOut]
-    total: int
-
-
-class _SearchOptions(BaseModel):
-    """The V5-04 search options; every default is the pre-V5-04 behaviour."""
-
-    mode: SearchMode = Field(
-        default="vector",
-        description="`vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).",
-    )
-    rerank: RerankMode = Field(
-        default="none", description="`local` rescores the top candidates with the local cross-encoder."
-    )
-    min_score: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Drop hits whose `score` is below this; the response's `dropped` counts them.",
-    )
-
-
-class KnowledgeSearchIn(KbSearchRequest, _SearchOptions):
-    """`POST /v1/knowledge-bases/{id}/search` (the console's test search)."""
-
-
-class InternalKnowledgeSearchIn(InternalKbSearchRequest, _SearchOptions):
-    """`POST /internal/v1/kb/search` (the worker)."""
-
-
-class KbReindexIn(BaseModel):
-    """`POST /v1/knowledge-bases/{id}/reindex`: every document, or only these."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    document_ids: list[str] | None = Field(default=None, max_length=1000)
-
-
-class KbReindexSkipped(BaseModel):
-    """A document the re-index could not queue, and why."""
-
-    document_id: str
-    filename: str
-    reason: Literal["source_not_stored", "ingest_in_progress"]
-
-
-class KbReindexOut(BaseModel):
-    """What the re-index queued; each queued document is `pending` until its job finishes."""
-
-    queued: list[str]
-    skipped: list[KbReindexSkipped]
 
 
 # --------------------------------------------------------------------------- dependencies

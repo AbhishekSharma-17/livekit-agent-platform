@@ -54,6 +54,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 from urllib.parse import quote, urlparse
 
 from lkap_contracts.agent_config import (
+    KNOWLEDGE_RERANK_VALUES,
     REQUIRED_SLOTS,
     AgentConfig,
     PipelineConfig,
@@ -477,6 +478,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
 
     findings.extend(connection_flag_issues(ctx))
     findings.extend(knowledge_auto_inject_issues(ctx))
+    findings.extend(knowledge_retrieval_issues(ctx))
     findings.extend(tool_execution_issues(ctx))
     findings.extend(apps_issues(ctx))
     findings.extend(conversation_preset_issues(ctx))
@@ -775,6 +777,52 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
             "auto-inject off and let the agent call the search_knowledge tool"
         )
     return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
+
+
+def knowledge_retrieval_issues(ctx: ValidationContext) -> list[Issue]:
+    """The ``KnowledgeConfig`` v2 retrieval settings (V5-06).
+
+    * ``min_score`` outside [0, 1] is an error: every search score is on that
+      range (cosine, normalised fusion, or the reranker's sigmoid).
+    * ``rerank`` other than ``none`` / ``local`` is an error until connection
+      rerankers exist (V5-20 widens the accepted set).
+    * ``rerank="local"`` with ``prefetch`` off is a warning: the rerank then
+      runs inside every turn instead of while the caller is still talking.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        The issues, at ``knowledge.min_score`` / ``knowledge.rerank``.
+    """
+    knowledge = ctx.config.knowledge
+    issues: list[Issue] = []
+    if knowledge.min_score is not None and not 0.0 <= knowledge.min_score <= 1.0:
+        issues.append(
+            Issue(
+                path="knowledge.min_score",
+                message="the minimum score must be between 0 and 1",
+                severity="error",
+            )
+        )
+    if knowledge.rerank not in KNOWLEDGE_RERANK_VALUES:
+        issues.append(
+            Issue(
+                path="knowledge.rerank",
+                message=f"unknown rerank '{knowledge.rerank}'; use 'none' or 'local'",
+                severity="error",
+            )
+        )
+    elif knowledge.rerank == "local" and not knowledge.prefetch:
+        issues.append(
+            Issue(
+                path="knowledge.rerank",
+                message="reranking without pre-fetch adds ~60 ms to every turn; turn pre-fetch on to "
+                "rerank while the caller is still speaking",
+                severity="warning",
+            )
+        )
+    return issues
 
 
 #: Plain names of the ``turn_handling`` keys a preset sets, for warnings the console shows.

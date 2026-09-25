@@ -6,6 +6,13 @@ The same `PackSessionContext.kb` (`KbClient` over
 `AgentConfig.knowledge.auto_inject`); this module is only the explicit
 tool-call surface.
 
+V5-06: the search runs with the agent's `KnowledgeConfig.mode`, `rerank` and
+`min_score`, bound on the session's `ApiKbClient`
+(:func:`lkap_agent.knowledge.search_options`), so the tool and auto-inject
+retrieve alike. The tool path skips the auto-inject gate, dedupe and budget:
+the model asked for this search. Hits carry their locators (`KbHit.meta`) to
+`ctx.ui.cite(...)`, which maps them onto `KbCitation` (V5-08).
+
 v2 (CONTRACTS-V2 §4.4, implicit `cite_sources`): when the panel has a
 `kb_citations` block, every non-empty result also replaces that block's
 citations, so the user sees what the answer is based on. Citing is best

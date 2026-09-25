@@ -115,12 +115,21 @@ export interface LkapContracts {
   KbCreate?: KbCreate;
   KbDocumentOut?: KbDocumentOut;
   KbDocumentPage?: KbDocumentPage;
+  KbEvalIn?: KbEvalIn;
+  KbEvalOut?: KbEvalOut;
+  KbEvalSetIn?: KbEvalSetIn;
+  KbEvalSetOut?: KbEvalSetOut;
   KbHit?: KbHit;
   KbImportIn?: KbImportIn;
   KbOut?: KbOut;
   KbPage?: KbPage;
+  KbReindexIn?: KbReindexIn;
+  KbReindexOut?: KbReindexOut;
+  KbReindexSkipped?: KbReindexSkipped;
+  KbSearchOptions?: KbSearchOptions;
   KbSearchRequest?: KbSearchRequest;
   KbSearchResponse?: KbSearchResponse;
+  KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
   MarkdownBlockState?: MarkdownBlockState;
   McpServerDefinition?: McpServerDefinition;
@@ -516,12 +525,43 @@ export interface VariableSpec {
 /**
  * Knowledge bases attached to the agent and how they are injected.
  *
+ * The v2 fields (V5-06) default so an agent saved before them retrieves at
+ * least what it did: hybrid search on, no score floor, no rerank.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "KnowledgeConfig".
  */
 export interface KnowledgeConfig {
   auto_inject?: boolean;
   kb_ids?: string[];
+  /**
+   * Upper bound on the knowledge note added to a turn (approximate tokens).
+   */
+  max_inject_tokens?: number;
+  /**
+   * Drop hits scoring below this (0-1); null keeps every hit. In hybrid mode without rerank the score is rank-derived, so a floor only trims the tail of the list.
+   */
+  min_score?: number | null;
+  /**
+   * `hybrid` fuses keyword matches with embedding similarity.
+   */
+  mode?: "vector" | "hybrid";
+  /**
+   * Start the auto-inject search on the caller's interim transcript, so the result is usually ready when the turn ends.
+   */
+  prefetch?: boolean;
+  /**
+   * `conversation` searches with the last user turn plus the previous assistant sentence and flow variables; `last_turn` with the user's words only.
+   */
+  query_mode?: "last_turn" | "conversation";
+  /**
+   * `local` rescores the candidates with the local cross-encoder (adds ~60-100 ms).
+   */
+  rerank?: ("none" | "local") | string;
+  /**
+   * Skip the auto-inject search for backchannels and very short turns (yes, okay, digits).
+   */
+  skip_short_turns?: boolean;
   top_k?: number;
 }
 /**
@@ -2368,7 +2408,19 @@ export interface IdIssue {
 export interface InternalKbSearchRequest {
   k?: number;
   kb_ids: string[];
+  /**
+   * Drop hits whose `score` is below this; the response's `dropped` counts them.
+   */
+  min_score?: number | null;
+  /**
+   * `vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).
+   */
+  mode?: "vector" | "hybrid";
   query: string;
+  /**
+   * `local` rescores the top candidates with the local cross-encoder.
+   */
+  rerank?: "none" | "local";
 }
 /**
  * ``POST /internal/v1/telephony/sessions/{id}/transfer`` (the ``transfer_call`` tool).
@@ -2464,6 +2516,10 @@ export interface KbDocumentOut {
   id: string;
   kb_id: string;
   mime: string;
+  /**
+   * Embedded chunks / total while pending (every 50 chunks), 1.0 when ready; null for a document ingested before V5-01.
+   */
+  progress?: number | null;
   status: "pending" | "ready" | "failed";
 }
 /**
@@ -2475,7 +2531,329 @@ export interface KbDocumentPage {
   total: number;
 }
 /**
- * One retrieved chunk.
+ * One golden question: found when a top-k hit is the expected document or contains the expected text.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalIn".
+ */
+export interface KbEvalIn {
+  expected_document_id?: string | null;
+  expected_text?: string | null;
+  question: string;
+  /**
+   * @maxItems 20
+   */
+  tags?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string]
+    | [string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ];
+}
+/**
+ * A stored eval.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalOut".
+ */
+export interface KbEvalOut {
+  created_at: string;
+  expected_document_id?: string | null;
+  expected_text?: string | null;
+  id: string;
+  question: string;
+  /**
+   * @maxItems 20
+   */
+  tags?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string]
+    | [string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ];
+}
+/**
+ * `PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalSetIn".
+ */
+export interface KbEvalSetIn {
+  /**
+   * @maxItems 500
+   */
+  items: KbEvalIn[];
+}
+/**
+ * The stored evaluation set, in the order it was put.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalSetOut".
+ */
+export interface KbEvalSetOut {
+  items: KbEvalOut[];
+  total: number;
+}
+/**
+ * One retrieved chunk, its locators and the score of every stage that ran for it.
+ *
+ * ``score`` is on [0, 1] in every mode: cosine similarity (``vector``), the
+ * reciprocal-rank fusion normalised to its maximum (``fused``) or the
+ * cross-encoder logit through a sigmoid (``rerank``); ``score_source`` says which.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "KbHit".
@@ -2484,8 +2862,38 @@ export interface KbHit {
   chunk_id: string;
   document_id: string;
   filename: string;
+  /**
+   * Reciprocal-rank fusion, normalised to (0, 1]; hybrid mode only.
+   */
+  fused_score?: number | null;
+  /**
+   * The knowledge base the chunk belongs to; null from a pre-V5-04 api.
+   */
+  kb_id?: string | null;
+  /**
+   * 1-based rank in the keyword list; null when not in it (or not hybrid).
+   */
+  lexical_rank?: number | null;
+  /**
+   * The chunk's locators: `filename`, and for chunks ingested since V5-01 `heading_path`, `page`, `char_start`, `char_end`.
+   */
+  meta?: {
+    [k: string]: unknown;
+  };
+  /**
+   * Cross-encoder relevance through a sigmoid, (0, 1); reranked hits only.
+   */
+  rerank_score?: number | null;
   score: number;
+  /**
+   * Which stage `score` is: `vector`, `fused` or `rerank`.
+   */
+  score_source?: "vector" | "fused" | "rerank";
   text: string;
+  /**
+   * Cosine similarity to the query; null when not in the vector list.
+   */
+  vector_score?: number | null;
 }
 /**
  * ``POST /v1/knowledge-bases/{id}/documents/import`` (v3, R-V3-14).
@@ -2514,10 +2922,24 @@ export interface KbImportIn {
  */
 export interface KbOut {
   chunk_count: number;
+  /**
+   * `{max_tokens, overlap}` of the chunker; null means the defaults.
+   */
+  chunking?: {
+    [k: string]: number;
+  } | null;
   created_at: string;
   description: string;
+  /**
+   * Vector width recorded at creation; null for a KB created before V5-01.
+   */
+  dimension?: number | null;
   document_count: number;
   embedder_id: string;
+  /**
+   * Embedding model recorded at creation; null for a KB created before V5-01.
+   */
+  embedder_model?: string | null;
   id: string;
   name: string;
   updated_at: string;
@@ -2531,6 +2953,56 @@ export interface KbPage {
   total: number;
 }
 /**
+ * `POST /v1/knowledge-bases/{id}/reindex`: every document, or only these.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbReindexIn".
+ */
+export interface KbReindexIn {
+  document_ids?: string[] | null;
+}
+/**
+ * What the re-index queued; each queued document is `pending` until its job finishes.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbReindexOut".
+ */
+export interface KbReindexOut {
+  queued: string[];
+  skipped: KbReindexSkipped[];
+}
+/**
+ * A document the re-index could not queue, and why.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbReindexSkipped".
+ */
+export interface KbReindexSkipped {
+  document_id: string;
+  filename: string;
+  reason: "source_not_stored" | "ingest_in_progress";
+}
+/**
+ * The V5-04 search options; every default is the pre-V5-04 behaviour.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbSearchOptions".
+ */
+export interface KbSearchOptions {
+  /**
+   * Drop hits whose `score` is below this; the response's `dropped` counts them.
+   */
+  min_score?: number | null;
+  /**
+   * `vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).
+   */
+  mode?: "vector" | "hybrid";
+  /**
+   * `local` rescores the top candidates with the local cross-encoder.
+   */
+  rerank?: "none" | "local";
+}
+/**
  * ``POST /v1/knowledge-bases/{id}/search``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -2538,16 +3010,53 @@ export interface KbPage {
  */
 export interface KbSearchRequest {
   k?: number;
+  /**
+   * Drop hits whose `score` is below this; the response's `dropped` counts them.
+   */
+  min_score?: number | null;
+  /**
+   * `vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).
+   */
+  mode?: "vector" | "hybrid";
   query: string;
+  /**
+   * `local` rescores the top candidates with the local cross-encoder.
+   */
+  rerank?: "none" | "local";
 }
 /**
- * Search results, best first.
+ * Search results, best first, with what was dropped or skipped on the way.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "KbSearchResponse".
  */
 export interface KbSearchResponse {
+  /**
+   * Hits of the top `k` removed by `min_score`.
+   */
+  dropped?: number;
   hits: KbHit[];
+  min_score?: number | null;
+  mode?: "vector" | "hybrid";
+  rerank?: "none" | "local";
+  /**
+   * `embed`, `retrieve`, `rerank` and `total`, in milliseconds.
+   */
+  timings_ms?: {
+    [k: string]: number;
+  };
+  warnings?: KbSearchWarning[];
+}
+/**
+ * Something the search skipped or degraded, without failing.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbSearchWarning".
+ */
+export interface KbSearchWarning {
+  code: "kb_not_found" | "kb_embedder_mismatch" | "kb_timeout" | "kb_error" | "lexical_unavailable" | "rerank_failed";
+  kb_id?: string | null;
+  message: string;
 }
 /**
  * A knowledge base the api creates when seeding an agent from this pack.

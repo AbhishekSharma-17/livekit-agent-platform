@@ -1,7 +1,7 @@
 {
   "$defs": {
     "KbHit": {
-      "description": "One retrieved chunk.",
+      "description": "One retrieved chunk, its locators and the score of every stage that ran for it.\n\n``score`` is on [0, 1] in every mode: cosine similarity (``vector``), the\nreciprocal-rank fusion normalised to its maximum (``fused``) or the\ncross-encoder logit through a sigmoid (``rerank``); ``score_source`` says which.",
       "properties": {
         "chunk_id": {
           "title": "Chunk Id",
@@ -15,13 +15,95 @@
           "title": "Filename",
           "type": "string"
         },
+        "fused_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reciprocal-rank fusion, normalised to (0, 1]; hybrid mode only.",
+          "title": "Fused Score"
+        },
+        "kb_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The knowledge base the chunk belongs to; null from a pre-V5-04 api.",
+          "title": "Kb Id"
+        },
+        "lexical_rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "1-based rank in the keyword list; null when not in it (or not hybrid).",
+          "title": "Lexical Rank"
+        },
+        "meta": {
+          "additionalProperties": true,
+          "description": "The chunk's locators: `filename`, and for chunks ingested since V5-01 `heading_path`, `page`, `char_start`, `char_end`.",
+          "title": "Meta",
+          "type": "object"
+        },
+        "rerank_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cross-encoder relevance through a sigmoid, (0, 1); reranked hits only.",
+          "title": "Rerank Score"
+        },
         "score": {
           "title": "Score",
           "type": "number"
         },
+        "score_source": {
+          "default": "vector",
+          "description": "Which stage `score` is: `vector`, `fused` or `rerank`.",
+          "enum": [
+            "vector",
+            "fused",
+            "rerank"
+          ],
+          "title": "Score Source",
+          "type": "string"
+        },
         "text": {
           "title": "Text",
           "type": "string"
+        },
+        "vector_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cosine similarity to the query; null when not in the vector list.",
+          "title": "Vector Score"
         }
       },
       "required": [
@@ -33,17 +115,107 @@
       ],
       "title": "KbHit",
       "type": "object"
+    },
+    "KbSearchWarning": {
+      "description": "Something the search skipped or degraded, without failing.",
+      "properties": {
+        "code": {
+          "enum": [
+            "kb_not_found",
+            "kb_embedder_mismatch",
+            "kb_timeout",
+            "kb_error",
+            "lexical_unavailable",
+            "rerank_failed"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "kb_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kb Id"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "KbSearchWarning",
+      "type": "object"
     }
   },
   "$id": "lkap-contracts/KbSearchResponse.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Search results, best first.",
+  "description": "Search results, best first, with what was dropped or skipped on the way.",
   "properties": {
+    "dropped": {
+      "default": 0,
+      "description": "Hits of the top `k` removed by `min_score`.",
+      "title": "Dropped",
+      "type": "integer"
+    },
     "hits": {
       "items": {
         "$ref": "#/$defs/KbHit"
       },
       "title": "Hits",
+      "type": "array"
+    },
+    "min_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min Score"
+    },
+    "mode": {
+      "default": "vector",
+      "enum": [
+        "vector",
+        "hybrid"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "rerank": {
+      "default": "none",
+      "enum": [
+        "none",
+        "local"
+      ],
+      "title": "Rerank",
+      "type": "string"
+    },
+    "timings_ms": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "`embed`, `retrieve`, `rerank` and `total`, in milliseconds.",
+      "title": "Timings Ms",
+      "type": "object"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/KbSearchWarning"
+      },
+      "title": "Warnings",
       "type": "array"
     }
   },

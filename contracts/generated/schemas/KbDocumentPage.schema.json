@@ -44,6 +44,19 @@
           "title": "Mime",
           "type": "string"
         },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Embedded chunks / total while pending (every 50 chunks), 1.0 when ready; null for a document ingested before V5-01.",
+          "title": "Progress"
+        },
         "status": {
           "enum": [
             "pending",

@@ -32,11 +32,18 @@ from test_main import FakeJobContext, _deps, _metadata
 from lkap_agent.main import run_session
 from lkap_agent.packs.loader import NullPack
 from lkap_agent.platform_agent import PlatformAgent, SessionContext
+from lkap_agent.settings import Settings, get_settings
 from lkap_agent.tools._http_safety import GuardedTransport
 from lkap_agent.tools.declarative import build_guarded_mcp_servers, build_mcp_toolsets
 from lkap_agent.tools.mcp_client import GuardedMCPServerHTTP
 
 PUBLIC_URL = "https://mcp.example.com/mcp"
+
+
+@pytest.fixture(autouse=True)
+def _worker_settings(settings: Settings) -> Settings:
+    """`build_mcp_toolsets` reads `LKAP_MCP_ALLOWED_HOSTS` from the worker's settings (V5-09)."""
+    return settings
 
 
 class _FakeMcpEndpoint:
@@ -367,3 +374,82 @@ def test_a_plain_server_elsewhere_is_unaffected_by_the_pin() -> None:
     (server,) = build_guarded_mcp_servers([_definition()])
 
     assert server.url == PUBLIC_URL
+
+
+# ------------------------------------------------ V5-09: https and LKAP_MCP_ALLOWED_HOSTS
+def _refused(defs: list[McpServerDefinition], **kwargs: Any) -> list[tuple[str, str]]:
+    skipped: list[tuple[str, str]] = []
+    servers = build_guarded_mcp_servers(
+        defs, on_skipped=lambda d, reason: skipped.append((d.name, reason)), **kwargs
+    )
+    assert servers == []
+    return skipped
+
+
+def test_plain_http_to_a_public_host_is_refused() -> None:
+    (skipped,) = _refused([_definition(url="http://mcp.example.com/mcp", name="plain")])
+
+    assert skipped[0] == "plain"
+    assert "https" in skipped[1]
+
+
+def test_an_unset_allowlist_lets_any_public_https_host_through() -> None:
+    (server,) = build_guarded_mcp_servers([_definition(url="https://mcp.vendor.example/mcp")])
+
+    assert server.url == "https://mcp.vendor.example/mcp"
+
+
+def test_a_set_allowlist_is_a_ceiling_read_from_the_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LKAP_MCP_ALLOWED_HOSTS", "mcp.example.com")
+    get_settings.cache_clear()
+
+    servers = build_guarded_mcp_servers(
+        [_definition(name="inside"), _definition(url="https://mcp.vendor.example/mcp", name="outside")]
+    )
+    (skipped,) = _refused([_definition(url="https://mcp.vendor.example/mcp", name="outside")])
+
+    assert [server.url for server in servers] == [PUBLIC_URL]
+    assert skipped == ("outside", "host 'mcp.vendor.example' is not on LKAP_MCP_ALLOWED_HOSTS")
+
+
+def test_the_http_alias_reuses_the_http_tool_list_and_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LKAP_MCP_ALLOWED_HOSTS", "@http")
+    get_settings.cache_clear()
+    assert len(_refused([_definition()])) == 1
+
+    monkeypatch.setenv("LKAP_HTTP_TOOL_ALLOWED_HOSTS", "mcp.example.com")
+    get_settings.cache_clear()
+    (server,) = build_guarded_mcp_servers([_definition()])
+    assert server.url == PUBLIC_URL
+
+
+def test_the_ceiling_applies_to_provider_provisioned_servers_too() -> None:
+    (skipped,) = _refused(
+        [
+            _definition(
+                url="https://backend.composio.dev/tool_router/trs_1/mcp",
+                name="composio_tool_finder",
+                origin=_ORIGIN,
+            )
+        ],
+        host_ceiling=frozenset({"mcp.example.com"}),
+    )
+
+    assert "LKAP_MCP_ALLOWED_HOSTS" in skipped[1]
+
+
+def test_an_explicit_ceiling_overrides_the_settings() -> None:
+    (server,) = build_guarded_mcp_servers([_definition()], host_ceiling=frozenset({"mcp.example.com"}))
+
+    assert server.url == PUBLIC_URL
+
+
+def test_build_mcp_toolsets_applies_the_ceiling() -> None:
+    skipped: list[str] = []
+
+    toolsets = build_mcp_toolsets(
+        [_definition()], on_skipped=lambda _d, reason: skipped.append(reason), host_ceiling=frozenset()
+    )
+
+    assert toolsets == []
+    assert skipped and "LKAP_MCP_ALLOWED_HOSTS" in skipped[0]

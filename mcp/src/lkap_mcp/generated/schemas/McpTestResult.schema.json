@@ -1,0 +1,78 @@
+{
+  "$id": "lkap-contracts/McpTestResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tools/{id}/test``: connect, ``initialize``, ``tools/list``, store the snapshot.",
+  "properties": {
+    "cached_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cached At"
+    },
+    "duration_ms": {
+      "default": 0,
+      "title": "Duration Ms",
+      "type": "integer"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "blocked_destination",
+            "needs_auth",
+            "unreachable",
+            "protocol_error",
+            "http_error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "tool_count": {
+      "default": 0,
+      "title": "Tool Count",
+      "type": "integer"
+    },
+    "tool_names": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tool Names",
+      "type": "array"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "McpTestResult",
+  "type": "object"
+}

@@ -514,6 +514,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
         {
             "name",
             "url",
+            "auth",
             "headers",
             "allowed_tools",
             "secret_key_id",
@@ -524,6 +525,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
         }
     ),
     "tool_update": frozenset({"tool_id", "patch", "execution", "plan"}),
+    "tool_test": frozenset({"tool_id"}),
     "tool_dry_run": frozenset({"tool_id", "arguments"}),
     # 4.7 test chat
     "chat_start": frozenset({"agent_id_or_slug", "participant_name", "wait_for_greeting", "timeout_s"}),

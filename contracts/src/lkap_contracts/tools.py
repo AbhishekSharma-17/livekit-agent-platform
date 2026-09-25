@@ -7,6 +7,7 @@ The built-in names are the single source the worker, the api and the web share
 ``generated/builtin_tools.json`` carries them to the console.
 """
 
+from datetime import datetime
 from typing import Annotated, Any, Final, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -234,14 +235,94 @@ class McpServerOrigin(BaseModel):
     """A fingerprint of what the api asked the provider for; a save that changes it re-provisions."""
 
 
+class McpNoAuth(BaseModel):
+    """The MCP server needs no credentials (a public server)."""
+
+    kind: Literal["none"] = "none"
+
+
+class McpHeaderAuth(BaseModel):
+    """Static request headers, typically an API key (research-v4 tools §4.3.1).
+
+    Header values may reference ``{{ secret.NAME }}``; the api substitutes them from
+    ``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.
+    """
+
+    kind: Literal["header"] = "header"
+    headers: dict[str, str] = {}
+    credential_id: str | None = None
+
+
+class McpOAuthAuth(BaseModel):
+    """Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).
+
+    The api is the OAuth client: it runs discovery, registration, consent and the token
+    exchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a
+    short-lived access token at session start (research-v4 tools §4.3).
+    """
+
+    kind: Literal["oauth"] = "oauth"
+    credential_id: str | None = None
+    """The ``mcp-oauth`` credential once connected."""
+    registration: Literal["auto", "preregistered"] = "auto"
+    client_id: str | None = None
+    """Pre-registered clients only."""
+    client_secret_ref: str | None = None
+    """The name of a key in the credential bag holding the client secret (pre-registered only)."""
+    scopes: list[str] | None = None
+    """An admin override; ``None`` follows the spec's scope strategy."""
+    subject: Literal["workspace", "agent"] = "workspace"
+
+
+#: How the worker authenticates to an MCP server, discriminated on ``kind``.
+McpAuth = Annotated[McpNoAuth | McpHeaderAuth | McpOAuthAuth, Field(discriminator="kind")]
+
+
+class McpToolSnapshot(BaseModel):
+    """One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it."""
+
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    input_schema: dict[str, Any] | None = None
+
+
+class McpTestResult(BaseModel):
+    """``POST /v1/tools/{id}/test``: connect, ``initialize``, ``tools/list``, store the snapshot."""
+
+    ok: bool
+    tool_names: list[str] = []
+    tool_count: int = 0
+    cached_at: datetime | None = None
+    """When the snapshot was stored (only when ``ok``)."""
+    duration_ms: int = 0
+    reason: (
+        Literal["blocked_destination", "needs_auth", "unreachable", "protocol_error", "http_error"] | None
+    ) = None
+    """Why the test failed, when it did."""
+    error: str | None = None
+    """A value-free sentence for the console (never a header, a token or the full url)."""
+
+
 class McpServerDefinition(BaseModel):
-    """A streamable-HTTP MCP server attached to the agent."""
+    """A streamable-HTTP MCP server attached to the agent.
+
+    ``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the
+    pre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not
+    moved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or
+    with ``auth.kind == "none"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set
+    they are filled from it (``credential_id`` also mirrors an OAuth credential), and a
+    value that disagrees with ``auth`` is an error. Stored rows need no data migration:
+    they load as header auth and re-save with ``auth``.
+    """
 
     kind: Literal["mcp"] = "mcp"
     name: str
     url: str
+    auth: McpAuth = Field(default_factory=McpNoAuth)
     headers: dict[str, str] = {}
+    """Deprecated: mirrors ``auth.headers`` for header auth (set ``auth`` instead)."""
     credential_id: str | None = None
+    """Deprecated: mirrors ``auth.credential_id`` (set ``auth`` instead)."""
     allowed_tools: list[str] | None = None
     timeout_s: float = 5
     sse_read_timeout_s: float = 300
@@ -253,6 +334,35 @@ class McpServerDefinition(BaseModel):
     """Set on servers LKAP provisions for a tool provider (Composio's app server or tool finder,
     docs/v5/COMPOSIO.md D-V5-C6). The api manages these rows; the worker connects to them only
     over ``https`` on the provider's host."""
+    cached_tools: list[McpToolSnapshot] | None = None
+    """The server's tools as ``POST /v1/tools/{id}/test`` last listed them, for the console.
+    The worker still lists tools itself at session start (research-v4 tools §4.3.7)."""
+    cached_at: datetime | None = None
+    """When ``cached_tools`` was stored."""
+
+    @model_validator(mode="after")
+    def _fold_legacy_auth(self) -> Self:
+        legacy_set = bool(self.headers) or self.credential_id is not None
+        auth = self.auth
+        if isinstance(auth, McpNoAuth):
+            if legacy_set:
+                self.auth = McpHeaderAuth(headers=dict(self.headers), credential_id=self.credential_id)
+            return self
+        if isinstance(auth, McpHeaderAuth):
+            if legacy_set and (self.headers != auth.headers or self.credential_id != auth.credential_id):
+                raise ValueError(
+                    "headers/credential_id are deprecated mirrors of auth and disagree with "
+                    "auth.headers/auth.credential_id: set auth only"
+                )
+            self.headers = dict(auth.headers)
+            self.credential_id = auth.credential_id
+            return self
+        if self.headers:
+            raise ValueError("an oauth MCP server takes no static headers")
+        if self.credential_id is not None and self.credential_id != auth.credential_id:
+            raise ValueError("credential_id disagrees with auth.credential_id: set auth only")
+        self.credential_id = auth.credential_id
+        return self
 
     @model_validator(mode="after")
     def _tool_options_are_allowed(self) -> Self:

@@ -120,6 +120,14 @@ class Settings(BaseSettings):
     #: when the tool sets none; the worker has the same setting (asks #29). Some
     #: public APIs (Wikimedia) refuse clients whose User-Agent has no contact info.
     http_tool_user_agent: str = "LKAP/0.1 (+https://github.com/AbhishekSharma-17/livekit-agent-platform)"
+    #: ``LKAP_MCP_ALLOWED_HOSTS`` (V5-09, D-V5-4): comma-separated MCP server hosts. Empty =
+    #: any public ``https`` host that passes the network guard; non-empty = a ceiling no MCP
+    #: server may leave; ``@http`` = reuse ``LKAP_HTTP_TOOL_ALLOWED_HOSTS`` (empty then allows
+    #: nothing, as for HTTP tools). The worker reads the same variable at connect time.
+    mcp_allowed_hosts: str = ""
+    #: ``LKAP_HTTP_TOOL_ALLOWED_HOSTS``: the worker's HTTP-tool ceiling, read here only for
+    #: ``LKAP_MCP_ALLOWED_HOSTS=@http``.
+    http_tool_allowed_hosts: str = ""
     api_key_rate_per_min: int = Field(default=600, ge=1)
     login_rate_per_min: int = Field(default=10, ge=1)
 

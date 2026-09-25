@@ -65,8 +65,13 @@ from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
     HttpToolDefinition,
+    McpHeaderAuth,
+    McpNoAuth,
+    McpOAuthAuth,
     McpServerDefinition,
     McpServerOrigin,
+    McpTestResult,
+    McpToolSnapshot,
     ProviderToolDefinition,
     ToolDefinition,
     ToolExecution,
@@ -182,6 +187,11 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "HttpToolDefinition": HttpToolDefinition,
     "McpServerDefinition": McpServerDefinition,
     "McpServerOrigin": McpServerOrigin,
+    "McpNoAuth": McpNoAuth,
+    "McpHeaderAuth": McpHeaderAuth,
+    "McpOAuthAuth": McpOAuthAuth,
+    "McpToolSnapshot": McpToolSnapshot,
+    "McpTestResult": McpTestResult,
     "ProviderToolDefinition": ProviderToolDefinition,
     "ToolExecution": ToolExecution,
     # api models

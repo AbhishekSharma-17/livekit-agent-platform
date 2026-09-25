@@ -132,8 +132,13 @@ export interface LkapContracts {
   KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
   MarkdownBlockState?: MarkdownBlockState;
+  McpHeaderAuth?: McpHeaderAuth;
+  McpNoAuth?: McpNoAuth;
+  McpOAuthAuth?: McpOAuthAuth;
   McpServerDefinition?: McpServerDefinition;
   McpServerOrigin?: McpServerOrigin;
+  McpTestResult?: McpTestResult;
+  McpToolSnapshot?: McpToolSnapshot;
   Me?: Me;
   ModelCapabilities?: ModelCapabilities;
   ModelIdRules?: ModelIdRules;
@@ -3080,13 +3085,68 @@ export interface MarkdownBlockState {
   updated_at?: number | null;
 }
 /**
+ * Static request headers, typically an API key (research-v4 tools §4.3.1).
+ *
+ * Header values may reference ``{{ secret.NAME }}``; the api substitutes them from
+ * ``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpHeaderAuth".
+ */
+export interface McpHeaderAuth {
+  credential_id?: string | null;
+  headers?: {
+    [k: string]: string;
+  };
+  kind?: "header";
+}
+/**
+ * The MCP server needs no credentials (a public server).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpNoAuth".
+ */
+export interface McpNoAuth {
+  kind?: "none";
+}
+/**
+ * Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).
+ *
+ * The api is the OAuth client: it runs discovery, registration, consent and the token
+ * exchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a
+ * short-lived access token at session start (research-v4 tools §4.3).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOAuthAuth".
+ */
+export interface McpOAuthAuth {
+  client_id?: string | null;
+  client_secret_ref?: string | null;
+  credential_id?: string | null;
+  kind?: "oauth";
+  registration?: "auto" | "preregistered";
+  scopes?: string[] | null;
+  subject?: "workspace" | "agent";
+}
+/**
  * A streamable-HTTP MCP server attached to the agent.
+ *
+ * ``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the
+ * pre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not
+ * moved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or
+ * with ``auth.kind == "none"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set
+ * they are filled from it (``credential_id`` also mirrors an OAuth credential), and a
+ * value that disagrees with ``auth`` is an error. Stored rows need no data migration:
+ * they load as header auth and re-save with ``auth``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "McpServerDefinition".
  */
 export interface McpServerDefinition {
   allowed_tools?: string[] | null;
+  auth?: McpNoAuth | McpHeaderAuth | McpOAuthAuth;
+  cached_at?: string | null;
+  cached_tools?: McpToolSnapshot[] | null;
   credential_id?: string | null;
   headers?: {
     [k: string]: string;
@@ -3102,6 +3162,19 @@ export interface McpServerDefinition {
   url: string;
 }
 /**
+ * One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpToolSnapshot".
+ */
+export interface McpToolSnapshot {
+  description?: string | null;
+  input_schema?: {
+    [k: string]: unknown;
+  } | null;
+  name: string;
+}
+/**
  * Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -3112,6 +3185,21 @@ export interface McpServerOrigin {
   kind: "server" | "router";
   provider?: "composio";
   remote_id: string;
+}
+/**
+ * ``POST /v1/tools/{id}/test``: connect, ``initialize``, ``tools/list``, store the snapshot.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpTestResult".
+ */
+export interface McpTestResult {
+  cached_at?: string | null;
+  duration_ms?: number;
+  error?: string | null;
+  ok: boolean;
+  reason?: ("blocked_destination" | "needs_auth" | "unreachable" | "protocol_error" | "http_error") | null;
+  tool_count?: number;
+  tool_names?: string[];
 }
 /**
  * ``GET /v1/auth/me``.

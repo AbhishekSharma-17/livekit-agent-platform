@@ -1,4 +1,4 @@
-"""Declarative tool CRUD plus the HTTP dry run used by the console editor.
+"""Declarative tool CRUD, the HTTP dry run and the MCP test connection used by the console editor.
 
 Workspace scoping (V2-02, asks #25): every admin handler takes ``ctx: AdminCtxDep``;
 reads filter on ``ctx.workspace_id``, inserts set it, and a row of another
@@ -9,12 +9,20 @@ from __future__ import annotations
 import json
 import re
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Query, Response, status
 from lkap_contracts.api_models import ToolCreate, ToolDryRunRequest, ToolDryRunResult, ToolOut, ToolPage
-from lkap_contracts.tools import HttpToolDefinition, ProviderToolDefinition, ToolDefinition
+from lkap_contracts.tools import (
+    HttpToolDefinition,
+    McpOAuthAuth,
+    McpServerDefinition,
+    McpTestResult,
+    ProviderToolDefinition,
+    ToolDefinition,
+)
 from pydantic import TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +35,12 @@ from lkap_api.db.models import Agent, Credential, Tool, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
+from lkap_api.mcp_test import McpTestError, list_mcp_tools
+from lkap_api.settings import Settings
 from lkap_api.tool_providers.bindings import (
     composio_binding_problem,
     is_composio_credential,
+    is_composio_url,
     provider_connection_problem,
 )
 from lkap_api.tool_providers.service import AppConnection
@@ -102,19 +113,44 @@ async def _workspace_credential(db: AsyncSession, workspace_id: str, credential_
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
-async def _check_payload(db: AsyncSession, vault: Vault, ctx: WorkspaceContext, payload: ToolCreate) -> None:
+def _check_mcp_definition(definition: McpServerDefinition, settings: Settings) -> None:
+    """V5-09: an MCP server's auth kind and url, at save and before a test connection.
+
+    ``oauth`` is refused until V5-14 ships the sign-in flow (``422 oauth_not_available``).
+    The url must pass :meth:`net_guard.McpPolicy.problem`: the network guard, ``https``
+    outside a dev loopback host, and ``LKAP_MCP_ALLOWED_HOSTS`` when set (D-V5-4).
+    """
+    if isinstance(definition.auth, McpOAuthAuth):
+        raise UnprocessableEntityError(
+            "signing in to an MCP server is not available yet: use header auth (an API key) for now",
+            details={"field": "definition.auth.kind", "reason": "oauth_not_available"},
+        )
+    problem = net_guard.mcp_policy(settings).problem(definition.url)
+    if problem is not None:
+        raise UnprocessableEntityError(
+            problem, details={"field": "definition.url", "reason": "blocked_destination"}
+        )
+
+
+async def _check_payload(
+    db: AsyncSession, vault: Vault, ctx: WorkspaceContext, payload: ToolCreate, settings: Settings
+) -> None:
     """Validate cross-references, kind/definition agreement and secret placeholders.
 
     F-15: every `{{ secret.NAME }}` the definition's url/headers/body
     reference must resolve — either the tool has no `credential_id` at all
     (error: nothing to substitute from) or `NAME` is a key of that
     credential's decrypted secret bag (error otherwise, naming only the
-    unresolved names, never a value).
+    unresolved names, never a value). An MCP server's header auth binds an
+    ``http-tool-secret`` bag through ``auth.credential_id``, which the contract
+    mirrors to the deprecated top-level ``credential_id`` checked here (V5-09).
     """
     if payload.definition.kind != payload.kind:
         raise UnprocessableEntityError(
             f"kind '{payload.kind}' does not match definition kind '{payload.definition.kind}'"
         )
+    if isinstance(payload.definition, McpServerDefinition):
+        _check_mcp_definition(payload.definition, settings)
     if (
         payload.agent_id is not None
         and await db.scalar(
@@ -206,9 +242,11 @@ async def _check_provider_binding(
         "owned by one agent."
     ),
 )
-async def create_tool(payload: ToolCreate, db: DbDep, vault: VaultDep, ctx: AdminCtxDep) -> ToolOut:
+async def create_tool(
+    payload: ToolCreate, db: DbDep, vault: VaultDep, settings: SettingsDep, ctx: AdminCtxDep
+) -> ToolOut:
     """Create a declarative tool row in the caller's workspace."""
-    await _check_payload(db, vault, ctx, payload)
+    await _check_payload(db, vault, ctx, payload, settings)
     row = Tool(
         workspace_id=ctx.workspace_id,
         agent_id=payload.agent_id,
@@ -267,20 +305,40 @@ async def get_tool(tool_id: str, db: DbDep, ctx: AdminCtxDep) -> ToolOut:
     description="Replaces the tool definition, its name, owner and enabled flag.",
 )
 async def update_tool(
-    tool_id: str, payload: ToolCreate, db: DbDep, vault: VaultDep, ctx: AdminCtxDep
+    tool_id: str, payload: ToolCreate, db: DbDep, vault: VaultDep, settings: SettingsDep, ctx: AdminCtxDep
 ) -> ToolOut:
     """Replace a tool definition."""
     row = await _load(db, ctx, tool_id)
-    await _check_payload(db, vault, ctx, payload)
+    await _check_payload(db, vault, ctx, payload, settings)
+    definition = _keep_mcp_snapshot(_definition_of(row), payload.definition)
     row.agent_id = payload.agent_id
     row.kind = payload.kind
     row.name = payload.name
-    row.definition = payload.definition.model_dump(mode="json")
+    row.definition = definition.model_dump(mode="json")
     row.enabled = payload.enabled
     row.updated_at = utcnow()
     await db.flush()
     log.info("tool_updated", tool_id=row.id, kind=row.kind)
     return _to_out(row)
+
+
+def _keep_mcp_snapshot(stored: ToolDefinition, incoming: ToolDefinition) -> ToolDefinition:
+    """Carry the stored ``cached_tools`` over a save that does not send one (V5-09).
+
+    Editors that predate the snapshot post the definition without it; the tools a
+    server listed stay valid as long as the url is the same.
+    """
+    if (
+        isinstance(stored, McpServerDefinition)
+        and isinstance(incoming, McpServerDefinition)
+        and incoming.cached_tools is None
+        and stored.cached_tools is not None
+        and stored.url == incoming.url
+    ):
+        return incoming.model_copy(
+            update={"cached_tools": stored.cached_tools, "cached_at": stored.cached_at}
+        )
+    return incoming
 
 
 @router.delete(
@@ -428,4 +486,84 @@ async def dry_run_tool(
         result=truncated,
         status_code=response.status_code,
         duration_ms=duration_ms,
+    )
+
+
+# ------------------------------------------------------------------------- MCP test
+#: One request of the test connection gives up after this many seconds at most.
+MCP_TEST_MAX_TIMEOUT_S = 15.0
+
+
+async def _mcp_request_headers(
+    db: AsyncSession, vault: Vault, row: Tool, definition: McpServerDefinition
+) -> dict[str, str]:
+    """The definition's headers with secrets substituted, as the worker would send them."""
+    secrets: dict[str, str] = {}
+    if definition.credential_id:
+        credential = await _workspace_credential(db, row.workspace_id, definition.credential_id)
+        if credential is None:
+            raise UnprocessableEntityError(f"unknown credential '{definition.credential_id}'")
+        secrets = vault.decrypt(credential.ciphertext)
+    resolved = resolve_tool_definition(definition, secrets)
+    assert isinstance(resolved, McpServerDefinition)  # noqa: S101 - narrowed by kind
+    return dict(resolved.headers)
+
+
+@router.post(
+    "/{tool_id}/test",
+    response_model=McpTestResult,
+    summary="Test an MCP server",
+    description=(
+        "Connects to the MCP server with its stored auth, runs `initialize` and `tools/list`, "
+        "stores the tool list on the definition (`cached_tools`, `cached_at`) and returns the "
+        "names and the count. The url must pass the MCP host policy (the network guard, "
+        "`https`, `LKAP_MCP_ALLOWED_HOSTS`); redirects are never followed. Headers and "
+        "secrets are never echoed back."
+    ),
+)
+async def test_mcp_tool(
+    tool_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    client: HttpClientDep,
+    settings: SettingsDep,
+    ctx: AdminCtxDep,
+) -> McpTestResult:
+    """Connect to an MCP server once and store its tool list."""
+    row = await _load(db, ctx, tool_id)
+    definition = _definition_of(row)
+    if not isinstance(definition, McpServerDefinition):
+        raise BadRequestError("the connection test is only available for MCP servers")
+    _check_mcp_definition(definition, settings)
+    if definition.origin is not None and not is_composio_url(definition.url):
+        # D-V5-C10: a provisioned app server carries the Composio key; it only ever talks to Composio.
+        raise UnprocessableEntityError(
+            "an app server may only connect to its provider's https host",
+            details={"field": "definition.url", "reason": "blocked_destination"},
+        )
+    headers = await _mcp_request_headers(db, vault, row, definition)
+
+    started = time.perf_counter()
+    try:
+        tools = await list_mcp_tools(
+            definition.url,
+            headers,
+            client=client,
+            timeout_s=min(max(definition.timeout_s, 1.0), MCP_TEST_MAX_TIMEOUT_S),
+        )
+    except McpTestError as exc:
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        log.warning("tool_mcp_test_failed", tool_id=tool_id, reason=exc.reason, duration_ms=duration_ms)
+        return McpTestResult(ok=False, duration_ms=duration_ms, reason=exc.reason, error=str(exc))
+    duration_ms = int((time.perf_counter() - started) * 1000)
+
+    cached_at = datetime.now(UTC)
+    row.definition = definition.model_copy(update={"cached_tools": tools, "cached_at": cached_at}).model_dump(
+        mode="json"
+    )
+    await db.flush()
+    names = [tool.name for tool in tools]
+    log.info("tool_mcp_test", tool_id=tool_id, tool_count=len(names), duration_ms=duration_ms)
+    return McpTestResult(
+        ok=True, tool_names=names, tool_count=len(names), cached_at=cached_at, duration_ms=duration_ms
     )

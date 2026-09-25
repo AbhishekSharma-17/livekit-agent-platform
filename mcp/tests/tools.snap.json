@@ -11613,10 +11613,138 @@
         "readOnlyHint": false
       },
       "data": "ToolOut",
-      "description": "Attach a remote MCP server as a tool source (the worker connects to it at session time).",
+      "description": "Attach a remote MCP server as a tool source; check it with tool_test before a chat.",
       "gate": null,
       "inputSchema": {
         "$defs": {
+          "McpHeaderAuth": {
+            "description": "Static request headers, typically an API key (research-v4 tools §4.3.1).\n\nHeader values may reference ``{{ secret.NAME }}``; the api substitutes them from\n``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.",
+            "properties": {
+              "credential_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Credential Id"
+              },
+              "headers": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "default": {},
+                "title": "Headers",
+                "type": "object"
+              },
+              "kind": {
+                "const": "header",
+                "default": "header",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "title": "McpHeaderAuth",
+            "type": "object"
+          },
+          "McpNoAuth": {
+            "description": "The MCP server needs no credentials (a public server).",
+            "properties": {
+              "kind": {
+                "const": "none",
+                "default": "none",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "title": "McpNoAuth",
+            "type": "object"
+          },
+          "McpOAuthAuth": {
+            "description": "Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
+            "properties": {
+              "client_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Client Id"
+              },
+              "client_secret_ref": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Client Secret Ref"
+              },
+              "credential_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Credential Id"
+              },
+              "kind": {
+                "const": "oauth",
+                "default": "oauth",
+                "title": "Kind",
+                "type": "string"
+              },
+              "registration": {
+                "default": "auto",
+                "enum": [
+                  "auto",
+                  "preregistered"
+                ],
+                "title": "Registration",
+                "type": "string"
+              },
+              "scopes": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scopes"
+              },
+              "subject": {
+                "default": "workspace",
+                "enum": [
+                  "workspace",
+                  "agent"
+                ],
+                "title": "Subject",
+                "type": "string"
+              }
+            },
+            "title": "McpOAuthAuth",
+            "type": "object"
+          },
           "ToolExecution": {
             "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
             "properties": {
@@ -11763,6 +11891,37 @@
             "default": null,
             "title": "Allowed Tools"
           },
+          "auth": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "header": "#/$defs/McpHeaderAuth",
+                    "none": "#/$defs/McpNoAuth",
+                    "oauth": "#/$defs/McpOAuthAuth"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/McpNoAuth"
+                  },
+                  {
+                    "$ref": "#/$defs/McpHeaderAuth"
+                  },
+                  {
+                    "$ref": "#/$defs/McpOAuthAuth"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How the worker authenticates: {'kind': 'none'} (default), or {'kind': 'header', 'headers': {...}, 'credential_id': <http-tool-secret key id>} where header values may use {{ secret.NAME }}. Sign-in ({'kind': 'oauth'}) is not available yet. Do not combine with headers/secret_key_id, which are the older spelling of header auth.",
+            "title": "Auth"
+          },
           "headers": {
             "anyOf": [
               {
@@ -11823,6 +11982,7 @@
             "title": "Tool Options"
           },
           "url": {
+            "description": "The server's https endpoint (streamable HTTP)",
             "title": "Url",
             "type": "string"
           }
@@ -11986,6 +12146,44 @@
       "mixed": false,
       "scopes": [
         "agents:read"
+      ],
+      "write_scopes": []
+    },
+    "tool_test": {
+      "_meta": {
+        "lkap/data": [
+          "McpTestResult"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "McpTestResult",
+      "description": "Connect to an MCP server tool once: list its tools and store them for the console.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id"
+        ],
+        "title": "tool_testArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
       ],
       "write_scopes": []
     },
@@ -12444,6 +12642,7 @@
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_test",
       "tool_update",
       "workspace_get"
     ],
@@ -12513,6 +12712,7 @@
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_test",
       "tool_update",
       "webhook_create",
       "webhook_deliveries",
@@ -12625,6 +12825,7 @@
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_test",
       "tool_update",
       "webhook_create",
       "webhook_deliveries",
@@ -12698,6 +12899,7 @@
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_test",
       "tool_update",
       "webhook_create",
       "webhook_deliveries",

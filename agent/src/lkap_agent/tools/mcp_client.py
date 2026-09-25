@@ -1,7 +1,8 @@
 """`MCPServerHTTP` with the SSRF-guarded transport and no redirect following.
 
-Verified against livekit-agents 1.8.2 (`livekit/agents/llm/mcp.py`) and
-mcp 1.30.0:
+Verified against livekit-agents 1.8.3 (`livekit/agents/llm/mcp.py`) and
+mcp 1.30.0; `tests/unit/test_sdk_tripwires.py` fails when an upgrade changes
+any of the facts below (D-V5-11, research-v4 tools §4.3.10):
 
 * `MCPServerHTTP.__init__` has no `auth`/`transport` kwarg; the httpx client is
   built by `_create_http_client(headers=None, timeout=None, auth=None)`, which

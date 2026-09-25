@@ -67,3 +67,21 @@ def test_http_tool_user_agent_reads_lkap_http_tool_user_agent(monkeypatch: pytes
     monkeypatch.setenv("LKAP_HTTP_TOOL_USER_AGENT", "acme-voice/2 (ops@example.com)")
 
     assert Settings().http_tool_user_agent == "acme-voice/2 (ops@example.com)"
+
+
+@pytest.mark.parametrize(
+    ("mcp", "http", "expected"),
+    [
+        ("", "", None),
+        (" , ", "", None),
+        ("MCP.example.com, other.example.com.", "", frozenset({"mcp.example.com", "other.example.com"})),
+        ("@http", "", frozenset()),
+        ("@http", "api.example.com", frozenset({"api.example.com"})),
+    ],
+)
+def test_mcp_host_ceiling(settings: Settings, mcp: str, http: str, expected: frozenset[str] | None) -> None:
+    """V5-09 (D-V5-4): empty = no ceiling, a list = the ceiling, `@http` = the HTTP-tool list."""
+    settings.mcp_allowed_hosts = mcp
+    settings.http_tool_allowed_hosts = http
+
+    assert settings.mcp_host_ceiling == expected

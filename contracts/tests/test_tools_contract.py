@@ -3,7 +3,7 @@
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 import lkap_contracts
 from lkap_contracts.agent_config import AgentConfig, ToolsConfig, VoiceConfig
@@ -19,7 +19,13 @@ from lkap_contracts.tools import (
     NEVER_BACKGROUND_TOOLS,
     UPDATABLE_BLOCK_TYPES,
     HttpToolDefinition,
+    McpHeaderAuth,
+    McpNoAuth,
+    McpOAuthAuth,
     McpServerDefinition,
+    McpTestResult,
+    McpToolSnapshot,
+    ToolDefinition,
     ToolExecution,
     never_background,
 )
@@ -220,3 +226,167 @@ def test_tool_execution_is_exported() -> None:
         "never_background",
     ):
         assert name in lkap_contracts.__all__
+
+
+# ------------------------------------------------------------------ V5-09: the MCP auth union
+#: A row stored before V5-09: header auth expressed through the top-level fields.
+_LEGACY_MCP_ROW: dict[str, Any] = {
+    "kind": "mcp",
+    "name": "crm",
+    "url": "https://mcp.example.com/mcp",
+    "headers": {"Authorization": "Bearer {{ secret.token }}"},
+    "credential_id": "cred_1",
+    "allowed_tools": None,
+    "timeout_s": 5,
+    "sse_read_timeout_s": 300,
+    "tool_options": {},
+    "origin": None,
+}
+
+
+def test_mcp_definition_without_auth_defaults_to_no_auth() -> None:
+    definition = McpServerDefinition(name="docs", url="https://mcp.example.com/mcp")
+
+    assert isinstance(definition.auth, McpNoAuth)
+    assert definition.headers == {}
+    assert definition.credential_id is None
+    assert definition.cached_tools is None
+    assert definition.cached_at is None
+
+
+def test_mcp_legacy_row_loads_as_header_auth_and_resaves_in_the_new_shape() -> None:
+    definition = McpServerDefinition.model_validate(_LEGACY_MCP_ROW)
+
+    assert definition.auth == McpHeaderAuth(
+        headers={"Authorization": "Bearer {{ secret.token }}"}, credential_id="cred_1"
+    )
+    dumped = definition.model_dump(mode="json")
+    assert dumped["auth"] == {
+        "kind": "header",
+        "headers": {"Authorization": "Bearer {{ secret.token }}"},
+        "credential_id": "cred_1",
+    }
+    # The deprecated mirrors stay in the dump for readers not on `auth` yet.
+    assert dumped["headers"] == _LEGACY_MCP_ROW["headers"]
+    assert dumped["credential_id"] == "cred_1"
+    assert McpServerDefinition.model_validate(dumped) == definition
+
+
+def test_mcp_legacy_row_loads_through_the_tool_union() -> None:
+    definition = TypeAdapter(ToolDefinition).validate_python(_LEGACY_MCP_ROW)
+
+    assert isinstance(definition, McpServerDefinition)
+    assert isinstance(definition.auth, McpHeaderAuth)
+
+
+def test_mcp_header_auth_fills_the_deprecated_mirrors() -> None:
+    definition = McpServerDefinition(
+        name="crm",
+        url="https://mcp.example.com/mcp",
+        auth=McpHeaderAuth(headers={"x-api-key": "{{ secret.key }}"}, credential_id="cred_2"),
+    )
+
+    assert definition.headers == {"x-api-key": "{{ secret.key }}"}
+    assert definition.credential_id == "cred_2"
+
+
+def test_mcp_legacy_fields_with_explicit_no_auth_fold_into_header_auth() -> None:
+    definition = McpServerDefinition.model_validate({**_LEGACY_MCP_ROW, "auth": {"kind": "none"}})
+
+    assert isinstance(definition.auth, McpHeaderAuth)
+    assert definition.auth.credential_id == "cred_1"
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        {"headers": {"Authorization": "Bearer other"}},
+        {"credential_id": "cred_other"},
+    ],
+)
+def test_mcp_legacy_fields_that_disagree_with_header_auth_are_an_error(legacy: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="set auth only"):
+        McpServerDefinition.model_validate(
+            {
+                "name": "crm",
+                "url": "https://mcp.example.com/mcp",
+                "auth": {"kind": "header", "headers": {"Authorization": "Bearer x"}, "credential_id": "c"},
+                **legacy,
+            }
+        )
+
+
+def test_mcp_oauth_auth_mirrors_its_credential_and_refuses_static_headers() -> None:
+    definition = McpServerDefinition(
+        name="crm",
+        url="https://mcp.example.com/mcp",
+        auth=McpOAuthAuth(credential_id="cred_oauth", scopes=["read"]),
+    )
+    assert definition.credential_id == "cred_oauth"
+    assert definition.headers == {}
+    assert definition.auth.kind == "oauth"
+
+    with pytest.raises(ValidationError, match="no static headers"):
+        McpServerDefinition.model_validate(
+            {
+                "name": "crm",
+                "url": "https://mcp.example.com/mcp",
+                "auth": {"kind": "oauth"},
+                "headers": {"Authorization": "Bearer x"},
+            }
+        )
+
+
+def test_mcp_oauth_auth_defaults_match_the_research_shape() -> None:
+    auth = McpOAuthAuth()
+
+    assert auth.model_dump() == {
+        "kind": "oauth",
+        "credential_id": None,
+        "registration": "auto",
+        "client_id": None,
+        "client_secret_ref": None,
+        "scopes": None,
+        "subject": "workspace",
+    }
+
+
+def test_mcp_unknown_auth_kind_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        McpServerDefinition.model_validate(
+            {"name": "crm", "url": "https://mcp.example.com/mcp", "auth": {"kind": "basic"}}
+        )
+
+
+def test_mcp_cached_tools_round_trip() -> None:
+    definition = McpServerDefinition.model_validate(
+        {
+            "name": "crm",
+            "url": "https://mcp.example.com/mcp",
+            "cached_tools": [
+                {"name": "lookup", "description": "Look up", "input_schema": {"type": "object"}},
+                {"name": "ping"},
+            ],
+            "cached_at": "2026-09-25T10:00:00Z",
+        }
+    )
+
+    assert definition.cached_tools == [
+        McpToolSnapshot(name="lookup", description="Look up", input_schema={"type": "object"}),
+        McpToolSnapshot(name="ping"),
+    ]
+    assert McpServerDefinition.model_validate(definition.model_dump(mode="json")) == definition
+
+
+def test_mcp_models_are_exported() -> None:
+    for name in (
+        "McpNoAuth",
+        "McpHeaderAuth",
+        "McpOAuthAuth",
+        "McpToolSnapshot",
+        "McpTestResult",
+    ):
+        assert name in EXPORTED_MODELS
+        assert name in lkap_contracts.__all__
+    assert "McpAuth" in lkap_contracts.__all__
+    assert McpTestResult(ok=False, reason="needs_auth").tool_names == []

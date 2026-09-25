@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Final, Literal
 from urllib.parse import quote
 
 import httpx
@@ -30,12 +30,14 @@ from livekit.agents.llm import RawFunctionTool
 from lkap_contracts.tool_providers import COMPOSIO_HOST
 from lkap_contracts.tools import (
     HttpToolDefinition,
+    McpOAuthAuth,
     McpServerDefinition,
     ProviderToolDefinition,
     ToolExecutionMode,
 )
 
 from lkap_agent.logging import get_logger
+from lkap_agent.settings import get_settings
 from lkap_agent.tools._http_safety import (
     HttpToolSecurityError,
     check_url_allowed,
@@ -337,6 +339,32 @@ def check_origin_host(url: str) -> None:
         raise HttpToolSecurityError(f"an app server must be https on {COMPOSIO_HOST} without a port or login")
 
 
+def check_mcp_host(url: str, ceiling: frozenset[str] | None) -> None:
+    """The worker half of the MCP host policy (V5-09, D-V5-4): `https`, then the ceiling.
+
+    `check_url_public` has already refused private and loopback hosts, so the api's
+    "plain http only to a dev loopback host" exception never reaches the worker: every
+    MCP server it connects to is `https`.
+
+    Args:
+        url: The MCP endpoint.
+        ceiling: `Settings.mcp_host_ceiling`: `None` = any public host, a set = only those.
+
+    Raises:
+        HttpToolSecurityError: Not `https`, or a host outside the ceiling.
+    """
+    parsed = httpx.URL(url)
+    if parsed.scheme != "https":
+        raise HttpToolSecurityError(f"an MCP server must use https, not {parsed.scheme!r}")
+    host = (parsed.host or "").lower().rstrip(".")
+    if ceiling is not None and host not in ceiling:
+        raise HttpToolSecurityError(f"host {host!r} is not on LKAP_MCP_ALLOWED_HOSTS")
+
+
+#: `host_ceiling` default: read `LKAP_MCP_ALLOWED_HOSTS` from the worker's settings.
+FROM_SETTINGS: Final = "settings"
+HostCeiling = frozenset[str] | None | Literal["settings"]
+
 #: Called with `(definition, reason)` for each MCP server `build_mcp_toolsets` refuses.
 McpSkipCallback = Callable[[McpServerDefinition, str], None]
 
@@ -347,6 +375,7 @@ def build_mcp_toolsets(
     on_skipped: McpSkipCallback | None = None,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     flow_node: bool = False,
+    host_ceiling: HostCeiling = FROM_SETTINGS,
 ) -> list[Any]:
     """Build one `MCPToolset` over a guarded server per `McpServerDefinition` whose URL is public.
 
@@ -373,11 +402,15 @@ def build_mcp_toolsets(
         on_skipped: Called with `(definition, reason)` for each refused server.
         transport_factory: Builds each client's transport; tests pass a fake.
         flow_node: The toolsets belong to a flow node (the 1.8.3 gate, R-V4-39).
+        host_ceiling: `LKAP_MCP_ALLOWED_HOSTS` as `Settings.mcp_host_ceiling`; the default
+            reads the worker's settings.
 
     Returns:
         `MCPToolset` instances, ready to pass to `Agent(tools=...)`.
     """
-    servers = _guarded_mcp_servers(defs, on_skipped=on_skipped, transport_factory=transport_factory)
+    servers = _guarded_mcp_servers(
+        defs, on_skipped=on_skipped, transport_factory=transport_factory, host_ceiling=host_ceiling
+    )
     if not servers:
         return []
     from livekit.agents.llm.mcp import MCPToolOptions, MCPToolset  # noqa: PLC0415 - optional extra
@@ -417,6 +450,7 @@ def build_mcp_servers(
     on_skipped: McpSkipCallback | None = None,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     flow_node: bool = False,
+    host_ceiling: HostCeiling = FROM_SETTINGS,
 ) -> list[Any]:
     """Deprecated alias of :func:`build_mcp_toolsets` (kept for one release; warns once).
 
@@ -431,7 +465,11 @@ def build_mcp_servers(
             detail="build_mcp_servers is an alias of build_mcp_toolsets and returns MCPToolsets",
         )
     return build_mcp_toolsets(
-        defs, on_skipped=on_skipped, transport_factory=transport_factory, flow_node=flow_node
+        defs,
+        on_skipped=on_skipped,
+        transport_factory=transport_factory,
+        flow_node=flow_node,
+        host_ceiling=host_ceiling,
     )
 
 
@@ -440,12 +478,13 @@ def build_guarded_mcp_servers(
     *,
     on_skipped: McpSkipCallback | None = None,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
+    host_ceiling: HostCeiling = FROM_SETTINGS,
 ) -> list[Any]:
     """The guarded servers alone (what :func:`build_mcp_toolsets` wraps); see `_guarded_mcp_servers`."""
     return [
         server
         for _definition, server in _guarded_mcp_servers(
-            defs, on_skipped=on_skipped, transport_factory=transport_factory
+            defs, on_skipped=on_skipped, transport_factory=transport_factory, host_ceiling=host_ceiling
         )
     ]
 
@@ -455,6 +494,7 @@ def _guarded_mcp_servers(
     *,
     on_skipped: McpSkipCallback | None = None,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
+    host_ceiling: HostCeiling = FROM_SETTINGS,
 ) -> list[tuple[McpServerDefinition, Any]]:
     """Build one guarded `MCPServerHTTP` per `McpServerDefinition` whose URL is public.
 
@@ -467,8 +507,17 @@ def _guarded_mcp_servers(
     :class:`~lkap_agent.tools.mcp_client.GuardedMCPServerHTTP`, whose client
     does not follow redirects and connects through `guarded_transport()`.
 
-    No host allowlist applies: `LKAP_HTTP_TOOL_ALLOWED_HOSTS` semantics would
-    refuse every MCP server whenever that list is unset (see `_http_safety`).
+    V5-09 (D-V5-4): the URL must also be `https` and, when `LKAP_MCP_ALLOWED_HOSTS`
+    is set, on it (:func:`check_mcp_host`; a provider-provisioned server too — the
+    operator lists the provider's host). `LKAP_HTTP_TOOL_ALLOWED_HOSTS` does not
+    apply unless `LKAP_MCP_ALLOWED_HOSTS=@http` says so: its empty-means-nothing
+    semantics would refuse every MCP server whenever it is unset.
+
+    Auth (`definition.auth`): `none` and `header` connect with the definition's
+    headers. The api substitutes secrets into both `auth.headers` and the deprecated
+    top-level `headers` mirror, which are equal once validated, so the top-level
+    field is what the SDK receives. `oauth` is skipped until the worker has an
+    api-issued bearer (V5-16).
 
     `livekit.agents.mcp` needs the optional `mcp` package (the `mcp` extra of
     `livekit-agents` in `agent/pyproject.toml`). When the import fails this
@@ -483,6 +532,7 @@ def _guarded_mcp_servers(
             host, never the full URL.
         transport_factory: Builds each client's transport; defaults to
             `guarded_transport`. Tests pass a fake.
+        host_ceiling: `Settings.mcp_host_ceiling`, or :data:`FROM_SETTINGS` to read it.
 
     Returns:
         ``(definition, server)`` pairs; :func:`build_mcp_toolsets` wraps each server
@@ -491,12 +541,16 @@ def _guarded_mcp_servers(
     if not defs:
         return []
 
+    ceiling = get_settings().mcp_host_ceiling if host_ceiling == FROM_SETTINGS else host_ceiling
     kept: list[McpServerDefinition] = []
     for definition in defs:
         try:
             check_url_public(definition.url)
             if definition.origin is not None:
                 check_origin_host(definition.url)
+            check_mcp_host(definition.url, ceiling)
+            if isinstance(definition.auth, McpOAuthAuth):
+                raise HttpToolSecurityError("signing in to an MCP server is not supported by this worker yet")
         except HttpToolSecurityError as exc:
             reason = str(exc)
             _log.warning("declarative_tool.mcp_server_refused", mcp_server=definition.name, reason=reason)

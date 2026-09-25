@@ -222,7 +222,9 @@ def test_fuse_rrf_breaks_ties_by_the_earlier_list_then_id() -> None:
     assert [item.id for item in fused] == ["x", "y"]
     assert fused[0].rrf == fused[1].rrf
     assert fuse_rrf([["solo"]])[0].score == pytest.approx(1.0)
-    assert fuse_rrf([]) == []
+    # An empty keyword list does not halve the scale.
+    assert fuse_rrf([["solo"], []])[0].score == pytest.approx(1.0)
+    assert fuse_rrf([]) == fuse_rrf([[], []]) == []
 
 
 @pytest.mark.parametrize(
@@ -259,7 +261,8 @@ async def test_query_cache_hits_on_a_repeated_normalised_query() -> None:
     first = await cache.embed(embedder, "What's   covered?")
     second = await cache.embed(embedder, "  what's covered?  ")
     assert first == second == [1.0, 0.0, 0.0, 0.0]
-    assert embedder.calls == [["what's covered?"]]
+    # The first spelling is embedded (whitespace collapsed, case kept).
+    assert embedder.calls == [["What's covered?"]]
     assert (cache.stats.hits, cache.stats.misses) == (1, 1)
 
     # Another model never gets this model's vector.

@@ -29,13 +29,20 @@ QUERY_CACHE_SIZE: Final = 512
 
 
 # --------------------------------------------------------------------------- query-embedding cache
+def collapse_whitespace(query: str) -> str:
+    """The text that is embedded: the query with its whitespace collapsed (case kept)."""
+    return " ".join(query.split())
+
+
 def normalise_query(query: str) -> str:
     """The cache key form of a query: whitespace collapsed, case folded.
 
-    It is also the text that is embedded, so a cached vector is exactly the
-    vector the query would get (the default ``bge-small`` model is uncased).
+    Two spellings that differ only in case share one cached vector: the
+    vector of whichever was embedded first. For the default ``bge-small``
+    model (uncased) that is exactly the vector either would get; a cased
+    remote model may differ in the last decimals.
     """
-    return " ".join(query.split()).casefold()
+    return collapse_whitespace(query).casefold()
 
 
 @dataclass(slots=True)
@@ -65,20 +72,19 @@ class QueryEmbeddingCache:
         return len(self._entries)
 
     async def embed(self, embedder: Embedder, query: str) -> list[float] | None:
-        """Return the vector for ``query`` (normalised), embedding it only on a miss.
+        """Return the vector for ``query``, embedding it only on a miss of its normalised form.
 
         Returns:
             The vector, or ``None`` when the embedder returned nothing.
         """
-        normalised = normalise_query(query)
-        key = (embedder.model_id, embedder.dimension, normalised)
+        key = (embedder.model_id, embedder.dimension, normalise_query(query))
         cached = self._entries.get(key)
         if cached is not None:
             self._entries.move_to_end(key)
             self.stats.hits += 1
             return cached
         self.stats.misses += 1
-        vectors = await embedder.embed([normalised])
+        vectors = await embedder.embed([collapse_whitespace(query)])
         if not vectors:
             return None
         vector = vectors[0]
@@ -112,8 +118,11 @@ def fuse_rrf(rankings: Sequence[Sequence[str]], *, k: int = RRF_K) -> list[Fused
     """Fuse ranked id lists by reciprocal rank: ``rrf(d) = Σ 1 / (k + rank_i(d))``.
 
     ``score`` is ``rrf`` divided by its maximum (an id ranked first in every
-    list), so it lies in ``(0, 1]`` and a ``min_score`` floor means the same
-    thing for any number of lists. Ties are broken by the best rank in the
+    non-empty list), so it lies in ``(0, 1]`` and a ``min_score`` floor means
+    the same thing for any number of lists. It is rank-derived, not a
+    relevance measure: the best hit of an unrelated query still scores near
+    1.0, so a floor separates relevant from irrelevant only on cosine or
+    rerank scores. Ties are broken by the best rank in the
     earlier lists, then by id, so the order is deterministic.
 
     Args:
@@ -124,9 +133,11 @@ def fuse_rrf(rankings: Sequence[Sequence[str]], *, k: int = RRF_K) -> list[Fused
         Every id that appears in any list, best first.
     """
     lists = [list(ranking) for ranking in rankings]
-    if not lists:
+    if not any(lists):
         return []
-    ceiling = len(lists) / (k + 1)
+    # Over the lists that found anything: a keyword list with no match must
+    # not halve every score (the floor would then mean something else).
+    ceiling = sum(1 for ranking in lists if ranking) / (k + 1)
     positions: dict[str, list[int | None]] = {}
     for index, ranking in enumerate(lists):
         for rank, item_id in enumerate(ranking, start=1):

@@ -28,7 +28,10 @@ One call, :meth:`KnowledgeService.search`, runs these stages:
 deciding scores are on ``[0, 1]`` so one ``min_score`` works in every mode:
 
 * ``vector``: cosine similarity (``1 - cosine distance``), exactly as before V5-04;
-* ``fused``: the RRF sum divided by its maximum (first in every list = 1.0);
+* ``fused``: the RRF sum divided by its maximum (first in every non-empty
+  list = 1.0). This is rank-derived: the best hit of any query scores near
+  1.0, so in ``hybrid`` mode without rerank ``min_score`` trims the tail of
+  the list rather than judging relevance;
 * ``rerank``: the cross-encoder's logit through a sigmoid.
 
 The defaults (``mode="vector"``, ``rerank="none"``, ``min_score=None``) return

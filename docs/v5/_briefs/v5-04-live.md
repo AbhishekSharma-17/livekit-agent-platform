@@ -13,7 +13,7 @@ Local cross-encoder `Xenova/ms-marco-MiniLM-L-6-v2` (fastembed `TextCrossEncoder
 | 10 | 95 ms | 89 ms | 106 ms |
 | 20 | 193 ms | 179 ms | 211 ms |
 
-Model load plus the first call: 522 ms, once per process. Cost is linear in the passage count, about 9.5 ms per full-length passage. This is slower than the research note's 112 ms for 20 (`knowledge-and-memory.md` §2 P0-6), which used shorter passages; with 256-token chunks the rerank pool should be 10, not 20, wherever it runs inside a voice turn (V5-06). The tool path can afford 20.
+Model load plus the first call: 522 ms, once per process. Cost is linear in the passage count, about 9.5 ms per full-length passage. This is about 1.7× the research note's 112 ms for 20 passages of the same length (`knowledge-and-memory.md` §2 P0-6); the cause was not investigated (ONNX thread count or execution provider are the likely knobs). With 256-token chunks the rerank pool should be 10, not 20, wherever it runs inside a voice turn (V5-06). The tool path can afford 20.
 
 The opt-in test `tests/test_kb_search.py::test_local_cross_encoder_disagrees_with_cosine_on_the_fixture` (set `LKAP_TEST_RERANK_MODEL_DIR` to a cache directory) confirmed on the real model that the cross-encoder puts "Comprehensive cover pays out when your car is stolen…" first for "Is a stolen car covered?" where cosine put the collision passage first.
 

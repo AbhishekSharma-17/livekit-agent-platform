@@ -270,7 +270,15 @@ async def test_skip_short_turns_off_searches_a_backchannel() -> None:
     assert len(kb.queries) == 1
 
 
-async def test_a_chunk_injected_two_turns_ago_is_not_reinjected() -> None:
+def test_recent_chunks_is_off_by_default() -> None:
+    recent = RecentChunks()
+    recent.push(["c1"])
+    assert not recent.seen("c1")
+
+
+async def test_a_chunk_the_follow_up_query_returns_again_is_injected_again() -> None:
+    # R-V5-11: the per-turn note is gone from the model's context by the next
+    # turn, so the follow-up gets the same passage again (dedupe off).
     kb = FakeKbClient([_hit("c1", text="Flood is covered.")])
     agent = _agent(_context(resolved_config(kb_ids=["kb-1"]), kb))
 
@@ -282,19 +290,7 @@ async def test_a_chunk_injected_two_turns_ago_is_not_reinjected() -> None:
     assert "Flood is covered." in _notes(first)[0]
     (note,) = _notes(third)
     assert "Fire is covered." in note
-    assert "Flood is covered." not in note
-
-
-async def test_a_chunk_is_injected_again_after_the_dedupe_window() -> None:
-    kb = FakeKbClient([_hit("c1")])
-    agent = _agent(_context(resolved_config(kb_ids=["kb-1"]), kb))
-
-    await _turn(agent, "Is flood damage covered?")
-    for _ in range(3):
-        await _turn(agent, "okay")
-    again = await _turn(agent, "Is flood damage covered again?")
-
-    assert len(_notes(again)) == 1
+    assert "Flood is covered." in note
 
 
 async def test_the_injected_note_respects_max_inject_tokens() -> None:

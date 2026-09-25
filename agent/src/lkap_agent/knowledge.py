@@ -84,8 +84,10 @@ PREFETCH_REUSE_JACCARD: Final[float] = 0.6
 #: A turn with fewer words than this never searches (when `skip_short_turns`).
 MIN_QUERY_WORDS: Final[int] = 3
 
-#: How many user turns an injected chunk id stays in the dedupe ring.
-DEDUPE_TURNS: Final[int] = 3
+#: How many user turns an injected chunk id stays in the dedupe ring. 0 = off
+#: (R-V5-11): on livekit-agents 1.8.3 the injected note is per-turn only, so a
+#: follow-up needs the same chunk again; re-enable only with persisted notes.
+DEDUPE_TURNS: Final[int] = 0
 
 #: Approximate characters per token for the `max_inject_tokens` budget.
 CHARS_PER_TOKEN: Final[int] = 4

@@ -71,6 +71,7 @@ from lkap_contracts.providers import (
     ProviderKind,
     ProviderSpec,
     WorkerImage,
+    by_kind,
     credential_home,
     get,
     validate_model_id,
@@ -85,6 +86,14 @@ from lkap_contracts.tools import (
     ToolDefinition,
     never_background,
 )
+from lkap_contracts.turn_handling import (
+    CONVERSATION_PRESETS,
+    REALTIME_IGNORED_KEYS,
+    TurnHandlingOptions,
+    resolve_turn_handling,
+    turn_handling_dict,
+)
+from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -426,7 +435,8 @@ def validate(ctx: ValidationContext) -> ValidationResult:
 
     _validate_modes(ctx, findings)
 
-    for key in pipeline.turn_handling:
+    stored_turn_handling = turn_handling_dict(pipeline.turn_handling)
+    for key in stored_turn_handling:
         if key == "turn_detection":
             findings.add(
                 "error",
@@ -435,6 +445,18 @@ def validate(ctx: ValidationContext) -> ValidationResult:
             )
         elif key not in TURN_HANDLING_KEYS:
             findings.add("warning", "pipeline.turn_handling", f"unknown key '{key}' will be ignored")
+    try:
+        TurnHandlingOptions.model_validate(stored_turn_handling)
+    except ValidationError as exc:
+        # V5-07: the contract keeps a dict whose typed keys do not validate (compatibility);
+        # say which value the session may refuse instead of failing the save.
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        findings.add(
+            "warning",
+            f"pipeline.turn_handling.{where}",
+            f"'{where}' does not look right ({first['msg']}); the call may fail to start with it",
+        )
 
     if ctx.known_tool_ids is not None:
         for tool_id in config.tools.tool_ids:
@@ -457,6 +479,8 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(knowledge_auto_inject_issues(ctx))
     findings.extend(tool_execution_issues(ctx))
     findings.extend(apps_issues(ctx))
+    findings.extend(conversation_preset_issues(ctx))
+    findings.extend(telephony_noise_cancellation_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -694,7 +718,10 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
     knowledge = ctx.config.knowledge
     if not knowledge.auto_inject or not knowledge.kb_ids:
         return []
-    preemptive = ctx.config.pipeline.turn_handling.get("preemptive_generation")
+    pipeline = ctx.config.pipeline
+    preemptive = resolve_turn_handling(pipeline.conversation_preset, pipeline.turn_handling).get(
+        "preemptive_generation"
+    )
     explicit = preemptive.get("enabled") if isinstance(preemptive, dict) else None
     if explicit is False:
         return []
@@ -712,6 +739,104 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
             "auto-inject off and let the agent call the search_knowledge tool"
         )
     return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
+
+
+#: Plain names of the ``turn_handling`` keys a preset sets, for warnings the console shows.
+_PLAIN_TURN_KEYS: dict[str, str] = {
+    "endpointing": "how long to wait before replying",
+    "interruption": "how easily the caller interrupts",
+    "preemptive_generation": "replying while the caller is still finishing",
+}
+
+
+def conversation_preset_issues(ctx: ValidationContext) -> list[Issue]:
+    """A conversation preset on a realtime pipeline: say which of its settings do nothing (V5-07).
+
+    With ``mode == "realtime"`` the model decides when the caller has finished and
+    handles interruptions itself, and preemptive generation runs only for a text LLM
+    (livekit-agents 1.8.3 ``agent_activity.py:2319`` and ``:2574``), so every key a
+    preset sets is ignored. In ``half_cascade`` only preemptive generation is (the
+    realtime model still writes the reply); the wait times apply when the model hands
+    turn-taking to the worker.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        At most one warning, at ``pipeline.conversation_preset``.
+    """
+    pipeline = ctx.config.pipeline
+    preset = pipeline.conversation_preset
+    if preset == "custom":
+        return []
+    set_by_preset = CONVERSATION_PRESETS[preset]
+    if pipeline.mode == "realtime":
+        ignored = [key for key in REALTIME_IGNORED_KEYS if key in set_by_preset]
+        reason = "a realtime model decides when the caller has finished and handles interruptions itself"
+    elif pipeline.mode == "half_cascade":
+        ignored = [key for key in ("preemptive_generation",) if key in set_by_preset]
+        reason = "early replies need a text model, and here the realtime model writes the reply"
+    else:
+        return []
+    if not ignored:
+        return []
+    names = ", ".join(f"{_PLAIN_TURN_KEYS[key]} ({key})" for key in ignored)
+    return [
+        Issue(
+            path="pipeline.conversation_preset",
+            message=f"The '{preset}' preset changes less than it says here: {reason}, so these "
+            f"settings are ignored: {names}",
+            severity="warning",
+        )
+    ]
+
+
+def _telephony_filter_offered() -> bool:
+    """Whether any registry noise filter with a phone variant is offered (a test seam)."""
+    return any(
+        spec.telephony_variant is not None and spec.availability == "available"
+        for spec in by_kind("noise_cancellation", status=None)
+    )
+
+
+def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
+    """The ``telephony`` preset where phone noise cancellation cannot run (V5-07, D-V5-30).
+
+    The preset tunes turn-taking everywhere and, on a phone call, switches the noise
+    filter to its phone variant (turning the LiveKit Cloud one on when none is set).
+    That filter is LiveKit Cloud only (``noise_cancellation_tier == "krisp"``), and it
+    needs a registry entry with a phone variant that the workers carry. Nothing is
+    checked without a connection.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        At most one warning, at ``pipeline.conversation_preset``.
+    """
+    connection = ctx.connection
+    if connection is None or ctx.config.pipeline.conversation_preset != "telephony":
+        return []
+    where = _connection_label(connection)
+    if connection.capabilities.noise_cancellation_tier != "krisp":
+        message = (
+            f"The phone call preset tunes turn-taking only: noise cancellation for phone calls "
+            f"needs LiveKit Cloud, which {where} does not offer"
+        )
+    else:
+        ref = ctx.config.pipeline.noise_cancellation
+        spec = _spec_or_none(ref.provider_id) if ref is not None else None
+        if spec is not None and spec.telephony_variant is not None:
+            return []
+        if spec is None and _telephony_filter_offered():
+            return []
+        message = (
+            f"The phone call preset keeps the noise filter '{spec.label}' as it is: it has no phone version"
+            if spec is not None
+            else "The phone call preset tunes turn-taking only: no noise filter for phone calls is "
+            "available on this platform yet"
+        )
+    return [Issue(path="pipeline.conversation_preset", message=message, severity="warning")]
 
 
 #: Below this many tool steps, a chain of background announcements can exhaust the budget

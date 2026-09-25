@@ -23,6 +23,8 @@ export const DEFAULT_VOICE: Required<VoiceConfig> = {
   user_away_timeout_s: 15.0,
   first_speaker: "agent",
   thinking_sound: "none",
+  // V5-07: no background clip unless the agent picks one (V5-11's Conversation section edits it).
+  ambient_sound: "none",
 };
 
 export const DEFAULT_CAPABILITIES: Required<CapabilitiesConfig> = {

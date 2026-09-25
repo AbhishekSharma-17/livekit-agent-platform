@@ -753,13 +753,14 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         return
     if telephony is not None:
         telephony.start()
-    # V4-12: `voice.thinking_sound` during blocking tool waits (never on the text channel);
-    # the player is closed in the shutdown path.
-    from lkap_agent.session_builder import start_thinking_sound  # noqa: PLC0415
+    # V4-12 / V5-07: one background player for `voice.thinking_sound` (blocking tool waits) and
+    # `voice.ambient_sound` (the whole call); never on the text channel or without audio out.
+    # The player is closed in the shutdown path.
+    from lkap_agent.session_builder import start_background_audio  # noqa: PLC0415
 
-    stop_thinking_sound = await start_thinking_sound(plan, ctx.room)
-    if stop_thinking_sound is not None:
-        ctx.add_shutdown_callback(stop_thinking_sound)
+    stop_background_audio = await start_background_audio(plan, ctx.room)
+    if stop_background_audio is not None:
+        ctx.add_shutdown_callback(stop_background_audio)
     observer.record(
         "session_started",
         {

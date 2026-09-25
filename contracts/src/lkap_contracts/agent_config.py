@@ -1,8 +1,8 @@
 """Agent configuration: what an admin saves, and what the worker receives resolved."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.connections import ConnectionInfo
@@ -11,6 +11,12 @@ from lkap_contracts.providers import ModelCapabilities
 from lkap_contracts.telephony import TelephonyConfig
 from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
+from lkap_contracts.turn_handling import (
+    AMBIENT_SOUND_PATTERN,
+    ConversationPreset,
+    TurnDetectorSettings,
+    TurnHandlingOptions,
+)
 from lkap_contracts.ui_protocol import BlockSpec
 
 PipelineMode = Literal["realtime", "cascaded", "half_cascade"]
@@ -44,6 +50,7 @@ __all__ = [
     "AvatarOptions",
     "CapabilitiesConfig",
     "ConnectionInfo",
+    "ConversationPreset",
     "KnowledgeConfig",
     "PanelLayout",
     "PipelineConfig",
@@ -57,6 +64,8 @@ __all__ = [
     "TelephonyConfig",
     "ThinkingSound",
     "ToolsConfig",
+    "TurnDetectorSettings",
+    "TurnHandlingOptions",
     "VoiceConfig",
     "pipeline_issues",
 ]
@@ -91,7 +100,24 @@ class PipelineConfig(BaseModel):
     vad: ProviderRef | None = None
     turn_detection: ProviderRef | None = None
     noise_cancellation: ProviderRef | None = None
-    turn_handling: dict[str, Any] = {}
+    turn_handling: Annotated[TurnHandlingOptions | dict[str, Any], Field(union_mode="left_to_right")] = {}
+    """``AgentSession(turn_handling=...)`` (V5-07). Validated against the typed model and kept
+    as a plain dict of the keys that were set; a dict whose typed keys do not validate is kept
+    as it is (compatibility). Used as is only with ``conversation_preset == "custom"``."""
+    conversation_preset: ConversationPreset = "custom"
+    """A named preset replaces the turn-taking keys of ``turn_handling`` when a session starts
+    (``turn_handling.resolve_turn_handling``); it is never stored expanded."""
+    turn_detector: TurnDetectorSettings | None = None
+    """Where the end-of-turn model runs and how sensitive it is; unset = as before V5-07."""
+
+    @field_validator("turn_handling", mode="after")
+    @classmethod
+    def _turn_handling_as_dict(cls, value: TurnHandlingOptions | dict[str, Any]) -> dict[str, Any]:
+        """Keep the runtime value a plain dict of the stored keys (one shape for every consumer)."""
+        if isinstance(value, TurnHandlingOptions):
+            dumped: dict[str, Any] = value.model_dump()
+            return dumped
+        return value
 
 
 class VoiceConfig(BaseModel):
@@ -105,6 +131,10 @@ class VoiceConfig(BaseModel):
     first_speaker: Literal["agent", "user"] = "agent"
     thinking_sound: ThinkingSound = "none"
     """A built-in clip played while the agent waits on a blocking tool (never on the text channel)."""
+    ambient_sound: Annotated[str, Field(pattern=AMBIENT_SOUND_PATTERN)] = "none"
+    """A background clip played for the whole call (V5-07): ``none``, a built-in name
+    (``turn_handling.AMBIENT_SOUNDS``) or ``asset:<id>`` (an uploaded clip, played from a later
+    package). Needs audio output; never on the text channel."""
 
 
 class CapabilitiesConfig(BaseModel):

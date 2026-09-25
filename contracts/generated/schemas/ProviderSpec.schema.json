@@ -626,6 +626,19 @@
       "title": "Package",
       "type": "string"
     },
+    "price_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A plain-language price line the console shows beside the provider when it is metered outside the price table (V5-07: LiveKit Cloud noise cancellation).",
+      "title": "Price Note"
+    },
     "price_ref": {
       "anyOf": [
         {
@@ -677,6 +690,19 @@
       ],
       "title": "Status",
       "type": "string"
+    },
+    "telephony_variant": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "noise_cancellation only (V5-07, D-V5-30): the dotted path of the variant tuned for phone audio. The worker builds it instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset. Unset = the entry has no telephony variant.",
+      "title": "Telephony Variant"
     },
     "test": {
       "anyOf": [

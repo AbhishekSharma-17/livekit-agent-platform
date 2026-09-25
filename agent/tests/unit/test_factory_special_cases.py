@@ -17,7 +17,7 @@ import pytest
 from lkap_contracts.agent_config import ResolvedProvider
 from lkap_contracts.providers import get as get_spec
 
-from lkap_agent.providers.factory import ProviderFactory
+from lkap_agent.providers.factory import ProviderFactory, telephony_noise_cancellation, turn_detector_kwargs
 from lkap_agent.providers.special_cases import (
     ProviderBuildError,
     apply_pipeline_mode,
@@ -390,3 +390,78 @@ def test_build_gemini_live_defaults_to_audio_modality_outside_half_cascade(
     built = ProviderFactory().build("realtime", provider)
 
     assert built.kwargs["modalities"] == [types.Modality.AUDIO]
+
+
+# ------------------------------------------------ V5-07: noise-cancellation variants, detector kwargs
+
+
+def _nc_slot(provider_id: str, **kwargs: Any) -> ResolvedProvider:
+    spec = get_spec(provider_id)
+    return ResolvedProvider(provider_id=spec.id, python_class=spec.python_class, model=None, kwargs=kwargs)
+
+
+def test_telephony_noise_cancellation_swaps_livekit_cloud_bvc_for_bvc_telephony() -> None:
+    variant = telephony_noise_cancellation(_nc_slot("legacy-noise-cancellation"))
+
+    assert variant is not None
+    assert variant.python_class == "livekit.plugins.noise_cancellation.BVCTelephony"
+    assert variant.provider_id == "legacy-noise-cancellation"
+    assert variant.kwargs == {}
+
+
+def test_telephony_noise_cancellation_drops_the_krisp_mode_the_variant_fixes_itself() -> None:
+    slot = _nc_slot("krisp-noise-cancellation", mode="noise_cancellation", noise_suppression_level=60)
+
+    variant = telephony_noise_cancellation(slot)
+
+    assert variant is not None
+    assert variant.python_class == "livekit.plugins.krisp.voice_isolation_telephony"
+    assert variant.kwargs == {"noise_suppression_level": 60}
+    assert slot.kwargs == {"mode": "noise_cancellation", "noise_suppression_level": 60}
+
+
+def test_telephony_noise_cancellation_is_idempotent() -> None:
+    once = telephony_noise_cancellation(_nc_slot("legacy-noise-cancellation"))
+    assert once is not None
+
+    assert telephony_noise_cancellation(once) == once
+
+
+@pytest.mark.parametrize("provider_id", ["ai-coustics-noise-cancellation", "no-such-provider", "silero-vad"])
+def test_telephony_noise_cancellation_returns_none_without_a_variant(provider_id: str) -> None:
+    provider = ResolvedProvider(provider_id=provider_id, python_class="x.Y", model=None, kwargs={})
+
+    assert telephony_noise_cancellation(provider) is None
+
+
+def test_the_factory_builds_the_telephony_variant_it_is_given(fake_plugin_module: Any) -> None:
+    fake_plugin_module(
+        "livekit.plugins.noise_cancellation",
+        BVC=lambda: "bvc-options",
+        BVCTelephony=lambda: "bvc-telephony-options",
+    )
+    default = _nc_slot("legacy-noise-cancellation")
+    variant = telephony_noise_cancellation(default)
+    assert variant is not None
+
+    assert ProviderFactory().build("noise_cancellation", default) == "bvc-options"
+    assert ProviderFactory().build("noise_cancellation", variant) == "bvc-telephony-options"
+
+
+@pytest.mark.parametrize(
+    ("mode", "threshold", "connection", "expected"),
+    [
+        (None, None, "hosted", {}),
+        ("hosted", None, "hosted", {}),
+        ("hosted", 0.2, "hosted", {"unlikely_threshold": 0.2}),
+        ("local", None, "hosted", {"version": "v1-mini"}),
+        ("hosted", None, "local", {"version": "v1-mini"}),
+        (None, 0.0, "local", {"version": "v1-mini", "unlikely_threshold": 0.0}),
+    ],
+)
+def test_turn_detector_kwargs(
+    mode: str | None, threshold: float | None, connection: Any, expected: dict[str, Any]
+) -> None:
+    assert (
+        turn_detector_kwargs(mode=mode, unlikely_threshold=threshold, connection_mode=connection) == expected
+    )

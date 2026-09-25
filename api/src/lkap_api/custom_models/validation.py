@@ -12,9 +12,10 @@ rule. No message contains the value. R-V4-31: on an id-like or
 **Warnings**: an id-like field whose value is a bare token; the last "Test
 model" run with the slot's current key failed (with its scrubbed reason); the
 vendor deprecated the model or it is gone from the live catalog
-(``catalog_missing_since``); the resolved capabilities say a cascaded LLM
-cannot see images while the agent wants video. The "unknown and untested"
-warning is ``config_service._validate_model``'s own, so it fires once.
+(``catalog_missing_since``). The "unknown and untested" warning is
+``config_service._validate_model``'s own, and the vision warning is
+``config_service._validate_llm_vision``'s (resolved capabilities), so each
+fires once.
 """
 
 from __future__ import annotations
@@ -27,11 +28,9 @@ from lkap_contracts.providers import (
     id_like_field,
     validate_id_value,
     validate_model_id,
-    vision_support,
 )
 
 from lkap_api.config_service import SLOT_KIND, ValidationContext, register_validator
-from lkap_api.custom_models.capabilities import resolve_capabilities
 from lkap_api.custom_models.records import current_test_result
 
 #: Longest vendor reason quoted in a warning.
@@ -113,30 +112,6 @@ def _record_issues(ctx: ValidationContext, path: str, ref: ProviderRef, spec: Pr
     return issues
 
 
-def _vision_issue(ctx: ValidationContext, ref: ProviderRef, spec: ProviderSpec) -> Issue | None:
-    config = ctx.config
-    wants_video = config.capabilities.camera or config.capabilities.screen_share
-    if config.pipeline.mode != "cascaded" or not wants_video:
-        return None
-    model = ref.model or spec.default_model
-    if model is None or validate_model_id(model) is not None:
-        return None
-    if vision_support(spec.id, model) is False:
-        return None  # `config_service._validate_modes` already says so for a listed model
-    caps = resolve_capabilities(spec, model, ctx.record_for(spec, model), ctx.catalog_item(spec.id, model))
-    if caps.vision is not False:
-        return None
-    return Issue(
-        path="pipeline.llm",
-        message=(
-            f"this model cannot see images (per its {caps.source or 'record'} capabilities); camera/screen "
-            "share still reach the UI and pin_frame, but per-turn vision and describe_current_frame "
-            "need a vision model"
-        ),
-        severity="warning",
-    )
-
-
 def custom_model_issues(ctx: ValidationContext) -> list[Issue]:
     """Every custom-model error and warning of a config (see the module docstring).
 
@@ -150,10 +125,6 @@ def custom_model_issues(ctx: ValidationContext) -> list[Issue]:
         path = _path(slot)
         issues.extend(id_rule_issues(path, ref, spec))
         issues.extend(_record_issues(ctx, path, ref, spec))
-        if slot == "llm":
-            vision = _vision_issue(ctx, ref, spec)
-            if vision is not None:
-                issues.append(vision)
     return issues
 
 

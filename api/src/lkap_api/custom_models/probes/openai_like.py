@@ -8,6 +8,7 @@ JWT the service mints from a connection's key and secret, R-V4-25).
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -21,6 +22,7 @@ from lkap_api.custom_models.probes.base import (
     PING_TOOL_DESCRIPTION,
     PING_TOOL_NAME,
     PNG_1X1_BASE64,
+    RAW_PCM_TYPES,
     TTS_INPUT,
     ChatAnswer,
     LlmProbe,
@@ -169,7 +171,15 @@ class OpenAiTranscriptionsProbe:
 
 
 class OpenAiSpeechProbe:
-    """``POST {base}/audio/speech``: ``input="Hello."``, the slot's voice, mp3."""
+    """``POST {base}/audio/speech``: ``input="Hello."``, the slot's voice, mp3 (pcm on a format refusal).
+
+    The first request asks for ``mp3`` (the cheapest to carry). Some models take
+    only raw PCM (OpenRouter's Gemini TTS answers ``400: Gemini TTS only supports
+    response_format="pcm"``, ask #64), and no vendor list says which formats a
+    model takes (OpenRouter's speech models carry no format field), so a 400/415/422
+    that names the format is retried **once** with ``pcm``, and PCM bytes count
+    as audio. A refused request is not billed; the input stays ``"Hello."``.
+    """
 
     name = "openai_speech"
 
@@ -181,12 +191,37 @@ class OpenAiSpeechProbe:
         if voice is None:
             raise ProbeInputError(f"the '{ctx.spec.id}' probe needs the slot's 'voice' field")
         url = f"{base_url(ctx, BASE_URLS.get(ctx.spec.id))}/audio/speech"
-        return await audio_probe(
+        body = {"model": ctx.model, "input": TTS_INPUT, "voice": voice, "response_format": "mp3"}
+        outcome = await audio_probe(ctx, url, headers=_bearer(ctx), json=body)
+        if not _refuses_format(outcome):
+            return outcome
+        ctx.state["tts_format"] = "pcm"
+        retried = await audio_probe(
             ctx,
             url,
             headers=_bearer(ctx),
-            json={"model": ctx.model, "input": TTS_INPUT, "voice": voice, "response_format": "mp3"},
+            json={**body, "response_format": "pcm"},
+            raw_audio_types=RAW_PCM_TYPES,
         )
+        note = "retried with pcm after the vendor refused mp3"
+        retried.message = f"{retried.message} ({note})" if retried.message else note
+        retried.results = [
+            r.model_copy(update={"message": f"{r.message} ({note})" if r.message else note})
+            for r in retried.results
+        ]
+        return retried
+
+
+#: A 4xx that names the audio format (``response_format``, ``pcm``): worth one pcm retry.
+_FORMAT_REFUSAL = re.compile(r"response_format|\bpcm\b", re.I)
+
+
+def _refuses_format(outcome: ProbeOutcome) -> bool:
+    """Whether a failed speech request was a 400/415/422 naming the response format."""
+    if outcome.ok is not False or not outcome.results:
+        return False
+    message = outcome.results[0].message or ""
+    return bool(re.match(r"HTTP (400|415|422)\b", message)) and bool(_FORMAT_REFUSAL.search(message))
 
 
 class OpenAiEmbeddingsProbe:

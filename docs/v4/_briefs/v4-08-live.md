@@ -31,6 +31,23 @@ Latency is the probe's own latency (`latency_ms`, the `basic` call). "Wall" is t
 
 **Vendor spend:** about $0.0003 in all, well under the $0.10 budget. The two rejected calls (the Gemini TTS 400 and the invalid id) are not billed by OpenRouter. The Simli probe is a `GET /faces`: no session, no minutes. The Bey probe is a GET by id.
 
+## Re-run after the fixes (asks #64–#67, 2026-09-25, 05:37 IST)
+
+The four failing readings were fixed in the api (asks #64–#67, plus #76 and #77 from the user) and re-tested on the same dev api on `:8080`. That api runs `uvicorn --reload`, so it picked up the edits without a restart; the new messages in the answers show the new code ran. One Builder key was used, with the same scopes and handling as above: named `V4-10 re-run after fixes (temporary)`, minted with the admin token with a 1-day expiry, held only in a 0600 scratchpad file and never printed. It was **revoked at 05:37:52 IST** (`DELETE /v1/api-keys/{id}` → 204; the listing shows `revoked_at` set), and the file was then deleted. Every call used `force=true` and ran about 7 s apart; none was cached.
+
+| Provider | Model / id | ok | Latency | Wall | Probes | Detected | Cost |
+|---|---|---|---|---|---|---|---|
+| `openrouter-tts` | `google/gemini-3.8-flash-tts`, voice `Kore` | ✅ true (was ❌) | 2239 ms (TTFB of the pcm retry) | 3152 ms | basic ✓ 59520 bytes `audio/pcm`, "retried with pcm after the vendor refused mp3" | `audio_out=true` | $0.0000030 for the input side (6 characters × `prompt`); output audio is not counted, and the note says so. OpenRouter bills the output audio per audio token, which a speech answer does not report (1.24 s of 24 kHz PCM; well under a cent). For a token-priced model the input side is approximate: 6 characters are priced as 6 prompt units |
+| `livekit-inference-llm` | `openai/gpt-4o-mini` | ✅ true | 1893 ms | 4534 ms | basic ✓ (`Ok.`), tools **inconclusive**: `HTTP 400: … max_tokens or model output limit was reached … (inconclusive)` | `tools=null` (was `false`); the stored row is corrected | $0.0000033 (platform price table) |
+| `openrouter-tts` | `deepgram/aura-2`, voice `aura-2-thalia-en` | ✅ true | 1322 ms (TTFB) | 1366 ms | basic ✓ 3744 bytes `audio/mpeg` | `audio_out=true` | **$0.00018** (was $0.00000): 6 characters × $0.00003 |
+| `simli-avatar` | `cace3ef7-a4c4-425d-a8cf-a5358eb0c427` (the Survey agent's face, Simli's preset "Tina") | ➖ null (was ❌ false) | 1255 ms | 1314 ms | basic: "the key works, but the id is not among this account's own faces (0 listed); Simli's preset faces are not listed and can't be verified without starting a session" | — | none (a list GET; no session, no minutes) |
+
+- **Vendor spend:** under $0.01 in all. The priced parts come to about $0.0002; the Gemini TTS output audio is billed on top of that per audio token, a count the answer does not report. The rejected mp3 request is not billed. That is under the $0.01 budget. No Simli session was started and no minutes were used.
+- **Simli, checked against the vendor's docs:** `GET /faces` in `https://api.simli.ai/openapi.yaml` returns the account's own faces (each with an `owner_id`). The preset faces are a static docs page (21 ids), and the OpenAPI has no preset or get-by-id endpoint. So "0 listed" is what `GET /faces` returns for an account with no faces of its own. The console's Simli catalog is unchanged and lists the same thing; whether it should also show the 21 documented presets is the coordinator's call.
+- **Validation of `Demo — Vision assistant`** (`7ccd189876a74adca561cf88e2bf7e64`; `openrouter-llm` `google/gemini-3.5-flash`, camera and screen share on). `POST /v1/agents/{id}/validate` (read-only) → `ok=true`, no errors. The only warning left is the auto-inject tip ("Tip: auto-inject turns off preemptive generation … Nothing is broken; …", ask #77). The false "cannot see images" warning is gone (ask #76): the cached OpenRouter catalog says the model takes `image` input.
+- **Still open:** a definite `tools` reading for models that cannot finish a forced tool call in 4 tokens needs a ruling on the budget (ask #78). The `openrouter-llm` registry flags are ask #79.
+- **Side effects:** the four `provider_models` rows were overwritten by the route (as designed); `livekit-inference-llm`/`openai/gpt-4o-mini` now stores `detected.tools=null`. Audit rows `provider.test_model` were written. No agent config, connection, credential or worker was touched.
+
 ## §4 step by step
 
 1. **OpenRouter LLM: pass.** `openai/gpt-4.1-mini` was used instead of `google/gemini-3.8-flash` (the card asked for a cheap model). `tools` ✓, cost from `meta.pricing`. The nonsense id gives `ok=false` with the vendor's reason and no key fragment. A key-shaped id gives 422 with no echo.
@@ -77,4 +94,5 @@ Reserved for V4-09 (`PLAN-V4.md` V4-09 "Live"): pick `openrouter-llm`, type `goo
 - 05:07 Free catalog reads: `bey-avatar`, `simli-avatar`, `deepgram-stt` (`q=flux`, `q=nova-3`), `deepgram-tts`, `openrouter-llm` (`q=claude`) and `openrouter-tts` voices.
 - 05:08–05:10 The eleven `test-model` calls in the table, sequential.
 - 05:11 Key revoked (204), and its scratchpad file deleted.
+- 05:37 Re-run after the fixes (section above): the key minted, the four `force=true` calls, the Vision assistant validated, the key revoked (204) and its file deleted.
 - 05:03 (before the api calls) `python -m lkap_api.catalogs.drift --only keyless`, with no keys: the §4 step 8 result above. It was re-run at 05:13 through `scripts/catalog_drift.py` with the final module: exit 0, the same sections, and `flux-general-en` marked expected.

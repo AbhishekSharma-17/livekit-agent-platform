@@ -197,6 +197,46 @@ async def test_openrouter_pricing_comes_from_the_cached_catalog(
     assert float(result["cost_estimate_usd"]) == pytest.approx(10 * 0.000001 + 1 * 0.000002)
 
 
+async def test_openrouter_tts_cost_counts_the_characters_at_the_catalog_price(
+    admin_client: httpx.AsyncClient, vendor: Vendor, database: Database
+) -> None:
+    """Ask #66: `deepgram/aura-2` read "0.00000"; 6 characters x $0.00003 is $0.00018."""
+    from lkap_api.db.models import ProviderCatalogCache, new_id, utcnow
+
+    key = await _key(admin_client, "openrouter-llm", FAKE_OPENROUTER_KEY)
+    async with database.session() as session:
+        session.add(
+            ProviderCatalogCache(
+                id=new_id(),
+                provider_id="openrouter-tts",
+                credential_id=key["id"],
+                kind="models",
+                items=[
+                    {
+                        "id": "deepgram/aura-2",
+                        "label": "Aura 2",
+                        "meta": {"pricing": {"prompt": "0.00003", "completion": "0"}},
+                    }
+                ],
+                fetched_at=utcnow(),
+            )
+        )
+    vendor.handler = lambda request: httpx.Response(
+        200, headers={"content-type": "audio/mpeg"}, content=b"\xff\xfb" * 2304
+    )
+
+    result = (
+        await admin_client.post(
+            _test("openrouter-tts"),
+            json={"model": "deepgram/aura-2", "fields": {"voice": "aura-2-thalia-en"}},
+        )
+    ).json()
+
+    assert result["ok"] is True
+    assert float(result["cost_estimate_usd"]) == pytest.approx(0.00018)
+    assert result["cost_note"] == "from the vendor catalog's input pricing × 6 characters"
+
+
 # ------------------------------------------------------------------------------- scrub
 async def test_a_404_that_echoes_the_key_is_scrubbed_everywhere(
     admin_client: httpx.AsyncClient,

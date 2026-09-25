@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,8 @@ from sqlalchemy import select
 
 from lkap_api.custom_models import capabilities, records
 from lkap_api.custom_models.ids import REDACTED, scrub
+from lkap_api.custom_models.probes import Usage
+from lkap_api.custom_models.service import estimate_cost
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.models import AuditLog
 from lkap_api.db.session import Database
@@ -456,3 +459,46 @@ def test_no_new_api_source_path_has_a_credentials_prefixed_segment() -> None:
         and any(part.startswith("credentials") for part in path.relative_to(src).parts)
     ]
     assert offenders == []
+
+
+# ------------------------------------------------------------ the cost estimate (ask #66)
+@pytest.mark.parametrize(
+    ("pricing", "usage", "cost", "note"),
+    [
+        # Deepgram Aura-2 on OpenRouter: $30/1M characters, billed per input character.
+        ({"prompt": "0.00003", "completion": "0"}, Usage(chars=6), Decimal("0.00018"), "× 6 characters"),
+        # Gemini TTS: the input side only; output audio tokens are unknowable from a speech answer.
+        (
+            {"prompt": "0.0000005", "completion": "0.000009"},
+            Usage(chars=6),
+            Decimal("0.0000030"),
+            "output audio is priced separately and not counted",
+        ),
+        # An LLM keeps the per-token path.
+        (
+            {"prompt": "0.000001", "completion": "0.000002"},
+            Usage(tokens_in=10, tokens_out=1),
+            Decimal("0.000012"),
+            "per-token",
+        ),
+    ],
+    ids=["deepgram-aura-2", "gemini-tts", "llm-tokens"],
+)
+def test_estimate_cost_prices_what_the_probe_used(
+    pricing: dict[str, str], usage: Usage, cost: Decimal, note: str
+) -> None:
+    item = CatalogItem(id="m", label="m", meta={"pricing": pricing})
+
+    estimate, cost_note = estimate_cost(get("openrouter-tts"), "m", usage, item)
+
+    assert estimate == cost
+    assert note in cost_note
+
+
+def test_estimate_cost_never_reads_catalog_pricing_as_a_zero_for_unpriced_units() -> None:
+    item = CatalogItem(id="m", label="m", meta={"pricing": {"prompt": "0.000001", "completion": "0.000002"}})
+
+    estimate, cost_note = estimate_cost(get("openrouter-stt"), "m", Usage(audio_s_in=1.0), item)
+
+    assert estimate is None
+    assert cost_note.startswith("no price on file for this model; the probe used 1 s of audio")

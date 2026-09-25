@@ -3,6 +3,7 @@ and the knowledge auto-inject / preemptive generation warning (research-v4 knowl
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from typing import Any
 
@@ -39,7 +40,7 @@ def test_camera_with_a_vision_capable_cascaded_llm_does_not_warn() -> None:
     assert not any("cannot see images" in warning for warning in result.warnings)
 
 
-def test_camera_with_an_unlisted_free_text_model_does_not_warn() -> None:
+def test_camera_with_an_unlisted_free_text_model_gets_a_tip_not_a_cannot_see_warning() -> None:
     config = inference_config()
     config.pipeline.llm.model = "some-vendor/unlisted-model"
     config.capabilities.camera = True
@@ -48,6 +49,8 @@ def test_camera_with_an_unlisted_free_text_model_does_not_warn() -> None:
 
     assert result.ok is True
     assert not any("cannot see images" in warning for warning in result.warnings)
+    vision = [i for i in result.issues if i.path == "pipeline.llm" and "images" in i.message]
+    assert len(vision) == 1 and vision[0].message.startswith("Tip: ")
 
 
 def test_text_only_cascaded_llm_without_camera_or_screen_share_does_not_warn() -> None:
@@ -69,6 +72,99 @@ def test_screen_share_with_a_text_only_cascaded_llm_also_warns() -> None:
     assert any("cannot see images" in warning for warning in result.warnings)
 
 
+def _openrouter_vision_ctx(
+    model: str, *, input_modalities: list[str] | None = None, declared: dict[str, Any] | None = None
+) -> ValidationContext:
+    """A cascaded agent with the camera on and ``openrouter-llm`` as its LLM."""
+    config = inference_config()
+    config.pipeline.llm = ProviderRef(provider_id="openrouter-llm", credential_id="cred-or", model=model)
+    config.capabilities.camera = True
+    catalog: dict[str, CatalogItem] = {}
+    if input_modalities is not None:
+        meta = {"architecture": {"input_modalities": input_modalities, "output_modalities": ["text"]}}
+        catalog[model] = CatalogItem(id=model, label=model, meta=meta)
+    records: dict[tuple[str, str, str], ProviderModelOut] = {}
+    if declared is not None:
+        now = dt.datetime.now(dt.UTC)
+        records[("openrouter-llm", "llm", model)] = ProviderModelOut.model_validate(
+            {
+                "id": "r-or",
+                "provider_id": "openrouter-llm",
+                "provider_home": "openrouter-llm",
+                "kind": "llm",
+                "model_id": model,
+                "created_at": now,
+                "updated_at": now,
+                "declared": declared,
+            }
+        )
+    return ValidationContext(
+        config=config,
+        credential_providers={"cred-or": "openrouter-llm"},
+        model_records=records,
+        catalog_items={"openrouter-llm": catalog},
+    )
+
+
+def _vision_warnings(ctx: ValidationContext) -> list[str]:
+    return [i.message for i in validate(ctx).issues if i.path == "pipeline.llm" and "image" in i.message]
+
+
+@pytest.mark.parametrize("model", ["google/gemini-3.5-flash", "openai/gpt-4o"])
+def test_an_openrouter_model_whose_catalog_lists_image_input_gets_no_vision_warning(model: str) -> None:
+    assert _vision_warnings(_openrouter_vision_ctx(model, input_modalities=["text", "image", "file"])) == []
+
+
+def test_an_openrouter_model_declared_text_only_gets_the_vision_warning() -> None:
+    ctx = _openrouter_vision_ctx(
+        "google/gemini-3.5-flash", input_modalities=["text", "image"], declared={"vision": False}
+    )
+
+    (warning,) = _vision_warnings(ctx)
+
+    assert "cannot see images (per its declared capabilities)" in warning
+
+
+def test_a_model_with_unknown_vision_gets_a_soft_tip_not_cannot_see() -> None:
+    (warning,) = _vision_warnings(_openrouter_vision_ctx("some-lab/unlisted-model-7b"))
+
+    assert warning.startswith("Tip: ")
+    assert "cannot see images" not in warning
+    assert "vision probe" in warning
+    assert "unlisted-model-7b" not in warning, "a typed id is never echoed"
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "model", "input_modalities"),
+    [
+        ("openrouter-llm", "google/gemini-3.5-flash", ["text"]),
+        ("openrouter-llm", "openai/gpt-4.1-mini", None),
+        ("livekit-inference-llm", "google/gemma-4-31b-it", None),
+        ("livekit-inference-llm", "google/gemini-3.5-flash", None),
+    ],
+)
+def test_the_vision_suggestion_never_names_the_configured_model(
+    provider_id: str, model: str, input_modalities: list[str] | None
+) -> None:
+    ctx = _openrouter_vision_ctx(model, input_modalities=input_modalities)
+    ctx.config.pipeline.llm = ProviderRef(provider_id=provider_id, credential_id=None, model=model)
+    if input_modalities is not None:
+        ctx = dataclasses.replace(ctx, catalog_items={provider_id: ctx.catalog_items["openrouter-llm"]})
+
+    for warning in _vision_warnings(ctx):
+        suggestion = warning.split("—", 1)[-1]
+        assert model not in suggestion
+
+
+def test_an_openrouter_text_only_catalog_item_warns_and_suggests_the_vision_probe() -> None:
+    (warning,) = _vision_warnings(
+        _openrouter_vision_ctx("google/gemini-3.5-flash", input_modalities=["text"])
+    )
+
+    assert "cannot see images (per its catalog capabilities)" in warning
+    assert "vision probe" in warning, "openrouter-llm lists no model marked 'supports video'"
+
+
 def _knowledge_issues(result: Any) -> list[Any]:
     return [issue for issue in result.issues if issue.path == "knowledge.auto_inject"]
 
@@ -80,7 +176,8 @@ def test_validate_auto_inject_with_a_knowledge_base_warns_about_preemptive_gener
 
     assert result.ok is True
     (issue,) = _knowledge_issues(result)
-    assert issue.severity == "warning"
+    assert issue.severity == "warning", "the contracts have no info severity"
+    assert issue.message.startswith("Tip: "), "advisory, not a problem"
     assert "turns off preemptive generation" in issue.message
     assert "search_knowledge" in issue.message
     assert any(w.startswith("knowledge.auto_inject: ") for w in result.warnings)
@@ -118,6 +215,7 @@ def test_validate_auto_inject_with_preemptive_explicitly_on_warns_about_the_disc
     assert result.ok is True
     (issue,) = _knowledge_issues(result)
     assert issue.severity == "warning"
+    assert issue.message.startswith("Tip: ")
     assert "discards the preemptive reply" in issue.message
 
 

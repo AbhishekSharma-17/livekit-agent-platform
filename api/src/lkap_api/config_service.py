@@ -74,13 +74,13 @@ from lkap_contracts.providers import (
     credential_home,
     get,
     validate_model_id,
-    vision_support,
 )
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolDefinition
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.connections.probe import effective_capabilities
+from lkap_api.custom_models.capabilities import resolve_capabilities
 from lkap_api.db.models import (
     Credential,
     KnowledgeBase,
@@ -409,7 +409,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     for slot, ref in ctx.slots():
         _validate_slot(ctx, slot, ref, findings)
 
-    _validate_modes(config, findings)
+    _validate_modes(ctx, findings)
 
     for key in pipeline.turn_handling:
         if key == "turn_detection":
@@ -492,7 +492,8 @@ def _not_installed_message(spec: ProviderSpec, connection: ConnectionContext | N
     )
 
 
-def _validate_modes(config: AgentConfig, findings: _Findings) -> None:
+def _validate_modes(ctx: ValidationContext, findings: _Findings) -> None:
+    config = ctx.config
     pipeline = config.pipeline
     wants_video = config.capabilities.camera or config.capabilities.screen_share
 
@@ -515,16 +516,55 @@ def _validate_modes(config: AgentConfig, findings: _Findings) -> None:
                 )
 
     if pipeline.mode == "cascaded" and pipeline.llm is not None and wants_video:
-        llm_spec = _spec_or_none(pipeline.llm.provider_id)
-        if llm_spec is not None and vision_support(pipeline.llm.provider_id, pipeline.llm.model) is False:
-            model = pipeline.llm.model or llm_spec.default_model
-            findings.add(
-                "warning",
-                "pipeline.llm",
-                f"'{model}' cannot see images; camera/screen share still "
-                "reach the UI and pin_frame, but per-turn vision and describe_current_frame "
-                "are disabled — pick a model marked 'supports video' (e.g. google/gemini-3.5-flash)",
-            )
+        _validate_llm_vision(ctx, pipeline.llm, findings)
+
+
+def _validate_llm_vision(ctx: ValidationContext, ref: ProviderRef, findings: _Findings) -> None:
+    """Warn when the cascaded LLM is known not to see images; a tip when nobody knows (D-V4-24).
+
+    Vision comes from the resolved capabilities (declared → "Test model" →
+    the cached live catalog → the registry), the same answer the worker gets in
+    ``ResolvedProvider.capabilities``, so an OpenRouter model whose catalog item
+    lists ``image`` input is not flagged just because the registry's suggestion
+    list carries no ``supports_video`` flag for it. The model id is quoted only
+    when the registry lists it (a typed id may be a pasted key, R-V4-21), and
+    the suggestion never names the configured model.
+    """
+    spec = _spec_or_none(ref.provider_id)
+    model = ref.model or (spec.default_model if spec is not None else None)
+    if spec is None or spec.kind != "llm" or not model or validate_model_id(model) is not None:
+        return
+    caps = resolve_capabilities(spec, model, ctx.record_for(spec, model), ctx.catalog_item(spec.id, model))
+    if caps.vision is True:
+        return
+    listed = {m.id for m in spec.models}
+    name = f"'{model}'" if model in listed or model == spec.default_model else "this model"
+    if caps.vision is False:
+        findings.add(
+            "warning",
+            "pipeline.llm",
+            f"{name} cannot see images (per its {caps.source or 'registry'} capabilities); camera/screen "
+            "share still reach the UI and pin_frame, but per-turn vision and describe_current_frame "
+            f"are disabled — {_vision_suggestion(spec, model)}",
+        )
+        return
+    findings.add(
+        "warning",
+        "pipeline.llm",
+        f"Tip: whether {name} accepts images is unknown, so camera/screen share frames are still "
+        "sent to it; run Test model with the vision probe, or declare its capabilities, to be sure",
+    )
+
+
+def _vision_suggestion(spec: ProviderSpec, model: str) -> str:
+    """Vision models of the same provider (never ``model`` itself), else the vision probe."""
+    others = [m.id for m in spec.models if m.supports_video and m.id != model]
+    if others:
+        return f"pick a model marked 'supports video' (e.g. {', '.join(others[:2])})"
+    return (
+        "if it does accept images, run Test model with the vision probe or declare its capabilities; "
+        "otherwise pick a vision model"
+    )
 
 
 def _validate_credential(
@@ -613,7 +653,10 @@ def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings:
 
 
 def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
-    """Warn that knowledge auto-inject and preemptive generation do not mix.
+    """A tip that knowledge auto-inject and preemptive generation do not mix.
+
+    Advisory, not a problem: the contracts have only ``error``/``warning``
+    severities, so it is a ``warning`` whose message starts with ``Tip:``.
 
     Auto-inject adds the retrieved text to the chat context in
     ``on_user_turn_completed``; livekit-agents 1.8.2 discards its preemptive
@@ -640,16 +683,16 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
         return []
     if explicit is True:
         message = (
-            "auto-inject changes the conversation on every turn with a knowledge hit, which discards "
-            "the preemptive reply this agent keeps enabled (turn_handling.preemptive_generation) — "
-            "each such turn pays for two LLM calls; turn auto-inject off and rely on the "
-            "search_knowledge tool to keep preemptive generation effective"
+            "Tip: auto-inject changes the conversation on every turn with a knowledge hit, which "
+            "discards the preemptive reply this agent keeps enabled (turn_handling.preemptive_generation), "
+            "so each such turn pays for two LLM calls. Nothing is broken; for faster, cheaper replies, "
+            "turn auto-inject off and let the agent call the search_knowledge tool"
         )
     else:
         message = (
-            "auto-inject turns off preemptive generation for this agent's sessions, so replies start "
-            "only after the caller's turn ends; turn auto-inject off and rely on the search_knowledge "
-            "tool to keep preemptive generation"
+            "Tip: auto-inject turns off preemptive generation for this agent's sessions, so replies "
+            "start only after the caller's turn ends. Nothing is broken; for faster replies, turn "
+            "auto-inject off and let the agent call the search_knowledge tool"
         )
     return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
 

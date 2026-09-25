@@ -21,6 +21,7 @@ the secret values before anything is stored, returned or logged.
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
@@ -51,6 +52,8 @@ PNG_1X1_BASE64 = (
 MIN_AUDIO_BYTES = 1024
 #: Most audio bytes a TTS probe reads before it stops (it reports a count, never the bytes).
 MAX_AUDIO_BYTES = 2_000_000
+#: Content types a raw PCM answer may carry (besides ``audio/*``): headerless samples.
+RAW_PCM_TYPES = frozenset({"application/octet-stream", "binary/octet-stream", ""})
 #: Longest ``sample`` kept (the LLM's word, the STT transcript).
 SAMPLE_MAX = 200
 #: Longest slice of a vendor error body quoted in a probe message (before scrubbing).
@@ -210,14 +213,36 @@ def failure(name: str, response: httpx.Response, latency_ms: int) -> ProbeResult
 
 
 def capability_from_status(status_code: int) -> bool | None:
-    """What a refused optional call (tools, vision) says about the capability.
+    """What a refused optional call (vision) says about the capability.
 
     A 400/404/422 refusal means "not supported"; a 429, a 5xx or an auth error
-    says nothing about the model, so the capability stays unknown.
+    says nothing about the model, so the capability stays unknown. The ``tools``
+    call is read more strictly by :func:`tools_from_refusal`.
     """
     if status_code in (400, 404, 422):
         return False
     return None
+
+
+#: A refusal that names the output budget: the call was cut off, which says nothing
+#: about the capability (``max_tokens`` 4 is shorter than some tool calls, ask #65).
+_BUDGET_REFUSAL = re.compile(r"max_tokens|max_completion_tokens|output limit|token limit|finish_reason", re.I)
+#: A refusal that names the tools parameter itself (the only reading that means "no tools").
+_TOOLS_REFUSAL = re.compile(r"\btools?\b|tool_choice|tool use|tool[ _-]?call|function[ _-]?call", re.I)
+
+
+def tools_from_refusal(status_code: int, reason: str) -> bool | None:
+    """What a refused ``tools`` call says about tool support (D-V4-26, asks #60/#65).
+
+    ``False`` only for a 400/404/422 whose reason names the tools parameter
+    (``tools``, ``tool_choice``, tool use, function calling) and not the output
+    budget. A refusal that names ``max_tokens`` or an output limit, any other
+    4xx, a 429, a 5xx or an auth error is inconclusive (``None``): a truncated
+    tool call must never read as "no tools".
+    """
+    if status_code not in (400, 404, 422) or _BUDGET_REFUSAL.search(reason):
+        return None
+    return False if _TOOLS_REFUSAL.search(reason) else None
 
 
 def json_body(response: httpx.Response) -> Any:
@@ -254,11 +279,15 @@ async def audio_probe(
     headers: Mapping[str, str],
     params: Mapping[str, str] | None = None,
     json: Any = None,
+    raw_audio_types: frozenset[str] = frozenset(),
 ) -> ProbeOutcome:
-    """One TTS request: pass on 2xx, an ``audio/*`` content type and at least 1 KB of body.
+    """One TTS request: pass on 2xx, an audio content type and at least 1 KB of body.
 
-    The body is counted, never kept; ``latency_ms`` is the time to the
-    response headers (TTFB).
+    The content type is audio when it is ``audio/*`` or one of
+    ``raw_audio_types`` (lower case; a probe that asked for raw PCM passes
+    :data:`RAW_PCM_TYPES`, since a headerless stream may come back as
+    ``application/octet-stream`` or untyped). The body is counted, never
+    kept; ``latency_ms`` is the time to the response headers (TTFB).
     """
     start = time.perf_counter()
     async with ctx.client.stream("POST", url, headers=dict(headers), params=params, json=json) as response:
@@ -272,7 +301,8 @@ async def audio_probe(
             size += len(chunk)
             if size >= MAX_AUDIO_BYTES:
                 break
-    ok = content_type.startswith("audio/") and size >= MIN_AUDIO_BYTES
+    is_audio = content_type.lower().startswith("audio/") or content_type.lower() in raw_audio_types
+    ok = is_audio and size >= MIN_AUDIO_BYTES
     described = f"{size} bytes of {content_type or 'an unknown type'}, first byte after {ttfb} ms"
     message = described if ok else f"the answer was not speech audio ({described})"
     return ProbeOutcome(
@@ -382,8 +412,13 @@ class LlmProbe:
     ) -> tuple[bool | None, ProbeResult]:
         response, latency = await self.call(ctx, variant)
         if not response.is_success:
-            found = capability_from_status(response.status_code)
             refused = failure(variant, response, latency)
+            if variant == "tools":
+                found = tools_from_refusal(response.status_code, vendor_text(response))
+                if found is None:
+                    refused = refused.model_copy(update={"message": f"{refused.message} (inconclusive)"})
+            else:
+                found = capability_from_status(response.status_code)
             return found, refused.model_copy(update={"ok": found})
         answer = self.parse(json_body(response))
         usage.tokens_in += answer.tokens_in
@@ -408,6 +443,7 @@ __all__ = [
     "PING_TOOL_DESCRIPTION",
     "PING_TOOL_NAME",
     "PNG_1X1_BASE64",
+    "RAW_PCM_TYPES",
     "SAMPLE_MAX",
     "STT_CLIP_SECONDS",
     "TTS_INPUT",
@@ -428,6 +464,7 @@ __all__ = [
     "failure",
     "json_body",
     "stt_clip",
+    "tools_from_refusal",
     "transcript_outcome",
     "vendor_text",
 ]

@@ -324,9 +324,20 @@ def estimate_cost(
     pricing = catalog_item.meta.get("pricing") if catalog_item is not None else None
     if isinstance(pricing, dict):
         prompt, completion = _decimal(pricing.get("prompt")), _decimal(pricing.get("completion"))
-        if prompt is not None or completion is not None:
+        if (usage.tokens_in or usage.tokens_out) and (prompt is not None or completion is not None):
             cost = (prompt or Decimal(0)) * usage.tokens_in + (completion or Decimal(0)) * usage.tokens_out
             return cost, "from the vendor catalog's per-token pricing"
+        if usage.chars and prompt is not None:
+            # A speech answer carries no usage: OpenRouter prices speech input per
+            # prompt unit (a character for Deepgram Aura-2, $30/1M chars; a token for
+            # Gemini TTS), so the probe's characters × `prompt` is the input side.
+            # Output audio units are unknowable here, so a `completion` price is
+            # left out and the note says so (ask #66).
+            cost = prompt * usage.chars
+            note = f"from the vendor catalog's input pricing × {usage.chars} characters"
+            if completion:
+                note += "; output audio is priced separately and not counted"
+            return cost, note
     return None, f"no price on file for this model; the probe used {_usage_note(usage)}"
 
 

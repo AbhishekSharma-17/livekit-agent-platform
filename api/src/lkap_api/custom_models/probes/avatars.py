@@ -82,12 +82,22 @@ class AnamAvatarProbe(_GetByIdProbe):
 
 
 class SimliFaceMemberProbe:
-    """``GET https://api.simli.ai/faces`` and look for the id in the list."""
+    """``GET https://api.simli.ai/faces`` and look for the id in the list.
+
+    Simli's ``GET /faces`` lists **the account's own faces** (each item carries
+    an ``owner_id``; ``https://api.simli.ai/openapi.yaml``). Simli's preset
+    faces (``https://docs.simli.com/api-reference/preset-faces``) are not in
+    that list, and Simli has no endpoint that lists or reads them; the only
+    other way to learn whether an id works is to start a session, which costs
+    minutes. So a listed id passes, and an unlisted one is **inconclusive**
+    (``ok=None``), never a failure (ask #67). A non-2xx still fails: the key
+    itself was refused.
+    """
 
     name = "simli_face_member"
 
     async def run(self, ctx: ProbeContext) -> ProbeOutcome:
-        """Pass when the key's face list contains the id."""
+        """Pass when the key's face list contains the id; otherwise inconclusive."""
         start = time.perf_counter()
         response = await ctx.client.get(SIMLI_FACES_URL, headers={"x-simli-api-key": ctx.api_key})
         latency = elapsed_ms(start)
@@ -96,10 +106,13 @@ class SimliFaceMemberProbe:
         ids = {item.id for item in parse_items(json_body(response))}
         if ctx.model in ids:
             return _passed(latency, "the id is in this key's face list")
-        message = f"the id is not in this key's face list ({len(ids)} faces listed)"
+        message = (
+            f"the key works, but the id is not among this account's own faces ({len(ids)} listed); "
+            "Simli's preset faces are not listed and can't be verified without starting a session"
+        )
         return ProbeOutcome(
-            ok=False,
-            results=[ProbeResult(name="basic", ok=False, latency_ms=latency, message=message)],
+            ok=None,
+            results=[ProbeResult(name="basic", ok=None, latency_ms=latency, message=message)],
             message=message,
         )
 

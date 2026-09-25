@@ -223,6 +223,61 @@ async def test_a_truncated_tool_answer_is_inconclusive_not_false() -> None:
     assert outcome.results[1].ok is None
 
 
+def _refuse_tools(status: int, message: str) -> Handler:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _body(request).get("tools"):
+            return httpx.Response(status, json={"error": {"message": message}})
+        return _chat_answer(request)
+
+    return handler
+
+
+async def test_a_tool_call_refused_for_the_output_limit_is_inconclusive_not_false() -> None:
+    """Ask #65: LiveKit Inference's gpt-4o-mini answered the 4-token tool call with this 400."""
+    seen: list[dict[str, Any]] = []
+    refuse = _refuse_tools(
+        400, "Could not finish the message because max_tokens or model output limit was reached."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(_body(request))
+        return refuse(request)
+
+    outcome = await PROBES["openai_chat"].run(_ctx("livekit-inference-llm", "openai/gpt-4o-mini", handler))
+
+    assert outcome.ok is True
+    assert outcome.detected.tools is None
+    assert outcome.results[1].ok is None
+    assert outcome.results[1].message is not None and "(inconclusive)" in outcome.results[1].message
+    assert len(seen) == 2, "the reasoning-shape retry must not fire on an output-limit 400"
+    assert all(body.get("max_tokens", body.get("max_completion_tokens")) <= MAX_TOKENS for body in seen)
+
+
+@pytest.mark.parametrize(
+    ("status", "message", "expected"),
+    [
+        (400, "This model does not support tools.", False),
+        (404, "No endpoints found that support tool use.", False),
+        (400, "tool_choice 'required' is not supported by this model", False),
+        (422, "Function calling is not enabled for this model", False),
+        (400, "max_tokens is too small for a tool call", None),
+        (400, "Invalid request: something else went wrong", None),
+        (429, "Rate limit exceeded for tools", None),
+        (500, "internal error", None),
+    ],
+)
+async def test_only_a_refusal_naming_tools_reads_as_no_tools(
+    status: int, message: str, expected: bool | None
+) -> None:
+    outcome = await PROBES["openai_chat"].run(
+        _ctx("groq-llm", "llama-4-scout", _refuse_tools(status, message))
+    )
+
+    assert outcome.ok is True
+    assert outcome.detected.tools is expected
+    assert outcome.results[1].ok is expected
+
+
 async def test_openai_compatible_needs_a_base_url() -> None:
     with pytest.raises(ProbeInputError):
         await PROBES["openai_chat"].run(_ctx("openai-compatible-llm", "my-model", _chat_answer))
@@ -379,6 +434,99 @@ async def test_a_tiny_or_non_audio_answer_fails() -> None:
     outcome = await PROBES["deepgram_speak"].run(_ctx("deepgram-tts", "aura-2-thalia-en", handler))
 
     assert outcome.ok is False
+
+
+_GEMINI_TTS_REFUSAL = 'Gemini TTS only supports response_format="pcm". Got "mp3".'
+
+
+async def test_openai_speech_retries_once_with_pcm_when_the_vendor_refuses_mp3() -> None:
+    """Ask #64: OpenRouter's Gemini TTS takes only pcm, and answers pcm bytes."""
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = _body(request)
+        seen.append(body)
+        if body["response_format"] != "pcm":
+            return httpx.Response(400, json={"error": {"message": _GEMINI_TTS_REFUSAL}})
+        return httpx.Response(200, headers={"content-type": "audio/pcm"}, content=b"\x00\x01" * 4000)
+
+    outcome = await PROBES["openai_speech"].run(
+        _ctx("openrouter-tts", "google/gemini-3.8-flash-tts", handler, fields={"voice": "Kore"})
+    )
+
+    assert outcome.ok is True and outcome.detected.audio_out is True
+    assert [b["response_format"] for b in seen] == ["mp3", "pcm"]
+    assert all(b["input"] == "Hello." and b["voice"] == "Kore" for b in seen)
+    assert outcome.message is not None and "8000 bytes of audio/pcm" in outcome.message
+    assert "retried with pcm" in outcome.message
+    assert len(outcome.results) == 1 and outcome.results[0].ok is True
+    assert outcome.usage.chars == len("Hello.")
+
+
+@pytest.mark.parametrize("content_type", ["application/octet-stream", None])
+async def test_untyped_or_octet_stream_pcm_counts_as_audio(content_type: str | None) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _body(request)["response_format"] != "pcm":
+            return httpx.Response(400, json={"error": {"message": _GEMINI_TTS_REFUSAL}})
+        headers = {"content-type": content_type} if content_type else {}
+        return httpx.Response(200, headers=headers, content=b"\x00" * 4096)
+
+    outcome = await PROBES["openai_speech"].run(
+        _ctx("openrouter-tts", "google/gemini-3.8-flash-tts", handler, fields={"voice": "Kore"})
+    )
+
+    assert outcome.ok is True
+
+
+async def test_an_octet_stream_answer_to_an_mp3_request_is_still_not_speech() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, headers={"content-type": "application/octet-stream"}, content=b"\x00" * 4096
+        )
+
+    outcome = await PROBES["openai_speech"].run(
+        _ctx("openrouter-tts", "deepgram/aura-2", handler, fields={"voice": "aura-2-thalia-en"})
+    )
+
+    assert outcome.ok is False
+
+
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (400, "Invalid voice 'Nobody' for this model"),
+        (404, "google/nope-tts is not a valid model ID"),
+        (401, "pcm"),
+    ],
+)
+async def test_a_refusal_that_does_not_name_the_format_is_not_retried(status: int, message: str) -> None:
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(_body(request))
+        return httpx.Response(status, json={"error": {"message": message}})
+
+    outcome = await PROBES["openai_speech"].run(
+        _ctx("openrouter-tts", "google/gemini-3.8-flash-tts", handler, fields={"voice": "Kore"})
+    )
+
+    assert outcome.ok is False
+    assert len(seen) == 1
+
+
+async def test_a_second_format_refusal_fails_without_a_third_request() -> None:
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(_body(request))
+        return httpx.Response(400, json={"error": {"message": "unsupported response_format"}})
+
+    outcome = await PROBES["openai_speech"].run(
+        _ctx("openrouter-tts", "google/gemini-3.8-flash-tts", handler, fields={"voice": "Kore"})
+    )
+
+    assert outcome.ok is False
+    assert [b["response_format"] for b in seen] == ["mp3", "pcm"]
 
 
 async def test_deepgram_speak_names_the_model_in_the_query() -> None:
@@ -546,13 +694,48 @@ async def test_bey_gets_the_avatar_and_never_posts_a_session() -> None:
     assert "session" not in str(seen[0].url)
 
 
-async def test_simli_checks_list_membership() -> None:
+def _simli_faces(request: httpx.Request) -> httpx.Response:
+    # The `GET /faces` shape of https://api.simli.ai/openapi.yaml: the account's own faces.
+    assert request.method == "GET"
+    assert request.url.path == "/faces"
+    face = {"owner_id": "owner-1", "simli_version": 1, "created_at": "2026-09-01T00:00:00Z"}
+    return httpx.Response(
+        200, json=[{**face, "id": "face-a", "updated_at": "x"}, {**face, "id": "face-b", "updated_at": "x"}]
+    )
+
+
+async def test_simli_passes_a_face_in_the_accounts_own_list() -> None:
+    outcome = await PROBES["simli_face_member"].run(_ctx("simli-avatar", "face-b", _simli_faces))
+
+    assert outcome.ok is True
+
+
+async def test_simli_reads_an_unlisted_face_as_inconclusive_not_failed() -> None:
+    """Ask #67: preset faces (the Survey agent's "Tina") are not in the account's list."""
+    seen: list[httpx.Request] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.method == "GET"
-        return httpx.Response(200, json=[{"id": "face-a"}, {"id": "face-b"}])
+        seen.append(request)
+        return _simli_faces(request)
 
-    present = await PROBES["simli_face_member"].run(_ctx("simli-avatar", "face-b", handler))
-    absent = await PROBES["simli_face_member"].run(_ctx("simli-avatar", "face-z", handler))
+    outcome = await PROBES["simli_face_member"].run(
+        _ctx("simli-avatar", "cace3ef7-a4c4-425d-a8cf-a5358eb0c427", handler)
+    )
 
-    assert present.ok is True
-    assert absent.ok is False
+    assert outcome.ok is None
+    assert outcome.results[0].ok is None
+    assert outcome.message is not None
+    assert "can't be verified without starting a session" in outcome.message
+    assert "2 listed" in outcome.message
+    assert [r.method for r in seen] == ["GET"], "never a session"
+
+
+async def test_simli_an_empty_list_is_inconclusive_and_a_refused_key_fails() -> None:
+    def empty(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    def refused(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"detail": "Invalid API key"})
+
+    assert (await PROBES["simli_face_member"].run(_ctx("simli-avatar", "face-z", empty))).ok is None
+    assert (await PROBES["simli_face_member"].run(_ctx("simli-avatar", "face-z", refused))).ok is False

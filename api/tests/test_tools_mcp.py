@@ -6,6 +6,7 @@ override (the same shape as the worker's ``test_mcp_guard.py`` fake): no network
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
@@ -21,7 +22,7 @@ from sqlalchemy import select
 from lkap_api import net_guard
 from lkap_api.db.models import Tool
 from lkap_api.db.session import Database
-from lkap_api.mcp_test import MAX_TOOLS
+from lkap_api.mcp_test import MAX_TOOLS, McpTestError, list_mcp_tools
 from lkap_api.settings import Settings
 
 MCP_URL = "https://mcp.example.com/mcp"
@@ -507,6 +508,49 @@ async def test_the_test_route_refuses_a_stored_oauth_row(
     assert response.status_code == 422
     assert response.json()["error"]["details"]["reason"] == "oauth_not_available"
     assert server.requests == []
+
+
+async def test_a_legacy_row_never_resaved_still_resolves_for_the_worker(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    """Compatibility (PLAN-V5 §0.1): a pre-V5-09 row reaches its first session unchanged in effect."""
+    credential_id = await _credential(admin_client, {"KEY": TOOL_SECRET})
+    tool_id = await _insert_row(
+        database,
+        {
+            "kind": "mcp",
+            "name": "crm",
+            "url": MCP_URL,
+            "headers": {"x-api-key": "{{ secret.KEY }}"},
+            "credential_id": credential_id,
+        },
+    )
+    config = json.loads(inference_config().model_dump_json())
+    config["tools"]["tool_ids"] = [tool_id]
+    agent = await create_agent(admin_client, name="Legacy MCP agent", config=config)
+    session_id = (await admin_client.post(f"/v1/agents/{agent['id']}/connect", json={})).json()["sessionId"]
+
+    raw = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+    (definition,) = ResolvedAgentConfig.model_validate(raw).tools
+
+    assert isinstance(definition, McpServerDefinition)
+    assert definition.headers == {"x-api-key": TOOL_SECRET}
+    assert definition.auth == McpHeaderAuth(headers={"x-api-key": TOOL_SECRET}, credential_id=None)
+    assert credential_id not in json.dumps(raw)
+
+
+async def test_the_whole_test_connection_is_bounded_in_time() -> None:
+    """A server that never finishes answering cannot hold the admin request open."""
+
+    async def slow(_request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(5)
+        return httpx.Response(200)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(slow)) as client:
+        with pytest.raises(McpTestError) as caught:
+            await list_mcp_tools(MCP_URL, {}, client=client, timeout_s=0.05)
+
+    assert caught.value.reason == "unreachable"
 
 
 async def test_the_test_route_is_mcp_only(admin_client: httpx.AsyncClient) -> None:

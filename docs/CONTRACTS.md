@@ -203,7 +203,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_CORS_ORIGINS` | opt | — | — | default `http://localhost:3000` |
 | `LKAP_PUBLIC_BASE_URL` | opt | — | — | used in connect response for asset links; also the origin of the Apps sign-in return address (`/v1/tool-providers/composio/callback`), falling back to the api's own url (V5-18) |
 | `LKAP_PACKS` | opt | opt | — | default `packs.insurance_claim,packs.generic` |
-| `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | — | opt | — | comma list; empty = only per-tool allowlist |
+| `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | opt | opt | — | comma list; empty = only per-tool allowlist (the api reads it only for `LKAP_MCP_ALLOWED_HOSTS=@http`) |
 | `LKAP_MCP_ALLOWED_HOSTS` | opt | opt | — | comma list of MCP server hosts (V5-09, D-V5-4); empty = any public `https` host that passes the network guard, non-empty = a ceiling, `@http` = reuse `LKAP_HTTP_TOOL_ALLOWED_HOSTS` (then empty allows nothing). Set the same value on both |
 | `LKAP_LOG_LEVEL` / `LKAP_LOG_JSON` | opt | opt | — | `INFO` / `false` |
 | `LKAP_EMBEDDER` | opt | — | — | `fastembed` (default) or `openai:<credential_id>` |

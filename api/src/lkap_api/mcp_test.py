@@ -18,6 +18,7 @@ hostile server must not be able to grow that row without bound.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any, Final, Literal
@@ -39,6 +40,8 @@ MAX_DESCRIPTION_CHARS: Final[int] = 1000
 MAX_SCHEMA_BYTES: Final[int] = 16_000
 #: An event-stream answer longer than this is refused.
 MAX_STREAM_BYTES: Final[int] = 2_000_000
+#: The whole test (every request) gives up after this many per-request timeouts.
+TOTAL_TIMEOUT_FACTOR: Final[int] = 3
 
 McpTestReason = Literal["blocked_destination", "needs_auth", "unreachable", "protocol_error", "http_error"]
 
@@ -189,6 +192,37 @@ def _snapshot(tool: object) -> McpToolSnapshot | None:
     )
 
 
+async def _list_tools(session: _Session) -> list[McpToolSnapshot]:
+    initialized = await _call(
+        session,
+        "initialize",
+        {
+            "protocolVersion": PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "lkap-api", "version": "0.1"},
+        },
+    )
+    version = initialized.get("protocolVersion")
+    session.protocol_version = version if isinstance(version, str) else PROTOCOL_VERSION
+    await _notify(session, "notifications/initialized")
+    tools: list[McpToolSnapshot] = []
+    cursor: str | None = None
+    for _page in range(MAX_PAGES):
+        result = await _call(session, "tools/list", {"cursor": cursor} if cursor else None)
+        listed = result.get("tools")
+        if not isinstance(listed, list):
+            raise McpTestError("protocol_error", "the server's tools/list answer has no tools")
+        for item in listed:
+            snapshot = _snapshot(item)
+            if snapshot is not None and len(tools) < MAX_TOOLS:
+                tools.append(snapshot)
+        next_cursor = result.get("nextCursor")
+        if not isinstance(next_cursor, str) or not next_cursor or len(tools) >= MAX_TOOLS:
+            break
+        cursor = next_cursor
+    return tools
+
+
 async def list_mcp_tools(
     url: str, headers: dict[str, str], *, client: httpx.AsyncClient, timeout_s: float
 ) -> list[McpToolSnapshot]:
@@ -208,34 +242,12 @@ async def list_mcp_tools(
     """
     session = _Session(url=url, headers=headers, client=client, timeout_s=timeout_s)
     try:
-        initialized = await _call(
-            session,
-            "initialize",
-            {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": {"name": "lkap-api", "version": "0.1"},
-            },
-        )
-        version = initialized.get("protocolVersion")
-        session.protocol_version = version if isinstance(version, str) else PROTOCOL_VERSION
-        await _notify(session, "notifications/initialized")
-        tools: list[McpToolSnapshot] = []
-        cursor: str | None = None
-        for _page in range(MAX_PAGES):
-            result = await _call(session, "tools/list", {"cursor": cursor} if cursor else None)
-            listed = result.get("tools")
-            if not isinstance(listed, list):
-                raise McpTestError("protocol_error", "the server's tools/list answer has no tools")
-            for item in listed:
-                snapshot = _snapshot(item)
-                if snapshot is not None and len(tools) < MAX_TOOLS:
-                    tools.append(snapshot)
-            next_cursor = result.get("nextCursor")
-            if not isinstance(next_cursor, str) or not next_cursor or len(tools) >= MAX_TOOLS:
-                break
-            cursor = next_cursor
-        return tools
+        # Each request has its own timeout; this bounds the whole exchange, so a server
+        # that drips an event stream cannot hold the admin request open.
+        async with asyncio.timeout(timeout_s * TOTAL_TIMEOUT_FACTOR):
+            return await _list_tools(session)
+    except TimeoutError as exc:
+        raise McpTestError("unreachable", "the server did not finish answering in time") from exc
     except httpx.TimeoutException as exc:
         raise McpTestError("unreachable", "the server did not answer in time") from exc
     except httpx.HTTPError as exc:

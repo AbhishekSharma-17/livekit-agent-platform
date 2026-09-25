@@ -65,6 +65,10 @@ class ComposioWorld:
     failures: dict[str, ToolProviderError] = field(default_factory=dict)
     #: Raised by ``session_info`` (to exercise the key test's fallback).
     session_info_error: ToolProviderError | None = None
+    #: Live Tool Router sessions (V5-47): ``session id -> {subject, options}``.
+    sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Where session MCP urls point (a test sets another host to exercise the pin).
+    session_url_base: str = "https://backend.composio.dev/tool_router"
     _ids: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
 
     def factory(self, api_key: str) -> ToolProviderAdapter:
@@ -274,10 +278,21 @@ class FakeComposio:
 
     async def create_router_session(self, *, subject: str, options: dict[str, Any]) -> dict[str, Any]:
         self._enter("create_router_session", subject=subject, options=options)
-        return {"session_id": self.world.next_id("trs"), "mcp": {"type": "http", "url": ""}}
+        session_id = self.world.next_id("trs")
+        url = f"{self.world.session_url_base}/{session_id}/mcp"
+        self.world.sessions[session_id] = {"subject": subject, "options": copy.deepcopy(options)}
+        return {
+            "session_id": session_id,
+            "mcp": {"type": "http", "url": url},
+            "tool_router_tools": ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL"],
+            "config_version": 1,
+            "warnings": [],
+        }
 
     async def delete_router_session(self, session_id: str) -> None:
         self._enter("delete_router_session", session_id=session_id)
+        if self.world.sessions.pop(session_id, None) is None:
+            raise ToolProviderNotFoundError("Session not found", status=404)
 
 
 __all__ = ["FIXTURES", "VALID_KEY", "Call", "ComposioWorld", "FakeComposio"]

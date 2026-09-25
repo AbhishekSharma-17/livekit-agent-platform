@@ -8,6 +8,7 @@ import { FileTextIcon, PlugIcon, WorkflowIcon, WrenchIcon } from "lucide-react";
 
 import { AgentEditor } from "@/components/console/agents/agent-editor";
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
+import { resetEstimateSettings } from "@/components/console/lib/cost-hooks";
 import type { EditorSectionDef, EditorSectionProps } from "@/components/console/agents/editor/types";
 import { guardedHref } from "@/components/console/agents/editor/unsaved-guard";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
@@ -156,6 +157,35 @@ function makeAgent(overrides: Partial<AgentOut> = {}): AgentOut {
   };
 }
 
+/** A minimal-but-shaped `CostEstimate` (docs/v4/COSTS.md §3.1) for the rail/dialog. */
+const COST_ESTIMATE_FIXTURE = {
+  per_minute_usd: { low: "0.03", mid: "0.04", high: "0.05" },
+  per_session_usd: { low: "0.15", mid: "0.20", high: "0.25" },
+  session_minutes: 5,
+  channel: "web",
+  lines: [
+    {
+      slot: "llm",
+      label: "Agent's thinking",
+      provider_id: "livekit-inference-llm",
+      model: "openai/gpt-4o-mini",
+      unit: "tokens_in",
+      quantity_per_min: "7860",
+      quote: { provider_id: "livekit-inference-llm", unit: "tokens_in", usd_per_unit: "0.00000015", source: "table", as_of: "2026-09-23" },
+      usd_per_min: "0.0012",
+    },
+  ],
+  assumptions: [
+    { key: "agent_talk_ratio", value: 0.45, low: 0.3, high: 0.6, unit: "share", source: "default", label: "How much the agent talks" },
+  ],
+  unpriced: [],
+  priced_share: 1,
+  price_version: "2026-09-23",
+  as_of: "2026-09-23",
+  sources: ["table"],
+  caveats: [],
+};
+
 interface Server {
   agent: AgentOut;
   validation: ValidationResult;
@@ -208,6 +238,13 @@ function stubServer(agent: AgentOut, validation: ValidationResult = { ok: true, 
       if (path === "providers") return json(200, { providers: [] });
       if (path === "packs") return json(200, { items: [] });
       if (path === "tools") return json(200, { items: [], total: 0 });
+      // V4-16: the rail's shared cost estimate (docs/v4/COSTS.md §5 item 1) —
+      // every editor render debounces one of these, so every stub server
+      // needs an answer or the shell's fetch mock throws for it.
+      if (path === "cost-estimates" && method === "POST") return json(200, COST_ESTIMATE_FIXTURE);
+      if (path === "cost-estimates/assumptions" && method === "GET") {
+        return json(200, { assumptions: COST_ESTIMATE_FIXTURE.assumptions, sessions_sampled: 3 });
+      }
       if (path === "auth/me") {
         return json(200, {
           user: { id: "u1", email: "admin@example.test" },
@@ -280,6 +317,10 @@ beforeEach(() => {
   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
   Element.prototype.scrollIntoView = vi.fn();
   searchParams = new URLSearchParams();
+  // Every `renderEditor()` here estimates the same fixed agent id by
+  // default; the cost-estimate settings cache/localStorage is per-agent and
+  // module-level (by design), so it must not leak between tests.
+  resetEstimateSettings();
 });
 
 afterEach(() => {
@@ -695,5 +736,17 @@ describe("summary rail", () => {
     await screen.findByText("Unsaved changes");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(server.puts[0]?.description).toBe("Answers claim calls"));
+  });
+
+  it("shows the estimated cost with its band and opens the estimate dialog (docs/v4/COSTS.md §5 item 1)", async () => {
+    renderEditor();
+    await ready();
+    const rail = screen.getByRole("complementary", { name: "Agent summary" });
+    await waitFor(() => expect(within(rail).getByText(/≈ \$0\.0400\/min · estimate/)).toBeTruthy(), { timeout: 3000 });
+    expect(within(rail).getByText(/typically \$0\.0300–\$0\.0500/)).toBeTruthy();
+
+    fireEvent.click(within(rail).getByRole("button", { name: /Cost/ }));
+    const dialog = await findDialog("Cost estimate");
+    expect(within(dialog).getByText(/Agent's thinking/)).toBeTruthy();
   });
 });

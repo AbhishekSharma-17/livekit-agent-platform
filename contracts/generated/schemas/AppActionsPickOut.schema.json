@@ -27,11 +27,19 @@
       "type": "array"
     },
     "tools_created": {
-      "description": "Tool ids created (empty until V5-47 lands)",
+      "description": "Ids of the agent tools created for the picked actions",
       "items": {
         "type": "string"
       },
       "title": "Tools Created",
+      "type": "array"
+    },
+    "tools_existing": {
+      "description": "Ids of tools that already existed for picked actions",
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools Existing",
       "type": "array"
     }
   },

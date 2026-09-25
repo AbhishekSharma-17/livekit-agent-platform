@@ -18,6 +18,12 @@ WEBHOOK_DELIVERY = "webhook_delivery"
 QA_SCORING = "qa_scoring"
 USAGE_DAILY_ROLLUP = "usage_daily_rollup"
 
+#: V5-04 (D-V5-12, single writer): removes a deleted document's or knowledge
+#: base's vectors (and any chunk row an in-flight ingest left behind), so in
+#: production only the `jobs` process writes to the vector store. Enqueued by
+#: the delete routes in `routers/knowledge.py`; handler in `kb/jobs.py`.
+KB_DELETE = "kb_delete"
+
 #: Reserved for other packages' handlers (PLAN-V2 §"V2-08" scope line); this
 #: package never enqueues these itself.
 CONNECTION_PROBE = "connection_probe"

@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "PriceQuoteItemIn": {
+      "description": "One provider/model to quote.",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "PriceQuoteItemIn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/PriceQuotesRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/pricing/quotes``.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/PriceQuoteItemIn"
+      },
+      "maxItems": 100,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "PriceQuotesRequest",
+  "type": "object"
+}

@@ -3,6 +3,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "One day or one agent in ``AnalyticsSummary``.",
   "properties": {
+    "accuracy_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "actual / estimated x 100 over the sessions that have both figures.",
+      "title": "Accuracy Pct"
+    },
     "cost_usd": {
       "anyOf": [
         {
@@ -18,6 +31,22 @@
       ],
       "default": null,
       "title": "Cost Usd"
+    },
+    "estimated_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Usd"
     },
     "failed": {
       "default": 0,
@@ -36,6 +65,11 @@
     "sessions": {
       "default": 0,
       "title": "Sessions",
+      "type": "integer"
+    },
+    "sessions_estimated": {
+      "default": 0,
+      "title": "Sessions Estimated",
       "type": "integer"
     }
   },

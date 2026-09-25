@@ -36,7 +36,15 @@ Rules for the table:
   the id starts with, followed by ``-`` (``aura-2-andromeda-en`` → ``aura-2``;
   ``aura-2`` never prices ``aura-20``). The model-agnostic row is the last
   fallback (R-V4-61). Other kinds do not take the step: an LLM variant
-  (``gpt-4.1-nano``) is not priced at its family's rate (``gpt-4.1``).
+  (``gpt-4.1-nano``) is not priced at its family's rate (``gpt-4.1``). A TTS
+  quality variant gets its own row so it never falls through to its base
+  (``tts-1-hd`` is not ``tts-1``; R-V4-66).
+* The one rule that crosses kinds is the **dated snapshot**: an id that is a
+  row ``model`` followed by ``-YYYY-MM-DD`` (a real calendar date) resolves to
+  that row, as OpenAI lists its snapshots under the model's price
+  (``gpt-4o-2024-08-06`` → ``gpt-4o``). Nothing else does: an alphabetic
+  variant (``nano``, ``mini``, ``lite``, ``hd``, ``turbo``, ``audio``) is a
+  different product, and ``gpt-4.1-nano-2026`` is not a date (R-V4-66).
 
 Pseudo provider ids (not registry entries; priced from LKAP's own clocks, rows
 in :data:`INFRA_PRICES`):
@@ -55,6 +63,7 @@ rows" (``openai-responses-llm`` → ``openai-llm``); it is never a self-referenc
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, cast, get_args
@@ -282,9 +291,10 @@ PRICES: list[Price] = [
     _openai("gpt-realtime-mini", "audio_tokens_in", "10.00", "openai-realtime"),
     _openai("gpt-realtime-mini", "audio_tokens_out", "20.00", "openai-realtime"),
     # ---------------------------------------------------------------- OpenAI TTS
-    # `tts-1` per character; `gpt-4o-mini-tts` per token (text in, audio out) — the
+    # `tts-1` and `tts-1-hd` per character (R-V4-66); `gpt-4o-mini-tts` per token (text in, audio out) — the
     # SDK reports `TTSModelUsage.input_tokens/output_tokens` for it.
     _row("openai-tts", "tts-1", "chars", Decimal("15.00") / _M, _OPENAI, tier_note=_OPENAI_TIER),
+    _row("openai-tts", "tts-1-hd", "chars", Decimal("30.00") / _M, _OPENAI, tier_note=_OPENAI_TIER),
     _openai("gpt-4o-mini-tts", "tokens_in", "0.60", "openai-tts"),
     _openai("gpt-4o-mini-tts", "tokens_out", "12.00", "openai-tts"),
     # ---------------------------------------------------------------- OpenAI STT (token-billed)
@@ -598,8 +608,10 @@ def _all_rows() -> Iterable[Price]:
 def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:
     """Return the table price for a provider/model/unit triple, or ``None`` if unknown.
 
-    The table half of :func:`quote`, in three steps for the same provider and
-    unit: the exact model row; else, for a TTS entry, the longest family prefix
+    The table half of :func:`quote`, in four steps for the same provider and
+    unit: the exact model row; else, for any kind, the row of a dated snapshot's
+    model (``gpt-4o-2024-08-06`` → ``gpt-4o``; the suffix must be a real
+    ``-YYYY-MM-DD`` date); else, for a TTS entry, the longest family prefix
     (a row ``model`` the id starts with, followed by ``-``:
     ``aura-2-andromeda-en`` → ``aura-2``, never ``aura-20`` or ``aura-2_x``);
     else the model-agnostic row. No ``price_ref`` aliasing happens here.
@@ -613,6 +625,8 @@ def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:
         The matching :class:`Price`, or ``None`` when the table has no entry —
         callers must record "no price", never a zero cost.
     """
+    snapshot_of = _snapshot_base(model)
+    snapshot: Price | None = None
     family: Price | None = None
     fallback: Price | None = None
     by_family = model is not None and _kind(provider_id) == "tts"
@@ -623,6 +637,8 @@ def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:
             fallback = fallback or price
         elif price.model == model:
             return price
+        elif snapshot_of is not None and price.model == snapshot_of:
+            snapshot = snapshot or price
         elif (
             by_family
             and model is not None
@@ -630,7 +646,25 @@ def lookup(provider_id: str, model: str | None, unit: Unit) -> Price | None:
             and (family is None or len(price.model) > len(family.model or ""))
         ):
             family = price
-    return family or fallback
+    return snapshot or family or fallback
+
+
+#: A dated snapshot suffix (``-2024-08-06``): the one cross-kind lookup rule (R-V4-66).
+_SNAPSHOT_RE = re.compile(r"^(?P<base>.+)-(?P<date>\d{4}-\d{2}-\d{2})$")
+
+
+def _snapshot_base(model: str | None) -> str | None:
+    """The model a dated snapshot id names (``gpt-4o-2024-08-06`` → ``gpt-4o``), else ``None``."""
+    if model is None:
+        return None
+    match = _SNAPSHOT_RE.match(model)
+    if match is None:
+        return None
+    try:
+        dt.date.fromisoformat(match["date"])
+    except ValueError:
+        return None
+    return match["base"]
 
 
 def price_alias(provider_id: str) -> str:

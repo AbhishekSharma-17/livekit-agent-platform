@@ -238,6 +238,70 @@ def test_an_llm_variant_is_not_priced_at_its_familys_rate() -> None:
     assert pricing.lookup("openai-llm", "gpt-4.1-nano-2026", "tokens_in") is None
 
 
+def _row_of(provider_id: str, model: str, unit: str) -> Price:
+    return next(r for r in PRICES if (r.provider_id, r.model, r.unit) == (provider_id, model, unit))
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "model", "unit", "base"),
+    [
+        ("openai-llm", "gpt-4o-2024-08-06", "tokens_in", "gpt-4o"),
+        ("openai-llm", "gpt-4.1-2025-04-14", "tokens_out", "gpt-4.1"),
+        ("openai-tts", "gpt-4o-mini-tts-2025-03-20", "tokens_out", "gpt-4o-mini-tts"),
+    ],
+)
+def test_a_dated_snapshot_is_priced_at_its_models_row(
+    provider_id: str, model: str, unit: Any, base: str
+) -> None:
+    """R-V4-66: `<row model>-YYYY-MM-DD` resolves to that row, for every kind."""
+    assert pricing.lookup(provider_id, model, unit) is _row_of(provider_id, base, unit)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gpt-4.1-nano-2026",  # not a date
+        "gpt-4.1-nano",  # an alphabetic variant is a different product
+        "gpt-4.1-nano-2025-04-14",  # a dated snapshot of an unpriced model
+        "gpt-4o-2024-13-40",  # not a real calendar date
+        "gpt-4o-20240806",  # not the `-YYYY-MM-DD` shape
+        "gpt-4o-audio-preview",
+    ],
+)
+def test_only_a_dated_snapshot_crosses_kinds(model: str) -> None:
+    """Nothing but a real `-YYYY-MM-DD` suffix on a row's model resolves an LLM id to that row."""
+    assert pricing.lookup("openai-llm", model, "tokens_in") is None
+
+
+def test_tts_1_hd_has_its_own_row_not_tts_1s() -> None:
+    """R-V4-66: the quality variant never falls through to its base's family row."""
+    hd = _row_of("openai-tts", "tts-1-hd", "chars")
+    assert hd.usd_per_unit == Decimal("30.00") / Decimal(1_000_000)
+    assert pricing.lookup("openai-tts", "tts-1-hd", "chars") is hd
+    q = quote("openai-tts", "tts-1-hd", "chars", now=NOW)
+    assert q is not None and q.usd_per_unit == hd.usd_per_unit and q.source == "table"
+
+
+#: Alphabetic segments that name a different product, never a voice of a family (R-V4-66).
+QUALITY_VARIANTS = {"hd", "turbo", "mini", "nano", "lite", "audio", "max", "pro", "flash"}
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "model"),
+    [(spec.id, m.id) for spec in providers.by_kind("tts", status=None) for m in spec.models],
+)
+def test_a_registry_tts_id_priced_by_family_is_a_voice_of_it(provider_id: str, model: str) -> None:
+    """A registry TTS id priced by family is a voice of that family, never a quality variant of it."""
+    alias = pricing.price_alias(provider_id)
+    for unit in UNITS:
+        row = pricing.lookup(alias, model, unit)  # type: ignore[arg-type]
+        if row is None or row.model is None or row.model == model:
+            continue
+        assert model.startswith(row.model + "-")
+        first = model[len(row.model) + 1 :].split("-")[0]
+        assert first not in QUALITY_VARIANTS, f"{model} fell through to {row.model}"
+
+
 def test_a_livekit_inference_tts_voice_takes_the_family_step() -> None:
     q = quote("livekit-inference-tts", "deepgram/aura-2-thalia-en", "chars", now=NOW)
     assert q is not None and q.usd_per_unit == Decimal("30.00") / Decimal(1_000_000)

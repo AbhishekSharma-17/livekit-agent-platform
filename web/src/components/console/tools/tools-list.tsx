@@ -329,7 +329,8 @@ function ToolActions({
             </Button>
           }
         />
-      ) : (
+      ) : isProviderTool(tool) ? null : (
+        // An app action has its own editor (R-V5-8, V5-50); until then no Edit here.
         <McpToolEditorDialog
           agentId={tool.agent_id ?? null}
           tool={tool}

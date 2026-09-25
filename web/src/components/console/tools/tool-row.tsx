@@ -103,7 +103,8 @@ export function ToolRow({
               </Button>
             }
           />
-        ) : (
+        ) : "tool_slug" in tool.definition ? null : (
+          // An app action has its own editor (R-V5-8, V5-50); until then no Edit here.
           <McpToolEditorDialog
             agentId={agentId}
             tool={tool}

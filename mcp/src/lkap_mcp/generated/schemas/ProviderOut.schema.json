@@ -616,7 +616,8 @@
         "noise_cancellation",
         "image_gen",
         "embedding",
-        "secret_bag"
+        "secret_bag",
+        "tool_provider"
       ],
       "title": "Kind",
       "type": "string"

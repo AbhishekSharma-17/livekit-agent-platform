@@ -1,0 +1,57 @@
+{
+  "$id": "lkap-contracts/AppKeyTestOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a key test found; ``message`` is safe to show as is.",
+  "properties": {
+    "account_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account Name"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "project_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project Name"
+    },
+    "toolkits_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Toolkits Count"
+    }
+  },
+  "required": [
+    "ok",
+    "message"
+  ],
+  "title": "AppKeyTestOut",
+  "type": "object"
+}

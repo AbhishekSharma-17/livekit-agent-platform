@@ -50,6 +50,7 @@ TOOL_MODULES: list[str] = [
     "lkap_mcp.tools.sessions",
     "lkap_mcp.tools.webhooks",
     "lkap_mcp.tools.telephony",
+    "lkap_mcp.tools.apps",  # V5-18: connected apps (Composio)
     "lkap_mcp.tools.generic",
     "lkap_mcp.chat.tools",  # V3-02; optional until it lands
 ]

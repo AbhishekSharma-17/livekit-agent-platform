@@ -42,9 +42,38 @@ CACHE_TTL_S = 600
 TIMEOUT_S = 10.0
 
 
+#: Providers tested by their own key check instead of a catalog adapter (V5-18): the
+#: Composio key is checked against the project it belongs to, not by listing apps
+#: (its app list is not a reliable key check, and it is no provider catalog).
+TOOL_PROVIDER_TESTS: frozenset[str] = frozenset({"composio"})
+
+
 def has_adapter(spec: ProviderSpec) -> bool:
-    """Whether :func:`run` can test this provider (it has a registered adapter)."""
+    """Whether :func:`run` can test this provider (a catalog adapter, or a tool-provider key check)."""
+    if spec.id in TOOL_PROVIDER_TESTS:
+        return True
     return spec.test is not None and get_adapter(spec.test) is not None
+
+
+async def _run_tool_provider(
+    spec: ProviderSpec, secrets: dict[str, str], client: httpx.AsyncClient
+) -> CredentialTestResult:
+    """The Composio key check (``lkap_api.tool_providers.service.test_key``) as a credential test."""
+    # Deferred: the tool-provider package imports the vault and the db models.
+    from lkap_api.tool_providers.composio import ComposioAdapter  # noqa: PLC0415
+    from lkap_api.tool_providers.service import test_key  # noqa: PLC0415
+
+    checked_at = utcnow()
+    try:
+        outcome = await asyncio.wait_for(
+            test_key(ComposioAdapter(client, secrets.get("api_key", "")), api_key=secrets.get("api_key", "")),
+            timeout=TIMEOUT_S * 3,
+        )
+    except TimeoutError:
+        log.warning("credential_test_failed", provider_id=spec.id, error_type="TimeoutError")
+        return CredentialTestResult(ok=False, message="request failed: TimeoutError", checked_at=checked_at)
+    log.info("credential_tested", provider_id=spec.id, ok=outcome.ok)
+    return CredentialTestResult(ok=outcome.ok, message=outcome.message, checked_at=checked_at)
 
 
 def is_cache_fresh(last_test_at: dt.datetime | None, *, now: dt.datetime | None = None) -> bool:
@@ -82,6 +111,8 @@ async def run(
         Otherwise always a result: a vendor failure is reported as
         ``ok=False``, never raised.
     """
+    if spec.id in TOOL_PROVIDER_TESTS:
+        return await _run_tool_provider(spec, secrets, client)
     if not spec.test:
         return None
     adapter = get_adapter(spec.test)
@@ -114,4 +145,12 @@ async def run(
     )
 
 
-__all__ = ["CACHE_TTL_S", "TIMEOUT_S", "cached_result", "has_adapter", "is_cache_fresh", "run"]
+__all__ = [
+    "CACHE_TTL_S",
+    "TIMEOUT_S",
+    "TOOL_PROVIDER_TESTS",
+    "cached_result",
+    "has_adapter",
+    "is_cache_fresh",
+    "run",
+]

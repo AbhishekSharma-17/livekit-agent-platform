@@ -1,0 +1,89 @@
+{
+  "$id": "lkap-contracts/AppsStatusOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/tool-providers/composio/status``: the Apps section header.",
+  "properties": {
+    "connections": {
+      "default": 0,
+      "title": "Connections",
+      "type": "integer"
+    },
+    "credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "enabled": {
+      "description": "A key exists and the provider is on for this workspace",
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "fingerprint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fingerprint"
+    },
+    "last_test_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test At"
+    },
+    "last_test_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Message"
+    },
+    "last_test_ok": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Test Ok"
+    },
+    "paused_tools": {
+      "default": 0,
+      "description": "Tools switched off while the provider is disabled",
+      "title": "Paused Tools",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "enabled"
+  ],
+  "title": "AppsStatusOut",
+  "type": "object"
+}

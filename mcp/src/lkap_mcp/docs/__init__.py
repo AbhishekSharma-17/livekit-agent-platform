@@ -72,6 +72,7 @@ CONCEPT_TOPICS: Final[tuple[str, ...]] = (
     "webhooks",
     "sessions-and-test-chat",
     "roles-and-scopes",
+    "apps",  # V5-18
 )
 
 #: The 10 recipes of AGENT-ACCESS.md §3.1.
@@ -88,6 +89,7 @@ RECIPE_NAMES: Final[tuple[str, ...]] = (
     "test-and-publish",
     "test-a-custom-model",
     "diagnose-a-session",
+    "connect-an-app",  # V5-18
 )
 
 #: The 7 prompts of AGENT-ACCESS.md §3.2.

@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "AppActionOut": {
+      "description": "One Composio tool (an app's action), trimmed.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "important": {
+          "default": false,
+          "description": "Composio marks it as a featured action",
+          "title": "Important",
+          "type": "boolean"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "description": "The action's JSON Schema input",
+          "title": "Parameters",
+          "type": "object"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write",
+            "destructive"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "slug",
+        "name"
+      ],
+      "title": "AppActionOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AppActionPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A page of an app's actions.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/AppActionOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Cursor"
+    },
+    "total": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Total"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "AppActionPage",
+  "type": "object"
+}

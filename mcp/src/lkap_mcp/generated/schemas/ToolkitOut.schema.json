@@ -1,0 +1,155 @@
+{
+  "$defs": {
+    "AppAuthField": {
+      "description": "One field the Connect dialog asks for (never a stored value).",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "secret": {
+          "default": true,
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "title": "AppAuthField",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ToolkitOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One Composio toolkit (an app), trimmed for the console gallery.",
+  "properties": {
+    "auth": {
+      "description": "The ways this app can be connected, best first",
+      "items": {
+        "enum": [
+          "oauth_managed",
+          "oauth_custom",
+          "api_key",
+          "bearer",
+          "basic",
+          "none"
+        ],
+        "type": "string"
+      },
+      "title": "Auth",
+      "type": "array"
+    },
+    "auth_fields": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/AppAuthField"
+        },
+        "type": "array"
+      },
+      "description": "Per auth option, the fields the Connect dialog asks for (one-app read only)",
+      "title": "Auth Fields",
+      "type": "object"
+    },
+    "auth_guide_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vendor's setup guide for your own OAuth app",
+      "title": "Auth Guide Url"
+    },
+    "categories": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Categories",
+      "type": "array"
+    },
+    "connected": {
+      "default": false,
+      "description": "Whether this workspace has an active connection to it",
+      "title": "Connected",
+      "type": "boolean"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "That connection's id, when connected",
+      "title": "Connection Id"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "logo": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vendor's logo URL; shown by the console, never proxied",
+      "title": "Logo"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "oauth_redirect_uri": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The redirect URI to register in your own OAuth app (custom OAuth only)",
+      "title": "Oauth Redirect Uri"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    },
+    "tools_count": {
+      "default": 0,
+      "title": "Tools Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "slug",
+    "name"
+  ],
+  "title": "ToolkitOut",
+  "type": "object"
+}

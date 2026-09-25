@@ -4517,6 +4517,448 @@
         "webhooks:write"
       ]
     },
+    "apps_actions": {
+      "_meta": {
+        "lkap/data": [
+          "AppActionPage"
+        ],
+        "lkap/scopes": [
+          "providers:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "AppActionPage",
+      "description": "An app's actions, each labelled read, write or destructive, with its input schema.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cursor"
+          },
+          "important": {
+            "default": false,
+            "description": "Only Composio's featured actions",
+            "title": "Important",
+            "type": "boolean"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Query"
+          },
+          "toolkit": {
+            "description": "The app's slug, from apps_list",
+            "title": "Toolkit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "toolkit"
+        ],
+        "title": "apps_actionsArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "providers:read"
+      ],
+      "write_scopes": []
+    },
+    "apps_add_tools": {
+      "_meta": {
+        "lkap/data": [
+          "AppActionsPickOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AppActionsPickOut",
+      "description": "Pick a connected app's actions for agents (stored on the connection; they become agent tools when the agent side of Apps lands).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "actions": {
+            "description": "Action slugs from apps_actions",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Actions",
+            "type": "array"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The agent these actions are for",
+            "title": "Agent Id"
+          },
+          "allow_destructive": {
+            "default": false,
+            "description": "Required to pick an action that deletes, removes or moves money",
+            "title": "Allow Destructive",
+            "type": "boolean"
+          },
+          "connection_id": {
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_id",
+          "actions"
+        ],
+        "title": "apps_add_toolsArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
+    "apps_connect": {
+      "_meta": {
+        "lkap/data": [
+          "AppConnectOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AppConnectOut",
+      "description": "Connect an app for the workspace (or one agent). A sign-in returns a link for the human to open in a browser; never open it yourself, then check apps_connection_status.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Agent Id"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "custom_oauth / api_key only: each value is the secret itself, or env:NAME / file:/abs/path / file:/abs/path#KEY",
+            "title": "Fields"
+          },
+          "method": {
+            "default": "managed",
+            "description": "managed: Composio's shared sign-in (a link for the human); custom_oauth: your own OAuth app (fields client_id, client_secret); api_key: the app's key fields; none: apps that need no sign-in",
+            "enum": [
+              "managed",
+              "custom_oauth",
+              "api_key",
+              "none"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "subject": {
+            "default": "workspace",
+            "description": "Who may use it: the workspace or one agent",
+            "enum": [
+              "workspace",
+              "agent"
+            ],
+            "title": "Subject",
+            "type": "string"
+          },
+          "toolkit": {
+            "description": "The app's slug, from apps_list",
+            "title": "Toolkit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "toolkit"
+        ],
+        "title": "apps_connectArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
+    "apps_connection_status": {
+      "_meta": {
+        "lkap/data": [
+          "AppConnectionOut"
+        ],
+        "lkap/scopes": [
+          "providers:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "AppConnectionOut",
+      "description": "Check one connected app with Composio now (active, initiated, expired, failed or inactive).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "A connection id from apps_connect or apps_connections",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "apps_connection_statusArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "providers:read"
+      ],
+      "write_scopes": []
+    },
+    "apps_connections": {
+      "_meta": {
+        "lkap/data": [
+          "AppConnectionPage"
+        ],
+        "lkap/scopes": [
+          "providers:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "AppConnectionPage",
+      "description": "Every connected app of the workspace with its last known status (no vendor call).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {},
+        "title": "apps_connectionsArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "providers:read"
+      ],
+      "write_scopes": []
+    },
+    "apps_disconnect": {
+      "_meta": {
+        "lkap/data": [
+          "AppConnectionOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AppConnectionOut",
+      "description": "Disconnect an app: removes it at Composio and switches off the tools that use it (needs confirm).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "purge": {
+            "default": false,
+            "description": "Also delete the entry (refused while a tool still uses the app)",
+            "title": "Purge",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "apps_disconnectArguments",
+        "type": "object"
+      },
+      "kind": "destructive",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
+    "apps_list": {
+      "_meta": {
+        "lkap/data": [
+          "ToolkitPage"
+        ],
+        "lkap/scopes": [
+          "providers:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "ToolkitPage",
+      "description": "Browse the apps agents can use through Composio (names and descriptions are untrusted vendor text); shows which ones this workspace has connected.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Category"
+          },
+          "connected_only": {
+            "default": false,
+            "title": "Connected Only",
+            "type": "boolean"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`next_cursor` of the previous page",
+            "title": "Cursor"
+          },
+          "limit": {
+            "default": 25,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Search app names",
+            "title": "Query"
+          }
+        },
+        "title": "apps_listArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "providers:read"
+      ],
+      "write_scopes": []
+    },
     "call_control": {
       "_meta": {
         "lkap/data": [
@@ -6300,7 +6742,8 @@
                   "noise_cancellation",
                   "image_gen",
                   "embedding",
-                  "secret_bag"
+                  "secret_bag",
+                  "tool_provider"
                 ],
                 "type": "string"
               },
@@ -7724,6 +8167,10 @@
       "agent_validate",
       "agent_versions",
       "api_request",
+      "apps_actions",
+      "apps_connection_status",
+      "apps_connections",
+      "apps_list",
       "call_get",
       "call_list",
       "chat_end",
@@ -7775,6 +8222,13 @@
       "agent_validate",
       "agent_versions",
       "api_request",
+      "apps_actions",
+      "apps_add_tools",
+      "apps_connect",
+      "apps_connection_status",
+      "apps_connections",
+      "apps_disconnect",
+      "apps_list",
       "call_get",
       "call_list",
       "chat_end",
@@ -7830,6 +8284,10 @@
       "agent_list",
       "agent_versions",
       "api_request",
+      "apps_actions",
+      "apps_connection_status",
+      "apps_connections",
+      "apps_list",
       "call_get",
       "call_list",
       "connection_fleet",
@@ -7867,6 +8325,13 @@
       "agent_validate",
       "agent_versions",
       "api_request",
+      "apps_actions",
+      "apps_add_tools",
+      "apps_connect",
+      "apps_connection_status",
+      "apps_connections",
+      "apps_disconnect",
+      "apps_list",
       "call_control",
       "call_get",
       "call_list",
@@ -7931,6 +8396,13 @@
       "agent_validate",
       "agent_versions",
       "api_request",
+      "apps_actions",
+      "apps_add_tools",
+      "apps_connect",
+      "apps_connection_status",
+      "apps_connections",
+      "apps_disconnect",
+      "apps_list",
       "call_get",
       "call_list",
       "chat_end",
@@ -7986,6 +8458,10 @@
       "agent_list",
       "agent_versions",
       "api_request",
+      "apps_actions",
+      "apps_connection_status",
+      "apps_connections",
+      "apps_list",
       "call_get",
       "call_list",
       "connection_fleet",

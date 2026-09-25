@@ -29,6 +29,19 @@ export interface LkapContracts {
   AgentUpdate?: AgentUpdate;
   AnalyticsBucket?: AnalyticsBucket;
   AnalyticsSummary?: AnalyticsSummary;
+  AppActionOut?: AppActionOut;
+  AppActionPage?: AppActionPage;
+  AppActionsPickIn?: AppActionsPickIn;
+  AppActionsPickOut?: AppActionsPickOut;
+  AppAuthField?: AppAuthField;
+  AppConnectIn?: AppConnectIn;
+  AppConnectOut?: AppConnectOut;
+  AppConnectionOut?: AppConnectionOut;
+  AppConnectionPage?: AppConnectionPage;
+  AppKeyTestIn?: AppKeyTestIn;
+  AppKeyTestOut?: AppKeyTestOut;
+  AppReconnectIn?: AppReconnectIn;
+  AppsStatusOut?: AppsStatusOut;
   AvatarOptions?: AvatarOptions;
   BlockSpec?: BlockSpec;
   CallCreate?: CallCreate;
@@ -161,6 +174,8 @@ export interface LkapContracts {
   ToolMeta?: ToolMeta;
   ToolOut?: ToolOut;
   ToolPage?: ToolPage;
+  ToolkitOut?: ToolkitOut;
+  ToolkitPage?: ToolkitPage;
   TranscriptBlockState?: TranscriptBlockState;
   TranscriptTurn?: TranscriptTurn;
   TransferNode?: TransferNode;
@@ -750,6 +765,228 @@ export interface AnalyticsSummary {
   failed?: number;
   minutes?: number;
   sessions?: number;
+}
+/**
+ * One Composio tool (an app's action), trimmed.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppActionOut".
+ */
+export interface AppActionOut {
+  description?: string;
+  /**
+   * Composio marks it as a featured action
+   */
+  important?: boolean;
+  name: string;
+  /**
+   * The action's JSON Schema input
+   */
+  parameters?: {
+    [k: string]: unknown;
+  };
+  risk?: "read" | "write" | "destructive";
+  slug: string;
+  tags?: string[];
+  version?: string | null;
+}
+/**
+ * A page of an app's actions.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppActionPage".
+ */
+export interface AppActionPage {
+  items: AppActionOut[];
+  next_cursor?: string | null;
+  total?: number | null;
+}
+/**
+ * ``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.
+ *
+ * Until the ``provider`` tool kind exists (V5-47) the picks are stored on the
+ * connection and returned; V5-47 turns them into tools (attached to
+ * ``agent_id`` when given).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppActionsPickIn".
+ */
+export interface AppActionsPickIn {
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
+  actions: [string, ...string[]];
+  agent_id?: string | null;
+  /**
+   * Must be true to pick an action that deletes, removes or moves money
+   */
+  allow_destructive?: boolean;
+  connection_id: string;
+}
+/**
+ * The connection's picked actions after the change.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppActionsPickOut".
+ */
+export interface AppActionsPickOut {
+  agent_id?: string | null;
+  connection_id: string;
+  picked_actions: string[];
+  /**
+   * Tool ids created (empty until V5-47 lands)
+   */
+  tools_created?: string[];
+}
+/**
+ * One field the Connect dialog asks for (never a stored value).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppAuthField".
+ */
+export interface AppAuthField {
+  label: string;
+  name: string;
+  required?: boolean;
+  secret?: boolean;
+}
+/**
+ * ``POST /v1/tool-providers/composio/connections``: connect an app.
+ *
+ * ``fields`` carries what the chosen method needs (the OAuth app's
+ * ``client_id``/``client_secret``, or the app's API key fields). It is
+ * forwarded to Composio once and never stored, logged or returned.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppConnectIn".
+ */
+export interface AppConnectIn {
+  /**
+   * Required when subject is 'agent'
+   */
+  agent_id?: string | null;
+  /**
+   * Write-only; never stored or returned
+   */
+  fields?: {
+    [k: string]: string;
+  };
+  method?: "managed" | "custom_oauth" | "api_key" | "none";
+  subject?: "workspace" | "agent";
+  toolkit: string;
+}
+/**
+ * The started connection: open ``redirect_url`` in a browser tab (OAuth), or it is already active.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppConnectOut".
+ */
+export interface AppConnectOut {
+  connection_id: string;
+  /**
+   * When an unfinished sign-in expires
+   */
+  expires_at?: string | null;
+  /**
+   * The app's consent page; for a human to open
+   */
+  redirect_url?: string | null;
+  status: "active" | "initiated" | "expired" | "failed" | "inactive" | "unknown";
+}
+/**
+ * A connected app of this workspace (no vendor tokens: Composio holds them).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppConnectionOut".
+ */
+export interface AppConnectionOut {
+  agents_using?: number;
+  connected_at?: string | null;
+  id: string;
+  last_checked_at?: string | null;
+  method: "managed" | "custom_oauth" | "api_key" | "none";
+  needs_reconnect?: boolean;
+  /**
+   * Actions chosen for agents
+   */
+  picked_actions?: string[];
+  provider?: "composio";
+  status: "active" | "initiated" | "expired" | "failed" | "inactive" | "unknown";
+  /**
+   * 'ws:<workspace_id>' or 'agent:<agent_id>'
+   */
+  subject: string;
+  toolkit: string;
+  toolkit_name?: string | null;
+}
+/**
+ * Every connected app of the workspace.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppConnectionPage".
+ */
+export interface AppConnectionPage {
+  items: AppConnectionOut[];
+  total: number;
+}
+/**
+ * ``POST /v1/tool-providers/composio/key/test``: a pasted key, used once and never stored.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppKeyTestIn".
+ */
+export interface AppKeyTestIn {
+  api_key: string;
+}
+/**
+ * What a key test found; ``message`` is safe to show as is.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppKeyTestOut".
+ */
+export interface AppKeyTestOut {
+  account_name?: string | null;
+  message: string;
+  ok: boolean;
+  project_name?: string | null;
+  toolkits_count?: number | null;
+}
+/**
+ * ``POST …/connections/{id}/reconnect``: ``fields`` only for an API-key app (a new key).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppReconnectIn".
+ */
+export interface AppReconnectIn {
+  /**
+   * Write-only; never stored or returned
+   */
+  fields?: {
+    [k: string]: string;
+  };
+}
+/**
+ * ``GET /v1/tool-providers/composio/status``: the Apps section header.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AppsStatusOut".
+ */
+export interface AppsStatusOut {
+  connections?: number;
+  credential_id?: string | null;
+  /**
+   * A key exists and the provider is on for this workspace
+   */
+  enabled: boolean;
+  fingerprint?: string | null;
+  last_test_at?: string | null;
+  last_test_message?: string | null;
+  last_test_ok?: boolean | null;
+  /**
+   * Tools switched off while the provider is disabled
+   */
+  paused_tools?: number;
 }
 /**
  * ``POST /v1/calls`` — place one outbound call.
@@ -1781,7 +2018,8 @@ export interface ModelTestResult {
     | "noise_cancellation"
     | "image_gen"
     | "embedding"
-    | "secret_bag";
+    | "secret_bag"
+    | "tool_provider";
   latency_ms?: number | null;
   message?: string | null;
   model: string;
@@ -2067,7 +2305,8 @@ export interface ProviderModelOut {
     | "noise_cancellation"
     | "image_gen"
     | "embedding"
-    | "secret_bag";
+    | "secret_bag"
+    | "tool_provider";
   last_test_at?: string | null;
   last_test_cost_usd?: number | string | null;
   last_test_credential_id?: string | null;
@@ -2121,7 +2360,8 @@ export interface ProviderOut {
     | "noise_cancellation"
     | "image_gen"
     | "embedding"
-    | "secret_bag";
+    | "secret_bag"
+    | "tool_provider";
   label: string;
   models?: ModelSpec[];
   notes?: string | null;
@@ -2260,7 +2500,8 @@ export interface ProviderSpec {
     | "noise_cancellation"
     | "image_gen"
     | "embedding"
-    | "secret_bag";
+    | "secret_bag"
+    | "tool_provider";
   label: string;
   models?: ModelSpec[];
   notes?: string | null;
@@ -2966,6 +3207,63 @@ export interface ToolOut {
 export interface ToolPage {
   items: ToolOut[];
   total: number;
+}
+/**
+ * One Composio toolkit (an app), trimmed for the console gallery.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolkitOut".
+ */
+export interface ToolkitOut {
+  /**
+   * The ways this app can be connected, best first
+   */
+  auth?: ("oauth_managed" | "oauth_custom" | "api_key" | "bearer" | "basic" | "none")[];
+  /**
+   * Per auth option, the fields the Connect dialog asks for (one-app read only)
+   */
+  auth_fields?: {
+    [k: string]: AppAuthField[];
+  };
+  /**
+   * The vendor's setup guide for your own OAuth app
+   */
+  auth_guide_url?: string | null;
+  categories?: string[];
+  /**
+   * Whether this workspace has an active connection to it
+   */
+  connected?: boolean;
+  /**
+   * That connection's id, when connected
+   */
+  connection_id?: string | null;
+  description?: string;
+  /**
+   * The vendor's logo URL; shown by the console, never proxied
+   */
+  logo?: string | null;
+  name: string;
+  /**
+   * The redirect URI to register in your own OAuth app (custom OAuth only)
+   */
+  oauth_redirect_uri?: string | null;
+  slug: string;
+  tools_count?: number;
+}
+/**
+ * A page of toolkits; pass ``next_cursor`` back as ``cursor`` for the next one.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolkitPage".
+ */
+export interface ToolkitPage {
+  items: ToolkitOut[];
+  next_cursor?: string | null;
+  /**
+   * Composio's total for this query, when it reports one
+   */
+  total?: number | null;
 }
 /**
  * Transcript rendering options (the turns come from the LiveKit room).

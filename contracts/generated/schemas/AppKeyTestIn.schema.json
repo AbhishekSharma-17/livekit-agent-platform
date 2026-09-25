@@ -1,0 +1,18 @@
+{
+  "$id": "lkap-contracts/AppKeyTestIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tool-providers/composio/key/test``: a pasted key, used once and never stored.",
+  "properties": {
+    "api_key": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Api Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "api_key"
+  ],
+  "title": "AppKeyTestIn",
+  "type": "object"
+}

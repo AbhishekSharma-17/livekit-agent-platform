@@ -201,7 +201,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_DATA_DIR` | req | — | — | default `./data` (db, lancedb, kb files, models) |
 | `LKAP_DATABASE_URL` | opt | — | — | default `sqlite+aiosqlite:///{DATA_DIR}/lkap.db` |
 | `LKAP_CORS_ORIGINS` | opt | — | — | default `http://localhost:3000` |
-| `LKAP_PUBLIC_BASE_URL` | opt | — | — | used in connect response for asset links (unused MVP) |
+| `LKAP_PUBLIC_BASE_URL` | opt | — | — | used in connect response for asset links; also the origin of the Apps sign-in return address (`/v1/tool-providers/composio/callback`), falling back to the api's own url (V5-18) |
 | `LKAP_PACKS` | opt | opt | — | default `packs.insurance_claim,packs.generic` |
 | `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | — | opt | — | comma list; empty = only per-tool allowlist |
 | `LKAP_LOG_LEVEL` / `LKAP_LOG_JSON` | opt | opt | — | `INFO` / `false` |
@@ -216,6 +216,16 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `PORT` | 8080 | — | 3000 | |
 
 Vendor keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, ...) are **not** read from env by the platform; they live in the credential vault. Exception for convenience: the api accepts `LKAP_BOOTSTRAP_CREDENTIALS_JSON` (JSON `{provider_id: {field: value}}`) at startup to seed credentials in dev.
+
+### Apps (Composio, V5-18)
+
+Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable and no new table:
+
+- **Key.** Registry entry `composio` (`kind: "tool_provider"`, one secret field `api_key`, no `test`/`catalog`); a normal provider-key row. `POST /v1/credentials/{id}/test` checks it through `lkap_api.credential_tests` (Composio's session-info call, then the app count). `POST /v1/tool-providers/composio/key/test` checks a pasted key without storing it (10 per workspace per minute). Rotate is `PUT /v1/credentials/{id}` on the same row. Enablement is the `workspace_providers` row of `composio` (`POST …/enable`, `POST …/disable`; disable switches off the tools bound to the key or to a connection).
+- **Connections.** One `credentials` row per connected app with `provider_id = "tool-provider-account"` (not a registry id, so `POST /v1/credentials` cannot create one). The encrypted bag holds references only: `toolkit`, `method`, `subject` (`ws:<workspace_id>` or `agent:<agent_id>`), `auth_config_id`, `connected_account_id`, status, picked actions, and while a sign-in is pending the SHA-256 of its single-use nonce and its expiry. `last_test_message` mirrors the status (`initiated|active|expired|failed|inactive|unknown`, transiently `verifying`), `last_test_ok` = active, `last_test_at` = last checked. The sessions sweep marks sign-ins unfinished after 10 minutes `expired`.
+- **Routes** (`lkap_api/tool_providers/router.py`, reads `viewer` + `providers:read`, writes `admin` + `providers:write`): `GET …/status`, `POST …/key/test`, `POST …/enable`, `POST …/disable`, `GET …/toolkits`, `GET …/toolkits/{slug}`, `GET …/toolkits/{slug}/actions`, `POST …/connections`, `GET …/connections`, `GET …/connections/{id}` (refreshes from Composio), `POST …/connections/{id}/reconnect`, `DELETE …/connections/{id}[?purge=true]`, `POST …/materialise` (stores picked actions until V5-47), and the unauthenticated `GET …/callback?flow=<row id>.<nonce>&status&connected_account_id` (302 to `/console/tools?tab=apps&connect=ok|error`). Prefix `…` = `/v1/tool-providers/composio`.
+- **Models** (`lkap_contracts.tool_providers`, exported with an `App`/`Toolkit` prefix because `ConnectionOut` is taken): `ToolkitOut`, `ToolkitPage`, `AppAuthField`, `AppActionOut`, `AppActionPage`, `AppConnectIn`, `AppConnectOut`, `AppConnectionOut`, `AppConnectionPage`, `AppReconnectIn`, `AppKeyTestIn`, `AppKeyTestOut`, `AppsStatusOut`, `AppActionsPickIn`, `AppActionsPickOut`.
+- **Tool bindings.** `_check_payload` lets a `composio` key bind only to an `mcp` definition whose url is `https://backend.composio.dev/…` (V5-47 switches this to its `origin` tag and adds the `provider` kind); an `http` tool can never bind it, and a connection row is never a tool credential.
 
 ---
 

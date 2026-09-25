@@ -21,9 +21,9 @@ self-hosted server; `connection_create`, `connection_list`) → **agents**
 `generic` or `insurance_claim`) → each
 agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 `half_cascade` — see `lkap_explain("pipeline-modes")`), **providers and keys**
-(`provider_list`, `provider_key_create` — the registry has 126 provider
+(`provider_list`, `provider_key_create` — the registry has 127 provider
 entries), **tools** (`tool_create_http`, `tool_create_mcp`, plus built-ins like
-`search_knowledge`), **knowledge bases** (`kb_create`, `kb_add_document`), a
+`search_knowledge`; third-party **apps** through Composio: `apps_list`, `apps_connect`), **knowledge bases** (`kb_create`, `kb_add_document`), a
 **panel** (composite blocks, or a pack's own UI) and, optionally, a **flow**
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
 ...})`). Agents produce **sessions** (`session_list`, `session_get`), which
@@ -92,7 +92,7 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `connect-livekit`, `start-from-template`, `insurance-intake-agent`, `generic-assistant`,
 `add-http-tool`, `attach-mcp-server`, `knowledge-from-text`,
 `switch-to-flow`, `composite-panel`, `test-and-publish`,
-`test-a-custom-model`, `diagnose-a-session` — each is a numbered, copy-pasteable tool sequence
+`test-a-custom-model`, `diagnose-a-session`, `connect-an-app` — each is a numbered, copy-pasteable tool sequence
 (`lkap_describe("recipe", name)`).
 
 ## Concepts
@@ -100,4 +100,4 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `agents`, `pipeline-modes`, `providers-and-keys`, `connections-and-pools`,
 `knowledge`, `tools-http`, `tools-mcp`, `panels-and-blocks`, `flows`,
 `telephony`, `qa-and-evals`, `recordings-and-cost`, `webhooks`,
-`sessions-and-test-chat`, `roles-and-scopes` (`lkap_explain(topic)`).
+`sessions-and-test-chat`, `roles-and-scopes`, `apps` (`lkap_explain(topic)`).

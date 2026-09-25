@@ -339,6 +339,12 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/workspaces/{workspace_id}/invites",
     "/v1/workspaces/{workspace_id}/members",
     "/v1/workspaces/{workspace_id}/members/{user_id}",
+    # V4-15: cost estimates, price quotes and workspace prices (`lkap_api/routers/costs.py`).
+    "/v1/agents/{agent_id}/cost-estimate",
+    "/v1/cost-estimates",
+    "/v1/cost-estimates/assumptions",
+    "/v1/pricing/quotes",
+    "/v1/workspace/prices",
 )
 
 
@@ -512,6 +518,20 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "session_get": frozenset({"session_id", "include_transcript", "include_recording_url"}),
     "session_events": frozenset({"session_id", "after_id", "types", "limit"}),
     "session_rescore": frozenset({"session_id", "confirm"}),
+    # V4-15 costs (docs/v4/COSTS.md §6)
+    "cost_estimate": frozenset(
+        {
+            "agent_id_or_slug",
+            "template_id",
+            "config",
+            "session_minutes",
+            "assumptions",
+            "channel",
+            "workspace_averages",
+        }
+    ),
+    "pricing_quote": frozenset({"provider_id", "model"}),
+    "cost_summary": frozenset({"range"}),
     # 4.9 webhooks
     "webhook_list": frozenset(),
     "webhook_create": frozenset({"url", "events", "description", "plan"}),

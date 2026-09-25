@@ -371,6 +371,23 @@ CREATE INDEX ix_session_events_session ON session_events(session_id, id);
 CREATE INDEX ix_sessions_agent ON sessions(agent_id, created_at);
 ```
 
+**Pricing and cost (v4, `docs/v4/COSTS.md`, migration `v4_003_session_estimates`).** A session's
+priced usage lands in `session_costs` (`provider_id, model, unit, quantity, unit_price_usd, cost_usd,
+price_version, price_source, vendor_usd, vendor_ref`; only priced lines are stored — an unknown price
+is `note="no price"` on read, never a zero) and sums into `sessions.cost_usd`. Prices resolve through
+`lkap_contracts.pricing.quote()` from three sources in order: a **workspace** price
+(`workspaces.settings["cost"]["prices"]`, USD, admin-entered), the **live** OpenRouter sheet (the
+cached `/api/v1/models` catalog, USD per unit), then the **table** `pricing.PRICES` (each row with
+`source_url`, `as_of`, and a `tier_note` for tiered pages; `PRICE_VERSION` bumps with every edit;
+LiveKit Cloud minutes under the pseudo ids `livekit-agent`, `livekit-participant`, `livekit-sip`,
+`livekit-egress`). Units (`pricing.Unit`, ≤ 16 chars): `tokens_in`, `tokens_out`, `cached_tokens_in`,
+`text_tokens_in/out` and `audio_tokens_in/out` (realtime splits, never the folded total),
+`audio_s_in`, `audio_s_out`, `chars`, `minutes`, `images`, `requests`. Every session also carries
+the `CostEstimate` snapshotted after creation at its pinned `config_version`
+(`sessions.estimate`), `sessions.estimated_usd` (per-minute mid × actual minutes + per-session
+lines, set at summary time) and `sessions.reconciled_usd` (a vendor's own charge, V4-17);
+`usage_daily.estimated_usd` rolls the estimates up per day.
+
 ---
 
 ## 6. Dispatch metadata and agent config (`lkap_contracts.dispatch`, `.agent_config`)

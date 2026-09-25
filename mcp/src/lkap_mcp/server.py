@@ -51,6 +51,7 @@ TOOL_MODULES: list[str] = [
     "lkap_mcp.tools.webhooks",
     "lkap_mcp.tools.telephony",
     "lkap_mcp.tools.generic",
+    "lkap_mcp.tools.costs",
     "lkap_mcp.chat.tools",  # V3-02; optional until it lands
 ]
 

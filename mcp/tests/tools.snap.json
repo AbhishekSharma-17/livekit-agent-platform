@@ -271,6 +271,132 @@
       ],
       "write_scopes": []
     },
+    "agent_apps_mode": {
+      "_meta": {
+        "lkap/data": [
+          "AgentOut"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AgentOut",
+      "description": "Choose how an agent uses connected apps; saving provisions the app server or tool finder.",
+      "gate": null,
+      "inputSchema": {
+        "$defs": {
+          "AppsRouterOptions": {
+            "description": "What the tool finder may do (D-V5-C7).",
+            "properties": {
+              "execute": {
+                "default": true,
+                "description": "Let the agent run the actions it found",
+                "title": "Execute",
+                "type": "boolean"
+              },
+              "manage_connections": {
+                "default": false,
+                "description": "Let the agent offer a sign-in link for an app that is not connected yet (text and web chats only: a phone caller cannot open a link)",
+                "title": "Manage Connections",
+                "type": "boolean"
+              },
+              "search": {
+                "default": true,
+                "description": "Let the agent look actions up during the conversation",
+                "title": "Search",
+                "type": "boolean"
+              }
+            },
+            "title": "AppsRouterOptions",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "allowed_toolkits": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Apps the server or finder may use (toolkit slugs); empty = every connected app",
+            "title": "Allowed Toolkits"
+          },
+          "denied_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Action slugs the server or finder must never run",
+            "title": "Denied Actions"
+          },
+          "id_or_slug": {
+            "title": "Id Or Slug",
+            "type": "string"
+          },
+          "mode": {
+            "description": "actions = the picked app actions attached as tools (recommended); server = one app server offering the picked actions; router = a tool finder that looks actions up during the conversation (slower replies); off = neither server",
+            "enum": [
+              "actions",
+              "server",
+              "router",
+              "off"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "router": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AppsRouterOptions"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Tool finder flags: search, execute, manage_connections (off by default)"
+          }
+        },
+        "required": [
+          "id_or_slug",
+          "mode"
+        ],
+        "title": "agent_apps_modeArguments",
+        "type": "object"
+      },
+      "kind": "idempotent_write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
     "agent_archive": {
       "_meta": {
         "lkap/data": [
@@ -5075,7 +5201,7 @@
         "readOnlyHint": false
       },
       "data": "AppActionsPickOut",
-      "description": "Pick a connected app's actions for agents (stored on the connection; they become agent tools when the agent side of Apps lands).",
+      "description": "Pick a connected app's actions and add each as an agent tool (attached to agent_id when given).",
       "gate": null,
       "inputSchema": {
         "properties": {
@@ -9024,6 +9150,7 @@
   "visible": {
     "builder": [
       "activity",
+      "agent_apps_mode",
       "agent_archive",
       "agent_attach",
       "agent_create",
@@ -9079,6 +9206,7 @@
     ],
     "full_scope": [
       "activity",
+      "agent_apps_mode",
       "agent_archive",
       "agent_attach",
       "agent_create",
@@ -9182,6 +9310,7 @@
     ],
     "full_scope_with_dial": [
       "activity",
+      "agent_apps_mode",
       "agent_archive",
       "agent_attach",
       "agent_create",
@@ -9253,6 +9382,7 @@
     ],
     "operator": [
       "activity",
+      "agent_apps_mode",
       "agent_archive",
       "agent_attach",
       "agent_create",

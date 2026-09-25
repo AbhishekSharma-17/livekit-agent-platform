@@ -686,6 +686,7 @@
             }
           ],
           "default": null,
+          "description": "Price this entry with that registry entry's rows (docs/v4/COSTS.md D-V4-39), e.g. `openai-responses-llm` -> `openai-llm`. Never a self-reference; unset = the entry's own rows.",
           "title": "Price Ref"
         },
         "probe": {

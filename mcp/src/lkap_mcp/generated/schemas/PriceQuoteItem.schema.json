@@ -1,0 +1,244 @@
+{
+  "$defs": {
+    "PriceQuote": {
+      "description": "A resolved price with its provenance (D-V4-39): what every estimate and cost line carries.",
+      "properties": {
+        "as_of": {
+          "description": "ISO date: the row's `as_of` (table), the fetch date (live), the edit date (workspace).",
+          "title": "As Of",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "fetched_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "live: the catalog cache row's fetch time.",
+          "title": "Fetched At"
+        },
+        "free_tier_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Free Tier Note"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A workspace price's own note.",
+          "title": "Note"
+        },
+        "provider_id": {
+          "description": "The registry entry priced (after `price_ref` aliasing).",
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "workspace",
+            "live",
+            "table"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor page (table), the API endpoint (live), or null (a workspace price).",
+          "title": "Source Url"
+        },
+        "stale": {
+          "default": false,
+          "description": "A table row older than PRICE_STALE_DAYS, or a live sheet past its cache TTL.",
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "tier_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tier Note"
+        },
+        "unit": {
+          "enum": [
+            "tokens_in",
+            "tokens_out",
+            "audio_s_in",
+            "audio_s_out",
+            "chars",
+            "minutes",
+            "images",
+            "text_tokens_in",
+            "text_tokens_out",
+            "audio_tokens_in",
+            "audio_tokens_out",
+            "cached_tokens_in",
+            "requests"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "usd_per_unit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Usd Per Unit"
+        }
+      },
+      "required": [
+        "provider_id",
+        "unit",
+        "usd_per_unit",
+        "source",
+        "as_of"
+      ],
+      "title": "PriceQuote",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/PriceQuoteItem.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The quotes for one provider/model, with that slot's own per-minute share.",
+  "properties": {
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "realtime",
+            "stt",
+            "llm",
+            "tts",
+            "avatar",
+            "vad",
+            "turn_detection",
+            "noise_cancellation",
+            "image_gen",
+            "embedding",
+            "secret_bag"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Kind"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "per_minute_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "This slot's own share of a minute at default assumptions (an estimate).",
+      "title": "Per Minute Usd"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "quotes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PriceQuote"
+      },
+      "title": "Quotes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "provider_id"
+  ],
+  "title": "PriceQuoteItem",
+  "type": "object"
+}

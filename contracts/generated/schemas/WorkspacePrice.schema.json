@@ -1,0 +1,85 @@
+{
+  "$id": "lkap-contracts/WorkspacePrice.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A price an admin typed in for the workspace (the ``workspace`` source), in USD.",
+  "properties": {
+    "as_of": {
+      "description": "ISO date the price was set.",
+      "title": "As Of",
+      "type": "string"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "provider_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "unit": {
+      "enum": [
+        "tokens_in",
+        "tokens_out",
+        "audio_s_in",
+        "audio_s_out",
+        "chars",
+        "minutes",
+        "images",
+        "text_tokens_in",
+        "text_tokens_out",
+        "audio_tokens_in",
+        "audio_tokens_out",
+        "cached_tokens_in",
+        "requests"
+      ],
+      "title": "Unit",
+      "type": "string"
+    },
+    "usd_per_unit": {
+      "anyOf": [
+        {
+          "maximum": 1000.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Usd Per Unit"
+    }
+  },
+  "required": [
+    "provider_id",
+    "unit",
+    "usd_per_unit",
+    "as_of"
+  ],
+  "title": "WorkspacePrice",
+  "type": "object"
+}

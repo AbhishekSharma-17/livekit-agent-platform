@@ -99,6 +99,23 @@
           "default": null,
           "title": "Error"
         },
+        "estimated_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The creation-time estimate (docs/v4/COSTS.md D-V4-43); null without one.",
+          "title": "Estimated Usd"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -111,6 +128,22 @@
           ],
           "title": "Pipeline Mode",
           "type": "string"
+        },
+        "reconciled_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reconciled Usd"
         },
         "recording_status": {
           "default": "none",

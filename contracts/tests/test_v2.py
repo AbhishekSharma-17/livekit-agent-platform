@@ -844,9 +844,9 @@ def test_livekit_inference_models_have_a_sourced_price(provider_id: str, model: 
 
 
 def test_ambiguous_inference_models_stay_unpriced() -> None:
-    """gpt-oss-120b (two backend rates) and inworld-tts-2 (no matching catalog entry)."""
+    """gpt-oss-120b (two backend rates, ask #93); inworld-tts-2 is priced since V4-15 (COSTS.md §1.3)."""
     assert pricing.lookup("livekit-inference-llm", "openai/gpt-oss-120b", "tokens_in") is None
-    assert pricing.lookup("livekit-inference-tts", "inworld/inworld-tts-2", "chars") is None
+    assert pricing.lookup("livekit-inference-tts", "inworld/inworld-tts-2", "chars") is not None
 
 
 # ------------------------------------------------------------------------------ fleet

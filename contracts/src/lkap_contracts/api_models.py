@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl, StringConstraints, field_validator
+from pydantic import BaseModel, Field, HttpUrl, StringConstraints, field_validator, model_validator
 
 from lkap_contracts.agent_config import (
     AgentConfig,
@@ -28,7 +28,10 @@ from lkap_contracts.connections import (
 )
 from lkap_contracts.flow import FlowSpec
 from lkap_contracts.packs import PackManifest
+from lkap_contracts.pricing import PriceQuote as PriceQuote
+from lkap_contracts.pricing import PriceSource as PriceSource
 from lkap_contracts.pricing import Unit as Unit
+from lkap_contracts.pricing import WorkspacePrice as WorkspacePrice
 from lkap_contracts.providers import (
     BARE_TOKEN_MIN_LEN,
     MODEL_ID_MAX_LEN,
@@ -545,12 +548,26 @@ class PacksResponse(BaseModel):
     items: list[PackOut]
 
 
+class TemplateEstimate(BaseModel):
+    """A starter's per-minute estimate at list prices and default assumptions (docs/v4/COSTS.md §3.1)."""
+
+    per_minute_usd_mid: Decimal
+    per_minute_usd_low: Decimal
+    per_minute_usd_high: Decimal
+    as_of: str = Field(description="The oldest `as_of` among the prices used.")
+    unpriced: int = Field(default=0, description="How many estimate lines have no price.")
+
+
 class TemplateOut(BaseModel):
     """One starter, merged (``instructions.md`` folded in) plus the pack it layers on."""
 
     template: StarterTemplate
     pack: PackManifest
     derived: bool = False
+    estimate: TemplateEstimate | None = Field(
+        default=None,
+        description="An estimate at list prices before any usage; null when nothing is priced.",
+    )
 
 
 class TemplatesResponse(BaseModel):
@@ -595,13 +612,93 @@ class CostLine(BaseModel):
     unit_price_usd: Decimal | None = None
     cost_usd: Decimal | None = None
     note: str | None = None
+    price_source: PriceSource | None = Field(
+        default=None, description="Which price source priced the line (null when unpriced)."
+    )
+    vendor_usd: Decimal | None = Field(
+        default=None, description="The vendor's own charge for this line, when reconciled."
+    )
+    vendor_ref: str | None = Field(default=None, description='What was reconciled, e.g. "12 generations".')
+
+
+#: Why an actual line differs from its estimate (docs/v4/COSTS.md §4.3, first matching rule).
+DriverReason = Literal[
+    "more minutes",
+    "fewer minutes",
+    "more talk",
+    "less talk",
+    "longer prompts",
+    "more turns",
+    "unpriced line",
+    "price changed",
+    "not estimated",
+    "as estimated",
+]
+
+#: Which part of the agent an estimate line prices (docs/v4/COSTS.md §3.1).
+EstimateSlot = Literal[
+    "stt",
+    "llm",
+    "tts",
+    "realtime",
+    "avatar",
+    "workflow_llm",
+    "image_gen",
+    "embedding",
+    "turn_detection",
+    "vad",
+    "livekit_agent",
+    "livekit_participant",
+    "livekit_sip",
+    "livekit_egress",
+    "qa_judge",
+]
+
+#: Where an assumption's value came from.
+AssumptionSource = Literal["default", "workspace", "request"]
+
+#: What kind of session an estimate is for.
+EstimateChannel = Literal["web", "phone", "text"]
+
+
+class CostDriver(BaseModel):
+    """One estimate-vs-actual comparison row; a list is sorted by ``|delta_usd|``, largest first."""
+
+    slot: EstimateSlot
+    provider_id: str
+    model: str | None = None
+    unit: Unit
+    estimated_quantity: Decimal | None = None
+    actual_quantity: Decimal | None = None
+    estimated_usd: Decimal | None = None
+    actual_usd: Decimal | None = None
+    delta_usd: Decimal | None = Field(
+        default=None, description="actual - estimated; null when either side is unpriced."
+    )
+    reason: DriverReason
 
 
 class SessionCost(BaseModel):
-    """The cost block of ``SessionDetailOut``."""
+    """The cost block of ``SessionDetailOut``: actual lines, and the estimate snapshotted at creation."""
 
     total_usd: Decimal | None = None
     lines: list[CostLine] = []
+    estimated_usd: Decimal | None = Field(
+        default=None,
+        description="The creation-time estimate: per-minute mid x actual minutes + per-session lines. "
+        "Null for a session without a snapshot (never back-filled).",
+    )
+    estimate_per_minute_usd: Decimal | None = None
+    variance_usd: Decimal | None = Field(
+        default=None, description="total_usd - estimated_usd, when both exist."
+    )
+    variance_pct: float | None = None
+    reconciled_usd: Decimal | None = Field(
+        default=None, description="The vendors' own charge, when reconciled."
+    )
+    price_version: str | None = None
+    estimate_as_of: str | None = None
+    drivers: list[CostDriver] = []
 
 
 class QaOut(BaseModel):
@@ -651,6 +748,10 @@ class SessionOut(BaseModel):
     channel: SessionChannel = "web"
     connection_id: str | None = None
     cost_usd: Decimal | None = None
+    estimated_usd: Decimal | None = Field(
+        default=None, description="The creation-time estimate (docs/v4/COSTS.md D-V4-43); null without one."
+    )
+    reconciled_usd: Decimal | None = None
     disposition: str | None = None
     #: Surfaced on the list row too (docs/v2/_asks.md V2-20-3) so a `failed`
     #: recording is visible without opening the session; the reason itself
@@ -679,6 +780,22 @@ class AnalyticsBucket(BaseModel):
     minutes: float = 0.0
     cost_usd: Decimal | None = None
     failed: int = 0
+    estimated_usd: Decimal | None = None
+    sessions_estimated: int = 0
+    accuracy_pct: float | None = Field(
+        default=None, description="actual / estimated x 100 over the sessions that have both figures."
+    )
+
+
+class AnalyticsDriver(BaseModel):
+    """One of the range's top cost drivers (``session_costs`` lines grouped by provider, model and unit)."""
+
+    provider_id: str
+    model: str | None = None
+    unit: Unit
+    cost_usd: Decimal
+    share_pct: float
+    estimated_usd: Decimal | None = None
 
 
 class AnalyticsSummary(BaseModel):
@@ -690,6 +807,142 @@ class AnalyticsSummary(BaseModel):
     failed: int = 0
     by_day: list[AnalyticsBucket] = []
     by_agent: list[AnalyticsBucket] = []
+    estimated_usd: Decimal | None = None
+    sessions_estimated: int = 0
+    accuracy_pct: float | None = Field(
+        default=None, description="actual / estimated x 100 over the sessions that have both figures."
+    )
+    top_drivers: list[AnalyticsDriver] = Field(default=[], description="At most 8, largest first.")
+
+
+# ------------------------------------------------------------ cost estimates (V4-15)
+class Assumption(BaseModel):
+    """One named input of the usage model (docs/v4/COSTS.md D-V4-41)."""
+
+    key: str
+    value: float | str
+    low: float | None = None
+    high: float | None = None
+    unit: str | None = None
+    source: AssumptionSource
+    label: str
+    source_url: str | None = None
+
+
+class EstimateLine(BaseModel):
+    """One line of a per-minute estimate."""
+
+    slot: EstimateSlot
+    label: str = Field(description='The plain-language label, e.g. "Agent\'s voice".')
+    provider_id: str
+    model: str | None = None
+    unit: Unit
+    quantity_per_min: Decimal | None = Field(default=None, description="Null for a per-session line.")
+    quantity_per_session: Decimal | None = None
+    quote: PriceQuote | None = None
+    usd_per_min: Decimal | None = Field(default=None, description="Null when unpriced.")
+    usd_per_session: Decimal | None = None
+    note: str | None = None
+
+
+class MoneyRange(BaseModel):
+    """A low / mid / high band in USD (a band from stated assumptions, not a confidence interval)."""
+
+    low: Decimal
+    mid: Decimal
+    high: Decimal
+
+
+class CostEstimate(BaseModel):
+    """What an agent configuration is estimated to cost per minute, at list prices."""
+
+    per_minute_usd: MoneyRange | None = Field(default=None, description="Null when every line is unpriced.")
+    per_session_usd: MoneyRange | None = None
+    session_minutes: float
+    channel: EstimateChannel
+    lines: list[EstimateLine] = []
+    assumptions: list[Assumption] = []
+    unpriced: list[str] = Field(default=[], description="A plain description of every unpriced line.")
+    priced_share: float = Field(default=0.0, description="Priced lines / all lines, 0-1.")
+    price_version: str
+    as_of: str = Field(description="The oldest `as_of` among the quotes used.")
+    sources: list[PriceSource] = []
+    caveats: list[str] = []
+
+
+class CostEstimateRequest(BaseModel):
+    """``POST /v1/cost-estimates``: exactly one of ``agent_id``, ``template_id``, ``config``.
+
+    ``POST /v1/agents/{id}/cost-estimate`` takes the same body with none of the three.
+    """
+
+    agent_id: str | None = None
+    template_id: str | None = None
+    config: AgentConfig | None = Field(default=None, description="An unsaved draft; validated, never stored.")
+    assumptions: dict[str, float | str] | None = Field(
+        default=None, description="Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`)."
+    )
+    channel: EstimateChannel = "web"
+
+    @model_validator(mode="after")
+    def _at_most_one_source(self) -> "CostEstimateRequest":
+        given = [v for v in (self.agent_id, self.template_id, self.config) if v is not None]
+        if len(given) > 1:
+            raise ValueError("give exactly one of agent_id, template_id or config")
+        return self
+
+
+class CostAssumptionsOut(BaseModel):
+    """``GET /v1/cost-estimates/assumptions``: the workspace's effective assumptions."""
+
+    assumptions: list[Assumption]
+    sessions_sampled: int = Field(default=0, description="Ended sessions the workspace averages came from.")
+
+
+class PriceQuoteItemIn(BaseModel):
+    """One provider/model to quote."""
+
+    provider_id: str = Field(min_length=1, max_length=64)
+    model: str | None = Field(default=None, max_length=256)
+
+
+class PriceQuotesRequest(BaseModel):
+    """``POST /v1/pricing/quotes``."""
+
+    items: list[PriceQuoteItemIn] = Field(max_length=100)
+
+
+class PriceQuoteItem(BaseModel):
+    """The quotes for one provider/model, with that slot's own per-minute share."""
+
+    provider_id: str
+    model: str | None = None
+    kind: ProviderKind | None = None
+    quotes: list[PriceQuote] = []
+    per_minute_usd: Decimal | None = Field(
+        default=None, description="This slot's own share of a minute at default assumptions (an estimate)."
+    )
+    note: str | None = None
+
+
+class PriceQuotesResponse(BaseModel):
+    """``POST /v1/pricing/quotes``."""
+
+    items: list[PriceQuoteItem]
+    price_version: str
+    as_of: str
+
+
+class WorkspacePricesIn(BaseModel):
+    """``PUT /v1/workspace/prices``: the full list (replaces the stored one)."""
+
+    prices: list[WorkspacePrice] = Field(max_length=100)
+
+
+class WorkspacePricesOut(BaseModel):
+    """``GET``/``PUT /v1/workspace/prices``."""
+
+    prices: list[WorkspacePrice] = []
 
 
 class SessionEventOut(BaseModel):

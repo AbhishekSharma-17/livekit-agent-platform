@@ -1,0 +1,566 @@
+{
+  "$defs": {
+    "Assumption": {
+      "description": "One named input of the usage model (docs/v4/COSTS.md D-V4-41).",
+      "properties": {
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "High"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "workspace",
+            "request"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Url"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "key",
+        "value",
+        "source",
+        "label"
+      ],
+      "title": "Assumption",
+      "type": "object"
+    },
+    "EstimateLine": {
+      "description": "One line of a per-minute estimate.",
+      "properties": {
+        "label": {
+          "description": "The plain-language label, e.g. \"Agent's voice\".",
+          "title": "Label",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "quantity_per_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null for a per-session line.",
+          "title": "Quantity Per Min"
+        },
+        "quantity_per_session": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quantity Per Session"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PriceQuote"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "slot": {
+          "enum": [
+            "stt",
+            "llm",
+            "tts",
+            "realtime",
+            "avatar",
+            "workflow_llm",
+            "image_gen",
+            "embedding",
+            "turn_detection",
+            "vad",
+            "livekit_agent",
+            "livekit_participant",
+            "livekit_sip",
+            "livekit_egress",
+            "qa_judge"
+          ],
+          "title": "Slot",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "tokens_in",
+            "tokens_out",
+            "audio_s_in",
+            "audio_s_out",
+            "chars",
+            "minutes",
+            "images",
+            "text_tokens_in",
+            "text_tokens_out",
+            "audio_tokens_in",
+            "audio_tokens_out",
+            "cached_tokens_in",
+            "requests"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "usd_per_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null when unpriced.",
+          "title": "Usd Per Min"
+        },
+        "usd_per_session": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usd Per Session"
+        }
+      },
+      "required": [
+        "slot",
+        "label",
+        "provider_id",
+        "unit"
+      ],
+      "title": "EstimateLine",
+      "type": "object"
+    },
+    "MoneyRange": {
+      "description": "A low / mid / high band in USD (a band from stated assumptions, not a confidence interval).",
+      "properties": {
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "High"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Low"
+        },
+        "mid": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Mid"
+        }
+      },
+      "required": [
+        "low",
+        "mid",
+        "high"
+      ],
+      "title": "MoneyRange",
+      "type": "object"
+    },
+    "PriceQuote": {
+      "description": "A resolved price with its provenance (D-V4-39): what every estimate and cost line carries.",
+      "properties": {
+        "as_of": {
+          "description": "ISO date: the row's `as_of` (table), the fetch date (live), the edit date (workspace).",
+          "title": "As Of",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "fetched_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "live: the catalog cache row's fetch time.",
+          "title": "Fetched At"
+        },
+        "free_tier_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Free Tier Note"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A workspace price's own note.",
+          "title": "Note"
+        },
+        "provider_id": {
+          "description": "The registry entry priced (after `price_ref` aliasing).",
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "workspace",
+            "live",
+            "table"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor page (table), the API endpoint (live), or null (a workspace price).",
+          "title": "Source Url"
+        },
+        "stale": {
+          "default": false,
+          "description": "A table row older than PRICE_STALE_DAYS, or a live sheet past its cache TTL.",
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "tier_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tier Note"
+        },
+        "unit": {
+          "enum": [
+            "tokens_in",
+            "tokens_out",
+            "audio_s_in",
+            "audio_s_out",
+            "chars",
+            "minutes",
+            "images",
+            "text_tokens_in",
+            "text_tokens_out",
+            "audio_tokens_in",
+            "audio_tokens_out",
+            "cached_tokens_in",
+            "requests"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "usd_per_unit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Usd Per Unit"
+        }
+      },
+      "required": [
+        "provider_id",
+        "unit",
+        "usd_per_unit",
+        "source",
+        "as_of"
+      ],
+      "title": "PriceQuote",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/CostEstimate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What an agent configuration is estimated to cost per minute, at list prices.",
+  "properties": {
+    "as_of": {
+      "description": "The oldest `as_of` among the quotes used.",
+      "title": "As Of",
+      "type": "string"
+    },
+    "assumptions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Assumption"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "caveats": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Caveats",
+      "type": "array"
+    },
+    "channel": {
+      "enum": [
+        "web",
+        "phone",
+        "text"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "lines": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/EstimateLine"
+      },
+      "title": "Lines",
+      "type": "array"
+    },
+    "per_minute_usd": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MoneyRange"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Null when every line is unpriced."
+    },
+    "per_session_usd": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MoneyRange"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "price_version": {
+      "title": "Price Version",
+      "type": "string"
+    },
+    "priced_share": {
+      "default": 0.0,
+      "description": "Priced lines / all lines, 0-1.",
+      "title": "Priced Share",
+      "type": "number"
+    },
+    "session_minutes": {
+      "title": "Session Minutes",
+      "type": "number"
+    },
+    "sources": {
+      "default": [],
+      "items": {
+        "enum": [
+          "workspace",
+          "live",
+          "table"
+        ],
+        "type": "string"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "unpriced": {
+      "default": [],
+      "description": "A plain description of every unpriced line.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Unpriced",
+      "type": "array"
+    }
+  },
+  "required": [
+    "session_minutes",
+    "channel",
+    "price_version",
+    "as_of"
+  ],
+  "title": "CostEstimate",
+  "type": "object"
+}

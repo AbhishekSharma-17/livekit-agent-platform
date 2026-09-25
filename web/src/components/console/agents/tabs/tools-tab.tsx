@@ -22,12 +22,13 @@ import { usePacks, useProviders, useTools } from "@/components/console/lib/api-h
 import { BUILTIN_TOOLS, type BuiltinToolInfo } from "@/components/console/lib/constants";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { BuiltinExecutionDialog } from "@/components/console/agents/tabs/builtin-execution-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ToolRow } from "@/components/console/tools/tool-row";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { cn } from "@/lib/utils";
-import type { AgentOut, ToolOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, ToolExecution, ToolOut } from "@/contracts/lkap-contracts";
 
 /**
  * Built-in tool groups (§4.7): the tool names come from WP-0's
@@ -42,11 +43,15 @@ const BUILTIN_GROUPS: { label: string; tools: string[] }[] = [
   { label: "Escalation", tools: ["escalate_to_human"] },
 ];
 
+/** `BACKGROUNDABLE_BUILTINS` (BACKGROUND-TOOLS.md §3) — everything else always blocks. */
+const BUILTINS_WITH_EXECUTION = new Set(["search_knowledge", "http_request", "describe_current_frame"]);
+
 export function ToolsTab({ agent }: { agent: AgentOut }) {
   const maxToolStepsId = React.useId();
   const { control, watch, setValue } = useFormContext<AgentEditorForm>();
   const toolIds = watch("config.tools.tool_ids");
   const builtinDisabled = watch("config.tools.builtin_disabled");
+  const builtinExecution = watch("config.tools.builtin_execution");
   const kbIds = watch("config.knowledge.kb_ids");
   const camera = watch("config.capabilities.camera");
   const screenShare = watch("config.capabilities.screen_share");
@@ -74,6 +79,28 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
       "config.tools.builtin_disabled",
       enabled ? current.filter((existing) => existing !== name) : Array.from(new Set([...current, name])),
       { shouldDirty: true },
+    );
+  }
+
+  /** Writes `config.tools.builtin_execution[name]` (BACKGROUND-TOOLS.md §7). */
+  function setBuiltinExecution(name: string, execution: ToolExecution) {
+    setValue("config.tools.builtin_execution", { ...(builtinExecution ?? {}), [name]: execution }, { shouldDirty: true });
+  }
+
+  function executionChipFor(name: string, label: string) {
+    if (!BUILTINS_WITH_EXECUTION.has(name)) return null;
+    return (
+      <BuiltinExecutionDialog
+        name={name}
+        label={label}
+        value={builtinExecution?.[name]}
+        onSave={(execution) => setBuiltinExecution(name, execution)}
+        trigger={
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs">
+            Execution
+          </Button>
+        }
+      />
     );
   }
 
@@ -118,6 +145,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                     checked={!(builtinDisabled ?? []).includes(name)}
                     disabledReason={disabledReason}
                     onCheckedChange={(checked) => toggleBuiltin(name, checked)}
+                    executionChip={executionChipFor(name, tool.label)}
                   />
                 );
               })}
@@ -135,13 +163,16 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             htmlFor="http-request-enabled"
             hint="Lets the model call web addresses on its own, limited to the hosts the worker allows (LKAP_HTTP_TOOL_ALLOWED_HOSTS)."
           >
-            <Controller
-              control={control}
-              name="config.tools.http_request_enabled"
-              render={({ field }) => (
-                <Switch id="http-request-enabled" checked={field.value} onCheckedChange={field.onChange} />
-              )}
-            />
+            <div className="flex items-center gap-2">
+              {executionChipFor("http_request", "Make HTTP requests")}
+              <Controller
+                control={control}
+                name="config.tools.http_request_enabled"
+                render={({ field }) => (
+                  <Switch id="http-request-enabled" checked={field.value} onCheckedChange={field.onChange} />
+                )}
+              />
+            </div>
           </Field>
         </SectionRow>
 
@@ -344,11 +375,14 @@ function BuiltinToolRow({
   checked,
   disabledReason,
   onCheckedChange,
+  executionChip,
 }: {
   tool: BuiltinToolInfo;
   checked: boolean;
   disabledReason: string | null;
   onCheckedChange: (checked: boolean) => void;
+  /** The "Execution" chip (BACKGROUNDABLE_BUILTINS only); `null` for every other built-in. */
+  executionChip?: React.ReactNode;
 }) {
   const id = `builtin-tool-${tool.name}`;
   return (
@@ -359,12 +393,15 @@ function BuiltinToolRow({
         htmlFor={id}
         hint={disabledReason ?? tool.help}
       >
-        <Switch
-          id={id}
-          checked={checked && !disabledReason}
-          disabled={Boolean(disabledReason)}
-          onCheckedChange={onCheckedChange}
-        />
+        <div className="flex items-center gap-2">
+          {executionChip}
+          <Switch
+            id={id}
+            checked={checked && !disabledReason}
+            disabled={Boolean(disabledReason)}
+            onCheckedChange={onCheckedChange}
+          />
+        </div>
       </Field>
     </SectionRow>
   );

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -63,6 +63,8 @@ function stubFetch() {
   );
 }
 
+let latest: AgentEditorForm | null = null;
+
 function Harness({ agent = AGENT }: { agent?: AgentOut }) {
   const client = React.useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
   const form = useForm<AgentEditorForm>({
@@ -70,6 +72,7 @@ function Harness({ agent = AGENT }: { agent?: AgentOut }) {
     defaultValues: toFormValues(agent),
     mode: "onChange",
   });
+  latest = form.watch();
   return (
     <QueryClientProvider client={client}>
       <FormProvider {...form}>
@@ -139,5 +142,49 @@ describe("ToolsTab", () => {
     );
     render(<Harness />);
     expect(await screen.findByText("This pack registers no code tools.")).toBeTruthy();
+  });
+
+  describe("built-in execution chips (V4-13, BACKGROUND-TOOLS.md §7)", () => {
+    beforeEach(() => {
+      // Radix `Select` (the Execution dialog's "Runs" picker) needs these in jsdom.
+      Element.prototype.scrollIntoView = vi.fn();
+      Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+      Element.prototype.releasePointerCapture = vi.fn();
+    });
+
+    /** Radix `Select` mirrors every item in a hidden native `<option>` too; scope to the open listbox. */
+    async function pickOption(text: string) {
+      const listbox = await screen.findByRole("listbox");
+      fireEvent.click(within(listbox).getByText(text));
+    }
+
+    it("shows an Execution chip only on search_knowledge, describe_current_frame and http_request", async () => {
+      stubFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(screen.getAllByText("Execution")).toHaveLength(3);
+      // Not on a builtin outside BACKGROUNDABLE_BUILTINS, e.g. "End call".
+      const endCallRow = screen.getByRole("switch", { name: "End call" }).closest("[data-slot='field']");
+      expect(endCallRow ? within(endCallRow as HTMLElement).queryByText("Execution") : null).toBeNull();
+    });
+
+    it('opens the dialog and writes "tools.builtin_execution.search_knowledge" on Save', async () => {
+      stubFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      // Knowledge group renders first among the chip-bearing rows.
+      fireEvent.click(screen.getAllByText("Execution")[0]);
+      expect(await screen.findByText("Execution — Search knowledge")).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText("Runs"));
+      await pickOption("Automatic — background only if slow");
+
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() => expect(latest?.config.tools.builtin_execution.search_knowledge?.mode).toBe("auto"));
+      expect(latest?.config.tools.builtin_execution.search_knowledge?.auto_threshold_ms).toBe(700);
+    });
   });
 });

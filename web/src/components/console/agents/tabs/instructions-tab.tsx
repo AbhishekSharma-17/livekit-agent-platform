@@ -67,12 +67,25 @@ function supportedTimezones(): string[] {
  * "User-away timeout (seconds)" → "End the call when the caller is silent
  * for … seconds"; "Allow interruptions" → "Let callers interrupt".
  */
+/** Below this, a chain of background announcements can exhaust the tool-steps budget (api's `MIN_TOOL_STEPS_FOR_BACKGROUND`, R-V4-35). */
+const MIN_TOOL_STEPS_FOR_BACKGROUND = 4;
+
+const THINKING_SOUNDS = [
+  { value: "none", label: "None" },
+  { value: "keyboard_typing", label: "Keyboard typing" },
+  { value: "keyboard_typing2", label: "Keyboard typing (alternate)" },
+  { value: "office_ambience", label: "Office ambience" },
+] as const;
+
 export function InstructionsTab({ agent }: { agent: AgentOut }) {
   const timezoneListId = React.useId();
   const { register, control, watch, setValue, formState } = useFormContext<AgentEditorForm>();
   const instructions = watch("config.instructions");
   const mode = watch("config.pipeline.mode");
+  const executionDefault = watch("config.tools.execution_default");
+  const maxToolSteps = watch("config.tools.max_tool_steps");
   const instructionsError = formState.errors.config?.instructions?.message;
+  const stepsWarning = executionDefault !== "blocking" && maxToolSteps < MIN_TOOL_STEPS_FOR_BACKGROUND;
 
   const packsQuery = usePacks();
   const pack = packsQuery.data?.items.find((p) => p.manifest.id === agent.pack_id)?.manifest;
@@ -261,6 +274,74 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
               )}
             />
           </Field>
+        </SectionRow>
+      </Section>
+
+      <Section
+        id="conversation"
+        title="Conversation"
+        description="How the agent behaves while a tool is still running."
+      >
+        <SectionRow>
+          <Controller
+            control={control}
+            name="config.tools.execution_default"
+            render={({ field }) => (
+              <Field
+                label="Read tools run"
+                htmlFor="tools-execution-default"
+                hint="Applies to GET web requests, search knowledge and describe current frame — anything that changes something always waits for the agent to reply."
+              >
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="tools-execution-default" className="w-full sm:w-72" data-issue-path="tools.execution_default">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="blocking">Blocking — wait for the result</SelectItem>
+                    <SelectItem value="auto">Automatic — background only if slow</SelectItem>
+                    <SelectItem value="background">In the background — always</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          />
+          {stepsWarning ? (
+            <p
+              data-issue-path="tools.max_tool_steps"
+              className="text-[0.8125rem] text-warning-text"
+            >
+              Read tools run &quot;{executionDefault}&quot; and each announcement spends a tool step; with{" "}
+              {maxToolSteps} tool steps a chain of lookups can run out of steps — use {MIN_TOOL_STEPS_FOR_BACKGROUND}{" "}
+              or more (Tools tab → Advanced → Tool steps per turn).
+            </p>
+          ) : null}
+        </SectionRow>
+
+        <SectionRow>
+          <Controller
+            control={control}
+            name="config.voice.thinking_sound"
+            render={({ field }) => (
+              <Field
+                label="Thinking sound"
+                htmlFor="voice-thinking-sound"
+                hint="Plays while the agent is working things out, e.g. on a blocking tool call."
+              >
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="voice-thinking-sound" className="w-full sm:w-72" data-issue-path="voice.thinking_sound">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {THINKING_SOUNDS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          />
         </SectionRow>
       </Section>
     </div>

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -18,7 +18,14 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-beforeEach(() => vi.stubGlobal("ResizeObserver", ResizeObserverStub));
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+  // Radix `Select` (the Conversation card's "Read tools run"/"Thinking sound"
+  // pickers, V4-13) needs these in jsdom; no other test in this file opens one.
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.releasePointerCapture = vi.fn();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -153,5 +160,44 @@ describe("InstructionsTab", () => {
 
     fireEvent.change(timeout, { target: { value: "" } });
     await waitFor(() => expect(latest?.config.voice.user_away_timeout_s).toBeNull());
+  });
+
+  describe("Conversation card (V4-13, BACKGROUND-TOOLS.md §7)", () => {
+    /** Radix `Select` also renders a hidden native `<option>` mirror of every item; scope to the open listbox. */
+    async function pickOption(text: string) {
+      const listbox = await screen.findByRole("listbox");
+      fireEvent.click(within(listbox).getByText(text));
+    }
+
+    it("posts config.tools.execution_default and config.voice.thinking_sound", async () => {
+      stubFetch();
+      render(<Harness agent={agent()} />);
+
+      fireEvent.click(screen.getByLabelText("Read tools run"));
+      await pickOption("Automatic — background only if slow");
+      await waitFor(() => expect(latest?.config.tools.execution_default).toBe("auto"));
+
+      fireEvent.click(screen.getByLabelText("Thinking sound"));
+      await pickOption("Keyboard typing");
+      await waitFor(() => expect(latest?.config.voice.thinking_sound).toBe("keyboard_typing"));
+    });
+
+    it("warns inline (data-issue-path) when a non-blocking default leaves too few tool steps", async () => {
+      stubFetch();
+      const { container } = render(<Harness agent={agent()} />);
+
+      // Blocking (the default) never spends a tool step on an announcement, so no warning yet.
+      expect(container.querySelector('[data-issue-path="tools.max_tool_steps"]')).toBeNull();
+
+      fireEvent.click(screen.getByLabelText("Read tools run"));
+      await pickOption("Automatic — background only if slow");
+
+      const warning = await waitFor(() => {
+        const node = container.querySelector('[data-issue-path="tools.max_tool_steps"]');
+        if (!node) throw new Error("warning not shown yet");
+        return node;
+      });
+      expect(warning.textContent).toContain("use 4 or more");
+    });
   });
 });

@@ -1,9 +1,11 @@
 import {
   ActivityIcon,
+  CheckCheckIcon,
   CircleAlertIcon,
   FlagIcon,
   PhoneIcon,
   PhoneOffIcon,
+  RadioIcon,
   WorkflowIcon,
 } from "lucide-react";
 
@@ -102,5 +104,38 @@ export const BUILTIN_EVENT_KINDS: TimelineEventKind[] = [
     icon: FlagIcon,
     title: () => "Escalated",
     summary: (payload) => text(payload, "reason") ?? text(payload, "message"),
+  },
+  /**
+   * V4-13 (BACKGROUND-TOOLS.md D-V4-38): the two events a non-blocking tool
+   * adds beside the unchanged `tool_call_started`/`tool_call_ended` pair.
+   * `tool_call_updated {call_id, tool, message_preview}` is the announce or a
+   * later progress update; `tool_reply {call_ids, status, speech_id}` is the
+   * deferred reply the SDK schedules once the tool is done. Ask #89 (left by
+   * V4-12): the worker can post `tool_reply` *before* the matching
+   * `tool_call_ended` (it queues the reply from inside the tool task and
+   * reports `ended` from a done-callback), so these render as their own rows
+   * by `ts` rather than assuming that order — no pairing by `call_id` here.
+   */
+  {
+    type: "tool_call_updated",
+    filter: "tools",
+    icon: RadioIcon,
+    title: (payload) => `Update from ${text(payload, "tool") ?? "a tool"}`,
+    summary: (payload) => text(payload, "message_preview"),
+  },
+  {
+    type: "tool_reply",
+    filter: "tools",
+    icon: CheckCheckIcon,
+    title: (payload) => {
+      const status = text(payload, "status");
+      if (status === "skipped") return "Already covered";
+      return status ? `Reply ${humanize(status)}` : "Reply";
+    },
+    summary: (payload) => {
+      const ids = payload["call_ids"];
+      if (!Array.isArray(ids) || ids.length === 0) return null;
+      return `${ids.length} tool call${ids.length === 1 ? "" : "s"}`;
+    },
   },
 ];

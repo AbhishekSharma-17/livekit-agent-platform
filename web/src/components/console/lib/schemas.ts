@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { FlowSpec } from "@/contracts/lkap-contracts";
+import type { FlowSpec, ToolExecution } from "@/contracts/lkap-contracts";
 
 /**
  * Hand-authored zod mirrors of the generated contract interfaces
@@ -77,6 +77,8 @@ export const voiceConfigSchema = z.object({
   language: z.string().min(1, "Language is required"),
   allow_interruptions: z.boolean(),
   user_away_timeout_s: z.number().nullable().optional(),
+  /** V4-13: the Conversation card's thinking-sound picker (BACKGROUND-TOOLS.md D-V4-38). */
+  thinking_sound: z.enum(["none", "keyboard_typing", "keyboard_typing2", "office_ambience"]),
 });
 
 export const capabilitiesConfigSchema = z.object({
@@ -91,6 +93,16 @@ export const toolsConfigSchema = z.object({
   http_request_enabled: z.boolean(),
   tool_ids: z.array(z.string()),
   max_tool_steps: z.number().int().min(1, "At least 1").max(20, "20 max"),
+  /**
+   * V4-13 (BACKGROUND-TOOLS.md §7): `execution_default` is the Conversation
+   * card's "Read tools run" picker; `builtin_execution` is written by
+   * `builtin-execution-dialog.tsx` (the Tools tab's per-builtin "Execution"
+   * chip), not by direct binding, so it is a passthrough — the dialog owns
+   * the real shape (`ToolExecution`, mirrored by hand since there is no
+   * JSON-Schema-to-zod step, see the file header).
+   */
+  execution_default: z.enum(["blocking", "background", "auto"]),
+  builtin_execution: z.record(z.string(), z.custom<ToolExecution>()),
 });
 
 export const knowledgeConfigSchema = z.object({

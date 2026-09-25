@@ -20,6 +20,17 @@ const RECORDING = { enabled: false, audio_only: true, storage_config_id: null, r
 const AVATAR_OPTIONS = { participant_name: "Avatar", video_quality: null, idle_timeout_s: null, max_duration_s: null };
 const PANEL = { panel_id: "composite", layout: "side" as const, blocks: [] };
 const TELEPHONY = { transfer_targets: [] };
+// V4-13 (BACKGROUND-TOOLS.md §7): `voiceConfigSchema`/`toolsConfigSchema` gained
+// `thinking_sound`/`execution_default`/`builtin_execution` — required fields now.
+const VOICE = { greeting: "hi", greeting_mode: "say" as const, language: "en", allow_interruptions: true, thinking_sound: "none" as const };
+const TOOLS = {
+  builtin_disabled: [],
+  http_request_enabled: false,
+  tool_ids: [],
+  max_tool_steps: 3,
+  execution_default: "blocking" as const,
+  builtin_execution: {},
+};
 
 describe("zodResolver", () => {
   it("builds a nested error tree matching the form shape", async () => {
@@ -36,9 +47,9 @@ describe("zodResolver", () => {
         config: {
           instructions: "",
           pipeline: { mode: "cascaded", stt: null, llm: null, tts: null, avatar_options: AVATAR_OPTIONS, turn_handling: {} },
-          voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true },
+          voice: VOICE,
           capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
-          tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+          tools: TOOLS,
           knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
           pack_settings: {},
           timezone: "UTC",
@@ -84,9 +95,9 @@ describe("zodResolver", () => {
             avatar_options: AVATAR_OPTIONS,
             turn_handling: {},
           },
-          voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true },
+          voice: VOICE,
           capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
-          tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+          tools: TOOLS,
           knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
           pack_settings: {},
           timezone: "UTC",
@@ -125,9 +136,9 @@ describe("zodResolver", () => {
             turn_handling: {},
             ...overrides.pipeline,
           },
-          voice: { greeting: "hi", greeting_mode: "say", language: "en", allow_interruptions: true },
+          voice: VOICE,
           capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
-          tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+          tools: TOOLS,
           knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
           pack_settings: {},
           timezone: "UTC",
@@ -220,9 +231,9 @@ describe("zodResolver", () => {
             avatar_options: AVATAR_OPTIONS,
             turn_handling: {},
           },
-          voice: { greeting: "hi", greeting_mode: "say" as const, language: "en", allow_interruptions: true },
+          voice: VOICE,
           capabilities: { camera: false, screen_share: false, chat_input: true, vision_inject_per_turn: true },
-          tools: { builtin_disabled: [], http_request_enabled: false, tool_ids: [], max_tool_steps: 3 },
+          tools: TOOLS,
           knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
           pack_settings: {},
           timezone: "UTC",

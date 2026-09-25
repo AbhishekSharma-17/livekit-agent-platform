@@ -20,7 +20,7 @@
  */
 import * as React from "react";
 
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon } from "lucide-react";
 
 import type {
   ActivityEvent,
@@ -320,8 +320,15 @@ export function AssetsBlock({
   );
 }
 
+/** The activity feed's own detail line (E2, panels-and-capabilities.md): background-tool updates carry it. */
+function activityDetailMessage(event: ActivityEvent): string | null {
+  const message = event.detail?.message;
+  return typeof message === "string" && message.trim().length > 0 ? message : null;
+}
+
 /** One activity row: a running item gets the meter, everything else a dot. */
 export function ActivityRow({ event }: { event: ActivityEvent }) {
+  const detailMessage = activityDetailMessage(event);
   return (
     <li data-slot="panel-activity-item" data-phase={event.phase} className="flex gap-2.5">
       {event.phase === "running" ? (
@@ -348,6 +355,19 @@ export function ActivityRow({ event }: { event: ActivityEvent }) {
           {event.label} · {PHASE_LABEL[event.phase]}
           {typeof event.duration_ms === "number" && ` · ${Math.round(event.duration_ms)} ms`}
         </p>
+        {detailMessage ? (
+          <details data-slot="panel-activity-detail" className="group/activity-detail mt-1">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-xs text-xs text-muted-foreground outline-none select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <Icon
+                as={ChevronRightIcon}
+                size="sm"
+                className="transition-transform duration-(--dur-1) ease-out group-open/activity-detail:rotate-90 motion-reduce:transition-none"
+              />
+              Details
+            </summary>
+            <p className="mt-1 text-xs leading-snug break-words text-muted-foreground">{detailMessage}</p>
+          </details>
+        ) : null}
       </div>
     </li>
   );

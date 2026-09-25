@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+import structlog
 from fakes.fake_api import resolved_config
 from fakes.fake_ctx import (
     FakeBackgroundRunner,
@@ -723,6 +724,95 @@ def test_cascaded_mode_keeps_the_reply_of_a_tool_without_silent_reply() -> None:
 
     assert plain.has_tool_reply
     assert mixed.has_tool_reply
+
+
+def _http_silent_agent(mode: PipelineMode, pack: Any = None) -> Any:
+    """An agent whose `_assemble` found one `silent_reply=true` HTTP tool (R-V4-71)."""
+    ctx = _context(resolved_config(mode=mode))
+    return PlatformAgent(
+        ctx=ctx,
+        pack=pack or NullPack(),
+        has_tts=mode == "cascaded",
+        silent_reply_tools=frozenset({"push_status"}),
+    )
+
+
+def _unhonoured_lines(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [line for line in logs if "silent_reply is not honoured" in str(line.get("event"))]
+
+
+@pytest.mark.parametrize("mode", ["realtime", "half_cascade"])
+def test_on_function_tools_executed_silent_http_tool_on_realtime_cancels_the_reply(
+    mode: PipelineMode,
+) -> None:
+    """R-V4-71: an HTTP tool's `silent_reply` joins the silent set; realtime models always honour it."""
+    agent = _http_silent_agent(mode)
+    event = _tools_executed("push_status")
+
+    agent.on_function_tools_executed(event)
+
+    assert not event.has_tool_reply
+
+
+def test_on_function_tools_executed_silent_http_tool_on_cascaded_1_8_3_cancels_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R-V4-71 + R-V4-68: the cascaded pipeline honours it from livekit-agents 1.8.3, without a log line."""
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.3")
+    with structlog.testing.capture_logs() as logs:
+        agent = _http_silent_agent("cascaded")
+    event = _tools_executed("push_status")
+
+    agent.on_function_tools_executed(event)
+
+    assert not event.has_tool_reply
+    assert _unhonoured_lines(logs) == []
+
+
+def test_on_function_tools_executed_silent_http_tool_on_cascaded_below_1_8_3_keeps_the_reply_and_logs_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Below 1.8.3 a cascaded LLM answers anyway; the session says so once instead of ignoring the flag."""
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.2")
+    with structlog.testing.capture_logs() as logs:
+        agent = _http_silent_agent("cascaded")
+        first, second = _tools_executed("push_status"), _tools_executed("push_status")
+        agent.on_function_tools_executed(first)
+        agent.on_function_tools_executed(second)
+
+    assert first.has_tool_reply
+    assert second.has_tool_reply
+    (line,) = _unhonoured_lines(logs)
+    assert line["log_level"] == "info"
+    assert line["tools"] == ["push_status"]
+
+
+def test_the_unhonoured_line_is_not_logged_for_pack_silent_tools_or_realtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The line is about HTTP tools on a cascaded pipeline below 1.8.3 only; pack behaviour is unchanged."""
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.2")
+    with structlog.testing.capture_logs() as logs:
+        _agent(resolved_config(mode="cascaded"), _SilentPack())
+        _http_silent_agent("realtime")
+
+    assert _unhonoured_lines(logs) == []
+
+
+@pytest.mark.parametrize("mode", ["realtime", "cascaded"])
+def test_on_function_tools_executed_silent_http_tool_mixed_with_a_speaking_tool_keeps_the_reply(
+    mode: PipelineMode,
+) -> None:
+    """The ⊆ rule is unchanged: a batch with any non-silent tool is still answered."""
+    agent = _http_silent_agent(mode, _SilentPack())
+    mixed = _tools_executed("push_status", "lookup_policy")
+    silent_only = _tools_executed("push_status", "sync_claim_packet")
+
+    agent.on_function_tools_executed(mixed)
+    agent.on_function_tools_executed(silent_only)
+
+    assert mixed.has_tool_reply
+    assert not silent_only.has_tool_reply, "pack and HTTP silent names form one set"
 
 
 def test_the_cascaded_note_keeps_short_acknowledgements_for_tools_that_answer() -> None:

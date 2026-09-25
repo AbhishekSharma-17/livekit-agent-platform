@@ -23,6 +23,7 @@ from livekit.agents import AgentServer, AgentSession, inference, llm
 from lkap_contracts.api_models import KbHit
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
 from packs.base import UiChannel as UiChannelProtocol
 
 from lkap_agent.config_client import ConfigUnavailableError, SessionEndedError, SessionNotFoundError
@@ -293,6 +294,38 @@ async def test_run_session_registers_the_silent_reply_handler_synchronously() ->
     from lkap_agent.platform_agent import PlatformAgent
 
     assert not inspect.iscoroutinefunction(PlatformAgent.on_function_tools_executed)
+
+
+def _http_row(name: str, *, silent_reply: bool) -> HttpToolDefinition:
+    return HttpToolDefinition(
+        name=name,
+        description=f"{name} tool.",
+        parameters={"type": "object", "properties": {}},
+        method="GET",
+        url="https://api.example.com/status",
+        allowed_hosts=["api.example.com"],
+        silent_reply=silent_reply,
+    )
+
+
+async def test_assemble_silent_reply_http_tools_reach_the_agent_silent_set() -> None:
+    """R-V4-71: exactly the `http` rows with `silent_reply=True` join the agent's silent set."""
+    from lkap_agent.main import _assemble
+    from lkap_agent.platform_agent import PlatformAgent
+    from lkap_agent.session_builder import prepare_resolved
+
+    tools: list[Any] = [
+        _http_row("push_status", silent_reply=True),
+        _http_row("lookup_status", silent_reply=False),
+        McpServerDefinition(name="crm", url="https://mcp.example.com/mcp"),
+    ]
+    resolved = resolved_config(mode="cascaded", tools=tools)
+    deps = _deps(FakeApi(resolved))
+
+    _plan, agent = _assemble(FakeJobContext(_metadata()), deps, prepare_resolved(resolved))
+
+    assert isinstance(agent, PlatformAgent)
+    assert agent._silent_reply_tools == frozenset({"push_status"})
 
 
 # ------------------------------------------------------------------- failure path

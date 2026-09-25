@@ -66,6 +66,7 @@ __all__ = [
     "GuardedResolver",
     "GuardedTCPConnector",
     "GuardedTransport",
+    "McpPolicy",
     "NoRedirectClientSession",
     "NetPolicy",
     "address_problem",
@@ -74,6 +75,7 @@ __all__ = [
     "guarded_aiohttp_session",
     "guarded_http_client",
     "host_problem",
+    "mcp_policy",
     "numeric_host",
     "policy_from_settings",
     "validate_url",
@@ -288,6 +290,65 @@ def validate_url(
         raise UnprocessableEntityError(
             problem, details={"field": field_name, "reason": "blocked_destination"}
         )
+
+
+#: ``LKAP_MCP_ALLOWED_HOSTS`` value that reuses the HTTP-tool list (D-V5-4's override).
+MCP_HOSTS_HTTP_ALIAS: Final[str] = "@http"
+
+
+@dataclass(frozen=True)
+class McpPolicy:
+    """Where an MCP server may live (V5-09, D-V5-4): the guard, ``https``, and an optional ceiling."""
+
+    net: NetPolicy
+    allowed_hosts: frozenset[str] = frozenset()
+    """``LKAP_MCP_ALLOWED_HOSTS``; a non-empty set is a ceiling."""
+    fail_closed: bool = False
+    """``@http``: the HTTP-tool list is the ceiling and, as for HTTP tools, empty allows nothing."""
+    allow_http_loopback: bool = False
+    """``LKAP_ENV=dev``: plain ``http`` is allowed to a loopback host (a local test server)."""
+
+    def problem(self, url: str) -> str | None:
+        """Why the api may not connect to the MCP server at ``url``, or ``None`` (offline check).
+
+        The reason names the host or the setting, never the url's path or query.
+        """
+        base = check_url(url, self.net)
+        if base is not None:
+            return base
+        parsed = urlsplit(url.strip())
+        host = _normalise_host(parsed.hostname or "")
+        if parsed.scheme.lower() != "https" and not (self.allow_http_loopback and _loopback_host(host)):
+            return "an MCP server must use https (plain http only reaches a loopback host in LKAP_ENV=dev)"
+        if (self.allowed_hosts or self.fail_closed) and host not in self.allowed_hosts:
+            return f"{host} is not on LKAP_MCP_ALLOWED_HOSTS"
+        return None
+
+
+def _loopback_host(host: str) -> bool:
+    literal = _ip_literal(host)
+    if literal is not None:
+        return literal.is_loopback
+    return host == "localhost" or host.endswith(".localhost")
+
+
+def _host_list(raw: str) -> frozenset[str]:
+    return frozenset(_normalise_host(h) for h in raw.split(",") if h.strip())
+
+
+def mcp_policy(settings: Settings) -> McpPolicy:
+    """The MCP host policy: the process's :class:`NetPolicy`, ``https``, ``LKAP_MCP_ALLOWED_HOSTS``."""
+    raw = settings.mcp_allowed_hosts.strip()
+    if raw == MCP_HOSTS_HTTP_ALIAS:
+        hosts, fail_closed = _host_list(settings.http_tool_allowed_hosts), True
+    else:
+        hosts, fail_closed = _host_list(raw), False
+    return McpPolicy(
+        net=policy_from_settings(settings),
+        allowed_hosts=hosts,
+        fail_closed=fail_closed,
+        allow_http_loopback=settings.env == "dev",
+    )
 
 
 # --------------------------------------------------------------------------- resolution

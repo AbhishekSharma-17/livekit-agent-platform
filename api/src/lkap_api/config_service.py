@@ -81,6 +81,8 @@ from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     NON_BLOCKING_MODES,
     HttpToolDefinition,
+    McpHeaderAuth,
+    McpOAuthAuth,
     McpServerDefinition,
     ProviderToolDefinition,
     ToolDefinition,
@@ -1638,11 +1640,23 @@ def resolve_tool_definition(definition: ToolDefinition, secrets: Mapping[str, st
             }
         )
     mcp: McpServerDefinition = definition
+    # V5-09: `auth` is canonical and `headers`/`credential_id` mirror it, so both are filled
+    # and cleared together (a disagreeing pair fails validation on the worker); the
+    # `cached_tools` snapshot is for the console and stays out of the session.
+    headers = {k: substitute_secrets(v, secrets) for k, v in mcp.headers.items()}
+    auth = mcp.auth
+    if isinstance(auth, McpHeaderAuth):
+        auth = McpHeaderAuth(headers=headers, credential_id=None)
+    elif isinstance(auth, McpOAuthAuth):
+        auth = auth.model_copy(update={"credential_id": None})
     return mcp.model_copy(
         update={
             "url": substitute_secrets(mcp.url, secrets),
-            "headers": {k: substitute_secrets(v, secrets) for k, v in mcp.headers.items()},
+            "headers": headers,
             "credential_id": None,
+            "auth": auth,
+            "cached_tools": None,
+            "cached_at": None,
         }
     )
 

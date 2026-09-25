@@ -1,6 +1,6 @@
 """The flow runtime: one `FlowRuntime` per flow session (PLAN-V2 V2-15, ARCHITECTURE-V2 §2.5).
 
-Mapping of a `FlowSpec` onto livekit-agents 1.8.2 (verified against the
+Mapping of a `FlowSpec` onto livekit-agents 1.8.3 (verified against the
 installed SDK):
 
 * **Nodes.** Every `agent` node — and the `start` node when it has to route
@@ -13,6 +13,12 @@ installed SDK):
   with `chat_ctx=<current agent's chat_ctx>`; `Agent.__init__` copies it with
   `ChatContext.copy(tools=...)`, which also drops old `go_to_*` call pairs the
   new node has no tool for.
+* **Sibling tools of an edge** (R-V4-64, V4-19): when a batch of parallel
+  tool calls hands off, the draining node generates no tool reply (every
+  output of the batch is marked `reply_required=False` in the synchronous
+  `function_tools_executed` handler), and the batch's call/output pairs are
+  carried into the next node, whose `on_enter` answers from them
+  (:meth:`FlowRuntime.on_function_tools_executed`).
 * **transition_speech** is queued with `session.say()` inside the tool:
   speech scheduling is not paused yet at tool time, and the old activity's
   `drain()` waits for every queued speech before the next node starts, so the
@@ -53,7 +59,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
-from livekit.agents import RunContext, get_job_context
+from livekit.agents import Agent, FunctionToolsExecutedEvent, RunContext, get_job_context
 from livekit.agents import llm as lk_llm
 from lkap_contracts.agent_config import ResolvedAgentConfig, effective_qa
 from lkap_contracts.flow import (
@@ -262,6 +268,10 @@ class FlowRuntime:
         self._finished = False
         self._ended = False
         self._warned: set[str] = set()
+        #: Edge call id → the node agent that call returned, until its batch is executed.
+        self._handoff_targets: dict[str, Agent] = {}
+        # R-V4-64: synchronous, so it runs before the SDK reads `has_tool_reply`.
+        ctx.session.on("function_tools_executed", self.on_function_tools_executed)
 
     # ------------------------------------------------------------------ build
 
@@ -444,7 +454,7 @@ class FlowRuntime:
         self.publish_progress()
 
     async def settle(self, timeout_s: float = SETTLE_TIMEOUT_S) -> None:
-        """Wait (bounded) for in-flight extractions to land in `FlowState.variables`."""
+        """Wait (bounded) for in-flight extractions (and a handoff's carried tool pairs) to land."""
         pending = [t for t in self._pending if not t.done()]
         if not pending:
             return
@@ -462,7 +472,11 @@ class FlowRuntime:
             agent = current if current is not None and hasattr(current, "node") else agent
         if agent is None:
             return "The conversation flow is not ready yet."
-        return await self.transition(agent, edge, reason="edge")
+        result = await self.transition(agent, edge, reason="edge")
+        if isinstance(result, Agent):
+            # The batch this call belongs to hands off to `result` (R-V4-64).
+            self._handoff_targets[context.function_call.call_id] = result
+        return result
 
     async def transition(self, source: FlowNodeAgent, edge: FlowEdge, *, reason: str) -> Any:
         """Leave `source` along `edge`.
@@ -501,6 +515,69 @@ class FlowRuntime:
                 return await self._transfer(source, target, edge, reason)
             case _:
                 return "That step cannot be entered."
+
+    def on_function_tools_executed(self, ev: FunctionToolsExecutedEvent) -> None:
+        """No reply from the draining node once a batch hands off (R-V4-64, V4-19).
+
+        livekit-agents 1.8.3 gathers a whole batch of parallel tool calls, then
+        emits this event, then — when a tool returned an `Agent` — calls
+        `update_agent` and still generates the tool reply on the **old**
+        activity, with the old node's instructions, whenever any output of the
+        batch has `reply_required` (`AgentActivity._pipeline_reply_task_impl`;
+        the realtime path is the same). An edge tool's own output never asks for
+        a reply, but a sibling's does — a plain result, or a background tool's
+        first `ctx.update()` announce — so the caller heard the router before
+        the target node. Completion order inside the batch does not matter: the
+        decision is made over all of its outputs at once.
+
+        So when the batch hands off, every output is marked
+        `reply_required=False` (`cancel_tool_reply`, the SDK's public knob; a
+        `ToolResult` returned by the tool cannot reach a background tool's
+        announce). A background sibling still running is cancelled by the old
+        activity's drain (D-V4-37).
+
+        The batch's call/output pairs are also carried into the target node:
+        the target copied the old node's context when the edge tool ran, before
+        the SDK committed the batch, and the SDK merges nothing on a handoff.
+        They are added through `Agent.update_chat_ctx` (a plain assignment while
+        the target has no activity yet, filtered to the target's tools like
+        `Agent.__init__`'s copy), tracked with the extractions so the target's
+        `on_enter` settles it before `generate_reply()` answers from them.
+
+        Registered on the session as a **synchronous** handler: the SDK reads
+        `has_tool_reply` right after emitting the event.
+        """
+        targets = [
+            self._handoff_targets.pop(call.call_id)
+            for call in ev.function_calls
+            if call.call_id in self._handoff_targets
+        ]
+        if not ev.has_agent_handoff:
+            return
+        if ev.has_tool_reply:
+            ev.cancel_tool_reply()
+            logger.debug(
+                "flow handoff: no reply from the draining node",
+                node=self.state.current_node,
+                tools=[call.name for call in ev.function_calls],
+            )
+        if len(targets) == 1:
+            self._carry_batch(targets[0], ev)
+
+    def _carry_batch(self, target: Agent, ev: FunctionToolsExecutedEvent) -> None:
+        """Add the batch's call/output pairs to `target`'s context (see above)."""
+        chat_ctx = target.chat_ctx.copy()
+        known = {item.id for item in chat_ctx.items}
+        items: list[lk_llm.ChatItem] = [
+            *(call for call in ev.function_calls if call.id not in known),
+            *(out for out in ev.function_call_outputs if out.id not in known),
+        ]
+        if not items:
+            return
+        chat_ctx.insert(items)
+        task = asyncio.create_task(target.update_chat_ctx(chat_ctx), name="lkap_flow_carry_batch")
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
 
     async def fallback(self, source: FlowNodeAgent) -> None:
         """Take `source`'s fallback edge outside a tool (the `max_turns` guard)."""

@@ -30,6 +30,7 @@ from lkap_contracts.api_models import (
     CallReportIn,
     InternalTransferOut,
     KbHit,
+    KbSearchOptions,
     SessionEventIn,
     SessionMetricsIn,
     SessionRecordingIn,
@@ -172,6 +173,8 @@ class FakeApi:
         self.events: list[SessionEventIn] = []
         self.summaries: list[SessionSummaryIn] = []
         self.kb_queries: list[tuple[list[str], str, int]] = []
+        #: The search options of each `kb_search` (V5-06; `None` when the caller sent none).
+        self.kb_options: list[KbSearchOptions | None] = []
         #: Telephony (R-V2-20): every call report, and every transfer request.
         self.call_reports: list[CallReportIn] = []
         self.transfers: list[tuple[str, str, str | None]] = []
@@ -223,9 +226,12 @@ class FakeApi:
         self.summaries.append(summary)
         self.call_log.append("summary")
 
-    async def kb_search(self, kb_ids: list[str], query: str, k: int = 4) -> list[KbHit]:
-        """Record the query and return the canned hits."""
+    async def kb_search(
+        self, kb_ids: list[str], query: str, k: int = 4, *, options: KbSearchOptions | None = None
+    ) -> list[KbHit]:
+        """Record the query (and its options) and return the canned hits."""
         self.kb_queries.append((list(kb_ids), query, k))
+        self.kb_options.append(options)
         return self.hits[:k]
 
     async def report_call(self, report: CallReportIn) -> None:

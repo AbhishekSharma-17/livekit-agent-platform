@@ -217,14 +217,16 @@ async def test_on_user_turn_completed_survives_a_failing_knowledge_base() -> Non
 
     agent = _agent(resolved_config(kb_ids=["kb-1"]), kb=cast(Any, _BrokenKb()))
 
-    await agent.on_user_turn_completed(ChatContext.empty(), llm.ChatMessage(role="user", content=["hi"]))
+    await agent.on_user_turn_completed(
+        ChatContext.empty(), llm.ChatMessage(role="user", content=["Is my roof covered?"])
+    )
 
 
 async def test_on_user_turn_completed_skips_a_knowledge_search_slower_than_the_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A slow api bounds the reply delay at `_KB_INJECT_TIMEOUT_S`, then the turn carries on."""
-    monkeypatch.setattr(platform_agent_module, "_KB_INJECT_TIMEOUT_S", 0.01)
+    """A slow api bounds the reply delay at `INJECT_TIMEOUT_S`, then the turn carries on."""
+    monkeypatch.setattr(platform_agent_module, "INJECT_TIMEOUT_S", 0.01)
     cancelled = asyncio.Event()
 
     class _SlowKb(FakeKbClient):
@@ -240,17 +242,19 @@ async def test_on_user_turn_completed_skips_a_knowledge_search_slower_than_the_t
     agent = _agent(resolved_config(kb_ids=["kb-1"]), pack, kb=cast(Any, _SlowKb()))
     turn_ctx = ChatContext.empty()
 
+    question = "Is my roof covered?"
     await asyncio.wait_for(
-        agent.on_user_turn_completed(turn_ctx, llm.ChatMessage(role="user", content=["hi"])), timeout=2
+        agent.on_user_turn_completed(turn_ctx, llm.ChatMessage(role="user", content=[question])), timeout=2
     )
 
     assert cancelled.is_set()
     assert turn_ctx.items == []
-    assert pack.user_turns == ["hi"]
+    assert pack.user_turns == [question]
 
 
-def test_kb_inject_timeout_is_three_seconds() -> None:
-    assert platform_agent_module._KB_INJECT_TIMEOUT_S == 3.0
+def test_kb_inject_timeout_is_400_ms() -> None:
+    """V5-06: the pre-fetch usually has the hits ready; a search in the hook gets 400 ms."""
+    assert platform_agent_module.INJECT_TIMEOUT_S == 0.4
 
 
 # --------------------------------------------------------------------- vision

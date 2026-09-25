@@ -107,6 +107,7 @@ from lkap_agent.config_client import (
     SessionNotFoundError,
 )
 from lkap_agent.flow import FlowServices, build_flow_agent, is_flow, prepare_flow_resolved
+from lkap_agent.knowledge import prefetch_listener, search_options
 from lkap_agent.logging import configure_logging, get_logger
 from lkap_agent.observability import SessionObserver, bind_session_context
 from lkap_agent.packs.loader import PackLoader
@@ -715,6 +716,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     plan.session.on("conversation_item_added", agent.on_conversation_item)
     # V4-12 (D-V4-38): background and slow tools feed the activity block.
     plan.session.on("tool_execution_updated", agent.on_tool_execution)
+    # V5-06: knowledge pre-fetch on the running transcript (the current agent's scope at fire time).
+    plan.session.on("user_input_transcribed", prefetch_listener(plan.session))
     plan.session.on("error", _vision_degrade_handler(agent, observer))
     # D-W2-9e: a closed AgentSession (end_call, an error) must end the job too;
     # the shutdown callback posts the summary.
@@ -1350,7 +1353,9 @@ def _assemble(
         room=ctx.room,
         ui=ui,
         frames=frames,
-        kb=ApiKbClient(deps.config_client, resolved.kb_ids),
+        kb=ApiKbClient(
+            deps.config_client, resolved.kb_ids, options=search_options(resolved.config.knowledge)
+        ),
         workflow_llm=PromptJsonStructuredLLM(_workflow_model(providers)),
         background=deps.background_runner_factory(
             ui=ui,

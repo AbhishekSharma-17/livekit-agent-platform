@@ -27,6 +27,7 @@ from lkap_contracts.api_models import (
     InternalTransferIn,
     InternalTransferOut,
     KbHit,
+    KbSearchOptions,
     KbSearchResponse,
     RecordingStartOut,
     SessionEventIn,
@@ -115,8 +116,10 @@ class ConfigClientProtocol(Protocol):
         """Store the final usage, transcript and UI state."""
         ...
 
-    async def kb_search(self, kb_ids: list[str], query: str, k: int = 4) -> list[KbHit]:
-        """Search the agent's knowledge bases through the api."""
+    async def kb_search(
+        self, kb_ids: list[str], query: str, k: int = 4, *, options: KbSearchOptions | None = None
+    ) -> list[KbHit]:
+        """Search the agent's knowledge bases through the api (`options`: mode, rerank, floor)."""
         ...
 
     async def report_call(self, report: CallReportIn) -> None:
@@ -341,8 +344,17 @@ class ConfigClient:
         except httpx.HTTPError as exc:
             logger.warning("failed to put session summary", session_id=session_id, error=str(exc))
 
-    async def kb_search(self, kb_ids: list[str], query: str, k: int = 4) -> list[KbHit]:
+    async def kb_search(
+        self, kb_ids: list[str], query: str, k: int = 4, *, options: KbSearchOptions | None = None
+    ) -> list[KbHit]:
         """Post `POST /internal/v1/kb/search`.
+
+        Args:
+            kb_ids: The knowledge bases to search.
+            query: The search text.
+            k: How many hits.
+            options: `mode`, `rerank` and `min_score` (V5-06, from `KnowledgeConfig`);
+                `None` sends the api's defaults (vector, no rerank, no floor).
 
         Returns:
             The hits, best first. An empty list when the search fails — retrieval
@@ -350,7 +362,9 @@ class ConfigClient:
         """
         if not kb_ids or not query.strip():
             return []
-        request = InternalKbSearchRequest(kb_ids=kb_ids, query=query, k=k)
+        request = InternalKbSearchRequest(
+            kb_ids=kb_ids, query=query, k=k, **(options.model_dump() if options is not None else {})
+        )
         try:
             response = await self._client.post(
                 self._url("/internal/v1/kb/search"),
@@ -413,13 +427,29 @@ class ApiKbClient:
     `ctx.kb.search("...")` without knowing them. `k` is passed through
     unchanged (DECISIONS-W2 D-W2-5): an explicit `k` wins, otherwise the
     contract default 4; platform callers pass `config.knowledge.top_k`.
+
+    V5-06: the agent's search options (`KnowledgeConfig.mode`, `rerank`,
+    `min_score`, see :func:`lkap_agent.knowledge.search_options`) are bound
+    here too, so auto-inject, the pre-fetch, `search_knowledge` and pack
+    tools all search the way the agent is configured without the
+    `packs.base.KbClient` signature changing.
     """
 
-    def __init__(self, client: ConfigClientProtocol, kb_ids: list[str]) -> None:
+    def __init__(
+        self, client: ConfigClientProtocol, kb_ids: list[str], *, options: KbSearchOptions | None = None
+    ) -> None:
         self._client = client
         self._kb_ids = list(kb_ids)
+        self._options = options
+
+    @property
+    def options(self) -> KbSearchOptions | None:
+        """The bound search options (`None`: the api's defaults)."""
+        return self._options
 
     async def search(self, query: str, k: int = 4, kb_ids: list[str] | None = None) -> list[KbHit]:
         """Search the agent's knowledge bases (or `kb_ids` when given) for `k` hits."""
         targets = kb_ids if kb_ids is not None else self._kb_ids
-        return await self._client.kb_search(targets, query, k)
+        if self._options is None:
+            return await self._client.kb_search(targets, query, k)
+        return await self._client.kb_search(targets, query, k, options=self._options)

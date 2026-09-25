@@ -6,7 +6,9 @@
   platform pipeline notes),
 * carries the merged tool list (built-in, declarative, pack),
 * injects knowledge-base results and, in cascaded mode, one camera/screen frame
-  per user turn before delegating to the pack hook,
+  per user turn before delegating to the pack hook; the retrieval gate, the
+  conversation query, the dedupe ring and the interim pre-fetch are in
+  :mod:`lkap_agent.knowledge` (V5-06),
 * speaks the greeting on enter, choosing `say()` or `generate_reply()` by what
   the configured pipeline can actually do (ARCHITECTURE §15.9),
 * cancels the model's tool reply for tools a pack or an HTTP tool definition
@@ -61,6 +63,16 @@ from packs.base import (
     UiChannel,
 )
 
+from lkap_agent.knowledge import (
+    INJECT_TIMEOUT_S,
+    KNOWLEDGE_STATE_KEY,
+    KnowledgeState,
+    approx_tokens,
+    build_query,
+    compose_note,
+    knowledge_state,
+    skip_reason,
+)
 from lkap_agent.logging import get_logger
 from lkap_agent.tools.execution import (
     FLOW_BACKGROUND_MIN_SDK,
@@ -138,9 +150,6 @@ _REALTIME_MODEL_MODES: Final[frozenset[PipelineMode]] = frozenset({"realtime", "
 
 #: Longest side of an injected frame (DECISIONS-W2 D-W2-8 R3).
 _VISION_MAX_PX: Final[int] = 512
-
-#: Upper bound on the per-turn knowledge search; a slower api must not delay the reply.
-_KB_INJECT_TIMEOUT_S: Final[float] = 3.0
 
 #: How the retrieved knowledge is framed for the model.
 _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
@@ -652,30 +661,119 @@ class PlatformAgent(Agent):
         """The knowledge bases auto-inject searches (hook point: a flow node's KB subset)."""
         return list(self._ctx.config.knowledge.kb_ids)
 
-    async def _inject_knowledge(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
+    def _knowledge_query(self, user_text: str, chat_ctx: ChatContext) -> str:
+        """The auto-inject search text: the turn, plus context in `conversation` mode (V5-06)."""
         knowledge = self._ctx.config.knowledge
-        if not knowledge.auto_inject or not self._auto_inject_kb_ids():
+        if knowledge.query_mode != "conversation":
+            return user_text.strip()
+        previous = ""
+        for item in reversed(chat_ctx.items):
+            if isinstance(item, ChatMessage) and item.role == "assistant" and item.text_content:
+                previous = item.text_content
+                break
+        flow = self._ctx.userdata.get("flow")
+        variables = getattr(flow, "variables", None)
+        return build_query(
+            user_text,
+            query_mode=knowledge.query_mode,
+            previous_assistant=previous,
+            variables=variables if isinstance(variables, dict) else None,
+        )
+
+    def _auto_inject_active(self) -> bool:
+        knowledge = self._ctx.config.knowledge
+        return knowledge.auto_inject and bool(self._auto_inject_kb_ids())
+
+    def prefetch_knowledge(self, transcript: str, is_final: bool) -> None:
+        """Start (or restart) the debounced auto-inject search for the running transcript.
+
+        Called by the session's `user_input_transcribed` listener
+        (:func:`lkap_agent.knowledge.prefetch_listener`) on the agent current
+        at that moment, so a flow node's knowledge-base scope is the one
+        searched. Synchronous: it only schedules the search.
+        """
+        knowledge = self._ctx.config.knowledge
+        if not knowledge.prefetch or not self._auto_inject_active():
             return
-        query = new_message.text_content
-        if not query:
+        state = knowledge_state(self._ctx.userdata)
+        text = state.running_text(transcript, is_final=is_final)
+        if skip_reason(text, skip_short_turns=knowledge.skip_short_turns) is not None:
             return
-        try:
-            hits = await asyncio.wait_for(
-                self._ctx.kb.search(query, k=knowledge.top_k), timeout=_KB_INJECT_TIMEOUT_S
-            )
-        except TimeoutError:
-            logger.warning("knowledge auto-inject timed out", timeout_s=_KB_INJECT_TIMEOUT_S)
+        kb = self._ctx.kb
+        top_k = knowledge.top_k
+
+        async def _search(query: str) -> list[KbHit]:
+            return await kb.search(query, k=top_k)
+
+        state.prefetch.schedule(
+            text=text,
+            query=self._knowledge_query(text, self.chat_ctx),
+            scope=self._auto_inject_kb_ids(),
+            search=_search,
+        )
+
+    async def _inject_knowledge(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
+        """Add the retrieved knowledge to this turn's context (gate, pre-fetch, dedupe, budget)."""
+        knowledge = self._ctx.config.knowledge
+        if not self._auto_inject_active():
             return
-        except Exception:
-            logger.warning("knowledge auto-inject failed", exc_info=True)
+        state = knowledge_state(self._ctx.userdata)
+        text = new_message.text_content or ""
+        reason = skip_reason(text, skip_short_turns=knowledge.skip_short_turns)
+        if reason is not None:
+            state.prefetch.cancel()
+            state.end_turn()
+            state.recent.push(())
+            logger.debug("knowledge auto-inject skipped", reason=reason)
             return
-        if not hits:
+        scope = self._auto_inject_kb_ids()
+        hits = await state.prefetch.take(text=text, scope=scope)
+        prefetch_hit = hits is not None
+        ready_before_final = state.ready_before_final()
+        state.end_turn()
+        if hits is None:
+            query = self._knowledge_query(text, turn_ctx)
+            try:
+                hits = await asyncio.wait_for(
+                    self._ctx.kb.search(query, k=knowledge.top_k), timeout=INJECT_TIMEOUT_S
+                )
+            except TimeoutError:
+                logger.warning("knowledge auto-inject timed out", timeout_s=INJECT_TIMEOUT_S)
+                state.recent.push(())
+                return
+            except Exception:
+                logger.warning("knowledge auto-inject failed", exc_info=True)
+                state.recent.push(())
+                return
+        fresh = state.recent.fresh(hits)
+        note, used = compose_note(fresh, prefix=_KB_PREFIX, max_tokens=knowledge.max_inject_tokens)
+        state.recent.push(hit.chunk_id for hit in used)
+        if not used:
             return
-        body = "\n\n".join(f"[{hit.filename}] {hit.text}" for hit in hits)
-        turn_ctx.add_message(role="assistant", content=f"{_KB_PREFIX}\n{body}")
+        turn_ctx.add_message(role="assistant", content=note)
         # Info, counts only (asks #36): the one KB signal visible on an INFO worker.
-        logger.info("injected knowledge", hits=len(hits), top_k=knowledge.top_k)
-        await self._cite(hits)
+        logger.info(
+            "injected knowledge",
+            hits=len(used),
+            top_k=knowledge.top_k,
+            deduped=len(hits) - len(fresh),
+            prefetch_hit=prefetch_hit,
+        )
+        if self._record_event is not None:
+            with contextlib.suppress(Exception):
+                self._record_event(
+                    "knowledge",
+                    {
+                        "hits": len(used),
+                        "deduped": len(hits) - len(fresh),
+                        "prefetch_hit": prefetch_hit,
+                        # The spike's live measurement (docs/v5/_briefs/v5-06-spike.md).
+                        "prefetch_ready_before_final": ready_before_final,
+                        "tokens": approx_tokens(note),
+                        "chunk_ids": [hit.chunk_id for hit in used],
+                    },
+                )
+        await self._cite(used)
 
     async def _inject_vision(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
         """Attach one recent frame to the user's message in cascaded mode (D-W2-8).
@@ -788,6 +886,9 @@ class PlatformAgent(Agent):
 
     async def on_pack_session_end(self, reason: str) -> None:
         """Run the pack's teardown hook, never raising into the shutdown path."""
+        state = self._ctx.userdata.get(KNOWLEDGE_STATE_KEY)
+        if isinstance(state, KnowledgeState):
+            state.close()
         try:
             await self._pack.on_session_end(self._ctx, reason)
         except Exception:

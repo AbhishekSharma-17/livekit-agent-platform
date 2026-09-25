@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import livekit.agents
 import pytest
 import respx
 import structlog
@@ -117,7 +118,7 @@ async def test_register_payload_carries_connection_image_sdk_providers_and_packs
     assert payload.connection_id == "conn-b"
     assert payload.instance_key == "replica-0"
     assert payload.image == "full"
-    assert payload.sdk_version == sdk_version() == "1.8.2"
+    assert payload.sdk_version == sdk_version() == livekit.agents.__version__
     assert payload.installed_provider_ids == ["livekit-inference-llm", "silero-vad"]
     assert payload.pack_ids == ["generic", "insurance_claim"]
     assert payload.managed_by == "external"

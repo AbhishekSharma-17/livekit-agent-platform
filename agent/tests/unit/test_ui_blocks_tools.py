@@ -120,15 +120,24 @@ def test_builtin_disabled_switches_block_tools_off() -> None:
     assert {"update_block", "show_document"} <= names
 
 
-def test_block_tool_schemas_have_no_property_less_objects_for_gemini() -> None:
-    """A free-form `dict` parameter becomes an OBJECT with no properties, which Gemini rejects."""
+@pytest.mark.parametrize("use_parameters_json_schema", [True, False])
+def test_block_tool_schemas_have_no_property_less_objects_for_gemini(
+    use_parameters_json_schema: bool,
+) -> None:
+    """A free-form `dict` parameter becomes an OBJECT with no properties, which Gemini rejects.
+
+    Since livekit-agents 1.8.3 (#7312) the text API gets `parameters_json_schema` and Gemini
+    Live (`use_parameters_json_schema=False`) the simplified `parameters`; both are walked.
+    """
     ctx, _ch, _room = _ctx()
     tools = [
         t
         for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)
         if t.info.name in BLOCK_TOOL_NAMES
     ]
-    declarations = google_format.to_fnc_ctx(ToolContext(tools))
+    declarations = google_format.to_fnc_ctx(
+        ToolContext(tools), use_parameters_json_schema=use_parameters_json_schema
+    )
 
     def walk(schema: Any) -> None:
         if isinstance(schema, dict):
@@ -141,7 +150,9 @@ def test_block_tool_schemas_have_no_property_less_objects_for_gemini() -> None:
                 walk(value)
 
     for declaration in declarations:
-        walk(declaration["parameters"])
+        key = "parameters_json_schema" if use_parameters_json_schema else "parameters"
+        assert key in declaration, declaration
+        walk(declaration.get("parameters_json_schema") or declaration.get("parameters"))
 
 
 def test_tool_descriptions_list_the_panel_blocks() -> None:

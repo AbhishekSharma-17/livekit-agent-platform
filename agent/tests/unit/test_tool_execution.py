@@ -171,10 +171,30 @@ def test_resolve_a_flow_node_tool_runs_as_declared_from_1_8_3(version: str) -> N
     assert resolved.downgraded_from is None
 
 
-def test_resolve_the_installed_sdk_is_below_the_flow_gate() -> None:
-    """The pin is 1.8.2 until V4-14; the gate reads `livekit.agents.__version__`."""
-    assert livekit.agents.__version__ == "1.8.2"
-    assert _resolve(declared=ToolExecution(mode="auto"), flow_node=True).mode == "blocking"
+def test_resolve_the_installed_sdk_is_at_or_above_the_flow_gate() -> None:
+    """V4-14 pinned 1.8.3, so the gate (it reads `livekit.agents.__version__`) is lifted (R-V4-54)."""
+    assert execution.sdk_version_at_least(execution.FLOW_BACKGROUND_MIN_SDK)
+    resolved = _resolve(declared=ToolExecution(mode="auto"), flow_node=True)
+
+    assert resolved.mode == "auto"
+    assert resolved.downgraded_from is None
+
+
+def test_resolve_an_installed_1_8_2_still_downgrades_flow_nodes_with_one_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R-V4-54: the downgrade stays tested through the installed-version path."""
+    monkeypatch.setattr(livekit.agents, "__version__", "1.8.2")
+
+    with structlog.testing.capture_logs() as logs:
+        first = _resolve(declared=ToolExecution(mode="auto"), flow_node=True)
+        second = _resolve(declared=ToolExecution(mode="auto"), flow_node=True)
+
+    assert (first.mode, second.mode) == ("blocking", "blocking")
+    assert first.downgraded_from == "auto"
+    assert [entry["event"] for entry in logs if "1.8.3" in entry["event"]] == [
+        "flow-node tool runs blocking until livekit-agents >= 1.8.3 (#7321)"
+    ]
 
 
 def test_resolve_without_the_sdk_executor_every_tool_blocks(monkeypatch: pytest.MonkeyPatch) -> None:

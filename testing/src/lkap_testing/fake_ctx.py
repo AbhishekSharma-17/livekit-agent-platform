@@ -23,8 +23,8 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from livekit.agents import AgentSession, ChatContext
 from lkap_contracts.agent_config import AgentConfig, PipelineConfig, PipelineMode, ProviderRef
@@ -293,6 +293,12 @@ class FakeUiChannel:
         """`(block_id, schema, prefill)` for every `request_form`."""
         self.form_responses: dict[str, dict[str, Any] | None] = {}
         """What `request_form` returns per block id (default `None`: cancelled/timed out)."""
+        self.block_requests: list[tuple[str, dict[str, Any]]] = []
+        """`(block_id, payload)` for every `request_block` (V5-02)."""
+        self.block_responses: dict[str, dict[str, Any] | None] = {}
+        """What `request_block` returns per block id (default `None`: cancelled/timed out)."""
+        self.cancelled_requests: list[tuple[str, list[str]]] = []
+        """`(reason, released block ids)` for every `cancel_pending`."""
 
     async def patch(self, ops: list[UiPatchOp]) -> None:
         self.seq += 1
@@ -361,6 +367,34 @@ class FakeUiChannel:
         state = {"schema": schema, "values": values, "status": "requested", "submitted_at": None}
         await self.patch([UiPatchOp(op="set", path=block_path(block_id), value=state)])
         return self.form_responses.get(block_id)
+
+    async def request_block(
+        self,
+        block_id: str,
+        *,
+        timeout_s: float,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        self.block_calls.append(("request_block", block_id))
+        self.block_requests.append((block_id, dict(payload or {})))
+        await self.patch(
+            [
+                UiPatchOp(op="set", path=block_path(block_id, "status"), value="requested"),
+                UiPatchOp(op="set", path=block_path(block_id, "submitted_at"), value=None),
+            ]
+        )
+        return self.block_responses.get(block_id)
+
+    @property
+    def pending_requests(self) -> Mapping[str, Literal["request", "form"]]:
+        """The fake answers every request at once, so nothing is ever pending."""
+        return {}
+
+    def cancel_pending(
+        self, reason: str, *, methods: Iterable[Literal["request", "form"]] | None = None
+    ) -> list[str]:
+        self.cancelled_requests.append((reason, []))
+        return []
 
     async def cite(self, block_id: str, hits: list[KbHit]) -> None:
         self.block_calls.append(("cite", block_id))

@@ -274,7 +274,8 @@ class TestExecutionPolicy:
         assert (opted.info.flags, opted.info.on_duplicate) == (ToolFlag.NONE, "confirm")
         assert "lk_agents_confirm_duplicate" in opted.info.raw_schema["parameters"]["properties"]
 
-    def test_a_flow_node_tool_is_built_blocking_below_1_8_3(self) -> None:
+    def test_a_flow_node_tool_is_built_blocking_below_1_8_3(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("livekit.agents.__version__", "1.8.2")  # the downgrade path (R-V4-54)
         (tool,) = build_http_tools([_base_def(execution=ToolExecution(mode="background"))], flow_node=True)
 
         assert tool.info.flags == ToolFlag.NONE
@@ -340,7 +341,8 @@ class TestBuildMcpToolsets:
         policies = policy_of(toolset)
         assert isinstance(policies, dict) and policies["search"].resolved.mode == "background"
 
-    def test_flow_node_toolsets_keep_their_tools_blocking(self) -> None:
+    def test_flow_node_toolsets_keep_their_tools_blocking(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("livekit.agents.__version__", "1.8.2")  # the downgrade path (R-V4-54)
         defn = McpServerDefinition(
             name="crm",
             url="https://mcp.example.com/mcp",

@@ -1152,7 +1152,10 @@ def test_platform_agent_puts_mcp_toolsets_in_its_tools() -> None:
     assert not agent.mcp_servers
 
 
-def test_a_flow_agent_records_one_info_event_when_it_keeps_background_tools_blocking() -> None:
+def test_a_flow_agent_records_one_info_event_when_it_keeps_background_tools_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.2")  # the downgrade path (R-V4-54)
     events: list[tuple[str, dict[str, Any]]] = []
     flow = FlowSpec.model_validate({"nodes": [{"id": "start", "kind": "start"}]})
     base = _with_tools(resolved_config(), execution_default="auto")

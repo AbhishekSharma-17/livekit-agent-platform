@@ -545,8 +545,11 @@ BACKGROUND_FLOW: dict[str, Any] = {
 }
 
 
-async def test_flow_node_background_tools_run_blocking_until_livekit_agents_1_8_3() -> None:
+async def test_flow_node_background_tools_run_blocking_until_livekit_agents_1_8_3(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """R-V4-39: #7321 can drop a handoff in 1.8.2, so a flow node never backgrounds a tool."""
+    monkeypatch.setattr("livekit.agents.__version__", "1.8.2")  # the downgrade path (R-V4-54)
     from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecution  # noqa: PLC0415
 
     from lkap_agent.tools.declarative import build_http_tools  # noqa: PLC0415

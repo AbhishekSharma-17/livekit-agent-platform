@@ -888,7 +888,7 @@ wheels = [
 
 [[package]]
 name = "livekit-agents"
-version = "1.8.2"
+version = "1.8.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -923,9 +923,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/34/523d759af2d16b2f76dcd2dc3093d8e7306405b78ccf9dbf5852e20511c6/livekit_agents-1.8.2.tar.gz", hash = "sha256:4aff07ff77c398ff23da4c9715b5f0f05c01c37492e660c479643718fc890a49", size = 2732581, upload_time = "2026-09-15T18:13:59.705Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/f1/f6ad601bb82d98bb88275293d375d03cbc8a4806ee24ffb961dd62c214ce/livekit_agents-1.8.3.tar.gz", hash = "sha256:a5ba26e686c52f30d085ca41941a94bf2d76d6333c78ddc446fc51170e1a766e", size = 2767949, upload_time = "2026-09-23T19:04:08.806Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/8c/4a3c72a5bd935d5f5a72bedddee500eebb95455044a3e5f50afa35914f1a/livekit_agents-1.8.2-py3-none-any.whl", hash = "sha256:314683e470a1b31d7d8862a8e1162e7f42e3959193daac41eaf707674f413b06", size = 2854670, upload_time = "2026-09-15T18:13:57.512Z" },
+    { url = "https://files.pythonhosted.org/packages/33/ca/dc75a2a5c975607c49b0269f7d459bd90d9f661edacb3fb511fb17e48119/livekit_agents-1.8.3-py3-none-any.whl", hash = "sha256:2f40bcc49a51946b00b61f74ada5624a2c5f46f15c04c2a9efa3983b7788f75d", size = 2892583, upload_time = "2026-09-23T19:04:06.757Z" },
 ]
 
 [[package]]
@@ -1132,7 +1132,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", specifier = "==1.8.2" },
+    { name = "livekit-agents", specifier = "==1.8.3" },
     { name = "lkap-contracts", editable = "../contracts" },
     { name = "pydantic", specifier = ">=2.11,<3" },
 ]
@@ -1159,7 +1159,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", specifier = "==1.8.2" },
+    { name = "livekit-agents", specifier = "==1.8.3" },
     { name = "lkap-contracts", editable = "../contracts" },
     { name = "pydantic", specifier = ">=2.11,<3" },
 ]

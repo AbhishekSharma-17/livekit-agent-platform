@@ -8,7 +8,7 @@ tool's `http-tool-secret` credential before the worker ever sees these
 definitions (CONTRACTS §9 "Note on tool secrets") — this module only renders
 the remaining `{{ arg }}` placeholders against the model's call arguments.
 
-Raw HTTP tool construction is verified against livekit-agents==1.8.2
+Raw HTTP tool construction is verified against livekit-agents==1.8.3
 (`llm/tool_context.py`, `llm/utils.py::_prepare_function_arguments`): a
 `RawFunctionTool`'s wrapped function is called with the whole JSON args dict
 bound to a parameter literally named `raw_arguments`, plus the injected

@@ -30,7 +30,7 @@ CONTRACTS-V2 §4.4) that ``lkap_agent.ui.channel.UiChannel`` already terminates;
 there (see ``docs/v2/_asks.md``, "Open — left by V2-18"). ``main.py`` wires
 :func:`handle_agent_action` to that hook only for ``channel="text"`` sessions.
 
-Verified against livekit-agents 1.8.2 (``agent/.venv``):
+Verified against livekit-agents 1.8.3 (``agent/.venv``):
 
 * ``AgentSession.history`` (``session._chat_ctx``) and the current ``Agent``'s
   own ``chat_ctx`` (``agent._chat_ctx``) are **two different objects**: the

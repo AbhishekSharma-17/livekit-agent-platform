@@ -1,7 +1,7 @@
 """Background and parallel tool calls: LKAP's policy on the SDK's async-tool executor.
 
 docs/v4/BACKGROUND-TOOLS.md (D-V4-29 … D-V4-38, rulings R-V4-34 … R-V4-39). The
-scheduler is livekit-agents' own, verified in the installed 1.8.2:
+scheduler is livekit-agents' own, verified in the installed 1.8.3:
 
 * ``voice/tool_executor.py`` ``_ToolExecutor.execute`` runs every tool as its own
   task and returns to the LLM at the tool's first ``RunContext.update()`` or at its
@@ -350,7 +350,7 @@ def cancel_running(session: Any) -> int:
 
 
 def _has_voice(session: Any) -> bool:
-    """Whether ``session.say()`` can speak (a TTS); realtime plugins in 1.8.2 set no ``supports_say``."""
+    """Whether ``session.say()`` can speak (a TTS); realtime plugins in 1.8.3 set no ``supports_say``."""
     try:
         return getattr(session, "tts", None) is not None
     except Exception:  # noqa: BLE001 - a session without the property simply has no voice

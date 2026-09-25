@@ -1,6 +1,6 @@
 # V4-14 live check: flow-node background tools on livekit-agents 1.8.3
 
-Status: **not run.** This is the coordinator's protocol for PLAN-V4 V4-14 "Live" (rulings R-V4-39 and R-V4-30 (ii), decision D-V4-37, `BACKGROUND-TOOLS.md` §1.9). **It is also blocked.** The pin bump has not landed, because the asks from V4-14 (`docs/v4/_asks.md` #97 … #100) are still open. The run needs a worker on 1.8.3, and until the bump lands a flow-node tool is still downgraded to `blocking`, which would make every step here pass or fail for the wrong reason.
+Status: **not run.** This is the coordinator's protocol for PLAN-V4 V4-14 "Live" (rulings R-V4-39 and R-V4-30 (ii), decision D-V4-37, `BACKGROUND-TOOLS.md` §1.9). The pin bump landed with V4-14 under rulings R-V4-52 … R-V4-56 (asks #97 … #100). The run still needs the merge, a `uv sync` in the main checkout's `agent/`, and a worker restart. Until the worker runs 1.8.3, a flow-node tool is still downgraded to `blocking`, so every step here would pass or fail for the wrong reason.
 
 The repo is public: no token, key, host, phone number or transcript beyond the quoted turns goes in this file. Session ids and agent ids are fine. A failing step becomes an ask with the log line. Never patch during the run (R-V4-20).
 

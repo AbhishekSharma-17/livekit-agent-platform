@@ -4,18 +4,21 @@ Most of the ~120 registry entries live in plugin packages this project's
 venv does not install (only the 8 v1 MVP packages are present — see
 `docs/research-v2/livekit-plugins-catalog.md` §0). This module is the
 committed evidence that V2-05 checked their field names against the real
-1.8.2 source anyway, using the AST snapshot `scripts/snapshot_plugin_signatures.py`
+source anyway, using the AST snapshot `scripts/snapshot_plugin_signatures.py`
 produced into `agent/tests/fixtures/plugin_signatures.json` from a fresh
-clone of `github.com/livekit/agents@livekit-agents@1.8.2` — not from re-typing
-the catalog doc's own field lists unread.
+clone of `github.com/livekit/agents` at the pinned release tag (now
+`livekit-agents@1.8.3`) — not from re-typing the catalog doc's own field
+lists unread.
 
-A provider whose `python_class` is not in the fixture (a package added to
-the catalog after the last snapshot run, or a package this repo's installed
-venv already covers directly) is skipped, not failed: this test is a
-verification aid, not a live-import check (that would require installing all
-~70 plugin packages, most with native/heavy dependencies this project does
-not carry — `agent/requirements/full.txt` and its own import-check gate are
-V2-09's job, CONTRACTS-V2 §7).
+An `available` provider whose `python_class` is not in the fixture **fails**
+(R-V4-55): a skip there once hid three OpenAI Realtime checks when upstream
+#7318 turned the class into a star re-export. Skips are reserved for
+`**kwargs` constructors (any name is forwarded); deferred entries are not in
+`_PLUGIN_SPECS` at all. This is still a verification aid, not a live-import
+check (that would require installing all ~70 plugin packages, most with
+native/heavy dependencies this project does not carry —
+`agent/requirements/full.txt` and its own import-check gate are V2-09's job,
+CONTRACTS-V2 §7).
 """
 
 from __future__ import annotations
@@ -60,11 +63,21 @@ _PLUGIN_SPECS = [
 ]
 
 
+def _signature_for(spec: ProviderSpec, signatures: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """The fixture entry for an available provider's `python_class`; missing is a failure (R-V4-55)."""
+    signature = signatures.get(spec.python_class)
+    assert signature is not None, (
+        f"{spec.id}: {spec.python_class} is not in the AST snapshot; re-run "
+        "scripts/snapshot_plugin_signatures.py against the pinned release tag"
+    )
+    return signature
+
+
 def test_fixture_file_exists_and_is_non_empty() -> None:
     """Guards against silently skipping every test below if the fixture is missing."""
     assert _FIXTURE_PATH.exists(), (
         "agent/tests/fixtures/plugin_signatures.json is missing — regenerate with "
-        "scripts/snapshot_plugin_signatures.py against a livekit-agents@1.8.2 clone"
+        "scripts/snapshot_plugin_signatures.py against the pinned livekit-agents release tag"
     )
     assert SIGNATURES, "plugin_signatures.json exists but is empty"
 
@@ -75,12 +88,7 @@ def test_at_least_one_hundred_plugin_signatures_were_captured() -> None:
 
 @pytest.mark.parametrize("spec", _PLUGIN_SPECS, ids=lambda s: s.id)
 def test_field_names_are_accepted_by_the_real_constructor(spec: ProviderSpec) -> None:
-    signature = SIGNATURES.get(spec.python_class)
-    if signature is None:
-        pytest.skip(
-            f"{spec.python_class} not in the AST snapshot; re-run "
-            "scripts/snapshot_plugin_signatures.py against a fresh clone to verify"
-        )
+    signature = _signature_for(spec, SIGNATURES)
     if signature["has_var_keyword"]:
         pytest.skip(f"{spec.python_class} accepts **kwargs; any field name is technically forwarded")
 
@@ -119,8 +127,7 @@ def test_nested_model_classes_resolve_from_the_same_module(spec: ProviderSpec) -
         if not field.nested_model:
             continue
         nested_key = f"{module_path}.{field.nested_model}"
-        if nested_key not in SIGNATURES:
-            pytest.skip(f"{nested_key} not in the AST snapshot this pass")
+        assert nested_key in SIGNATURES, f"{spec.id}: {nested_key} is not in the AST snapshot"
         # Presence in SIGNATURES already proves it resolves under that module;
         # nothing further to assert.
 
@@ -130,14 +137,36 @@ def test_the_five_classmethod_python_classes_are_in_the_fixture() -> None:
     classmethod_ids = {
         "azure-openai-realtime": "livekit.plugins.openai.realtime.RealtimeModel.with_azure",
         "silero-vad": "livekit.plugins.silero.VAD.load",
-        # V4-03: a @staticmethod in 1.8.2, captured by name like the classmethods.
+        # V4-03: a @staticmethod (since 1.8.2), captured by name like the classmethods.
         "openrouter-llm": "livekit.plugins.openai.LLM.with_openrouter",
     }
     for provider_id, python_class in classmethod_ids.items():
         spec = next(s for s in available_providers() if s.id == provider_id)
         assert spec.python_class == python_class
-        if python_class not in SIGNATURES:
-            pytest.skip(f"{python_class} not in the AST snapshot this pass")
+        assert python_class in SIGNATURES, f"{python_class} is not in the AST snapshot"
+
+
+def test_a_missing_available_class_fails_instead_of_skipping() -> None:
+    """R-V4-55: a doctored fixture without an available entry's class is a failure, not a skip."""
+    spec = next(s for s in _PLUGIN_SPECS if s.id == "openai-realtime")
+    doctored = {key: sig for key, sig in SIGNATURES.items() if key != spec.python_class}
+
+    assert _signature_for(spec, SIGNATURES) is SIGNATURES[spec.python_class]
+    with pytest.raises(AssertionError, match="not in the AST snapshot"):
+        _signature_for(spec, doctored)
+
+
+def test_the_openai_realtime_star_reexport_keeps_its_public_keys() -> None:
+    """Upstream #7318 made `realtime_model.py` a star shim; the snapshot follows it one hop."""
+    for key in (
+        "livekit.plugins.openai.realtime.RealtimeModel",
+        "livekit.plugins.openai.realtime.RealtimeModel.with_azure",
+        "livekit.plugins.openai.realtime.RealtimeSession",
+    ):
+        assert key in SIGNATURES, key
+    assert {"model", "voice", "modalities"} <= set(
+        SIGNATURES["livekit.plugins.openai.realtime.RealtimeModel"]["params"]
+    )
 
 
 def test_with_openrouter_is_in_the_fixture_and_takes_every_openrouter_llm_field() -> None:

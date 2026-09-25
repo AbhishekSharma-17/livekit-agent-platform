@@ -8,19 +8,22 @@
 #   contracts/.venv/bin/python scripts/gen_plugin_requirements.py
 #
 # These are ADDITIONAL packages layered on top of agent/pyproject.toml's own
-# livekit-agents==1.8.2 baseline via `uv pip install -r` in agent/Dockerfile
+# livekit-agents==1.8.3 baseline via `uv pip install -r` in agent/Dockerfile
 # — they are not a replacement for `uv sync --frozen`. Bare vendor SDKs
 # already declared as base deps (openai, google-genai) and API-only packages
 # (fastembed, for embedding providers the worker never constructs — see
 # check_installed_providers.py) are intentionally omitted; see
 # docs/v2/CONTRACTS-V2.md §7 and docs/v2/_asks.md #32.
-livekit-plugins-bey==1.8.2
-livekit-plugins-cartesia==1.8.2
-livekit-plugins-deepgram==1.8.2
-livekit-plugins-elevenlabs==1.8.2
-livekit-plugins-google==1.8.2
-livekit-plugins-openai==1.8.2
-livekit-plugins-silero==1.8.2
-livekit-plugins-simli==1.8.2
-livekit-plugins-tavus==1.8.2
-livekit-plugins-turn-detector==1.8.2
+#
+# Plugin pins follow livekit-agents==1.8.3; overrides (no release at that
+# version on PyPI, same SDK line): livekit-plugins-bithuman==1.8.4.
+livekit-plugins-bey==1.8.3
+livekit-plugins-cartesia==1.8.3
+livekit-plugins-deepgram==1.8.3
+livekit-plugins-elevenlabs==1.8.3
+livekit-plugins-google==1.8.3
+livekit-plugins-openai==1.8.3
+livekit-plugins-silero==1.8.3
+livekit-plugins-simli==1.8.3
+livekit-plugins-tavus==1.8.3
+livekit-plugins-turn-detector==1.8.3

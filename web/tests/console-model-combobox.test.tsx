@@ -132,7 +132,13 @@ describe("ModelCombobox — groups", () => {
     expect(catalogCalls).toHaveLength(1);
     expect(catalogCalls[0].url).toContain("limit=1000");
     expect(catalogCalls[0].url).toContain(`credential_id=${CREDENTIAL.id}`);
-    expect(anyCallCarries(calls, "gemini-x")).toBe(false);
+    // V4-16 adds one `POST /pricing/quotes` per open, for the catalog's *own*
+    // ids (fired once, from the just-fetched list) — it necessarily carries
+    // ids like `google/gemini-x-0`, which is not "what was typed" (D-V4-25's
+    // actual concern: the catalog/vendor-search calls must never see the
+    // search text). Excluded here on that basis, not silenced.
+    const searchableCalls = calls.filter((c) => !c.url.includes("/pricing/quotes"));
+    expect(anyCallCarries(searchableCalls, "gemini-x")).toBe(false);
   });
 
   it("lists this workspace's custom models under “Your custom models”, each with its tested chip", async () => {

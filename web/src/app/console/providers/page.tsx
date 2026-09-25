@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { ProvidersCatalog } from "@/components/console/providers/providers-catalog";
+import { WorkspacePricesButton } from "@/components/console/settings/workspace-prices-dialog";
 
 export const metadata: Metadata = { title: "Providers" };
 
@@ -20,9 +21,12 @@ export default function ConsoleProvidersPage() {
         title="Providers"
         description="Every provider in the registry, grouped by kind — enable, add a key and preview its catalog."
         actions={
-          <Button asChild variant="outline">
-            <Link href="/console/keys">Manage keys</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <WorkspacePricesButton />
+            <Button asChild variant="outline">
+              <Link href="/console/keys">Manage keys</Link>
+            </Button>
+          </div>
         }
       />
       <Suspense>

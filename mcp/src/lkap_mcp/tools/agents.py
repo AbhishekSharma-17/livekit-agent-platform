@@ -399,6 +399,14 @@ def register(registry: Registry) -> None:
         denied_actions: Annotated[
             list[str] | None, Field(description="Action slugs the server or finder must never run")
         ] = None,
+        reviewed_actions: Annotated[
+            list[str] | None,
+            Field(
+                description="Destructive action slugs the user has decided about: a destructive "
+                "action (delete, remove, send money) stays blocked until it is listed here, and "
+                "denied_actions still blocks a reviewed one. Ask the user first"
+            ),
+        ] = None,
         router: Annotated[
             AppsRouterOptions | None,
             Field(description="Tool finder flags: search, execute, manage_connections (off by default)"),
@@ -409,6 +417,8 @@ def register(registry: Registry) -> None:
 
         The api creates (or reuses) the Composio session on save and attaches it as a managed MCP
         server; ``off`` or another mode removes it. Picked actions attach with ``apps_add_tools``.
+        A destructive action of the server or finder is blocked until it is in ``reviewed_actions``
+        (R-V5-9).
         """
         agent = await resolve_agent(client, id_or_slug)
         config = dict(agent.get("config") or {})
@@ -419,6 +429,8 @@ def register(registry: Registry) -> None:
             apps["allowed_toolkits"] = [slug.strip().lower() for slug in allowed_toolkits if slug.strip()]
         if denied_actions is not None:
             apps["denied_actions"] = [slug.strip().upper() for slug in denied_actions if slug.strip()]
+        if reviewed_actions is not None:
+            apps["reviewed_actions"] = [slug.strip().upper() for slug in reviewed_actions if slug.strip()]
         if router is not None:
             apps["router"] = router.model_dump(mode="json")
         try:

@@ -69,6 +69,7 @@ from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
 from lkap_api.settings import Settings
+from lkap_api.tool_providers.provisioning import apply_denied_actions
 from lkap_api.vault import Vault
 from lkap_api.webhooks import events as webhook_events
 
@@ -237,7 +238,9 @@ async def _build_resolved(
 
     tools: list[ToolDefinition] = []
     for row in tool_rows:
-        definition = _TOOL_ADAPTER.validate_python(row.definition)
+        # V5-49 (R-V5-9): an app server never offers an unreviewed destructive action, even
+        # one provisioned before `reviewed_actions` existed.
+        definition = apply_denied_actions(_TOOL_ADAPTER.validate_python(row.definition), config.tools.apps)
         tools.append(resolve_tool_definition(definition, secrets.get(definition.credential_id or "", {})))
 
     connection = await _session_connection(db, session, agent)

@@ -269,6 +269,26 @@ async def test_agent_apps_mode_router_provisions_on_save_and_plans_without_sendi
     assert world.sessions == {}, "off removes the tool finder"
 
 
+async def test_agent_apps_mode_sends_reviewed_actions_upper_cased(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str
+) -> None:
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        agent = await _agent(mcp, "Demo — Apps scratch")
+        planned = await mcp.call(
+            "agent_apps_mode",
+            id_or_slug=agent["id"],
+            mode="router",
+            reviewed_actions=[" acmecrm_delete_contact ", ""],
+            plan=True,
+        )
+
+    apps = planned["plan"][0]["body"]["config"]["tools"]["apps"]
+    assert apps["reviewed_actions"] == ["ACMECRM_DELETE_CONTACT"]
+    assert world.sessions == {}, "a plan sends nothing"
+
+
 async def test_agent_apps_mode_needs_agents_write(key: Any, mcp_session: Any) -> None:
     raw = await key(READ_ONLY_SCOPES)
 

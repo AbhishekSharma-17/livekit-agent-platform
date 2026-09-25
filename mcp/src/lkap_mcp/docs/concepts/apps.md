@@ -77,6 +77,13 @@ An agent's `tools.apps.mode` (set with `agent_apps_mode`) chooses:
   on a phone call.
 - `off` — the default; nothing is provisioned.
 
+In `server` and `router` modes a destructive action (delete, remove, send
+money) stays blocked until the user reviews it: list it in
+`reviewed_actions` (`agent_apps_mode(reviewed_actions=[...])`, or tick it in
+the console's Connected apps card) to allow it, and add it to
+`denied_actions` as well to keep it blocked. Ask the user before reviewing
+one. Validation warns with the names of the ones still blocked.
+
 The platform provisions the server or finder when the agent is saved and
 attaches it as a managed MCP server (read-only in the tools list); changing
 the settings replaces it, `off` or deleting the agent removes it. Only

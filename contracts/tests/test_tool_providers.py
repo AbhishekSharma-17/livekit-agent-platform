@@ -13,10 +13,12 @@ from lkap_contracts.tool_providers import (
     AppConnectIn,
     AppConnectionOut,
     AppKeyTestIn,
+    AppsMode,
     ToolkitOut,
     ToolkitPage,
     action_risk,
     agent_subject,
+    effective_denied_actions,
     workspace_subject,
 )
 
@@ -94,6 +96,60 @@ def test_subjects() -> None:
 )
 def test_action_risk(slug: str, tags: list[str] | None, risk: str) -> None:
     assert action_risk(slug, tags) == risk
+
+
+DELETE = "GMAIL_DELETE_EMAIL"
+LIST = "GMAIL_LIST_EMAILS"
+
+
+@pytest.mark.parametrize(
+    ("denied", "reviewed", "expected"),
+    [
+        pytest.param([], [], [DELETE], id="unreviewed-destructive-is-denied"),
+        pytest.param([], [DELETE], [], id="reviewed-and-not-denied-is-allowed"),
+        pytest.param([DELETE], [DELETE], [DELETE], id="reviewed-and-denied-is-denied"),
+        pytest.param([LIST], [], [DELETE, LIST], id="non-destructive-denial-is-kept"),
+    ],
+)
+def test_effective_denied_actions_four_cases(
+    denied: list[str], reviewed: list[str], expected: list[str]
+) -> None:
+    apps = AppsMode(mode="router", denied_actions=denied, reviewed_actions=reviewed)
+
+    assert effective_denied_actions(apps, [DELETE]) == expected
+
+
+def test_effective_denied_actions_leaves_a_non_destructive_action_untouched() -> None:
+    apps = AppsMode(mode="server", reviewed_actions=[LIST])
+
+    assert effective_denied_actions(apps, []) == []
+    assert effective_denied_actions(AppsMode(mode="server"), [DELETE]) == [DELETE]
+
+
+def test_effective_denied_actions_without_reviews_matches_the_console_seed() -> None:
+    """R-V5-9 compatibility: ``reviewed_actions=[]`` denies every destructive action in scope."""
+    seeded = AppsMode(mode="router", denied_actions=["SLACK_SEND_MESSAGE", "SLACK_DELETE_MESSAGE"])
+    fresh = AppsMode(mode="router", denied_actions=["SLACK_SEND_MESSAGE"])
+    scope = ["SLACK_DELETE_MESSAGE"]
+
+    assert effective_denied_actions(seeded, scope) == sorted(seeded.denied_actions)
+    assert effective_denied_actions(fresh, scope) == effective_denied_actions(seeded, scope)
+
+
+def test_effective_denied_actions_is_case_insensitive_sorted_and_unique() -> None:
+    apps = AppsMode(mode="router", denied_actions=["b_remove_x", "A_GET"], reviewed_actions=["c_delete_y"])
+
+    assert effective_denied_actions(apps, ["C_DELETE_Y", "b_remove_x", "D_PURGE_Z", " "]) == [
+        "A_GET",
+        "B_REMOVE_X",
+        "D_PURGE_Z",
+    ]
+
+
+def test_apps_mode_reviewed_actions_is_additive_and_bounded() -> None:
+    assert AppsMode.model_validate({"mode": "router"}).reviewed_actions == []
+    with pytest.raises(ValidationError):
+        AppsMode(reviewed_actions=["X"] * 501)
 
 
 def test_registry_has_composio_as_a_tool_provider_with_one_secret() -> None:

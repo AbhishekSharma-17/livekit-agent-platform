@@ -783,6 +783,12 @@ export interface AppsMode {
    */
   denied_actions?: string[];
   mode?: "actions" | "server" | "router" | "off";
+  /**
+   * Destructive actions the builder has decided about (action slugs, R-V5-9); denied_actions says which way. An unreviewed destructive action is blocked
+   *
+   * @maxItems 500
+   */
+  reviewed_actions?: string[];
   router?: AppsRouterOptions;
 }
 /**

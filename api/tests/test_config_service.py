@@ -914,3 +914,58 @@ def test_a_typed_turn_handling_dict_does_not_warn() -> None:
     result = validate_agent_config(config, credential_providers={})
 
     assert [i for i in result.issues if i.path.startswith("pipeline.turn_handling")] == []
+
+
+# ------------------------------------------------------------------ V5-49: unreviewed destructive actions
+def _picked(slug: str, *, toolkit: str = "acmecrm", connection_id: str = "conn1") -> dict[str, Any]:
+    return _provider_definition(
+        name=slug.lower(), tool_slug=slug, toolkit=toolkit, connection_id=connection_id
+    )
+
+
+_PICKED = {
+    "t1": _picked("ACMECRM_DELETE_CONTACT"),
+    "t2": _picked("ACMECRM_LIST_CONTACTS"),
+    "t3": _picked("MAIL_REMOVE_LABEL", toolkit="mail", connection_id="conn2"),
+}
+
+
+@pytest.mark.parametrize(
+    ("apps", "expected"),
+    [
+        pytest.param({"mode": "server"}, ["ACMECRM_DELETE_CONTACT", "MAIL_REMOVE_LABEL"], id="all-apps"),
+        pytest.param(
+            {"mode": "router", "allowed_toolkits": ["acmecrm"]},
+            ["ACMECRM_DELETE_CONTACT"],
+            id="allowed-apps-only",
+        ),
+        pytest.param(
+            {"mode": "server", "reviewed_actions": ["acmecrm_delete_contact", "MAIL_REMOVE_LABEL"]},
+            [],
+            id="all-reviewed",
+        ),
+        pytest.param({"mode": "actions"}, [], id="actions-mode-has-no-deny-list"),
+    ],
+)
+def test_unreviewed_destructive_actions_are_a_warning_naming_them(
+    apps: dict[str, Any], expected: list[str]
+) -> None:
+    ctx = _apps_ctx(apps, definitions=_PICKED, statuses={"conn1": "active", "conn2": "active"})
+
+    flagged = [issue for issue in apps_issues(ctx) if issue.path == "tools.apps.denied_actions"]
+
+    if not expected:
+        assert flagged == []
+        return
+    assert len(flagged) == 1
+    assert flagged[0].severity == "warning"
+    assert "blocked until reviewed in the Connected apps card" in flagged[0].message
+    for slug in expected:
+        assert slug in flagged[0].message
+    assert "ACMECRM_LIST_CONTACTS" not in flagged[0].message
+
+
+def test_unreviewed_destructive_warning_skips_a_removed_connection() -> None:
+    ctx = _apps_ctx({"mode": "server"}, definitions={"t1": _picked("ACMECRM_DELETE_CONTACT")}, statuses={})
+
+    assert "tools.apps.denied_actions" not in _paths(ctx)

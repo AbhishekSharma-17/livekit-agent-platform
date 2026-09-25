@@ -20,6 +20,7 @@ with existing exports (``ConnectionOut`` is the LiveKit connection).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Final, Literal
 
@@ -294,7 +295,37 @@ class AppsMode(BaseModel):
         max_length=500,
         description="Actions the app server or tool finder must never run (action slugs)",
     )
+    reviewed_actions: list[str] = Field(
+        default_factory=list,
+        max_length=500,
+        description="Destructive actions the builder has decided about (action slugs, R-V5-9); "
+        "denied_actions says which way. An unreviewed destructive action is blocked",
+    )
     router: AppsRouterOptions = Field(default_factory=AppsRouterOptions)
+
+
+def effective_denied_actions(apps: AppsMode, destructive_in_scope: Iterable[str]) -> list[str]:
+    """The actions an app server or tool finder must not run (R-V5-9), sorted and upper-cased.
+
+    ``denied_actions`` plus every destructive action in scope the builder has not reviewed:
+    ``denied_actions | (destructive_in_scope - reviewed_actions)``. So an unreviewed
+    destructive action is blocked whatever the console did, a reviewed one that is not
+    denied stays allowed, and a reviewed one that is denied stays denied. With
+    ``reviewed_actions=[]`` every destructive action in scope is denied, which is the deny
+    list the V5-48 console seeded client-side.
+
+    Args:
+        apps: The agent's ``tools.apps``.
+        destructive_in_scope: The destructive action slugs the agent's allowed apps expose
+            (``action_risk(slug) == "destructive"``).
+
+    Returns:
+        The effective deny list.
+    """
+    denied = {slug.strip().upper() for slug in apps.denied_actions if slug.strip()}
+    reviewed = {slug.strip().upper() for slug in apps.reviewed_actions if slug.strip()}
+    scope = {slug.strip().upper() for slug in destructive_in_scope if slug.strip()}
+    return sorted(denied | (scope - reviewed))
 
 
 def router_allowed_tools(options: AppsRouterOptions) -> list[str]:
@@ -400,6 +431,7 @@ __all__ = [
     "ToolkitPage",
     "action_risk",
     "agent_subject",
+    "effective_denied_actions",
     "router_allowed_tools",
     "workspace_subject",
 ]

@@ -370,6 +370,17 @@ export function ProviderToolEditorDialog({
                     {refreshResult.added.length > 0 ? <p>Added: {refreshResult.added.join(", ")}</p> : null}
                     {refreshResult.removed.length > 0 ? <p>Removed: {refreshResult.removed.join(", ")}</p> : null}
                     {refreshResult.modified.length > 0 ? <p>Changed: {refreshResult.modified.join(", ")}</p> : null}
+                    {refreshResult.required_before.join(",") !== refreshResult.required_after.join(",") ? (
+                      <p>
+                        Required fields: {refreshResult.required_before.join(", ") || "none"} →{" "}
+                        {refreshResult.required_after.join(", ") || "none"}
+                      </p>
+                    ) : null}
+                    {refreshResult.schema_version_before !== refreshResult.schema_version_after ? (
+                      <p>
+                        Version: {refreshResult.schema_version_before ?? "none"} → {refreshResult.schema_version_after ?? "none"}
+                      </p>
+                    ) : null}
                     {!refreshResult.applied ? (
                       <Button
                         type="button"

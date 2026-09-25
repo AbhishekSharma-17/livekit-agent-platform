@@ -504,6 +504,10 @@ function stubToolsListApi(tools: ToolOut[]) {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      // `useWriteAccess`'s floor gates `ToolActions`' Edit/Delete buttons
+      // (`disabled={!canWrite}`) — without a workspace role here they stay
+      // disabled and a `fireEvent.click` on them never opens a dialog.
+      if (url.includes("/auth/me")) return jsonResponse({ user: { id: "u1" }, workspaces: [{ id: "ws1", name: "WS", role: "admin", slug: "ws" }] });
       if (url.includes("/providers")) return jsonResponse(PROVIDERS);
       if (url.includes("/tool-providers/composio/connections")) return jsonResponse(connectionPage([connectionFixture({ id: "conn_github", toolkit: "googlecalendar", toolkit_name: "Google Calendar" })]));
       if (url.includes("/tools")) return jsonResponse(page);
@@ -592,5 +596,18 @@ describe("ToolsList — read-only rows for Composio-origin entries (docs/v5/_ask
     expect(table.getByText("MCP")).toBeTruthy();
     expect(table.getByRole("button", { name: "Edit my_mcp_server" })).toBeTruthy();
     expect(table.getByRole("button", { name: "Delete my_mcp_server" })).toBeTruthy();
+  });
+
+  it("Edit on a provider-kind row opens the app-action editor, never the MCP one (ask #46, R-V5-8) — the reachable path: tools-list.tsx's ToolActions", async () => {
+    stubToolsListApi([providerTool()]);
+    renderToolsList();
+
+    await waitFor(() => expect(tableScope().getByText("googlecalendar_find_free_slots")).toBeTruthy());
+    const editButton = tableScope().getByRole("button", { name: "Edit googlecalendar_find_free_slots" }) as HTMLButtonElement;
+    await waitFor(() => expect(editButton.disabled).toBe(false));
+    fireEvent.click(editButton);
+
+    expect(await screen.findByText("Edit App action")).toBeTruthy();
+    expect(screen.queryByText("Edit MCP server")).toBeNull();
   });
 });

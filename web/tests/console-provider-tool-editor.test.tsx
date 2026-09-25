@@ -231,6 +231,7 @@ describe("ProviderToolEditorDialog", () => {
       expect(await screen.findByText(/The app changed this action/)).toBeTruthy();
       expect(screen.getByText(/Added: time_zone/)).toBeTruthy();
       expect(screen.getByText(/Changed: duration_minutes/)).toBeTruthy();
+      expect(screen.getByText(/Version: 3 → 4/)).toBeTruthy();
       expect(refreshCalls).toBe(1);
       const firstCall = fetchMock.mock.calls.find(([url]) => String(url).includes("refresh-schema"));
       expect(String(firstCall?.[0])).not.toContain("apply=true");
@@ -318,7 +319,6 @@ describe("Edit wiring — tool-row.tsx / tools-list.tsx open the app-action edit
 
 describe("execution fields post the same shape from both dialogs (R-V5-8: one shared component)", () => {
   it("HTTP and provider editors post an identical `execution` object for identical input", async () => {
-    const httpFetch = stubFetch();
     let httpBody: unknown;
     vi.stubGlobal(
       "fetch",
@@ -338,7 +338,6 @@ describe("execution fields post the same shape from both dialogs (R-V5-8: one sh
         });
       }),
     );
-    void httpFetch;
     renderWithClient(
       <HttpToolEditorDialog agentId="agent-1" secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>New HTTP tool</button>} />,
     );
@@ -353,14 +352,13 @@ describe("execution fields post the same shape from both dialogs (R-V5-8: one sh
     const httpExecution = (httpBody as { definition: { execution: unknown } }).definition.execution;
 
     let providerBody: unknown;
-    const { fetchMock: providerFetch } = stubFetch((url, init) => {
+    stubFetch((url, init) => {
       if (url.endsWith("/tools/tool-1") && init?.method === "PUT") {
         providerBody = init?.body ? JSON.parse(String(init.body)) : undefined;
         return { status: 200, body: providerTool() };
       }
       return undefined;
     });
-    void providerFetch;
     const tool = providerTool();
     renderWithClient(<ProviderToolEditorDialog tool={tool} onSaved={vi.fn()} trigger={<button>Edit action</button>} />);
     fireEvent.click(screen.getByText("Edit action"));

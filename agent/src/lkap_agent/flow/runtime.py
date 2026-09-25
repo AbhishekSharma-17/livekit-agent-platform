@@ -523,8 +523,8 @@ class FlowRuntime:
         emits this event, then — when a tool returned an `Agent` — calls
         `update_agent` and still generates the tool reply on the **old**
         activity, with the old node's instructions, whenever any output of the
-        batch has `reply_required` (`AgentActivity._pipeline_reply_task_impl`;
-        the realtime path is the same). An edge tool's own output never asks for
+        batch has `reply_required` (`AgentActivity._pipeline_reply_task_impl`).
+        An edge tool's own output never asks for
         a reply, but a sibling's does — a plain result, or a background tool's
         first `ctx.update()` announce — so the caller heard the router before
         the target node. Completion order inside the batch does not matter: the
@@ -534,7 +534,11 @@ class FlowRuntime:
         `reply_required=False` (`cancel_tool_reply`, the SDK's public knob; a
         `ToolResult` returned by the tool cannot reach a background tool's
         announce). A background sibling still running is cancelled by the old
-        activity's drain (D-V4-37).
+        activity's drain (D-V4-37). Realtime models with server-side tool
+        replies (`auto_tool_reply_generation`, e.g. Gemini Live) honour it only
+        where the plugin can send the result silently (Gemini: `SILENT`
+        scheduling, i.e. `tool_behavior=NON_BLOCKING`, not on Vertex); elsewhere
+        the model still answers (ask #150).
 
         The batch's call/output pairs are also carried into the target node:
         the target copied the old node's context when the edge tool ran, before

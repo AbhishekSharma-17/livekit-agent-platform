@@ -7,16 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { VendorMark } from "@/components/shared/vendor-mark";
+import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
+import { displayMessage } from "@/components/console/agents/editor/validation-map";
 import { useCredentials } from "@/components/console/lib/api-hooks";
-import { ModelSummary } from "@/components/console/registry/model-combobox";
-import { effectiveModelId, findModel, isInferenceProvider } from "@/components/console/registry/provider-meta";
+import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
+import { isCustomModelId, ModelSummary, useModelCatalog } from "@/components/console/registry/model-combobox";
+import { TestedChip, useTestedState } from "@/components/console/registry/model-test-panel";
+import { findModel, isInferenceProvider } from "@/components/console/registry/provider-meta";
 import {
+  MODEL_KINDS,
+  modelFieldOf,
   ProviderSlotEditor,
+  slotModelId,
+  slotSuggestions,
   SPEAKING_KINDS,
   THINKING_KINDS,
   useSlotProviders,
   type ProviderSlotEditorProps,
 } from "@/components/console/registry/provider-slot-editor";
+import { isSendableModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
 import type { ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
 
@@ -64,6 +73,16 @@ export function ProviderSlotCard({
   const autoId = React.useId();
   const bodyId = `${idPrefix ?? `slot-${kind}-${autoId}`}-body`;
   const titleId = `${bodyId}-title`;
+  const { issueFor } = useSectionIssues();
+  const fieldIssueFor = React.useCallback(
+    (fieldName: string) => {
+      if (!issuePath) return undefined;
+      const issue = issueFor(`${issuePath}.fields.${fieldName}`);
+      if (!issue) return undefined;
+      return { message: displayMessage(issue), severity: issue.severity === "error" ? ("error" as const) : ("warning" as const) };
+    },
+    [issuePath, issueFor],
+  );
 
   return (
     <Collapsible open={expanded} onOpenChange={onExpandedChange} asChild>
@@ -121,7 +140,7 @@ export function ProviderSlotCard({
         ) : null}
         {notice ? <div className="mx-4 mb-4">{notice}</div> : null}
         <CollapsibleContent id={bodyId} className="border-t border-border px-4 py-5 sm:px-5">
-          <ProviderSlotEditor {...editorProps} />
+          <ProviderSlotEditor {...editorProps} issuePath={issuePath} fieldIssueFor={fieldIssueFor} />
         </CollapsibleContent>
       </section>
     </Collapsible>
@@ -154,12 +173,45 @@ export function ProviderSlotSummary({
     );
   }
 
-  const modelId = effectiveModelId(spec, value.model);
-  const model = findModel(spec, modelId);
+  return <SlotSummaryBody spec={spec} value={value} kind={kind} />;
+}
+
+/**
+ * The collapsed card's model line (V4-09): the model's label and id, a
+ * `Custom` badge for an id outside the suggestions and the vendor's list, the
+ * tested chip, and a vision badge from the model's record when it is custom.
+ * The record is read only for an id that passes the model-id rule (R-V4-32).
+ */
+function SlotSummaryBody({ spec, value, kind }: { spec: ProviderSpec; value: ProviderRef; kind: ProviderSpec["kind"] }) {
+  const modelField = modelFieldOf(spec);
+  const modelId = slotModelId(spec, value) || null;
+  const suggestions = slotSuggestions(spec);
+  const listed = modelId ? suggestions.find((m) => m.id === modelId) : undefined;
+  const modelKind = MODEL_KINDS.has(spec.kind);
+  const sendable = modelKind && isSendableModelId(modelId);
+  // The vendor list is read only when the id is not a suggestion (it may still be a catalog id).
+  const catalog = useModelCatalog(spec.id, spec.catalog, value.credential_id ?? null, { enabled: sendable && !listed });
+  const catalogItem = modelId ? catalog.data?.items?.find((item) => item.id === modelId) : undefined;
+  const custom = sendable && !listed && isCustomModelId(modelId as string, suggestions, catalog.data?.items ?? []);
+  // One record read per unlisted (catalog or custom) id; a suggested model needs none on the collapsed card.
+  const unlisted = sendable && !listed;
+  const tested = useTestedState(unlisted ? spec : undefined, unlisted ? modelId : null, value.credential_id ?? null);
+  const model = modelField ? listed : findModel(spec, modelId);
+  const summaryModel = model ?? (catalogItem ? { id: catalogItem.id, label: catalogItem.label } : undefined);
   const caps = spec.capabilities ?? {};
   const voices = caps.voices?.length ?? 0;
   const thinks = THINKING_KINDS.has(kind);
-  const vision = thinks && (model ? model.supports_video === true : kind === "realtime" && caps.video_input === true);
+  const recordVision =
+    tested.record?.declared?.vision ?? tested.record?.detected?.vision ?? catalogSaysVision(catalogItem?.meta) ?? null;
+  const vision =
+    thinks &&
+    (model
+      ? model.supports_video === true
+      : custom || catalogItem
+        ? recordVision === true
+        : kind === "realtime" && caps.video_input === true);
+  const isDefault = modelField ? !value.fields?.[modelField.name] : !value.model && Boolean(spec.default_model);
+  const showChip = unlisted && (custom || tested.state.kind === "ok" || tested.state.kind === "failed");
 
   return (
     <div className="flex flex-col gap-2">
@@ -167,7 +219,13 @@ export function ProviderSlotSummary({
         <VendorMark vendor={spec.vendor} size="md" className="mt-0.5" />
         <div className="flex min-w-0 flex-col">
           <span className="text-sm font-medium text-foreground">{spec.label}</span>
-          {modelId ? <ModelSummary model={model} modelId={modelId} isDefault={!value.model && Boolean(spec.default_model)} /> : null}
+          {modelId ? <ModelSummary model={summaryModel} modelId={modelId} isDefault={isDefault} /> : null}
+          {custom || showChip ? (
+            <span className="mt-1 flex flex-wrap items-center gap-1">
+              {custom ? <CapabilityBadge kind="custom" /> : null}
+              {showChip ? <TestedChip state={tested.state} className="max-w-full" /> : null}
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-wrap gap-1">

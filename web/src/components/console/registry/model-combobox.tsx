@@ -1,18 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsUpDownIcon, PencilLineIcon } from "lucide-react";
+import { ChevronsUpDownIcon, CircleSlashIcon, PencilLineIcon, SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
+import { useCredentials, useProviderModels, useProviders } from "@/components/console/lib/api-hooks";
+import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
+import { TestedChip, testedStateFor } from "@/components/console/registry/model-test-panel";
+import { CATALOG_FULL_LIMIT, useCatalog } from "@/hooks/useCatalog";
+import { idIssueSentence, isSendableModelId, validateModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
-import type { ModelSpec } from "@/contracts/lkap-contracts";
+import type { CatalogItem, CatalogSpec, ModelIdRules, ModelSpec, ProviderModelOut, ProviderSpec } from "@/contracts/lkap-contracts";
+
+/** Most catalog rows rendered at once; typing narrows the rest (a 1000-item list stays fast). */
+const CATALOG_RENDER_CAP = 100;
+
+/** The provider context the combobox needs for its live groups (all optional: without it, it is today's suggestions-only picker). */
+export type ModelComboboxProvider = Pick<ProviderSpec, "id" | "vendor" | "probe" | "requires_credential"> & {
+  catalog?: CatalogSpec | null;
+};
 
 export interface ModelComboboxProps {
   /** Forwarded to the trigger so a caller's `<label htmlFor>` / `Field` resolves. */
   id?: string;
+  /** *Suggested*: the registry's `models` (or a `type="model"` field's `options`). */
   models: ModelSpec[];
   /** The stored model id; `""` means "use the provider default". */
   value: string;
@@ -22,31 +36,164 @@ export interface ModelComboboxProps {
   /** Controlled open state (the vision note opens the list pre-filtered). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Start with the list filtered to vision models (`supports_video`). */
+  /** Start with the list filtered to vision models (`supports_video`, or catalog `image` input). */
   visionOnly?: boolean;
   disabled?: boolean;
   className?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
+  /** Enables *Catalog* (live vendor list), the vendor search row and *Your custom models*. */
+  provider?: ModelComboboxProvider;
+  /** The slot's key: the catalog is listed with it, and the chips compare its fingerprint. */
+  credentialId?: string | null;
+  /** `ProvidersResponse.model_id_rules`; read from the providers cache when omitted. */
+  rules?: ModelIdRules | null;
 }
 
-function matches(model: ModelSpec, needle: string): boolean {
-  if (needle === "") return true;
-  return model.label.toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle);
+/** Whether a provider has a live model list (`catalog.kinds` includes `models`). */
+export function hasModelCatalog(catalog: CatalogSpec | null | undefined): boolean {
+  return Boolean(catalog?.kinds?.includes("models"));
 }
 
 /**
- * Model picker (docs/UI_UX_SPEC.md §4.4 step 3, §7.5 item 3): a `Command`
- * inside a `Popover`. Rows show the human label first, the id in mono and
- * the badges; the default model is marked. Free text always works — a
- * model outside the list is a validation warning, not an error
- * (CONTRACTS §6: LiveKit Inference's catalog churns) — through the
- * "Use "<query>" as a custom id" row.
- *
- * V2-06's vendor catalogs will feed extra `models` in; nothing here assumes
- * the list is complete.
+ * The vendor's live model list for a slot, fetched once (limit 1000) and
+ * filtered locally — typing never reaches the vendor (D-V4-25). Shared by the
+ * combobox, the slot editor and the slot card through the query cache.
  */
-export function ModelCombobox({
+export function useModelCatalog(
+  providerId: string | undefined,
+  catalog: CatalogSpec | null | undefined,
+  credentialId: string | null | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useCatalog(providerId, "models", credentialId ?? null, {
+    params: { limit: CATALOG_FULL_LIMIT },
+    enabled: Boolean(providerId) && hasModelCatalog(catalog) && enabled,
+  });
+}
+
+/** An id outside *Suggested* and the live *Catalog* — shown with the `Custom` badge (D-V4-23). */
+export function isCustomModelId(modelId: string, models: ModelSpec[], catalogItems: CatalogItem[] = []): boolean {
+  if (!modelId) return false;
+  return !models.some((m) => m.id === modelId) && !catalogItems.some((item) => item.id === modelId);
+}
+
+/** The model-id rule the api publishes, else the contract defaults (`lib/model-ids.ts`). */
+export function useModelIdRules(rules?: ModelIdRules | null): ModelIdRules | null | undefined {
+  const cached = useProviders({ enabled: false }).data?.model_id_rules;
+  return rules ?? cached;
+}
+
+function matches(id: string, label: string, needle: string): boolean {
+  if (needle === "") return true;
+  return label.toLowerCase().includes(needle) || id.toLowerCase().includes(needle);
+}
+
+function recordSaysVision(record: ProviderModelOut): boolean {
+  return record.declared?.vision === true || (record.declared?.vision == null && record.detected?.vision === true);
+}
+
+/** OpenRouter is the one vendor with a server-side search (`search_vendor`, R-V4-28). */
+function vendorSearchName(provider: ModelComboboxProvider | undefined): string | null {
+  const adapter = provider?.catalog?.adapter ?? "";
+  return adapter.startsWith("openrouter_") ? "OpenRouter" : null;
+}
+
+/**
+ * Model picker (docs/UI_UX_SPEC.md §4.4 step 3; docs/v4/CUSTOM-MODELS.md
+ * D-V4-23, §3): a `Command` in a `Popover` with four groups —
+ *   - *Suggested* — the registry's models, the default marked;
+ *   - *Catalog* — the vendor's live list for the chosen key, filtered here as
+ *     you type; for OpenRouter a "Search OpenRouter for …" row asks the vendor;
+ *   - *Your custom models* — ids this workspace has tested or declared, with
+ *     their tested chip;
+ *   - "Use custom model: <typed>" — free text is first-class; an id outside
+ *     the lists is a validation warning, never an error.
+ *
+ * The typed text is checked by the model-id rule first: a value that looks
+ * like a key (or breaks the syntax) disables the custom row with the reason,
+ * is never repeated anywhere, and triggers no request (R-V4-32).
+ */
+export function ModelCombobox(props: ModelComboboxProps) {
+  // The live groups need the query client; a bare suggestions picker (a
+  // `type="model"` option field) stays query-free.
+  return props.provider ? <LiveModelCombobox {...props} provider={props.provider} /> : <ModelComboboxView {...props} live={NO_LIVE_DATA} />;
+}
+
+/** What the live groups feed the view. */
+interface LiveData {
+  catalogItems: CatalogItem[];
+  vendorItems: CatalogItem[];
+  vendorSearching: boolean;
+  records: ProviderModelOut[];
+  fingerprint: string | null | undefined;
+  searchVendor: string | null;
+  vendorQuery: string | null;
+  setVendorQuery: (query: string | null) => void;
+  rules: ModelIdRules | null | undefined;
+}
+
+const NO_LIVE_DATA: LiveData = {
+  catalogItems: [],
+  vendorItems: [],
+  vendorSearching: false,
+  records: [],
+  fingerprint: undefined,
+  searchVendor: null,
+  vendorQuery: null,
+  setVendorQuery: () => {},
+  rules: undefined,
+};
+
+function LiveModelCombobox(props: ModelComboboxProps & { provider: ModelComboboxProvider }) {
+  const { provider, credentialId = null, rules: rulesProp } = props;
+  const [openState, setOpenState] = React.useState(false);
+  const open = props.open ?? openState;
+  const [vendorQuery, setVendorQuery] = React.useState<string | null>(null);
+  const rules = useModelIdRules(rulesProp);
+
+  // Live groups: the list is fetched once (limit 1000) and searched locally.
+  const catalogQuery = useModelCatalog(provider.id, provider.catalog, credentialId);
+  const searchVendor = vendorSearchName(provider);
+  const vendorSearchQuery = useCatalog(provider.id, "models", credentialId, {
+    params: { q: vendorQuery ?? undefined, search_vendor: true, limit: CATALOG_FULL_LIMIT },
+    enabled: Boolean(searchVendor && vendorQuery && isSendableModelId(vendorQuery, rules)),
+  });
+  const customRecords = useProviderModels(provider.id, { custom: true }, { enabled: open });
+  const credentials = useCredentials();
+  const needsKey = provider.requires_credential !== false && !provider.id.startsWith("livekit-inference-");
+  const fingerprint = !needsKey
+    ? null
+    : credentialId
+      ? credentials.data?.items.find((item) => item.id === credentialId)?.fingerprint
+      : undefined;
+
+  const live: LiveData = {
+    catalogItems: catalogQuery.data?.items ?? [],
+    vendorItems: vendorQuery ? (vendorSearchQuery.data?.items ?? []) : [],
+    vendorSearching: Boolean(vendorQuery) && vendorSearchQuery.isFetching,
+    records: customRecords.data?.items ?? [],
+    fingerprint,
+    searchVendor,
+    vendorQuery,
+    setVendorQuery,
+    rules,
+  };
+  return (
+    <ModelComboboxView
+      {...props}
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setVendorQuery(null);
+        setOpenState(next);
+        props.onOpenChange?.(next);
+      }}
+      live={live}
+    />
+  );
+}
+
+function ModelComboboxView({
   id,
   models,
   value,
@@ -59,12 +206,17 @@ export function ModelCombobox({
   className,
   "aria-describedby": describedBy,
   "aria-invalid": invalid,
-}: ModelComboboxProps) {
+  provider,
+  rules: rulesProp,
+  live,
+}: ModelComboboxProps & { live: LiveData }) {
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
   const [query, setQuery] = React.useState("");
   const [visionOnly, setVisionOnly] = React.useState(visionOnlyProp);
   const listId = React.useId();
+  const rules = live.rules ?? rulesProp;
+  const { searchVendor, vendorQuery, setVendorQuery, fingerprint } = live;
 
   React.useEffect(() => {
     if (open) setVisionOnly(visionOnlyProp);
@@ -81,13 +233,37 @@ export function ModelCombobox({
     setOpen(false);
   }
 
+  const catalogItems = live.catalogItems;
   const effective = value.trim() || defaultModel || "";
-  const selected = models.find((m) => m.id === effective);
+  const suggestedIds = new Set(models.map((m) => m.id));
+  const liveItems = dedupe([...live.vendorItems, ...catalogItems]).filter((item) => !suggestedIds.has(item.id));
+  const knownIds = new Set([...suggestedIds, ...liveItems.map((item) => item.id)]);
+  const records = live.records.filter((record) => !knownIds.has(record.model_id));
+
+  const catalogSelected = liveItems.find((item) => item.id === effective);
+  const selected: ModelSpec | undefined =
+    models.find((m) => m.id === effective) ?? (catalogSelected ? { id: catalogSelected.id, label: catalogSelected.label } : undefined);
+  const custom = value.trim() !== "" && isCustomModelId(value.trim(), models, liveItems);
+
   const needle = query.trim().toLowerCase();
-  const hasVision = models.some((m) => m.supports_video);
-  const visible = models.filter((m) => matches(m, needle) && (!visionOnly || m.supports_video));
-  const customId = query.trim();
-  const offerCustom = customId !== "" && !models.some((m) => m.id === customId);
+  const hasVision =
+    models.some((m) => m.supports_video) || liveItems.some((item) => catalogSaysVision(item.meta) === true);
+  const visibleSuggested = models.filter((m) => matches(m.id, m.label, needle) && (!visionOnly || m.supports_video));
+  const visibleCatalogAll = liveItems.filter(
+    (item) => matches(item.id, item.label, needle) && (!visionOnly || catalogSaysVision(item.meta) === true),
+  );
+  const visibleCatalog = visibleCatalogAll.slice(0, CATALOG_RENDER_CAP);
+  const visibleRecords = records.filter(
+    (record) => matches(record.model_id, record.model_id, needle) && (!visionOnly || recordSaysVision(record)),
+  );
+
+  const typed = query.trim();
+  const typedIssue = typed === "" ? null : validateModelId(typed, { field: "model", rules });
+  const typedIsListed = typed !== "" && (knownIds.has(typed) || records.some((record) => record.model_id === typed));
+  const offerCustom = typed !== "" && !typedIsListed;
+  const offerVendorSearch = Boolean(searchVendor) && typed !== "" && typedIssue === null && vendorQuery !== typed;
+  const nothingVisible =
+    visibleSuggested.length === 0 && visibleCatalog.length === 0 && visibleRecords.length === 0 && !offerCustom;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -104,7 +280,16 @@ export function ModelCombobox({
           disabled={disabled}
           className={cn("h-auto min-h-9 w-full justify-between gap-2 px-3 py-1.5 text-left font-normal", className)}
         >
-          <ModelSummary model={selected} modelId={effective} isDefault={value.trim() === "" && Boolean(defaultModel)} />
+          <span className="flex min-w-0 items-center gap-2">
+            <ModelSummary
+              model={selected}
+              modelId={effective}
+              isDefault={value.trim() === "" && Boolean(defaultModel)}
+              // The dark outline trigger lightens on hover/open; the muted id would drop below 4.5:1 there.
+              idClassName="dark:text-foreground/80"
+            />
+            {custom ? <CapabilityBadge kind="custom" /> : null}
+          </span>
           <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
@@ -127,14 +312,14 @@ export function ModelCombobox({
               {visionOnly ? <span>Showing models that can see images.</span> : null}
             </div>
           ) : null}
-          <CommandList id={listId}>
-            {!offerCustom ? <CommandEmpty>No models match.</CommandEmpty> : null}
-            {visible.length > 0 ? (
+          <CommandList id={listId} className="max-h-[min(22rem,50dvh)]">
+            {nothingVisible ? <CommandEmpty>No models match.</CommandEmpty> : null}
+            {visibleSuggested.length > 0 ? (
               <CommandGroup heading="Suggested">
-                {visible.map((model) => (
+                {visibleSuggested.map((model) => (
                   <CommandItem
                     key={model.id}
-                    value={model.id}
+                    value={`suggested:${model.id}`}
                     onSelect={() => choose(model.id)}
                     data-checked={model.id === effective ? "true" : undefined}
                     className="items-start"
@@ -156,14 +341,92 @@ export function ModelCombobox({
                 ))}
               </CommandGroup>
             ) : null}
-            {offerCustom ? (
-              <CommandGroup heading="Custom">
-                <CommandItem value={`__custom__:${customId}`} onSelect={() => choose(customId)}>
-                  <PencilLineIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-                  <span className="min-w-0 truncate">
-                    Use <span className="font-mono">&ldquo;{customId}&rdquo;</span> as a custom id
+            {visibleCatalog.length > 0 || live.vendorSearching ? (
+              <CommandGroup
+                heading={
+                  <span className="flex items-center justify-between gap-2">
+                    <span>Catalog</span>
+                    <span className="font-normal tabular-nums">
+                      {visibleCatalogAll.length > CATALOG_RENDER_CAP
+                        ? `${CATALOG_RENDER_CAP} of ${visibleCatalogAll.length} — keep typing`
+                        : visibleCatalogAll.length}
+                    </span>
                   </span>
-                </CommandItem>
+                }
+              >
+                {visibleCatalog.map((item) => (
+                  <CommandItem
+                    key={item.id}
+                    value={`catalog:${item.id}`}
+                    onSelect={() => choose(item.id)}
+                    data-checked={item.id === effective ? "true" : undefined}
+                    className="items-start"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="min-w-0 truncate text-sm text-foreground" title={item.label}>
+                          {item.label}
+                        </span>
+                        {catalogSaysVision(item.meta) === true ? <CapabilityBadge kind="vision" /> : null}
+                      </span>
+                      <span className="truncate font-mono text-xs text-muted-foreground" title={item.id}>
+                        {item.id}
+                      </span>
+                    </div>
+                  </CommandItem>
+                ))}
+                {live.vendorSearching ? (
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">Searching {searchVendor}…</p>
+                ) : null}
+              </CommandGroup>
+            ) : null}
+            {visibleRecords.length > 0 ? (
+              <CommandGroup heading="Your custom models">
+                {visibleRecords.map((record) => (
+                  <CommandItem
+                    key={record.id || record.model_id}
+                    value={`record:${record.model_id}`}
+                    onSelect={() => choose(record.model_id)}
+                    data-checked={record.model_id === effective ? "true" : undefined}
+                    className="items-start"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="truncate font-mono text-xs text-foreground" title={record.model_id}>
+                        {record.model_id}
+                      </span>
+                      {provider ? (
+                        <TestedChip state={testedStateFor({ spec: provider, record, fingerprint })} className="max-w-full" />
+                      ) : null}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+            {offerVendorSearch || offerCustom ? (
+              <CommandGroup heading="Custom">
+                {offerVendorSearch ? (
+                  <CommandItem value={`__search__:${typed}`} onSelect={() => setVendorQuery(typed)}>
+                    <SearchIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                    <span className="min-w-0 truncate">
+                      Search {searchVendor} for <span className="font-mono">&ldquo;{typed}&rdquo;</span>
+                    </span>
+                  </CommandItem>
+                ) : null}
+                {offerCustom ? (
+                  typedIssue?.severity === "error" ? (
+                    <CommandItem value="__custom__:invalid" disabled data-invalid="" className="items-start">
+                      <CircleSlashIcon className="mt-0.5 size-4 text-danger-text" aria-hidden="true" />
+                      <span className="min-w-0 text-pretty text-danger-text">{idIssueSentence(typedIssue, "this as a model id")}</span>
+                    </CommandItem>
+                  ) : (
+                    <CommandItem value={`__custom__:${typed}`} onSelect={() => choose(typed)}>
+                      <PencilLineIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                      <span className="min-w-0 truncate">
+                        Use custom model: <span className="font-mono">{typed}</span>
+                      </span>
+                    </CommandItem>
+                  )
+                ) : null}
               </CommandGroup>
             ) : null}
           </CommandList>
@@ -173,15 +436,28 @@ export function ModelCombobox({
   );
 }
 
+function dedupe(items: CatalogItem[]): CatalogItem[] {
+  const seen = new Set<string>();
+  const out: CatalogItem[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
 /** Label first, id second (mono); custom ids show "Custom model". */
 export function ModelSummary({
   model,
   modelId,
   isDefault = false,
+  idClassName,
 }: {
   model: ModelSpec | undefined;
   modelId: string;
   isDefault?: boolean;
+  idClassName?: string;
 }) {
   if (!modelId) {
     return <span className="text-sm text-muted-foreground">Choose a model</span>;
@@ -192,7 +468,7 @@ export function ModelSummary({
         {model ? model.label : "Custom model"}
         {isDefault ? <span className="text-xs text-muted-foreground">· Default</span> : null}
       </span>
-      <span className="truncate font-mono text-xs text-muted-foreground">{modelId}</span>
+      <span className={cn("truncate font-mono text-xs text-muted-foreground", idClassName)}>{modelId}</span>
     </span>
   );
 }

@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
+import { isSendableModelId, modelIdPath } from "@/lib/model-ids";
 import { uploadKbDocument } from "@/components/console/lib/upload";
 import type {
   AgentCreate,
@@ -22,7 +23,12 @@ import type {
   KbPage,
   KbSearchRequest,
   KbSearchResponse,
+  ModelCapabilities,
+  ModelTestRequest,
+  ModelTestResult,
   PacksResponse,
+  ProviderModelOut,
+  ProviderModelPage,
   ProvidersResponse,
   SessionDetailOut,
   SessionEventPage,
@@ -56,7 +62,13 @@ const keys = {
   sessions: (agentId?: string, status?: string) => ["sessions", agentId ?? "", status ?? ""] as const,
   session: (id: string) => ["sessions", id] as const,
   sessionEvents: (id: string) => ["sessions", id, "events"] as const,
+  /** Every model-record query of one provider (`["provider-models", providerId, …]`), for invalidation. */
+  providerModelsAll: (providerId: string) => ["provider-models", providerId] as const,
+  providerModels: (providerId: string, params: { custom: boolean; limit?: number }) =>
+    ["provider-models", providerId, "list", params.custom, params.limit ?? null] as const,
+  providerModel: (providerId: string, modelId: string) => ["provider-models", providerId, "one", modelId] as const,
 };
+
 
 // ---- health ----
 
@@ -85,6 +97,101 @@ export function usePacks() {
     queryKey: keys.packs,
     queryFn: () => api.get<PacksResponse>("packs"),
     staleTime: 5 * 60_000,
+  });
+}
+
+// ---- provider model records, Test model (V4-09; docs/v4/CUSTOM-MODELS.md D-V4-24, D-V4-26) ----
+
+/**
+ * `GET /v1/providers/{id}/models?custom=&limit=` — the workspace's records for
+ * this provider's credential home and kind, most recently tested first
+ * ("Your custom models" in the model combobox; the Catalog dialog's chips).
+ */
+export function useProviderModels(
+  providerId: string | undefined,
+  params: { custom?: boolean; limit?: number } = {},
+  options?: { enabled?: boolean },
+) {
+  const custom = params.custom ?? false;
+  return useQuery({
+    queryKey: keys.providerModels(providerId ?? "", { custom, limit: params.limit }),
+    queryFn: () =>
+      api.get<ProviderModelPage>(`providers/${providerId}/models`, {
+        custom: custom || undefined,
+        limit: params.limit,
+      }),
+    enabled: Boolean(providerId) && (options?.enabled ?? true),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * `GET /v1/providers/{id}/models/{model_id}` — one record, or `null` when the
+ * workspace has none (404: never tested, declared or seen).
+ *
+ * The id travels in the URL path, so the query is **never** enabled for a
+ * value that fails the model-id rule (R-V4-32), whatever the caller passes.
+ */
+export function useProviderModel(
+  providerId: string | undefined,
+  modelId: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  const sendable = isSendableModelId(modelId);
+  return useQuery<ProviderModelOut | null, ApiError>({
+    queryKey: keys.providerModel(providerId ?? "", sendable ? modelId : ""),
+    queryFn: async () => {
+      try {
+        return await api.get<ProviderModelOut>(`providers/${providerId}/models/${modelIdPath(modelId as string)}`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    enabled: Boolean(providerId) && sendable && (options?.enabled ?? true),
+    retry: false,
+    throwOnError: false,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * `POST /v1/providers/{id}/test-model` — one capped, real vendor call. Refuses
+ * locally (no request) for an id that fails the model-id rule. On success the
+ * provider's records refetch, so the tested chip and "Your custom models" update.
+ */
+export function useTestModel(providerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<ModelTestResult, Error, ModelTestRequest>({
+    mutationFn: async (body) => {
+      if (!isSendableModelId(body.model)) {
+        throw new ApiError(422, "invalid_model_id", "The model id can't be tested: fix it first.");
+      }
+      return api.post<ModelTestResult>(`providers/${providerId}/test-model`, body);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.providerModelsAll(providerId) });
+    },
+  });
+}
+
+/** `PUT /v1/providers/{id}/models/{model_id}` `{declared}` — admin only; refuses locally for a failing id. */
+export function useDeclareModel(providerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<ProviderModelOut, Error, { modelId: string; declared: ModelCapabilities }>({
+    mutationFn: async ({ modelId, declared }) => {
+      if (!isSendableModelId(modelId)) {
+        throw new ApiError(422, "invalid_model_id", "The model id can't be saved: fix it first.");
+      }
+      return api.put<ProviderModelOut>(`providers/${providerId}/models/${modelIdPath(modelId)}`, { declared });
+    },
+    onSuccess: (record, { modelId }) => {
+      queryClient.setQueryData(keys.providerModel(providerId, modelId), record);
+      void queryClient.invalidateQueries({
+        queryKey: keys.providerModelsAll(providerId),
+        predicate: (query) => query.queryKey[2] === "list",
+      });
+    },
   });
 }
 

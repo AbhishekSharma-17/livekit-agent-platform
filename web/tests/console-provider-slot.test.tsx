@@ -321,7 +321,7 @@ describe("ModelCombobox", () => {
     withClient(<ModelCombobox id="m" models={models} value="" defaultModel={null} onChange={onChange} />);
     fireEvent.click(screen.getByRole("combobox"));
     fireEvent.change(await screen.findByPlaceholderText(/Search models/), { target: { value: "acme/voice-9" } });
-    fireEvent.click(await screen.findByText(/as a custom id/));
+    fireEvent.click(await screen.findByText(/Use custom model:/));
     expect(onChange).toHaveBeenCalledWith("acme/voice-9");
   });
 

@@ -7,6 +7,7 @@ import {
   EyeIcon,
   KeyRoundIcon,
   type LucideIcon,
+  PencilLineIcon,
   TypeIcon,
   VolumeXIcon,
   WrenchIcon,
@@ -28,7 +29,9 @@ export type CapabilityKind =
   /** The model can answer in text as well as audio (UI_UX_SPEC-V2-AMENDMENTS §2.2). */
   | "text-modality"
   /** Runs only through LiveKit Cloud (Inference / Cloud-hosted). */
-  | "cloud-only";
+  | "cloud-only"
+  /** A model id outside the suggestions and the vendor's live list (docs/v4/CUSTOM-MODELS.md D-V4-23). */
+  | "custom";
 
 export interface CapabilityBadgeProps {
   kind: CapabilityKind;
@@ -58,6 +61,7 @@ export const CAPABILITY_BADGE_META: Record<CapabilityKind, CapabilityMeta> = {
   "key-set": { icon: KeyRoundIcon, label: "Key set", tone: "neutral" },
   "text-modality": { icon: TypeIcon, label: "Text modality", tone: "neutral" },
   "cloud-only": { icon: CloudIcon, label: "Cloud only", tone: "neutral" },
+  custom: { icon: PencilLineIcon, label: "Custom", tone: "neutral" },
 };
 
 const TONE_CLASSES = {

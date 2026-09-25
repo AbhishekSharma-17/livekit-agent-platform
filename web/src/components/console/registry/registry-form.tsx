@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field } from "@/components/shared/field";
-import { useCatalog, type CatalogKind } from "@/hooks/useCatalog";
+import { ModelCombobox } from "@/components/console/registry/model-combobox";
+import { CATALOG_FULL_LIMIT, useCatalog, type CatalogKind } from "@/hooks/useCatalog";
+import { idIssueSentence, isIdLikeField, isSendableModelId, validateModelId, type IdIssue } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
 import type { CatalogSpec, FieldSpec, ProviderSpec } from "@/contracts/lkap-contracts";
 
@@ -38,6 +40,23 @@ export interface CatalogFieldContext {
   kind: ProviderSpec["kind"];
   catalog: CatalogSpec | null | undefined;
   credentialId: string | null;
+  /**
+   * The slot's model id (V4-09): a `voices` catalog is listed for this model
+   * only (`model=`), e.g. OpenRouter's TTS voices of one Gemini TTS model.
+   */
+  model?: string | null;
+}
+
+/**
+ * The `model=` a voices list is narrowed by: only for a catalog that lists
+ * models too (OpenRouter, Rime — voices there belong to one model), and only
+ * for an id that passes the model-id rule (nothing failing it is ever sent,
+ * R-V4-32). Voice-only catalogs (ElevenLabs, Cartesia) carry no model on their
+ * items, so a filter would empty them.
+ */
+function voicesModelFor(kind: CatalogKind, ctx: CatalogFieldContext): string | null {
+  if (kind !== "voices" || !ctx.catalog?.kinds?.includes("models")) return null;
+  return isSendableModelId(ctx.model) ? ctx.model : null;
 }
 
 const AVATAR_ID_FIELD_NAME = /(^|\.)(avatar_id|face_id|persona_id)$/;
@@ -78,9 +97,30 @@ export interface RegistryFormProps {
    * field below `admin`). Default: every field editable.
    */
   lockedReason?: (field: FieldSpec) => string | null;
+  /**
+   * Config path prefix of these fields (`pipeline.avatar.fields`): each
+   * control gets `data-issue-path="<prefix>.<name>"`, so an api issue at that
+   * path ("Show field") lands on the control.
+   */
+  issuePathPrefix?: string;
+  /** The api's issue for a field by name (errors and warnings), shown under that field. */
+  issueFor?: (fieldName: string) => { message: string; severity: "error" | "warning" } | undefined;
 }
 
 const CUSTOM = "__custom__";
+
+/**
+ * The model-id rule's verdict for an id-carrying field (R-V4-31): a `type="model"`
+ * field uses the model rule (a bare token is an error); a `type="catalog"` or
+ * id-like field (`voice_id`, `face_id`, …) uses the id rule (a bare token is only
+ * a warning, and Save stays enabled). Empty values and other fields: `null`.
+ */
+export function fieldIdIssue(field: FieldSpec, value: unknown): IdIssue | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  if (field.type === "model") return validateModelId(value, { field: "model" });
+  if (field.type === "catalog" || isIdLikeField(field.name)) return validateModelId(value, { field: "id" });
+  return null;
+}
 
 /** Common BCP-47 codes for the `language` field; free text stays available via "Custom…". */
 export const COMMON_LANGUAGES: { code: string; label: string }[] = [
@@ -132,6 +172,8 @@ export function RegistryForm({
   singleColumn = false,
   catalogContext,
   lockedReason,
+  issuePathPrefix,
+  issueFor,
 }: RegistryFormProps) {
   const autoId = useId();
   const prefix = idPrefix ?? autoId;
@@ -146,7 +188,21 @@ export function RegistryForm({
         .filter((field) => fieldConditionMet(field, values))
         .map((field) => {
           const fieldId = `${prefix}-${field.name}`;
-          const wide = singleColumn || field.type === "json" || field.type === "string" || field.type === "catalog";
+          const wide =
+            singleColumn || field.type === "json" || field.type === "string" || field.type === "catalog" || field.type === "model";
+          const apiIssue = issueFor?.(field.name);
+          const localIssue = fieldIdIssue(field, values[field.name]);
+          const error =
+            errors?.[field.name] ??
+            (localIssue?.severity === "error" ? idIssueSentence(localIssue, "this value") : undefined) ??
+            (apiIssue?.severity === "error" ? apiIssue.message : undefined);
+          const warning = error
+            ? undefined
+            : localIssue?.severity === "warning"
+              ? idIssueSentence(localIssue, "this value")
+              : apiIssue?.severity === "warning"
+                ? apiIssue.message
+                : undefined;
           return (
             <RegistryField
               key={field.name}
@@ -156,7 +212,9 @@ export function RegistryForm({
               secretsMasked={secretsMasked}
               fieldId={fieldId}
               voices={voices}
-              error={errors?.[field.name]}
+              error={error}
+              warning={warning}
+              issuePath={issuePathPrefix ? `${issuePathPrefix}.${field.name}` : undefined}
               className={wide && !singleColumn ? "sm:col-span-2" : undefined}
               catalogContext={catalogContext}
               locked={lockedReason?.(field) ?? null}
@@ -200,6 +258,8 @@ function RegistryField({
   fieldId,
   voices,
   error,
+  warning,
+  issuePath,
   className,
   catalogContext,
   locked = null,
@@ -211,6 +271,9 @@ function RegistryField({
   fieldId: string;
   voices?: string[];
   error?: string;
+  /** A value-free warning shown in the hint slot (warning tone); never blocks Save. */
+  warning?: string;
+  issuePath?: string;
   className?: string;
   catalogContext?: CatalogFieldContext;
   locked?: string | null;
@@ -231,11 +294,22 @@ function RegistryField({
       </Field>
     );
   }
+  const baseHint = fieldHint(field, secretsMasked);
+  const hint = warning ? (
+    <>
+      <span data-slot="field-warning" className="font-medium text-warning-text">
+        {warning}
+      </span>
+      {baseHint ? <> {baseHint}</> : null}
+    </>
+  ) : (
+    baseHint
+  );
   return (
     <Field
       label={field.label}
       htmlFor={fieldId}
-      hint={fieldHint(field, secretsMasked)}
+      hint={hint}
       required={required}
       error={error}
       inline={field.type === "boolean"}
@@ -249,6 +323,7 @@ function RegistryField({
         fieldId={fieldId}
         voices={voices}
         catalogContext={catalogContext}
+        data-issue-path={issuePath}
       />
     </Field>
   );
@@ -274,6 +349,7 @@ function RegistryFieldControl({
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
   "aria-required"?: boolean;
+  "data-issue-path"?: string;
 }) {
   const stringValue =
     typeof value === "string" ? value : value !== undefined && value !== null ? String(value) : "";
@@ -286,9 +362,27 @@ function RegistryFieldControl({
         providerId={catalogContext.providerId}
         kind={catalogKind}
         credentialId={catalogContext.credentialId}
+        model={voicesModelFor(catalogKind, catalogContext)}
         value={stringValue}
         onChange={onChange}
         {...aria}
+      />
+    );
+  }
+
+  if (field.type === "model") {
+    // Suggestions are the field's `options`; free text stays first-class (D-V4-23).
+    return (
+      <ModelCombobox
+        id={fieldId}
+        models={Array.from(
+          new Set([...(typeof field.default === "string" && field.default ? [field.default] : []), ...(field.options ?? [])]),
+        ).map((option) => ({ id: option, label: option }))}
+        value={stringValue}
+        defaultModel={typeof field.default === "string" ? field.default : null}
+        onChange={onChange}
+        aria-describedby={aria["aria-describedby"]}
+        aria-invalid={aria["aria-invalid"]}
       />
     );
   }
@@ -352,7 +446,6 @@ function RegistryFieldControl({
     case "json":
       return <JsonTextarea id={fieldId} value={stringValue || String(field.default ?? "")} placeholder={field.placeholder} onChange={onChange} {...aria} />;
 
-    case "model":
     case "string":
     case "catalog":
     case "file":
@@ -388,7 +481,7 @@ function RegistryFieldControl({
           id={fieldId}
           type="text"
           value={stringValue}
-          className={field.type === "catalog" || field.type === "model" ? "font-mono text-[0.8125rem]" : undefined}
+          className={field.type === "catalog" ? "font-mono text-[0.8125rem]" : undefined}
           placeholder={
             field.placeholder ?? (field.default !== null && field.default !== undefined ? String(field.default) : undefined)
           }
@@ -602,6 +695,9 @@ function previewImageUrl(meta: Record<string, unknown> | undefined): string | nu
   return null;
 }
 
+/** Above this many items the catalog picker gets a search box (V4-09). */
+const CATALOG_SEARCH_THRESHOLD = 20;
+
 /**
  * A vendor catalog id field (V2-13): a `Select` of `GET
  * /providers/{id}/catalog` items with a preview thumbnail when the vendor's
@@ -610,12 +706,17 @@ function previewImageUrl(meta: Record<string, unknown> | undefined): string | nu
  * failed, or a v1-style free-text id already stored). `CatalogResponse.error`
  * never fails the field — V2-06's "a failed vendor call must never break the
  * page" — it renders as a quiet note under the input.
+ *
+ * V4-09: the list is requested whole (`limit=1000`; the api pages at 200 by
+ * default), a voices list is narrowed to the slot's model (`model=`), and a
+ * search box filters it locally once it has more than 20 items.
  */
 function CatalogPickerField({
   id,
   providerId,
   kind,
   credentialId,
+  model,
   value,
   onChange,
   ...aria
@@ -624,14 +725,22 @@ function CatalogPickerField({
   providerId: string;
   kind: CatalogKind;
   credentialId: string | null;
+  model?: string | null;
   value: string;
   onChange: (value: string) => void;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
   "aria-required"?: boolean;
+  "data-issue-path"?: string;
 }) {
-  const { data, isLoading, isError } = useCatalog(providerId, kind, credentialId);
-  const items = data?.items ?? [];
+  const { data, isLoading, isError } = useCatalog(providerId, kind, credentialId, {
+    params: { limit: CATALOG_FULL_LIMIT, model: model ?? undefined },
+  });
+  // A per-model voices list repeats a voice id once per model when no model is chosen; one row per id.
+  const items = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (data?.items ?? []).filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
+  }, [data?.items]);
   const knownId = value === "" || items.some((item) => item.id === value);
   // `null` = no explicit user choice yet — while the catalog is still
   // loading, `items` is always `[]`, so deciding "manual" from `knownId` at
@@ -641,6 +750,8 @@ function CatalogPickerField({
   // still isn't known.
   const [manualOverride, setManualOverride] = React.useState<boolean | null>(null);
   const manual = manualOverride ?? (!isLoading && !knownId);
+  const [search, setSearch] = React.useState("");
+  const searchId = `${id}-search`;
 
   const note = isError ? "Couldn't load the catalog — paste the id instead." : (data?.error ?? null);
 
@@ -672,9 +783,25 @@ function CatalogPickerField({
 
   const selected = items.find((item) => item.id === value);
   const preview = previewImageUrl(selected?.meta);
+  const needle = search.trim().toLowerCase();
+  const searchable = items.length > CATALOG_SEARCH_THRESHOLD;
+  const shown = needle
+    ? items.filter((item) => item.id === value || item.label.toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle))
+    : items;
 
   return (
     <div className="flex flex-col gap-1.5">
+      {searchable ? (
+        <Input
+          id={searchId}
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={`Search ${items.length} ${kind}`}
+          aria-label={`Search the ${kind} list`}
+          className="h-8 text-[0.8125rem]"
+        />
+      ) : null}
       <div className="flex items-center gap-2">
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element -- vendor-hosted thumbnail, not a local asset
@@ -688,15 +815,23 @@ function CatalogPickerField({
             <SelectValue placeholder={isLoading ? "Loading catalog…" : "Choose…"} />
           </SelectTrigger>
           <SelectContent>
-            {items.map((item) => (
+            {shown.map((item) => (
               <SelectItem key={item.id} value={item.id}>
                 {item.label}
               </SelectItem>
             ))}
+            {searchable && needle && shown.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">Nothing matches the search.</p>
+            ) : null}
             <SelectItem value={MANUAL_ENTRY}>Paste id manually…</SelectItem>
           </SelectContent>
         </Select>
       </div>
+      {searchable && needle ? (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {shown.length} of {items.length} match.
+        </p>
+      ) : null}
       {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
     </div>
   );

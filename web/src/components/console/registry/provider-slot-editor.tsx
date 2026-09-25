@@ -8,9 +8,16 @@ import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { Field } from "@/components/shared/field";
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
-import { useProviders } from "@/components/console/lib/api-hooks";
+import { useProviderModel, useProviders } from "@/components/console/lib/api-hooks";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
-import { ModelCombobox } from "@/components/console/registry/model-combobox";
+import { ModelCapabilitiesBlock } from "@/components/console/registry/model-capabilities";
+import {
+  isCustomModelId,
+  ModelCombobox,
+  useModelCatalog,
+  useModelIdRules,
+} from "@/components/console/registry/model-combobox";
+import { ModelTestControls } from "@/components/console/registry/model-test-panel";
 import {
   inferenceProviderFor,
   isInferenceProvider,
@@ -20,8 +27,9 @@ import {
   type ProviderKind,
 } from "@/components/console/registry/provider-meta";
 import { defaultFieldValues, RegistryForm } from "@/components/console/registry/registry-form";
+import { idIssueSentence, isSendableModelId, validateModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
-import type { FieldSpec, ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
+import type { FieldSpec, ModelSpec, ModelTestResult, ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
  * What a slot may offer. Every member is optional; `{}` is the v1 behaviour.
@@ -71,6 +79,14 @@ export interface ProviderSlotEditorProps {
   /** Controlled model-list open state (the vision note opens it). */
   modelPickerOpen?: boolean;
   onModelPickerOpenChange?: (open: boolean) => void;
+  /**
+   * Config-relative path of this slot (`pipeline.avatar`). Option fields get
+   * `data-issue-path="<issuePath>.fields.<name>"` so "Show field" can reach
+   * them (id-field issues sit at that path since V4-08).
+   */
+  issuePath?: string;
+  /** The api's issue for one option field (`<issuePath>.fields.<name>`), shown under that field. */
+  fieldIssueFor?: (fieldName: string) => { message: string; severity: "error" | "warning" } | undefined;
 }
 
 type RunChoice = "inference" | "own";
@@ -79,6 +95,52 @@ type RunChoice = "inference" | "own";
 export const THINKING_KINDS: ReadonlySet<ProviderKind> = new Set<ProviderKind>(["llm", "realtime"]);
 /** Kinds where a voice count means something. */
 export const SPEAKING_KINDS: ReadonlySet<ProviderKind> = new Set<ProviderKind>(["tts", "realtime"]);
+/**
+ * Kinds whose slot takes a model id (`lkap_contracts.providers.MODEL_KINDS`,
+ * R-V4-22): the model field renders for every one, even with no `models`.
+ */
+export const MODEL_KINDS: ReadonlySet<ProviderKind> = new Set<ProviderKind>([
+  "realtime",
+  "stt",
+  "llm",
+  "tts",
+  "image_gen",
+  "embedding",
+]);
+
+/**
+ * Where a slot's model id lives. Most entries use `ProviderRef.model`; about
+ * thirty (AssemblyAI, Gladia, …) carry it in a `type="model"` option field
+ * instead (the registry never has both, D-V4-23). Either way the editor shows
+ * one "Model" control in the same place, so the field is lifted out of
+ * "Options" rather than rendered twice.
+ */
+export function modelFieldOf(spec: ProviderSpec): FieldSpec | undefined {
+  return (spec.fields ?? []).find((field) => field.type === "model");
+}
+
+/**
+ * *Suggested* for a slot: the registry's `models`, or for a `type="model"`
+ * field its `options` plus its default — so a field's own default is never
+ * labelled "Custom".
+ */
+export function slotSuggestions(spec: ProviderSpec): ModelSpec[] {
+  const field = modelFieldOf(spec);
+  if (!field) return spec.models ?? [];
+  const ids = [...(typeof field.default === "string" && field.default ? [field.default] : []), ...(field.options ?? [])];
+  return Array.from(new Set(ids)).map((id) => ({ id, label: id }));
+}
+
+/** The id the slot runs with (typed, else the field or provider default), or `""`. */
+export function slotModelId(spec: ProviderSpec, value: ProviderRef): string {
+  const field = modelFieldOf(spec);
+  if (field) {
+    const typed = value.fields?.[field.name];
+    if (typeof typed === "string" && typed.trim() !== "") return typed.trim();
+    return typeof field.default === "string" ? field.default : "";
+  }
+  return value.model?.trim() || spec.default_model || "";
+}
 
 interface UnavailableEntry {
   spec: ProviderSpec;
@@ -124,6 +186,8 @@ export function ProviderSlotEditor({
   idPrefix,
   modelPickerOpen,
   onModelPickerOpenChange,
+  issuePath,
+  fieldIssueFor,
 }: ProviderSlotEditorProps) {
   const registry = useSlotProviders(providersProp);
   const autoId = React.useId();
@@ -171,6 +235,9 @@ export function ProviderSlotEditor({
     onChange(newProviderRef(spec));
   }
 
+  const liftedModelField = current ? modelFieldOf(current) : undefined;
+  const optionFields = (current?.fields ?? []).filter((field) => field !== liftedModelField);
+
   const vendors = ofKind.filter((p) => !isInferenceProvider(p));
   const selectable: ProviderSpec[] = [];
   const unavailable: UnavailableEntry[] = [];
@@ -181,8 +248,6 @@ export function ProviderSlotEditor({
   }
 
   const showVendors = effectiveRun === "own";
-  const models = current?.models ?? [];
-  const showModel = Boolean(current) && (models.length > 0 || Boolean(current?.default_model));
 
   return (
     <div className="flex flex-col gap-5" data-slot="provider-slot-editor" data-kind={kind}>
@@ -213,20 +278,15 @@ export function ProviderSlotEditor({
             </p>
           ) : null}
 
-          {showModel ? (
-            <Field label="Model" htmlFor={`${prefix}-model`} hint={current.default_model ? undefined : "Type any id the provider accepts."}>
-              <ModelCombobox
-                id={`${prefix}-model`}
-                models={models}
-                value={value.model ?? ""}
-                defaultModel={current.default_model}
-                onChange={(model) => onChange({ ...value, model: model.trim() === "" ? null : model.trim() })}
-                visionOnly={constraints.preferVision}
-                open={modelPickerOpen}
-                onOpenChange={onModelPickerOpenChange}
-              />
-            </Field>
-          ) : null}
+          <SlotModel
+            spec={current}
+            value={value}
+            onChange={onChange}
+            prefix={prefix}
+            visionOnly={constraints.preferVision}
+            open={modelPickerOpen}
+            onOpenChange={onModelPickerOpenChange}
+          />
 
           {current.requires_credential !== false && !isInferenceProvider(current) ? (
             <CredentialPicker
@@ -237,11 +297,11 @@ export function ProviderSlotEditor({
             />
           ) : null}
 
-          {(current.fields ?? []).length > 0 ? (
+          {optionFields.length > 0 ? (
             <div className="flex flex-col gap-3">
               <h4 className="text-sm font-semibold text-foreground">Options</h4>
               <RegistryForm
-                fields={current.fields ?? []}
+                fields={optionFields}
                 values={value.fields ?? {}}
                 onChange={(name, fieldValue) => onChange({ ...value, fields: { ...(value.fields ?? {}), [name]: fieldValue } })}
                 idPrefix={`${prefix}-field`}
@@ -252,7 +312,10 @@ export function ProviderSlotEditor({
                   kind: current.kind,
                   catalog: current.catalog,
                   credentialId: value.credential_id ?? null,
+                  model: slotModelId(current, value) || null,
                 }}
+                issuePathPrefix={issuePath ? `${issuePath}.fields` : undefined}
+                issueFor={fieldIssueFor}
               />
             </div>
           ) : null}
@@ -262,6 +325,111 @@ export function ProviderSlotEditor({
           This slot uses <span className="font-mono">{value.provider_id}</span>, which isn&apos;t in the provider registry any
           more. Pick another provider.
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The slot's "Model" row (V4-09): the combobox (Suggested / Catalog / Your
+ * custom models / a custom id), the model-id rule's inline error, and for an
+ * id that passes it the tested chip, Test model and, for an id outside the
+ * suggestions (a catalog or custom id) of a thinking model, "This model can…". Nothing is requested for an id that
+ * fails the rule (R-V4-32).
+ */
+function SlotModel({
+  spec,
+  value,
+  onChange,
+  prefix,
+  visionOnly,
+  open,
+  onOpenChange,
+}: {
+  spec: ProviderSpec;
+  value: ProviderRef;
+  onChange: (next: ProviderRef) => void;
+  prefix: string;
+  visionOnly?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const rules = useModelIdRules();
+  const [detected, setDetected] = React.useState<ModelTestResult["detected"] | null>(null);
+  const modelField = modelFieldOf(spec);
+  const credentialId = value.credential_id ?? null;
+  const modelId = slotModelId(spec, value);
+  const sendable = isSendableModelId(modelId, rules);
+  const catalog = useModelCatalog(spec.id, spec.catalog, credentialId);
+  const catalogItems = catalog.data?.items ?? [];
+  const suggestions = slotSuggestions(spec);
+  const defaultModel = modelField ? (typeof modelField.default === "string" ? modelField.default : null) : spec.default_model;
+  const stored = modelField ? String(value.fields?.[modelField.name] ?? "") : (value.model ?? "");
+  // Records, tests and declarations exist for model kinds only (an avatar's "model" is not a vendor model id).
+  const modelKind = MODEL_KINDS.has(spec.kind);
+  const custom = sendable && isCustomModelId(modelId, suggestions, catalogItems);
+  // Outside the suggestions (a catalog id or a custom one) the platform knows less: show what it can do.
+  const unlisted = sendable && !suggestions.some((m) => m.id === modelId);
+  const record = useProviderModel(spec.id, unlisted && modelKind ? modelId : null);
+  const issue = stored.trim() === "" ? null : validateModelId(stored.trim(), { field: "model", rules });
+  const isThinking = THINKING_KINDS.has(spec.kind);
+
+  React.useEffect(() => setDetected(null), [modelId, credentialId]);
+
+  if (!modelKind && !modelField && suggestions.length === 0 && !spec.default_model) return null;
+
+  function setModel(next: string) {
+    const trimmed = next.trim();
+    if (modelField) {
+      onChange({ ...value, fields: { ...(value.fields ?? {}), [modelField.name]: trimmed } });
+    } else {
+      onChange({ ...value, model: trimmed === "" ? null : trimmed });
+    }
+  }
+
+  const hint = modelField?.help ?? (defaultModel ? undefined : "Type any id the provider accepts.");
+
+  return (
+    <div className="flex flex-col gap-3" data-slot="slot-model">
+      <Field
+        label={modelField?.label ?? "Model"}
+        htmlFor={`${prefix}-model`}
+        hint={hint}
+        error={issue ? idIssueSentence(issue, "this model id") : undefined}
+      >
+        <ModelCombobox
+          id={`${prefix}-model`}
+          models={suggestions}
+          value={stored}
+          defaultModel={defaultModel}
+          onChange={setModel}
+          visionOnly={visionOnly}
+          open={open}
+          onOpenChange={onOpenChange}
+          provider={spec}
+          credentialId={credentialId}
+          rules={rules}
+        />
+      </Field>
+      {sendable && modelKind ? (
+        <ModelTestControls
+          spec={spec}
+          modelId={modelId}
+          credentialId={credentialId}
+          fields={value.fields}
+          showUntested={custom}
+          readRecord={unlisted}
+          onResult={(result) => setDetected(result.detected ?? null)}
+        />
+      ) : null}
+      {unlisted && modelKind && isThinking ? (
+        <ModelCapabilitiesBlock
+          spec={spec}
+          modelId={modelId}
+          record={record.data}
+          catalogItem={catalogItems.find((item) => item.id === modelId)}
+          detected={detected}
+        />
       ) : null}
     </div>
   );

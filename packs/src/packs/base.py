@@ -13,7 +13,7 @@ packs never import `lkap_agent`.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -133,6 +133,32 @@ class UiChannel(Protocol):
 
     async def cite(self, block_id: str, hits: list[KbHit]) -> None:
         """Replace the citations shown by `kb_citations` block `block_id`."""
+        ...
+
+    async def request_block(
+        self,
+        block_id: str,
+        *,
+        timeout_s: float,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Ask the user to answer requestable block `block_id` and wait (V5-02).
+
+        The caller writes the block's content first; this only marks it
+        `requested` and waits. Returns the submitted values, or `None` on
+        cancel, timeout, a newer request on the same block, or session close.
+        """
+        ...
+
+    @property
+    def pending_requests(self) -> Mapping[str, Literal["request", "form"]]:
+        """Block id -> method of every request still waiting for the user."""
+        ...
+
+    def cancel_pending(
+        self, reason: str, *, methods: Iterable[Literal["request", "form"]] | None = None
+    ) -> list[str]:
+        """Release pending requests with `None`; returns the released block ids."""
         ...
 
 

@@ -79,9 +79,9 @@ import asyncio
 import contextlib
 import os
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 from livekit import rtc
 from livekit.agents import Agent, AgentServer, AgentSession, JobProcess, JobRequest, inference
@@ -321,6 +321,27 @@ class NoopUiChannel:
 
     async def cite(self, block_id: str, hits: list[KbHit]) -> None:
         """Drop the citations."""
+
+    async def request_block(
+        self,
+        block_id: str,
+        *,
+        timeout_s: float,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Nobody can answer a block: answer as a timed-out request."""
+        return None
+
+    @property
+    def pending_requests(self) -> Mapping[str, Literal["request", "form"]]:
+        """Nothing is ever pending."""
+        return {}
+
+    def cancel_pending(
+        self, reason: str, *, methods: Iterable[Literal["request", "form"]] | None = None
+    ) -> list[str]:
+        """Nothing to release."""
+        return []
 
 
 class NoopFrameBuffer:

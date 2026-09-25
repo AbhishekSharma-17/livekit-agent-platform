@@ -30,7 +30,9 @@ export interface LkapContracts {
   AnalyticsBucket?: AnalyticsBucket;
   AnalyticsSummary?: AnalyticsSummary;
   AvatarOptions?: AvatarOptions;
+  BlockRequestPayload?: BlockRequestPayload;
   BlockSpec?: BlockSpec;
+  BlockSubmitPayload?: BlockSubmitPayload;
   CallCreate?: CallCreate;
   CallDtmfIn?: CallDtmfIn;
   CallDtmfOut?: CallDtmfOut;
@@ -133,6 +135,7 @@ export interface LkapContracts {
   RecordingOut?: RecordingOut;
   RecordingStartOut?: RecordingStartOut;
   ReplicaHandle?: ReplicaHandle;
+  RequestableState?: RequestableState;
   ResolvedAgentConfig?: ResolvedAgentConfig;
   SessionCost?: SessionCost;
   SessionDetailOut?: SessionDetailOut;
@@ -807,6 +810,38 @@ export interface AnalyticsSummary {
   failed?: number;
   minutes?: number;
   sessions?: number;
+}
+/**
+ * ``UiRequest.payload`` for ``method == "request"`` (V5-02).
+ *
+ * ``schema`` is optional block-specific input a renderer may need beyond the
+ * block state; extra keys a requestable block defines pass through.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "BlockRequestPayload".
+ */
+export interface BlockRequestPayload {
+  block_id: string;
+  schema?: {
+    [k: string]: unknown;
+  } | null;
+  timeout_s: number;
+  [k: string]: unknown;
+}
+/**
+ * ``AgentAction.payload`` for ``action == "block_submit"`` (V5-02).
+ *
+ * Exactly one of ``values`` (the user's answer) or ``cancelled: true``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "BlockSubmitPayload".
+ */
+export interface BlockSubmitPayload {
+  block_id: string;
+  cancelled?: boolean;
+  values?: {
+    [k: string]: unknown;
+  } | null;
 }
 /**
  * ``POST /v1/calls`` — place one outbound call.
@@ -2426,6 +2461,24 @@ export interface ReplicaHandle {
   replica_index: number;
   started_at?: number;
   state?: "starting" | "running" | "draining" | "stopped" | "failed";
+}
+/**
+ * Mixin for the state of every block the agent can ask the user to answer.
+ *
+ * The agent flips ``status`` to ``requested`` when it asks (``UiRequest.method
+ * == "request"``, or the legacy ``form``) and the browser answers with
+ * ``AgentAction.action == "block_submit"``. ``submitted`` stamps
+ * ``submitted_at``; ``cancelled`` covers a user cancel, a timeout and a
+ * barge-in on the generic ``request`` path. The legacy ``form`` path keeps
+ * its v2 statuses for one release: ``idle`` after a cancel, ``requested``
+ * after a timeout (so a late submission still lands).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RequestableState".
+ */
+export interface RequestableState {
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
 }
 /**
  * What the worker receives from ``/internal/v1/sessions/{id}/resolved``.

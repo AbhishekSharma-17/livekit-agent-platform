@@ -1,0 +1,37 @@
+{
+  "$id": "lkap-contracts/BlockRequestPayload.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "``UiRequest.payload`` for ``method == \"request\"`` (V5-02).\n\n``schema`` is optional block-specific input a renderer may need beyond the\nblock state; extra keys a requestable block defines pass through.",
+  "properties": {
+    "block_id": {
+      "minLength": 1,
+      "title": "Block Id",
+      "type": "string"
+    },
+    "schema": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Schema"
+    },
+    "timeout_s": {
+      "exclusiveMinimum": 0,
+      "title": "Timeout S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "block_id",
+    "timeout_s"
+  ],
+  "title": "BlockRequestPayload",
+  "type": "object"
+}

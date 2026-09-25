@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/BlockSubmitPayload.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``AgentAction.payload`` for ``action == \"block_submit\"`` (V5-02).\n\nExactly one of ``values`` (the user's answer) or ``cancelled: true``.",
+  "properties": {
+    "block_id": {
+      "minLength": 1,
+      "title": "Block Id",
+      "type": "string"
+    },
+    "cancelled": {
+      "default": false,
+      "title": "Cancelled",
+      "type": "boolean"
+    },
+    "values": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Values"
+    }
+  },
+  "required": [
+    "block_id"
+  ],
+  "title": "BlockSubmitPayload",
+  "type": "object"
+}

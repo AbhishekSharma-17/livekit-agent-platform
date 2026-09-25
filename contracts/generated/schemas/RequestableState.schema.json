@@ -1,0 +1,32 @@
+{
+  "$id": "lkap-contracts/RequestableState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Mixin for the state of every block the agent can ask the user to answer.\n\nThe agent flips ``status`` to ``requested`` when it asks (``UiRequest.method\n== \"request\"``, or the legacy ``form``) and the browser answers with\n``AgentAction.action == \"block_submit\"``. ``submitted`` stamps\n``submitted_at``; ``cancelled`` covers a user cancel, a timeout and a\nbarge-in on the generic ``request`` path. The legacy ``form`` path keeps\nits v2 statuses for one release: ``idle`` after a cancel, ``requested``\nafter a timeout (so a late submission still lands).",
+  "properties": {
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    }
+  },
+  "title": "RequestableState",
+  "type": "object"
+}

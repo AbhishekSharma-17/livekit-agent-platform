@@ -53,6 +53,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lkap_api.costs.estimate import QuoteFn, estimated_usd_for, table_quote
 from lkap_api.costs.mapping import resolve_model, slot_for_usage
 from lkap_api.costs.prices import PriceBook, load_price_book, pipeline_refs
+from lkap_api.costs.vendors import (
+    BUILT_VENDORS,
+    provider_requests_of,
+    request_ids,
+    workspace_reconcile_vendors,
+)
 from lkap_api.db.models import Agent, AgentConfigVersion, PhoneNumber, SessionEvent
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import SessionCost as SessionCostRow
@@ -496,6 +502,20 @@ async def cost_session(db: AsyncSession, session: SessionRow, *, quote: QuoteFn 
         cost_usd=session.cost_usd,
         estimated_usd=session.estimated_usd,
     )
+
+
+async def reconcile_due(db: AsyncSession, session: SessionRow) -> bool:
+    """Whether :func:`cost_session`'s caller should enqueue ``cost_reconcile`` (V4-17, D-V4-45).
+
+    True when the workspace opted into a vendor with a built client and the worker
+    posted per-request LLM ids (``metrics {kind: "provider_requests"}``). The enqueue
+    itself happens in the summary route **after** its commit (ask #40: the jobs
+    service opens its own connection), via :func:`lkap_api.jobs.reconcile.enqueue_reconcile`.
+    """
+    vendors = await workspace_reconcile_vendors(db, session.workspace_id)
+    if not BUILT_VENDORS.intersection(vendors):
+        return False
+    return bool(request_ids(await provider_requests_of(db, session.id), "llm"))
 
 
 async def add_egress_cost_line(db: AsyncSession, session: SessionRow) -> None:

@@ -40,9 +40,10 @@ from lkap_api.auth.models import (
     WorkspaceUpdate,
 )
 from lkap_api.auth.roles import Requirement
+from lkap_api.costs.vendors import RECONCILE_KEY, ReconcileSettingError, validate_reconcile
 from lkap_api.db.models import AuditLog, User, Workspace, WorkspaceMember, new_id
 from lkap_api.deps import DbDep, SettingsDep
-from lkap_api.errors import ConflictError, ForbiddenError, NotFoundError
+from lkap_api.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
 
@@ -154,6 +155,34 @@ async def list_workspaces(principal: PrincipalDep, db: DbDep) -> Page[WorkspaceO
     return Page[WorkspaceOut](items=items, total=len(items))
 
 
+def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    """Merge top-level keys, except ``cost``, whose own keys are merged one level down.
+
+    V4-17 (D-V4-45): the reconciliation opt-in (``cost.reconcile``) is written with this
+    route, and a shallow merge would drop the workspace prices stored beside it
+    (``cost.prices``, written by ``PUT /v1/workspace/prices``). ``cost.reconcile`` is
+    validated here.
+
+    Raises:
+        UnprocessableEntityError: ``cost`` is not an object, or ``cost.reconcile`` names
+            an unknown vendor or one whose client is not built yet.
+    """
+    merged = {**current, **incoming}
+    if "cost" in incoming:
+        cost_in = incoming["cost"]
+        if not isinstance(cost_in, dict):
+            raise UnprocessableEntityError("settings.cost must be an object")
+        cost = dict(current.get("cost") or {}) if isinstance(current.get("cost"), dict) else {}
+        cost.update(cost_in)
+        if RECONCILE_KEY in cost_in:
+            try:
+                cost[RECONCILE_KEY] = validate_reconcile(cost_in[RECONCILE_KEY])
+            except ReconcileSettingError as exc:
+                raise UnprocessableEntityError(str(exc)) from exc
+        merged["cost"] = cost
+    return merged
+
+
 @router.put(
     "/workspaces/{workspace_id}",
     response_model=WorkspaceOut,
@@ -171,7 +200,7 @@ async def update_workspace(payload: WorkspaceUpdate, ctx: PathWorkspaceDep, db: 
         workspace.name = payload.name
         changed.append("name")
     if payload.settings is not None:
-        workspace.settings = {**(workspace.settings or {}), **payload.settings}
+        workspace.settings = _merge_settings(workspace.settings or {}, payload.settings)
         changed.append("settings")
     await db.flush()
     _audit(db, ctx, "workspace.update", workspace.id, fields=changed)

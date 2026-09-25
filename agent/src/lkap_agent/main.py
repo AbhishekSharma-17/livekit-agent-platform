@@ -680,7 +680,12 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     if not meta.session_id:
         bind_session_context(session_id=resolved.session_id, agent_id=resolved.agent_id, job_id=job_id)
 
-    observer = SessionObserver(session_id=resolved.session_id, client=deps.config_client)
+    observer = SessionObserver(
+        session_id=resolved.session_id,
+        client=deps.config_client,
+        # V4-17 (D-V4-45): the workspace's reconciliation opt-in; empty collects no ids.
+        cost_reconcile=resolved.cost_reconcile,
+    )
     eager: _EagerShutdownContext | None = None
     if is_text_channel(resolved):
         # asks #33: post a typed chat's summary as soon as it ends, not after the SDK's teardown.

@@ -459,6 +459,21 @@ async def test_the_summary_still_posts_when_the_last_event_flush_fails() -> None
     assert [s.status for s in api.summaries] == ["ended"]
 
 
+@pytest.mark.parametrize(("cost_reconcile", "posted"), [([], False), (["openrouter"], True)])
+async def test_run_session_posts_provider_requests_only_under_the_opt_in(
+    cost_reconcile: list[str], posted: bool
+) -> None:
+    """V4-17: `resolved.cost_reconcile` reaches the observer (the one `main.py` hunk)."""
+    api = FakeApi(resolved_config().model_copy(update={"cost_reconcile": cost_reconcile}))
+    ctx = FakeJobContext(_metadata())
+
+    await run_session(ctx, _deps(api))
+    await ctx.fire_shutdown("client disconnected")
+
+    kinds = [e.payload.get("kind") for e in api.events_of("metrics")]
+    assert ("provider_requests" in kinds) is posted
+
+
 async def test_shutdown_is_idempotent() -> None:
     """A double shutdown (job end plus close) must not post two summaries."""
     api = FakeApi(resolved_config())

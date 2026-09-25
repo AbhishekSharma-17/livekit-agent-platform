@@ -592,6 +592,13 @@
                 "default": {
                   "auto_inject": true,
                   "kb_ids": [],
+                  "max_inject_tokens": 1200,
+                  "min_score": null,
+                  "mode": "hybrid",
+                  "prefetch": true,
+                  "query_mode": "conversation",
+                  "rerank": "none",
+                  "skip_short_turns": true,
                   "top_k": 4
                 }
               },
@@ -1437,7 +1444,7 @@
             "type": "object"
           },
           "KnowledgeConfig": {
-            "description": "Knowledge bases attached to the agent and how they are injected.",
+            "description": "Knowledge bases attached to the agent and how they are injected.\n\nThe v2 fields (V5-06) default so an agent saved before them retrieves at\nleast what it did: hybrid search on, no score floor, no rerank.",
             "properties": {
               "auto_inject": {
                 "default": true,
@@ -1451,6 +1458,75 @@
                 },
                 "title": "Kb Ids",
                 "type": "array"
+              },
+              "max_inject_tokens": {
+                "default": 1200,
+                "description": "Upper bound on the knowledge note added to a turn (approximate tokens).",
+                "minimum": 1,
+                "title": "Max Inject Tokens",
+                "type": "integer"
+              },
+              "min_score": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Drop hits scoring below this (0-1); null keeps every hit. In hybrid mode without rerank the score is rank-derived, so a floor only trims the tail of the list.",
+                "title": "Min Score"
+              },
+              "mode": {
+                "default": "hybrid",
+                "description": "`hybrid` fuses keyword matches with embedding similarity.",
+                "enum": [
+                  "vector",
+                  "hybrid"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "prefetch": {
+                "default": true,
+                "description": "Start the auto-inject search on the caller's interim transcript, so the result is usually ready when the turn ends.",
+                "title": "Prefetch",
+                "type": "boolean"
+              },
+              "query_mode": {
+                "default": "conversation",
+                "description": "`conversation` searches with the last user turn plus the previous assistant sentence and flow variables; `last_turn` with the user's words only.",
+                "enum": [
+                  "last_turn",
+                  "conversation"
+                ],
+                "title": "Query Mode",
+                "type": "string"
+              },
+              "rerank": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "none",
+                      "local"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "none",
+                "description": "`local` rescores the candidates with the local cross-encoder (adds ~60-100 ms).",
+                "title": "Rerank"
+              },
+              "skip_short_turns": {
+                "default": true,
+                "description": "Skip the auto-inject search for backchannels and very short turns (yes, okay, digits).",
+                "title": "Skip Short Turns",
+                "type": "boolean"
               },
               "top_k": {
                 "default": 4,
@@ -3691,6 +3767,13 @@
                 "default": {
                   "auto_inject": true,
                   "kb_ids": [],
+                  "max_inject_tokens": 1200,
+                  "min_score": null,
+                  "mode": "hybrid",
+                  "prefetch": true,
+                  "query_mode": "conversation",
+                  "rerank": "none",
+                  "skip_short_turns": true,
                   "top_k": 4
                 }
               },
@@ -4536,7 +4619,7 @@
             "type": "object"
           },
           "KnowledgeConfig": {
-            "description": "Knowledge bases attached to the agent and how they are injected.",
+            "description": "Knowledge bases attached to the agent and how they are injected.\n\nThe v2 fields (V5-06) default so an agent saved before them retrieves at\nleast what it did: hybrid search on, no score floor, no rerank.",
             "properties": {
               "auto_inject": {
                 "default": true,
@@ -4550,6 +4633,75 @@
                 },
                 "title": "Kb Ids",
                 "type": "array"
+              },
+              "max_inject_tokens": {
+                "default": 1200,
+                "description": "Upper bound on the knowledge note added to a turn (approximate tokens).",
+                "minimum": 1,
+                "title": "Max Inject Tokens",
+                "type": "integer"
+              },
+              "min_score": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Drop hits scoring below this (0-1); null keeps every hit. In hybrid mode without rerank the score is rank-derived, so a floor only trims the tail of the list.",
+                "title": "Min Score"
+              },
+              "mode": {
+                "default": "hybrid",
+                "description": "`hybrid` fuses keyword matches with embedding similarity.",
+                "enum": [
+                  "vector",
+                  "hybrid"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "prefetch": {
+                "default": true,
+                "description": "Start the auto-inject search on the caller's interim transcript, so the result is usually ready when the turn ends.",
+                "title": "Prefetch",
+                "type": "boolean"
+              },
+              "query_mode": {
+                "default": "conversation",
+                "description": "`conversation` searches with the last user turn plus the previous assistant sentence and flow variables; `last_turn` with the user's words only.",
+                "enum": [
+                  "last_turn",
+                  "conversation"
+                ],
+                "title": "Query Mode",
+                "type": "string"
+              },
+              "rerank": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "none",
+                      "local"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "none",
+                "description": "`local` rescores the candidates with the local cross-encoder (adds ~60-100 ms).",
+                "title": "Rerank"
+              },
+              "skip_short_turns": {
+                "default": true,
+                "description": "Skip the auto-inject search for backchannels and very short turns (yes, okay, digits).",
+                "title": "Skip Short Turns",
+                "type": "boolean"
               },
               "top_k": {
                 "default": 4,
@@ -7336,6 +7488,13 @@
                 "default": {
                   "auto_inject": true,
                   "kb_ids": [],
+                  "max_inject_tokens": 1200,
+                  "min_score": null,
+                  "mode": "hybrid",
+                  "prefetch": true,
+                  "query_mode": "conversation",
+                  "rerank": "none",
+                  "skip_short_turns": true,
                   "top_k": 4
                 }
               },
@@ -8181,7 +8340,7 @@
             "type": "object"
           },
           "KnowledgeConfig": {
-            "description": "Knowledge bases attached to the agent and how they are injected.",
+            "description": "Knowledge bases attached to the agent and how they are injected.\n\nThe v2 fields (V5-06) default so an agent saved before them retrieves at\nleast what it did: hybrid search on, no score floor, no rerank.",
             "properties": {
               "auto_inject": {
                 "default": true,
@@ -8195,6 +8354,75 @@
                 },
                 "title": "Kb Ids",
                 "type": "array"
+              },
+              "max_inject_tokens": {
+                "default": 1200,
+                "description": "Upper bound on the knowledge note added to a turn (approximate tokens).",
+                "minimum": 1,
+                "title": "Max Inject Tokens",
+                "type": "integer"
+              },
+              "min_score": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Drop hits scoring below this (0-1); null keeps every hit. In hybrid mode without rerank the score is rank-derived, so a floor only trims the tail of the list.",
+                "title": "Min Score"
+              },
+              "mode": {
+                "default": "hybrid",
+                "description": "`hybrid` fuses keyword matches with embedding similarity.",
+                "enum": [
+                  "vector",
+                  "hybrid"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "prefetch": {
+                "default": true,
+                "description": "Start the auto-inject search on the caller's interim transcript, so the result is usually ready when the turn ends.",
+                "title": "Prefetch",
+                "type": "boolean"
+              },
+              "query_mode": {
+                "default": "conversation",
+                "description": "`conversation` searches with the last user turn plus the previous assistant sentence and flow variables; `last_turn` with the user's words only.",
+                "enum": [
+                  "last_turn",
+                  "conversation"
+                ],
+                "title": "Query Mode",
+                "type": "string"
+              },
+              "rerank": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "none",
+                      "local"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "none",
+                "description": "`local` rescores the candidates with the local cross-encoder (adds ~60-100 ms).",
+                "title": "Rerank"
+              },
+              "skip_short_turns": {
+                "default": true,
+                "description": "Skip the auto-inject search for backchannels and very short turns (yes, okay, digits).",
+                "title": "Skip Short Turns",
+                "type": "boolean"
               },
               "top_k": {
                 "default": 4,

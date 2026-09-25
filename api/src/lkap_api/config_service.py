@@ -830,10 +830,11 @@ def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
             return []
         if spec is None and _telephony_filter_offered():
             return []
-        message = "The phone call preset tunes turn-taking only: " + (
-            f"the noise filter '{spec.label}' has no phone version"
+        message = (
+            f"The phone call preset keeps the noise filter '{spec.label}' as it is: it has no phone version"
             if spec is not None
-            else "no noise filter for phone calls is available on this platform yet"
+            else "The phone call preset tunes turn-taking only: no noise filter for phone calls is "
+            "available on this platform yet"
         )
     return [Issue(path="pipeline.conversation_preset", message=message, severity="warning")]
 

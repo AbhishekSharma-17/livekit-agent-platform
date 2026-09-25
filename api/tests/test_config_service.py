@@ -862,6 +862,15 @@ def test_telephony_preset_with_a_filter_that_has_a_phone_version_does_not_warn()
     assert _preset_issues(result) == []
 
 
+def test_telephony_preset_with_a_filter_without_a_phone_version_says_it_is_kept() -> None:
+    config = _telephony_config()
+    config.pipeline.noise_cancellation = ProviderRef(provider_id="ai-coustics-noise-cancellation")
+
+    (issue,) = _preset_issues(validate(ValidationContext(config=config, connection=_connection("krisp"))))
+
+    assert "keeps the noise filter 'ai-coustics' as it is" in issue.message
+
+
 @pytest.mark.parametrize("tier", ["none", "krisp"])
 def test_other_presets_never_get_the_telephony_warning(tier: str) -> None:
     config = inference_config()

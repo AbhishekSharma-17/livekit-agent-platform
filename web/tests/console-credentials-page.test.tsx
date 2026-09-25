@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -26,6 +26,20 @@ beforeAll(() => {
 });
 afterAll(() => {
   Element.prototype.matches = nativeMatches;
+});
+
+// jsdom has no ResizeObserver; `EnableComposioDialog`'s override `Checkbox`
+// (@radix-ui/react-checkbox, via `@radix-ui/react-use-size`) needs one the
+// moment the Rotate dialog opens (see console-http-tool-editor.test.tsx for
+// the Select-flavoured version of this same gap). Re-applied per test since
+// `vi.unstubAllGlobals()` in `afterEach` clears it.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
 });
 
 const credentials: CredentialOut[] = [
@@ -92,6 +106,17 @@ const tools: ToolOut[] = [
 interface Call {
   url: string;
   method: string;
+  body: Record<string, unknown> | undefined;
+}
+
+/** `call.body?.foo` with a type jsdom's parsed JSON never gives us for free. */
+function bodyField(call: Call, path: string[]): unknown {
+  let value: unknown = call.body;
+  for (const key of path) {
+    if (typeof value !== "object" || value === null) return undefined;
+    value = (value as Record<string, unknown>)[key];
+  }
+  return value;
 }
 
 function stubApi(overrides: (call: Call) => { status: number; body: unknown } | undefined = () => undefined) {
@@ -99,7 +124,8 @@ function stubApi(overrides: (call: Call) => { status: number; body: unknown } | 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const call = { url: String(input), method: init?.method ?? "GET" };
+      const requestBody = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const call = { url: String(input), method: init?.method ?? "GET", body: requestBody };
       calls.push(call);
       const override = overrides(call);
       let status = 200;
@@ -253,5 +279,114 @@ describe("CredentialList", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Rotate" }));
     expect(await screen.findByRole("heading", { name: "Rotate OpenAI team key" })).toBeTruthy();
     expect(screen.getByText("Current key")).toBeTruthy();
+  });
+});
+
+/**
+ * The Composio row (docs/v5/COMPOSIO.md §6, D-V5-C13; docs/v5/_asks.md #4):
+ * the workspace's key is an ordinary row here (`provider_id: "composio"`),
+ * just with Validate/Rotate/Disable/Remove key instead of the generic
+ * Test/Rotate/Rename/Delete menu; its per-app connections
+ * (`provider_id: "tool-provider-account"`) are not vault keys and are
+ * filtered out client-side until the api refuses them itself (ask #2).
+ */
+describe("Composio row", () => {
+  const composioCredential: CredentialOut = {
+    id: "cred_composio",
+    provider_id: "composio",
+    label: "Composio key · September 2026",
+    fingerprint: "…c0c0",
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-01T00:00:00Z",
+  };
+  const connectionRow: CredentialOut = {
+    id: "conn_github",
+    provider_id: "tool-provider-account",
+    label: "",
+    fingerprint: "…c1c1",
+    created_at: "2026-09-05T00:00:00Z",
+    updated_at: "2026-09-05T00:00:00Z",
+  };
+
+  function stubWithComposio(overrides: (call: Call) => { status: number; body: unknown } | undefined = () => undefined) {
+    return stubApi((call) => {
+      if (call.url.includes("/credentials") && call.method === "GET") {
+        return { status: 200, body: { items: [composioCredential, connectionRow], total: 2 } };
+      }
+      if (call.url.endsWith("/tool-providers/composio/status")) {
+        return {
+          status: 200,
+          body: {
+            enabled: true,
+            credential_id: "cred_composio",
+            fingerprint: "…c0c0",
+            last_test_ok: true,
+            last_test_at: "2026-09-20T10:00:00Z",
+            last_test_message: "Key works",
+            connections: 1,
+            paused_tools: 0,
+          },
+        };
+      }
+      return overrides(call);
+    });
+  }
+
+  it("hides the connection row and shows the key row with its own chip", async () => {
+    stubWithComposio();
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    expect(within(table).queryByText("conn_github")).toBeNull();
+    expect(within(table).getByText("Composio key · September 2026")).toBeTruthy();
+    expect(await within(table).findByText("Valid")).toBeTruthy();
+  });
+
+  it("Validate posts the stored-key test", async () => {
+    const calls = stubWithComposio();
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row").find((r) => within(r).queryByText("Composio key · September 2026"))!;
+    fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for Composio key · September 2026" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Validate" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/credentials/cred_composio/test"))).toBe(true));
+  });
+
+  it("Rotate opens the dialog for the same credential id", async () => {
+    const calls = stubWithComposio((call) => (call.url.endsWith("/key/test") ? { status: 200, body: { ok: true, account_name: null, project_name: "Acme", toolkits_count: 10, message: "Key works" } } : undefined));
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row").find((r) => within(r).queryByText("Composio key · September 2026"))!;
+    fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for Composio key · September 2026" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rotate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Rotate the Composio key" });
+    fireEvent.change(within(dialog).getByLabelText("Composio API key"), { target: { value: "sk_new" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Test key" }));
+    await within(dialog).findByText(/Connected to/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Replace key" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "PUT" && c.url.endsWith("/credentials/cred_composio") && bodyField(c, ["secrets", "api_key"]) === "sk_new")).toBe(true),
+    );
+  });
+
+  it("Disable confirms, then posts disable", async () => {
+    const calls = stubWithComposio();
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row").find((r) => within(r).queryByText("Composio key · September 2026"))!;
+    fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for Composio key · September 2026" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Disable" }));
+    const dialog = await screen.findByRole("dialog", { name: "Turn off Apps?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Turn off" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/tool-providers/composio/disable"))).toBe(true));
+  });
+
+  it("Remove key opens the generic delete confirm", async () => {
+    stubWithComposio();
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row").find((r) => within(r).queryByText("Composio key · September 2026"))!;
+    fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for Composio key · September 2026" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Remove key" }));
+    expect(await screen.findByRole("dialog", { name: "Delete Composio key · September 2026" })).toBeTruthy();
   });
 });

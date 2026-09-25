@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { verificationMeta } from "@/components/shared/capability-meta";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
@@ -10,6 +12,7 @@ import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { CatalogDialog } from "@/components/console/providers/catalog-dialog";
 import { CredentialDialog } from "@/components/console/registry/credential-dialog";
+import { composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
 import { useCredentials } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useUpdateProviderSettings } from "@/hooks/useProviders";
@@ -18,6 +21,41 @@ import type { ConnectionOut, ProviderOut } from "@/contracts/lkap-contracts";
 
 /** A one-sentence badge for capabilities `CapabilityBadge` (WP-0's `shared/capability-badge.tsx`) doesn't have a kind for yet — `text_modality`/`cloud_only` (UI_UX_SPEC-V2-AMENDMENTS §2.2). Flagged in the V2-13 report as a follow-up ask to extend `CAPABILITY_BADGE_META` instead of duplicating this locally. */
 export function ProviderRow({ provider, connections }: { provider: ProviderOut; connections: ConnectionOut[] }) {
+  // A tool provider (Composio) is enabled/disabled from Tools -> Apps, which
+  // also pauses its tools (D-V5-C13, `AppsTab`'s Disable) — the generic
+  // Switch below writes `workspace_providers.enabled` directly and skips
+  // that (docs/v5/_asks.md #4). Read-only here; the real controls live there.
+  if (provider.kind === "tool_provider") {
+    return <ToolProviderRow provider={provider} />;
+  }
+  return <GenericProviderRow provider={provider} connections={connections} />;
+}
+
+function ToolProviderRow({ provider }: { provider: ProviderOut }) {
+  const { status } = useComposioStatus();
+  const chip = composioStatusChip(status);
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-1 gap-3">
+        <VendorMark vendor={provider.vendor} size="md" className="mt-0.5" />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">{provider.label}</span>
+            <StatusChip tone={chip.tone} size="sm">
+              {chip.label}
+            </StatusChip>
+          </div>
+          {provider.notes ? <p className="text-xs text-pretty text-muted-foreground">{provider.notes}</p> : null}
+        </div>
+      </div>
+      <Button asChild variant="outline" size="sm" className="shrink-0">
+        <Link href="/console/tools?tab=apps">Manage in Tools → Apps</Link>
+      </Button>
+    </div>
+  );
+}
+
+function GenericProviderRow({ provider, connections }: { provider: ProviderOut; connections: ConnectionOut[] }) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const updateSettings = useUpdateProviderSettings();
   const { data: credentials } = useCredentials(provider.id);

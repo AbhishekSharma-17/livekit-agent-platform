@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 
 import { ApiError, api } from "@/lib/api";
 import { isSendableModelId, modelIdPath } from "@/lib/model-ids";
@@ -10,6 +10,16 @@ import type {
   AgentOut,
   AgentPage,
   AgentUpdate,
+  AppActionPage,
+  AppActionsPickIn,
+  AppActionsPickOut,
+  AppConnectIn,
+  AppConnectOut,
+  AppConnectionOut,
+  AppConnectionPage,
+  AppKeyTestOut,
+  AppReconnectIn,
+  AppsStatusOut,
   CredentialCreate,
   CredentialOut,
   CredentialPage,
@@ -36,6 +46,8 @@ import type {
   ToolCreate,
   ToolDryRunRequest,
   ToolDryRunResult,
+  ToolkitOut,
+  ToolkitPage,
   ToolOut,
   ToolPage,
   ValidationResult,
@@ -67,6 +79,13 @@ const keys = {
   providerModels: (providerId: string, params: { custom: boolean; limit?: number }) =>
     ["provider-models", providerId, "list", params.custom, params.limit ?? null] as const,
   providerModel: (providerId: string, modelId: string) => ["provider-models", providerId, "one", modelId] as const,
+  /** Tools -> Apps (Composio, docs/v5/COMPOSIO.md §6). */
+  appsStatus: ["apps", "status"] as const,
+  appsToolkits: (params: ToolkitListParams) => ["apps", "toolkits", params] as const,
+  appsToolkit: (slug: string) => ["apps", "toolkit", slug] as const,
+  appsActions: (slug: string, params: AppActionListParams) => ["apps", "actions", slug, params] as const,
+  appsConnections: ["apps", "connections"] as const,
+  appsConnection: (id: string) => ["apps", "connection", id] as const,
 };
 
 
@@ -457,5 +476,198 @@ export function useSessionEvents(id: string) {
     queryKey: keys.sessionEvents(id),
     queryFn: () => api.get<SessionEventPage>(`sessions/${id}/events`),
     enabled: id.length > 0,
+  });
+}
+
+// ---- tool providers: Apps (Composio, docs/v5/COMPOSIO.md §6, V5-22) ----
+
+/** Every route lives under `/v1/tool-providers/composio/*` (docs/v5/COMPOSIO.md §4). */
+const APPS_BASE = "tool-providers/composio";
+
+/** `GET /v1/tool-providers/composio/status` — the Apps section header. */
+export function useAppsStatus() {
+  return useQuery({
+    queryKey: keys.appsStatus,
+    queryFn: () => api.get<AppsStatusOut>(`${APPS_BASE}/status`),
+  });
+}
+
+/** `POST .../key/test` — a pasted key, used once and never stored (D-V5-C13). */
+export function useTestAppsKey() {
+  return useMutation({
+    mutationFn: (apiKey: string) => api.post<AppKeyTestOut>(`${APPS_BASE}/key/test`, { api_key: apiKey }),
+  });
+}
+
+/** `POST .../enable` — turns Apps on for the workspace (a key must already exist). */
+export function useEnableApps() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<AppsStatusOut>(`${APPS_BASE}/enable`),
+    onSuccess: (status) => {
+      queryClient.setQueryData(keys.appsStatus, status);
+      // Every `["apps", …]` query (toolkits, connections, both details), not
+      // just `keys.appsStatus`: `AppCard`/`ConnectionRow` read those to
+      // decide what to show, and "enabled" changes what they should return.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+      void queryClient.invalidateQueries({ queryKey: ["providers"] });
+      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+    },
+  });
+}
+
+/** `POST .../disable` — keeps the key and connections, pauses the tools that use them. */
+export function useDisableApps() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<AppsStatusOut>(`${APPS_BASE}/disable`),
+    onSuccess: (status) => {
+      queryClient.setQueryData(keys.appsStatus, status);
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+      void queryClient.invalidateQueries({ queryKey: ["providers"] });
+      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+      void queryClient.invalidateQueries({ queryKey: ["tools"] });
+    },
+  });
+}
+
+export interface ToolkitListParams {
+  query?: string;
+  category?: string;
+  limit?: number;
+  connectedOnly?: boolean;
+}
+
+/**
+ * `GET .../toolkits` — the app gallery, paged by `cursor` (docs/v5/COMPOSIO.md
+ * §4: "page with `cursor`"). `useInfiniteQuery` so "Load more" appends to the
+ * same list rather than the caller juggling a manual accumulator; a search,
+ * category or "Connected only" change is a new `queryKey` and starts over.
+ */
+export function useToolProviderToolkits(params: ToolkitListParams, options?: { enabled?: boolean }) {
+  return useInfiniteQuery({
+    queryKey: keys.appsToolkits(params),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      api.get<ToolkitPage>(`${APPS_BASE}/toolkits`, {
+        query: params.query || undefined,
+        category: params.category || undefined,
+        cursor: pageParam || undefined,
+        limit: params.limit,
+        connected_only: params.connectedOnly || undefined,
+      }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+/** `GET .../toolkits/{slug}` — one app's connect methods and fields. */
+export function useToolProviderToolkit(slug: string | null) {
+  return useQuery({
+    queryKey: keys.appsToolkit(slug ?? ""),
+    queryFn: () => api.get<ToolkitOut>(`${APPS_BASE}/toolkits/${encodeURIComponent(slug ?? "")}`),
+    enabled: Boolean(slug),
+  });
+}
+
+export interface AppActionListParams {
+  query?: string;
+  important?: boolean;
+  limit?: number;
+}
+
+/** `GET .../toolkits/{slug}/actions` — a paged, appending list of one app's actions (the Actions dialog). */
+export function useToolProviderActions(slug: string | null, params: AppActionListParams) {
+  return useInfiniteQuery({
+    queryKey: keys.appsActions(slug ?? "", params),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      api.get<AppActionPage>(`${APPS_BASE}/toolkits/${encodeURIComponent(slug ?? "")}/actions`, {
+        query: params.query || undefined,
+        important: params.important || undefined,
+        cursor: pageParam || undefined,
+        limit: params.limit,
+      }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: Boolean(slug),
+  });
+}
+
+/** `GET .../connections` — every connected app of the workspace. */
+export function useToolProviderConnections() {
+  return useQuery({
+    queryKey: keys.appsConnections,
+    queryFn: () => api.get<AppConnectionPage>(`${APPS_BASE}/connections`),
+  });
+}
+
+/** `GET .../connections/{id}` — refresh one connection; polls while `status === "initiated"`. */
+export function useToolProviderConnection(id: string | null, options?: { poll?: boolean }) {
+  return useQuery({
+    queryKey: keys.appsConnection(id ?? ""),
+    queryFn: () => api.get<AppConnectionOut>(`${APPS_BASE}/connections/${id}`),
+    enabled: Boolean(id),
+    refetchInterval: (query) => {
+      if (!options?.poll) return false;
+      const data = query.state.data as AppConnectionOut | undefined;
+      return data?.status === "initiated" ? 3000 : false;
+    },
+  });
+}
+
+/** `POST .../connections` — start (or, for a key, finish) a connection. */
+export function useConnectApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AppConnectIn) => api.post<AppConnectOut>(`${APPS_BASE}/connections`, body),
+    onSuccess: () => {
+      // `keys.appsToolkits(...)` is what `AppCard` actually reads to decide
+      // Connect-button vs `ConnectionRow` (`ToolkitOut.connected`) — a
+      // narrower invalidation (just `appsConnections`/`appsStatus`) leaves
+      // the gallery showing "Connect" on an app that just connected.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+    },
+  });
+}
+
+/** `POST .../connections/{id}/reconnect` — a new sign-in link, or a new key. */
+export function useReconnectApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, fields }: { id: string; fields?: AppReconnectIn["fields"] }) =>
+      api.post<AppConnectOut>(`${APPS_BASE}/connections/${id}/reconnect`, { fields: fields ?? {} }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+    },
+  });
+}
+
+/** `DELETE .../connections/{id}` — disconnect; `purge` also removes the row. */
+export function useDisconnectApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, purge }: { id: string; purge?: boolean }) =>
+      api.delete<AppConnectionOut | void>(`${APPS_BASE}/connections/${id}${purge ? "?purge=true" : ""}`),
+    onSuccess: () => {
+      // `keys.appsConnections` alone does not match `keys.appsConnection(id)`
+      // (a different second segment) — the disconnected row's own detail
+      // query, which `ConnectionRow` renders from, would otherwise keep
+      // answering "active" from cache.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+      void queryClient.invalidateQueries({ queryKey: ["tools"] });
+    },
+  });
+}
+
+/** `POST .../materialise` — pick actions of a connected app (adds to, never replaces, the picks). */
+export function useMaterialiseAppActions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AppActionsPickIn) => api.post<AppActionsPickOut>(`${APPS_BASE}/materialise`, body),
+    onSuccess: () => {
+      // Not just the connections list: `ConnectionRow` reads `picked_actions`
+      // from `appsConnection(id)` when it reopens the Actions dialog.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+    },
   });
 }

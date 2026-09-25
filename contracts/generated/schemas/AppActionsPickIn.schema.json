@@ -1,0 +1,44 @@
+{
+  "$id": "lkap-contracts/AppActionsPickIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tool-providers/composio/materialise``: pick actions of a connected app.\n\nUntil the ``provider`` tool kind exists (V5-47) the picks are stored on the\nconnection and returned; V5-47 turns them into tools (attached to\n``agent_id`` when given).",
+  "properties": {
+    "actions": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Actions",
+      "type": "array"
+    },
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Id"
+    },
+    "allow_destructive": {
+      "default": false,
+      "description": "Must be true to pick an action that deletes, removes or moves money",
+      "title": "Allow Destructive",
+      "type": "boolean"
+    },
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection_id",
+    "actions"
+  ],
+  "title": "AppActionsPickIn",
+  "type": "object"
+}

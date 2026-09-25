@@ -59,6 +59,7 @@ from lkap_api.routers.provider_keys import seed_bootstrap_credentials
 from lkap_api.sessions_sweep import sweep_loop
 from lkap_api.settings import Settings, get_settings
 from lkap_api.templates.router import router as templates_router
+from lkap_api.tool_providers.router import router as tool_providers_router
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -176,6 +177,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(telephony.router)
     app.include_router(calls.router)
     app.include_router(text_sessions.router)
+    app.include_router(tool_providers_router)  # V5-18: connected apps (Composio)
     _include_knowledge_router(app)
 
 

@@ -1,6 +1,6 @@
 # Providers and keys
 
-The registry (`providers.json`, 126 entries) is the single source of every
+The registry (`providers.json`, 127 entries) is the single source of every
 vendor plugin the worker can construct: `stt`, `llm`, `tts`, `realtime`,
 `avatar`, `image_gen`, `embedding`, `vad`, `turn_detection`,
 `noise_cancellation`, plus one `secret_bag` kind (`http-tool-secret`, for

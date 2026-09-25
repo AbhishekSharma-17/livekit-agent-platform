@@ -62,6 +62,7 @@ from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, 
 from lkap_contracts.qa import QaVerdict, SessionQaIn
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
 from lkap_contracts.templates import StarterTemplate
+from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpServerDefinition,
@@ -292,6 +293,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "WebhookEndpointPage": api_models.WebhookEndpointPage,
     "WebhookDeliveryPage": api_models.WebhookDeliveryPage,
     "ProviderModelPage": api_models.ProviderModelPage,
+    **TOOL_PROVIDER_MODELS,  # V5-18: connected apps (docs/v5/COMPOSIO.md §3)
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.

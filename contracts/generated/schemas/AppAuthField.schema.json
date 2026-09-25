@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/AppAuthField.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One field the Connect dialog asks for (never a stored value).",
+  "properties": {
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "required": {
+      "default": true,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "secret": {
+      "default": true,
+      "title": "Secret",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "label"
+  ],
+  "title": "AppAuthField",
+  "type": "object"
+}

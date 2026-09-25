@@ -1,0 +1,44 @@
+{
+  "$id": "lkap-contracts/AppActionsPickOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The connection's picked actions after the change.",
+  "properties": {
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Id"
+    },
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "picked_actions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Picked Actions",
+      "type": "array"
+    },
+    "tools_created": {
+      "description": "Tool ids created (empty until V5-47 lands)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools Created",
+      "type": "array"
+    }
+  },
+  "required": [
+    "connection_id",
+    "picked_actions"
+  ],
+  "title": "AppActionsPickOut",
+  "type": "object"
+}

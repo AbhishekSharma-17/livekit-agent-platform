@@ -1,0 +1,56 @@
+{
+  "$id": "lkap-contracts/AppConnectOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The started connection: open ``redirect_url`` in a browser tab (OAuth), or it is already active.",
+  "properties": {
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When an unfinished sign-in expires",
+      "title": "Expires At"
+    },
+    "redirect_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The app's consent page; for a human to open",
+      "title": "Redirect Url"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "initiated",
+        "expired",
+        "failed",
+        "inactive",
+        "unknown"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection_id",
+    "status"
+  ],
+  "title": "AppConnectOut",
+  "type": "object"
+}

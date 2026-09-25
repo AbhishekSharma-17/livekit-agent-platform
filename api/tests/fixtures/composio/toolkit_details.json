@@ -1,0 +1,60 @@
+{
+  "googlecalendar": {
+    "slug": "googlecalendar",
+    "name": "Google Calendar",
+    "type": "native",
+    "enabled": true,
+    "composio_managed_auth_schemes": ["OAUTH2"],
+    "auth_guide_url": "https://docs.example.com/googlecalendar-oauth",
+    "auth_config_details": [
+      {
+        "mode": "OAUTH2",
+        "name": "Google Calendar OAuth",
+        "fields": {
+          "auth_config_creation": {
+            "required": [
+              {"name": "client_id", "displayName": "Client ID", "type": "string", "required": true, "is_secret": false},
+              {"name": "client_secret", "displayName": "Client secret", "type": "string", "required": true, "is_secret": true}
+            ],
+            "optional": [{"name": "scopes", "displayName": "Scopes", "type": "string", "required": false}]
+          },
+          "connected_account_initiation": {"required": [], "optional": []}
+        }
+      }
+    ],
+    "meta": {
+      "description": "Schedule and find meetings.",
+      "logo": "https://logos.example.com/googlecalendar.svg",
+      "categories": [{"id": "scheduling", "name": "Scheduling"}],
+      "tools_count": 28
+    }
+  },
+  "acmecrm": {
+    "slug": "acmecrm",
+    "name": "Acme CRM",
+    "type": "native",
+    "composio_managed_auth_schemes": [],
+    "auth_config_details": [
+      {
+        "mode": "API_KEY",
+        "name": "Acme CRM key",
+        "fields": {
+          "auth_config_creation": {"required": [], "optional": []},
+          "connected_account_initiation": {
+            "required": [{"name": "api_key", "displayName": "API key", "type": "string", "required": true, "is_secret": true}],
+            "optional": [{"name": "region", "displayName": "Region", "type": "string", "required": false, "is_secret": false}]
+          }
+        }
+      }
+    ],
+    "meta": {"description": "A fictional CRM.", "logo": "https://logos.example.com/acmecrm.png", "categories": ["crm"], "tools_count": 12}
+  },
+  "publicholidays": {
+    "slug": "publicholidays",
+    "name": "Public holidays",
+    "type": "native",
+    "composio_managed_auth_schemes": [],
+    "auth_config_details": [],
+    "meta": {"description": "Keyless holiday calendar lookups.", "categories": ["data"], "tools_count": 2}
+  }
+}

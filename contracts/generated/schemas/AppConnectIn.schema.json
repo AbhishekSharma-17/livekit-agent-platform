@@ -1,0 +1,60 @@
+{
+  "$id": "lkap-contracts/AppConnectIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tool-providers/composio/connections``: connect an app.\n\n``fields`` carries what the chosen method needs (the OAuth app's\n``client_id``/``client_secret``, or the app's API key fields). It is\nforwarded to Composio once and never stored, logged or returned.",
+  "properties": {
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Required when subject is 'agent'",
+      "title": "Agent Id"
+    },
+    "fields": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Write-only; never stored or returned",
+      "title": "Fields",
+      "type": "object"
+    },
+    "method": {
+      "default": "managed",
+      "enum": [
+        "managed",
+        "custom_oauth",
+        "api_key",
+        "none"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "subject": {
+      "default": "workspace",
+      "enum": [
+        "workspace",
+        "agent"
+      ],
+      "title": "Subject",
+      "type": "string"
+    },
+    "toolkit": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "title": "Toolkit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "toolkit"
+  ],
+  "title": "AppConnectIn",
+  "type": "object"
+}

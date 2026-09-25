@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "AppConnectionOut": {
+      "description": "A connected app of this workspace (no vendor tokens: Composio holds them).",
+      "properties": {
+        "agents_using": {
+          "default": 0,
+          "title": "Agents Using",
+          "type": "integer"
+        },
+        "connected_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connected At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "last_checked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Checked At"
+        },
+        "method": {
+          "enum": [
+            "managed",
+            "custom_oauth",
+            "api_key",
+            "none"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "needs_reconnect": {
+          "default": false,
+          "title": "Needs Reconnect",
+          "type": "boolean"
+        },
+        "picked_actions": {
+          "description": "Actions chosen for agents",
+          "items": {
+            "type": "string"
+          },
+          "title": "Picked Actions",
+          "type": "array"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "initiated",
+            "expired",
+            "failed",
+            "inactive",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "subject": {
+          "description": "'ws:<workspace_id>' or 'agent:<agent_id>'",
+          "title": "Subject",
+          "type": "string"
+        },
+        "toolkit": {
+          "title": "Toolkit",
+          "type": "string"
+        },
+        "toolkit_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Toolkit Name"
+        }
+      },
+      "required": [
+        "id",
+        "toolkit",
+        "subject",
+        "status",
+        "method"
+      ],
+      "title": "AppConnectionOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AppConnectionPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Every connected app of the workspace.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/AppConnectionOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "AppConnectionPage",
+  "type": "object"
+}

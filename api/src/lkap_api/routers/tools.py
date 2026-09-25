@@ -27,6 +27,7 @@ from lkap_api.db.models import Agent, Credential, Tool, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
+from lkap_api.tool_providers.bindings import composio_binding_problem, is_composio_credential
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -129,7 +130,15 @@ async def _check_payload(db: AsyncSession, vault: Vault, ctx: WorkspaceContext, 
         credential = await _workspace_credential(db, ctx.workspace_id, credential_id)
         if credential is None:
             raise UnprocessableEntityError(f"unknown credential '{credential_id}'")
-        if credential.provider_id != TOOL_SECRET_PROVIDER:
+        if is_composio_credential(credential.provider_id):
+            # V5-18 (COMPOSIO.md §4, D-V5-C10): the Composio key binds only to Composio app
+            # servers (and V5-47's action tools); an HTTP tool could send it anywhere.
+            problem = composio_binding_problem(payload.definition, credential.provider_id)
+            if problem is not None:
+                raise UnprocessableEntityError(
+                    problem, details={"credential_id": credential_id, "provider_id": credential.provider_id}
+                )
+        elif credential.provider_id != TOOL_SECRET_PROVIDER:
             raise UnprocessableEntityError(
                 f"a tool may only use '{TOOL_SECRET_PROVIDER}' credentials, not a provider key "
                 f"('{credential.provider_id}')",

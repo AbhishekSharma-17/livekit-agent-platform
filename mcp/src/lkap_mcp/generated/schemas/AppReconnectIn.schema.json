@@ -1,0 +1,17 @@
+{
+  "$id": "lkap-contracts/AppReconnectIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST …/connections/{id}/reconnect``: ``fields`` only for an API-key app (a new key).",
+  "properties": {
+    "fields": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Write-only; never stored or returned",
+      "title": "Fields",
+      "type": "object"
+    }
+  },
+  "title": "AppReconnectIn",
+  "type": "object"
+}

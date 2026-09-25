@@ -24,6 +24,7 @@ ProviderKind = Literal[
     "image_gen",
     "embedding",
     "secret_bag",
+    "tool_provider",
 ]
 FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "model", "file", "catalog"]
 
@@ -3017,6 +3018,30 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(name="language", label="Language", type="string", default="auto"),
         ],
         docs_url="https://docs.livekit.io/agents/models/tts/",
+    ),
+    # ------------------------------------------------ tool providers (V5-18, COMPOSIO.md)
+    # The workspace's Composio key (D-V5-C1): nothing to construct, so no package or
+    # class. Tested by `lkap_api.credential_tests` (the session-info call), not by a
+    # catalog adapter, so `test` and `catalog` stay unset.
+    _full(
+        "composio",
+        "tool_provider",
+        "Composio (connected apps)",
+        "Composio",
+        "",
+        "",
+        secret_fields=[
+            _api_key(
+                "Composio API key",
+                help_text="From your Composio project's settings. Used to list apps and connect them.",
+                env="COMPOSIO_API_KEY",
+            )
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Connected apps (Tools -> Apps). Free tier: 100,000 tool calls a month; apps that use "
+        "Composio's shared sign-in include 20,000 of those, then a small per-call fee.",
+        docs_url="https://docs.composio.dev/docs/authenticating-tools",
+        get_key_url="https://platform.composio.dev",
     ),
 ]
 

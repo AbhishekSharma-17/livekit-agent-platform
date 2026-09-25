@@ -1,0 +1,55 @@
+{
+  "items": [
+    {
+      "slug": "googlecalendar",
+      "name": "Google Calendar",
+      "type": "native",
+      "auth_schemes": ["OAUTH2"],
+      "composio_managed_auth_schemes": ["OAUTH2"],
+      "is_local_toolkit": false,
+      "no_auth": false,
+      "auth_guide_url": null,
+      "meta": {
+        "description": "Schedule and find meetings. See https://calendar.example.com for details.",
+        "logo": "https://logos.example.com/googlecalendar.svg",
+        "app_url": "https://calendar.example.com",
+        "categories": [{"id": "scheduling", "name": "Scheduling"}],
+        "tools_count": 28,
+        "triggers_count": 3,
+        "version": "20260901_00"
+      }
+    },
+    {
+      "slug": "acmecrm",
+      "name": "Acme CRM",
+      "type": "native",
+      "auth_schemes": ["API_KEY"],
+      "composio_managed_auth_schemes": [],
+      "no_auth": false,
+      "meta": {
+        "description": "A fictional CRM.",
+        "logo": "https://logos.example.com/acmecrm.png",
+        "categories": ["crm"],
+        "tools_count": 12
+      }
+    },
+    {
+      "slug": "publicholidays",
+      "name": "Public holidays",
+      "type": "native",
+      "auth_schemes": [],
+      "composio_managed_auth_schemes": [],
+      "no_auth": true,
+      "meta": {
+        "description": "Keyless holiday calendar lookups.",
+        "logo": "http://insecure.example.com/logo.png",
+        "categories": ["data"],
+        "tools_count": 2
+      }
+    }
+  ],
+  "next_cursor": "Y3Vyc29yLTI=",
+  "total_pages": 40,
+  "current_page": 1,
+  "total_items": 1000
+}

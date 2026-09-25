@@ -277,6 +277,22 @@ async def sweep_recording_retention(
     return purged
 
 
+async def sweep_app_connections(db: Database, settings: Settings, *, now: dt.datetime | None = None) -> int:
+    """Expire connected-app sign-ins nobody finished within 10 minutes (V5-18, COMPOSIO.md D-V5-C5).
+
+    The connection row stays (``expired``, needs reconnect) so the console can
+    offer Reconnect; its single-use flow nonce is dropped.
+
+    Returns:
+        How many pending connections were expired this pass.
+    """
+    # Deferred like the other sweeps: keeps this module's import graph small.
+    from lkap_api.tool_providers.service import expire_stale_connections  # noqa: PLC0415
+
+    async with db.session() as session:
+        return await expire_stale_connections(session, Vault(settings.master_key), now=now)
+
+
 async def sweep_loop(db: Database, settings: Settings) -> None:
     """Run every sweep forever, every `LKAP_SESSION_SWEEP_INTERVAL_S` seconds:
     `sweep_orphaned_sessions`, `sweep_once`, `sweep_recording_retention` and
@@ -299,6 +315,7 @@ async def sweep_loop(db: Database, settings: Settings) -> None:
             await sweep_once(db, settings)
             await sweep_recording_retention(db, settings)
             await sweep_stuck_calls(db)  # R-V2-24: calls stuck in `dialing` / left open
+            await sweep_app_connections(db, settings)  # V5-18: unfinished app sign-ins
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - a sweep failure must never kill the loop

@@ -326,6 +326,19 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     # V4-01: the starter templates (`lkap_api/templates/router.py`).
     "/v1/templates",
     "/v1/templates/{template_id}",
+    # V5-18: connected apps (`lkap_api/tool_providers/router.py`).
+    "/v1/tool-providers/composio/callback",
+    "/v1/tool-providers/composio/connections",
+    "/v1/tool-providers/composio/connections/{connection_id}",
+    "/v1/tool-providers/composio/connections/{connection_id}/reconnect",
+    "/v1/tool-providers/composio/disable",
+    "/v1/tool-providers/composio/enable",
+    "/v1/tool-providers/composio/key/test",
+    "/v1/tool-providers/composio/materialise",
+    "/v1/tool-providers/composio/status",
+    "/v1/tool-providers/composio/toolkits",
+    "/v1/tool-providers/composio/toolkits/{slug}",
+    "/v1/tool-providers/composio/toolkits/{slug}/actions",
     "/v1/tools",
     "/v1/tools/{tool_id}",
     "/v1/tools/{tool_id}/dry-run",
@@ -526,6 +539,14 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     # 4.11 generic
     "lkap_delete": frozenset({"kind", "id", "parent_id", "purge", "confirm", "plan"}),
     "api_request": frozenset({"method", "path", "query", "body", "confirm", "plan"}),
+    # V5-18: connected apps (Composio)
+    "apps_list": frozenset({"query", "category", "connected_only", "cursor", "limit"}),
+    "apps_actions": frozenset({"toolkit", "query", "important", "cursor"}),
+    "apps_connect": frozenset({"toolkit", "method", "subject", "agent_id", "fields", "plan"}),
+    "apps_connections": frozenset(),
+    "apps_connection_status": frozenset({"id"}),
+    "apps_disconnect": frozenset({"id", "purge", "confirm", "plan"}),
+    "apps_add_tools": frozenset({"connection_id", "actions", "agent_id", "allow_destructive", "plan"}),
 }
 
 ALL_CALLABLE_NAMES: Final[frozenset[str]] = (

@@ -2601,7 +2601,7 @@ export interface McpNoAuth {
   kind?: "none";
 }
 /**
- * Sign in with the server's OAuth authorization server (V5-14; saved only once V5-14 lands).
+ * Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).
  *
  * The api is the OAuth client: it runs discovery, registration, consent and the token
  * exchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a

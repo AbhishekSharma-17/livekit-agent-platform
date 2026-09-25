@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/McpOAuthAuth.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Sign in with the server's OAuth authorization server (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
+  "description": "Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
   "properties": {
     "client_id": {
       "anyOf": [

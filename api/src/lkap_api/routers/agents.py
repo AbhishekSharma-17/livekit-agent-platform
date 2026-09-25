@@ -64,6 +64,7 @@ from lkap_api.settings import Settings
 from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
 from lkap_api.templates.router import resolve_template
 from lkap_api.templates.seed import apply_tool_seeds, seed_from_template
+from lkap_api.tool_providers.provisioning import AppsProvisionerDep  # V5-47
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -543,7 +544,12 @@ def _raise_template_with_config() -> None:
     ),
 )
 async def create_agent(
-    payload: AgentCreate, db: DbDep, settings: SettingsDep, vault: VaultDep, ctx: AdminCtxDep
+    payload: AgentCreate,
+    db: DbDep,
+    settings: SettingsDep,
+    vault: VaultDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
 ) -> AgentOut:
     """Create an agent from a starter template, an explicit config or its pack's defaults.
 
@@ -607,6 +613,9 @@ async def create_agent(
             db, config, workspace_id=ctx.workspace_id, connection_id=connection_id, pack_id=pack_id
         )
     )
+    # V5-47 (COMPOSIO.md D-V5-C11): provision the app server / tool finder of `tools.apps`.
+    config = await apps.on_save(db, ctx, row, config)
+    row.config = config.model_dump(mode="json")
     template_id = template.id if template is not None else None
     if template_id is None and payload.config is None:
         template_id = derived_template_id(pack_id)
@@ -700,7 +709,13 @@ async def get_agent(
         "derived from `config.flow` (nodes ⇒ `flow`); a `mode` that disagrees is a 422."
     ),
 )
-async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: AdminCtxDep) -> AgentOut:
+async def update_agent(
+    agent_id: str,
+    payload: AgentUpdate,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
+) -> AgentOut:
     """Apply a partial update to an agent."""
     row = await load_scoped_agent(db, ctx, agent_id)
     # R-V2-12: `mode` follows `config.flow`; a disagreeing `mode` is a 422 before anything changes.
@@ -728,6 +743,8 @@ async def update_agent(agent_id: str, payload: AgentUpdate, db: DbDep, ctx: Admi
                 pack_id=row.pack_id,
             )
         )
+        # V5-47 (COMPOSIO.md D-V5-C11): provision the app server / tool finder of `tools.apps`.
+        payload.config = await apps.on_save(db, ctx, row, payload.config)
         new_config: dict[str, Any] = payload.config.model_dump(mode="json")
         row.mode = derived_mode(payload.config)
         if new_config != row.config:
@@ -761,6 +778,7 @@ async def delete_agent(
     agent_id: str,
     db: DbDep,
     ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # V5-47
     purge: bool = Query(default=False, description="Cascade-delete sessions of an archived agent"),
 ) -> Response:
     """Delete an agent that has no sessions, or purge an archived one that does.
@@ -778,6 +796,7 @@ async def delete_agent(
         # FK, which would otherwise raise the same `IntegrityError` this
         # branch exists to avoid.
         await db.execute(delete(SessionRow).where(SessionRow.agent_id == row.id))
+    await apps.on_delete(db, ctx, row)  # V5-47: delete its Composio sessions (best effort)
     await db.delete(row)
     try:
         await db.flush()

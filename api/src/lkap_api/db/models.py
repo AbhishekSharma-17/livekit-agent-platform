@@ -551,7 +551,7 @@ class Tool(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("kind IN ('http','mcp')", name="kind_valid"),
+        CheckConstraint("kind IN ('http','mcp','provider')", name="kind_valid"),  # V5-47 (v5_010)
         Index("ix_tools_workspace", "workspace_id"),
     )
 

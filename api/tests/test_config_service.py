@@ -14,9 +14,21 @@ from conftest import create_agent, inference_config
 from lkap_contracts.agent_config import KnowledgeConfig, ProviderRef, ToolsConfig
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
 from lkap_contracts.providers import get
-from lkap_contracts.tools import ToolExecution
+from lkap_contracts.tools import (
+    McpServerDefinition,
+    McpServerOrigin,
+    ProviderToolDefinition,
+    ToolExecution,
+)
 
-from lkap_api.config_service import ValidationContext, register_validator, validate, validate_agent_config
+from lkap_api.config_service import (
+    ValidationContext,
+    apps_issues,
+    register_validator,
+    resolve_tool_definition,
+    validate,
+    validate_agent_config,
+)
 from lkap_api.custom_models.capabilities import resolve_capabilities
 from lkap_api.custom_models.validation import custom_model_issues
 
@@ -557,3 +569,137 @@ async def test_a_tool_with_silent_reply_and_a_background_mode_is_refused_on_save
 
     assert response.status_code == 422
     assert "silent_reply" in response.text
+
+
+# ------------------------------------------------------------------ V5-47: connected apps
+def _apps_ctx(
+    apps: dict[str, Any] | None = None,
+    *,
+    tool_ids: list[str] | None = None,
+    definitions: dict[str, dict[str, Any]] | None = None,
+    credentials: dict[str, str] | None = None,
+    statuses: dict[str, str] | None = None,
+    disabled: frozenset[str] = frozenset(),
+) -> ValidationContext:
+    config = inference_config(
+        tools=ToolsConfig.model_validate({"tool_ids": tool_ids or [], "apps": apps or {}})
+    )
+    return ValidationContext(
+        config=config,
+        credential_providers=credentials if credentials is not None else {"key1": "composio"},
+        disabled_provider_ids=disabled,
+        tool_definitions_by_id=definitions or {},
+        connection_statuses=statuses or {},
+    )
+
+
+def _provider_definition(**overrides: Any) -> dict[str, Any]:
+    return {
+        "kind": "provider",
+        "name": "acmecrm_list_contacts",
+        "toolkit": "acmecrm",
+        "connection_id": "conn1",
+        "credential_id": "key1",
+        **overrides,
+    }
+
+
+def _paths(ctx: ValidationContext) -> dict[str, str]:
+    return {issue.path: issue.severity for issue in apps_issues(ctx)}
+
+
+def test_apps_off_by_default_raises_nothing() -> None:
+    assert apps_issues(_apps_ctx(credentials={})) == []
+
+
+@pytest.mark.parametrize("mode", ["actions", "server", "router"])
+def test_apps_mode_without_a_composio_key_is_an_error(mode: str) -> None:
+    assert _paths(_apps_ctx({"mode": mode}, credentials={})) == {"tools.apps.mode": "error"}
+
+
+def test_apps_mode_with_composio_turned_off_is_an_error() -> None:
+    issues = apps_issues(_apps_ctx({"mode": "router"}, disabled=frozenset({"composio"})))
+
+    assert [issue.path for issue in issues] == ["tools.apps.mode"]
+    assert "turned off" in issues[0].message
+
+
+def test_router_manage_connections_is_a_warning() -> None:
+    ctx = _apps_ctx({"mode": "router", "router": {"manage_connections": True}})
+
+    assert _paths(ctx) == {"tools.apps.router.manage_connections": "warning"}
+
+
+@pytest.mark.parametrize(
+    ("status", "problem"),
+    [("active", False), ("expired", True), ("failed", True), ("inactive", True), (None, True)],
+)
+def test_a_provider_tool_with_a_broken_connection_is_an_error(status: str | None, problem: bool) -> None:
+    ctx = _apps_ctx(
+        {"mode": "actions"},
+        tool_ids=["t1"],
+        definitions={"t1": _provider_definition()},
+        statuses={"conn1": status} if status is not None else {},
+    )
+
+    issues = apps_issues(ctx)
+
+    assert bool(issues) is problem
+    if problem:
+        assert issues[0].path == "tools[0].definition.connection_id"
+        assert "acmecrm" in issues[0].message
+
+
+def test_a_provider_tool_whose_key_is_not_composio_is_an_error() -> None:
+    ctx = _apps_ctx(
+        tool_ids=["t1"],
+        definitions={"t1": _provider_definition(credential_id="other")},
+        credentials={"key1": "composio", "other": "http-tool-secret"},
+        statuses={"conn1": "active"},
+    )
+
+    assert _paths(ctx) == {"tools[0].definition.credential_id": "error"}
+
+
+def test_apps_issues_run_as_part_of_validate() -> None:
+    result = validate(_apps_ctx({"mode": "router"}, credentials={}))
+
+    assert result.ok is False
+    assert any(issue.path == "tools.apps.mode" for issue in result.issues)
+
+
+def test_resolve_substitutes_the_key_into_a_provider_definition() -> None:
+    definition = ProviderToolDefinition(
+        name="acmecrm_list_contacts",
+        description="List contacts.",
+        parameters={"type": "object", "properties": {}},
+        tool_slug="ACMECRM_LIST_CONTACTS",
+        connection_id="conn1",
+        credential_id="key1",
+        subject="ws:w1",
+    )
+
+    resolved = resolve_tool_definition(definition, {"api_key": "ak_placeholder_value"})
+
+    assert isinstance(resolved, ProviderToolDefinition)
+    assert resolved.headers == {"x-api-key": "ak_placeholder_value"}
+    assert resolved.credential_id is None
+    assert (resolved.connection_id, resolved.subject) == ("conn1", "ws:w1")
+    assert definition.headers == {"x-api-key": "{{ secret.api_key }}"}, "the stored copy is unchanged"
+
+
+def test_resolve_substitutes_the_key_into_an_origin_tagged_mcp_definition() -> None:
+    definition = McpServerDefinition(
+        name="composio_tool_finder",
+        url="https://backend.composio.dev/tool_router/trs_1/mcp",
+        headers={"x-api-key": "{{ secret.api_key }}"},
+        credential_id="key1",
+        origin=McpServerOrigin(kind="router", remote_id="trs_1"),
+    )
+
+    resolved = resolve_tool_definition(definition, {"api_key": "ak_placeholder_value"})
+
+    assert isinstance(resolved, McpServerDefinition)
+    assert resolved.headers == {"x-api-key": "ak_placeholder_value"}
+    assert resolved.credential_id is None
+    assert resolved.origin == definition.origin

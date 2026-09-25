@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Query, Response, status
 from lkap_contracts.api_models import ToolCreate, ToolDryRunRequest, ToolDryRunResult, ToolOut, ToolPage
-from lkap_contracts.tools import HttpToolDefinition, ToolDefinition
+from lkap_contracts.tools import HttpToolDefinition, ProviderToolDefinition, ToolDefinition
 from pydantic import TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,12 @@ from lkap_api.db.models import Agent, Credential, Tool, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
-from lkap_api.tool_providers.bindings import composio_binding_problem, is_composio_credential
+from lkap_api.tool_providers.bindings import (
+    composio_binding_problem,
+    is_composio_credential,
+    provider_connection_problem,
+)
+from lkap_api.tool_providers.service import AppConnection
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
@@ -47,7 +52,10 @@ _SECRET_RE = re.compile(r"\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 def _referenced_secret_names(definition: ToolDefinition) -> set[str]:
     """Every `{{ secret.NAME }}` name the tool's url/headers/body reference."""
-    texts: list[str] = [definition.url, *definition.headers.values()]
+    if isinstance(definition, ProviderToolDefinition):  # V5-47: no url; the key rides a header
+        texts: list[str] = list(definition.headers.values())
+    else:
+        texts = [definition.url, *definition.headers.values()]
     if isinstance(definition, HttpToolDefinition) and definition.body_template:
         texts.append(definition.body_template)
     names: set[str] = set()
@@ -144,6 +152,8 @@ async def _check_payload(db: AsyncSession, vault: Vault, ctx: WorkspaceContext, 
                 f"('{credential.provider_id}')",
                 details={"credential_id": credential_id, "provider_id": credential.provider_id},
             )
+    if isinstance(payload.definition, ProviderToolDefinition):
+        await _check_provider_binding(db, vault, ctx, payload)
     referenced = _referenced_secret_names(payload.definition)
     if referenced:
         if credential is None:
@@ -158,12 +168,43 @@ async def _check_payload(db: AsyncSession, vault: Vault, ctx: WorkspaceContext, 
             )
 
 
+async def _check_provider_binding(
+    db: AsyncSession, vault: Vault, ctx: WorkspaceContext, payload: ToolCreate
+) -> None:
+    """V5-47 (COMPOSIO.md §4, D-V5-C10): a ``provider`` tool binds the Composio key and a connected app.
+
+    The key (``credential_id``) is required; ``connection_id`` must be a connected-app row of
+    this workspace whose subject is the tool's, and an app connected for one agent serves only
+    that agent's tools.
+    """
+    definition = payload.definition
+    assert isinstance(definition, ProviderToolDefinition)  # noqa: S101 - narrowed by the caller
+    if definition.credential_id is None:
+        raise UnprocessableEntityError("an app action tool needs the Composio key as credential_id")
+    row = await _workspace_credential(db, ctx.workspace_id, definition.connection_id)
+    if row is None:
+        raise UnprocessableEntityError(f"unknown app connection '{definition.connection_id}'")
+    problem = composio_binding_problem(definition, row.provider_id, field="connection_id")
+    if problem is None:
+        conn = AppConnection.from_row(row, vault)
+        problem = provider_connection_problem(
+            definition_subject=definition.subject,
+            connection_subject=conn.subject,
+            tool_agent_id=payload.agent_id,
+        )
+    if problem is not None:
+        raise UnprocessableEntityError(problem, details={"connection_id": definition.connection_id})
+
+
 @router.post(
     "",
     response_model=ToolOut,
     status_code=status.HTTP_201_CREATED,
     summary="Create a tool",
-    description="Stores an HTTP tool or MCP server definition, shared or owned by one agent.",
+    description=(
+        "Stores an HTTP tool, an MCP server or a connected app's action (`provider`), shared or "
+        "owned by one agent."
+    ),
 )
 async def create_tool(payload: ToolCreate, db: DbDep, vault: VaultDep, ctx: AdminCtxDep) -> ToolOut:
     """Create a declarative tool row in the caller's workspace."""
@@ -192,7 +233,7 @@ async def list_tools(
     db: DbDep,
     ctx: AdminCtxDep,
     agent_id: str | None = Query(default=None, description="Only tools owned by this agent"),
-    kind: str | None = Query(default=None, description="http | mcp"),
+    kind: str | None = Query(default=None, description="http | mcp | provider"),
 ) -> ToolPage:
     """Return the workspace's tool rows, newest first."""
     stmt = select(Tool).where(Tool.workspace_id == ctx.workspace_id)

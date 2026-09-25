@@ -7,8 +7,10 @@ offline, never connected).
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -31,10 +33,13 @@ from lkap_agent.providers.factory import (
     ProviderFactory,
 )
 from lkap_agent.session_builder import (
+    ASYNC_TOOL_OPTIONS,
     AVATAR_OPTION_KWARGS,
+    THINKING_SOUND_VOLUME,
     SessionBuilder,
     factory_view,
     prepare_resolved,
+    start_thinking_sound,
 )
 
 SIGNATURES: dict[str, Any] = json.loads(
@@ -334,3 +339,121 @@ def test_every_avatar_option_kwarg_exists_in_the_plugin_constructor() -> None:
     for spec in provider_registry.REGISTRY:
         if spec.kind == "avatar" and spec.availability == "available":
             assert "avatar_participant_name" in SIGNATURES[spec.python_class]["params"], spec.id
+
+
+# ------------------------------------------------ V4-12: async-tool templates, thinking sound
+
+
+def _plan_for(mode: str, **voice: Any) -> Any:
+    config = resolved_config(mode=mode)  # type: ignore[arg-type]
+    if voice:
+        cfg = config.config.model_copy(update={"voice": config.config.voice.model_copy(update=voice)})
+        config = config.model_copy(update={"config": cfg})
+    providers = BuiltProviders(llm=object(), realtime=object(), stt=object(), tts=object())
+    return SessionBuilder().build(config, providers, vad=object(), turn_detector=object())
+
+
+@pytest.mark.parametrize("mode", ["cascaded", "half_cascade", "realtime"])
+async def test_every_mode_gets_the_voice_safe_async_tool_templates(mode: str) -> None:
+    plan = _plan_for(mode)
+
+    options = plan.session._async_tool_options
+    assert options == {**options, **ASYNC_TOOL_OPTIONS[mode]}  # type: ignore[index]
+    for template in options.values():
+        assert "call_id" not in str(template), "no id is ever read aloud"
+
+
+@pytest.mark.parametrize("mode", ["cascaded", "half_cascade", "realtime"])
+def test_the_async_tool_templates_render_with_the_sdk_s_arguments(mode: str) -> None:
+    """`voice/tool_executor.py` formats each with a fixed argument set; a stray brace would raise."""
+    options = ASYNC_TOOL_OPTIONS[mode]  # type: ignore[index]
+    update = options["update_template"].format(function_name="lookup", call_id="c1", message="Fetching.")
+    assert "Fetching.\n" in update
+    duplicate_args = {"function_name": "lookup", "fnc_calls_json": [], "fnc_calls_text": ""}
+    assert "on its way" in options["duplicate_reject_template"].format(**duplicate_args)
+    assert "lk_agents_confirm_duplicate" in options["duplicate_confirm_template"].format(**duplicate_args)
+    assert options["reply_at_tail_template"].format(call_ids=["c1"])
+    assert "nothing at all" in options["reply_maybe_covered_template"].format(call_ids=["c1"])
+
+
+async def test_the_plan_carries_the_thinking_sound_except_on_the_text_channel() -> None:
+    assert _plan_for("cascaded").thinking_sound == "none"
+    assert _plan_for("cascaded", thinking_sound="keyboard_typing").thinking_sound == "keyboard_typing"
+    text_config = prepare_resolved(resolved_config(channel="text"))
+    cfg = text_config.config.model_copy(
+        update={"voice": text_config.config.voice.model_copy(update={"thinking_sound": "office_ambience"})}
+    )
+    text_plan = SessionBuilder().build(
+        text_config.model_copy(update={"config": cfg}), BuiltProviders(llm=object())
+    )
+    assert text_plan.thinking_sound == "none"
+
+
+def _with_audio_out() -> Any:
+    """A session stand-in whose `output.audio` is set (the room's audio output after start)."""
+    return SimpleNamespace(output=SimpleNamespace(audio=object()))
+
+
+class _FakePlayer:
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
+        self.started: list[dict[str, Any]] = []
+        self.closed = 0
+
+    async def start(self, **kwargs: Any) -> None:
+        self.started.append(kwargs)
+
+    async def aclose(self) -> None:
+        self.closed += 1
+
+
+async def test_the_thinking_sound_starts_a_player_and_stops_it_at_shutdown() -> None:
+    from livekit.agents import BuiltinAudioClip  # noqa: PLC0415
+
+    plan = _plan_for("cascaded", thinking_sound="keyboard_typing2")
+    plan = dataclasses.replace(plan, session=_with_audio_out())
+    players: list[_FakePlayer] = []
+
+    def _factory(**kwargs: Any) -> _FakePlayer:
+        players.append(_FakePlayer(**kwargs))
+        return players[-1]
+
+    room = object()
+    stop = await start_thinking_sound(plan, room, player_factory=_factory)
+
+    assert stop is not None
+    (player,) = players
+    clip = player.kwargs["thinking_sound"]
+    assert clip.source is BuiltinAudioClip.KEYBOARD_TYPING2
+    assert clip.volume == THINKING_SOUND_VOLUME
+    assert player.started == [{"room": room, "agent_session": plan.session}]
+    assert stop.__code__.co_argcount == 1, "the SDK calls shutdown callbacks with the reason"
+    await stop("done")
+    assert player.closed == 1
+
+
+async def test_no_thinking_sound_without_a_setting_or_an_audio_output() -> None:
+    def _never(**_kwargs: Any) -> Any:
+        raise AssertionError("no player expected")
+
+    assert await start_thinking_sound(_plan_for("cascaded"), object(), player_factory=_never) is None
+    silent = _plan_for("cascaded", thinking_sound="keyboard_typing")
+    assert silent.session.output.audio is None
+    assert await start_thinking_sound(silent, object(), player_factory=_never) is None
+
+
+async def test_a_thinking_sound_that_fails_to_start_is_skipped() -> None:
+    class _Broken(_FakePlayer):
+        async def start(self, **kwargs: Any) -> None:
+            raise RuntimeError("no track")
+
+    plan = _plan_for("cascaded", thinking_sound="office_ambience")
+    plan = dataclasses.replace(plan, session=_with_audio_out())
+    broken: list[_Broken] = []
+
+    def _factory(**kwargs: Any) -> _Broken:
+        broken.append(_Broken(**kwargs))
+        return broken[-1]
+
+    assert await start_thinking_sound(plan, object(), player_factory=_factory) is None
+    assert broken[0].closed == 1

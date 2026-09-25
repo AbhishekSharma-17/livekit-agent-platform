@@ -11,7 +11,8 @@ Two deviations from the plan text, both verified against livekit-agents 1.8.2:
 
 * Tool timing comes from the `tool_execution_updated` event
   (`ToolCallStarted` / `ToolCallEnded`, both carrying `call_id`) rather than
-  hand-instrumenting every tool.
+  hand-instrumenting every tool. `ToolCallUpdated` and `ToolReplyUpdated` become the
+  `tool_call_updated` and `tool_reply` events of background tools (V4-12, D-V4-38).
 * Usage totals and the CONTRACTS `metrics` events come from
   `session_usage_updated` (`AgentSessionUsage`). `metrics.UsageCollector` still
   exists but warns on construction, and subscribing to `metrics_collected` makes
@@ -33,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import math
+import re
 import time
 from typing import Any, Final
 
@@ -133,6 +135,15 @@ class LatencyCollector:
             values[f"{name}_p50"] = round(p50, 1) if p50 is not None else None
             values[f"{name}_p95"] = round(p95, 1) if p95 is not None else None
         return SessionLatency(**values)
+
+
+#: The SDK's ids for a deferred call's entries: ``{call_id}_update_N`` and ``{call_id}_final``.
+_ENTRY_SUFFIX = re.compile(r"_(?:final|update_\d+)$")
+
+
+def _base_call_ids(entry_ids: list[str]) -> list[str]:
+    """The tool calls a deferred reply covers, in order, from its entry ids (no duplicates)."""
+    return list(dict.fromkeys(_ENTRY_SUFFIX.sub("", entry_id) for entry_id in entry_ids))
 
 
 def bind_session_context(*, session_id: str, agent_id: str, job_id: str) -> None:
@@ -327,6 +338,27 @@ class SessionObserver:
                 call_id=update.call_id,
                 status=update.status,
                 duration_ms=duration_ms,
+            )
+        elif update.type == "tool_call_updated":
+            # D-V4-38: a background tool's progress (its first update is the announcement).
+            self.record(
+                "tool_call_updated",
+                {
+                    "call_id": update.call_id,
+                    "tool": self._tool_names.get(update.call_id, ""),
+                    "message_preview": (update.message or "")[:_RESULT_PREVIEW_CHARS],
+                },
+            )
+        elif update.type == "tool_reply_updated":
+            # The deferred reply that voices background results: scheduled, then
+            # completed / interrupted / skipped (the model had already said it).
+            self.record(
+                "tool_reply",
+                {
+                    "call_ids": _base_call_ids(update.update_ids),
+                    "status": update.status,
+                    "speech_id": update.speech_id,
+                },
             )
 
     def _on_usage(self, ev: SessionUsageUpdatedEvent) -> None:

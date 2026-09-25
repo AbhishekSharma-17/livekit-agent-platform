@@ -76,7 +76,7 @@ class FlowNodeAgent(PlatformAgent):
             ctx=services.ctx,
             pack=services.pack,
             tools=runtime.tools_for(node),
-            mcp_servers=runtime.mcp_servers_for(node) or None,
+            mcp_toolsets=runtime.mcp_toolsets_for(node),
             has_tts=services.has_tts,
             vision_max_frame_age_s=services.vision_max_frame_age_s,
             record_event=services.record_event,

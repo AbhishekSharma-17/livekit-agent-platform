@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
+from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecution
 from pydantic import Field
 
 from lkap_mcp.registry import IDEMPOTENT_WRITE, READ, WRITE, Registry
@@ -17,6 +17,22 @@ from lkap_mcp.results import ToolResult, untrusted
 from lkap_mcp.tools._common import merge_patch, planned, request, seg
 
 HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+#: The read-tool rule, in one sentence, for the `execution` / `tool_options` arguments.
+EXECUTION_HELP = (
+    "How the tool runs: mode 'blocking' (default), 'background' (announce at once, answer when the "
+    "agent is idle) or 'auto' (inline if fast, else background). Only GET tools follow the agent's "
+    "tools.execution_default; any other method runs blocking unless it sets a mode here, and then "
+    "asks before running twice. Fillers are spoken as written and need a voice (a TTS)."
+)
+UPDATE_EXECUTION_HELP = (
+    "HTTP tools only: replaces definition.execution (pass patch={} to change nothing else). " + EXECUTION_HELP
+)
+MCP_TOOL_OPTIONS_HELP = (
+    "Per MCP tool name: how it runs (a ToolExecution; names must be in allowed_tools when set). "
+    "MCP tools never follow the agent default; a background tool is announced only through the "
+    "server's progress messages (report_progress=true)."
+)
 
 
 def _dry_run(result: Any, tool_id: str) -> dict[str, Any]:
@@ -67,6 +83,7 @@ def register(registry: Registry) -> None:
         dry_run_args: Annotated[
             dict[str, Any] | None, Field(description="Arguments for a dry run right after creating")
         ] = None,
+        execution: Annotated[ToolExecution | None, Field(description=EXECUTION_HELP)] = None,
         plan: bool = False,
     ) -> ToolResult:
         """Create an HTTP tool an agent can call (hosts allowlisted), optionally dry-running it."""
@@ -84,6 +101,7 @@ def register(registry: Registry) -> None:
             max_result_chars=max_result_chars,
             result_path=result_path,
             silent_reply=silent_reply,
+            execution=execution or ToolExecution(),
         )
         body = {
             "agent_id": agent_id,
@@ -118,6 +136,9 @@ def register(registry: Registry) -> None:
         secret_key_id: str | None = None,
         timeout_s: Annotated[float, Field(gt=0, le=60)] = 5,
         agent_id: str | None = None,
+        tool_options: Annotated[
+            dict[str, ToolExecution] | None, Field(description=MCP_TOOL_OPTIONS_HELP)
+        ] = None,
         plan: bool = False,
     ) -> ToolResult:
         """Attach a remote MCP server as a tool source (the worker connects to it at session time)."""
@@ -128,6 +149,7 @@ def register(registry: Registry) -> None:
             credential_id=secret_key_id,
             allowed_tools=allowed_tools,
             timeout_s=timeout_s,
+            tool_options=tool_options or {},
         )
         body = {
             "agent_id": agent_id,
@@ -153,15 +175,23 @@ def register(registry: Registry) -> None:
             dict[str, Any],
             Field(description="Merge patch over {name, enabled, agent_id, definition}"),
         ],
+        execution: Annotated[ToolExecution | None, Field(description=UPDATE_EXECUTION_HELP)] = None,
         plan: bool = False,
     ) -> ToolResult:
         """Change a tool with a merge patch over its name, enabled flag, agent and definition."""
         current = await client.get(f"/v1/tools/{seg(tool_id)}")
+        if execution is not None and current.get("kind") != "http":
+            return ToolResult.fail(
+                "invalid_argument",
+                "execution applies to HTTP tools; for an MCP server patch definition.tool_options",
+            )
         base = {key: current.get(key) for key in ("agent_id", "kind", "name", "definition", "enabled")}
         merged = merge_patch(base, {key: value for key, value in patch.items() if key != "kind"})
         merged["kind"] = current.get("kind")
         if isinstance(merged.get("definition"), dict):
             merged["definition"]["kind"] = current.get("kind")
+            if execution is not None:
+                merged["definition"]["execution"] = execution.model_dump(mode="json")
         path = f"/v1/tools/{seg(tool_id)}"
         if plan:
             return planned(request("PUT", path, merged))

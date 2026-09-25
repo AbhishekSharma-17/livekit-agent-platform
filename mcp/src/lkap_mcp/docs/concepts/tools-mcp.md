@@ -27,6 +27,16 @@ that session, and `session_events` (or the chat's own events) shows why.
 Same as an HTTP tool: `agent_attach(id_or_slug, tool_ids=[...])`, or
 `agent_id` set at creation time to scope it to one agent immediately.
 
+## Background tools
+
+`tool_options` maps a downstream tool's name (one of `allowed_tools` when
+that is set) to a `ToolExecution`. MCP tools never follow the agent's
+`tools.execution_default`; opt each one in. A background MCP tool is
+announced only through the server's own progress messages, so set
+`report_progress=true` (validation warns otherwise), and its time limit is
+the server's `timeout_s`. The rest is as for HTTP tools
+(`lkap_explain("tools-http")`).
+
 ## Related tools
 
 `tool_list`, `tool_get`, `tool_create_mcp`, `tool_update`, `agent_attach`,
@@ -34,4 +44,4 @@ Same as an HTTP tool: `agent_attach(id_or_slug, tool_ids=[...])`, or
 
 ## Related schemas
 
-`McpServerDefinition`, `ToolCreate`, `ToolOut`.
+`McpServerDefinition`, `ToolExecution`, `ToolCreate`, `ToolOut`.

@@ -1,9 +1,13 @@
-"""`BackgroundToolRunner` — LKAP's "non-blocking tool" pattern.
+"""`BackgroundToolRunner` — the pack API for background work with urgent results.
 
 Implements `packs.base.BackgroundRunner` (docs/CONTRACTS.md §8;
-docs/ARCHITECTURE.md §7.2, D10). LiveKit has no non-blocking tool flag, so a
-tool that wants to keep talking/listening while it does slow work (a
-workflow run, an image generation, a slow lookup) calls `submit()` and
+docs/ARCHITECTURE.md §7.2, D10). Since livekit-agents 1.8.2 the SDK has its own
+async-tool executor (`RunContext.update`, deferred replies at idle), and every
+built-in, declarative and opted-in pack tool uses it through
+`lkap_agent.tools.execution` (docs/v4/BACKGROUND-TOOLS.md, R-V4-34). This runner
+stays the pack API for the one thing that executor does not offer: a result that
+must interrupt (`urgent`). A pack tool that wants to keep talking/listening while
+it does slow work (a workflow run, an image generation) calls `submit()` and
 returns immediately; this runner does the actual work as a session-scoped
 `asyncio.Task` and delivers the result on two independent channels:
 

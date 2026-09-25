@@ -483,13 +483,24 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
             "secret_key_id",
             "agent_id",
             "dry_run_args",
+            "execution",
             "plan",
         }
     ),
     "tool_create_mcp": frozenset(
-        {"name", "url", "headers", "allowed_tools", "secret_key_id", "timeout_s", "agent_id", "plan"}
+        {
+            "name",
+            "url",
+            "headers",
+            "allowed_tools",
+            "secret_key_id",
+            "timeout_s",
+            "agent_id",
+            "tool_options",
+            "plan",
+        }
     ),
-    "tool_update": frozenset({"tool_id", "patch", "plan"}),
+    "tool_update": frozenset({"tool_id", "patch", "execution", "plan"}),
     "tool_dry_run": frozenset({"tool_id", "arguments"}),
     # 4.7 test chat
     "chat_start": frozenset({"agent_id_or_slug", "participant_name", "wait_for_greeting", "timeout_s"}),

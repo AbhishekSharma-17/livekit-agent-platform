@@ -39,6 +39,7 @@ from livekit.agents import (
     ConversationItemAddedEvent,
     FunctionToolsExecutedEvent,
     StopResponse,
+    ToolExecutionUpdatedEvent,
 )
 from livekit.agents import llm as lk_llm
 from lkap_contracts.agent_config import AgentConfig, PipelineMode, ResolvedProvider
@@ -46,6 +47,7 @@ from lkap_contracts.api_models import KbHit
 from lkap_contracts.common import SessionChannel
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import ModelCapabilities, vision_support
+from lkap_contracts.ui_protocol import ActivityEvent
 from packs.base import (
     BackgroundRunner,
     FrameBufferProto,
@@ -57,6 +59,18 @@ from packs.base import (
 )
 
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.execution import (
+    FLOW_BACKGROUND_MIN_SDK,
+    ResolvedExecution,
+    ToolActivityFeed,
+    bind_agent_policy,
+    flow_mode_of,
+    policies_for,
+    policy_of,
+    register_policies,
+    resolve_execution,
+    wrap_tool,
+)
 from lkap_agent.ui.blocks import block_ids_of_type, initial_block_states, resolve_block_specs
 from lkap_agent.vision import encode_jpeg_data_url
 
@@ -74,6 +88,13 @@ logger = get_logger(__name__)
 
 GreetingMode = Literal["say", "generate"]
 
+#: What "still in progress" means for a tool on the SDK's async-tool executor
+#: (docs/v4/BACKGROUND-TOOLS.md §4.2, D-V4-33); appended to every pipeline note.
+IN_PROGRESS_NOTE: Final[str] = (
+    "Some tools report progress first and finish later; when a tool output says it is "
+    "still in progress, tell the user it is on its way and never invent the result."
+)
+
 #: Appended to the system prompt so the model's tool etiquette matches what the
 #: pipeline can express (docs/ARCHITECTURE.md §7.2).
 PIPELINE_NOTES: Final[dict[PipelineMode, str]] = {
@@ -81,19 +102,20 @@ PIPELINE_NOTES: Final[dict[PipelineMode, str]] = {
         "Pipeline notes: you are speaking through a cascaded voice pipeline. "
         "Every tool result comes back to you and you will voice a reply, so keep "
         'tool acknowledgements to one short clause ("Checking that now.") and '
-        "never read raw tool output aloud."
+        f"never read raw tool output aloud. {IN_PROGRESS_NOTE}"
     ),
     "realtime": (
         "Pipeline notes: you are a realtime speech model. Some tools finish in the "
         "background and return nothing; stay silent after those and continue the "
-        "conversation naturally. Results will appear in your context when ready."
+        "conversation naturally. Results will appear in your context when ready. "
+        f"{IN_PROGRESS_NOTE}"
     ),
     "half_cascade": (
         "Pipeline notes: you hear the user directly and your text replies are spoken "
         "by a separate voice, so write the way you would talk: no markdown, lists or "
         "symbols. Some tools finish in the background and return nothing; stay silent "
         "after those and continue the conversation naturally. Results will appear in "
-        "your context when ready."
+        f"your context when ready. {IN_PROGRESS_NOTE}"
     ),
 }
 
@@ -112,6 +134,9 @@ _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
 #: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form`
 #: returns `None` and its result arrives later as a background result.
 _REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset({"request_form"})
+
+#: `SessionContext.userdata` key: the flow-node downgrade was already recorded (R-V4-39).
+_FLOW_DOWNGRADE_KEY: Final[str] = "_lkap_flow_background_downgrade_reported"
 
 
 def compose_instructions(
@@ -207,6 +232,7 @@ class PlatformAgent(Agent):
         pack: Pack,
         tools: list[lk_llm.Tool | lk_llm.Toolset] | None = None,
         mcp_servers: list[Any] | None = None,
+        mcp_toolsets: list[Any] | None = None,
         has_tts: bool,
         vision_max_frame_age_s: float = 8.0,
         record_event: Callable[[str, dict[str, Any]], None] | None = None,
@@ -219,7 +245,11 @@ class PlatformAgent(Agent):
             ctx: The assembled pack session context.
             pack: The loaded pack (`NULL_PACK` when none is installed).
             tools: Built-in + declarative + pack tools, already merged.
-            mcp_servers: `mcp.MCPServerHTTP` instances from declarative tool rows.
+            mcp_servers: Deprecated name for ``mcp_toolsets`` (the worker's builder,
+                `declarative.build_mcp_servers`, now returns `MCPToolset`s).
+            mcp_toolsets: `MCPToolset`s from `declarative.build_mcp_toolsets`; they go
+                into `Agent(tools=...)` (livekit-agents 1.8.2 deprecates the `mcp_servers` argument
+                and would build its toolsets without LKAP's per-tool options).
             has_tts: Whether the pipeline resolved a TTS (drives the greeting).
             vision_max_frame_age_s: Frames older than this are not injected.
             record_event: Records a session event (the worker passes
@@ -258,13 +288,115 @@ class PlatformAgent(Agent):
                 mode=ctx.pipeline_mode,
                 manifest=pack.manifest,
             )
+        toolsets = [*(mcp_toolsets or []), *(mcp_servers or [])]
+        final_tools = self._apply_execution_policy(list(tools or []), pack)
+        policies = register_policies(ctx.session, [*final_tools, *toolsets])
+        self._report_flow_downgrade(policies)
+        # Strong refs for the activity feed's UI sends, chained so rows arrive in order.
+        self._activity_tail: asyncio.Task[None] | None = None
+        self._activity_feed = ToolActivityFeed(
+            emit=self._send_activity, policies=lambda: policies_for(self._ctx.session)
+        )
         super().__init__(
             instructions=instructions,
-            tools=tools or [],
-            mcp_servers=mcp_servers,
+            tools=[*final_tools, *toolsets],
             **(agent_options or {}),
         )
         self._init_blocks()
+
+    # ------------------------------------------------------------- tool policy
+
+    def _apply_execution_policy(
+        self, tools: list[lk_llm.Tool | lk_llm.Toolset], pack: Pack
+    ) -> list[lk_llm.Tool | lk_llm.Toolset]:
+        """Bind declarative tools to this agent's read-tool default; wrap opted-in pack tools.
+
+        Declarative HTTP tools are built before the agent's
+        ``tools.execution_default`` and flow-ness reach the builder, so they are
+        rebuilt here (`execution.bind_agent_policy`). A pack tool runs through
+        `run_with_policy` only when its `ToolMeta.execution` is set; every other
+        pack tool is passed on untouched (BACKGROUND-TOOLS.md §4.2).
+        """
+        config = self._ctx.config
+        on_flow = flow_mode_of(config)
+        bound = bind_agent_policy(tools, execution_default=config.tools.execution_default, flow_node=on_flow)
+        opted = {meta.name: meta for meta in pack.tool_meta() if meta.execution is not None}
+        if not opted:
+            return bound
+        out: list[lk_llm.Tool | lk_llm.Toolset] = []
+        for tool in bound:
+            name = getattr(getattr(tool, "info", None), "name", None)
+            meta = opted.get(name) if isinstance(name, str) else None
+            if meta is None or policy_of(tool) is not None:
+                out.append(tool)
+                continue
+            resolved = resolve_execution(
+                name=meta.name,
+                kind="pack",
+                is_read=False,
+                declared=meta.execution,
+                agent_default="blocking",
+                flow_node=on_flow,
+                label=meta.activity_label,
+            )
+            if meta.silent_reply and resolved.non_blocking:
+                logger.warning(
+                    "pack tool keeps blocking: silent_reply swallows its announcement", tool=meta.name
+                )
+                out.append(tool)
+                continue
+            out.append(wrap_tool(tool, resolved))
+        return out
+
+    def _report_flow_downgrade(self, policies: Mapping[str, ResolvedExecution]) -> None:
+        """Record one `info` event per session when flow-node tools were kept blocking (R-V4-39)."""
+        names = sorted(
+            name for name, p in policies.items() if p.downgraded_from is not None and p.mode == "blocking"
+        )
+        if not names or not flow_mode_of(self._ctx.config):
+            return
+        userdata = getattr(self._ctx, "userdata", None)
+        if not isinstance(userdata, dict) or userdata.get(_FLOW_DOWNGRADE_KEY):
+            return
+        userdata[_FLOW_DOWNGRADE_KEY] = True
+        if self._record_event is not None:
+            with contextlib.suppress(Exception):
+                self._record_event(
+                    "info",
+                    {
+                        "message": "background tools on flow nodes run blocking until the worker runs "
+                        f"livekit-agents {FLOW_BACKGROUND_MIN_SDK}: {', '.join(names)}"
+                    },
+                )
+
+    def on_tool_execution(self, ev: ToolExecutionUpdatedEvent) -> None:
+        """Feed the activity block from the SDK's tool lifecycle (D-V4-38).
+
+        Registered by the worker as a **synchronous** ``tool_execution_updated``
+        handler; the UI send is scheduled as a task (like `on_conversation_item`),
+        chained so the rows of one call arrive in order. Never raises.
+        """
+        try:
+            self._activity_feed.handle(ev)
+        except Exception:
+            logger.debug("tool activity feed failed", exc_info=True)
+
+    def _send_activity(self, event: ActivityEvent) -> None:
+        previous = self._activity_tail
+
+        async def _send() -> None:
+            if previous is not None:
+                with contextlib.suppress(BaseException):
+                    await previous
+            try:
+                await self._ctx.ui.activity(event)
+            except Exception:
+                logger.debug("could not send a tool activity row", exc_info=True)
+
+        task = asyncio.create_task(_send())
+        self._activity_tail = task
+        self._hook_tasks.add(task)
+        task.add_done_callback(self._hook_tasks.discard)
 
     # ----------------------------------------------------------------- blocks
 

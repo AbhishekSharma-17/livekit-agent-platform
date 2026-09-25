@@ -28,6 +28,15 @@ from livekit.agents import ChatContext, FunctionTool, RunContext, ToolError, fun
 from lkap_contracts.providers import vision_support
 from packs.base import PackSessionContext
 
+from lkap_agent.tools.execution import (
+    ResolvedExecution,
+    ToolPolicy,
+    attach_policy,
+    blocking_policy,
+    run_with_policy,
+    tool_flags,
+)
+
 #: Matches `pin_frame`'s freshness window (ARCHITECTURE §7.3) for consistency.
 DESCRIBE_FRAME_MAX_AGE_S = 12.0
 
@@ -57,16 +66,30 @@ def _llm_vision(ctx: PackSessionContext) -> bool | None:
     return vision_support(llm_ref.provider_id, llm_ref.model)
 
 
-def build_describe_current_frame_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
-    """Build the `describe_current_frame` tool bound to `ctx`."""
+def build_describe_current_frame_tool(
+    ctx: PackSessionContext, *, execution: ResolvedExecution | None = None
+) -> FunctionTool[..., Any]:
+    """Build the `describe_current_frame` tool bound to `ctx`.
 
-    @function_tool
+    Args:
+        ctx: The session's `PackSessionContext`.
+        execution: The tool's execution policy (docs/v4/BACKGROUND-TOOLS.md); `None`
+            runs it blocking, as before.
+    """
+    policy = execution or blocking_policy("describe_current_frame")
+    flags, on_duplicate, duplicate_scope = tool_flags(policy)
+
+    @function_tool(flags=flags, on_duplicate=on_duplicate, duplicate_scope=duplicate_scope)
     async def describe_current_frame(context: RunContext[Any], question: str | None = None) -> str:
         """Describe what the camera or screen share currently shows.
 
         Args:
             question: Optional specific question about the current frame.
         """
+        result: str = await run_with_policy(context, policy, lambda: _describe(context, question))
+        return result
+
+    async def _describe(context: RunContext[Any], question: str | None) -> str:
         if ctx.pipeline_mode in _REALTIME_VISION_MODES:
             snapshot = ctx.frames.latest()
             if snapshot is None:
@@ -110,4 +133,4 @@ def build_describe_current_frame_tool(ctx: PackSessionContext) -> FunctionTool[.
         description = "".join(text_parts).strip()
         return description or "I couldn't make out anything useful in the current frame."
 
-    return describe_current_frame
+    return attach_policy(describe_current_frame, ToolPolicy(resolved=policy))

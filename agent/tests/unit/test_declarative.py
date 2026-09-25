@@ -6,6 +6,7 @@ guard, transport and redirect behaviour live in `test_mcp_guard.py`.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -13,11 +14,14 @@ from typing import Any, cast
 import httpx
 import pytest
 import respx
+from fakes.fake_ctx import FakeRunContext
 from livekit.agents import RunContext, ToolError
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
+from livekit.agents.llm import ToolFlag
+from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition, ToolExecution
 
 from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
-from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers
+from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers, build_mcp_toolsets
+from lkap_agent.tools.execution import bind_agent_policy, policy_of
 
 
 @dataclass
@@ -238,3 +242,119 @@ class TestBuildMcpServers:
         defn = McpServerDefinition(name="tools-server", url="https://mcp.example.com/mcp")
 
         assert build_mcp_servers([defn]) == []
+
+
+class TestExecutionPolicy:
+    """V4-12 (docs/v4/BACKGROUND-TOOLS.md §4.2): flags and duplicate settings on built tools."""
+
+    def test_a_blocking_tool_is_declared_exactly_as_before(self) -> None:
+        (tool,) = build_http_tools([_base_def()])
+
+        assert (tool.info.flags, tool.info.on_duplicate, tool.info.duplicate_scope) == (
+            ToolFlag.NONE,
+            "allow",
+            "name",
+        )
+        assert "lk_agents_confirm_duplicate" not in json.dumps(tool.info.raw_schema)
+
+    def test_a_get_tool_under_an_auto_default_is_cancellable_and_rejects_duplicates(self) -> None:
+        (tool,) = build_http_tools([_base_def()], execution_default="auto")
+
+        assert (tool.info.flags, tool.info.on_duplicate, tool.info.duplicate_scope) == (
+            ToolFlag.CANCELLABLE,
+            "reject",
+            "name_and_args",
+        )
+
+    def test_a_post_tool_ignores_the_default_and_confirms_when_it_opts_in(self) -> None:
+        (default_only,) = build_http_tools([_base_def(method="POST")], execution_default="auto")
+        (opted,) = build_http_tools([_base_def(method="POST", execution=ToolExecution(mode="background"))])
+
+        assert default_only.info.on_duplicate == "allow"
+        assert (opted.info.flags, opted.info.on_duplicate) == (ToolFlag.NONE, "confirm")
+        assert "lk_agents_confirm_duplicate" in opted.info.raw_schema["parameters"]["properties"]
+
+    def test_a_flow_node_tool_is_built_blocking_below_1_8_3(self) -> None:
+        (tool,) = build_http_tools([_base_def(execution=ToolExecution(mode="background"))], flow_node=True)
+
+        assert tool.info.flags == ToolFlag.NONE
+        assert tool.info.on_duplicate == "allow"
+
+    def test_the_policy_rebinds_to_an_agent_default(self) -> None:
+        (tool,) = build_http_tools([_base_def()])
+
+        (bound,) = bind_agent_policy([tool], execution_default="auto", flow_node=False)
+        (same,) = bind_agent_policy([tool], execution_default="blocking", flow_node=False)
+
+        assert bound is not tool and bound.info.flags == ToolFlag.CANCELLABLE
+        assert same is tool
+
+    @respx.mock
+    async def test_a_background_tool_announces_then_returns_the_response(self) -> None:
+        respx.get("https://api.example.com/items/42").mock(return_value=httpx.Response(200, text="ok"))
+        (tool,) = build_http_tools([_base_def(execution=ToolExecution(mode="background"))])
+        context = FakeRunContext()
+
+        result = await tool(raw_arguments={"item_id": "42"}, context=cast(RunContext, context))
+
+        assert result == "ok"
+        assert context.updates == ["Working on lookup item."]
+
+
+class TestBuildMcpToolsets:
+    def test_each_server_becomes_a_toolset_over_the_guarded_server_with_its_tool_options(self) -> None:
+        from livekit.agents.llm.mcp import MCPToolset  # noqa: PLC0415
+
+        from lkap_agent.tools.mcp_client import GuardedMCPServerHTTP  # noqa: PLC0415
+
+        defn = McpServerDefinition(
+            name="crm",
+            url="https://mcp.example.com/mcp",
+            timeout_s=9,
+            tool_options={
+                "search": ToolExecution(mode="background", report_progress=True),
+                "lookup": ToolExecution(),
+            },
+        )
+
+        (toolset,) = build_mcp_toolsets([defn])
+
+        assert isinstance(toolset, MCPToolset)
+        assert toolset.id == "mcp_crm"
+        assert isinstance(toolset._mcp_server, GuardedMCPServerHTTP)
+        assert toolset._mcp_server._timeout == 9
+        assert toolset._tool_options == {
+            "search": {
+                "flags": ToolFlag.NONE,
+                "on_duplicate": "confirm",
+                "duplicate_scope": "name_and_args",
+                "report_progress": True,
+            },
+            "lookup": {
+                "flags": ToolFlag.NONE,
+                "on_duplicate": "allow",
+                "duplicate_scope": "name",
+                "report_progress": False,
+            },
+        }
+        policies = policy_of(toolset)
+        assert isinstance(policies, dict) and policies["search"].resolved.mode == "background"
+
+    def test_flow_node_toolsets_keep_their_tools_blocking(self) -> None:
+        defn = McpServerDefinition(
+            name="crm",
+            url="https://mcp.example.com/mcp",
+            tool_options={"search": ToolExecution(mode="background", report_progress=True)},
+        )
+
+        (toolset,) = build_mcp_toolsets([defn], flow_node=True)
+
+        assert toolset._tool_options["search"]["report_progress"] is False
+        assert toolset._tool_options["search"]["on_duplicate"] == "allow"
+
+    def test_the_old_name_is_an_alias_that_returns_toolsets(self) -> None:
+        from livekit.agents.llm.mcp import MCPToolset  # noqa: PLC0415
+
+        (toolset,) = build_mcp_servers([McpServerDefinition(name="crm", url="https://mcp.example.com/mcp")])
+
+        assert isinstance(toolset, MCPToolset)

@@ -8,14 +8,22 @@ declarative (`tools/declarative.py`) and pack tools to `Agent(tools=...)`.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from livekit.agents import FunctionTool
-from lkap_contracts.tools import BLOCK_TOOL_NAMES, BUILTIN_TOOL_NAMES
+from lkap_contracts.tools import (
+    BACKGROUNDABLE_BUILTINS,
+    BLOCK_TOOL_NAMES,
+    BUILTIN_TOOL_NAMES,
+    ToolExecution,
+    ToolExecutionMode,
+)
 from packs.base import PackSessionContext
 
+from lkap_agent.logging import get_logger
 from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
+from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_execution
 
 from .current_time import build_current_time_tool
 from .describe_current_frame import build_describe_current_frame_tool
@@ -51,6 +59,8 @@ __all__ = [
     "build_update_block_tool",
 ]
 
+logger = get_logger(__name__)
+
 # `BUILTIN_TOOL_NAMES` (the order `build_builtin_tools` considers them — the names
 # `AgentConfig.tools.builtin_disabled` and the console's toggles refer to) and
 # `BLOCK_TOOL_NAMES` (panel-block tools, CONTRACTS-V2 §4.4; registered only when the
@@ -73,6 +83,9 @@ def build_builtin_tools(
     platform_allowed_hosts: list[str] | None = None,
     shutdown: Callable[[str], None] | None = None,
     http_user_agent: str | None = None,
+    execution: Mapping[str, ToolExecution] | None = None,
+    execution_default: ToolExecutionMode | None = None,
+    flow_node: bool | None = None,
 ) -> list[FunctionTool[..., Any]]:
     """Build every enabled built-in tool for one session.
 
@@ -89,6 +102,13 @@ def build_builtin_tools(
             `get_job_context().shutdown` when omitted.
         http_user_agent: `LKAP_HTTP_TOOL_USER_AGENT`, the `User-Agent`
             `http_request` sends (none when omitted).
+        execution: Per built-in execution settings; defaults to
+            `ctx.config.tools.builtin_execution`. Only the names in
+            `BACKGROUNDABLE_BUILTINS` are read (others are ignored with a warning).
+        execution_default: The agent's read-tool default; defaults to
+            `ctx.config.tools.execution_default`.
+        flow_node: Whether these tools run on flow nodes (the 1.8.3 gate);
+            defaults to whether `ctx.config` is a flow.
 
     Returns:
         The enabled tools. `describe_current_frame` and `pin_frame` are
@@ -106,19 +126,47 @@ def build_builtin_tools(
     def _want(name: str) -> bool:
         return name not in skip
 
+    tools_config = getattr(ctx.config, "tools", None)
+    declared: Mapping[str, ToolExecution] = (
+        execution if execution is not None else getattr(tools_config, "builtin_execution", None) or {}
+    )
+    default: ToolExecutionMode = (
+        execution_default
+        if execution_default is not None
+        else getattr(tools_config, "execution_default", None) or "blocking"
+    )
+    on_flow = flow_node if flow_node is not None else flow_mode_of(ctx.config)
+    for name in sorted(set(declared) - BACKGROUNDABLE_BUILTINS):
+        logger.warning(
+            "builtin execution setting ignored: only read built-ins run in the background", tool=name
+        )
+
+    def _policy(name: str) -> ResolvedExecution:
+        return resolve_execution(
+            name=name,
+            kind="builtin",
+            is_read=True,
+            declared=declared.get(name),
+            agent_default=default,
+            flow_node=on_flow,
+        )
+
     tools: list[FunctionTool[..., Any]] = []
     if _want("end_call"):
         tools.append(build_end_call_tool(ctx, shutdown=shutdown))
     if _want("search_knowledge"):
-        tools.append(build_search_knowledge_tool(ctx))
+        tools.append(build_search_knowledge_tool(ctx, execution=_policy("search_knowledge")))
     if http_enabled and _want("http_request"):
         tools.append(
             build_http_request_tool(
-                ctx, platform_allowed_hosts=platform_allowed_hosts, user_agent=http_user_agent
+                ctx,
+                platform_allowed_hosts=platform_allowed_hosts,
+                user_agent=http_user_agent,
+                execution=_policy("http_request"),
             )
         )
     if has_vision and _want("describe_current_frame"):
-        tools.append(build_describe_current_frame_tool(ctx))
+        tools.append(build_describe_current_frame_tool(ctx, execution=_policy("describe_current_frame")))
     if has_vision and _want("pin_frame"):
         tools.append(build_pin_frame_tool(ctx))
     if _want("push_note"):

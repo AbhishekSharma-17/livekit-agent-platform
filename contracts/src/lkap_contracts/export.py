@@ -66,6 +66,7 @@ from lkap_contracts.tools import (
     HttpToolDefinition,
     McpServerDefinition,
     ToolDefinition,
+    ToolExecution,
     builtin_tools_document,
 )
 from lkap_contracts.ui_protocol import (
@@ -161,6 +162,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # tools
     "HttpToolDefinition": HttpToolDefinition,
     "McpServerDefinition": McpServerDefinition,
+    "ToolExecution": ToolExecution,
     # api models
     "Page": api_models.Page,
     "ErrorBody": api_models.ErrorBody,

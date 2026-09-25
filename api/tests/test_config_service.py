@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import json
 from typing import Any
 
+import httpx
 import pytest
-from conftest import inference_config
-from lkap_contracts.agent_config import KnowledgeConfig, ProviderRef
+from conftest import create_agent, inference_config
+from lkap_contracts.agent_config import KnowledgeConfig, ProviderRef, ToolsConfig
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
 from lkap_contracts.providers import get
+from lkap_contracts.tools import ToolExecution
 
 from lkap_api.config_service import ValidationContext, register_validator, validate, validate_agent_config
 from lkap_api.custom_models.capabilities import resolve_capabilities
@@ -405,3 +408,152 @@ def test_the_enum_error_names_the_field_but_never_the_value() -> None:
 
     assert len([e for e in result.errors if "field 'voice' must be one of" in e]) == 1
     assert "NotAVoice99" not in " ".join(result.errors)
+
+
+# -------------------------------------------------------- V4-12: background tools
+
+
+def _tools_ctx(definitions: dict[str, dict[str, Any]], **tools_fields: Any) -> ValidationContext:
+    config = inference_config()
+    config.tools = ToolsConfig(tool_ids=list(definitions), **tools_fields)
+    return ValidationContext(config=config, tool_definitions_by_id=definitions)
+
+
+def _issues_at(result: Any, prefix: str) -> list[Any]:
+    return [issue for issue in result.issues if issue.path.startswith(prefix)]
+
+
+def _http(**overrides: Any) -> dict[str, Any]:
+    return {
+        "kind": "http",
+        "name": "lookup_item",
+        "description": "Look up an item.",
+        "parameters": {"type": "object", "properties": {}},
+        "method": "GET",
+        "url": "https://api.example.com/items",
+        **overrides,
+    }
+
+
+def _mcp(**overrides: Any) -> dict[str, Any]:
+    return {"kind": "mcp", "name": "crm", "url": "https://mcp.example.com/mcp", **overrides}
+
+
+@pytest.mark.parametrize("mode", ["background", "auto"])
+def test_silent_reply_with_a_non_blocking_mode_is_an_error(mode: str) -> None:
+    result = validate(_tools_ctx({"t1": _http(silent_reply=True, execution={"mode": mode})}))
+
+    (issue,) = _issues_at(result, "tools[0]")
+    assert issue.path == "tools[0].definition.execution.mode"
+    assert issue.severity == "error"
+    assert "silent_reply" in issue.message
+    assert result.ok is False
+
+
+def test_silent_reply_with_a_blocking_tool_is_fine() -> None:
+    result = validate(_tools_ctx({"t1": _http(silent_reply=True, execution={"mode": "blocking"})}))
+
+    assert _issues_at(result, "tools[") == []
+
+
+def test_a_builtin_execution_key_outside_the_read_builtins_is_an_error() -> None:
+    result = validate(
+        _tools_ctx(
+            {},
+            builtin_execution={
+                "search_knowledge": ToolExecution(mode="auto"),
+                "end_call": ToolExecution(mode="background"),
+            },
+        )
+    )
+
+    (issue,) = _issues_at(result, "tools.builtin_execution")
+    assert issue.path == "tools.builtin_execution.end_call"
+    assert issue.severity == "error"
+
+
+def test_an_mcp_tool_option_outside_allowed_tools_is_an_error() -> None:
+    definition = _mcp(allowed_tools=["lookup"], tool_options={"search": {"mode": "blocking"}})
+
+    result = validate(_tools_ctx({"m1": definition}))
+
+    (issue,) = _issues_at(result, "tools[0]")
+    assert issue.path == "tools[0].definition.tool_options.search"
+    assert issue.severity == "error"
+
+
+def test_a_background_mcp_tool_without_progress_is_a_warning() -> None:
+    definition = _mcp(
+        tool_options={
+            "search": {"mode": "background"},
+            "lookup": {"mode": "auto", "report_progress": True},
+        }
+    )
+
+    result = validate(_tools_ctx({"m1": definition}))
+
+    (issue,) = _issues_at(result, "tools[0]")
+    assert issue.path == "tools[0].definition.tool_options.search.report_progress"
+    assert issue.severity == "warning"
+    assert "will not announce" in issue.message
+    assert result.ok is True
+
+
+def test_a_never_list_name_with_a_background_mode_is_an_error() -> None:
+    result = validate(_tools_ctx({"m1": _mcp(tool_options={"end_call": {"mode": "background"}})}))
+
+    (issue,) = _issues_at(result, "tools[0]")
+    assert issue.path == "tools[0].definition.tool_options.end_call.mode"
+    assert issue.severity == "error"
+
+
+@pytest.mark.parametrize(
+    ("default", "steps", "warns"), [("auto", 3, True), ("auto", 4, False), ("blocking", 1, False)]
+)
+def test_a_background_default_with_few_tool_steps_warns(default: str, steps: int, warns: bool) -> None:
+    result = validate(_tools_ctx({}, execution_default=default, max_tool_steps=steps))
+
+    issues = _issues_at(result, "tools.max_tool_steps")
+    assert bool(issues) is warns
+    if warns:
+        assert issues[0].severity == "warning"
+        assert "4 or more" in issues[0].message
+
+
+def test_tool_checks_are_skipped_without_the_rows() -> None:
+    config = inference_config()
+    config.tools = ToolsConfig(tool_ids=["t1"])
+
+    assert _issues_at(validate(ValidationContext(config=config)), "tools[") == []
+
+
+async def test_the_validate_route_reads_the_attached_tool_rows(admin_client: httpx.AsyncClient) -> None:
+    """`validation_context_for` hands the stored definitions to the checks (end to end)."""
+    definition = _mcp(tool_options={"search": {"mode": "background"}})
+    created = await admin_client.post(
+        "/v1/tools", json={"kind": "mcp", "name": "crm", "definition": definition}
+    )
+    assert created.status_code == 201, created.text
+    config = inference_config()
+    config.tools = ToolsConfig(tool_ids=[created.json()["id"]], execution_default="auto")
+    agent = await create_agent(admin_client, published=False, config=json.loads(config.model_dump_json()))
+
+    response = await admin_client.post(f"/v1/agents/{agent['id']}/validate")
+
+    assert response.status_code == 200
+    paths = {issue["path"]: issue["severity"] for issue in response.json()["issues"]}
+    assert paths["tools[0].definition.tool_options.search.report_progress"] == "warning"
+    assert paths["tools.max_tool_steps"] == "warning"
+
+
+async def test_a_tool_with_silent_reply_and_a_background_mode_is_refused_on_save(
+    admin_client: httpx.AsyncClient,
+) -> None:
+    definition = _http(silent_reply=True, execution={"mode": "background"})
+
+    response = await admin_client.post(
+        "/v1/tools", json={"kind": "http", "name": "lookup_item", "definition": definition}
+    )
+
+    assert response.status_code == 422
+    assert "silent_reply" in response.text

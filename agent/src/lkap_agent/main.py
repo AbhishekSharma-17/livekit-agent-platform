@@ -584,13 +584,13 @@ def _wire_optional_modules(deps: Deps) -> None:
         logger.warning("lkap_agent.tools.builtin not available: no built-in tools registered")
 
     try:
-        from lkap_agent.tools.declarative import build_http_tools, build_mcp_servers  # noqa: PLC0415
+        from lkap_agent.tools.declarative import build_http_tools, build_mcp_toolsets  # noqa: PLC0415
 
         def _make_http(defs: list[Any]) -> list[Any]:
             return list(build_http_tools(defs, platform_allowed_hosts=allowed_hosts, user_agent=user_agent))
 
         deps.declarative_tools_builder = _make_http
-        deps.mcp_servers_builder = lambda defs, **kwargs: list(build_mcp_servers(defs, **kwargs))
+        deps.mcp_servers_builder = lambda defs, **kwargs: list(build_mcp_toolsets(defs, **kwargs))
     except ImportError:
         logger.warning("lkap_agent.tools.declarative not available: HTTP/MCP tools are skipped")
 
@@ -692,6 +692,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
     plan.session.on("function_tools_executed", agent.on_function_tools_executed)
     # F-03: drives the pack's `on_agent_turn_completed` hook.
     plan.session.on("conversation_item_added", agent.on_conversation_item)
+    # V4-12 (D-V4-38): background and slow tools feed the activity block.
+    plan.session.on("tool_execution_updated", agent.on_tool_execution)
     plan.session.on("error", _vision_degrade_handler(agent, observer))
     # D-W2-9e: a closed AgentSession (end_call, an error) must end the job too;
     # the shutdown callback posts the summary.
@@ -730,6 +732,13 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         return
     if telephony is not None:
         telephony.start()
+    # V4-12: `voice.thinking_sound` during blocking tool waits (never on the text channel);
+    # the player is closed in the shutdown path.
+    from lkap_agent.session_builder import start_thinking_sound  # noqa: PLC0415
+
+    stop_thinking_sound = await start_thinking_sound(plan, ctx.room)
+    if stop_thinking_sound is not None:
+        ctx.add_shutdown_callback(stop_thinking_sound)
     observer.record(
         "session_started",
         {
@@ -1372,7 +1381,7 @@ def _assemble(
             {"message": f"MCP server '{definition.name}' skipped: {reason}", "mcp_server": definition.name},
         )
 
-    mcp_servers = deps.mcp_servers_builder(
+    mcp_toolsets = deps.mcp_servers_builder(
         [t for t in resolved.tools if t.kind == "mcp"], on_skipped=_on_mcp_skipped
     )
 
@@ -1401,7 +1410,7 @@ def _assemble(
             ctx=session_ctx,
             pack=pack,
             tools=tools,
-            mcp_servers=mcp_servers or None,
+            mcp_toolsets=mcp_toolsets or None,
             has_tts=plan.has_tts,
             vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
             record_event=record_event,

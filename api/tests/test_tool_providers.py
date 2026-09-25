@@ -210,6 +210,20 @@ async def test_key_test_falls_back_to_the_app_count_when_the_project_is_unavaila
     assert world.calls_of("list_auth_configs"), "a key-scoped list decides validity"
 
 
+async def test_key_test_accepts_a_project_key_the_account_endpoint_refuses(
+    admin_client: httpx.AsyncClient, world: ComposioWorld
+) -> None:
+    # Live 2026-09-26: a valid project key got 403 from /auth/session/info
+    # while the project's own lists worked.
+    world.session_info_error = ToolProviderAuthError("Forbidden", status=403)
+
+    body = (await admin_client.post(f"{BASE}/key/test", json={"api_key": VALID_KEY})).json()
+
+    assert body["ok"] is True and body["project_name"] is None
+    assert body["message"] == "Key works — 1000 apps available"
+    assert world.calls_of("list_auth_configs"), "a key-scoped list decides validity"
+
+
 async def test_key_test_fallback_still_refuses_a_bad_key(
     admin_client: httpx.AsyncClient, world: ComposioWorld
 ) -> None:

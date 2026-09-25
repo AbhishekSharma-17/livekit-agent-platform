@@ -416,8 +416,9 @@ async def workspace_adapter(
 async def test_key(adapter: ToolProviderAdapter, *, api_key: str = "") -> AppKeyTestOut:
     """Check a key: the project it belongs to, else a scoped list, then the app count.
 
-    ``session_info`` names the project; if that call is unavailable, the
-    project's auth-config list (which needs a valid key) decides. A rejected
+    ``session_info`` names the project; if that call is unavailable or refuses
+    the key (project keys may not read it), the project's auth-config list
+    (which needs a valid key) decides. A rejected
     key is ``ok=false``; an unreachable vendor is ``ok=false`` with that said.
     The organisation member's personal name is never read.
     """
@@ -425,9 +426,10 @@ async def test_key(adapter: ToolProviderAdapter, *, api_key: str = "") -> AppKey
     account_name: str | None = None
     try:
         info = await adapter.session_info()
-    except ToolProviderAuthError:
-        return AppKeyTestOut(ok=False, message="Composio rejected this key")
     except ToolProviderError:
+        # Project API keys may be refused by the account endpoint (401/403) while
+        # being perfectly valid for the project's own resources, so a refusal
+        # here is not a verdict: the key-scoped list below decides.
         try:
             await adapter.list_auth_configs(limit=1)
         except ToolProviderAuthError:

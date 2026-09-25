@@ -2658,6 +2658,14 @@
         "deployment_type": "cloud"
       }
     },
+    "cost_reconcile": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Cost Reconcile",
+      "type": "array"
+    },
     "installed_provider_ids": {
       "anyOf": [
         {

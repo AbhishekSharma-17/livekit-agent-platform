@@ -275,6 +275,12 @@ class ResolvedAgentConfig(BaseModel):
     #: ``CallCreate.variables``). Flow agents start their ``FlowState.variables`` with them;
     #: prompt agents get them appended to ``config.instructions`` by the worker.
     variables: dict[str, Any] = {}
+    #: V4-17 (docs/v4/COSTS.md D-V4-45, R-V4-48): the vendors this workspace reconciles
+    #: against their own per-request charge (``workspaces.settings["cost"]["reconcile"]``,
+    #: e.g. ``["openrouter"]``). Non-empty makes the worker collect the per-request ids
+    #: of its LLM/STT/TTS calls and post them as one ``metrics {kind: "provider_requests"}``
+    #: event; empty (the default) collects nothing.
+    cost_reconcile: list[str] = []
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

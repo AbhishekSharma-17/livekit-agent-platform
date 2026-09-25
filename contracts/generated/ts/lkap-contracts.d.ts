@@ -3498,6 +3498,7 @@ export interface ResolvedAgentConfig {
   config: AgentConfig;
   config_version: number;
   connection?: ConnectionInfo;
+  cost_reconcile?: string[];
   installed_provider_ids?: string[] | null;
   kb_ids: string[];
   pack_id: string;

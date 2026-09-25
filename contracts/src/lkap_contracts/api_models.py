@@ -9,7 +9,15 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from lkap_contracts.agent_config import (
     AgentConfig,
@@ -480,6 +488,15 @@ class KbOut(BaseModel):
     document_count: int
     created_at: datetime
     updated_at: datetime
+    dimension: int | None = Field(
+        default=None, description="Vector width recorded at creation; null for a KB created before V5-01."
+    )
+    embedder_model: str | None = Field(
+        default=None, description="Embedding model recorded at creation; null for a KB created before V5-01."
+    )
+    chunking: dict[str, int] | None = Field(
+        default=None, description="`{max_tokens, overlap}` of the chunker; null means the defaults."
+    )
 
 
 class KbDocumentOut(BaseModel):
@@ -494,6 +511,80 @@ class KbDocumentOut(BaseModel):
     error: str | None = None
     chunk_count: int
     created_at: datetime
+    progress: float | None = Field(
+        default=None,
+        description="Embedded chunks / total while pending (every 50 chunks), 1.0 when ready; "
+        "null for a document ingested before V5-01.",
+    )
+
+
+#: The evaluation set's bounds (one `PUT` replaces the whole set).
+KB_MAX_EVALS = 500
+KB_MAX_EVAL_TEXT = 2000
+
+KbEvalTag = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+
+
+class KbEvalIn(BaseModel):
+    """One golden question: found when a top-k hit is the expected document or contains the expected text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=KB_MAX_EVAL_TEXT)
+    expected_document_id: str | None = Field(default=None, max_length=32)
+    expected_text: str | None = Field(default=None, min_length=1, max_length=KB_MAX_EVAL_TEXT)
+    tags: list[KbEvalTag] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def _expects_something(self) -> "KbEvalIn":
+        if self.expected_document_id is None and self.expected_text is None:
+            raise ValueError("an eval needs expected_document_id, expected_text or both")
+        return self
+
+
+class KbEvalOut(KbEvalIn):
+    """A stored eval."""
+
+    id: str
+    created_at: datetime
+
+
+class KbEvalSetIn(BaseModel):
+    """`PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[KbEvalIn] = Field(max_length=KB_MAX_EVALS)
+
+
+class KbEvalSetOut(BaseModel):
+    """The stored evaluation set, in the order it was put."""
+
+    items: list[KbEvalOut]
+    total: int
+
+
+class KbReindexIn(BaseModel):
+    """`POST /v1/knowledge-bases/{id}/reindex`: every document, or only these."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_ids: list[str] | None = Field(default=None, max_length=1000)
+
+
+class KbReindexSkipped(BaseModel):
+    """A document the re-index could not queue, and why."""
+
+    document_id: str
+    filename: str
+    reason: Literal["source_not_stored", "ingest_in_progress"]
+
+
+class KbReindexOut(BaseModel):
+    """What the re-index queued; each queued document is `pending` until its job finishes."""
+
+    queued: list[str]
+    skipped: list[KbReindexSkipped]
 
 
 class KbImportIn(BaseModel):
@@ -512,7 +603,37 @@ class KbImportIn(BaseModel):
     )
 
 
-class KbSearchRequest(BaseModel):
+#: How a knowledge search ranks chunks (V5-04): embedding similarity, or keyword matches fused with it.
+KbSearchMode = Literal["vector", "hybrid"]
+#: Whether the candidates are rescored by the local cross-encoder (V5-04).
+KbRerankMode = Literal["none", "local"]
+#: Which stage decided a hit's ``score``.
+KbScoreSource = Literal["vector", "fused", "rerank"]
+#: Why a search skipped or degraded part of its work.
+KbSearchWarningCode = Literal[
+    "kb_not_found", "kb_embedder_mismatch", "kb_timeout", "kb_error", "lexical_unavailable", "rerank_failed"
+]
+
+
+class KbSearchOptions(BaseModel):
+    """The V5-04 search options; every default is the pre-V5-04 behaviour."""
+
+    mode: KbSearchMode = Field(
+        default="vector",
+        description="`vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).",
+    )
+    rerank: KbRerankMode = Field(
+        default="none", description="`local` rescores the top candidates with the local cross-encoder."
+    )
+    min_score: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Drop hits whose `score` is below this; the response's `dropped` counts them.",
+    )
+
+
+class KbSearchRequest(KbSearchOptions):
     """``POST /v1/knowledge-bases/{id}/search``."""
 
     query: str
@@ -520,19 +641,63 @@ class KbSearchRequest(BaseModel):
 
 
 class KbHit(BaseModel):
-    """One retrieved chunk."""
+    """One retrieved chunk, its locators and the score of every stage that ran for it.
+
+    ``score`` is on [0, 1] in every mode: cosine similarity (``vector``), the
+    reciprocal-rank fusion normalised to its maximum (``fused``) or the
+    cross-encoder logit through a sigmoid (``rerank``); ``score_source`` says which.
+    """
 
     chunk_id: str
     document_id: str
     filename: str
     score: float
     text: str
+    kb_id: str | None = Field(
+        default=None, description="The knowledge base the chunk belongs to; null from a pre-V5-04 api."
+    )
+    meta: dict[str, Any] = Field(
+        default_factory=dict,
+        description="The chunk's locators: `filename`, and for chunks ingested since V5-01 "
+        "`heading_path`, `page`, `char_start`, `char_end`.",
+    )
+    vector_score: float | None = Field(
+        default=None, description="Cosine similarity to the query; null when not in the vector list."
+    )
+    lexical_rank: int | None = Field(
+        default=None, description="1-based rank in the keyword list; null when not in it (or not hybrid)."
+    )
+    fused_score: float | None = Field(
+        default=None, description="Reciprocal-rank fusion, normalised to (0, 1]; hybrid mode only."
+    )
+    rerank_score: float | None = Field(
+        default=None, description="Cross-encoder relevance through a sigmoid, (0, 1); reranked hits only."
+    )
+    score_source: KbScoreSource = Field(
+        default="vector", description="Which stage `score` is: `vector`, `fused` or `rerank`."
+    )
+
+
+class KbSearchWarning(BaseModel):
+    """Something the search skipped or degraded, without failing."""
+
+    code: KbSearchWarningCode
+    message: str
+    kb_id: str | None = None
 
 
 class KbSearchResponse(BaseModel):
-    """Search results, best first."""
+    """Search results, best first, with what was dropped or skipped on the way."""
 
     hits: list[KbHit]
+    mode: KbSearchMode = "vector"
+    rerank: KbRerankMode = "none"
+    min_score: float | None = None
+    dropped: int = Field(default=0, description="Hits of the top `k` removed by `min_score`.")
+    warnings: list[KbSearchWarning] = Field(default_factory=list)
+    timings_ms: dict[str, float] = Field(
+        default_factory=dict, description="`embed`, `retrieve`, `rerank` and `total`, in milliseconds."
+    )
 
 
 # ---------------------------------------------------------------------------- packs
@@ -997,7 +1162,7 @@ class SessionSummaryIn(BaseModel):
     variables: dict[str, Any] = {}
 
 
-class InternalKbSearchRequest(BaseModel):
+class InternalKbSearchRequest(KbSearchOptions):
     """``POST /internal/v1/kb/search`` (service token)."""
 
     kb_ids: list[str]

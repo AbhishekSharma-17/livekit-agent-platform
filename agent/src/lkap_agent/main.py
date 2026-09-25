@@ -1392,6 +1392,9 @@ def _assemble(
             else []
         ),
     ]
+    # R-V4-71: an HTTP tool's `silent_reply` joins the agent's silent set (realtime always,
+    # cascaded from livekit-agents 1.8.3); MCP tools have no such flag.
+    silent_http = frozenset(t.name for t in resolved.tools if t.kind == "http" and t.silent_reply)
     emit = record_event or _noop_record_event
 
     def _on_mcp_skipped(definition: Any, reason: str) -> None:
@@ -1435,6 +1438,7 @@ def _assemble(
             has_tts=plan.has_tts,
             vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
             record_event=record_event,
+            silent_reply_tools=silent_http,
         )
     return plan, agent
 

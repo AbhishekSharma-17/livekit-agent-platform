@@ -9,7 +9,8 @@
   per user turn before delegating to the pack hook,
 * speaks the greeting on enter, choosing `say()` or `generate_reply()` by what
   the configured pipeline can actually do (ARCHITECTURE §15.9),
-* cancels the model's tool reply for tools a pack marked `silent_reply`
+* cancels the model's tool reply for tools a pack or an HTTP tool definition
+  marked `silent_reply`
   (and for the built-in `request_form` on realtime models, D-W2-9i),
 * seeds the v2 panel blocks (`UiState.blocks`) from `AgentConfig.panel` and
   the pack's `default_panel`, and binds the block callbacks on the UI channel:
@@ -243,6 +244,7 @@ class PlatformAgent(Agent):
         record_event: Callable[[str, dict[str, Any]], None] | None = None,
         instructions: str | None = None,
         agent_options: dict[str, Any] | None = None,
+        silent_reply_tools: frozenset[str] = frozenset(),
     ) -> None:
         """Create the agent for one session.
 
@@ -266,6 +268,9 @@ class PlatformAgent(Agent):
             agent_options: Hook point for flow nodes (V2-15): extra
                 `livekit.agents.Agent` constructor kwargs (`id`, `chat_ctx`,
                 `llm`, `tts`, `turn_handling`).
+            silent_reply_tools: Names of the session's HTTP tool definitions with
+                `silent_reply=True` (R-V4-71, computed by `main._assemble`); they
+                join the pack's `silent_reply` tools.
         """
         self._ctx = ctx
         self._pack = pack
@@ -281,6 +286,8 @@ class PlatformAgent(Agent):
             ctx.config, capabilities=getattr(ctx, "llm_capabilities", None)
         )
         silent = {meta.name for meta in pack.tool_meta() if meta.silent_reply}
+        silent |= silent_reply_tools
+        self._report_silent_reply_unhonoured(silent_reply_tools)
         if ctx.pipeline_mode in _REALTIME_MODEL_MODES and getattr(ctx, "channel", "web") != "text":
             # On the text channel `request_form` answers at once with a line the
             # model must act on (asks #30), so its reply is never suppressed there.
@@ -352,6 +359,23 @@ class PlatformAgent(Agent):
                 continue
             out.append(wrap_tool(tool, resolved))
         return out
+
+    def _report_silent_reply_unhonoured(self, names: frozenset[str]) -> None:
+        """Log once that `silent_reply` HTTP tools still get a reply here (R-V4-71).
+
+        A cascaded pipeline honours `reply_required` only from livekit-agents
+        1.8.3 (R-V4-68); below it the flag is kept but not honoured, and saying
+        so beats ignoring it silently. `__init__` runs once per session.
+        """
+        if not names or self._ctx.pipeline_mode in _REALTIME_MODEL_MODES:
+            return
+        if sdk_version_at_least(SILENT_REPLY_PIPELINE_MIN_SDK):
+            return
+        logger.info(
+            "silent_reply is not honoured by this cascaded pipeline: these tools still get a reply",
+            tools=sorted(names),
+            min_sdk=SILENT_REPLY_PIPELINE_MIN_SDK,
+        )
 
     def _report_flow_downgrade(self, policies: Mapping[str, ResolvedExecution]) -> None:
         """Record one `info` event per session when flow-node tools were kept blocking (R-V4-39)."""

@@ -181,7 +181,7 @@ All tool invocations are logged at DEBUG with `{session_id, tool, call_id, args_
 ### 7.2 Background tools (replaces Gemini `NON_BLOCKING` + `WHEN_IDLE` / `INTERRUPT`)
 
 LiveKit has no non-blocking tool flag. Verified semantics:
-- A tool's return value becomes a `FunctionCallOutput`; `reply_required` defaults to `True`, is set to `False` when the tool returns `None` or raises `StopResponse`, and is **only read by realtime models** (Gemini Live, OpenAI Realtime). Cascaded LLMs always answer a tool output.
+- A tool's return value becomes a `FunctionCallOutput`; `reply_required` defaults to `True`, is set to `False` when the tool returns `None` or raises `StopResponse`, and is **honoured by realtime models** (Gemini Live, OpenAI Realtime), **and by the cascaded pipeline from livekit-agents 1.8.3**. Below 1.8.3 a cascaded LLM answers every tool output.
 - The `function_tools_executed` event exposes `function_call_outputs` and `cancel_tool_reply()`, the supported hook for deciding "speak now or stay quiet".
 - Gemini Live only honours silent scheduling when the model is constructed with `tool_behavior=NON_BLOCKING` (not on Vertex).
 
@@ -210,7 +210,7 @@ sequenceDiagram
 Two model-dependent branches, both implemented in `BackgroundToolRunner` behind one API so packs never branch themselves:
 
 - **Realtime mode** (Gemini Live / OpenAI Realtime): the tool function itself does the work *inline* when it is fast (<~1.5 s, e.g. `lookup_policy`), otherwise submits to the runner and returns `None` → `reply_required=False` → the model stays silent. When the background job finishes, routine results are appended to the chat context with `update_chat_ctx` (the model sees them on its next turn; equivalent to `WHEN_IDLE`); urgent results call `session.generate_reply(instructions=...)`, which interrupts current speech (equivalent to `INTERRUPT`). A `function_tools_executed` handler additionally calls `cancel_tool_reply()` for tools flagged `silent_reply=True` in the pack's tool metadata, so a fast inline tool can also stay silent.
-- **Cascaded mode**: the tool returns a short string ("Checking that now.") which the LLM will voice once; the later result is delivered exactly as above (`update_chat_ctx` for routine, `generate_reply` for urgent). Because cascaded LLMs always reply, pack instructions for cascaded mode tell the model to keep tool acknowledgements to one short clause (the platform appends a "pipeline notes" block to the system prompt per mode).
+- **Cascaded mode**: the tool returns a short string ("Checking that now.") which the LLM will voice once; the later result is delivered exactly as above (`update_chat_ctx` for routine, `generate_reply` for urgent). Because that tool output asks for a reply (`reply_required` is honoured by realtime models, and by the cascaded pipeline from livekit-agents 1.8.3, so only a `silent_reply` tool goes quiet), pack instructions for cascaded mode tell the model to keep tool acknowledgements to one short clause (the platform appends a "pipeline notes" block to the system prompt per mode).
 
 Both branches share: `RunContext.disallow_interruptions()` is never used for background tools; `ToolFlag.CANCELLABLE` is set so a user interruption cancels the tool's *reply*, not the background job (the job keeps running and still updates the UI).
 

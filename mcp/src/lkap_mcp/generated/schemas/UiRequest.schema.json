@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/UiRequest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "RPC payload for ``lkap.ui.request`` (agent asks the browser to do something).\n\nPayload keys per method are fixed (ruling R-V2-3b, PLAN-V2 §8):\n\n* ``open_dialog`` — ``{dialog: str, params?: dict}`` (never ``{id: ...}``)\n* ``focus`` — ``{target: str}``\n* ``request_video_source`` — ``{source: \"camera\" | \"screen\"}``\n* ``toast`` — ``{message: str, tone?: Tone}``\n* ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``\n* ``show_block`` — ``{block_id}``\n* ``navigate`` — ``{url}`` (new tab; the UI confirms first)",
+  "description": "RPC payload for ``lkap.ui.request`` (agent asks the browser to do something).\n\nPayload keys per method are fixed (ruling R-V2-3b, PLAN-V2 §8):\n\n* ``open_dialog`` — ``{dialog: str, params?: dict}`` (never ``{id: ...}``)\n* ``focus`` — ``{target: str}``\n* ``request_video_source`` — ``{source: \"camera\" | \"screen\"}``\n* ``toast`` — ``{message: str, tone?: Tone}``\n* ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``.\n  Deprecated alias of ``request``, kept for one release (V5-02); its answer\n  may come back as ``form_submit`` or ``block_submit``.\n* ``show_block`` — ``{block_id}``\n* ``navigate`` — ``{url}`` (new tab; the UI confirms first)\n* ``request`` — ``{block_id, timeout_s, schema?}`` (V5-02): the generic\n  blocking request on any requestable block (:class:`RequestableState`).\n  The block's state already shows ``status: \"requested\"``, so the browser\n  acks at once (``{}``) and answers later with ``block_submit``; an inline\n  ``{values}`` or ``{cancelled: true}`` result is accepted too.",
   "properties": {
     "method": {
       "enum": [
@@ -11,7 +11,8 @@
         "toast",
         "form",
         "show_block",
-        "navigate"
+        "navigate",
+        "request"
       ],
       "title": "Method",
       "type": "string"

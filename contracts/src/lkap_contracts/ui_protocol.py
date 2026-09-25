@@ -6,9 +6,9 @@ subsequent change. The browser applies patches strictly in ``seq`` order and ask
 for a fresh snapshot over RPC when it sees a gap.
 """
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TOPIC_UI_STATE = "lkap.ui.state"
 TOPIC_UI_ACTIVITY = "lkap.ui.activity"
@@ -119,13 +119,32 @@ class BlockSpec(BaseModel):
     order: int = 0
 
 
-class FormBlockState(BaseModel):
+#: Lifecycle of a requestable block (V5-02). ``requested`` means a request is
+#: pending: a reconnecting browser renders it from the snapshot alone.
+RequestStatus = Literal["idle", "requested", "submitted", "cancelled"]
+
+
+class RequestableState(BaseModel):
+    """Mixin for the state of every block the agent can ask the user to answer.
+
+    The agent flips ``status`` to ``requested`` when it asks (``UiRequest.method
+    == "request"``, or the legacy ``form``) and the browser answers with
+    ``AgentAction.action == "block_submit"``. ``submitted`` stamps
+    ``submitted_at``; ``cancelled`` covers a user cancel, a timeout and a
+    barge-in on the generic ``request`` path. The legacy ``form`` path keeps
+    its v2 statuses for one release: ``idle`` after a cancel, ``requested``
+    after a timeout (so a late submission still lands).
+    """
+
+    status: RequestStatus = "idle"
+    submitted_at: float | None = None
+
+
+class FormBlockState(RequestableState):
     """A JSON-schema form the agent asked the user to fill in."""
 
     schema_: dict[str, Any] = Field(default_factory=dict, alias="schema")
     values: dict[str, Any] = {}
-    status: Literal["idle", "requested", "submitted"] = "idle"
-    submitted_at: float | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -257,9 +276,16 @@ class UiRequest(BaseModel):
     * ``focus`` — ``{target: str}``
     * ``request_video_source`` — ``{source: "camera" | "screen"}``
     * ``toast`` — ``{message: str, tone?: Tone}``
-    * ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``
+    * ``form`` — ``{block_id, schema, prefill}``; result ``{values}`` or ``{cancelled: true}``.
+      Deprecated alias of ``request``, kept for one release (V5-02); its answer
+      may come back as ``form_submit`` or ``block_submit``.
     * ``show_block`` — ``{block_id}``
     * ``navigate`` — ``{url}`` (new tab; the UI confirms first)
+    * ``request`` — ``{block_id, timeout_s, schema?}`` (V5-02): the generic
+      blocking request on any requestable block (:class:`RequestableState`).
+      The block's state already shows ``status: "requested"``, so the browser
+      acks at once (``{}``) and answers later with ``block_submit``; an inline
+      ``{values}`` or ``{cancelled: true}`` result is accepted too.
     """
 
     v: Literal[1] = 1
@@ -271,6 +297,7 @@ class UiRequest(BaseModel):
         "form",
         "show_block",
         "navigate",
+        "request",
     ]
     payload: dict[str, Any] = {}
 
@@ -282,8 +309,52 @@ class UiRequestResult(BaseModel):
     payload: dict[str, Any] = {}
 
 
+class BlockRequestPayload(BaseModel):
+    """``UiRequest.payload`` for ``method == "request"`` (V5-02).
+
+    ``schema`` is optional block-specific input a renderer may need beyond the
+    block state; extra keys a requestable block defines pass through.
+    """
+
+    block_id: str = Field(min_length=1)
+    timeout_s: float = Field(gt=0)
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+
+class BlockSubmitPayload(BaseModel):
+    """``AgentAction.payload`` for ``action == "block_submit"`` (V5-02).
+
+    Exactly one of ``values`` (the user's answer) or ``cancelled: true``.
+    """
+
+    block_id: str = Field(min_length=1)
+    values: dict[str, Any] | None = None
+    cancelled: bool = False
+
+    @model_validator(mode="after")
+    def _one_answer(self) -> Self:
+        if self.cancelled == (self.values is not None):
+            raise ValueError("block_submit needs either a values object or cancelled: true")
+        return self
+
+
 class AgentAction(BaseModel):
-    """RPC payload for ``lkap.agent.action`` (browser asks the agent to do something)."""
+    """RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).
+
+    Payload keys per action:
+
+    * ``get_snapshot`` — ``{}``
+    * ``set_video_source`` — ``{source: "camera" | "screen" | "none"}``
+    * ``ui_action`` — ``{name, data}`` → ``Pack.on_ui_action``
+    * ``form_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
+      (``form`` blocks only; kept for one release beside ``block_submit``)
+    * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``
+    * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
+    * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
+      (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
+    """
 
     v: Literal[1] = 1
     action: Literal[
@@ -294,6 +365,7 @@ class AgentAction(BaseModel):
         "block_action",
         "rewind",
         "inject_user_text",
+        "block_submit",
     ]
     payload: dict[str, Any] = {}
 

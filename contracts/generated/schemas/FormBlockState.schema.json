@@ -13,7 +13,8 @@
       "enum": [
         "idle",
         "requested",
-        "submitted"
+        "submitted",
+        "cancelled"
       ],
       "title": "Status",
       "type": "string"

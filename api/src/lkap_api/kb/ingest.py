@@ -869,6 +869,16 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
             data=data,
             on_progress=progress_writer(ctx.database, document_id),
         )
+    # V5-04: compact the table the ingest just appended to (and index it once large).
+    await _optimize_after_ingest(store, kb_id)
+
+
+async def _optimize_after_ingest(store: VectorStore, kb_id: str) -> None:
+    """Best effort: a failed compaction never fails an ingest that already succeeded."""
+    try:
+        await store.optimize(kb_id)
+    except Exception as exc:  # noqa: BLE001 - maintenance only; the next ingest retries it
+        log.warning("kb_optimize_failed", kb_id=kb_id, error_type=type(exc).__name__)
 
 
 # --------------------------------------------------------------------------- url import (v3)

@@ -99,16 +99,24 @@ async def test_search_on_a_kb_built_by_another_embedder_is_a_422_naming_it(
         )
 
     admin = await admin_client.post(f"/v1/knowledge-bases/{kb['id']}/search", json={"query": "x", "k": 4})
+    assert admin.status_code == 422, admin.text
+    body = admin.json()
+    assert body["error"]["code"] == "kb_embedder_mismatch"
+    assert "Wide vectors" in body["error"]["message"]
+    assert body["error"]["details"]["kb_dimension"] == 1536
+    assert body["error"]["details"]["embedder_dimension"] == 32
+
+    # V5-04 (ask #13 b): the worker's cross-KB search skips that knowledge base
+    # with a warning naming it instead of refusing the whole search.
     internal = await service_client.post(
         "/internal/v1/kb/search", json={"kb_ids": [kb["id"]], "query": "x", "k": 4}
     )
-    for response in (admin, internal):
-        assert response.status_code == 422, response.text
-        body = response.json()
-        assert body["error"]["code"] == "kb_embedder_mismatch"
-        assert "Wide vectors" in body["error"]["message"]
-        assert body["error"]["details"]["kb_dimension"] == 1536
-        assert body["error"]["details"]["embedder_dimension"] == 32
+    assert internal.status_code == 200, internal.text
+    body = internal.json()
+    assert body["hits"] == []
+    [warning] = body["warnings"]
+    assert (warning["code"], warning["kb_id"]) == ("kb_embedder_mismatch", kb["id"])
+    assert "Wide vectors" in warning["message"]
 
 
 async def test_internal_search_ignores_unknown_kb_ids(service_client: httpx.AsyncClient) -> None:

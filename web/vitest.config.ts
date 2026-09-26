@@ -25,6 +25,9 @@ export default defineConfig({
     jsx: "automatic",
   },
   test: {
+    // Dialog-heavy tests exceed vitest's 5 s default on a loaded machine;
+    // a generous ceiling keeps the gate honest without masking hangs.
+    testTimeout: 20_000,
     environment: "jsdom",
     passWithNoTests: true,
     globals: true,

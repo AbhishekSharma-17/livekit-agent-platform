@@ -1468,6 +1468,8 @@ def _assemble(
     )
     if telephony is not None:
         session_ctx.userdata[TELEPHONY_USERDATA_KEY] = telephony
+    # V5-25: the network built-ins' vendors with their keys; `build_builtin_tools` reads them here.
+    session_ctx.userdata["lkap.builtin_providers"] = dict(resolved.builtin_providers)
 
     tools: list[lk_llm.Tool | lk_llm.Toolset] = [
         *deps.builtin_tools_builder(

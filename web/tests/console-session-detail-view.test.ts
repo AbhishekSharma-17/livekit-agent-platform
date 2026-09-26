@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StarIcon } from "lucide-react";
 
 import {
+  callerTimezoneLabel,
   formatUsageLabel,
   formatUsageValue,
   SessionDetailView,
@@ -268,6 +269,60 @@ describe("SessionDetailView — header and stats", () => {
     renderView();
     expect(await screen.findByText("This session doesn't exist")).toBeTruthy();
     expect(screen.getByRole("link", { name: "All sessions" }).getAttribute("href")).toBe("/console/sessions");
+  });
+});
+
+/**
+ * "Caller time zone: … (…)" chip (R-V5-10, V5-52): reads the worker's `locale`
+ * event when there is one (it carries the source), else falls back to
+ * `SessionOut.caller_timezone` once the summary has landed. Plain wording
+ * only — never "participant metadata" or "IANA".
+ */
+describe("callerTimezoneLabel", () => {
+  it("prefers the locale event and labels each source in plain words", () => {
+    const withSource = (source: string) => [
+      { id: 1, ts: "2026-09-18T20:17:07Z", type: "locale", payload: { caller_timezone: "Asia/Kolkata", source, business_timezone: "UTC" } },
+    ];
+    expect(callerTimezoneLabel(detail(), withSource("browser"))).toBe("Asia/Kolkata (detected from the browser)");
+    expect(callerTimezoneLabel(detail(), withSource("number"))).toBe("Asia/Kolkata (from the phone number)");
+    expect(callerTimezoneLabel(detail(), withSource("business"))).toBe("Asia/Kolkata (business timezone)");
+    expect(callerTimezoneLabel(detail(), withSource("workspace"))).toBe("Asia/Kolkata (workspace default)");
+    expect(callerTimezoneLabel(detail(), withSource("default"))).toBe("Asia/Kolkata (default)");
+  });
+
+  it("falls back to SessionOut.caller_timezone with no source wording when there is no locale event", () => {
+    expect(callerTimezoneLabel(detail({ caller_timezone: "Europe/Paris" }), [])).toBe("Europe/Paris");
+  });
+
+  it("returns null before the summary lands and with no locale event", () => {
+    expect(callerTimezoneLabel(detail({ caller_timezone: null }), [])).toBeNull();
+  });
+});
+
+describe("SessionDetailView — caller time zone chip (R-V5-10, V5-52)", () => {
+  it("renders the chip from the locale event, not just the raw session field", async () => {
+    stubApi(detail({ caller_timezone: null }), {
+      events: [
+        ...EVENTS,
+        {
+          id: 5,
+          ts: "2026-09-18T20:17:07Z",
+          type: "locale",
+          payload: { caller_timezone: "America/New_York", source: "number", business_timezone: "UTC" },
+        },
+      ],
+    });
+    renderView();
+
+    expect(await screen.findByText("Caller time zone: America/New_York (from the phone number)")).toBeTruthy();
+  });
+
+  it("shows nothing before the locale event or summary have landed", async () => {
+    stubApi(detail({ caller_timezone: null }));
+    renderView();
+
+    await screen.findByText("Ended");
+    expect(screen.queryByText(/Caller time zone/)).toBeNull();
   });
 });
 

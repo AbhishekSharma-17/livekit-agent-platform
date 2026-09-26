@@ -12,8 +12,9 @@
  */
 import { TokenSource } from "livekit-client";
 
-import type { ConnectRequest, ConnectResponse } from "@/contracts/lkap-contracts";
+import type { ConnectResponse, TextSessionCreate } from "@/contracts/lkap-contracts";
 import {
+  browserTimezone,
   ConnectError,
   errorFromPayload,
   publicApiBaseUrl,
@@ -29,7 +30,7 @@ const DEFAULT_ACCESS: SessionAccess = { viaConsole: false };
  */
 export async function fetchTextSession(
   slug: string,
-  request: ConnectRequest,
+  request: TextSessionCreate,
   access: SessionAccess = DEFAULT_ACCESS,
 ): Promise<ConnectResponse> {
   const url = access.viaConsole
@@ -78,12 +79,17 @@ export function createTextSessionTokenSource(
 
     const request = (async (): Promise<Credentials> => {
       try {
+        // R-V5-10: `timezone` (top-level on `TextSessionCreate`) wins over
+        // `participant_metadata.timezone`, so this is the one place to set it.
+        // Fails soft: omitted entirely when `Intl` can't say (never blocks the call).
+        const zone = browserTimezone();
         const details = await fetchTextSession(
           slug,
           {
             participant_name: options.participantName ?? "Guest",
             participant_identity: options.participantIdentity ?? null,
             participant_metadata: {},
+            ...(zone ? { timezone: zone } : {}),
           },
           access,
         );

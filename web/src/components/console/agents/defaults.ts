@@ -3,6 +3,7 @@ import type {
   AvatarOptions,
   CapabilitiesConfig,
   KnowledgeConfig,
+  LocaleConfig,
   RecordingConfig,
   TelephonyConfig,
   ToolsConfig,
@@ -63,6 +64,11 @@ export const DEFAULT_KNOWLEDGE: Required<KnowledgeConfig> = {
   max_inject_tokens: 1200,
   skip_short_turns: true,
   query_mode: "conversation",
+};
+
+/** `LocaleConfig` defaults (R-V5-10): the caller's own timezone unless the agent opts into the business one. */
+export const DEFAULT_LOCALE: Required<LocaleConfig> = {
+  caller_timezone: "detect",
 };
 
 /** `RecordingConfig` defaults (CONTRACTS-V2 §4.3). */

@@ -43,7 +43,7 @@ export const BUILTIN_SECTIONS: EditorSectionDef[] = [
     icon: FileTextIcon,
     order: 20,
     Component: InstructionsTab,
-    issuePaths: ["instructions", "voice", "timezone", "pack_settings"],
+    issuePaths: ["instructions", "voice", "timezone", "locale", "pack_settings"],
     issueKeywords: /\b(instruction|greeting|language|timezone|interrupt)/i,
     issueKeywordPriority: 20,
   },

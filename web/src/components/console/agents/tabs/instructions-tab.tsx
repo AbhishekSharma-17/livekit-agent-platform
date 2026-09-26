@@ -200,9 +200,9 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
           />
 
           <Field
-            label="Timezone"
+            label="Business timezone"
             htmlFor="agent-timezone"
-            hint="Used for the current-time tool and greetings."
+            hint="Used for opening hours and bookings."
           >
             <Input
               id="agent-timezone"
@@ -220,6 +220,33 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
               ))}
             </datalist>
           </Field>
+        </SectionRow>
+
+        <SectionRow className="flex flex-col gap-2">
+          <Controller
+            control={control}
+            name="config.locale.caller_timezone"
+            render={({ field }) => (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium leading-5">Caller&apos;s time</span>
+                <RadioGroup
+                  value={field.value ?? "detect"}
+                  onValueChange={field.onChange}
+                  aria-label="Caller's time"
+                  className="gap-2.5"
+                  data-issue-path="locale.caller_timezone"
+                >
+                  <label htmlFor="caller-timezone-detect" className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem id="caller-timezone-detect" value="detect" /> Use the caller&apos;s own timezone
+                    (detected)
+                  </label>
+                  <label htmlFor="caller-timezone-business" className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem id="caller-timezone-business" value="business" /> Always use the business timezone
+                  </label>
+                </RadioGroup>
+              </div>
+            )}
+          />
         </SectionRow>
 
         <SectionRow>

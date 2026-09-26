@@ -125,6 +125,20 @@ export const knowledgeConfigSchema = z.object({
   top_k: z.number().int().min(1, "At least 1").max(20, "20 max"),
 });
 
+/**
+ * `LocaleConfig` (R-V5-10, `contracts/src/lkap_contracts/agent_config.py`).
+ * Optional here (like `tools.apps` above) so fixtures built before V5-52
+ * that construct a `config` value by hand don't all need updating; the
+ * Instructions tab's "Caller's time" radio (V5-52) is the only editor of
+ * this field, and `DEFAULT_LOCALE` (`agents/defaults.ts`) always supplies a
+ * concrete value in the real editor. Without this field in the schema,
+ * `z.object`'s resolver parse would strip `config.locale` from every save
+ * (the file header's warning) — the radio's edits would never persist.
+ */
+export const localeConfigSchema = z.object({
+  caller_timezone: z.enum(["detect", "business"]).optional(),
+});
+
 const wholeNumber = (message: string) => z.number({ error: "Enter a number" }).int(message);
 
 /** `RecordingConfig` (CONTRACTS-V2 §4.3). Audio-only is fixed on in Phase 1. */
@@ -247,6 +261,8 @@ export const agentConfigFormSchema = z
     knowledge: knowledgeConfigSchema,
     pack_settings: z.record(z.string(), z.unknown()),
     timezone: z.string().min(1, "Timezone is required"),
+    /** R-V5-10: whose clock the agent talks in at session start (see `localeConfigSchema`). */
+    locale: localeConfigSchema.optional(),
     recording: recordingConfigSchema,
     panel: panelLayoutSchema,
     /**

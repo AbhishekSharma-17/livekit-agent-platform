@@ -12,9 +12,9 @@
  *
  * `<Block>` picks the block's state out of `props.state.blocks[spec.id]`
  * (over the type's initial state), resolves the heading, and renders the
- * matching component. The `document`, `table` and `video` components are
- * split out of the first load (`React.lazy`); pdf.js is a further PDF-only
- * split inside the document block.
+ * matching component. The `document`, `table`, `video` and `markdown`
+ * components are split out of the first load (`React.lazy`); pdf.js is a
+ * further PDF-only split inside the document block.
  */
 import type { BlockSpec } from "@/contracts/lkap-contracts";
 import * as React from "react";
@@ -27,13 +27,16 @@ import { PanelEmpty } from "@/panels/generic/blocks";
 import { ActivityBlock } from "./activity";
 import { blockStateOf, blockTitle } from "./catalog";
 import { ChecklistBlock } from "./checklist";
+import { ChoicesBlock } from "./choices";
 import { CustomBlock } from "./custom";
+import { DetailsBlock } from "./details";
 import { FormBlock } from "./form";
 import { BlockFrame } from "./frame";
 import { GalleryBlock } from "./gallery";
 import { KbCitationsBlock } from "./kb_citations";
 import { NotesBlock } from "./notes";
 import { StatusBlock } from "./status";
+import { StepsBlock } from "./steps";
 import { TranscriptBlock } from "./transcript";
 import type { BlockRenderProps } from "./types";
 
@@ -49,15 +52,9 @@ const TableBlock = lazy(() => import("./table"));
 // out of the first load so the console pages that render panels (session
 // detail, the composer preview) don't pull livekit-client in.
 const VideoBlock = lazy(() => import("./video"));
-
-/** A block type this web build has no renderer for yet. */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
+// `markdown` pulls in `streamdown`; kept out of the first load the same way,
+// for a session whose panel has no `markdown` block (V5-12).
+const MarkdownBlock = lazy(() => import("./markdown"));
 
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
@@ -73,15 +70,14 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   video: VideoBlock as AnyBlockComponent,
   kb_citations: KbCitationsBlock as AnyBlockComponent,
   custom: CustomBlock,
-  // V5-08 added these types to the contract; their renderers come with V5-12.
-  choices: NotRenderedYetBlock,
-  details: NotRenderedYetBlock,
-  markdown: NotRenderedYetBlock,
-  steps: NotRenderedYetBlock,
+  choices: ChoicesBlock as AnyBlockComponent,
+  details: DetailsBlock as AnyBlockComponent,
+  markdown: MarkdownBlock as AnyBlockComponent,
+  steps: StepsBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
-export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(["document", "table", "video"]);
+export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(["document", "table", "video", "markdown"]);
 
 export interface BlockProps extends PanelProps {
   spec: BlockSpec;

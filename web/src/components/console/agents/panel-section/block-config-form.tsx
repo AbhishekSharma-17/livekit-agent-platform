@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import type { BlockSpecForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import type { TableColumn } from "@/contracts/lkap-contracts";
-import { BLOCK_CATALOG, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
+import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
 
 import { setBlockConfig, updateBlock } from "./composer-model";
 
@@ -28,8 +28,111 @@ const COLUMN_TYPE_LABEL: Record<TableColumn["type"] & string, string> = {
   date: "Date",
 };
 
+const DETAILS_TYPE_LABEL: Record<(typeof DETAILS_FIELD_TYPES)[number], string> = {
+  string: "Text",
+  number: "Number",
+  date: "Date",
+  money: "Money",
+  phone: "Phone",
+  email: "Email",
+  badge: "Badge",
+};
+
+/** `key`/`id` fields read as identifiers: no spaces. Everything else is free text. */
+const IDENTIFIER_ITEM_KEYS = new Set(["key", "id"]);
+
 function isColumns(value: unknown): value is TableColumn[] {
   return Array.isArray(value) && value.every((c) => typeof c === "object" && c !== null && "key" in c);
+}
+
+function isRecordArray(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "object" && v !== null && !Array.isArray(v));
+}
+
+/**
+ * A list of small objects (`details.fields`, `steps.steps`): one row per
+ * item, one control per `itemKeys` entry. `type` (details only) gets the
+ * fixed select of `DetailsItem.type`; everything else is a text input.
+ */
+function ListEditor({
+  idBase,
+  itemKeys,
+  value,
+  onChange,
+}: {
+  idBase: string;
+  itemKeys: readonly string[];
+  value: Record<string, unknown>[];
+  onChange: (next: Record<string, unknown>[]) => void;
+}) {
+  function patch(index: number, key: string, next: unknown) {
+    onChange(value.map((item, i) => (i === index ? { ...item, [key]: next } : item)));
+  }
+  function blank(): Record<string, unknown> {
+    const item: Record<string, unknown> = {};
+    for (const key of itemKeys) item[key] = key === "type" ? "string" : "";
+    return item;
+  }
+  return (
+    <div className="flex flex-col gap-2" data-slot="list-editor">
+      {value.map((item, index) => (
+        <div key={index} className="flex flex-wrap items-center gap-2">
+          {itemKeys.map((key) => {
+            const label = key === "id" ? "ID" : key === "key" ? "Key" : key === "label" ? "Label" : key === "type" ? "Type" : key;
+            if (key === "type") {
+              const current = typeof item[key] === "string" ? (item[key] as string) : "string";
+              return (
+                <Select key={key} value={current} onValueChange={(next) => patch(index, key, next)}>
+                  <SelectTrigger aria-label={`Row ${index + 1} ${label}`} className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DETAILS_FIELD_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {DETAILS_TYPE_LABEL[type]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            }
+            return (
+              <Input
+                key={key}
+                aria-label={`Row ${index + 1} ${label}`}
+                value={typeof item[key] === "string" ? (item[key] as string) : ""}
+                placeholder={label}
+                onChange={(event) =>
+                  patch(index, key, IDENTIFIER_ITEM_KEYS.has(key) ? event.target.value.replace(/\s+/g, "_") : event.target.value)
+                }
+                className={IDENTIFIER_ITEM_KEYS.has(key) ? "w-32 font-mono text-sm" : "min-w-32 flex-1"}
+              />
+            );
+          })}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove row ${index + 1}`}
+            onClick={() => onChange(value.filter((_, i) => i !== index))}
+          >
+            <Icon as={Trash2Icon} size="sm" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        id={`${idBase}-add-row`}
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start"
+        onClick={() => onChange([...value, blank()])}
+      >
+        <Icon as={PlusIcon} size="sm" />
+        Add row
+      </Button>
+    </div>
+  );
 }
 
 function ColumnsEditor({
@@ -232,6 +335,24 @@ export function BlockConfigForm({
               <ColumnsEditor
                 idBase={id}
                 value={isColumns(value) ? value : []}
+                onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+              />
+              {field.hint ? (
+                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                  {field.hint}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        }
+        if (field.kind === "list") {
+          return (
+            <fieldset key={field.key} className="flex flex-col gap-1.5" aria-describedby={`${id}-hint`}>
+              <legend className="mb-1.5 text-sm leading-5 font-medium">{field.label}</legend>
+              <ListEditor
+                idBase={id}
+                itemKeys={field.itemKeys}
+                value={isRecordArray(value) ? value : []}
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (

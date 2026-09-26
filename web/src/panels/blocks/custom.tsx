@@ -6,6 +6,12 @@
  * state, when the pack writes one) as a collapsed JSON view, exactly like
  * the generic panel's "Pack data". A custom React panel that knows the shape
  * renders it itself instead.
+ *
+ * One exception (D-V5-33): a `custom` block with `config.kind ==
+ * "flow_progress"` keeps the flow runtime's raw `FlowState` mirror on the
+ * wire (`agent/src/lkap_agent/flow/runtime.py::publish_progress`), but is
+ * rendered with the `steps` timeline, not the JSON dump — `stepsFromFlowProgress`
+ * (`./steps`) adapts the mirror into a `StepsBlockState`.
  */
 import * as React from "react";
 import { useMemo } from "react";
@@ -13,9 +19,19 @@ import { useMemo } from "react";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
 import { BlockFrame } from "./frame";
+import { StepsBlock, stepsFromFlowProgress } from "./steps";
 import type { BlockRenderProps } from "./types";
 
+const FLOW_PROGRESS_KIND = "flow_progress";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function CustomBlock({ spec, data, panel, title, highlighted }: BlockRenderProps) {
+  const isFlowProgress = isRecord(spec.config) && spec.config.kind === FLOW_PROGRESS_KIND;
+  const flowSteps = useMemo(() => stepsFromFlowProgress(data), [data]);
+
   const payload = useMemo(() => {
     const custom = panel.state.custom ?? {};
     const own = data && Object.keys(data).length > 0 ? data : null;
@@ -30,6 +46,10 @@ export function CustomBlock({ spec, data, panel, title, highlighted }: BlockRend
       return "{}";
     }
   }, [payload]);
+
+  if (isFlowProgress) {
+    return <StepsBlock spec={spec} data={flowSteps} panel={panel} title={title} highlighted={highlighted} />;
+  }
 
   return (
     <BlockFrame spec={spec} title={title} highlighted={highlighted}>

@@ -110,7 +110,7 @@ export type BlockConfigField =
   | {
       key: string;
       label: string;
-      /** A list of small objects (`details.fields`, `steps.steps`); the composer's editor comes with V5-12. */
+      /** A list of small objects (`details.fields`, `steps.steps`); edited by `block-config-form.tsx::ListEditor`. */
       kind: "list";
       hint?: string;
       default: Record<string, unknown>[];
@@ -150,6 +150,9 @@ export const STEPS_SOURCES = [
   { value: "manual", label: "The agent" },
   { value: "flow", label: "The flow" },
 ] as const;
+
+/** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */
+export const DETAILS_FIELD_TYPES = ["string", "number", "date", "money", "phone", "email", "badge"] as const;
 
 export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   status: {

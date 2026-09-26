@@ -106,7 +106,8 @@ describe("block catalog", () => {
   it("has a component and a catalog entry for every BlockType", () => {
     expect([...BLOCK_TYPES].sort()).toEqual(Object.keys(BLOCK_COMPONENTS).sort());
     expect([...BLOCK_TYPES].sort()).toEqual(Object.keys(BLOCK_CATALOG).sort());
-    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["document", "table", "video"]);
+    // V5-12: `markdown` joins the lazy split (it pulls in `streamdown`).
+    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["document", "markdown", "table", "video"]);
   });
 
   it("seeds initial state from config keys that name a state field, like the worker", () => {

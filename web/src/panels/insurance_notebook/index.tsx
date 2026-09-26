@@ -18,19 +18,21 @@ import * as React from "react";
 import { useMemo } from "react";
 
 import type { UiRequest, UiRequestResult } from "@/contracts/lkap-contracts";
+import { DetailsBlock } from "@/panels/blocks/details";
 import type { PanelDefinition, PanelProps } from "@/panels/registry";
 
 import { NOTEBOOK_CSS } from "./notebook-styles";
 import { Notes, Pen, Pinboard, Stamp, isWriting } from "./paper";
 import { PacketDialog, openPacketDialog } from "./packet-dialog";
 import { SketchCard } from "./sketch-card";
-import { headerLine, parseNotebookCustom } from "./state";
+import { detailsItemsFromFields, headerLine, parseNotebookCustom } from "./state";
 import { StillNeeded, TeamFeed } from "./studio";
 
 /** Punch holes down the left margin; decorative only. */
 const HOLES = [0, 1, 2, 3, 4, 5, 6, 7];
 
-export function InsuranceNotebookPanel({ state, assets, perform }: PanelProps) {
+export function InsuranceNotebookPanel(props: PanelProps) {
+  const { state, assets, perform } = props;
   const custom = useMemo(() => parseNotebookCustom(state.custom), [state.custom]);
 
   const notes = state.notes ?? [];
@@ -85,14 +87,14 @@ export function InsuranceNotebookPanel({ state, assets, perform }: PanelProps) {
           {fields.length > 0 && (
             <details className="sections mt-7">
               <summary>Claim details ({fields.length})</summary>
-              <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                {fields.map(([key, field]) => (
-                  <div key={key} className="field" data-status={field.status}>
-                    <span className="f-label">{field.label}</span>
-                    <span className="f-value">{field.value}</span>
-                    <span className="f-source">{field.source}</span>
-                  </div>
-                ))}
+              <div className="mt-3">
+                {/* V5-12: the notebook's own summary is the platform's `details` block now. */}
+                <DetailsBlock
+                  spec={{ id: "claim_fields", type: "details", title: null, config: { columns: 2 } }}
+                  data={{ items: detailsItemsFromFields(custom.fields) }}
+                  panel={props}
+                  title={null}
+                />
               </div>
             </details>
           )}

@@ -29,12 +29,18 @@ export interface NodeToolOption {
  */
 export const VISION_TOOL_NAMES: ReadonlySet<string> = new Set(["describe_current_frame", "pin_frame"]);
 
+/** The shape `nodeToolOptions` needs of a panel block: its type and its config. */
+export interface ToolOptionBlock {
+  type: string;
+  config?: Record<string, unknown> | null;
+}
+
 export interface ToolOptionsInput {
   builtinDisabled: readonly string[];
   httpRequestEnabled: boolean;
   camera: boolean;
   screenShare: boolean;
-  blockTypes: readonly string[];
+  blocks: readonly ToolOptionBlock[];
   packToolNames: readonly string[];
   toolIds: readonly string[];
   /** `{id → name}` of the workspace's tool rows. */
@@ -53,11 +59,19 @@ export function nodeToolOptions(input: ToolOptionsInput): NodeToolOption[] {
   if (input.httpRequestEnabled && !disabled.has("http_request")) {
     out.push({ name: "http_request", label: "HTTP request", group: "Built-in" });
   }
-  const blocks = new Set(input.blockTypes);
+  const blockTypes = new Set(input.blocks.map((block) => block.type));
+  // `set_steps` registers only for a `steps` block that does not follow the
+  // flow (`config.source !== "flow"`) — the same rule the composer's block-tool
+  // switches apply (`composer-model.ts::blockToolStatus`, ask #43).
+  const hasManualSteps = input.blocks.some((block) => block.type === "steps" && block.config?.source !== "flow");
   for (const tool of BLOCK_TOOLS) {
     if (disabled.has(tool.name)) continue;
+    if (tool.name === "set_steps") {
+      if (hasManualSteps) out.push({ name: tool.name, label: tool.label, group: "Panel" });
+      continue;
+    }
     const types = BLOCK_TOOL_TYPES[tool.name as BlockToolName];
-    if (types && [...types].some((type) => blocks.has(type))) {
+    if (types && [...types].some((type) => blockTypes.has(type))) {
       out.push({ name: tool.name, label: tool.label, group: "Panel" });
     }
   }

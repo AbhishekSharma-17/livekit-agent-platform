@@ -142,19 +142,28 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
  * Whether each block tool would be registered (the worker's
  * `build_builtin_tools` rule, read from `config.panel.blocks`) and whether
  * the author has it switched on (`config.tools.builtin_disabled`).
+ *
+ * `set_steps` is coarse in `BLOCK_TOOL_TYPES` on purpose (the contract keeps
+ * one type set per tool), but the worker registers it only for a `steps`
+ * block whose `config.source` is not `"flow"` — a panel with only a
+ * flow-driven steps block gets no `set_steps` (ask #43).
  */
 export function blockToolStatus(
   panel: PanelLayoutForm,
   builtinDisabled: readonly string[],
 ): BlockToolStatus[] {
-  const types = new Set(panel.panel_id === COMPOSITE_PANEL_ID ? panel.blocks.map((b) => b.type) : []);
+  const blocks = panel.panel_id === COMPOSITE_PANEL_ID ? panel.blocks : [];
+  const types = new Set(blocks.map((b) => b.type));
+  const hasFlowSteps = blocks.some((b) => b.type === "steps" && b.config?.source === "flow");
+  const hasManualSteps = blocks.some((b) => b.type === "steps" && b.config?.source !== "flow");
   return (Object.keys(BLOCK_TOOL_TYPES) as BlockToolName[]).map((name) => {
-    const available = [...BLOCK_TOOL_TYPES[name]].some((type) => types.has(type));
-    return {
-      name,
-      available,
-      enabled: !builtinDisabled.includes(name),
-      reason: available ? null : TOOL_NEEDS[name],
-    };
+    const available = name === "set_steps" ? hasManualSteps : [...BLOCK_TOOL_TYPES[name]].some((type) => types.has(type));
+    const reason =
+      available
+        ? null
+        : name === "set_steps" && hasFlowSteps
+          ? 'This steps block follows the flow; set "Driven by" to "The agent" first'
+          : TOOL_NEEDS[name];
+    return { name, available, enabled: !builtinDisabled.includes(name), reason };
   });
 }

@@ -129,4 +129,4 @@ sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_009.db"
 cd api && uv run alembic upgrade head      # v5_010_tool_provider_kind -> v5_009_consent
 ```
 
-Instant on the dev database. The api must run the V5-15 code to read or write the column (restart after applying).
+Instant on the dev database. **Order matters:** backup → `upgrade head` → restart the api → restart the worker. `Session.consent_state` is a mapped column, so an api on the V5-15 code against an unmigrated database fails on every `sessions` read, not only on consent writes. In the window between the api and the worker restarts, an old worker never holds a consent-gated recording back, so the new api answers its start with 409 (recorded as a failed recording) for any agent that already has `recording.require_consent: true` (none do before V5-17 ships the switch).

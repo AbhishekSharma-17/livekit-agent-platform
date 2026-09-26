@@ -1,0 +1,40 @@
+{
+  "$id": "lkap-contracts/BlockConfig_upload.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``upload``: what the caller may send, how many files and how large (V5-19).\n\n``accept`` lists ``image/*`` or exact types from :data:`UPLOAD_MIME_TYPES`\n(photos and PDFs; never HTML or SVG). ``camera_capture`` asks a phone to\nopen its camera. The worker enforces every limit before storing a file and\nthe api checks them again.",
+  "properties": {
+    "accept": {
+      "default": [
+        "image/*",
+        "application/pdf"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Accept",
+      "type": "array"
+    },
+    "camera_capture": {
+      "default": false,
+      "title": "Camera Capture",
+      "type": "boolean"
+    },
+    "max_bytes": {
+      "default": 10485760,
+      "maximum": 26214400,
+      "minimum": 1,
+      "title": "Max Bytes",
+      "type": "integer"
+    },
+    "max_files": {
+      "default": 3,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Max Files",
+      "type": "integer"
+    }
+  },
+  "title": "BlockConfig_upload",
+  "type": "object"
+}

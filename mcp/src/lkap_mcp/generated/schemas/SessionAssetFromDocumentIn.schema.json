@@ -1,0 +1,18 @@
+{
+  "$id": "lkap-contracts/SessionAssetFromDocumentIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/sessions/{id}/assets/from-document``: the cited KB document to copy (R-V5-5).",
+  "properties": {
+    "document_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Document Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "document_id"
+  ],
+  "title": "SessionAssetFromDocumentIn",
+  "type": "object"
+}

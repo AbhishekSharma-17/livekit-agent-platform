@@ -719,7 +719,8 @@ describe("summary rail", () => {
     await ready();
     const rail = screen.getByRole("complementary", { name: "Agent summary" });
     expect(within(rail).getByText("Claim notebook")).toBeTruthy();
-    expect(within(rail).getByText("9 built-in")).toBeTruthy();
+    // V5-19: `describe_asset` joined `BUILTIN_TOOLS` (tool-names parity), so 9 became 10.
+    expect(within(rail).getByText("10 built-in")).toBeTruthy();
     expect(within(rail).getByText("None attached")).toBeTruthy();
     expect(within(rail).getByText("Version 2")).toBeTruthy();
     expect((within(rail).getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Takes first notice of loss");

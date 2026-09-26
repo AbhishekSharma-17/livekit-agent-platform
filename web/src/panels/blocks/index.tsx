@@ -85,6 +85,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   steps: StepsBlock as AnyBlockComponent,
   // V5-15 added this type to the contract; its renderer comes with V5-17.
   consent: NotRenderedYetBlock,
+  // V5-19 added this type to the contract; its renderer comes with V5-23.
+  upload: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

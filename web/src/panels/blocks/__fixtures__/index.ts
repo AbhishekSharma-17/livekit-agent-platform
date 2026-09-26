@@ -33,6 +33,7 @@ import markdownState from "./markdown.json";
 import stepsState from "./steps.json";
 import tableState from "./table.json";
 import transcriptState from "./transcript.json";
+import uploadState from "./upload.json";
 import videoState from "./video.json";
 
 /** A `PanelLayout` with one block of every type (ids as in `layout.json`). */
@@ -52,6 +53,7 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   markdown: markdownState,
   steps: stepsState,
   consent: consentState,
+  upload: uploadState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */
@@ -71,6 +73,8 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   steps: { type: "steps", state: stepsState },
   // V5-15: the consent block's state (renderer and scenes come with V5-17).
   consent: { type: "consent", state: consentState },
+  // V5-19: the upload block's state (renderer and scenes come with V5-23).
+  upload: { type: "upload", state: uploadState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -132,6 +136,7 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     recap: markdownState,
     progress: stepsState,
     recording_consent: consentState,
+    documents: uploadState,
   };
 }
 

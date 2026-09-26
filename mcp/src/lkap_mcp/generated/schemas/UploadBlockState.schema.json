@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "UploadRejection": {
+      "description": "A file the worker refused, and why (V5-19).",
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "too_large",
+            "type_not_allowed",
+            "too_many_files",
+            "empty",
+            "not_requested",
+            "failed"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "reason",
+        "message"
+      ],
+      "title": "UploadRejection",
+      "type": "object"
+    },
+    "UploadedFile": {
+      "description": "One file the worker received, checked and stored for an ``upload`` block (V5-19).\n\nWritten by the worker only: a ``block_submit`` never replaces the list\n(the browser's answer names asset ids; the worker keeps what it verified).",
+      "properties": {
+        "asset_id": {
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "mime": {
+          "title": "Mime",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "asset_id",
+        "name",
+        "mime",
+        "size"
+      ],
+      "title": "UploadedFile",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/UploadBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Files the caller sends from their device (``request_upload``, V5-19).\n\nWhile ``status`` is ``requested`` the browser streams each file on\n``lkap.ui.upload`` (attributes ``block_id``, ``name``). The worker checks it\nagainst the block config's ``accept``, ``max_bytes`` and ``max_files`` (it\nsniffs the bytes and never trusts the declared type), stores it through the\napi and appends it to ``files``, or appends a ``rejected`` row. ``progress``\n(0-1) is how much of the file being received has arrived. The browser then\nanswers ``block_submit {values: {files: [asset_id, ...]}}``.",
+  "properties": {
+    "files": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/UploadedFile"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress"
+    },
+    "prompt": {
+      "default": "",
+      "title": "Prompt",
+      "type": "string"
+    },
+    "rejected": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/UploadRejection"
+      },
+      "title": "Rejected",
+      "type": "array"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    }
+  },
+  "title": "UploadBlockState",
+  "type": "object"
+}

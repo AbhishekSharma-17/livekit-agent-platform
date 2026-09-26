@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/FormUploadSpec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The limits of a form's ``file`` field (``x-lkap-upload``); empty ``accept`` = images and PDFs.",
+  "properties": {
+    "accept": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Accept",
+      "type": "array"
+    },
+    "max_bytes": {
+      "default": 10485760,
+      "maximum": 26214400,
+      "minimum": 1,
+      "title": "Max Bytes",
+      "type": "integer"
+    },
+    "max_files": {
+      "default": 1,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Max Files",
+      "type": "integer"
+    }
+  },
+  "title": "FormUploadSpec",
+  "type": "object"
+}

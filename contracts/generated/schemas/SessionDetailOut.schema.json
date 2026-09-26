@@ -82,7 +82,7 @@
       "type": "object"
     },
     "AssetRef": {
-      "description": "Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.",
+      "description": "Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.\n\n``kind`` is the display kind (``photo`` for a pinned frame, a pack-defined\nkind, ``upload``). V5-19: ``stored`` says the bytes are also kept in the\nsession's asset store (``session_assets``); ``asset_id`` is then the stored\nasset's id, which the console lists and downloads after the call. ``name``\nand ``size`` describe the file. The browser still renders from the bytes\ndelivered on ``lkap.ui.asset`` (the display path).",
       "properties": {
         "asset_id": {
           "title": "Asset Id",
@@ -115,6 +115,36 @@
         "mime": {
           "title": "Mime",
           "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "stored": {
+          "default": false,
+          "title": "Stored",
+          "type": "boolean"
         },
         "ts": {
           "title": "Ts",

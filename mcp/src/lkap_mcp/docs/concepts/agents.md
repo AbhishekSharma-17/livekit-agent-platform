@@ -5,7 +5,7 @@ a `mode` (`prompt` or `flow`, derived from whether `config.flow` is set — you
 never send `mode` yourself), and a `config` (`AgentConfig`) holding
 everything else: `instructions`, `pipeline`, `voice`, `capabilities`,
 `tools`, `knowledge`, `panel`, `recording`, `qa`, `flow`, `telephony`,
-`pack_settings`, `timezone` and `locale`. `published` gates whether `/s/{slug}` is
+`pack_settings`, `timezone`, `locale` and `disclosure`. `published` gates whether `/s/{slug}` is
 live; a draft agent can still be tested with `chat_start`.
 
 `agent_list(query=, mode=, published=, archived=false)` lists every agent in
@@ -117,6 +117,30 @@ two). A new agent created from a starter or a pack takes the workspace's
 default timezone (`settings.locale.timezone`, set with the workspace settings)
 when the starter sets none. `session_get` shows the zone a session used as
 `caller_timezone`.
+
+## AI disclosure and recording consent
+
+Every agent tells callers they are talking to an AI unless you turn it off:
+`config.disclosure` is `{enabled: true, text: null, position: "both"}` by
+default. `position` `greeting` or `both` speaks the line at the start of the
+greeting (a `{disclosure}` placeholder in `voice.greeting` marks where);
+`banner` leaves it to the on-screen banner of a `consent` block, but a phone
+call has no screen, so it is spoken there anyway. `text: null` uses the
+workspace's wording. The workspace picks a jurisdiction (`eu`, `in` — the
+default — or `us`) and may rewrite the disclosure line and the recording
+question in the workspace settings (`settings.compliance`: `jurisdiction`,
+`disclosure_text`, `recording_text`, `counsel_note_ack`; the console's
+Settings → Compliance). The preset wording is a starting point, not legal
+advice.
+
+`config.recording.require_consent: true` records a call only after the caller
+agrees: the agent asks (tap-to-accept on a `consent` block, or out loud with
+`record_consent`), nothing is recorded before a yes, and a no is never
+recorded; `session_get` then shows the recording's `error` as "Not recorded:
+consent declined". Each answer is a `consent` session event with the SHA-256
+of the exact wording. `agent_validate` warns when consent is required without
+a consent block (voice answers still work), when recording is off, and when
+the disclosure is turned off (naming the workspace's jurisdiction).
 
 ## Prompt vs. flow
 

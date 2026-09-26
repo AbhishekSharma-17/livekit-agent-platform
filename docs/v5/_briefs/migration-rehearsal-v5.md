@@ -104,3 +104,29 @@ It takes well under a second on the dev database. The api needs no restart to st
 ## Re-rehearsal after the re-chain (coordinator, 2026-09-25)
 
 `v5_001_knowledge_p0` now has `down_revision = "v4_003_session_estimates"` (ask #8). On a fresh `.backup` copy of the dev DB at `v4_002_provider_models`: `upgrade head` ran `v4_003` then `v5_001`; `downgrade v4_002_provider_models` ran both down; `upgrade head` again; row counts (agents 19, sessions 63, kb_chunks 154, tools 12) unchanged at every step; `kb_chunks_fts` holds 154 rows; `integrity_check` ok, `foreign_key_check` clean; `alembic check` reports no drift.
+
+## `v5_009_consent` (V5-15)
+
+### What the revision does
+
+Adds the nullable JSON column `sessions.consent_state` (`lkap_contracts.compliance.ConsentState`: the latest consent answer per kind, folded in by `POST /internal/v1/sessions/{id}/events` from the `consent` events). `upgrade()` is a plain `ADD COLUMN` on both dialects (no table rebuild); existing rows read `NULL`. `downgrade()` uses SQLite's native `ALTER TABLE sessions DROP COLUMN consent_state` (3.35+; the api venv has 3.47) instead of a batch rebuild, which would reflect the table and lose its CHECK constraints; Postgres uses `op.drop_column`. Chained after `v5_010_tool_provider_kind` (the head when V5-15 started; the ledger reserved the id `v5_009` before V5-47 took `v5_010`).
+
+### Rehearsal on a scratch database (V5-15, 2026-09-27)
+
+The worktree has no dev database and the package rules keep the live one out of reach, so the rehearsal ran on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session scratchpad: `upgrade head` ran every revision from the v1 head through `v5_010` to `v5_009_consent`; `downgrade v5_010_tool_provider_kind` ran `v5_009` down; `upgrade head` again; `alembic current` = `v5_009_consent (head)`.
+
+### Tests
+
+- `api/tests/test_migration_v5_009.py` (SQLite): upgrade adds the column and every existing row reads `NULL`; downgrade drops it and the `sessions` DDL still carries `status_valid`, `channel_valid` and `recording_status_valid`; the next upgrade reaches head again.
+- `api/tests/test_migrations.py` and `test_health.py` (existing): fresh `upgrade head` matches the models (`Session.consent_state`), no drift; the head id keeps the `v5_` prefix.
+
+**Postgres: not executed** (no Postgres here). The revision uses only `op.add_column` / `op.drop_column` with `sa.JSON()` on Postgres; the CI `test-postgres` job's up/down/up step runs it.
+
+### To apply (coordinator)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_009.db"
+cd api && uv run alembic upgrade head      # v5_010_tool_provider_kind -> v5_009_consent
+```
+
+Instant on the dev database. The api must run the V5-15 code to read or write the column (restart after applying).

@@ -7,6 +7,7 @@ LiveKit TTS machinery (`ChunkedStream`, `AudioEmitter`) runs for real.
 from __future__ import annotations
 
 import json
+import struct
 
 import httpx
 import pytest
@@ -16,6 +17,7 @@ from livekit.agents import APIConnectOptions, APIStatusError
 from lkap_agent.providers.openrouter import (
     AudioFormat,
     OpenRouterTTS,
+    PcmDownmixer,
     parse_audio_content_type,
     response_format_for,
 )
@@ -128,4 +130,39 @@ async def test_a_vendor_400_surfaces_as_a_non_retryable_status_error() -> None:
             await _synthesize(tts)
 
     assert caught.value.status_code == 400
+    await tts.aclose()
+
+
+def test_downmixer_averages_channels_and_carries_partial_frames_across_chunks() -> None:
+    stereo = struct.pack("<6h", 100, 300, -200, -400, 32767, 32767)
+    mixer = PcmDownmixer(2)
+
+    first = mixer.push(stereo[:5])  # one full frame plus one stray byte
+    rest = mixer.push(stereo[5:])
+
+    assert struct.unpack(f"<{len(first + rest) // 2}h", first + rest) == (200, -300, 32767)
+
+
+async def test_stereo_pcm_reaches_the_pipeline_as_mono_at_the_same_duration() -> None:
+    """The room's audio source is mono and the pipeline only resamples, so channels are mixed here."""
+    tts = _tts()
+    half_second_48k_stereo = struct.pack("<2h", 1000, 3000) * 24_000
+
+    with respx.mock:
+        respx.post(SPEECH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                content=half_second_48k_stereo,
+                headers={"content-type": "audio/pcm;rate=48000;channels=2"},
+            )
+        )
+        frames = []
+        async with tts.synthesize("Hi.", conn_options=NO_RETRY) as stream:
+            async for event in stream:
+                frames.append(event.frame)
+
+    assert {frame.num_channels for frame in frames} == {1}
+    assert {frame.sample_rate for frame in frames} == {48_000}
+    assert sum(frame.duration for frame in frames) == pytest.approx(0.5, abs=0.03)
+    assert frames[0].data[0] == 2000
     await tts.aclose()

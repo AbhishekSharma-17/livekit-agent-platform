@@ -16,7 +16,8 @@ ways the stock 1.8.3 plugin gets wrong:
    fast (a pitched, "robotic" voice). :func:`parse_audio_content_type` reads them,
    and the stream labels its frames with the rate the vendor actually sent (the
    voice pipeline resamples to the output rate, livekit-agents 1.8.3
-   ``voice/generation.py:631``).
+   ``voice/generation.py:631``). It does not remix channels, and the room's
+   source is mono, so multi-channel PCM is downmixed (:class:`PcmDownmixer`).
 
 It also never sends ``stream_format``: OpenRouter returns raw audio bytes, never
 the SSE stream that parameter selects on OpenAI, and it takes the request id from
@@ -28,6 +29,8 @@ OpenRouter has no incremental text-in/audio-out endpoint.
 
 from __future__ import annotations
 
+import sys
+from array import array
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -44,6 +47,7 @@ __all__ = [
     "DEFAULT_PCM_SAMPLE_RATE",
     "AudioFormat",
     "OpenRouterTTS",
+    "PcmDownmixer",
     "parse_audio_content_type",
     "response_format_for",
 ]
@@ -132,6 +136,36 @@ def parse_audio_content_type(content_type: str | None, *, requested_format: str)
     )
 
 
+class PcmDownmixer:
+    """Averages interleaved 16-bit little-endian PCM channels to mono, across chunk boundaries."""
+
+    def __init__(self, num_channels: int) -> None:
+        """Create a downmixer.
+
+        Args:
+            num_channels: Channels interleaved in the input (2 or more).
+        """
+        self._num_channels = num_channels
+        self._frame_bytes = 2 * num_channels
+        self._pending = b""
+
+    def push(self, chunk: bytes) -> bytes:
+        """Return the mono samples for every complete input frame seen so far."""
+        data = self._pending + chunk
+        usable = len(data) - len(data) % self._frame_bytes
+        self._pending = data[usable:]
+        samples = array("h", data[:usable])
+        if sys.byteorder == "big":
+            samples.byteswap()
+        channels = self._num_channels
+        mono = array(
+            "h", (sum(samples[i : i + channels]) // channels for i in range(0, len(samples), channels))
+        )
+        if sys.byteorder == "big":
+            mono.byteswap()
+        return mono.tobytes()
+
+
 class OpenRouterTTS(openai_tts.TTS):
     """``livekit.plugins.openai.TTS`` with OpenRouter's response format and rate handling."""
 
@@ -200,14 +234,19 @@ class _ChunkedStream(tts.ChunkedStream):
                 audio_format = parse_audio_content_type(
                     response.headers.get("content-type"), requested_format=str(opts.response_format)
                 )
+                # The room's audio source is mono and the pipeline only resamples, so
+                # multi-channel PCM is downmixed here rather than labelled as it came.
+                downmix = PcmDownmixer(audio_format.num_channels) if audio_format.num_channels > 1 else None
                 output_emitter.initialize(
                     request_id=response.headers.get("x-generation-id") or response.request_id or "",
                     sample_rate=audio_format.sample_rate,
-                    num_channels=audio_format.num_channels,
+                    num_channels=1 if downmix is not None else audio_format.num_channels,
                     mime_type=audio_format.mime_type,
                 )
                 async for chunk in response.iter_bytes():
-                    output_emitter.push(chunk)
+                    data = downmix.push(chunk) if downmix is not None else chunk
+                    if data:
+                        output_emitter.push(data)
             output_emitter.flush()
         except openai.APITimeoutError:
             raise APITimeoutError() from None

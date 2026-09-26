@@ -12,7 +12,7 @@ only (no streaming), so even after these fixes they will always be slower than a
 
 The evidence was read-only: the dev DB `api/data/lkap.db` (sessions, `session_events`, agent config
 versions, the catalog cache) and the worker log. Eight sessions used `openrouter-stt`/`openrouter-tts`
-(2026-09-24 to 2026-09-26). Five ran; three never started (worker not running; unrelated).
+(2026-09-24 to 2026-09-26). Four ran; four never started (no worker was running; unrelated).
 
 | Session | STT (language) | TTS (voice) | What happened |
 |---|---|---|---|
@@ -66,8 +66,10 @@ same way.
 ### 3. "Zombie" voice in the one session that spoke: a French voice reading English (config)
 
 Session `0a179844` used `deepgram/aura-2` with voice `aura-2-agathe-fr`, a French Aura-2 voice, to read
-an English greeting. That is the most likely cause of the odd, robotic sound. The request was MP3, which
-the decoder resamples correctly, so a sample-rate mix-up is ruled out for this session. The slow start
+an English greeting. That is the most likely cause of the odd, robotic sound. A sample-rate mix-up is
+unlikely. The request was MP3, which the decoder resamples to the right rate. The recorded audio was
+7.1 s for the 90-character greeting, a normal speaking pace; 1.5x too fast would be about 4.7 s and 1.5x
+too slow about 10.6 s. What content type OpenRouter actually returned was not logged. The slow start
 (TTS TTFB 2.4 s, and 2.0 s more before playback) comes from the non-streaming, one-request-per-sentence
 design (see below). The "transcript" the user saw was the agent's greeting. No user speech was ever
 transcribed in any OpenRouter session.
@@ -89,7 +91,8 @@ was left as it is because it is a design decision, not part of this report.
   - asks for `pcm` by default and `mp3` for `mistralai/voxtral*` (`response_format_for`);
   - reads `rate`/`channels` from the response `Content-Type` and labels frames with the rate the vendor
     actually sent (`parse_audio_content_type`, falling back to 24 kHz). The voice pipeline then
-    resamples to the room's rate (livekit-agents `voice/generation.py:631`);
+    resamples to the room's rate (livekit-agents `voice/generation.py:631`). The pipeline does not
+    remix channels, so multi-channel PCM is downmixed to mono (`PcmDownmixer`);
   - drops `stream_format` (OpenRouter returns raw bytes, never SSE) and uses `X-Generation-Id` as the
     request id.
 - **`agent/src/lkap_agent/providers/factory.py`: `openai_transcription_language_kwargs`.** This runs for
@@ -112,6 +115,11 @@ Tests: `agent/tests/unit/test_openrouter_tts.py` (format per model, Content-Type
 `stream_format`, a 400 surfaces as `APIStatusError`), `agent/tests/unit/test_factory_openrouter.py`
 (PCM default, Voxtral MP3, version-skew fallback, language normalisation table), and
 `api/tests/test_speech_latency_issues.py`.
+
+**Check after restart.** `deepgram/aura-2`, the only model that ever spoke, used MP3 and now gets PCM.
+OpenRouter documents PCM as the endpoint default, so this should work, but it is the first thing to try
+on a real session. The console has no `response_format` setting. If another model turns out to be MP3
+only, add it to `_MP3_ONLY_MODEL_PREFIXES` in `openrouter.py`.
 
 ## What is inherent to OpenRouter (not fixable in LKAP)
 

@@ -122,14 +122,29 @@ class ToolProviderAdapter(Protocol):
         """Create an auth config: Composio's shared app (``managed``) or the caller's own."""
         ...
 
-    async def start_link(self, *, auth_config_id: str, subject: str, callback_url: str) -> dict[str, Any]:
-        """Start a hosted sign-in; returns ``redirect_url`` and ``connected_account_id``."""
+    async def start_link(
+        self, *, auth_config_id: str, subject: str, callback_url: str, alias: str | None = None
+    ) -> dict[str, Any]:
+        """Start a hosted sign-in; returns ``redirect_url`` and ``connected_account_id``.
+
+        ``alias`` names the account at the vendor (unique per subject and app, R-V5-13).
+        """
         ...
 
     async def create_with_key(
-        self, *, auth_config_id: str, subject: str, auth_scheme: str, fields: dict[str, str]
+        self,
+        *,
+        auth_config_id: str,
+        subject: str,
+        auth_scheme: str,
+        fields: dict[str, str],
+        alias: str | None = None,
     ) -> dict[str, Any]:
         """Create a connected account from key fields (forwarded once, never kept)."""
+        ...
+
+    async def update_connection(self, connected_account_id: str, *, alias: str) -> dict[str, Any]:
+        """Rename a connected account at the vendor (its ``alias``; R-V5-13)."""
         ...
 
     async def get_connection(self, connected_account_id: str) -> dict[str, Any]:

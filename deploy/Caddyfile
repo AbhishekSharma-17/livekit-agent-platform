@@ -89,6 +89,11 @@
 		# `respond` runs before `reverse_proxy` in Caddy's fixed directive
 		# order, so a refused /internal/* request never reaches the api.
 		respond @internalRefused "forbidden: the internal worker API is not reachable from this address" 403
+		# S5-12: the api's own ingress cap (a 25 MB upload plus multipart
+		# overhead), enforced here first so an oversized body never reaches it.
+		request_body {
+			max_size 26MB
+		}
 		reverse_proxy api:8080
 	}
 

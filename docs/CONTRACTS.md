@@ -201,7 +201,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_DATA_DIR` | req | — | — | default `./data` (db, lancedb, kb files, models) |
 | `LKAP_DATABASE_URL` | opt | — | — | default `sqlite+aiosqlite:///{DATA_DIR}/lkap.db` |
 | `LKAP_CORS_ORIGINS` | opt | — | — | default `http://localhost:3000` |
-| `LKAP_PUBLIC_BASE_URL` | opt | — | — | used in connect response for asset links; also the origin of the Apps sign-in return address (`/v1/tool-providers/composio/callback`), falling back to the api's own url (V5-18) |
+| `LKAP_PUBLIC_BASE_URL` | opt | — | — | used in connect response for asset links; also the origin of the Apps sign-in return address (`/v1/tool-providers/composio/callback`) and of the MCP sign-in return address (`/v1/oauth/mcp/callback`, V5-14), falling back to the api's own url (V5-18) |
 | `LKAP_PACKS` | opt | opt | — | default `packs.insurance_claim,packs.generic` |
 | `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | opt | opt | — | comma list; empty = only per-tool allowlist (the api reads it only for `LKAP_MCP_ALLOWED_HOSTS=@http`) |
 | `LKAP_MCP_ALLOWED_HOSTS` | opt | opt | — | comma list of MCP server hosts (V5-09, D-V5-4); empty = any public `https` host that passes the network guard, non-empty = a ceiling, `@http` = reuse `LKAP_HTTP_TOOL_ALLOWED_HOSTS` (then empty allows nothing). Set the same value on both |
@@ -272,8 +272,8 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   fold into header auth; with `auth` set they are filled from it (`credential_id` also mirrors an OAuth
   credential); a value that disagrees with `auth` is a validation error. Stored rows need no data
   migration: they load as header auth and re-save with `auth` (plus the mirrors, for readers that have
-  not moved to `auth`). `kind: "oauth"` is refused at save and at test with `422`
-  `details.reason = "oauth_not_available"` until V5-14.
+  not moved to `auth`). `kind: "oauth"` is saved from V5-14 on (below); until V5-16 the worker skips
+  such a server (it receives no token yet).
 - **Host policy.** At save (`_check_payload`), before a test connection, and on the worker at connect
   time, an MCP url must pass the network guard (`net_guard.check_url`; the worker's `check_url_public`),
   be `https` (the api allows plain `http` only to a loopback host in `LKAP_ENV=dev`; the worker, which
@@ -290,10 +290,65 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   definition (at most 200 tools, descriptions cut to 1,000 characters, an input schema over 16 KB
   dropped). A save that sends no snapshot keeps the stored one while the url is unchanged. The worker
   still lists tools itself at session start; the api strips `cached_tools` from the resolved config.
+  For an `oauth` server the test sends `Authorization: Bearer <the stored access token>`; with no
+  sign-in, a non-`active` one or an expired token it answers `needs_auth` without a request (refresh
+  is V5-16).
 - **Upgrade tripwire.** `agent/tests/unit/test_sdk_tripwires.py` fails when livekit-agents'
   `MCPServerHTTP.__init__` gains `auth`, when `_create_http_client` or its two call sites change, when
   livekit-agents stops pinning `mcp<2`, or when the pinned version moves off 1.8.3; the file says what to
   do (shrink `GuardedMCPServerHTTP` per research §4.3.10).
+
+### MCP servers: signing in with OAuth (V5-14)
+
+`docs/research-v4/tools-and-integrations.md` §4.3.2–§4.3.5, §4.3.8, §4.3.9, §4.3.11; D-V5-2, D-V5-3.
+Migration `v5_004_mcp_oauth` (`mcp_oauth_flows`, `mcp_oauth_clients`). The api is the OAuth client;
+refresh, revoke, the internal token route and the worker bearer are V5-16.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /v1/tools/{id}/oauth/start` | admin + `providers:write` | `McpOauthStartIn{client_secret?, authorization_server?}` → `McpOauthStartOut{status: redirect\|needs_client_registration, authorization_url, expires_at, redirect_uri, issuer, registration: preregistered\|cimd\|dcr}`. Runs discovery and registration and writes a flow row. Refusals are `422` with `details.reason` (`pkce_unsupported`, `blocked_destination`, `issuer_mismatch`, `resource_mismatch`, `no_resource_metadata`, `no_authorization_server_metadata`, `oauth_not_required`, `redirect`, `registration_failed`, `client_id_required`, `not_oauth`, `unreachable`, …). |
+| `GET /v1/tools/{id}/oauth/status` | admin | `McpOauthStatusOut{status: not_connected\|connected\|needs_reauth\|revoked, issuer, scopes, expires_at, connected_at, last_refresh_at, registration, worker_supported: false}`. |
+| `GET /v1/oauth/mcp/callback?state&code&iss?&error?` | **none** (browser redirect; bound by `state`) | `302` to `{LKAP_WEB_BASE_URL}/console/tools?oauth=ok\|error` (no id, no token material; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`); `400` when `state` names no live sign-in (unknown, used, expired, malformed). |
+| `GET /v1/oauth/mcp/client-metadata.json` | public | The deployment's Client ID Metadata Document, only when `LKAP_PUBLIC_BASE_URL` is a public `https` origin; `404` otherwise. |
+
+- **Discovery.** Unauthenticated `initialize` → `401` → `WWW-Authenticate` (`resource_metadata`,
+  `scope`) → protected resource metadata (the header's url, then `/.well-known/oauth-protected-resource/<path>`,
+  then the root) → its `resource` must contain the server's canonical url and is sent as `resource`
+  on both requests → authorization server metadata (RFC 8414 then OpenID, path-inserted then
+  appended) → `issuer` must match; `code_challenge_methods_supported` must list `S256` (absent →
+  refused). Every server-supplied url passes the network guard and must be `https` (plain `http` only
+  to loopback in dev) **before** it is fetched; redirects are never followed; bodies are capped
+  (64 KB); each request times out after 10 s, the whole start after 30 s.
+- **Registration**, in the spec's order: pre-registered (`auth.registration = "preregistered"` +
+  `auth.client_id`; an optional client secret arrives write-only in the start body and is kept
+  encrypted on the `mcp_oauth_clients` row), or a client this workspace already registered at the
+  issuer → the metadata document when the provider supports it and `LKAP_PUBLIC_BASE_URL` is public
+  `https` → dynamic registration (a public client, `application_type` `native` for a loopback return
+  address, `web` otherwise; the registration is stored and reused per workspace and issuer) →
+  `needs_client_registration`.
+- **Flow row.** `state` (32 random bytes) is stored only as its SHA-256; the PKCE verifier only as a
+  vault ciphertext; ten minutes; single use; a new start replaces the tool's pending flow. The row
+  records the workspace, the tool, the initiating actor and the issuer exactly as the metadata spelled it.
+- **Callback checks**, in order: the hashed `state` (constant-time compare) → the row is claimed and
+  committed before anything else → expiry → RFC 9207 (`iss` present: byte-equal to the recorded
+  issuer; absent: refused when the provider advertised `authorization_response_iss_parameter_supported`;
+  on a mismatch `error` is not acted on) → `error` → `code` → the tool still exists, still uses OAuth,
+  and its url is still covered by the flow's `resource` → code exchange (`authorization_code`, the
+  verifier, `redirect_uri`, `resource`; `client_secret_basic` or `_post` when the client has a secret).
+- **The `mcp-oauth` credential** (registry entry `mcp-oauth`, kind `secret_bag`, no secret fields):
+  bag keys `access_token`, `refresh_token`, `expires_at` (absolute ISO UTC), `scope`, `issuer`,
+  `token_endpoint`, `revocation_endpoint`, `resource`, `client_id`, `client_secret`,
+  `token_endpoint_auth_method`, `registration`, `registration_client_uri`, `registration_access_token`,
+  `client_metadata_url`, `status` (`active | needs_reauth | revoked`), `tool_id`, `connected_at`,
+  `last_refresh_at`. Fingerprint `issuer host · first scope`. The callback sets the tool's
+  `auth.credential_id`. At save, an `oauth` definition binds an `mcp-oauth` credential only on update
+  and only when the bag's `tool_id` is that tool and its `resource` covers the url
+  (`422 oauth_credential_mismatch` / `oauth_credential_misuse` otherwise); its url may hold no
+  `{{ secret.* }}` (`422 oauth_url_placeholder`); a save that omits `auth.credential_id` keeps the
+  stored sign-in while the url is unchanged.
+- **Audit**: `mcp_oauth.start`, `mcp_oauth.callback_ok`, `mcp_oauth.callback_rejected` (`reason`),
+  identifiers only. **Sweep**: the sessions sweep deletes consumed or expired flows and
+  dynamically registered clients whose secret expired.
 
 ---
 

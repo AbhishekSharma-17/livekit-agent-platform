@@ -1,0 +1,79 @@
+{
+  "$id": "lkap-contracts/McpOauthStartOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tools/{id}/oauth/start``: where to send the admin's browser, or what is missing.\n\n``status=\"redirect\"``: open ``authorization_url``; the sign-in must finish before\n``expires_at``. ``status=\"needs_client_registration\"``: the provider offers no automatic\nregistration, so an admin registers an app with it (``redirect_uri`` is the address to\npaste), then saves the server with ``auth.registration=\"preregistered\"`` and the client id.\nNever carries a token or a client secret.",
+  "properties": {
+    "authorization_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Authorization Url"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "issuer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Issuer"
+    },
+    "redirect_uri": {
+      "title": "Redirect Uri",
+      "type": "string"
+    },
+    "registration": {
+      "anyOf": [
+        {
+          "enum": [
+            "preregistered",
+            "cimd",
+            "dcr"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Registration"
+    },
+    "status": {
+      "enum": [
+        "redirect",
+        "needs_client_registration"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "redirect_uri"
+  ],
+  "title": "McpOauthStartOut",
+  "type": "object"
+}

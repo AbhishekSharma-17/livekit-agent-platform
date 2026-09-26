@@ -489,6 +489,58 @@ class ToolDryRunResult(BaseModel):
     duration_ms: int
 
 
+# ------------------------------------------------------------------ MCP sign-in (V5-14)
+#: How the api obtained the OAuth client id it signs in with (research-v4 tools §4.3.5).
+McpOauthRegistration = Literal["preregistered", "cimd", "dcr"]
+
+
+class McpOauthStartIn(BaseModel):
+    """``POST /v1/tools/{id}/oauth/start``: begin signing in to an MCP server's OAuth provider.
+
+    ``client_secret`` is for a pre-registered confidential client only. It is write-only:
+    stored in the vault, sent to the provider's token endpoint, never returned or logged.
+    """
+
+    client_secret: str | None = Field(default=None, min_length=1, max_length=2000)
+    authorization_server: str | None = Field(default=None, max_length=2000)
+    """When the server names several sign-in providers, the one to use (default: the first)."""
+
+
+class McpOauthStartOut(BaseModel):
+    """``POST /v1/tools/{id}/oauth/start``: where to send the admin's browser, or what is missing.
+
+    ``status="redirect"``: open ``authorization_url``; the sign-in must finish before
+    ``expires_at``. ``status="needs_client_registration"``: the provider offers no automatic
+    registration, so an admin registers an app with it (``redirect_uri`` is the address to
+    paste), then saves the server with ``auth.registration="preregistered"`` and the client id.
+    Never carries a token or a client secret.
+    """
+
+    status: Literal["redirect", "needs_client_registration"]
+    authorization_url: str | None = None
+    expires_at: datetime | None = None
+    redirect_uri: str
+    issuer: str | None = None
+    registration: McpOauthRegistration | None = None
+
+
+class McpOauthStatusOut(BaseModel):
+    """``GET /v1/tools/{id}/oauth/status``: the tool's sign-in, without any token material.
+
+    ``worker_supported`` stays ``False`` until the worker can use the token (V5-16): a
+    connected server is saved but not yet usable in a session.
+    """
+
+    status: Literal["not_connected", "connected", "needs_reauth", "revoked"]
+    issuer: str | None = None
+    scopes: list[str] = []
+    expires_at: datetime | None = None
+    connected_at: datetime | None = None
+    last_refresh_at: datetime | None = None
+    registration: McpOauthRegistration | None = None
+    worker_supported: bool = False
+
+
 # ------------------------------------------------------------------ knowledge bases
 class KbCreate(BaseModel):
     """``POST /v1/knowledge-bases``."""

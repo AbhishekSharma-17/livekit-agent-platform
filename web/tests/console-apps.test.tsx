@@ -12,7 +12,9 @@ import { useToolProviderToolkits } from "@/components/console/lib/api-hooks";
 import {
   actionFixture,
   actionPage,
+  categoryPage,
   connectionFixture,
+  connectionPage,
   toolkitFixture,
   toolkitPage,
   TOOLKIT_GITHUB_CONNECTED,
@@ -25,9 +27,10 @@ import {
  * "Connect:" or "Actions:".
  */
 
-// jsdom has no ResizeObserver; the shadcn `Select` (category filter, the
-// agent pickers) needs one to mount (see console-http-tool-editor.test.tsx —
-// the only other suite in this repo that renders one).
+// jsdom has no ResizeObserver; the category filter's `SearchableSelect`
+// (Popover + cmdk `Command`, same combination `console-model-combobox.test.tsx`
+// exercises) needs one to mount, and cmdk itself calls `scrollIntoView` on
+// its selected item, also unimplemented in jsdom.
 class ResizeObserverStub {
   observe() {}
   unobserve() {}
@@ -35,14 +38,17 @@ class ResizeObserverStub {
 }
 
 const nativeMatches = Element.prototype.matches;
+const nativeScrollIntoView = Element.prototype.scrollIntoView;
 beforeAll(() => {
   Element.prototype.matches = function matches(this: Element, selector: string) {
     if (selector === ":popover-open" || selector === ":modal") return false;
     return nativeMatches.call(this, selector);
   };
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
 });
 afterAll(() => {
   Element.prototype.matches = nativeMatches;
+  Element.prototype.scrollIntoView = nativeScrollIntoView;
 });
 
 // `vi.unstubAllGlobals()` runs after every test (it also clears the fetch
@@ -197,6 +203,49 @@ describe("AppGallery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
     await screen.findByText("Slack");
     expect(screen.getByText("Google Calendar")).toBeTruthy();
+  });
+
+  it("the category filter lists the complete category list from its own endpoint, title-cased, not just categories seen in the loaded apps", async () => {
+    stubApi((call) => {
+      if (call.url.endsWith("/tool-providers/composio/categories")) return { status: 200, body: categoryPage() };
+      return undefined;
+    });
+    renderWithClient(<AppGallery />);
+    await screen.findByText("Google Calendar");
+    fireEvent.click(screen.getByRole("combobox", { name: "Category" }));
+    // Scoped to the open popover: "Scheduling" is also one of Google
+    // Calendar's own category chips on its card, so an unscoped query is
+    // ambiguous. "Communication" is a real category (the fixture's
+    // categories endpoint includes it) even though no app on this loaded
+    // page carries it — the old behaviour (collecting categories from
+    // `items`) could never have offered it.
+    const listbox = within(await screen.findByRole("dialog"));
+    expect(await listbox.findByText("Communication")).toBeTruthy();
+    expect(listbox.getByText("Developer tools")).toBeTruthy();
+    expect(listbox.getByText("Scheduling")).toBeTruthy();
+  });
+
+  it("picking a category sends its id (not its display name) to the toolkits route and resets to 'All categories' clears it", async () => {
+    const calls = stubApi((call) => {
+      if (call.url.endsWith("/tool-providers/composio/categories")) return { status: 200, body: categoryPage() };
+      return undefined;
+    });
+    renderWithClient(<AppGallery />);
+    await screen.findByText("Google Calendar");
+    fireEvent.click(screen.getByRole("combobox", { name: "Category" }));
+    fireEvent.click(await within(await screen.findByRole("dialog")).findByText("Scheduling"));
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/toolkits?") && c.url.includes("category=scheduling"))).toBe(true));
+
+    // Trigger now reads "Scheduling"; reopen and pick "All categories" to clear the filter.
+    // Snapshot the count first — the very first (unfiltered) mount already made a
+    // `category`-free call, so asserting ">0" without this baseline would pass
+    // even if picking "All categories" sent nothing new.
+    const beforeReset = calls.length;
+    fireEvent.click(screen.getAllByRole("combobox", { name: "Category" }).find((el) => el.tagName === "BUTTON")!);
+    fireEvent.click(await within(await screen.findByRole("dialog")).findByText("All categories"));
+    await waitFor(() =>
+      expect(calls.slice(beforeReset).some((c) => c.url.includes("/toolkits?") && !c.url.includes("category="))).toBe(true),
+    );
   });
 
   it("shows a connected app's live status row instead of a Connect button", async () => {
@@ -443,6 +492,28 @@ describe("ActionsDialog", () => {
     const checkbox = await within(dialog).findByRole("checkbox", { name: /List repositories/ });
     expect(isDisabled(checkbox)).toBe(true);
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("AppCard — a single account still shows the plain row (R-V5-13 backward compatibility)", () => {
+  it('shows the app\'s Default chip on its lone account, "Add another account" underneath, and never "Manage accounts"', async () => {
+    stubApi((call) => {
+      if (call.url.includes("/tool-providers/composio/toolkits") && !/\/toolkits\/[^/?]+/.test(call.url)) {
+        return { status: 200, body: toolkitPage([TOOLKIT_GITHUB_CONNECTED]) };
+      }
+      if (call.url.endsWith("/connections/conn_github")) return { status: 200, body: connectionFixture() };
+      if (call.url.endsWith("/tool-providers/composio/connections") && call.method === "GET") {
+        return { status: 200, body: connectionPage([connectionFixture()]) };
+      }
+      return undefined;
+    });
+    renderWithClient(<AppGallery />);
+    await screen.findByText("GitHub");
+
+    expect(await screen.findByText("Default")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Add another account" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Manage \d+ accounts/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Make default" })).toBeNull();
   });
 });
 

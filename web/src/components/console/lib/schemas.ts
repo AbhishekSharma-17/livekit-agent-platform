@@ -234,13 +234,16 @@ export const toolsConfigSchema = z.object({
    * D-V5-C6) is a passthrough for the same reason as `builtin_execution`
    * above — no JSON-Schema-to-zod step exists, so its nested shape (`mode`,
    * `allowed_toolkits`, `denied_actions`, `router.{search,execute,
-   * manage_connections}`) is mirrored by hand instead of deeply validated.
-   * Without this field `z.object` would strip `config.tools.apps` on every
-   * resolver parse (the file header's warning), silently discarding the
-   * mode picker's value on save. Optional (unlike `builtin_execution`) so
-   * the many fixtures across this codebase's tests that build a `tools`
-   * value by hand, from before V5-47, don't all need updating; `DEFAULT_TOOLS`
-   * (`agents/defaults.ts`) always supplies it in the real editor.
+   * manage_connections}`, and — V5-54, R-V5-13 — `accounts: {toolkit:
+   * [connection_id]}`, the per-app account chooser's value) is mirrored by
+   * hand instead of deeply validated. Without this field `z.object` would
+   * strip `config.tools.apps` on every resolver parse (the file header's
+   * warning), silently discarding the mode picker's value — and, for
+   * `accounts`, which account(s) a multi-account app should use — on save.
+   * Optional (unlike `builtin_execution`) so the many fixtures across this
+   * codebase's tests that build a `tools` value by hand, from before V5-47,
+   * don't all need updating; `DEFAULT_TOOLS` (`agents/defaults.ts`) always
+   * supplies it in the real editor.
    */
   apps: z.custom<AppsMode>().optional(),
 });

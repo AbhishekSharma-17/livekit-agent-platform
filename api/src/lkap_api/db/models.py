@@ -12,6 +12,7 @@ import datetime as dt
 import uuid
 from typing import Any
 
+from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -28,10 +29,12 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     false,
     text,
     true,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
@@ -558,7 +561,12 @@ class Tool(Base):
 
 
 class KnowledgeBase(Base):
-    """A knowledge base; its vectors live in LanceDB, its metadata here."""
+    """A knowledge base; its metadata here, its vectors in the configured vector store.
+
+    The store follows the database (V5-13): the ``kb_vectors`` table
+    (:class:`KbVector`) on Postgres, LanceDB files under ``LKAP_DATA_DIR`` on
+    SQLite or with ``LKAP_VECTOR_STORE=lancedb`` (``lkap_api.kb.store``).
+    """
 
     __tablename__ = "knowledge_bases"
 
@@ -610,7 +618,7 @@ class KbDocument(Base):
 
 
 class KbChunk(Base):
-    """A chunk of a document; the vector with the same id lives in LanceDB.
+    """A chunk of a document; the vector with the same id lives in the vector store.
 
     `meta` (V5-01) holds the chunk's locators: `filename`, `heading_path`
     (list of headings), `page` (1-based or `None`), and `char_start` /
@@ -655,6 +663,81 @@ class KbEval(Base):
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
     __table_args__ = (Index("ix_kb_evals_kb", "kb_id"),)
+
+
+# --------------------------------------------------------------------------- Postgres-only (V5-13)
+class PgOnlyBase(DeclarativeBase):
+    """Declarative base of the tables that exist on Postgres only.
+
+    GUARD: these models are deliberately **not** in :attr:`Base.metadata`.
+    Migration ``v5_003_pgvector`` creates them on Postgres and is a no-op on
+    SQLite, so keeping them out of ``Base.metadata`` keeps ``create_all`` on
+    SQLite, the "upgrade head matches the models" test and ``alembic check`` on
+    SQLite exactly as they were. On Postgres, :func:`_create_postgres_only`
+    and :func:`_drop_postgres_only` hook ``Base.metadata.create_all`` /
+    ``drop_all`` (tests and first-run dev) so the table appears and goes with
+    the rest of the schema.
+    """
+
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+class KbVector(PgOnlyBase):
+    """One chunk's embedding in Postgres (``kb_vectors``, the pgvector store; Postgres only).
+
+    ``embedding`` has no fixed width (knowledge bases built by different
+    embedders share the table); each knowledge base gets its own partial HNSW
+    index on ``embedding::vector(<its dimension>)``, created by the store
+    (``lkap_api.kb.stores.pgvector``), not by this model. The foreign key is
+    ``DEFERRABLE INITIALLY DEFERRED`` because the ingest path writes the
+    vectors before it flushes the chunk rows of the same transaction; its
+    ``ON DELETE CASCADE`` still fires at once (Postgres never defers
+    referential actions), so deleting chunks deletes their vectors.
+    """
+
+    __tablename__ = "kb_vectors"
+
+    chunk_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey(
+            KbChunk.__table__.c.id,
+            ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
+            name="fk_kb_vectors_chunk_id_kb_chunks",
+        ),
+        primary_key=True,
+    )
+    kb_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    embedding: Mapped[Any] = mapped_column(VECTOR(), nullable=False)
+
+    __table_args__ = (Index("ix_kb_vectors_kb_id", "kb_id"),)
+
+
+@event.listens_for(Base.metadata, "after_create")
+def _create_postgres_only(target: MetaData, connection: Connection, **kw: Any) -> None:
+    """After ``Base.metadata.create_all`` on Postgres: the ``vector`` extension and ``kb_vectors``.
+
+    Skipped (with nothing created) on any other dialect, and on a Postgres
+    server without the pgvector extension available, so a plain ``postgres``
+    image still gets the rest of the schema.
+    """
+    if connection.dialect.name != "postgresql":
+        return
+    available = connection.execute(
+        text("SELECT 1 FROM pg_available_extensions WHERE name = 'vector'")
+    ).first()
+    if available is None:
+        return
+    connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    PgOnlyBase.metadata.create_all(connection)
+
+
+@event.listens_for(Base.metadata, "before_drop")
+def _drop_postgres_only(target: MetaData, connection: Connection, **kw: Any) -> None:
+    """Before ``Base.metadata.drop_all`` on Postgres: drop ``kb_vectors`` (it references ``kb_chunks``)."""
+    if connection.dialect.name == "postgresql":
+        PgOnlyBase.metadata.drop_all(connection)
 
 
 class AgentKnowledgeBase(Base):

@@ -27,6 +27,7 @@ dependencies = [
   "arq>=0.26,<1",
   "boto3>=1.35,<2",
   "markitdown[docx,pptx,xlsx]==0.1.8",
+  "pgvector>=0.4,<1",
 ]
 
 [dependency-groups]

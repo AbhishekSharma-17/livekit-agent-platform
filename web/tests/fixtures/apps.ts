@@ -8,6 +8,7 @@ import type {
   ToolkitOut,
   ToolkitPage,
 } from "@/contracts/lkap-contracts";
+import type { ToolProviderCategoryOut, ToolProviderCategoryPage } from "@/components/console/lib/api-hooks";
 
 /**
  * Fixtures for Tools -> Apps (Composio, docs/v5/COMPOSIO.md §6, V5-22):
@@ -56,6 +57,24 @@ export function toolkitPage(items: ToolkitOut[] = [toolkitFixture(), TOOLKIT_SLA
   return { items, next_cursor: nextCursor, total: items.length };
 }
 
+/** `GET /v1/tool-providers/composio/categories` — the gallery's complete category list. */
+export function categoryPage(
+  items: ToolProviderCategoryOut[] = [
+    { id: "scheduling", name: "Scheduling" },
+    { id: "communication", name: "Communication" },
+    { id: "developer-tools", name: "Developer tools" },
+  ],
+): ToolProviderCategoryPage {
+  return { items };
+}
+
+/**
+ * A single account of an app — realistically, the *only* account a real
+ * connection ever has until R-V5-13's "Add another account": the backend's
+ * lazy backfill (`AppConnection.label()`, `api/src/lkap_api/tool_providers/service.py`)
+ * makes the first (and, here, only) connection the default with the app's
+ * own name as its label.
+ */
 export function connectionFixture(overrides: Partial<AppConnectionOut> = {}): AppConnectionOut {
   return {
     id: "conn_github",
@@ -70,8 +89,22 @@ export function connectionFixture(overrides: Partial<AppConnectionOut> = {}): Ap
     needs_reconnect: false,
     picked_actions: [],
     agents_using: 0,
+    label: "GitHub",
+    is_default: true,
     ...overrides,
   };
+}
+
+/**
+ * Two accounts of the same app (R-V5-13, `console-app-accounts.test.tsx`):
+ * "Work" is the default, connected first; "Personal" a second account of
+ * the same toolkit, its own connection row.
+ */
+export function connectionFixtureAccounts(overrides: Partial<AppConnectionOut> = {}): [AppConnectionOut, AppConnectionOut] {
+  return [
+    connectionFixture({ ...overrides, id: "conn_work", label: "Work", is_default: true }),
+    connectionFixture({ ...overrides, id: "conn_personal", label: "Personal", is_default: false }),
+  ];
 }
 
 export function connectionPage(items: AppConnectionOut[] = [connectionFixture()]): AppConnectionPage {

@@ -89,7 +89,9 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # V5-13: pgvector, the default vector store whenever the database is
+        # Postgres (migration v5_003_pgvector needs the `vector` extension).
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: lkap
           POSTGRES_PASSWORD: lkap
@@ -106,6 +108,11 @@ jobs:
       # Used by `tests/conftest.py::postgres_url` to point the whole suite at Postgres.
       LKAP_TEST_DATABASE_URL: postgresql+asyncpg://lkap:lkap@localhost:5432/lkap_test
       LKAP_ENV: dev
+      # V5-13: the kb tests written before V5-13 seed LanceDB directly, so the
+      # suite keeps LanceDB; tests/test_kb_store_pgvector.py and the Postgres
+      # tests in tests/test_kb_reindex.py clear this and run on PgVectorStore
+      # (the store the database picks by default).
+      LKAP_VECTOR_STORE: lancedb
 
     steps:
       - uses: actions/checkout@v4

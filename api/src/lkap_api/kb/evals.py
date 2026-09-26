@@ -52,7 +52,7 @@ from lkap_api.kb.embed import resolve_embedder
 from lkap_api.kb.ingest import warm_embedder
 from lkap_api.kb.rerank import get_local_reranker
 from lkap_api.kb.service import KnowledgeService
-from lkap_api.kb.store import get_lancedb_store
+from lkap_api.kb.store import resolve_store
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -428,13 +428,14 @@ async def run_kb_evaluate_job(ctx: JobContext, payload: dict[str, Any]) -> None:
     # Loaded before the search session opens (a first model load can take long).
     await warm_embedder(embedder)
 
-    store = get_lancedb_store(ctx.settings.data_dir)
     local = options.rerank == "local"
     reranker = get_local_reranker(ctx.settings.data_dir, ctx.settings.rerank_model) if local else None
     async with ctx.database.session() as session:
         evals = await load_evals(session, kb_id)
         documents = await session.execute(select(KbDocument.id).where(KbDocument.kb_id == kb_id))
         present = set(documents.scalars())
+        # V5-13: resolved per session (pgvector queries run on it).
+        store = resolve_store(ctx.settings, session)
         service = KnowledgeService(session, store=store, embedder=embedder, reranker=reranker)
 
         async def search(query: str) -> KbSearchResponse:

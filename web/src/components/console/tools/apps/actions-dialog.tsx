@@ -37,6 +37,14 @@ export interface ActionsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
+   * R-V5-13: "the Actions dialog is opened per account". Pass the account's
+   * label only when its app has more than one connected account — the title
+   * and success toast then say which inbox just gained the actions ("Gmail
+   * actions — Work", "Added 2 action(s) from Gmail (Work)"); with a single
+   * account the app's name alone still reads fine, so callers omit this.
+   */
+  accountLabel?: string;
+  /**
    * V5-48: opened from an agent's own Connected apps card — preselects
    * "attach to" that agent (docs/v5/COMPOSIO.md §6: "reusing V5-22's picker
    * with 'attach to this agent' preselected"). Still an editable select, not
@@ -72,7 +80,13 @@ export function ActionsDialog({
   onOpenChange,
   presetAgentId,
   onAdded,
+  accountLabel,
 }: ActionsDialogProps) {
+  // "Gmail actions — Work" / "Added 2 action(s) from Gmail (Work)" — two
+  // different shapes for the same distinction, so the title reads as a
+  // heading and the toast reads as a sentence.
+  const titleSuffix = accountLabel ? ` — ${accountLabel}` : "";
+  const inlineAccount = accountLabel ? ` (${accountLabel})` : "";
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [featuredOnly, setFeaturedOnly] = React.useState(false);
@@ -139,8 +153,8 @@ export function ActionsDialog({
       });
       toast.success(
         attachAgentId
-          ? `Added ${checked.size} action(s) from ${toolkitName} and attached to the agent`
-          : `Added ${checked.size} action(s) from ${toolkitName}`,
+          ? `Added ${checked.size} action(s) from ${toolkitName}${inlineAccount} and attached to the agent`
+          : `Added ${checked.size} action(s) from ${toolkitName}${inlineAccount}`,
       );
       onAdded?.(result);
       onOpenChange(false);
@@ -154,8 +168,8 @@ export function ActionsDialog({
       <DialogContent size="lg">
         <form onSubmit={(event) => void submit(event)} className="flex min-h-0 flex-1 flex-col" noValidate>
           <DialogHeader>
-            <DialogTitle>{toolkitName} actions</DialogTitle>
-            <DialogDescription>Pick what agents may do with {toolkitName}. Destructive actions need a confirm.</DialogDescription>
+            <DialogTitle>{toolkitName} actions{titleSuffix}</DialogTitle>
+            <DialogDescription>Pick what agents may do with {toolkitName}{inlineAccount}. Destructive actions need a confirm.</DialogDescription>
           </DialogHeader>
 
           <DialogBody className="flex flex-col gap-3">

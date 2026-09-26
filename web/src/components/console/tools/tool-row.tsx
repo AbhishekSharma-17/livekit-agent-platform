@@ -20,8 +20,13 @@ import type { ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/
 /** `method + host` per docs/UI_UX_SPEC.md §7.6 item 4 ("method + host"), not the full URL template. */
 export function requestSummary(tool: ToolOut): string {
   if ("tool_slug" in tool.definition) {
-    // V5-47: a connected app's action has no URL of its own; show the app it belongs to.
-    return `App action · ${tool.definition.toolkit || "app"}`;
+    // V5-47: a connected app's action has no URL of its own. Its description
+    // already carries the account's label as a "(<label>) " prefix whenever
+    // the app has more than one account (R-V5-13 item 3, `materialise.py`'s
+    // `AccountNaming.describe`, e.g. "(Work) Send an email") — showing it
+    // here is how a builder tells which inbox a tool touches, with no extra
+    // connections lookup needed on this side.
+    return tool.definition.description || `App action · ${tool.definition.toolkit || "app"}`;
   }
   if (tool.definition.kind === "http") {
     let host = tool.definition.url;

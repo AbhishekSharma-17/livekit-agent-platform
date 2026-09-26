@@ -70,7 +70,7 @@ from lkap_api.kb.embed import (
     resolve_embedder,
     token_counter_for,
 )
-from lkap_api.kb.store import VectorRecord, VectorStore, get_lancedb_store
+from lkap_api.kb.store import VectorRecord, VectorStore, resolve_store
 from lkap_api.logging import get_logger
 from lkap_api.storage.base import UploadTooLargeError
 from lkap_api.storage.resolve import default_storage
@@ -915,8 +915,9 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
             await _audit_seed_ingest(session, origin, kb_id=kb_id, document_id=document_id, status="failed")
         return
 
-    store = get_lancedb_store(ctx.settings.data_dir)
     async with ctx.database.session() as session:
+        # V5-13: resolved per session (pgvector writes in this session's transaction).
+        store = resolve_store(ctx.settings, session)
         outcome = await ingest_into_session(
             session,
             store=store,

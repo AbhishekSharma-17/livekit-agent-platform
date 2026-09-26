@@ -158,6 +158,39 @@ describe("ToolsTab", () => {
       expect(screen.queryByText("Apps aren't set up yet")).toBeNull();
     });
 
+    it("R-V5-13: passes an app with several accounts through to the Connected apps card without error (the account chooser lives there)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.includes("/providers")) return jsonResponse(PROVIDERS);
+          if (url.includes("/packs")) return jsonResponse({ items: [{ manifest: { id: "generic", tool_names: ["custom_pack_tool"] } }] });
+          if (url.includes("/tool-providers/composio/status")) return jsonResponse({ enabled: true, credential_id: "cred-1", connections: 2 });
+          if (url.includes("/tool-providers/composio/connections")) {
+            return jsonResponse({
+              items: [
+                { id: "conn_work", provider: "composio", toolkit: "github", toolkit_name: "GitHub", subject: "ws:ws1", status: "active", method: "managed", needs_reconnect: false, picked_actions: [], agents_using: 0, label: "Work", is_default: true },
+                { id: "conn_personal", provider: "composio", toolkit: "github", toolkit_name: "GitHub", subject: "ws:ws1", status: "active", method: "managed", needs_reconnect: false, picked_actions: [], agents_using: 0, label: "Personal", is_default: false },
+              ],
+              total: 2,
+            });
+          }
+          if (url.includes("/tools")) return jsonResponse(EMPTY_TOOLS);
+          if (/\/toolkits\/[^/?]+\/actions/.test(url)) return jsonResponse({ items: [], next_cursor: null, total: 0 });
+          return jsonResponse({});
+        }),
+      );
+      const agentInServerMode = {
+        ...AGENT,
+        config: { ...AGENT.config, tools: { apps: { mode: "server", allowed_toolkits: ["github"] } } },
+      } as unknown as AgentOut;
+      render(<Harness agent={agentInServerMode} />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(await screen.findByText("Which accounts")).toBeTruthy();
+      expect(screen.getByText(/Work/)).toBeTruthy();
+      expect(screen.getByText(/Personal/)).toBeTruthy();
+    });
+
     it("keeps a Composio app server / tool finder row out of the MCP servers section (it's managed from the card above)", async () => {
       // `tool_providers/provisioning.py` creates these with this exact
       // `agent_id`, so `useTools(agent.id)` would otherwise return them here

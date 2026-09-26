@@ -610,7 +610,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-10 | Sonnet | 3 | planned | | | |
 | V5-11 | Sonnet | 3 | merged | | | |
 | V5-12 | Sonnet | 3 | merged | | | |
-| V5-13 | Opus | 3 | planned | | needs Docker | |
+| V5-13 | Opus | 3 | merged | | needs Docker | |
 | V5-14 | Opus | 3 | planned | | with V5-16 | |
 | V5-15 | Opus | 3 | planned | | | |
 | V5-48 | Sonnet | 3 | merged | | Composio live check | |

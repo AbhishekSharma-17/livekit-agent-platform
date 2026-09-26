@@ -60,12 +60,23 @@ export function fieldsFor(toolkit: Pick<ToolkitOut, "auth_fields">, method: Conn
   return [];
 }
 
+/** `AppConnectIn.label`'s limit (R-V5-13; docs/v5/_asks.md #85: "≤ 40"). */
+const MAX_ACCOUNT_LABEL = 40;
+
 export interface ConnectAppDialogProps {
   toolkit: { slug: string; name: string };
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onConnected?: () => void;
+  /**
+   * R-V5-13 item 2/4: this is "Add another account" on an app that already
+   * has one — same connect flow, same auth config, but with a label field
+   * (so the new account is distinguishable right away) and the "wrong
+   * account" sign-in hint, since Composio's own pages don't say whether the
+   * vendor consent screen always offers an account chooser.
+   */
+  isAddingAccount?: boolean;
 }
 
 /**
@@ -74,8 +85,10 @@ export interface ConnectAppDialogProps {
  * immediate result (API key, none) or a new-tab sign-in with status polling
  * (managed, your own OAuth app). Fields are forwarded to Composio once and
  * never rendered again once submitted (`AppConnectIn.fields`, write-only).
+ * `isAddingAccount` (R-V5-13) additionally asks for a name for the new
+ * account and shows the "wrong account" sign-in hint.
  */
-export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChange, onConnected }: ConnectAppDialogProps) {
+export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChange, onConnected, isAddingAccount = false }: ConnectAppDialogProps) {
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
 
@@ -92,6 +105,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
   const [method, setMethod] = React.useState<ConnectMethod | "">("");
   const [subject, setSubject] = React.useState<SubjectKind>("workspace");
   const [agentId, setAgentId] = React.useState("");
+  const [accountLabel, setAccountLabel] = React.useState("");
   const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [redirectUrl, setRedirectUrl] = React.useState<string | null>(null);
@@ -112,6 +126,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
     setMethod("");
     setSubject("workspace");
     setAgentId("");
+    setAccountLabel("");
     setFieldValues({});
     setPendingId(null);
     setRedirectUrl(null);
@@ -155,6 +170,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
         subject,
         agent_id: subject === "agent" ? agentId : null,
         fields: method === "custom_oauth" || method === "api_key" ? fieldValues : {},
+        label: isAddingAccount && accountLabel.trim() ? accountLabel.trim() : undefined,
       });
       setFieldValues({});
       if (result.redirect_url) {
@@ -194,9 +210,11 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
     <DialogContent size="md" aria-describedby="connect-app-description">
       <form onSubmit={(event) => void submit(event)} className="flex min-h-0 flex-1 flex-col" noValidate>
         <DialogHeader>
-          <DialogTitle>Connect {toolkit.name}</DialogTitle>
+          <DialogTitle>{isAddingAccount ? `Add another ${toolkit.name} account` : `Connect ${toolkit.name}`}</DialogTitle>
           <DialogDescription id="connect-app-description">
-            Agents can use {toolkit.name} once it&apos;s connected — pick actions for them in Actions afterwards.
+            {isAddingAccount
+              ? `Sign in with the account you want to add. If the wrong account is preselected, sign out of ${toolkit.name} in your browser or use a private window.`
+              : `Agents can use ${toolkit.name} once it's connected — pick actions for them in Actions afterwards.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -301,6 +319,18 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
                   />
                 </Field>
               ))}
+
+              {isAddingAccount ? (
+                <Field label="Name this account" htmlFor="connect-account-label" optional>
+                  <Input
+                    id="connect-account-label"
+                    placeholder="e.g. Work"
+                    maxLength={MAX_ACCOUNT_LABEL}
+                    value={accountLabel}
+                    onChange={(event) => setAccountLabel(event.target.value)}
+                  />
+                </Field>
+              ) : null}
 
               <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
                 <legend className="mb-1 text-sm font-medium text-foreground">Who can use it</legend>

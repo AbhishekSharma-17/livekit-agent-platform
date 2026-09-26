@@ -11,7 +11,7 @@ Chained after ``v5_010_tool_provider_kind``, the head when V5-15 started (the
 ledger id ``v5_009`` was reserved before V5-47 took ``v5_010``).
 
 Revision ID: v5_009_consent
-Revises: v5_010_tool_provider_kind
+Revises: v5_003_pgvector
 Create Date: 2026-09-27
 """
 
@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "v5_009_consent"
-down_revision: str | None = "v5_010_tool_provider_kind"
+down_revision: str | None = "v5_003_pgvector"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

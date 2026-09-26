@@ -40,6 +40,16 @@ def _load(name: str) -> Any:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
+def _category_ids(item: dict[str, Any]) -> set[str]:
+    """A toolkit's category ids, lower-cased (a fixture category may be a plain string or `{id, name}`)."""
+    ids: set[str] = set()
+    for cat in (item.get("meta") or {}).get("categories") or []:
+        raw = cat.get("id") or cat.get("name") if isinstance(cat, dict) else cat
+        if raw:
+            ids.add(str(raw).lower())
+    return ids
+
+
 @dataclass
 class Call:
     """One adapter call as the fake saw it."""
@@ -55,6 +65,7 @@ class ComposioWorld:
 
     valid_keys: set[str] = field(default_factory=lambda: {VALID_KEY})
     toolkits: dict[str, Any] = field(default_factory=lambda: _load("toolkits.json"))
+    categories: dict[str, Any] = field(default_factory=lambda: _load("categories.json"))
     toolkit_details: dict[str, Any] = field(default_factory=lambda: _load("toolkit_details.json"))
     tools: dict[str, list[dict[str, Any]]] = field(default_factory=lambda: _load("tools.json"))
     responses: dict[str, Any] = field(default_factory=lambda: _load("responses.json"))
@@ -182,6 +193,8 @@ class FakeComposio:
         page = copy.deepcopy(self.world.toolkits)
         if search:
             page["items"] = [i for i in page["items"] if search.lower() in i["name"].lower()]
+        if category:
+            page["items"] = [i for i in page["items"] if category.lower() in _category_ids(i)]
         if cursor:
             page["items"], page["next_cursor"] = [], None
         page["items"] = page["items"][:limit]
@@ -193,6 +206,14 @@ class FakeComposio:
         if detail is None:
             raise ToolProviderNotFoundError("Toolkit not found", status=404)
         return dict(copy.deepcopy(detail))
+
+    async def list_toolkit_categories(self, *, cursor: str | None = None, limit: int = 100) -> dict[str, Any]:
+        self._enter("list_toolkit_categories", cursor=cursor, limit=limit)
+        page = copy.deepcopy(self.world.categories)
+        if cursor:
+            page["items"], page["next_cursor"] = [], None
+        page["items"] = page["items"][:limit]
+        return dict(page)
 
     async def list_tools(
         self,

@@ -93,6 +93,14 @@ class Settings(BaseSettings):
     #: `LKAP_RERANK_MODEL`: the local cross-encoder the knowledge search can
     #: rerank with (fastembed `TextCrossEncoder`; used from V5-04).
     rerank_model: str = DEFAULT_RERANK_MODEL
+    #: `LKAP_VECTOR_STORE` (V5-13, D-V5-12): where knowledge-base vectors live.
+    #: Unset (the default) follows the database: `pgvector` (the `kb_vectors`
+    #: table, migration `v5_003`) when `LKAP_DATABASE_URL` is Postgres, `lancedb`
+    #: (files under `LKAP_DATA_DIR`) otherwise. `lancedb` forces LanceDB on any
+    #: database; `pgvector` on a SQLite database is refused when a store is
+    #: resolved. Changing it on a running deployment needs `kb_reindex` per
+    #: knowledge base (docs/RUNBOOK.md).
+    vector_store: Literal["lancedb", "pgvector"] | None = None
     bootstrap_credentials_json: str | None = None
     bootstrap_owner_email: str = DEFAULT_OWNER_EMAIL
     bootstrap_owner_password: str | None = None
@@ -199,6 +207,14 @@ class Settings(BaseSettings):
     def worker_callback_url_is_derived(self) -> bool:
         """Whether :attr:`worker_callback_base_url` is a `PORT`-based guess, not an explicit setting."""
         return not self.api_base_url and not self.public_base_url
+
+    @field_validator("vector_store", mode="before")
+    @classmethod
+    def _blank_vector_store_is_unset(cls, value: object) -> object:
+        """`LKAP_VECTOR_STORE=` (empty) means "follow the database", like leaving it unset."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value.strip().lower() if isinstance(value, str) else value
 
     @field_validator("bootstrap_credentials_json")
     @classmethod

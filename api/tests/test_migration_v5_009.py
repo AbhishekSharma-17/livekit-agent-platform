@@ -19,7 +19,7 @@ from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
 REVISION = "v5_009_consent"
-PREVIOUS = "v5_010_tool_provider_kind"
+PREVIOUS = "v5_003_pgvector"
 
 
 @pytest.fixture

@@ -126,7 +126,62 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
     return allowedToolkits.length === 0 || allowedToolkits.includes(toolkit);
   }
 
-  const allowedCount = connections.filter((c) => isAllowed(c.toolkit)).length;
+  // Distinct *apps*, not connections — R-V5-13 lets one toolkit have several
+  // accounts (several connection rows), and "at least one app must stay
+  // allowed" (`allowToggleOff` below) means one app, not one account.
+  const allowedCount = new Set(connections.filter((c) => isAllowed(c.toolkit)).map((c) => c.toolkit)).size;
+
+  // Every account of the workspace, grouped by toolkit (R-V5-13: one app may
+  // have several) — recomputed each render rather than memoized: `connections`
+  // is a fresh `?? []` fallback array on every render anyway (react-query
+  // only stabilizes `.data`, not this derived default), so a dependency-array
+  // memo here would just re-run every time regardless.
+  const appGroups: AppConnectionOut[][] = [];
+  {
+    const byToolkit = new Map<string, AppConnectionOut[]>();
+    for (const connection of connections) {
+      const list = byToolkit.get(connection.toolkit);
+      if (list) list.push(connection);
+      else byToolkit.set(connection.toolkit, [connection]);
+    }
+    appGroups.push(...byToolkit.values());
+  }
+
+  /** How many accounts this toolkit has among the workspace's connections (for the "(Work)" label on a single row in "actions" mode). */
+  function accountCountFor(toolkit: string): number {
+    return connections.filter((c) => c.toolkit === toolkit).length;
+  }
+
+  /** `AppsMode.accounts[toolkit]` if set, else just the app's default account — "empty = the default account" (R-V5-13). */
+  function selectedAccountsFor(toolkit: string, accounts: AppConnectionOut[]): string[] {
+    const configured = (watch("config.tools.apps.accounts") ?? {})[toolkit];
+    if (configured && configured.length > 0) return configured;
+    const defaultAccount = accounts.find((a) => a.is_default) ?? accounts[0];
+    return defaultAccount ? [defaultAccount.id] : [];
+  }
+
+  /**
+   * The per-app account chooser (R-V5-13 item 4, "server"/"router" modes):
+   * writes `tools.apps.accounts[toolkit]`. The default account can never be
+   * unchecked down to zero — that's exactly what an empty/absent entry
+   * already means, so the two states collapse back to one (no entry) rather
+   * than storing a redundant `[defaultId]`.
+   */
+  function toggleAccount(toolkit: string, accountId: string, checked: boolean, accounts: AppConnectionOut[]) {
+    const defaultAccount = accounts.find((a) => a.is_default) ?? accounts[0];
+    const current = selectedAccountsFor(toolkit, accounts);
+    const nextSet = new Set(current);
+    if (checked) nextSet.add(accountId);
+    else nextSet.delete(accountId);
+    if (defaultAccount && nextSet.size === 0) nextSet.add(defaultAccount.id);
+    const nextArr = accounts.filter((a) => nextSet.has(a.id)).map((a) => a.id);
+    const isJustDefault = defaultAccount ? nextArr.length === 1 && nextArr[0] === defaultAccount.id : nextArr.length === 0;
+    const currentAccounts = getValues("config.tools.apps.accounts") ?? {};
+    const nextAccounts = { ...currentAccounts };
+    if (isJustDefault) delete nextAccounts[toolkit];
+    else nextAccounts[toolkit] = nextArr;
+    setValue("config.tools.apps.accounts", nextAccounts, { shouldDirty: true });
+  }
 
   function toggleAllowed(toolkit: string, checked: boolean) {
     if (checked) {
@@ -195,7 +250,10 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
   }
 
   const activeOption = MODE_OPTIONS.find((option) => option.value === mode) ?? MODE_OPTIONS[0];
-  const allowedConnections = connections.filter((connection) => isAllowed(connection.toolkit));
+  // One entry per *app*, not per account (`appGroups` groups the raw
+  // `connections` list) — "Actions the agent may take" is scoped to a
+  // toolkit's actions, so two accounts of the same app must not duplicate it.
+  const allowedAppGroups = appGroups.filter((accounts) => isAllowed(accounts[0].toolkit));
 
   // The pure onboarding empty state only applies while `mode` is still
   // "off" — an agent already set to a dynamic mode whose workspace later
@@ -295,38 +353,53 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
                     </Button>
                   }
                 />
-              ) : (
+              ) : mode === "actions" ? (
                 <ul className="flex flex-col gap-2">
                   {connections.map((connection) => (
                     <AppRow
                       key={connection.id}
                       connection={connection}
-                      mode={mode}
-                      allowed={isAllowed(connection.toolkit)}
-                      allowToggleOff={!isAllowed(connection.toolkit) || allowedCount > 1 || allowedToolkits.length === 0}
-                      onToggleAllowed={(checked) => toggleAllowed(connection.toolkit, checked)}
+                      showAccountLabel={accountCountFor(connection.toolkit) > 1}
                       onOpenActions={() => setActionsFor(connection)}
-                      attachedTools={mode === "actions" ? attachedToolsFor(connection.id) : []}
+                      attachedTools={attachedToolsFor(connection.id)}
                       onToggleTool={setToolAttached}
                     />
                   ))}
+                </ul>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {appGroups.map((accounts) => {
+                    const toolkit = accounts[0].toolkit;
+                    return (
+                      <AppAllowRow
+                        key={toolkit}
+                        toolkit={toolkit}
+                        accounts={accounts}
+                        allowed={isAllowed(toolkit)}
+                        allowToggleOff={!isAllowed(toolkit) || allowedCount > 1 || allowedToolkits.length === 0}
+                        onToggleAllowed={(checked) => toggleAllowed(toolkit, checked)}
+                        selectedAccountIds={selectedAccountsFor(toolkit, accounts)}
+                        onToggleAccount={(accountId, checked) => toggleAccount(toolkit, accountId, checked, accounts)}
+                      />
+                    );
+                  })}
                 </ul>
               )}
             </SectionRow>
           ) : null}
 
-          {(mode === "server" || mode === "router") && allowedConnections.length > 0 ? (
+          {(mode === "server" || mode === "router") && allowedAppGroups.length > 0 ? (
             <SectionRow className="flex flex-col gap-3">
               <p className="text-sm font-medium text-foreground">Actions the agent may take</p>
               <p className="text-[0.8125rem] text-muted-foreground">
                 Destructive actions (delete, remove, send money) stay blocked until you review them.
               </p>
               <div className="flex flex-col gap-3" data-issue-path="tools.apps.denied_actions">
-                {allowedConnections.map((connection) => (
+                {allowedAppGroups.map((accounts) => (
                   <AppActionsList
-                    key={connection.id}
-                    toolkit={connection.toolkit}
-                    toolkitName={connection.toolkit_name ?? connection.toolkit}
+                    key={accounts[0].toolkit}
+                    toolkit={accounts[0].toolkit}
+                    toolkitName={accounts[0].toolkit_name ?? accounts[0].toolkit}
                     denied={deniedActions}
                     reviewed={reviewedActions}
                     onDeny={denyAction}
@@ -349,36 +422,109 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
           onOpenChange={closeActionsDialog}
           presetAgentId={agentId}
           onAdded={handleActionsAdded}
+          accountLabel={accountCountFor(actionsFor.toolkit) > 1 ? actionsFor.label : undefined}
         />
       ) : null}
     </Section>
   );
 }
 
-/** One connected app's row: identity, status, and either an Actions button (+ attached actions) or an allow checkbox. */
+/** One connected account's row ("actions" mode): identity, status, its own Actions button and attached-action chips. */
 function AppRow({
   connection,
-  mode,
-  allowed,
-  allowToggleOff,
-  onToggleAllowed,
+  showAccountLabel,
   onOpenActions,
   attachedTools,
   onToggleTool,
 }: {
   connection: AppConnectionOut;
-  mode: Mode;
-  allowed: boolean;
-  /** False only for the last remaining allowed app among more than one connected app (unchecking it would silently mean "every app" again, per `AppsMode.allowed_toolkits`'s "empty = all" contract). */
-  allowToggleOff: boolean;
-  onToggleAllowed: (checked: boolean) => void;
+  /** True once the app has more than one account (R-V5-13) — shows the account's label so the two rows are distinguishable. */
+  showAccountLabel: boolean;
   onOpenActions: () => void;
   attachedTools: ToolOut[];
   onToggleTool: (id: string, attached: boolean) => void;
 }) {
   const name = connection.toolkit_name ?? connection.toolkit;
   const needsReconnect = connection.needs_reconnect || connection.status !== "active";
-  const inputId = `apps-allow-${connection.id}`;
+
+  return (
+    <li className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <VendorMark vendor={name} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">
+              {name}{" "}
+              {showAccountLabel ? <span className="font-normal text-muted-foreground">({connection.label ?? name})</span> : null}
+            </p>
+            {needsReconnect ? (
+              <Link href="/console/tools?tab=apps" className="text-xs text-warning-text underline underline-offset-2">
+                Needs reconnect
+              </Link>
+            ) : (
+              <StatusChip tone="success" size="sm">
+                Connected
+              </StatusChip>
+            )}
+          </div>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onOpenActions}>
+          Actions
+        </Button>
+      </div>
+      {attachedTools.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5 pl-7">
+          {attachedTools.map((tool) => (
+            <li key={tool.id} className="inline-flex items-center gap-1 rounded-full bg-secondary py-0.5 pr-1 pl-2.5 font-mono text-xs text-secondary-foreground">
+              {tool.name}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="size-4"
+                aria-label={`Remove ${tool.name} from this agent`}
+                onClick={() => onToggleTool(tool.id, false)}
+              >
+                ×
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * One app's row in the "server"/"router" modes: the app-level "Let the
+ * agent use this app" checkbox (`allowed_toolkits`), plus — once the app has
+ * more than one account — a nested multi-select writing
+ * `tools.apps.accounts[toolkit]` (R-V5-13 item 4). The default account is
+ * preselected and can't be unchecked down to zero (an empty entry already
+ * means "just the default", so that's a no-op, not a lockout).
+ */
+function AppAllowRow({
+  toolkit,
+  accounts,
+  allowed,
+  allowToggleOff,
+  onToggleAllowed,
+  selectedAccountIds,
+  onToggleAccount,
+}: {
+  toolkit: string;
+  accounts: AppConnectionOut[];
+  allowed: boolean;
+  /** False only for the last remaining allowed app among more than one connected app (unchecking it would silently mean "every app" again, per `AppsMode.allowed_toolkits`'s "empty = all" contract). */
+  allowToggleOff: boolean;
+  onToggleAllowed: (checked: boolean) => void;
+  selectedAccountIds: string[];
+  onToggleAccount: (accountId: string, checked: boolean) => void;
+}) {
+  const representative = accounts[0];
+  const name = representative.toolkit_name ?? toolkit;
+  const needsReconnect = accounts.some((account) => account.needs_reconnect || account.status !== "active");
+  const inputId = `apps-allow-${toolkit}`;
   const uncheckDisabled = allowed && !allowToggleOff;
 
   return (
@@ -399,46 +545,50 @@ function AppRow({
             )}
           </div>
         </div>
-        {mode === "actions" ? (
-          <Button type="button" variant="outline" size="sm" onClick={onOpenActions}>
-            Actions
-          </Button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <Checkbox
-              id={inputId}
-              checked={allowed}
-              disabled={uncheckDisabled}
-              onCheckedChange={(v) => onToggleAllowed(v === true)}
-            />
-            <Label
-              htmlFor={inputId}
-              className="text-[0.8125rem] font-normal text-muted-foreground"
-              title={uncheckDisabled ? "At least one connected app must stay allowed" : undefined}
-            >
-              Let the agent use this app
-            </Label>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id={inputId}
+            checked={allowed}
+            disabled={uncheckDisabled}
+            onCheckedChange={(v) => onToggleAllowed(v === true)}
+          />
+          <Label
+            htmlFor={inputId}
+            className="text-[0.8125rem] font-normal text-muted-foreground"
+            title={uncheckDisabled ? "At least one connected app must stay allowed" : undefined}
+          >
+            Let the agent use this app
+          </Label>
+        </div>
       </div>
-      {mode === "actions" && attachedTools.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5 pl-7">
-          {attachedTools.map((tool) => (
-            <li key={tool.id} className="inline-flex items-center gap-1 rounded-full bg-secondary py-0.5 pr-1 pl-2.5 font-mono text-xs text-secondary-foreground">
-              {tool.name}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="size-4"
-                aria-label={`Remove ${tool.name} from this agent`}
-                onClick={() => onToggleTool(tool.id, false)}
-              >
-                ×
-              </Button>
-            </li>
-          ))}
-        </ul>
+      {allowed && accounts.length > 1 ? (
+        <fieldset className="m-0 flex flex-col gap-1.5 border-0 pl-7">
+          <legend className="mb-0.5 text-xs font-medium text-muted-foreground">Which accounts</legend>
+          {accounts.map((account) => {
+            const accountInputId = `apps-account-${account.id}`;
+            const checked = selectedAccountIds.includes(account.id);
+            const lastOne = account.is_default && checked && selectedAccountIds.length === 1;
+            return (
+              <div key={account.id} className="flex items-center gap-1.5">
+                <Checkbox
+                  id={accountInputId}
+                  checked={checked}
+                  disabled={lastOne}
+                  title={lastOne ? "At least the default account must stay picked" : undefined}
+                  onCheckedChange={(v) => onToggleAccount(account.id, v === true)}
+                />
+                <Label htmlFor={accountInputId} className="flex items-center gap-1.5 text-[0.8125rem] font-normal">
+                  {account.label ?? name}
+                  {account.is_default ? (
+                    <StatusChip tone="neutral" size="sm">
+                      Default
+                    </StatusChip>
+                  ) : null}
+                </Label>
+              </div>
+            );
+          })}
+        </fieldset>
       ) : null}
     </li>
   );

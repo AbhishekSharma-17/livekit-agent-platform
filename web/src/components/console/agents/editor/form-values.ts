@@ -3,6 +3,7 @@ import {
   DEFAULT_CAPABILITIES,
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
+  DEFAULT_LOCALE,
   DEFAULT_RECORDING,
   DEFAULT_TELEPHONY,
   DEFAULT_TOOLS,
@@ -71,6 +72,7 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       knowledge: { ...DEFAULT_KNOWLEDGE, ...config.knowledge },
       pack_settings: config.pack_settings ?? {},
       timezone: config.timezone ?? "UTC",
+      locale: { ...DEFAULT_LOCALE, ...config.locale },
       recording: { ...DEFAULT_RECORDING, ...config.recording },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
@@ -131,6 +133,8 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
     knowledge: { ...stored.knowledge, ...edited.knowledge },
     pack_settings: edited.pack_settings,
     timezone: edited.timezone,
+    // R-V5-10: the Instructions tab's "Caller's time" radio (V5-52).
+    locale: { ...stored.locale, ...edited.locale },
     recording: { ...stored.recording, ...edited.recording },
   };
   // R-V2-21: the Tools section edits `config.telephony` (the transfer destinations).

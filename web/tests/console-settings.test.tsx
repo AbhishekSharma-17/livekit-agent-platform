@@ -52,6 +52,11 @@ function stubMatchMedia() {
   );
 }
 
+/** Captured by `stubFetch`'s `PUT /workspaces/{id}` branch — R-V5-10's timezone test reads it. */
+let workspacePutBodies: Array<{ settings?: Record<string, unknown> }> = [];
+/** `settings.locale.timezone` (R-V5-10) as the "current" workspace record; tests can override before rendering. */
+let workspaceSettings: Record<string, unknown> = {};
+
 function stubFetch() {
   const health: HealthResponse = {
     ok: true,
@@ -69,8 +74,27 @@ function stubFetch() {
   // data and mutations.
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "PUT" && url.split("?")[0].endsWith("/workspaces/w1")) {
+        const body = init?.body ? (JSON.parse(init.body as string) as { settings?: Record<string, unknown> }) : {};
+        workspacePutBodies.push(body);
+        if (body.settings) workspaceSettings = { ...workspaceSettings, ...body.settings };
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: "w1",
+            slug: "default",
+            name: "Default",
+            settings: workspaceSettings,
+            role: "owner",
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-01-01T00:00:00Z",
+          }),
+        } as Response;
+      }
       const json = async () => {
         if (url.includes("/auth/me")) {
           return {
@@ -86,7 +110,7 @@ function stubFetch() {
                 id: "w1",
                 slug: "default",
                 name: "Default",
-                settings: {},
+                settings: workspaceSettings,
                 role: "owner",
                 created_at: "2026-01-01T00:00:00Z",
                 updated_at: "2026-01-01T00:00:00Z",
@@ -118,6 +142,8 @@ function renderSettings() {
 beforeEach(() => {
   stubLocalStorage();
   stubMatchMedia();
+  workspacePutBodies = [];
+  workspaceSettings = {};
   stubFetch();
 });
 
@@ -182,5 +208,39 @@ describe("SettingsTabs", () => {
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Team" }));
     expect(routerReplace).toHaveBeenCalledWith("/console/settings?tab=team", { scroll: false });
+  });
+
+  describe("Workspace tab — default timezone for new agents (R-V5-10, V5-52)", () => {
+    it("saves the field as settings.locale.timezone, never a bare settings.timezone", async () => {
+      renderSettings();
+      const input = await screen.findByLabelText("Default timezone for new agents");
+      expect((input as HTMLInputElement).value).toBe("");
+      expect(screen.queryByText(/IANA/)).toBeNull();
+
+      fireEvent.change(input, { target: { value: "Europe/London" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(workspacePutBodies).toHaveLength(1));
+      expect(workspacePutBodies[0].settings).toEqual({ locale: { timezone: "Europe/London" } });
+    });
+
+    it("reads a previously saved settings.locale.timezone back into the field", async () => {
+      workspaceSettings = { locale: { timezone: "Asia/Tokyo" } };
+      renderSettings();
+
+      expect(await screen.findByDisplayValue("Asia/Tokyo")).toBeTruthy();
+    });
+
+    it("clears the workspace default by saving an empty field as null", async () => {
+      workspaceSettings = { locale: { timezone: "Asia/Tokyo" } };
+      renderSettings();
+      const input = await screen.findByDisplayValue("Asia/Tokyo");
+
+      fireEvent.change(input, { target: { value: "" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(workspacePutBodies).toHaveLength(1));
+      expect(workspacePutBodies[0].settings).toEqual({ locale: { timezone: null } });
+    });
   });
 });

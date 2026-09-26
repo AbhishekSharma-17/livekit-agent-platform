@@ -19,7 +19,7 @@ import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
 import { useSessionDetail } from "@/components/console/lib/api-hooks";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
-import type { SessionDetailOut } from "@/contracts/lkap-contracts";
+import type { LocaleEvent, SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
 import { ApiError } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
 
@@ -207,6 +207,35 @@ function qaTone(score: number): StatusTone {
   return "danger";
 }
 
+/** Plain wording for `LocaleEvent.source` (R-V5-10) — never "participant metadata" or "IANA". */
+const CALLER_TIMEZONE_SOURCE_LABEL: Record<LocaleEvent["source"], string> = {
+  browser: "detected from the browser",
+  number: "from the phone number",
+  business: "business timezone",
+  workspace: "workspace default",
+  default: "default",
+};
+
+/**
+ * "Caller time zone: … (…)" (R-V5-10, V5-52). Prefers the worker's `locale`
+ * session event (has the source); falls back to `SessionOut.caller_timezone`
+ * once the summary lands, with no source wording since none is known then.
+ */
+export function callerTimezoneLabel(
+  session: Pick<SessionDetailOut, "caller_timezone">,
+  events: readonly SessionEventOut[],
+): string | null {
+  const localeEvent = events.find((event) => event.type === "locale");
+  if (localeEvent) {
+    const payload = localeEvent.payload as unknown as Partial<LocaleEvent>;
+    if (typeof payload.caller_timezone === "string") {
+      const source = payload.source ? (CALLER_TIMEZONE_SOURCE_LABEL[payload.source] ?? payload.source) : null;
+      return source ? `${payload.caller_timezone} (${source})` : payload.caller_timezone;
+    }
+  }
+  return session.caller_timezone ?? null;
+}
+
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1 whitespace-nowrap">
@@ -219,6 +248,9 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
 /** Header meta row: status, channel, mode, time, duration, config version, connection, cost, QA, room. */
 export function SessionHeaderMeta({ session }: { session: SessionDetailOut }) {
   const connections = useConnectionNames();
+  // Same query key as `SessionStats`' own call below — React Query dedupes
+  // the request, so this doesn't add a second fetch.
+  const eventsQuery = useAllSessionEvents(session.id);
   const swept = sweptReason(session);
   const duration = sessionDurationMs(session);
   const channel = channelLabel(session.channel);
@@ -229,6 +261,7 @@ export function SessionHeaderMeta({ session }: { session: SessionDetailOut }) {
     ? (connections.data?.get(session.connection_id) ?? session.connection_id)
     : null;
   const startedAt = session.started_at ?? null;
+  const callerTimezone = callerTimezoneLabel(session, eventsQuery.data?.items ?? []);
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -241,6 +274,7 @@ export function SessionHeaderMeta({ session }: { session: SessionDetailOut }) {
         <StatusChip tone="neutral">{pipelineModeLabel(session.pipeline_mode)}</StatusChip>
         {recording ? <StatusChip tone={recording.tone}>{recording.label}</StatusChip> : null}
         {score !== null ? <StatusChip tone={qaTone(score)}>{`QA ${score}/10`}</StatusChip> : null}
+        {callerTimezone ? <StatusChip tone="neutral">{`Caller time zone: ${callerTimezone}`}</StatusChip> : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.8125rem]">
         <MetaItem label={startedAt ? "Started" : "Created"}>

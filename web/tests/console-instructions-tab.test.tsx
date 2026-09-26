@@ -162,6 +162,44 @@ describe("InstructionsTab", () => {
     await waitFor(() => expect(latest?.config.voice.user_away_timeout_s).toBeNull());
   });
 
+  describe("Timezones (R-V5-10, V5-52)", () => {
+    it("labels the existing field 'Business timezone' with the opening-hours hint, never 'IANA'", async () => {
+      stubFetch();
+      render(<Harness agent={agent()} />);
+
+      expect(screen.getByText("Business timezone")).toBeTruthy();
+      expect(screen.getByText("Used for opening hours and bookings.")).toBeTruthy();
+      expect(screen.queryByText(/IANA/)).toBeNull();
+    });
+
+    it("defaults Caller's time to 'detect' and posts config.locale.caller_timezone on change", async () => {
+      stubFetch();
+      render(<Harness agent={agent()} />);
+
+      expect(screen.getByText("Caller's time")).toBeTruthy();
+      // Radix's `RadioGroupItem` is a `button[role=radio]`, not a native input.
+      const detectRadio = screen.getByLabelText(/Use the caller's own timezone \(detected\)/);
+      const businessRadio = screen.getByLabelText(/Always use the business timezone/);
+      expect(detectRadio.getAttribute("aria-checked")).toBe("true");
+      await waitFor(() => expect(latest?.config.locale?.caller_timezone).toBe("detect"));
+
+      fireEvent.click(businessRadio);
+      await waitFor(() => expect(latest?.config.locale?.caller_timezone).toBe("business"));
+      expect(businessRadio.getAttribute("aria-checked")).toBe("true");
+    });
+
+    it("carries a saved 'business' caller_timezone through toFormValues", () => {
+      stubFetch();
+      const withBusinessLocale = agent({
+        config: { instructions: "Hi there", pipeline: { mode: "cascaded" }, locale: { caller_timezone: "business" } },
+      });
+      render(<Harness agent={withBusinessLocale} />);
+
+      const businessRadio = screen.getByLabelText(/Always use the business timezone/);
+      expect(businessRadio.getAttribute("aria-checked")).toBe("true");
+    });
+  });
+
   describe("Conversation card (V4-13, BACKGROUND-TOOLS.md §7)", () => {
     /** Radix `Select` also renders a hidden native `<option>` mirror of every item; scope to the open listbox. */
     async function pickOption(text: string) {

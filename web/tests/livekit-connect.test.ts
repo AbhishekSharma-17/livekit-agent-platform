@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentOut, ConnectResponse } from "@/contracts/lkap-contracts";
 import {
   ConnectError,
+  browserTimezone,
   classifyConnectError,
   createConnectTokenSource,
   toPublicAgent,
@@ -201,6 +202,57 @@ describe("createConnectTokenSource — freeze after first connect (DECISIONS-W2 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(first.participantToken).toBe(CONNECT_RESPONSE.participantToken);
     expect(second.participantToken).toBe(first.participantToken);
+  });
+});
+
+/** R-V5-10: the browser's own timezone, sent on connect (`participant_metadata.timezone`). */
+describe("browserTimezone", () => {
+  it("returns Intl's resolved zone", () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockReturnValue({
+      resolvedOptions: () => ({ timeZone: "Europe/London" }),
+    } as unknown as Intl.DateTimeFormat);
+
+    expect(browserTimezone()).toBe("Europe/London");
+  });
+
+  it("fails soft (undefined) when Intl throws", () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(() => {
+      throw new Error("no Intl");
+    });
+
+    expect(browserTimezone()).toBeUndefined();
+  });
+});
+
+describe("createConnectTokenSource — sends the browser's timezone (R-V5-10)", () => {
+  it("posts participant_metadata.timezone with the browser's IANA zone", async () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockReturnValue({
+      resolvedOptions: () => ({ timeZone: "Asia/Kolkata" }),
+    } as unknown as Intl.DateTimeFormat);
+    const fetchMock = mockFetchOnce(CONNECT_RESPONSE);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { tokenSource } = createConnectTokenSource("smoke-generic", {}, { viaConsole: true });
+    await tokenSource.fetch({ participantName: "Guest" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { participant_metadata?: Record<string, string> };
+    expect(body.participant_metadata).toEqual({ timezone: "Asia/Kolkata" });
+  });
+
+  it("omits participant_metadata.timezone when Intl can't say (fails soft, never blocks the call)", async () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(() => {
+      throw new Error("no Intl");
+    });
+    const fetchMock = mockFetchOnce(CONNECT_RESPONSE);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { tokenSource } = createConnectTokenSource("smoke-generic", {}, { viaConsole: true });
+    await tokenSource.fetch({ participantName: "Guest" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { participant_metadata?: Record<string, string> };
+    expect(body.participant_metadata).toEqual({});
   });
 });
 

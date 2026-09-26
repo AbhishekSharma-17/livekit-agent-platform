@@ -81,6 +81,22 @@ export function publicApiBaseUrl(): string {
   return base.replace(/\/+$/, "");
 }
 
+/**
+ * The browser's own timezone (R-V5-10), read fresh on every connect attempt
+ * so a caller's device change (or a stale cached bundle) is never stale. Fails
+ * soft — `undefined` when `Intl` throws or returns nothing sensible — never
+ * blocking a call over a clock the api would drop anyway (an unknown name is
+ * silently ignored server-side, per `ConnectRequest.participant_metadata`).
+ */
+export function browserTimezone(): string | undefined {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Exported so `livekit-server.ts` can raise the same `ConnectError` shape. */
 export function errorFromPayload(status: number, payload: unknown): ConnectError {
   if (
@@ -240,12 +256,13 @@ export function createConnectTokenSource(
 
     const request = (async (): Promise<Credentials> => {
       try {
+        const zone = browserTimezone();
         const details = await fetchConnect(
           slug,
           {
             participant_name: options.participantName ?? "Guest",
             participant_identity: options.participantIdentity ?? null,
-            participant_metadata: {},
+            participant_metadata: zone ? { timezone: zone } : {},
           },
           access,
         );

@@ -25,10 +25,49 @@ function canManageWorkspace(role: string | undefined): boolean {
   return role === "admin" || role === "owner";
 }
 
+/** `settings.locale.timezone` (R-V5-10) — the default timezone new agents are created with. */
+function workspaceDefaultTimezone(settings: Record<string, unknown> | undefined): string {
+  const locale = settings?.locale;
+  const zone = locale && typeof locale === "object" ? (locale as { timezone?: unknown }).timezone : undefined;
+  return typeof zone === "string" ? zone : "";
+}
+
+/**
+ * A short curated fallback for runtimes without `Intl.supportedValuesOf`
+ * (mirrors `instructions-tab.tsx`'s own copy — both V5-52 files).
+ */
+const FALLBACK_TIMEZONES = [
+  "UTC",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Asia/Kolkata",
+  "Asia/Tokyo",
+  "Asia/Singapore",
+  "Australia/Sydney",
+];
+
+function supportedTimezones(): string[] {
+  try {
+    const withSupportedValuesOf = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
+    const values = withSupportedValuesOf.supportedValuesOf?.("timeZone");
+    if (values && values.length > 0) return values;
+  } catch {
+    // fall through to the curated list
+  }
+  return FALLBACK_TIMEZONES;
+}
+
 export function WorkspaceTab() {
   const { workspace: membership, isLoading: meLoading } = useActiveWorkspace();
   const workspaceQuery = useWorkspace(membership?.id);
   const invalidate = useInvalidateSettings();
+  const timezoneListId = React.useId();
+  const timezones = React.useMemo(() => supportedTimezones(), []);
 
   const [name, setName] = React.useState("");
   const [timezone, setTimezone] = React.useState("");
@@ -39,7 +78,7 @@ export function WorkspaceTab() {
   React.useEffect(() => {
     if (workspace && !initialized) {
       setName(workspace.name);
-      setTimezone(typeof workspace.settings?.timezone === "string" ? (workspace.settings.timezone as string) : "");
+      setTimezone(workspaceDefaultTimezone(workspace.settings));
       setInitialized(true);
     }
   }, [workspace, initialized]);
@@ -49,7 +88,9 @@ export function WorkspaceTab() {
     if (!membership) return;
     setSaving(true);
     try {
-      await api.put(`workspaces/${membership.id}`, { name, settings: { timezone: timezone || null } });
+      // R-V5-10: `settings.locale.timezone` is the default timezone new agents
+      // are created with (an empty field clears it, so agents fall back to UTC).
+      await api.put(`workspaces/${membership.id}`, { name, settings: { locale: { timezone: timezone || null } } });
       invalidate(membership.id);
       toast.success("Workspace updated");
     } catch (err) {
@@ -95,14 +136,28 @@ export function WorkspaceTab() {
                   required
                 />
               </Field>
-              <Field label="Timezone" htmlFor="workspace-timezone" optional hint="IANA name, e.g. America/New_York.">
+              <Field
+                label="Default timezone for new agents"
+                htmlFor="workspace-timezone"
+                optional
+                hint="e.g. America/New_York. Leave empty to start new agents on UTC."
+              >
                 <Input
                   id="workspace-timezone"
+                  list={timezoneListId}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono text-[0.8125rem]"
                   value={timezone}
                   onChange={(event) => setTimezone(event.target.value)}
                   placeholder="UTC"
                   disabled={saving}
                 />
+                <datalist id={timezoneListId}>
+                  {timezones.map((tz) => (
+                    <option key={tz} value={tz} />
+                  ))}
+                </datalist>
               </Field>
               <div className="sm:col-span-2">
                 <Button type="submit" disabled={saving}>
@@ -115,7 +170,7 @@ export function WorkspaceTab() {
               columns={2}
               items={[
                 { term: "Name", detail: workspace?.name },
-                { term: "Timezone", detail: timezone || "UTC" },
+                { term: "Default timezone for new agents", detail: timezone || "UTC" },
               ]}
             />
           )}

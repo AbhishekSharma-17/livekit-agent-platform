@@ -2692,3 +2692,29 @@ def test_display_name_and_account_type_are_read_from_the_documented_places() -> 
     assert service._account_type(fixture) == "PRIVATE"
     assert service._account_type({"experimental": {"accountType": "shared"}}) == "SHARED"
     assert service._account_display_name({"state": {"val": {}}}) is None
+
+
+async def test_the_resolved_config_carries_each_tools_own_account(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    """The pin reaches the worker: each account-bound tool resolves with its own account id."""
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps accounts"))["id"])
+    await _pick(admin_client, work, FREE_SLOTS, agent_id=agent_id)
+    await _pick(admin_client, personal, FREE_SLOTS, agent_id=agent_id)
+    session_id = (await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})).json()["sessionId"]
+
+    resolved = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+
+    by_name = {tool["name"]: tool for tool in resolved["tools"] if tool["kind"] == "provider"}
+    work_account = await _account_of(database, settings, work)
+    personal_account = await _account_of(database, settings, personal)
+    assert by_name["googlecalendar_find_free_slots"]["connected_account_id"] == work_account
+    assert by_name["googlecalendar_find_free_slots__personal"]["connected_account_id"] == personal_account

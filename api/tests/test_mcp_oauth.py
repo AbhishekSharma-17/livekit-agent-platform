@@ -459,7 +459,9 @@ async def test_status_reports_the_sign_in_without_token_material(
 
     assert before["status"] == "not_connected"
     body = after.json()
-    assert body["status"] == "connected" and body["worker_supported"] is False
+    assert body["status"] == "connected" and body["worker_supported"] is True, (
+        "V5-16: sessions use the sign-in"
+    )
     assert body["issuer"] == AS_ROOT and body["scopes"] == ["issues:read"] and body["registration"] == "dcr"
     assert body["expires_at"] is not None and body["connected_at"] is not None
     assert world.access_token not in after.text and world.refresh_token not in after.text
@@ -750,13 +752,14 @@ async def test_the_test_route_connects_with_the_stored_access_token(
     assert world.access_token not in after.text
 
 
-async def test_the_test_route_reports_an_expired_sign_in_without_calling(
+async def test_the_test_route_refreshes_an_expired_sign_in_before_calling(
     admin_client: httpx.AsyncClient,
     client: httpx.AsyncClient,
     world: OAuthWorld,
     database: Database,
     settings: Settings,
 ) -> None:
+    """V5-16 (was: reported, not refreshed): the stored refresh token renews it first."""
     tool_id = await _tool(admin_client)
     await _connect(admin_client, client, world, tool_id)
     credential_id = (await _definition(database, tool_id)).auth.credential_id
@@ -771,7 +774,9 @@ async def test_the_test_route_reports_an_expired_sign_in_without_calling(
 
     response = await admin_client.post(f"/v1/tools/{tool_id}/test")
 
-    assert response.json()["reason"] == "needs_auth" and world.requests == []
+    assert response.json()["ok"] is True, response.text
+    assert len(world.refresh_calls) == 1
+    assert [r.url.path for r in world.requests][0] == "/token", "refresh before the MCP call"
 
 
 # ------------------------------------------------------------- the metadata document

@@ -17,13 +17,24 @@ Route ownership (CONTRACTS-V2 §3.4): ``sessions/*``, ``sessions/start`` and
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import importlib
 from collections.abc import Awaitable, Callable
-from typing import Annotated, cast
+from dataclasses import dataclass
+from typing import Annotated, Final, cast
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
-from lkap_contracts.agent_config import AgentConfig, ProviderRef, ResolvedAgentConfig, effective_qa
+from lkap_contracts.agent_config import (
+    AgentConfig,
+    McpOAuthAccess,
+    McpOAuthTokenIn,
+    McpOAuthTokenOut,
+    ProviderRef,
+    ResolvedAgentConfig,
+    effective_qa,
+)
 from lkap_contracts.api_models import (
     RecordingStartOut,
     SessionEventsIn,
@@ -37,7 +48,7 @@ from lkap_contracts.compliance import CONSENT_EVENT
 from lkap_contracts.connections import ConnectionInfo, DeploymentType
 from lkap_contracts.fleet import WorkerEnv
 from lkap_contracts.qa import SessionQaIn
-from lkap_contracts.tools import ToolDefinition
+from lkap_contracts.tools import McpServerDefinition, ToolDefinition
 from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,11 +76,19 @@ from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Agent, Credential, LiveKitConnection, SessionEvent, SessionQa, Tool, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
-from lkap_api.deps import DbDep, ServiceDep, SettingsDep, VaultDep
+from lkap_api.deps import DbDep, HttpClientDep, ServiceDep, SettingsDep, VaultDep
 from lkap_api.errors import ApiError, ConflictError, NotFoundError
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.jobs.reconcile import enqueue_reconcile
+from lkap_api.jobs.service import JobsService
 from lkap_api.logging import get_logger
+from lkap_api.mcp_oauth.tokens import (
+    NeedsReauth,
+    TokenUnavailable,
+    issue_session_token,
+    oauth_definition,
+    tool_access,
+)
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.recordings.consent import apply_consent_event, note_unrecorded
@@ -106,6 +125,22 @@ RECORDINGS_MODULE = "lkap_api.recordings"
 RecordingStarter = Callable[
     [AsyncSession, SessionRow, LiveKitConnection, ConnectionClientFactory], Awaitable[RecordingStartOut]
 ]
+
+
+#: The pre-session refresh of one oauth MCP server gives up after this many seconds.
+MCP_OAUTH_RESOLVE_TIMEOUT_S: Final[float] = 15.0
+
+
+@dataclass(frozen=True)
+class OAuthSources:
+    """What the resolve step needs to hand the worker MCP access tokens (V5-16)."""
+
+    database: Database
+    client: httpx.AsyncClient
+    jobs: JobsService | None
+    may_refresh: bool
+    """``False`` when the request already holds SQLite's write lock (``sessions/start``):
+    a stale token is then left for the worker to fetch through the token route."""
 
 
 class NotImplementedApiError(ApiError):
@@ -214,10 +249,57 @@ async def _session_connection(db: AsyncSession, session: SessionRow, agent: Agen
     return row
 
 
+async def _mcp_oauth_access(
+    vault: Vault, settings: Settings, oauth: OAuthSources, tool: Tool, definition: McpServerDefinition
+) -> McpOAuthAccess | None:
+    """One oauth server's access for the worker; ``None`` when it has no usable sign-in.
+
+    A token the api could not refresh now (SQLite's write lock, a provider hiccup) is
+    delivered as ``access_token=None``: the worker asks the token route before its first
+    request. A sign-in that needs an admin is left out, so the worker skips the server.
+    """
+    try:
+        async with asyncio.timeout(MCP_OAUTH_RESOLVE_TIMEOUT_S):
+            token = await tool_access(
+                oauth.database,
+                vault,
+                oauth.client,
+                settings,
+                tool=tool,
+                definition=definition,
+                may_refresh=oauth.may_refresh,
+                jobs=oauth.jobs,
+            )
+    except NeedsReauth as exc:
+        log.info("session_mcp_oauth_unavailable", tool_id=tool.id, reason=exc.reason)
+        return None
+    except (TokenUnavailable, TimeoutError):
+        return McpOAuthAccess(tool_id=tool.id, name=definition.name, url=definition.url)
+    return McpOAuthAccess(
+        tool_id=tool.id,
+        name=definition.name,
+        url=definition.url,
+        access_token=token.access_token,
+        expires_at=token.expires_at,
+    )
+
+
 async def _build_resolved(
-    db: AsyncSession, vault: Vault, settings: Settings, session: SessionRow, agent: Agent
+    db: AsyncSession,
+    vault: Vault,
+    settings: Settings,
+    session: SessionRow,
+    agent: Agent,
+    *,
+    oauth: OAuthSources | None = None,
 ) -> ResolvedAgentConfig:
-    """Resolve a session's configuration and mark it active. **Contains secrets.**"""
+    """Resolve a session's configuration and mark it active. **Contains secrets.**
+
+    V5-16: an oauth MCP server's sign-in is never decrypted into ``tools`` (asks #114 d);
+    its short-lived access goes in ``mcp_oauth`` instead (with ``oauth``), refreshed first
+    when it is about to expire. Without ``oauth`` the server gets no access and the worker
+    skips it.
+    """
     config = AgentConfig.model_validate(agent.config)
     # R-V5-10: the effective business timezone; the worker reads it from `config.timezone`.
     business_timezone = await _business_timezone(db, config, agent.workspace_id)
@@ -240,18 +322,34 @@ async def _build_resolved(
             .all()
         )
 
+    oauth_rows = {row.id: found for row in tool_rows if (found := oauth_definition(row)) is not None}
     wanted = _credential_ids(config)
     for row in tool_rows:
+        if row.id in oauth_rows:
+            continue  # asks #114 d: the sign-in bag is never decrypted into the session
         credential_id = row.definition.get("credential_id") if isinstance(row.definition, dict) else None
         if isinstance(credential_id, str):
             wanted.add(credential_id)
     secrets = await _decrypt(db, vault, wanted, workspace_id=agent.workspace_id)
 
     tools: list[ToolDefinition] = []
+    mcp_oauth: list[McpOAuthAccess] = []
     for row in tool_rows:
         # V5-49 (R-V5-9): an app server never offers an unreviewed destructive action, even
         # one provisioned before `reviewed_actions` existed.
         definition = apply_denied_actions(_TOOL_ADAPTER.validate_python(row.definition), config.tools.apps)
+        oauth_server = oauth_rows.get(row.id)
+        if oauth_server is not None:
+            # No placeholder and no header on an oauth server: nothing to substitute.
+            tools.append(resolve_tool_definition(definition, {}))
+            access = (
+                await _mcp_oauth_access(vault, settings, oauth, row, oauth_server)
+                if oauth is not None
+                else None
+            )
+            if access is not None:
+                mcp_oauth.append(access)
+            continue
         tools.append(resolve_tool_definition(definition, secrets.get(definition.credential_id or "", {})))
 
     connection = await _session_connection(db, session, agent)
@@ -278,6 +376,7 @@ async def _build_resolved(
         config_version=session.config_version,
         pipeline_mode=config.pipeline.mode,
         tool_count=len(tools),
+        mcp_oauth_count=len(mcp_oauth),
         kb_count=len(config.knowledge.kb_ids),
     )
     return ResolvedAgentConfig(
@@ -310,6 +409,7 @@ async def _build_resolved(
         locale=config.locale,
         # V5-15: the workspace's disclosure and recording wording (Settings → Compliance).
         compliance=await workspace_compliance(db, agent.workspace_id),
+        mcp_oauth=mcp_oauth,
     )
 
 
@@ -336,7 +436,14 @@ async def _business_timezone(db: AsyncSession, config: AgentConfig, workspace_id
     ),
 )
 async def resolved_config(
-    session_id: str, db: DbDep, vault: VaultDep, settings: SettingsDep, _service: ServiceDep
+    session_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    settings: SettingsDep,
+    _service: ServiceDep,
+    database: DatabaseDep,
+    client: HttpClientDep,
+    jobs: JobsDep,
 ) -> ResolvedAgentConfig:
     """Resolve and return a session's configuration for the worker.
 
@@ -348,7 +455,8 @@ async def resolved_config(
     if session.status in {"ended", "failed"}:
         raise ConflictError(f"session '{session_id}' has already ended")
     agent = await _session_agent(db, session)
-    return await _build_resolved(db, vault, settings, session, agent)
+    oauth = OAuthSources(database=database, client=client, jobs=jobs, may_refresh=True)
+    return await _build_resolved(db, vault, settings, session, agent, oauth=oauth)
 
 
 @router.post(
@@ -370,6 +478,7 @@ async def start_session(
     _service: ServiceDep,
     jobs: JobsDep,
     database: DatabaseDep,
+    client: HttpClientDep,
     background_tasks: BackgroundTasks,
 ) -> ResolvedAgentConfig:
     """Create a session row for a worker-discovered room and resolve it.
@@ -433,7 +542,45 @@ async def start_session(
     )
     # D-V4-43: the estimate snapshot runs after the response (the row is committed by then).
     background_tasks.add_task(attach_estimate, database, session.id, embedder=settings.embedder)
-    return await _build_resolved(db, vault, settings, session, agent)
+    # V5-16: the new session row holds SQLite's write lock until this request commits, so a
+    # stale MCP token is left for the worker to refresh through the token route.
+    oauth = OAuthSources(
+        database=database,
+        client=client,
+        jobs=jobs,
+        may_refresh=database.engine.dialect.name != "sqlite",
+    )
+    return await _build_resolved(db, vault, settings, session, agent, oauth=oauth)
+
+
+@router.post(
+    "/tools/{tool_id}/oauth/token",
+    response_model=McpOAuthTokenOut,
+    summary="A fresh access token for an MCP server that signs in (worker only)",
+    description=(
+        "V5-16: the worker's MCP client asks for a new access token when the one it has is "
+        "about to expire or the server refused it (`rejected_token_sha256`, which makes the api "
+        "refresh unless another request already did). Bound to a live session whose agent uses "
+        "the tool. Returns the access token and its expiry, never the refresh token; `409` with "
+        "`reason=needs_reauth` when an admin must sign in again; `503` on a transient refresh "
+        "failure."
+    ),
+)
+async def mcp_oauth_token(
+    tool_id: str,
+    payload: McpOAuthTokenIn,
+    db: DbDep,
+    vault: VaultDep,
+    settings: SettingsDep,
+    _service: ServiceDep,
+    database: DatabaseDep,
+    client: HttpClientDep,
+    jobs: JobsDep,
+) -> McpOAuthTokenOut:
+    """Hand the worker a fresh access token for one oauth MCP server."""
+    return await issue_session_token(
+        db, database, vault, client, settings, jobs, tool_id=tool_id, payload=payload
+    )
 
 
 @router.post(

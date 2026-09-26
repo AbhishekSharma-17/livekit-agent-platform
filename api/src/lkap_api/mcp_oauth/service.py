@@ -53,7 +53,7 @@ def as_http_error(exc: McpOauthError) -> UnprocessableEntityError:
     return UnprocessableEntityError(str(exc), details=details)
 
 
-async def _oauth_tool(
+async def oauth_tool(
     db: AsyncSession, ctx: WorkspaceContext, tool_id: str
 ) -> tuple[Tool, McpServerDefinition, McpOAuthAuth]:
     row = await db.scalar(select(Tool).where(Tool.id == tool_id, Tool.workspace_id == ctx.workspace_id))
@@ -92,7 +92,7 @@ async def start_sign_in(
 ) -> McpOauthStartOut:
     """Discover, register, write the flow row and return where to send the browser."""
     ctx.check(START_REQUIREMENT)
-    row, definition, auth = await _oauth_tool(db, ctx, tool_id)
+    row, definition, auth = await oauth_tool(db, ctx, tool_id)
     if definition.origin is not None:
         raise UnprocessableEntityError(
             "an app server's access is managed by its provider, not by signing in here",
@@ -182,7 +182,7 @@ async def sign_in_status(
 ) -> McpOauthStatusOut:
     """The tool's sign-in, from its ``mcp-oauth`` credential (no token material)."""
     ctx.check(STATUS_REQUIREMENT)
-    row, definition, auth = await _oauth_tool(db, ctx, tool_id)
+    row, definition, auth = await oauth_tool(db, ctx, tool_id)
     loaded = await load_sign_in(db, vault, workspace_id=ctx.workspace_id, credential_id=auth.credential_id)
     if loaded is None or not binds_tool(loaded[1], tool_id=row.id, url=definition.url):
         return McpOauthStatusOut(status="not_connected")
@@ -204,9 +204,17 @@ async def sign_in_status(
             "connected_at": parse_time(bag.get("connected_at")),
             "last_refresh_at": parse_time(bag.get("last_refresh_at")),
             "registration": registration if registration in ("preregistered", "cimd", "dcr") else None,
-            "worker_supported": False,
+            # V5-16: sessions use the sign-in (the worker's api-issued bearer).
+            "worker_supported": True,
         }
     )
 
 
-__all__ = ["START_REQUIREMENT", "STATUS_REQUIREMENT", "as_http_error", "sign_in_status", "start_sign_in"]
+__all__ = [
+    "START_REQUIREMENT",
+    "STATUS_REQUIREMENT",
+    "as_http_error",
+    "oauth_tool",
+    "sign_in_status",
+    "start_sign_in",
+]

@@ -2,6 +2,8 @@
 
 * ``POST /v1/tools/{tool_id}/oauth/start`` — admin + ``providers:write``.
 * ``GET /v1/tools/{tool_id}/oauth/status`` — admin.
+* ``POST /v1/tools/{tool_id}/oauth/revoke`` — admin + ``providers:write`` (V5-16): revoke
+  at the provider (best effort), delete the sign-in.
 * ``GET /v1/oauth/mcp/callback`` — **unauthenticated** (the provider's browser
   redirect), bound to its flow by the single-use ``state``.
 * ``GET /v1/oauth/mcp/client-metadata.json`` — public: the deployment's Client ID
@@ -28,7 +30,7 @@ from lkap_contracts.api_models import McpOauthStartIn, McpOauthStartOut, McpOaut
 from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, NotFoundError
-from lkap_api.mcp_oauth import callback, service
+from lkap_api.mcp_oauth import callback, revoke, service
 from lkap_api.mcp_oauth.registration import CALLBACK_PATH, CLIENT_METADATA_PATH, client_metadata_document
 
 router = APIRouter(tags=["mcp-oauth"])
@@ -100,12 +102,37 @@ async def start(
     summary="MCP server sign-in status",
     description=(
         "Whether the MCP server is signed in, with the provider, scopes and expiry. No token "
-        "material. `worker_supported` is false until sessions can use the sign-in."
+        "material. `worker_supported` is true: sessions use the sign-in through an access "
+        "token the api refreshes and hands to the worker."
     ),
 )
 async def get_status(tool_id: str, db: DbDep, vault: VaultDep, ctx: AdminCtxDep) -> McpOauthStatusOut:
     """Report one MCP tool's sign-in."""
     return await service.sign_in_status(db, vault, ctx, tool_id)
+
+
+@router.post(
+    "/v1/tools/{tool_id}/oauth/revoke",
+    response_model=McpOauthStatusOut,
+    summary="Disconnect an MCP server's sign-in",
+    description=(
+        "Revokes the sign-in at the provider (RFC 7009: the refresh token, then the access "
+        "token; RFC 7592 deletion of a dynamically registered client no other tool uses), then "
+        "deletes the stored sign-in. The provider calls are best effort: the sign-in is deleted "
+        "even when the provider cannot be reached. Needs the admin role (`providers:write` for "
+        "API keys). Returns the new status (`not_connected`)."
+    ),
+)
+async def post_revoke(
+    tool_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    client: HttpClientDep,
+    settings: SettingsDep,
+    ctx: AdminCtxDep,
+) -> McpOauthStatusOut:
+    """Disconnect one MCP tool's sign-in."""
+    return await revoke.revoke_tool_sign_in(db, vault, client, settings, ctx, tool_id)
 
 
 @router.get(

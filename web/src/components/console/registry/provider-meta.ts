@@ -97,6 +97,18 @@ export function slotAvailability(spec: ProviderSpec, ctx: SlotConnectionContext 
       break; // "available" (or undefined — v1 fixtures)
   }
   if (!enabledFor(spec)) return "disabled";
+  // V5-28: `web_search`/`sms` run as a plain HTTP call from the worker (no
+  // vendor SDK, `httpx` is a base agent dependency in every image) — there is
+  // no LiveKit connection or worker-image concept to install them "on", so
+  // the `isMvp`/`installed_on` gates below (both about that concept) never
+  // apply to these two kinds. Every registry entry of either kind still
+  // carries the V2-05 `_full()` helper's blanket `status: "deferred"`
+  // default (a worker-image-catalogue artifact, not a real "not offered yet"
+  // signal for a kind the helper predates), which would otherwise leave
+  // Tavily/Brave/Twilio/Telnyx permanently `not-installed` and unpickable —
+  // `spec.availability` above is still the real "coming soon" signal for a
+  // future entry of either kind that genuinely isn't ready.
+  if (spec.kind === "web_search" || spec.kind === "sms") return "selectable";
   const connection = ctx.connection;
   if (!connection) {
     return isMvp(spec) ? "selectable" : "not-installed";

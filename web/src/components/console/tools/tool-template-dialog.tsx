@@ -149,7 +149,13 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
           agent_id: agentId,
           credential_id: credentialId,
           names: chosen.map((t) => t.definition.name),
-          defaults: Object.fromEntries(Array.from(defaultSpecs.keys()).map((name) => [name, defaults[name] ?? ""])),
+          // An optional default left blank is omitted rather than sent as "" — the
+          // api's `_coerce` would 422 on an empty string for a non-string parameter.
+          defaults: Object.fromEntries(
+            Array.from(defaultSpecs.keys())
+              .map((name) => [name, (defaults[name] ?? "").trim()] as const)
+              .filter(([, value]) => value !== ""),
+          ),
           enabled: true,
         },
       });

@@ -187,7 +187,7 @@ describe("ToolsTab", () => {
       await screen.findByText("custom_pack_tool");
 
       const accountsHeading = await screen.findByText("Which accounts");
-      // Scoped to the accounts chooser itself: V5-28's "Calculate" built-in row
+      // Scoped to the accounts chooser itself: V5-28's "Calculator" built-in row
       // ("Works out sums…") also matches a loose /Work/ query on the whole page.
       const accountsSection = accountsHeading.closest("section") ?? accountsHeading.parentElement!;
       expect(within(accountsSection).getByText(/Work/)).toBeTruthy();
@@ -297,9 +297,25 @@ describe("ToolsTab", () => {
   });
 
   describe("Network built-ins (V5-25, V5-28)", () => {
+    // Real registry shape (contracts/generated/providers.json): every V5-25 network
+    // built-in is built with the V2-05 `_full()` helper, so it carries
+    // `status: "deferred"` / `worker_image: "full"` like the other 108 non-MVP
+    // entries — `provider-meta.ts::slotAvailability`'s `isMvp` fallback (no
+    // connection context, R-V2-2) must not read that as "not offered" for these
+    // two kinds (they have no LiveKit-connection/worker-image concept at all).
     const NETWORK_PROVIDERS: ProvidersResponse = {
       providers: [
-        { id: "tavily-search", kind: "web_search", label: "Tavily", vendor: "Tavily", package: "", python_class: "" },
+        {
+          id: "tavily-search",
+          kind: "web_search",
+          label: "Tavily",
+          vendor: "Tavily",
+          package: "",
+          python_class: "",
+          availability: "available",
+          status: "deferred",
+          worker_image: "full",
+        },
         {
           id: "twilio-sms",
           kind: "sms",
@@ -307,6 +323,9 @@ describe("ToolsTab", () => {
           vendor: "Twilio",
           package: "",
           python_class: "",
+          availability: "available",
+          status: "deferred",
+          worker_image: "full",
           fields: [{ name: "from_number", label: "Sending number", type: "string", required: true }],
         },
         { id: "http-tool-secret", kind: "secret_bag", label: "Tool secrets", vendor: "LKAP", package: "", python_class: "" },
@@ -333,21 +352,21 @@ describe("ToolsTab", () => {
       render(<Harness />);
       await screen.findByText("custom_pack_tool");
 
-      expect((screen.getByRole("switch", { name: "Calculate" }) as HTMLButtonElement).getAttribute("data-state")).toBe(
+      expect((screen.getByRole("switch", { name: "Calculator" }) as HTMLButtonElement).getAttribute("data-state")).toBe(
         "checked",
       );
-      expect((screen.getByRole("switch", { name: "Spell back" }) as HTMLButtonElement).getAttribute("data-state")).toBe(
-        "checked",
-      );
+      expect(
+        (screen.getByRole("switch", { name: "Spell it back" }) as HTMLButtonElement).getAttribute("data-state"),
+      ).toBe("checked");
     });
 
-    it("picking a Web search vendor writes config.tools.web_search", async () => {
+    it("picking a Search the web vendor writes config.tools.web_search", async () => {
       stubNetworkFetch();
       render(<Harness />);
       await screen.findByText("custom_pack_tool");
 
       expect(screen.getAllByText("Not set", { selector: "p" }).length).toBeGreaterThan(0);
-      fireEvent.click(screen.getByRole("button", { name: "Edit web search" }));
+      fireEvent.click(screen.getByRole("button", { name: "Edit search the web" }));
       fireEvent.click(await screen.findByText("Tavily"));
 
       await waitFor(() => expect(latest?.config.tools.web_search?.provider_id).toBe("tavily-search"));
@@ -384,20 +403,20 @@ describe("ToolsTab", () => {
       await waitFor(() => expect(latest?.config.tools.fetch_url_allowed_hosts).toEqual([]));
     });
 
-    it("Notify your team: turning it on fills in a default secret name and reveals the fields", async () => {
+    it("Tell your team: turning it on fills in a default secret name and reveals the fields", async () => {
       stubNetworkFetch();
       render(<Harness />);
       await screen.findByText("custom_pack_tool");
 
       expect(screen.queryByLabelText("Secret name")).toBeNull();
-      fireEvent.click(screen.getByRole("switch", { name: "Notify your team" }));
+      fireEvent.click(screen.getByRole("switch", { name: "Tell your team" }));
 
       expect((await screen.findByLabelText("Secret name")).getAttribute("value")).toBe("TEAM_WEBHOOK_URL");
       expect(screen.getByRole("switch", { name: "Also notify on escalation" })).toBeTruthy();
       expect(screen.getByRole("switch", { name: "Include the recent conversation" })).toBeTruthy();
       await waitFor(() => expect(latest?.config.tools.notify_team?.secret_name).toBe("TEAM_WEBHOOK_URL"));
 
-      fireEvent.click(screen.getByRole("switch", { name: "Notify your team" }));
+      fireEvent.click(screen.getByRole("switch", { name: "Tell your team" }));
       await waitFor(() => expect(latest?.config.tools.notify_team).toBeNull());
     });
 

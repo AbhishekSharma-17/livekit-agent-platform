@@ -243,7 +243,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
 
         <SectionRow>
           <ProviderSlotCard
-            title={byName.get("web_search")?.label ?? "Web search"}
+            title={byName.get("web_search")?.label ?? "Search the web"}
             description={byName.get("web_search")?.help}
             kind="web_search"
             value={webSearch ?? null}
@@ -683,10 +683,10 @@ function NotifyTeamCard({
   const enabled = Boolean(value);
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4" data-issue-path="tools.notify_team">
       <Field
         inline
-        label="Notify your team"
+        label="Tell your team"
         htmlFor={`${uid}-enabled`}
         hint="Posts a short summary to a webhook — Slack or a generic JSON endpoint — for example when the agent escalates to a person."
       >
@@ -703,6 +703,7 @@ function NotifyTeamCard({
               className={canBindCredential ? undefined : "pointer-events-none opacity-50"}
               aria-disabled={!canBindCredential}
               title={canBindCredential ? undefined : writeAccessReason("admin")}
+              data-issue-path="tools.notify_team.credential_id"
             >
               <CredentialPicker
                 spec={secretBagSpec}

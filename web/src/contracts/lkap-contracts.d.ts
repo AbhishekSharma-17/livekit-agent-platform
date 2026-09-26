@@ -4544,6 +4544,7 @@ export interface ResolvedAgentConfig {
   installed_provider_ids?: string[] | null;
   kb_ids: string[];
   locale?: LocaleConfig;
+  mcp_oauth?: McpOAuthAccess[];
   pack_id: string;
   panel?: PanelLayout;
   participant_identity: string;
@@ -4559,6 +4560,27 @@ export interface ResolvedAgentConfig {
     [k: string]: unknown;
   };
   workspace_id?: string;
+}
+/**
+ * V5-16: one signed-in MCP server's short-lived access, as the worker receives it.
+ *
+ * The api is the OAuth client (research-v4 tools §4.3.6): it keeps the refresh token,
+ * the client secret and the token endpoint, and hands the worker only an access token
+ * that expires minutes from now. ``name`` and ``url`` match the server's entry in
+ * :attr:`ResolvedAgentConfig.tools`; ``tool_id`` is what the worker names when it asks
+ * ``POST /internal/v1/tools/{tool_id}/oauth/token`` for a fresh token. ``access_token``
+ * is ``None`` when the api could not refresh it at session start (the worker fetches one
+ * before its first request). **Contains a secret.**
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOAuthAccess".
+ */
+export interface McpOAuthAccess {
+  access_token?: string | null;
+  expires_at?: string | null;
+  name: string;
+  tool_id: string;
+  url: string;
 }
 /**
  * A provider ready to construct: class path plus complete constructor kwargs.

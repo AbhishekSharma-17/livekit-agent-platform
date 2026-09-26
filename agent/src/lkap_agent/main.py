@@ -77,6 +77,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -138,6 +139,7 @@ from lkap_agent.telephony import (
     wait_for_answer,
 )
 from lkap_agent.text_mode import handle_agent_action as handle_text_mode_action
+from lkap_agent.tools.mcp_auth import McpOAuthBinding
 from lkap_agent.workflow_llm import PromptJsonStructuredLLM
 
 __all__ = [
@@ -1497,9 +1499,17 @@ def _assemble(
             {"message": f"MCP server '{definition.name}' skipped: {reason}", "mcp_server": definition.name},
         )
 
-    mcp_toolsets = deps.mcp_servers_builder(
-        [t for t in resolved.tools if t.kind == "mcp"], on_skipped=_on_mcp_skipped
-    )
+    # V5-16: an MCP server that signs in connects with the api-issued bearer; flow nodes too.
+    mcp_builder = deps.mcp_servers_builder
+    if resolved.mcp_oauth:
+        oauth = McpOAuthBinding(
+            session_id=resolved.session_id,
+            source=deps.config_client,
+            tokens=list(resolved.mcp_oauth),
+            record_event=emit,
+        )
+        mcp_builder = functools.partial(deps.mcp_servers_builder, oauth=oauth)
+    mcp_toolsets = mcp_builder([t for t in resolved.tools if t.kind == "mcp"], on_skipped=_on_mcp_skipped)
 
     agent: PlatformAgent
     if is_flow(resolved):
@@ -1513,7 +1523,7 @@ def _assemble(
                 provider_factory=deps.provider_factory,
                 has_tts=plan.has_tts,
                 mcp_definitions=[t for t in resolved.tools if t.kind == "mcp"],
-                mcp_servers_builder=deps.mcp_servers_builder,
+                mcp_servers_builder=mcp_builder,
                 vision_max_frame_age_s=deps.settings.vision_max_frame_age_s,
                 record_event=record_event,
                 shutdown=lambda reason: ctx.shutdown(reason=reason),

@@ -10,9 +10,42 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import cast
+from collections.abc import MutableMapping
+from typing import Any, Final, cast
 
 import structlog
+
+#: V5-16: event fields whose value never reaches a log line (OAuth and API secrets). Any
+#: field ending in ``_token`` or ``_secret`` is masked too.
+SECRET_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "registration_access_token",
+        "client_secret",
+        "code",
+        "code_verifier",
+        "state",
+        "authorization",
+        "api_key",
+    }
+)
+REDACTED: Final[str] = "[redacted]"
+
+
+def redact_secret_fields(
+    _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Mask every secret-named field of a log event (a structlog processor).
+
+    The worker never passes a token to a logger; this is the belt to those braces.
+    """
+    for key in list(event_dict):
+        lowered = key.lower()
+        if lowered in SECRET_FIELDS or lowered.endswith(("_token", "_secret")):
+            event_dict[key] = REDACTED
+    return event_dict
 
 
 def configure_logging(*, level: str = "INFO", json_output: bool = False) -> None:
@@ -27,6 +60,7 @@ def configure_logging(*, level: str = "INFO", json_output: bool = False) -> None
 
     shared_processors: list[structlog.typing.Processor] = [
         structlog.contextvars.merge_contextvars,
+        redact_secret_fields,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),

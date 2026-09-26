@@ -8,7 +8,9 @@ by creating the session with `POST /internal/v1/sessions/start` when it did not
 events, asks the api to start an Egress recording, and pushes latency metrics
 and a final summary from its shutdown callback. On phone calls it also reports
 the SIP leg's status and asks the api to transfer the caller (R-V2-20; these
-two calls replaced V2-17's separate telephony client).
+two calls replaced V2-17's separate telephony client). V5-16: it asks for a fresh
+access token of an MCP server that signs in (`mcp_oauth_token`); the answer is a
+secret and is never logged.
 
 Nothing in this module logs a response body: `ResolvedAgentConfig` carries
 decrypted vendor keys and substituted tool secrets.
@@ -20,7 +22,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Protocol, Self
 
 import httpx
-from lkap_contracts.agent_config import ResolvedAgentConfig
+from lkap_contracts.agent_config import McpOAuthTokenIn, McpOAuthTokenOut, ResolvedAgentConfig
 from lkap_contracts.api_models import (
     CallReportIn,
     InternalKbSearchRequest,
@@ -48,6 +50,7 @@ __all__ = [
     "ConfigClient",
     "ConfigClientProtocol",
     "ConfigUnavailableError",
+    "McpOAuthTokenError",
     "RecordingUnavailableError",
     "SessionEndedError",
     "SessionNotFoundError",
@@ -79,6 +82,19 @@ class SessionEndedError(ConfigUnavailableError):
 
 class RecordingUnavailableError(RuntimeError):
     """The api could not start an Egress recording (not installed, or it failed)."""
+
+
+class McpOAuthTokenError(RuntimeError):
+    """No access token for an MCP server that signs in (V5-16).
+
+    ``reason`` is ``needs_reauth`` (409: an admin must sign in again) or ``unavailable``
+    (a transport error, a 503 while the provider cannot refresh, or anything else).
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        """Keep the machine-readable reason next to a value-free message."""
+        super().__init__(message)
+        self.reason = reason
 
 
 class ConfigClientProtocol(Protocol):
@@ -130,6 +146,10 @@ class ConfigClientProtocol(Protocol):
         self, session_id: str, to: str, participant_identity: str | None
     ) -> InternalTransferOut:
         """Ask the api to cold-transfer the session's caller; failures come back as a result."""
+        ...
+
+    async def mcp_oauth_token(self, tool_id: str, request: McpOAuthTokenIn) -> McpOAuthTokenOut:
+        """A fresh access token of an MCP server that signs in (V5-16); never logged."""
         ...
 
     async def aclose(self) -> None:
@@ -418,6 +438,39 @@ class ConfigClient:
             return InternalTransferOut.model_validate_json(response.content)
         except ValueError:
             return failed("unparseable transfer result")
+
+    async def mcp_oauth_token(self, tool_id: str, request: McpOAuthTokenIn) -> McpOAuthTokenOut:
+        """Post `POST /internal/v1/tools/{tool_id}/oauth/token` (V5-16).
+
+        Args:
+            tool_id: The MCP server's tool id (`McpOAuthAccess.tool_id`).
+            request: The session and, after a 401, the SHA-256 of the refused token.
+
+        Returns:
+            The new access token and its expiry. **A secret**: never log it.
+
+        Raises:
+            McpOAuthTokenError: `needs_reauth` on 409, `unavailable` on anything else.
+        """
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/tools/{tool_id}/oauth/token"),
+                content=request.model_dump_json(),
+                headers={"content-type": "application/json"},
+            )
+        except httpx.HTTPError as exc:
+            raise McpOAuthTokenError("unavailable", f"api unreachable: {type(exc).__name__}") from exc
+        if response.status_code == httpx.codes.CONFLICT:
+            raise McpOAuthTokenError("needs_reauth", "the MCP server needs to be signed in again")
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise McpOAuthTokenError("unavailable", f"token route answered HTTP {response.status_code}")
+        try:
+            return McpOAuthTokenOut.model_validate_json(response.content)
+        except ValueError as exc:
+            # Message only: the body holds the token.
+            raise McpOAuthTokenError(
+                "unavailable", "the token route returned an unparseable payload"
+            ) from exc
 
 
 class ApiKbClient:

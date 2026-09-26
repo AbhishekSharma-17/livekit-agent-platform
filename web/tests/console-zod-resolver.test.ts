@@ -16,7 +16,15 @@ const LIMITS = {
   rate_per_ip_per_min: 6,
   rate_per_agent_per_min: 60,
 };
-const RECORDING = { enabled: false, audio_only: true, storage_config_id: null, retention_days: null };
+// V5-17: `require_consent`/`consent_text` joined the schema so a save no longer strips them.
+const RECORDING = {
+  enabled: false,
+  audio_only: true,
+  storage_config_id: null,
+  retention_days: null,
+  require_consent: false,
+  consent_text: null,
+};
 const AVATAR_OPTIONS = { participant_name: "Avatar", video_quality: null, idle_timeout_s: null, max_duration_s: null };
 const PANEL = { panel_id: "composite", layout: "side" as const, blocks: [] };
 const TELEPHONY = { transfer_targets: [] };

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import type { BlockSpecForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import type { TableColumn } from "@/contracts/lkap-contracts";
 import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
@@ -266,6 +267,16 @@ function ConfigFieldControl({
             ))}
           </SelectContent>
         </Select>
+      );
+    case "text":
+      return (
+        <Textarea
+          id={id}
+          rows={3}
+          maxLength={field.maxLength}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
       );
     case "columns":
       return null; // rendered as a fieldset by `BlockConfigForm`

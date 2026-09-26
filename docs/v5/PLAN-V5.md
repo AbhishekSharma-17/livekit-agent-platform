@@ -621,7 +621,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-53 | Opus | 4 | merged | | Composio live check | R-V5-13 |
 | V5-54 | Sonnet | 4 | merged | | | R-V5-13 |
 | V5-16 | Opus | 4 | planned | | needs a Linear account | |
-| V5-17 | Sonnet | 4 | planned | | | |
+| V5-17 | Sonnet | 4 | merged | | | |
 | V5-19 | Opus | 4 | planned | | | |
 | V5-20 | Opus | 4 | planned | | deferred (needs store keys) | |
 | V5-21 | Sonnet | 5 | planned | | needs a Linear account | |

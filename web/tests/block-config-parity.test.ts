@@ -22,7 +22,7 @@ const SCHEMAS = path.resolve(__dirname, "../../contracts/generated/schemas");
 
 type JsonSchema = {
   additionalProperties?: boolean;
-  properties?: Record<string, { default?: unknown; pattern?: string; minimum?: number }>;
+  properties?: Record<string, { default?: unknown; pattern?: string; minimum?: number; maxLength?: number }>;
 };
 
 function load(type: string): JsonSchema {
@@ -75,5 +75,10 @@ describe("block config parity (R-V2-17)", () => {
   it("the document page minimum matches the form's", () => {
     const field = BLOCK_CATALOG.document.configFields.find((f) => f.key === "page");
     expect(field && "min" in field ? field.min : undefined).toBe(load("document").properties?.page?.minimum);
+  });
+
+  it("the consent text's maxLength matches the schema's (V5-17: block-config-form.tsx's 'text' field kind)", () => {
+    const field = BLOCK_CATALOG.consent.configFields.find((f) => f.key === "text");
+    expect(field && "maxLength" in field ? field.maxLength : undefined).toBe(load("consent").properties?.text?.maxLength);
   });
 });

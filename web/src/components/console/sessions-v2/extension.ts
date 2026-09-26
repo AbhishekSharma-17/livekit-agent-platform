@@ -82,7 +82,11 @@ export const sessionsV2Extension: SessionDetailExtension = {
       icon: AudioLinesIcon,
       order: 30,
       Component: RecordingTab,
-      visible: ({ session }) => (session.recording?.status ?? "none") !== "none",
+      // V5-17: a consent-gated recording that never started stays
+      // `status: "none"` (no new status, `api/src/lkap_api/recordings/consent.py`)
+      // but still has something to say ("Not recorded: consent declined") —
+      // show the tab for that case too, not only once a recording exists.
+      visible: ({ session }) => (session.recording?.status ?? "none") !== "none" || Boolean(session.recording?.error),
     },
     { id: "cost", label: "Cost", icon: CoinsIcon, order: 40, Component: CostTab },
     { id: "qa", label: "QA", icon: GaugeIcon, order: 50, Component: QaTab },

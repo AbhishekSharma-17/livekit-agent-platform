@@ -28,6 +28,7 @@ import { ActivityBlock } from "./activity";
 import { blockStateOf, blockTitle } from "./catalog";
 import { ChecklistBlock } from "./checklist";
 import { ChoicesBlock } from "./choices";
+import { ConsentBlock } from "./consent";
 import { CustomBlock } from "./custom";
 import { DetailsBlock } from "./details";
 import { FormBlock } from "./form";
@@ -56,15 +57,6 @@ const VideoBlock = lazy(() => import("./video"));
 // for a session whose panel has no `markdown` block (V5-12).
 const MarkdownBlock = lazy(() => import("./markdown"));
 
-/** A block type this web build has no renderer for yet. */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
-
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -83,8 +75,7 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   details: DetailsBlock as AnyBlockComponent,
   markdown: MarkdownBlock as AnyBlockComponent,
   steps: StepsBlock as AnyBlockComponent,
-  // V5-15 added this type to the contract; its renderer comes with V5-17.
-  consent: NotRenderedYetBlock,
+  consent: ConsentBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     #: Comma-separated host names / IPs / CIDRs exempt from the private-range
     #: block. Unset: ``localhost,127.0.0.1,::1`` in dev, nothing in prod.
     net_allow_private_hosts: str | None = None
+    #: ``LKAP_SELF_HOSTED_ALLOWED_NETWORKS`` (R-V5-17): comma-separated CIDRs a self-hosted
+    #: LiveKit connection may reach. Unset = loopback, RFC 1918, ULA and CGNAT (the
+    #: pre-V5-27 reach); an empty string = none beyond ``LKAP_NET_ALLOW_PRIVATE_HOSTS``.
+    self_hosted_allowed_networks: str | None = None
     #: ``LKAP_HTTP_TOOL_USER_AGENT``: the ``User-Agent`` an HTTP tool's dry run sends
     #: when the tool sets none; the worker has the same setting (asks #29). Some
     #: public APIs (Wikimedia) refuse clients whose User-Agent has no contact info.

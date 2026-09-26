@@ -350,6 +350,54 @@ async def test_tool_dry_run_to_a_cgnat_address_stays_refused(
     assert mock_http == []
 
 
+@pytest.mark.parametrize(
+    ("ceiling", "reachable", "refused"),
+    [
+        (None, ["10.0.0.5", "127.0.0.1", TAILNET_IP, "192.168.1.9"], ["169.254.169.254"]),
+        ("10.20.0.0/16", ["10.20.3.4"], ["10.0.0.5", "127.0.0.1", TAILNET_IP, "192.168.1.9"]),
+        ("", [], ["10.0.0.5", "127.0.0.1", TAILNET_IP]),
+        # Listing metadata or link-local changes nothing: they stay refused.
+        ("169.254.0.0/16, 10.20.0.0/16", ["10.20.3.4"], ["169.254.169.254", "169.254.1.1"]),
+    ],
+)
+def test_self_hosted_private_reach_is_bounded_by_the_operator_ceiling(
+    settings: Settings, ceiling: str | None, reachable: list[str], refused: list[str]
+) -> None:
+    """R-V5-17 (S5-14): LKAP_SELF_HOSTED_ALLOWED_NETWORKS bounds what a self-hosted connection reaches."""
+    configured = settings.model_copy(
+        update={"env": "prod", "self_hosted_allowed_networks": ceiling, "net_allow_private_hosts": ""}
+    )
+    policy = net_guard.policy_from_settings(configured).for_connection("self_hosted")
+    for address in reachable:
+        assert net_guard.check_url(f"https://{address}/", policy, schemes=LK) is None, address
+    for address in refused:
+        assert net_guard.check_url(f"https://{address}/", policy, schemes=LK) is not None, address
+    localhost_ok = net_guard.check_url("https://localhost/", policy, schemes=LK) is None
+    assert localhost_ok is (ceiling is None)
+
+
+async def test_connection_test_route_audits_the_destination_host(
+    admin_client: httpx.AsyncClient, database: Any
+) -> None:
+    from sqlalchemy import select
+
+    from lkap_api.db.models import AuditLog
+
+    body = _body(f"https://{TAILNET_IP}", "self_hosted", "tailnet")
+    await admin_client.post("/v1/connections/test", json=body)
+    await admin_client.post("/v1/connections", json=body)
+
+    async with database.session() as session:
+        rows = (
+            (await session.execute(select(AuditLog).where(AuditLog.action.like("connection.%"))))
+            .scalars()
+            .all()
+        )
+    by_action = {row.action: row.payload for row in rows}
+    assert by_action["connection.test_destination"] == {"host": TAILNET_IP, "deployment_type": "self_hosted"}
+    assert by_action["connection.create"] == {"host": TAILNET_IP, "deployment_type": "self_hosted"}
+
+
 def test_process_policy_is_never_self_hosted(settings: Settings) -> None:
     """Webhooks, tools, QA judges, MCP and vendor calls use this policy as it is."""
     for env in ("dev", "prod"):

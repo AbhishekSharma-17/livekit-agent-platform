@@ -16,6 +16,7 @@ reads need ``viewer`` + ``connections:read``, every write ``admin`` +
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.responses import PlainTextResponse
@@ -28,6 +29,8 @@ from lkap_contracts.api_models import (
     ConnectionUpdate,
 )
 
+from lkap_api.auth import audit
+from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.connections import bundle, service
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.probe import probe_connection
@@ -84,11 +87,31 @@ async def create_connection(
     vault: VaultDep,
     settings: SettingsDep,
     workspace_id: WorkspaceIdDep,
-    _admin: AdminDep,
+    ctx: AdminCtxDep,
 ) -> ConnectionOut:
     """Create a connection."""
     row = await service.create_connection(db, vault, workspace_id, payload, settings.packs_list)
+    _audit_destination(db, ctx, "connection.create", payload, target_id=row.id)
     return service.to_out(row, vault)
+
+
+def _audit_destination(
+    db: DbDep, ctx: WorkspaceContext, action: str, payload: ConnectionCreate, *, target_id: str | None
+) -> None:
+    """R-V5-17 (S5-14): name the host and deployment type a create or test reaches."""
+    audit.record(
+        db,
+        workspace_id=ctx.workspace_id,
+        actor_type=ctx.actor.actor_type,
+        actor_id=ctx.actor.id,
+        action=action,
+        target_type="connection",
+        target_id=target_id,
+        payload={
+            "host": (urlsplit(str(payload.url)).hostname or "")[:253],
+            "deployment_type": payload.deployment_type,
+        },
+    )
 
 
 @router.post(
@@ -102,9 +125,10 @@ async def create_connection(
     ),
 )
 async def test_unsaved_connection(
-    payload: ConnectionCreate, vault: VaultDep, factory: ClientFactoryDep, _admin: AdminDep
+    payload: ConnectionCreate, db: DbDep, vault: VaultDep, factory: ClientFactoryDep, ctx: AdminCtxDep
 ) -> ConnectionTestResult:
-    """Probe connection details without saving them."""
+    """Probe connection details without saving them (the destination is audited, S5-14)."""
+    _audit_destination(db, ctx, "connection.test_destination", payload, target_id=None)
     unsaved = service.UnsavedConnection.from_create(vault, payload)
     return await probe_connection(
         factory, unsaved, deployment_type=payload.deployment_type, use_inference=payload.use_inference

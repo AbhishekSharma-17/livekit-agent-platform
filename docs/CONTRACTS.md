@@ -272,8 +272,8 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   fold into header auth; with `auth` set they are filled from it (`credential_id` also mirrors an OAuth
   credential); a value that disagrees with `auth` is a validation error. Stored rows need no data
   migration: they load as header auth and re-save with `auth` (plus the mirrors, for readers that have
-  not moved to `auth`). `kind: "oauth"` is saved from V5-14 on (below); until V5-16 the worker skips
-  such a server (it receives no token yet).
+  not moved to `auth`). `kind: "oauth"` is saved from V5-14 on (below); from V5-16 the worker
+  connects with an api-issued bearer (below) and skips a server the api issued no access for.
 - **Host policy.** At save (`_check_payload`), before a test connection, and on the worker at connect
   time, an MCP url must pass the network guard (`net_guard.check_url`; the worker's `check_url_public`),
   be `https` (the api allows plain `http` only to a loopback host in `LKAP_ENV=dev`; the worker, which
@@ -290,9 +290,9 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   definition (at most 200 tools, descriptions cut to 1,000 characters, an input schema over 16 KB
   dropped). A save that sends no snapshot keeps the stored one while the url is unchanged. The worker
   still lists tools itself at session start; the api strips `cached_tools` from the resolved config.
-  For an `oauth` server the test sends `Authorization: Bearer <the stored access token>`; with no
-  sign-in, a non-`active` one or an expired token it answers `needs_auth` without a request (refresh
-  is V5-16).
+  For an `oauth` server the test sends `Authorization: Bearer <the access token>`, refreshed first
+  when it is about to expire (V5-16); with no sign-in, or one that needs an admin, it answers
+  `needs_auth` without a request (`unreachable` when the provider cannot refresh just now).
 - **Upgrade tripwire.** `agent/tests/unit/test_sdk_tripwires.py` fails when livekit-agents'
   `MCPServerHTTP.__init__` gains `auth`, when `_create_http_client` or its two call sites change, when
   livekit-agents stops pinning `mcp<2`, or when the pinned version moves off 1.8.3; the file says what to
@@ -302,12 +302,12 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
 
 `docs/research-v4/tools-and-integrations.md` §4.3.2–§4.3.5, §4.3.8, §4.3.9, §4.3.11; D-V5-2, D-V5-3.
 Migration `v5_004_mcp_oauth` (`mcp_oauth_flows`, `mcp_oauth_clients`). The api is the OAuth client;
-refresh, revoke, the internal token route and the worker bearer are V5-16.
+refresh, revoke, the internal token route and the worker bearer are V5-16 (next section).
 
 | Route | Auth | Purpose |
 |---|---|---|
 | `POST /v1/tools/{id}/oauth/start` | admin + `providers:write` | `McpOauthStartIn{client_secret?, authorization_server?}` → `McpOauthStartOut{status: redirect\|needs_client_registration, authorization_url, expires_at, redirect_uri, issuer, registration: preregistered\|cimd\|dcr}`. Runs discovery and registration and writes a flow row. Refusals are `422` with `details.reason` (`pkce_unsupported`, `blocked_destination`, `issuer_mismatch`, `resource_mismatch`, `no_resource_metadata`, `no_authorization_server_metadata`, `oauth_not_required`, `redirect`, `registration_failed`, `client_id_required`, `not_oauth`, `unreachable`, …). |
-| `GET /v1/tools/{id}/oauth/status` | admin | `McpOauthStatusOut{status: not_connected\|connected\|needs_reauth\|revoked, issuer, scopes, expires_at, connected_at, last_refresh_at, registration, worker_supported: false}`. |
+| `GET /v1/tools/{id}/oauth/status` | admin | `McpOauthStatusOut{status: not_connected\|connected\|needs_reauth\|revoked, issuer, scopes, expires_at, connected_at, last_refresh_at, registration, worker_supported}` (`worker_supported: true` from V5-16). |
 | `GET /v1/oauth/mcp/callback?state&code&iss?&error?` | **none** (browser redirect; bound by `state`) | `302` to `{LKAP_WEB_BASE_URL}/console/tools?oauth=ok\|error` (no id, no token material; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`); `400` when `state` names no live sign-in (unknown, used, expired, malformed). |
 | `GET /v1/oauth/mcp/client-metadata.json` | public | The deployment's Client ID Metadata Document, only when `LKAP_PUBLIC_BASE_URL` is a public `https` origin; `404` otherwise. |
 
@@ -349,6 +349,52 @@ refresh, revoke, the internal token route and the worker bearer are V5-16.
 - **Audit**: `mcp_oauth.start`, `mcp_oauth.callback_ok`, `mcp_oauth.callback_rejected` (`reason`),
   identifiers only. **Sweep**: the sessions sweep deletes consumed or expired flows and
   dynamically registered clients whose secret expired.
+
+### MCP servers: tokens, the worker bearer, disconnect (V5-16)
+
+`docs/research-v4/tools-and-integrations.md` §4.3.6. No migration (`status` lives in the bag).
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /internal/v1/tools/{id}/oauth/token` | service token | `McpOAuthTokenIn{session_id, rejected_token_sha256?}` → `McpOAuthTokenOut{access_token, expires_at}` — never the refresh token. Bound to a live session (`created`/`active`) whose agent lists the tool in `tools.tool_ids`; the tool must be an enabled `oauth` MCP server of the session's workspace whose sign-in belongs to it. `404` unknown session or a tool the agent does not use; `409` `session_ended` or `needs_reauth`; `503 token_unavailable` on a transient refresh failure. |
+| `POST /v1/tools/{id}/oauth/revoke` | admin + `providers:write` | Disconnect → `McpOauthStatusOut{status: "not_connected"}`. |
+
+- **Refresh** (`mcp_oauth/tokens.py::get_access_token`): the stored token is handed out while it
+  has more than 60 s left; otherwise it is refreshed (`refresh_token` grant with `resource` and the
+  client's authentication) **single-flight per credential**: a process lock, a Redis `SET NX PX`
+  lock when `LKAP_REDIS_URL` is set, and `SELECT … FOR UPDATE` on the credential row (Postgres).
+  Under the lock the bag is re-read, so a token another request already refreshed is used as is and
+  a rotated refresh token is never replayed; a new refresh token from the provider replaces the old
+  one. `rejected_token_sha256` equal to the stored token's hash forces a refresh; a stale hash (the
+  token was already rotated) returns the new one. `invalid_grant`, or an expired token without a
+  refresh token, sets the bag's `status` to `needs_reauth`, writes the audit row
+  `mcp_oauth.needs_reauth` and emits the `tool.needs_reauth` webhook (`data: {tool_id, reason}`); a
+  transient failure keeps a token that has not expired yet.
+- **Session start**: `ResolvedAgentConfig.mcp_oauth: list[McpOAuthAccess{tool_id, name, url,
+  access_token?, expires_at?}]`, one per `oauth` server with a usable sign-in, refreshed first when it
+  is about to expire (`access_token` is `null` when the api could not refresh it then — e.g.
+  `sessions/start` on SQLite, whose write lock the request already holds — and the worker fetches one
+  before its first request). The `mcp-oauth` bag is never decrypted into `tools`; the definition there
+  carries no credential id. A sign-in that needs an admin is left out and the worker skips the server.
+- **Worker** (`agent/src/lkap_agent/tools/mcp_auth.py`): `ApiIssuedBearer` wraps the guarded
+  transport of each such server — every request carries `Authorization: Bearer <token>` (replaced
+  when less than 30 s is left); on `401` one call to the token route (with the refused token's
+  SHA-256) and one retry, never a third request; on `403` with `error="insufficient_scope"` the
+  challenged scope names are logged and nothing is fetched. When no token can be had the transport
+  answers the MCP client itself so the connection survives: a `tools/call` gets an `isError` result
+  "This integration needs to be re-authorised by an admin" (the model's `ToolError`, recorded as a
+  `tool_needs_reauth` session event), any other request a JSON-RPC error, a notification `202`; after
+  `needs_reauth` it waits 30 s before asking the api again.
+- **Disconnect** (`mcp_oauth/revoke.py`), also run before a tool is deleted: RFC 7009 at the
+  `revocation_endpoint` (the refresh token, then the access token), then RFC 7592 deletion of a
+  dynamically registered client — only when its `registration_client_uri` passes the URL check, a
+  `registration_access_token` is held, and no other sign-in or live flow of the workspace uses the same
+  client (the `mcp_oauth_clients` row goes with it); every provider call through the guard, no
+  redirects, 20 s in total, failures recorded but never blocking. Then the credential is deleted and the
+  tool's `auth.credential_id` cleared. Audit `mcp_oauth.revoked {trigger: revoke|tool_delete,
+  credential_id, issuer_host, revocation: ok|failed|unsupported|no_token, client_deleted}`.
+- **Logs**: no token, code, `state` or secret in any log line, audit row or error message; the
+  worker's structlog chain masks `*_token`, `*_secret`, `code`, `state` and `authorization` fields.
 
 ---
 
@@ -742,6 +788,7 @@ GET  /v1/sessions/{id}/events?after_id=  -> Page[SessionEventOut]
 
 # ---- internal (service token)
 GET  /internal/v1/sessions/{id}/resolved -> ResolvedAgentConfig   (404 if unknown; 409 if status=ended; marks status=active, started_at)
+POST /internal/v1/tools/{id}/oauth/token  McpOAuthTokenIn -> McpOAuthTokenOut   (V5-16; 404/409/503, see §3)
 class SessionEventIn(BaseModel): ts: float; type: str; payload: dict
 POST /internal/v1/sessions/{id}/events   { events: list[SessionEventIn] } -> 202
 class SessionSummaryIn(BaseModel): status: Literal["ended","failed"]; usage: dict; transcript: list[TranscriptTurn]; final_ui_state: UiState | None; error: str | None = None

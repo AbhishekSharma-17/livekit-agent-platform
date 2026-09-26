@@ -22,6 +22,28 @@ works with a real `chat_start`/`chat_send` test after attaching: if the
 worker cannot reach the server, the tool simply does not appear to the model
 that session, and `session_events` (or the chat's own events) shows why.
 
+## Connected services (servers that sign in)
+
+Some MCP servers want a person to sign in with the vendor instead of an API
+key. An admin connects such a server from the console (the tool's page:
+Sign in, then the vendor's consent screen); the sign-in itself needs a
+browser, so it cannot be done through this MCP server. Once connected:
+
+- the platform keeps the vendor's long-lived grant and renews access by
+  itself; the running agent only ever holds access that expires within
+  minutes, and gets fresh access from the platform when it runs out;
+- if the vendor withdraws the grant, or the server asks for permissions the
+  sign-in did not include, the agent's next call to that server fails with a
+  plain sentence ("This integration needs to be re-authorised by an admin"),
+  the session records a `tool_needs_reauth` event, and the console shows the
+  server as needing a new sign-in;
+- disconnecting the server in the console, or deleting the tool, withdraws
+  the grant at the vendor as well (when the vendor supports it) and forgets
+  it here.
+
+A server that is saved but not signed in is skipped at session time; the
+session's events say so.
+
 ## Attaching
 
 Same as an HTTP tool: `agent_attach(id_or_slug, tool_ids=[...])`, or

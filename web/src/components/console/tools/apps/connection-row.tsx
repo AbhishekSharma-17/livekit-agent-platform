@@ -158,7 +158,7 @@ export function ConnectionRow({
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <RenameAccountDialog
             connectionId={connectionId}
             currentLabel={label}

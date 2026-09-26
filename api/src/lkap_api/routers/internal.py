@@ -33,6 +33,7 @@ from lkap_contracts.api_models import (
     SessionSummaryIn,
 )
 from lkap_contracts.common import is_iana_timezone
+from lkap_contracts.compliance import CONSENT_EVENT
 from lkap_contracts.connections import ConnectionInfo, DeploymentType
 from lkap_contracts.fleet import WorkerEnv
 from lkap_contracts.qa import SessionQaIn
@@ -71,8 +72,9 @@ from lkap_api.jobs.reconcile import enqueue_reconcile
 from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
+from lkap_api.recordings.consent import apply_consent_event, note_unrecorded
 from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
-from lkap_api.routers.workspaces import workspace_default_timezone
+from lkap_api.routers.workspaces import workspace_compliance, workspace_default_timezone
 from lkap_api.settings import Settings
 from lkap_api.tool_providers.provisioning import apply_denied_actions
 from lkap_api.vault import Vault
@@ -306,6 +308,8 @@ async def _build_resolved(
         cost_reconcile=await workspace_reconcile_vendors(db, agent.workspace_id),
         business_timezone=business_timezone,
         locale=config.locale,
+        # V5-15: the workspace's disclosure and recording wording (Settings → Compliance).
+        compliance=await workspace_compliance(db, agent.workspace_id),
     )
 
 
@@ -530,6 +534,9 @@ async def post_events(session_id: str, payload: SessionEventsIn, db: DbDep, _ser
                 payload=event.payload,
             )
         )
+        if event.type == CONSENT_EVENT:
+            # V5-15: the latest answer per kind also lands on the row (the recording gate reads it).
+            apply_consent_event(session, event.payload, at=event.ts)
     await db.flush()
     log.debug("session_events_appended", session_id=session_id, count=len(payload.events))
     return Response(status_code=status.HTTP_202_ACCEPTED)
@@ -624,6 +631,20 @@ async def _merge_caller_timezone(db: AsyncSession, session: SessionRow) -> None:
         session.usage = {**session.usage, "caller_timezone": zone}
 
 
+async def _note_unrecorded(db: AsyncSession, session: SessionRow) -> None:
+    """V5-15: a consent-gated recording that never started says why (``recordings.consent``)."""
+    agent = await db.scalar(
+        select(Agent).where(Agent.id == session.agent_id, Agent.workspace_id == session.workspace_id)
+    )
+    if agent is None:
+        return
+    try:
+        config = AgentConfig.model_validate(agent.config)
+    except ValueError:
+        return
+    note_unrecorded(session, config)
+
+
 def _merge_turn_count(session: SessionRow) -> None:
     """Fold `latency.turns` into `usage` so the console's turn count has one source.
 
@@ -690,6 +711,7 @@ async def put_summary(
     session.ended_at = utcnow()
     _merge_turn_count(session)
     await _merge_caller_timezone(db, session)
+    await _note_unrecorded(db, session)
     await cost_session(db, session)
     await db.flush()
     reconcile = await reconcile_due(db, session)

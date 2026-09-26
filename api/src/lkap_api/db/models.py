@@ -716,6 +716,9 @@ class Session(Base):
     disposition: Mapped[str | None] = mapped_column(String(128), nullable=True)
     variables: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     deleted_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    #: V5-15 (`v5_009_consent`): the latest consent answer per kind
+    #: (`lkap_contracts.compliance.ConsentState`), merged from the `consent` events.
+    consent_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         CheckConstraint("status IN ('created','active','ended','failed')", name="status_valid"),

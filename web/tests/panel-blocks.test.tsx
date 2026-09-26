@@ -107,7 +107,8 @@ describe("block catalog", () => {
     expect([...BLOCK_TYPES].sort()).toEqual(Object.keys(BLOCK_COMPONENTS).sort());
     expect([...BLOCK_TYPES].sort()).toEqual(Object.keys(BLOCK_CATALOG).sort());
     // V5-12: `markdown` joins the lazy split (it pulls in `streamdown`).
-    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["document", "markdown", "table", "video"]);
+    // V5-23: `upload` joins it too (it needs `@livekit/components-react`, like `video`).
+    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["document", "markdown", "table", "upload", "video"]);
   });
 
   it("seeds initial state from config keys that name a state field, like the worker", () => {
@@ -194,6 +195,19 @@ describe("each block renders its fixture state", () => {
         expect(within(el).getByRole("button", { name: "Decline" })).toBeTruthy();
       },
     ],
+    [
+      "upload",
+      (el) => {
+        // No `RoomContext` here (like the `video` case above): the picker
+        // shows its files (worker-verified and worker-refused) and disables
+        // sending, exactly as it does in the console's read-only snapshot.
+        expect(within(el).getByText("Please send a photo of the damage.")).toBeTruthy();
+        expect(within(el).getByText("stove.jpg")).toBeTruthy();
+        expect(within(el).getByText("That type of file can't be sent here. Send a photo or a PDF.")).toBeTruthy();
+        expect(within(el).getByText("Files can be sent during a call.")).toBeTruthy();
+        expect(within(el).getByRole("button", { name: /Choose a file/ }).hasAttribute("disabled")).toBe(true);
+      },
+    ],
   ];
 
   it.each(cases)("%s", async (type, check) => {
@@ -221,6 +235,7 @@ describe("each block has an empty state", () => {
     video: /avatar.s video appears here/,
     custom: /Nothing from the pack yet/,
     consent: /will ask for your agreement here/,
+    upload: /will ask for a file here/,
   };
   it.each(Object.entries(empties))("%s", async (type, text) => {
     render(

@@ -411,6 +411,29 @@ describe("PanelComposer", () => {
     });
   });
 
+  it("edits an upload block's file types (the multiselect config field, V5-23)", async () => {
+    stubFetch();
+    const a = agent({
+      config: {
+        instructions: "Hi",
+        pipeline: { mode: "cascaded" },
+        panel: { panel_id: "composite", layout: "side", blocks: [{ id: "documents", type: "upload", config: {}, order: 0 }] },
+      },
+    });
+    render(<Harness agent={a} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Send a file/ }));
+    // Default `accept` is `["image/*", "application/pdf"]` (`BlockConfig_upload`'s default) — both start checked.
+    const pdf = screen.getByRole("checkbox", { name: "PDF" });
+    const anyPhoto = screen.getByRole("checkbox", { name: "Any photo" });
+    expect(pdf.getAttribute("aria-checked")).toBe("true");
+    expect(anyPhoto.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(pdf);
+    expect(latest?.config.panel.blocks[0].config).toMatchObject({ accept: ["image/*"] });
+    // Unticking the last remaining type is refused (the schema needs at least one).
+    fireEvent.click(anyPhoto);
+    expect(latest?.config.panel.blocks[0].config).toMatchObject({ accept: ["image/*"] });
+  });
+
   it("switches the layout and the panel, keeping ui_panel_id in step", () => {
     stubFetch();
     render(<Harness agent={agent()} />);

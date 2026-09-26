@@ -95,6 +95,8 @@ from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.recordings.consent import apply_consent_event, note_unrecorded
 from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
+from lkap_api.recordings.service import RecordingStopOut
+from lkap_api.recordings.service import stop_recording as stop_egress_recording
 from lkap_api.routers.workspaces import workspace_compliance, workspace_default_timezone
 from lkap_api.settings import Settings
 from lkap_api.tool_providers.provisioning import apply_denied_actions
@@ -613,6 +615,27 @@ async def start_recording(
     agent = await _session_agent(db, session)
     connection = await _session_connection(db, session, agent)
     return await starter(db, session, connection, factory)
+
+
+@router.post(
+    "/sessions/{session_id}/recording/stop",
+    response_model=RecordingStopOut,
+    summary="Stop a session recording (worker only)",
+    description=(
+        "Called by the worker when the caller withdraws recording consent after the recording "
+        "started (V5-27, S5-5): the api stops the session's Egress; the `egress_ended` webhook "
+        "finalises the shorter file. Idempotent: nothing running, already finished or already "
+        "stopped answers `stopped: false`."
+    ),
+)
+async def stop_recording(
+    session_id: str, db: DbDep, factory: ClientFactoryDep, _service: ServiceDep
+) -> RecordingStopOut:
+    """Stop the session's Egress through the recordings package."""
+    session = await _load_session(db, session_id)
+    agent = await _session_agent(db, session)
+    connection = await _session_connection(db, session, agent)
+    return await stop_egress_recording(db, session, connection, factory)
 
 
 def _recording_starter() -> RecordingStarter:

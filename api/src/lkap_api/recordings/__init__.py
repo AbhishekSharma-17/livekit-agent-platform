@@ -12,7 +12,13 @@ from __future__ import annotations
 
 from lkap_api.recordings import finalize as _finalize  # noqa: F401 - registers the egress_ended handler
 from lkap_api.recordings import job as _job  # noqa: F401 - registers the recording_finalize job handler
-from lkap_api.recordings.service import start_recording
+from lkap_api.recordings.service import RecordingStopOut, start_recording, stop_recording
 from lkap_api.recordings.storage import NoEgressStorageError, resolve_storage_row
 
-__all__ = ["NoEgressStorageError", "resolve_storage_row", "start_recording"]
+__all__ = [
+    "NoEgressStorageError",
+    "RecordingStopOut",
+    "resolve_storage_row",
+    "start_recording",
+    "stop_recording",
+]

@@ -17,21 +17,24 @@ it) and is exactly the storage key a later signed URL needs; finalisation
 
 from __future__ import annotations
 
-from livekit.api import LiveKitAPI
+from livekit.api import LiveKitAPI, TwirpError
 from livekit.protocol.egress import (
     EgressInfo,
     EncodedFileOutput,
     EncodedFileType,
     RoomCompositeEgressRequest,
     S3Upload,
+    StopEgressRequest,
 )
 from lkap_contracts.agent_config import AgentConfig
 from lkap_contracts.api_models import RecordingStartOut
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.connections.clients import ConnectionClientFactory
 from lkap_api.connections.service import capabilities_of
+from lkap_api.costs.service import config_for_session
 from lkap_api.db.models import Agent, LiveKitConnection
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.deps import get_vault
@@ -50,6 +53,21 @@ _START_TIMEOUT_S = 10.0
 
 class EgressNotEnabledError(UnprocessableEntityError):
     """422: the session's connection has not probed `egress_enabled=true`."""
+
+
+#: `recording_error` of a recording stopped because the caller withdrew consent (S5-5);
+#: `finalize.apply_egress_result` keeps it once the stopped file is ready.
+RECORDING_STOPPED_NOTE = "Stopped early: the caller withdrew consent"
+#: The stop call itself answers quickly (it only asks Egress to end the file).
+_STOP_TIMEOUT_S = 10.0
+
+
+class RecordingStopOut(BaseModel):
+    """``POST /internal/v1/sessions/{id}/recording/stop``."""
+
+    stopped: bool
+    """Whether this call asked Egress to stop (``False``: nothing running, or already stopped)."""
+    egress_id: str | None = None
 
 
 def _egress_object_key(session_id: str) -> str:
@@ -89,7 +107,9 @@ async def start_recording(
     ).scalar_one_or_none()
     if agent is None:
         raise NotFoundError(f"unknown agent '{session.agent_id}'")
-    config = AgentConfig.model_validate(agent.config)
+    # S5-24: the config the session runs (its pinned version), so turning consent off in a
+    # later save never lifts the gate of a live session.
+    config = await config_for_session(db, session) or AgentConfig.model_validate(agent.config)
     if not config.recording.enabled:
         raise ConflictError(f"session '{session.id}' has no recording configured")
     # V5-15: an agent that records only after consent needs an accepted `recording` answer.
@@ -156,3 +176,31 @@ async def start_recording(
 
 async def _start(client: LiveKitAPI, request: RoomCompositeEgressRequest) -> EgressInfo:
     return await client.egress.start_room_composite_egress(request)
+
+
+async def stop_recording(
+    db: AsyncSession, session: SessionRow, connection: LiveKitConnection, factory: ConnectionClientFactory
+) -> RecordingStopOut:
+    """Stop the session's running Egress, once (S5-5: the caller withdrew recording consent).
+
+    Idempotent: a session with no Egress, one already finished, or one already stopped by
+    this route answers ``stopped=false`` without calling LiveKit. The existing
+    ``egress_ended`` webhook finalises the (shorter) file as usual.
+    """
+    egress_id = session.recording_egress_id
+    if (
+        egress_id is None  # `is None`: an empty string is a real, already-issued id (see start)
+        or session.recording_status in ("ready", "failed")
+        or session.recording_error == RECORDING_STOPPED_NOTE
+    ):
+        return RecordingStopOut(stopped=False, egress_id=egress_id)
+    try:
+        async with factory.api(connection, timeout_s=_STOP_TIMEOUT_S) as client:
+            await client.egress.stop_egress(StopEgressRequest(egress_id=egress_id))
+    except TwirpError as exc:
+        # An Egress that already ended (or never ran) cannot be stopped: nothing is recording.
+        log.info("recording_stop_refused", session_id=session.id, code=getattr(exc, "code", None))
+    session.recording_error = RECORDING_STOPPED_NOTE
+    await db.flush()
+    log.info("recording_stopped", session_id=session.id, egress_id=egress_id, reason="consent_withdrawn")
+    return RecordingStopOut(stopped=True, egress_id=egress_id)

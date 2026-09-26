@@ -37,6 +37,10 @@ import type {
   KbCreate,
   KbDocumentOut,
   KbDocumentPage,
+  KbEvalRunOut,
+  KbEvalSetIn,
+  KbEvalSetOut,
+  KbEvaluateIn,
   KbOut,
   KbPage,
   KbSearchRequest,
@@ -79,6 +83,9 @@ const keys = {
   kbs: ["knowledge-bases"] as const,
   kb: (id: string) => ["knowledge-bases", id] as const,
   kbDocuments: (id: string) => ["knowledge-bases", id, "documents"] as const,
+  kbEvals: (id: string) => ["knowledge-bases", id, "evals"] as const,
+  kbEvalRun: (kbId: string, jobId: string) => ["knowledge-bases", kbId, "evaluate", jobId] as const,
+  kbEvalLatest: (id: string) => ["knowledge-bases", id, "evaluate", "latest"] as const,
   sessions: (agentId?: string, status?: string) => ["sessions", agentId ?? "", status ?? ""] as const,
   session: (id: string) => ["sessions", id] as const,
   sessionEvents: (id: string) => ["sessions", id, "events"] as const,
@@ -466,6 +473,68 @@ export function useDeleteKbDocument(kbId: string) {
 export function useKbSearch(kbId: string) {
   return useMutation({
     mutationFn: (body: KbSearchRequest) => api.post<KbSearchResponse>(`knowledge-bases/${kbId}/search`, body),
+  });
+}
+
+// ---- knowledge base evals (V5-05 harness, V5-10 console) ----
+
+/** The knowledge base's golden-question set, in the order it was put. */
+export function useKbEvals(kbId: string) {
+  return useQuery({
+    queryKey: keys.kbEvals(kbId),
+    queryFn: () => api.get<KbEvalSetOut>(`knowledge-bases/${kbId}/evals`),
+    enabled: kbId.length > 0,
+  });
+}
+
+/** `PUT .../evals` replaces the whole set (≤ 500 questions); the dialog sends every row back each save. */
+export function usePutKbEvals(kbId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: KbEvalSetIn) => api.put<KbEvalSetOut>(`knowledge-bases/${kbId}/evals`, body),
+    onSuccess: (data) => {
+      queryClient.setQueryData(keys.kbEvals(kbId), data);
+    },
+  });
+}
+
+/** `POST .../evaluate`: enqueues a run and returns its (still `pending`) job id; the card polls `useKbEvalRun` with it. */
+export function useEvaluateKb(kbId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body?: KbEvaluateIn) => api.post<KbEvalRunOut>(`knowledge-bases/${kbId}/evaluate`, body),
+    onSuccess: (data) => {
+      queryClient.setQueryData(keys.kbEvalRun(kbId, data.job_id), data);
+    },
+  });
+}
+
+/** Polls one evaluation run until it leaves `pending`/`running`. `jobId: null` disables the query (nothing run yet this session). */
+export function useKbEvalRun(kbId: string, jobId: string | null) {
+  return useQuery({
+    queryKey: keys.kbEvalRun(kbId, jobId ?? "none"),
+    queryFn: () => api.get<KbEvalRunOut>(`knowledge-bases/${kbId}/evaluate/${jobId}`),
+    enabled: kbId.length > 0 && jobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "running" ? 1500 : false;
+    },
+  });
+}
+
+/** The last finished run, if any — `null` (not an error banner) when the knowledge base has never been evaluated (404). */
+export function useLatestKbEvalRun(kbId: string) {
+  return useQuery({
+    queryKey: keys.kbEvalLatest(kbId),
+    queryFn: async () => {
+      try {
+        return await api.get<KbEvalRunOut>(`knowledge-bases/${kbId}/evaluate/latest`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    enabled: kbId.length > 0,
   });
 }
 

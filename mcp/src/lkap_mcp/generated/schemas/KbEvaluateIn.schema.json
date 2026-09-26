@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/KbEvaluateIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``POST /v1/knowledge-bases/{id}/evaluate``: the search options every question runs with.\n\nThe defaults are an agent's knowledge defaults (``KnowledgeConfig``: ``mode=\"hybrid\"``, ``k=4``), not\n``KbSearchOptions``'s (``mode=\"vector\"``), so a bare call measures what a new agent retrieves.",
+  "properties": {
+    "k": {
+      "default": 4,
+      "description": "A question is found when a match is in the top `k`.",
+      "maximum": 20,
+      "minimum": 1,
+      "title": "K",
+      "type": "integer"
+    },
+    "min_score": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Drop hits whose `score` is below this (0-1).",
+      "title": "Min Score"
+    },
+    "mode": {
+      "default": "hybrid",
+      "description": "`hybrid` (keyword matches fused with embedding similarity) or `vector`.",
+      "enum": [
+        "vector",
+        "hybrid"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "rerank": {
+      "default": "none",
+      "description": "`local` rescores the top candidates with the local cross-encoder.",
+      "enum": [
+        "none",
+        "local"
+      ],
+      "title": "Rerank",
+      "type": "string"
+    }
+  },
+  "title": "KbEvaluateIn",
+  "type": "object"
+}

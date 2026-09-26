@@ -8,6 +8,7 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { PageHeader } from "@/components/console/shared/page-header";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import { KbDocuments } from "@/components/console/knowledge/kb-documents";
+import { KbEvalsCard } from "@/components/console/knowledge/kb-evals-card";
 import { KbSearchPanel } from "@/components/console/knowledge/kb-search-panel";
 import { DescriptionList } from "@/components/shared/description-list";
 import { pluralize } from "@/lib/format";
@@ -51,6 +52,7 @@ export function KbDetail({ kbId }: { kbId: string }) {
       <div className="flex flex-col gap-8">
         <KbDocuments kbId={kb.id} />
         <KbSearchPanel kbId={kb.id} />
+        <KbEvalsCard kbId={kb.id} />
       </div>
     </div>
   );

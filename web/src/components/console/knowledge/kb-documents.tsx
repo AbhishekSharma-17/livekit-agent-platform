@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AlertCircleIcon, Loader2Icon, RotateCcwIcon, Trash2Icon, UploadCloudIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDeleteKbDocument, useKbDocuments, useUploadKbDocument } from "@/components/console/lib/api-hooks";
 import { isFileOverUploadCap, kbUploadCapErrorMessage } from "@/components/console/lib/upload";
@@ -32,6 +33,18 @@ let queueSeq = 0;
 function nextQueueId() {
   queueSeq += 1;
   return `queue-${queueSeq}`;
+}
+
+/** A plain file-type label from the stored mime type (falls back to the extension, then "File"). */
+function fileTypeLabel(doc: Pick<KbDocumentOut, "mime" | "filename">): string {
+  if (doc.mime === "application/pdf") return "PDF";
+  if (doc.mime === "text/markdown" || doc.mime === "text/x-markdown") return "Markdown";
+  if (doc.mime === "text/plain") return "Text";
+  const extension = doc.filename.split(".").pop()?.toLowerCase();
+  if (extension === "pdf") return "PDF";
+  if (extension === "md" || extension === "markdown") return "Markdown";
+  if (extension === "txt") return "Text";
+  return "File";
 }
 
 /**
@@ -113,7 +126,12 @@ export function KbDocuments({ kbId }: { kbId: string }) {
     {
       id: "status",
       header: "Status",
-      cell: (doc) => <DocumentStatusChip status={doc.status} />,
+      cell: (doc) => <DocumentStatusChip status={doc.status} progress={doc.progress} />,
+    },
+    {
+      id: "type",
+      header: "Type",
+      cell: (doc) => <span className="text-muted-foreground">{fileTypeLabel(doc)}</span>,
     },
     {
       id: "chunks",
@@ -282,10 +300,10 @@ export function KbDocuments({ kbId }: { kbId: string }) {
                     <div className="text-xs text-danger-text">{doc.error}</div>
                   ) : null}
                 </div>
-                <DocumentStatusChip status={doc.status} />
+                <DocumentStatusChip status={doc.status} progress={doc.progress} />
               </div>
               <div className="text-xs text-muted-foreground">
-                {doc.chunk_count} chunks · {formatBytes(doc.bytes)}
+                {fileTypeLabel(doc)} · {doc.chunk_count} chunks · {formatBytes(doc.bytes)}
               </div>
               <div className="flex items-center gap-2">
                 {doc.status === "failed" ? (
@@ -324,12 +342,22 @@ export function KbDocuments({ kbId }: { kbId: string }) {
   );
 }
 
-function DocumentStatusChip({ status }: { status: KbDocumentOut["status"] }) {
+function DocumentStatusChip({
+  status,
+  progress,
+}: {
+  status: KbDocumentOut["status"];
+  progress?: number | null;
+}) {
   if (status === "pending") {
+    const pct = typeof progress === "number" ? Math.round(Math.max(0, Math.min(1, progress)) * 100) : null;
     return (
-      <StatusChip tone="info">
-        <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Indexing…
-      </StatusChip>
+      <div className="flex items-center gap-2">
+        <StatusChip tone="info">
+          <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Indexing{pct !== null ? ` ${pct}%` : "…"}
+        </StatusChip>
+        {pct !== null ? <Progress value={pct} className="w-16" aria-hidden="true" /> : null}
+      </div>
     );
   }
   if (status === "failed") {

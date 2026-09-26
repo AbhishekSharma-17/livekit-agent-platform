@@ -123,10 +123,16 @@ export interface LkapContracts {
   KbCreate?: KbCreate;
   KbDocumentOut?: KbDocumentOut;
   KbDocumentPage?: KbDocumentPage;
+  KbEvalHitRef?: KbEvalHitRef;
   KbEvalIn?: KbEvalIn;
+  KbEvalItemResult?: KbEvalItemResult;
   KbEvalOut?: KbEvalOut;
+  KbEvalResult?: KbEvalResult;
+  KbEvalRunOut?: KbEvalRunOut;
   KbEvalSetIn?: KbEvalSetIn;
   KbEvalSetOut?: KbEvalSetOut;
+  KbEvalTagScore?: KbEvalTagScore;
+  KbEvaluateIn?: KbEvaluateIn;
   KbHit?: KbHit;
   KbImportIn?: KbImportIn;
   KbOut?: KbOut;
@@ -2777,6 +2783,18 @@ export interface KbDocumentPage {
   total: number;
 }
 /**
+ * One of a question's top hits, by reference (no chunk text is stored).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalHitRef".
+ */
+export interface KbEvalHitRef {
+  chunk_id: string;
+  document_id: string;
+  filename: string;
+  score: number;
+}
+/**
  * One golden question: found when a top-k hit is the expected document or contains the expected text.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -2922,6 +2940,28 @@ export interface KbEvalIn {
         string,
         string
       ];
+}
+/**
+ * How one golden question scored.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalItemResult".
+ */
+export interface KbEvalItemResult {
+  eval_id: string;
+  expected_document_id?: string | null;
+  expected_text?: string | null;
+  latency_ms?: number | null;
+  question: string;
+  /**
+   * 1-based position of the first matching hit.
+   */
+  rank?: number | null;
+  reciprocal_rank?: number;
+  skip_reason?: "expected_document_deleted" | null;
+  status: "found" | "missed" | "skipped";
+  tags?: string[];
+  top_hits?: KbEvalHitRef[];
 }
 /**
  * A stored eval.
@@ -3071,6 +3111,105 @@ export interface KbEvalOut {
         string,
         string
       ];
+}
+/**
+ * One evaluation run: the options, the totals, the scores and every question's outcome.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalResult".
+ */
+export interface KbEvalResult {
+  by_tag?: KbEvalTagScore[];
+  embedder_model?: string | null;
+  finished_at: string;
+  found: number;
+  items?: KbEvalItemResult[];
+  k: number;
+  kb_id: string;
+  latency_ms_p50?: number | null;
+  min_score: number | null;
+  mode: "vector" | "hybrid";
+  /**
+   * Mean reciprocal rank over the scored questions.
+   */
+  mrr: number | null;
+  /**
+   * Share of scored questions whose first hit matched.
+   */
+  recall_at_1: number | null;
+  /**
+   * found / scored; null when nothing could be scored.
+   */
+  recall_at_k: number | null;
+  rerank: "none" | "local";
+  /**
+   * Questions that were run (total minus skipped).
+   */
+  scored: number;
+  skipped: number;
+  started_at: string;
+  total: number;
+  /**
+   * Distinct search warnings seen in the run.
+   */
+  warnings?: string[];
+}
+/**
+ * The scores of the questions carrying one tag.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalTagScore".
+ */
+export interface KbEvalTagScore {
+  found: number;
+  mrr: number | null;
+  recall_at_1: number | null;
+  recall_at_k: number | null;
+  scored: number;
+  tag: string;
+}
+/**
+ * An evaluation job: its status and, once ``done``, its result.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvalRunOut".
+ */
+export interface KbEvalRunOut {
+  created_at: string;
+  error?: string | null;
+  job_id: string;
+  kb_id: string;
+  options: KbEvaluateIn;
+  result?: KbEvalResult | null;
+  status: "pending" | "running" | "done" | "failed" | "dead";
+  updated_at: string;
+}
+/**
+ * ``POST /v1/knowledge-bases/{id}/evaluate``: the search options every question runs with.
+ *
+ * The defaults are an agent's knowledge defaults (``KnowledgeConfig``: ``mode="hybrid"``, ``k=4``), not
+ * ``KbSearchOptions``'s (``mode="vector"``), so a bare call measures what a new agent retrieves.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbEvaluateIn".
+ */
+export interface KbEvaluateIn {
+  /**
+   * A question is found when a match is in the top `k`.
+   */
+  k?: number;
+  /**
+   * Drop hits whose `score` is below this (0-1).
+   */
+  min_score?: number | null;
+  /**
+   * `hybrid` (keyword matches fused with embedding similarity) or `vector`.
+   */
+  mode?: "vector" | "hybrid";
+  /**
+   * `local` rescores the top candidates with the local cross-encoder.
+   */
+  rerank?: "none" | "local";
 }
 /**
  * `PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one).

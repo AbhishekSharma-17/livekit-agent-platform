@@ -248,10 +248,27 @@ export const toolsConfigSchema = z.object({
   apps: z.custom<AppsMode>().optional(),
 });
 
+/**
+ * `KnowledgeConfig` (`contracts/src/lkap_contracts/agent_config.py`). The v2
+ * retrieval fields (V5-06) are optional here for the same reason `apps` and
+ * `locale` are above: a fixture built by hand before V5-10 that constructs a
+ * `config.knowledge` value without them must still round-trip through
+ * `zodResolver` without the keys getting stripped from the save payload (the
+ * file header's warning) — `DEFAULT_KNOWLEDGE` (`agents/defaults.ts`) always
+ * supplies concrete values in the real editor.
+ */
 export const knowledgeConfigSchema = z.object({
   kb_ids: z.array(z.string()),
   auto_inject: z.boolean(),
   top_k: z.number().int().min(1, "At least 1").max(20, "20 max"),
+  min_score: z.number().min(0).max(1).nullable().optional(),
+  prefetch: z.boolean().optional(),
+  /** `"none" | "local"` today; a `connection:<id>` string is allowed from V5-24 on. */
+  rerank: z.string().optional(),
+  mode: z.enum(["vector", "hybrid"]).optional(),
+  max_inject_tokens: z.number().int().min(1, "At least 1").optional(),
+  skip_short_turns: z.boolean().optional(),
+  query_mode: z.enum(["last_turn", "conversation"]).optional(),
 });
 
 /**

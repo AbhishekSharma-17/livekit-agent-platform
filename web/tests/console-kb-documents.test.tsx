@@ -102,6 +102,24 @@ describe("KbDocuments — status rendering (docs/UI_UX_SPEC.md §7.7)", () => {
   });
 });
 
+describe("KbDocuments — progress and file type (V5-10)", () => {
+  it("shows a percentage while a document is pending with a progress value, and its file type", async () => {
+    mockFetch({
+      documents: [
+        document_({ id: "d-pending", filename: "a.pdf", mime: "application/pdf", status: "pending", progress: 0.42 }),
+        document_({ id: "d-ready", filename: "b.txt", mime: "text/plain", status: "ready" }),
+      ],
+    });
+
+    renderWithClient(<KbDocuments kbId="kb-1" />);
+    const table = within(await screen.findByRole("table", { name: "Documents" }));
+
+    expect(await table.findByText("Indexing 42%")).toBeTruthy();
+    expect(table.getByText("PDF")).toBeTruthy();
+    expect(table.getByText("Text")).toBeTruthy();
+  });
+});
+
 describe("KbDocuments — drop zone", () => {
   it("uploads a dropped file and refreshes the document list", async () => {
     const onUpload = vi.fn();

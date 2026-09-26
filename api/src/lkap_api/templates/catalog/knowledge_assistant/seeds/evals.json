@@ -1,0 +1,78 @@
+{
+  "Knowledge assistant · Product FAQ": [
+    {
+      "question": "Which plan comes with API access?",
+      "expected_text": "Only the Pro plan includes API access.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "What is your refund policy?",
+      "expected_text": "refunded in full within 30 days of the first payment",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "How many API requests per minute are allowed?",
+      "expected_text": "60 requests a minute",
+      "tags": [
+        "en",
+        "identifier"
+      ]
+    },
+    {
+      "question": "my meter shows offline",
+      "expected_text": "holding its button for ten seconds",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    },
+    {
+      "question": "How long is the warranty on the meter?",
+      "expected_text": "Two years on the meter hardware.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "How much is the Plus plan?",
+      "expected_text": "Plus costs 4 dollars a month.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    }
+  ],
+  "Knowledge assistant · Support playbook": [
+    {
+      "question": "When should I hand the customer over to a person?",
+      "expected_text": "The customer asks for a person, a manager or a callback.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "customer says the meter smells like burning",
+      "expected_text": "switch off the main supply if it is safe to do so",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    },
+    {
+      "question": "Can I tell the customer when the repair will happen?",
+      "expected_text": "A delivery, installation or repair date.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    }
+  ]
+}

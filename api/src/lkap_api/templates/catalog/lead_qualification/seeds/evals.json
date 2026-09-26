@@ -1,0 +1,28 @@
+{
+  "Lead qualification · Offer sheet": [
+    {
+      "question": "Which plan includes single sign-on?",
+      "expected_text": "From 25 dollars per user per month, includes single sign-on.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "Is there a free trial?",
+      "expected_text": "A 14-day free trial on Starter and Team",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "budget is over 10,000 dollars a month",
+      "expected_text": "Over 10,000 dollars a month: Enterprise.",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    }
+  ]
+}

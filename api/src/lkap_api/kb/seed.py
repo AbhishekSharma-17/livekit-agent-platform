@@ -17,6 +17,17 @@ embedded here: the caller commits the agent row first and then enqueues the
 payloads, so the create never holds the database's write lock through an
 embedding-model load, and the ``jobs`` process stays the single vector-store
 writer (V5-04 ask #29).
+
+V5-05: a seeds directory may also hold ``evals.json``, the golden questions
+of its knowledge bases keyed by ``kb_name``::
+
+    {"<kb_name>": [{"question": "...", "expected_text": "...",
+                    "expected_file": "<a seed file>", "tags": ["en"]}]}
+
+``expected_file`` names one of the seed's files and is stored as that
+document's id. A knowledge base's questions are loaded only while it has no
+evaluation set at all, so re-seeding neither duplicates them nor overwrites a
+set someone has since edited.
 """
 
 from __future__ import annotations
@@ -29,12 +40,14 @@ from dataclasses import dataclass, field
 from importlib.resources.abc import Traversable
 from typing import Any
 
+from lkap_contracts.api_models import KbEvalIn
 from lkap_contracts.packs import KbSeed
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
-from lkap_api.db.models import KbDocument, KnowledgeBase
+from lkap_api.db.models import KbDocument, KbEval, KnowledgeBase
 from lkap_api.kb.embed import Embedder, record_kb_embedder
 from lkap_api.kb.ingest import ChunkingConfig, ingest_payload, upload_storage_key
 from lkap_api.logging import get_logger
@@ -43,6 +56,23 @@ from lkap_api.storage.base import StorageBackend
 log = get_logger(__name__)
 
 DEFAULT_SEED_EMBEDDER_ID = "fastembed-embedding"
+
+#: The golden-question file of a seeds directory (V5-05), beside the seed files.
+SEED_EVALS_FILE = "evals.json"
+
+
+class SeedEval(BaseModel):
+    """One golden question in a seeds directory's ``evals.json``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    expected_file: str | None = Field(default=None, description="A seed file of the same knowledge base.")
+    expected_text: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+SEED_EVALS_ADAPTER: TypeAdapter[dict[str, list[SeedEval]]] = TypeAdapter(dict[str, list[SeedEval]])
 
 
 @dataclass(slots=True)
@@ -54,15 +84,19 @@ class SeedImport:
             in seed order — suitable for `AgentConfig.knowledge.kb_ids`.
         ingest_payloads: One ``KB_INGEST`` job payload per newly created
             ``pending`` document, to enqueue **after** the caller commits.
+        evals_loaded: How many golden questions were added from ``evals.json``
+            (V5-05); already in the session, nothing to enqueue.
     """
 
     kb_ids: list[str] = field(default_factory=list)
     ingest_payloads: list[dict[str, Any]] = field(default_factory=list)
+    evals_loaded: int = 0
 
     def extend(self, other: SeedImport) -> None:
         """Append ``other``'s knowledge bases and payloads to this one."""
         self.kb_ids.extend(other.kb_ids)
         self.ingest_payloads.extend(other.ingest_payloads)
+        self.evals_loaded += other.evals_loaded
 
 
 def resolve_pack_module_path(packs: Sequence[str], pack_id: str) -> str | None:
@@ -196,6 +230,64 @@ async def _stage_seed_file(
     )
 
 
+def read_seed_evals(root: Traversable, *, source_label: str) -> dict[str, list[SeedEval]]:
+    """Parse ``root / "seeds" / evals.json``; an absent file is ``{}``.
+
+    A file that cannot be read or parsed is logged and treated as absent, so
+    it never blocks agent creation (the shipped files are validated by tests).
+    """
+    try:
+        resource = root.joinpath("seeds", SEED_EVALS_FILE)
+        if not resource.is_file():
+            return {}
+        return SEED_EVALS_ADAPTER.validate_json(resource.read_bytes())
+    except (ValidationError, OSError) as exc:
+        log.warning("kb_seed_evals_unreadable", source=source_label, error_type=type(exc).__name__)
+        return {}
+
+
+async def _load_seed_evals(
+    db: AsyncSession, *, kb: KnowledgeBase, entries: list[SeedEval], source_label: str
+) -> int:
+    """Add ``entries`` as ``kb``'s evaluation set unless it already has one; return how many were added."""
+    existing = await db.execute(select(KbEval.id).where(KbEval.kb_id == kb.id).limit(1))
+    if existing.scalar_one_or_none() is not None:
+        return 0
+    documents = {
+        str(filename): str(document_id)
+        for document_id, filename in (
+            await db.execute(select(KbDocument.id, KbDocument.filename).where(KbDocument.kb_id == kb.id))
+        ).all()
+    }
+    rows: list[KbEval] = []
+    for entry in entries:
+        document_id = documents.get(entry.expected_file) if entry.expected_file else None
+        try:
+            item = KbEvalIn(
+                question=entry.question,
+                expected_document_id=document_id,
+                expected_text=entry.expected_text,
+                tags=entry.tags,
+            )
+        except ValidationError:
+            log.warning("kb_seed_eval_invalid", source=source_label, kb_id=kb.id, ordinal=len(rows))
+            continue
+        rows.append(
+            KbEval(
+                kb_id=kb.id,
+                question=item.question,
+                expected_document_id=item.expected_document_id,
+                expected_text=item.expected_text,
+                tags=list(item.tags),
+                ordinal=len(rows),
+            )
+        )
+    db.add_all(rows)
+    await db.flush()
+    log.info("kb_seed_evals_loaded", source=source_label, kb_id=kb.id, count=len(rows))
+    return len(rows)
+
+
 async def import_kb_seeds(
     *,
     db: AsyncSession,
@@ -212,6 +304,8 @@ async def import_kb_seeds(
     Nothing is embedded: each new file becomes a ``pending`` document whose
     bytes are in ``storage`` and whose ``KB_INGEST`` payload is returned. The
     caller commits, then enqueues the payloads (the job needs the committed row).
+    The golden questions of ``root / "seeds" / evals.json`` are added to each
+    knowledge base that has no evaluation set yet (V5-05).
 
     Args:
         db: The session the calling agent-creation transaction is using;
@@ -232,9 +326,11 @@ async def import_kb_seeds(
             bases are created in (and reused only from) that workspace.
 
     Returns:
-        The knowledge base ids (in seed order) and one ingest payload per staged file.
+        The knowledge base ids (in seed order), one ingest payload per staged
+        file and the number of golden questions loaded.
     """
     result = SeedImport()
+    seed_evals = read_seed_evals(root, source_label=source_label) if root is not None else {}
     for seed in seeds:
         kb = await _get_or_create_kb(
             db, workspace_id=workspace_id, name=seed.kb_name, embedder_id=embedder_id, embedder=embedder
@@ -253,6 +349,11 @@ async def import_kb_seeds(
                 await _stage_seed_file(
                     db, storage, kb=kb, file_name=file_name, data=data, origin=source_label
                 )
+            )
+        entries = seed_evals.get(seed.kb_name)
+        if entries:
+            result.evals_loaded += await _load_seed_evals(
+                db, kb=kb, entries=entries, source_label=source_label
             )
     return result
 

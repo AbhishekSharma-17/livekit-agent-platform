@@ -1,0 +1,44 @@
+{
+  "Receptionist · Practice info": [
+    {
+      "question": "What should a new patient bring?",
+      "expected_text": "Bring a photo ID and a list of current medication.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "Is there a fee if I cancel late?",
+      "expected_text": "a fee of 25 dollars",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "hours on Friday",
+      "expected_text": "Friday: 8:00 am to 3:00 pm",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    },
+    {
+      "question": "I have severe tooth pain, can I come in today?",
+      "expected_text": "same-day emergency slot",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "parking kahan milegi?",
+      "expected_text": "Free parking behind the building",
+      "tags": [
+        "hi-Latn",
+        "natural"
+      ]
+    }
+  ]
+}

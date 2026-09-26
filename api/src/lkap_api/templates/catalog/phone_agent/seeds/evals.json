@@ -1,0 +1,36 @@
+{
+  "Phone agent · FAQ": [
+    {
+      "question": "Are you open on Saturday?",
+      "expected_text": "Saturday: 10 am to 2 pm.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "How long does delivery take?",
+      "expected_text": "Three to five business days.",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "question about an invoice",
+      "expected_text": "The accounts team.",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    },
+    {
+      "question": "item return kaise karu?",
+      "expected_text": "Items can be returned within 30 days with the receipt.",
+      "tags": [
+        "hi-Latn",
+        "natural"
+      ]
+    }
+  ]
+}

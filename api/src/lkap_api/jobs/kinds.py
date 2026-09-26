@@ -24,6 +24,13 @@ USAGE_DAILY_ROLLUP = "usage_daily_rollup"
 #: the delete routes in `routers/knowledge.py`; handler in `kb/jobs.py`.
 KB_DELETE = "kb_delete"
 
+#: V5-05 (K §2 P0-9, the eval harness): runs a knowledge base's golden
+#: questions through the knowledge search and stores recall@k and MRR in the
+#: job row's own payload (``payload["result"]``; the table has no result
+#: column). Enqueued by ``POST /v1/knowledge-bases/{id}/evaluate``; handler in
+#: `kb/evals.py`.
+KB_EVALUATE = "kb_evaluate"
+
 #: V4-17 (docs/v4/COSTS.md D-V4-45): looks up the vendor's own charge for a finished
 #: session's per-request ids (OpenRouter `/generation`) and writes `vendor_usd` /
 #: `reconciled_usd`. Enqueued after the session summary commits, only when the

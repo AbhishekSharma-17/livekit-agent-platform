@@ -58,12 +58,39 @@ kb_seeds`) — the `insurance_claim` pack seeds "Insurance policy lines" and
 "Intake playbook" from its own files, already populated by the time
 `agent_create` returns.
 
+## Measuring retrieval
+
+A knowledge base can carry an evaluation set: golden questions, each naming
+the document a correct hit comes from (`expected_document_id`, from
+`kb_get`), a passage a correct hit contains (`expected_text`), or both.
+`kb_evals_set(kb_id, items=[...])` replaces the whole set (at most 500).
+
+`kb_evaluate(kb_id, mode="hybrid", rerank="none", min_score=None, k=4)`
+runs every question through the same search the agent uses (the defaults
+are an agent's knowledge defaults) as a background job and, with
+`wait=true`, returns the finished run. A question is **found** when one of
+the top `k` hits is its expected document or contains its expected text
+(case and line breaks ignored). The run reports `recall_at_k` (found /
+scored), `recall_at_1`, `mrr` (mean reciprocal rank: 1 for a first-place
+hit, 0.5 for second, 0 for a miss), the same per tag in `by_tag`, and each
+question's `rank` and top hits. A question whose expected document was
+deleted is `skipped` and left out of the averages.
+`kb_evaluate_result(kb_id)` reads the latest finished run (or one run by
+`job_id`).
+
+Compare modes on the same set before changing an agent's retrieval
+settings: run `mode="vector"`, `mode="hybrid"` and `rerank="local"` and keep
+the one with the best MRR for an acceptable latency (`latency_ms_p50`).
+Tag questions (`["hi-Latn"]` for transliterated Hindi, `["identifier"]` for
+policy or form numbers) to see where a mode helps. Starter templates and
+packs that seed knowledge bases ship a small evaluation set with them.
+
 ## Related tools
 
 `kb_list`, `kb_get`, `kb_create`, `kb_add_document`, `kb_search`,
-`agent_attach`.
+`kb_evals_set`, `kb_evaluate`, `kb_evaluate_result`, `agent_attach`.
 
 ## Related schemas
 
 `KbCreate`, `KbOut`, `KbDocumentOut`, `KbImportIn`, `KbSearchRequest`,
-`KbHit`, `KbSearchResponse`, `KbSeed`.
+`KbHit`, `KbSearchResponse`, `KbSeed`, `KbEvalIn`, `KbEvalSetOut`.

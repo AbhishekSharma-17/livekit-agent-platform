@@ -235,8 +235,11 @@ describe("AppsTab — status and the gallery's queries run in parallel", () => {
 
     await waitFor(() => expect(calls.some((c) => c.url.includes("/tool-providers/composio/toolkits?"))).toBe(true));
     expect(calls.some((c) => c.url.endsWith("/tool-providers/composio/categories"))).toBe(true);
-    // `status` has not answered yet — the tab is still on its loading skeleton.
-    expect(screen.queryByText("Valid")).toBeNull();
+    // `status` has not answered yet — the tab is still on its own loading
+    // skeleton (`screen.queryByText("Valid")` would also be null once
+    // `status` settles to `STATUS_NOT_SET_UP`, so name the loading state
+    // directly rather than inferring it from an absence).
+    expect(screen.getByText("Loading Apps")).toBeTruthy();
 
     releaseStatus();
     expect(await screen.findByText("Valid")).toBeTruthy();

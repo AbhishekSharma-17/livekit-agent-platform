@@ -41,6 +41,7 @@ from lkap_api.kb.stores import (
     StoreHealth,
     VectorHit,
     VectorRecord,
+    check_safe_id,
     document_filter,
 )
 from lkap_api.logging import get_logger
@@ -55,7 +56,7 @@ LANCEDB_CAPABILITIES: Final = StoreCapabilities(
 
 def _quoted_ids(ids: list[str]) -> str:
     for value in ids:
-        if not SAFE_ID.match(value):
+        if not SAFE_ID.fullmatch(value):
             raise ValueError(f"unsafe id for a LanceDB filter: {value!r}")
     return ", ".join(f"'{value}'" for value in ids)
 
@@ -81,7 +82,7 @@ class LanceDBStore:
 
     @staticmethod
     def _table_name(kb_id: str) -> str:
-        return f"kb_{kb_id}"
+        return f"kb_{check_safe_id(kb_id, what='kb_id')}"
 
     def _connect(self) -> lancedb.DBConnection:
         if self._db is None:

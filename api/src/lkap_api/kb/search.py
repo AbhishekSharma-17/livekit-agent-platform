@@ -8,6 +8,7 @@ point kept as a thin wrapper (vector mode, no rerank, no floor).
 
 from __future__ import annotations
 
+import hashlib
 from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -53,8 +54,16 @@ class CacheStats:
     misses: int = 0
 
 
+def query_cache_key(query: str) -> str:
+    """The cache's key for ``query``: the SHA-256 of its normalised form (S5-13).
+
+    A digest, so the process never retains up to 512 whole query texts.
+    """
+    return hashlib.sha256(normalise_query(query).encode("utf-8")).hexdigest()
+
+
 class QueryEmbeddingCache:
-    """An LRU of query vectors keyed by ``(embedder model, width, normalised query)``.
+    """An LRU of query vectors keyed by ``(embedder model, width, sha256(normalised query))``.
 
     Keyed by model as well as text, so switching ``LKAP_EMBEDDER`` (or a test
     embedder) never returns another model's vector. Spoken questions repeat
@@ -77,7 +86,7 @@ class QueryEmbeddingCache:
         Returns:
             The vector, or ``None`` when the embedder returned nothing.
         """
-        key = (embedder.model_id, embedder.dimension, normalise_query(query))
+        key = (embedder.model_id, embedder.dimension, query_cache_key(query))
         cached = self._entries.get(key)
         if cached is not None:
             self._entries.move_to_end(key)

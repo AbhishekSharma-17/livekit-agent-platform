@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import io
 import re
+import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -16,13 +18,16 @@ from sqlalchemy import select
 
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase
 from lkap_api.db.session import Database
+from lkap_api.kb import ingest as ingest_module
 from lkap_api.kb.embed import FakeEmbedder, approx_token_count
 from lkap_api.kb.ingest import (
     HEADING_SEPARATOR,
     PROGRESS_EVERY,
     Chunk,
     ChunkingConfig,
+    DocumentRejectedError,
     ExtractedDocument,
+    check_zip_archive,
     chunk_document,
     document_kind,
     extract_document,
@@ -450,3 +455,135 @@ async def test_ingest_failure_after_a_previous_ingest_keeps_the_old_chunks(
             await session.execute(select(KbChunk.text).where(KbChunk.document_id == document_id))
         ).scalars()
         assert list(texts) == ["# Doc\n\nFirst version."]
+
+
+# --------------------------------------------------------------------------- V5-27 (S5-1, S5-2)
+def _zip_with(members: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, body in members.items():
+            archive.writestr(name, body)
+    return buffer.getvalue()
+
+
+def _no_markitdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse() -> object:
+        raise AssertionError("MarkItDown must not see this archive")
+
+    monkeypatch.setattr(ingest_module, "_markitdown", refuse)
+
+
+def test_extract_document_zip_bomb_docx_is_rejected_before_decompression(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 20 MB of zeros deflates to ~20 KB: a 1000:1 member, the shape of the review's 306 KB bomb.
+    bomb = _zip_with({"[Content_Types].xml": b"<Types/>", "word/document.xml": bytes(20 * 1024 * 1024)})
+    assert len(bomb) < 100_000
+    _no_markitdown(monkeypatch)
+    with pytest.raises(DocumentRejectedError, match="compressed suspiciously well"):
+        extract_document(filename="bomb.docx", mime="", data=bomb)
+
+
+@pytest.mark.parametrize(
+    ("limits", "members", "message"),
+    [
+        ({"MAX_ZIP_MEMBERS": 3}, {f"m{i}.xml": b"<a/>" for i in range(4)}, "more than 3 parts"),
+        ({"MAX_ZIP_UNCOMPRESSED_BYTES": 1000}, {"a.xml": b"x" * 600, "b.xml": b"y" * 600}, "too large"),
+    ],
+)
+def test_extract_document_zip_limits_are_checked_on_the_directory(
+    monkeypatch: pytest.MonkeyPatch, limits: dict[str, int], members: dict[str, bytes], message: str
+) -> None:
+    for name, value in limits.items():
+        monkeypatch.setattr(ingest_module, name, value)
+    _no_markitdown(monkeypatch)
+    for filename in ("a.docx", "a.pptx", "a.xlsx"):
+        with pytest.raises(DocumentRejectedError, match=message):
+            extract_document(filename=filename, mime="", data=_zip_with(members))
+
+
+def test_extract_document_a_non_zip_office_file_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_markitdown(monkeypatch)
+    with pytest.raises(DocumentRejectedError, match="not a readable Office document"):
+        extract_document(filename="a.docx", mime="", data=b"not a zip")
+
+
+def test_extract_document_the_shipped_docx_passes_the_archive_check() -> None:
+    check_zip_archive((FIXTURES / "claims_handbook.docx").read_bytes())
+
+
+def test_markitdown_only_registers_the_supported_converters() -> None:
+    from markitdown.converters import DocxConverter, HtmlConverter, PptxConverter, XlsxConverter
+
+    registered = {type(item.converter) for item in ingest_module._markitdown()._converters}
+    assert registered == {DocxConverter, HtmlConverter, PptxConverter, XlsxConverter}
+
+
+async def test_ingest_extraction_timeout_marks_the_document_failed(
+    database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def slow_extract(**_: object) -> ExtractedDocument:
+        time.sleep(0.5)
+        return ExtractedDocument(text="late")
+
+    monkeypatch.setattr(ingest_module, "EXTRACT_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(ingest_module, "extract_document", slow_extract)
+    kb_id, document_id = await _kb_with_document(database, filename="slow.md")
+    async with database.session() as session:
+        outcome = await ingest_into_session(
+            session,
+            store=LanceDBStore(tmp_path),
+            embedder=FakeEmbedder(),
+            kb_id=kb_id,
+            document_id=document_id,
+            filename="slow.md",
+            mime="text/markdown",
+            data=b"# Slow",
+        )
+        await session.commit()
+    assert outcome.status == "failed"
+    assert outcome.error == "extracting the text took longer than 0.05 seconds"
+    async with database.session() as session:
+        document = await session.get(KbDocument, document_id)
+    assert document is not None and document.status == "failed" and document.error == outcome.error
+
+
+def test_chunk_document_long_heading_line_is_linear_time() -> None:
+    # "# x" + spaces + "y" backtracked quadratically in the old heading pattern (16k: ~3 s).
+    line = "# x" + " " * 200_000 + "y"
+    started = time.perf_counter()
+    chunks = chunk_document(
+        ExtractedDocument(text=f"{line}\n\nBody text."),
+        config=ChunkingConfig(),
+        count_tokens=approx_token_count,
+    )
+    assert time.perf_counter() - started < 1.0
+    assert chunks  # a line over the heading cap is plain text, still chunked
+
+
+@pytest.mark.parametrize(
+    ("line", "heading"),
+    [
+        ("# Title", (1, "Title")),
+        ("###   Spaced title  ", (3, "Spaced title")),
+        ("## Closed ##", (2, "Closed")),
+        ("## C# notes", (2, "C# notes")),
+        ("## ###", (2, "###")),
+        ("   # Indented", (1, "Indented")),
+        ("    # Code", None),
+        ("#NoSpace", None),
+        ("####### Seven", None),
+        ("# " + "x" * 10_001, None),
+    ],
+)
+def test_heading_reads_atx_headings(line: str, heading: tuple[int, str] | None) -> None:
+    assert ingest_module._heading(line) == heading
+
+
+def test_sentences_long_paragraph_is_linear_time() -> None:
+    # Every ". " used to slice the rest of the paragraph: ~17 s for this 2 MB paragraph.
+    text = "Ab. " * 500_000
+    started = time.perf_counter()
+    spans = ingest_module._sentences(text, 0, len(text))
+    assert time.perf_counter() - started < 2.0
+    assert len(spans) == 500_000

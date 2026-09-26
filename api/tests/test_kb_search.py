@@ -21,15 +21,26 @@ from typing import Any
 
 import httpx
 import pytest
+from auth_helpers import make_workspace
+from conftest import create_agent
 from fastapi import FastAPI
 from sqlalchemy import text, update
 
+from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase, new_id
+from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.kb.embed import FakeEmbedder
 from lkap_api.kb.lexical import fts5_match, lexical_search, query_tokens, tsquery_text
 from lkap_api.kb.rerank import LocalReranker, sigmoid
-from lkap_api.kb.search import QUERY_CACHE, QueryEmbeddingCache, fuse_rrf, normalise_query, search_kbs
+from lkap_api.kb.search import (
+    QUERY_CACHE,
+    QueryEmbeddingCache,
+    fuse_rrf,
+    normalise_query,
+    query_cache_key,
+    search_kbs,
+)
 from lkap_api.kb.service import KnowledgeService
 from lkap_api.kb.store import LanceDBStore, VectorHit, VectorRecord, get_lancedb_store
 from lkap_api.routers.knowledge import get_embedder, get_reranker
@@ -558,6 +569,87 @@ async def test_search_rejects_unknown_options(
         "/internal/v1/kb/search", json={"kb_ids": ["x"], "query": "q", "k": 2, **extra}
     )
     assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------- V5-27 (S5-13, S5-29)
+@pytest.mark.parametrize("route", ["admin", "internal"])
+async def test_search_rejects_query_over_max_length(
+    admin_client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    database: Database,
+    store: LanceDBStore,
+    route_fakes: KeywordReranker,
+    route: str,
+) -> None:
+    kb_id, _ = await seed_kb(database, store, HYBRID_CHUNKS)
+    for query, expected in (("q" * 2000, 200), ("q" * 2001, 422)):
+        if route == "admin":
+            response = await admin_client.post(
+                f"/v1/knowledge-bases/{kb_id}/search", json={"query": query, "k": 2}
+            )
+        else:
+            response = await service_client.post(
+                "/internal/v1/kb/search", json={"kb_ids": [kb_id], "query": query, "k": 2}
+            )
+        assert response.status_code == expected, response.text
+
+
+async def test_query_cache_key_does_not_retain_full_query() -> None:
+    cache = QueryEmbeddingCache(maxsize=4)
+    secret_query = "policy number AUTO-11111 for " + "x" * 1500
+    await cache.embed(StubEmbedder(), secret_query)
+    [key] = list(cache._entries)
+    assert key[2] == query_cache_key(secret_query) and len(key[2]) == 64
+    assert "AUTO-11111" not in repr(key)
+    # Normalisation still holds: one digest for spellings that differ in case and spaces.
+    assert query_cache_key("What's   Covered?") == query_cache_key("what's covered?")
+
+
+async def test_internal_search_with_session_workspace_skips_foreign_kb(
+    admin_client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    database: Database,
+    store: LanceDBStore,
+    route_fakes: KeywordReranker,
+) -> None:
+    own_kb, _ = await seed_kb(database, store, HYBRID_CHUNKS)
+    foreign_kb, _ = await seed_kb(database, store, HYBRID_CHUNKS, name="Other workspace KB")
+    other_workspace = await make_workspace(database, "other-ws")
+    async with database.session() as session:
+        await session.execute(
+            update(KnowledgeBase)
+            .where(KnowledgeBase.id == foreign_kb)
+            .values(workspace_id=other_workspace)
+            .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+        )
+    agent = await create_agent(admin_client)
+    session_id = "5" * 32
+    async with database.session() as session:
+        session.add(
+            SessionRow(
+                id=session_id,
+                agent_id=str(agent["id"]),
+                config_version=1,
+                room_name="lkap-kb-search",
+                participant_identity="u",
+                participant_name="U",
+                status="active",
+                pipeline_mode="cascaded",
+            )
+        )
+
+    body = {"kb_ids": [own_kb, foreign_kb], "query": QUERY, "k": 8}
+    scoped = await service_client.post("/internal/v1/kb/search", json={**body, "session_id": session_id})
+    assert scoped.status_code == 200, scoped.text
+    assert {hit["kb_id"] for hit in scoped.json()["hits"]} == {own_kb}
+    assert [(w["code"], w["kb_id"]) for w in scoped.json()["warnings"]] == [("kb_not_found", foreign_kb)]
+
+    # A pre-V5-27 worker (no session_id) keeps the old cross-workspace read.
+    legacy = await service_client.post("/internal/v1/kb/search", json=body)
+    assert {hit["kb_id"] for hit in legacy.json()["hits"]} == {own_kb, foreign_kb}
+
+    unknown = await service_client.post("/internal/v1/kb/search", json={**body, "session_id": "9" * 32})
+    assert unknown.status_code == 404
 
 
 # --------------------------------------------------------------------------- the real cross-encoder (opt-in)

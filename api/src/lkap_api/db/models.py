@@ -834,6 +834,39 @@ class SessionEvent(Base):
     __table_args__ = (Index("ix_session_events_session", "session_id", "id"),)
 
 
+class SessionAsset(Base):
+    """One stored file of a session (V5-19, `v5_002_session_uploads`, D-V5-35).
+
+    The bytes live in the configured storage backend at `storage_key`
+    (`sessions/<session id>/<random id><ext>`, server-generated, never the
+    caller's filename); `name` is the sanitised display name and `sha256` the
+    hex digest of the stored bytes. `meta` holds `block_id` (an upload) or
+    `document_id` (a copied knowledge-base document, R-V5-5).
+    """
+
+    __tablename__ = "session_assets"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = workspace_fk()
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    mime: Mapped[str] = mapped_column(String(128), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('upload','frame','signature','document')", name="kind_valid"),
+        Index("ix_session_assets_session", "session_id", "created_at"),
+        Index("ix_session_assets_workspace", "workspace_id"),
+    )
+
+
 # ------------------------------------------------------- session QA, cost, rollups
 class SessionQa(Base):
     """LLM quality scoring of one finished session (CONTRACTS-V2 §1.4, R-V2-5).

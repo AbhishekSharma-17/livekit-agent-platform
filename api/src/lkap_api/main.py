@@ -59,6 +59,8 @@ from lkap_api.routers import (
     workspaces,
 )
 from lkap_api.routers.provider_keys import seed_bootstrap_credentials
+from lkap_api.session_assets import retention_loop as session_assets_retention_loop
+from lkap_api.session_assets import router as session_assets_router
 from lkap_api.sessions_sweep import sweep_loop
 from lkap_api.settings import Settings, get_settings
 from lkap_api.templates.router import router as templates_router
@@ -182,6 +184,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(text_sessions.router)
     app.include_router(tool_providers_router)  # V5-18: connected apps (Composio)
     app.include_router(costs.router)
+    app.include_router(session_assets_router)  # V5-19: stored session files
     _include_knowledge_router(app)
 
 
@@ -280,6 +283,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await _startup(app, resolved)
         sweep_task: asyncio.Task[None] = asyncio.create_task(sweep_loop(app.state.db, resolved))
         app.state.sweep_task = sweep_task
+        # V5-19: session files follow the recording retention (its own loop until the
+        # sessions sweep owner folds it in; docs/v5/_asks.md).
+        assets_task: asyncio.Task[None] = asyncio.create_task(
+            session_assets_retention_loop(app.state.db, resolved)
+        )
+        app.state.session_assets_task = assets_task
         # V4-18 (R-V4-65): load the fastembed model now (fire-and-forget; never fails startup).
         warmup_task: asyncio.Task[None] = asyncio.create_task(warm_default_embedder(resolved))
         app.state.embedder_warmup_task = warmup_task
@@ -287,7 +296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
-            for task in (sweep_task, warmup_task):
+            for task in (sweep_task, assets_task, warmup_task):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task

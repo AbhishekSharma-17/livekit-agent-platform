@@ -36,6 +36,18 @@ deciding scores are on ``[0, 1]`` so one ``min_score`` works in every mode:
 
 The defaults (``mode="vector"``, ``rerank="none"``, ``min_score=None``) return
 what the pre-V5-04 search returned, so the worker is unchanged until V5-06.
+
+**Native hybrid (V5-13).** When the vector store says ``capabilities.hybrid``
+(pgvector: the ``tsv`` keyword index lives in the same database), stage 3
+asks the store for the fused list (``store.query(..., text=query)``) and the
+service skips its own lexical stage and fusion: each knowledge base's list is
+fused inside the store by the same RRF over the same keyword query, so one
+knowledge base's result is identical either way. Across several knowledge
+bases the per-knowledge-base fused lists are merged by fused score (the
+service's own path fuses one global keyword list instead). A store that
+reports a knowledge base built at another width
+(:class:`~lkap_api.kb.embed.KbEmbedderMismatchError`) gets that knowledge base
+skipped with a ``kb_embedder_mismatch`` warning, like stage 1 does.
 """
 
 from __future__ import annotations
@@ -61,11 +73,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase
-from lkap_api.kb.embed import Embedder, kb_embedder_mismatch
+from lkap_api.kb.embed import Embedder, KbEmbedderMismatchError, kb_embedder_mismatch
 from lkap_api.kb.lexical import LexicalResult, lexical_search
 from lkap_api.kb.rerank import Reranker, sigmoid
 from lkap_api.kb.search import QUERY_CACHE, QueryEmbeddingCache, fuse_rrf
-from lkap_api.kb.store import VectorHit, VectorStore
+from lkap_api.kb.store import VectorHit, VectorStore, store_capabilities
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -204,11 +216,17 @@ class KnowledgeService:
             return self._finish(response, started)
 
         retrieve_started = time.perf_counter()
+        native_hybrid = mode == "hybrid" and store_capabilities(self._store).hybrid
         lexical_task = (
-            self._lexical(searchable, query, response.warnings) if mode == "hybrid" else _no_lexical()
+            self._lexical(searchable, query, response.warnings)
+            if mode == "hybrid" and not native_hybrid
+            else _no_lexical()
         )
         vector_hits, lexical = await asyncio.gather(
-            self._vector_fan_out(searchable, vector, response.warnings), lexical_task
+            self._vector_fan_out(
+                searchable, vector, response.warnings, text=query if native_hybrid else None
+            ),
+            lexical_task,
         )
         candidates = await self._join(vector_hits, lexical, set(searchable))
         response.timings_ms["retrieve"] = _ms(retrieve_started)
@@ -256,13 +274,31 @@ class KnowledgeService:
         return searchable
 
     async def _vector_fan_out(
-        self, kb_ids: list[str], vector: list[float], warnings: list[KnowledgeSearchWarning]
+        self,
+        kb_ids: list[str],
+        vector: list[float],
+        warnings: list[KnowledgeSearchWarning],
+        *,
+        text: str | None = None,
     ) -> list[VectorHit]:
-        """Query every knowledge base at once; merge by cosine, best first, cut to :data:`CANDIDATES`."""
+        """Query every knowledge base at once; merge by score, best first, cut to :data:`CANDIDATES`.
+
+        ``text`` is passed only to a hybrid-capable store; its hits then carry fused scores.
+        """
 
         async def one(kb_id: str) -> list[VectorHit]:
             try:
-                return await asyncio.wait_for(self._store.query(kb_id, vector, CANDIDATES), self._timeout)
+                search = (
+                    self._store.query(kb_id, vector, CANDIDATES)
+                    if text is None
+                    else self._store.query(kb_id, vector, CANDIDATES, text=text)
+                )
+                return await asyncio.wait_for(search, self._timeout)
+            except KbEmbedderMismatchError as exc:
+                log.warning("kb_search_skipped_embedder_mismatch", kb_id=kb_id, source="store")
+                warnings.append(
+                    KnowledgeSearchWarning(code="kb_embedder_mismatch", kb_id=kb_id, message=exc.message)
+                )
             except TimeoutError:
                 log.warning("kb_search_timeout", kb_id=kb_id, timeout_s=self._timeout)
                 warnings.append(
@@ -285,11 +321,19 @@ class KnowledgeService:
 
         per_kb = await asyncio.gather(*(one(kb_id) for kb_id in kb_ids))
         merged: dict[str, VectorHit] = {}
+        position: dict[str, int] = {}
         for hits in per_kb:
-            for hit in hits:
+            for index, hit in enumerate(hits):
                 if hit.id not in merged or hit.score > merged[hit.id].score:
                     merged[hit.id] = hit
-        return sorted(merged.values(), key=lambda hit: (-hit.score, hit.id))[:CANDIDATES]
+                    position[hit.id] = index
+
+        def order(hit: VectorHit) -> tuple[float, int, str]:
+            # A store-fused list is already ordered with fuse_rrf's tie-break (equal
+            # RRF sums are common); keep that order among equal scores.
+            return (-hit.score, position[hit.id] if hit.fused else 0, hit.id)
+
+        return sorted(merged.values(), key=order)[:CANDIDATES]
 
     async def _lexical(
         self, kb_ids: list[str], query: str, warnings: list[KnowledgeSearchWarning]
@@ -339,6 +383,8 @@ class KnowledgeService:
         lexical: LexicalResult,
         mode: SearchMode,
     ) -> list[_Candidate]:
+        if mode == "hybrid" and any(hit.fused for hit in vector_hits):
+            return KnowledgeService._rank_native_hybrid(candidates, vector_hits)
         vector_ids = [hit.id for hit in vector_hits if hit.id in candidates]
         for hit in vector_hits:
             if hit.id in candidates:
@@ -357,6 +403,23 @@ class KnowledgeService:
             candidate.source = "fused"
             ranked.append(candidate)
         return ranked
+
+    @staticmethod
+    def _rank_native_hybrid(
+        candidates: dict[str, _Candidate], fused_hits: list[VectorHit]
+    ) -> list[_Candidate]:
+        """The store already fused each knowledge base's lists; keep its scores and the merged order."""
+        ranked: list[_Candidate] = []
+        for hit in fused_hits:
+            candidate = candidates.get(hit.id)
+            if candidate is None:
+                continue
+            candidate.vector_score = hit.vector_score
+            candidate.lexical_rank = hit.lexical_rank
+            candidate.fused_score = hit.score
+            candidate.source = "fused"
+            ranked.append(candidate)
+        return ranked[:CANDIDATES]
 
     async def _rerank(
         self, query: str, ranked: list[_Candidate], warnings: list[KnowledgeSearchWarning]

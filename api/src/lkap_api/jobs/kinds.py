@@ -31,6 +31,14 @@ KB_DELETE = "kb_delete"
 #: `kb/evals.py`.
 KB_EVALUATE = "kb_evaluate"
 
+#: V5-13 (D-V5-13): re-embeds a knowledge base's chunk rows with the current
+#: embedder and replaces its vectors in the current vector store, recording
+#: the embedder on the knowledge base. The move from LanceDB to pgvector and
+#: every embedder change go through it. Progress and the outcome are written
+#: into the job row's own payload (``progress``, ``result``). Enqueued by
+#: ``python -m lkap_api.kb.jobs reindex``; handler in `kb/jobs.py`.
+KB_REINDEX = "kb_reindex"
+
 #: V4-17 (docs/v4/COSTS.md D-V4-45): looks up the vendor's own charge for a finished
 #: session's per-request ids (OpenRouter `/generation`) and writes `vendor_usd` /
 #: `reconciled_usd`. Enqueued after the session summary commits, only when the

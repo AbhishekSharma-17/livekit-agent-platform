@@ -90,7 +90,7 @@ from lkap_api.kb.ingest import (
 from lkap_api.kb.jobs import enqueue_kb_delete
 from lkap_api.kb.rerank import Reranker, get_local_reranker
 from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService
-from lkap_api.kb.store import VectorStore, get_lancedb_store
+from lkap_api.kb.store import VectorStore, resolve_store
 from lkap_api.logging import get_logger
 from lkap_api.storage.base import StorageBackend, UploadTooLargeError
 from lkap_api.storage.deps import StorageDep
@@ -149,9 +149,9 @@ class KnowledgeDocumentPage(BaseModel):
 
 
 # --------------------------------------------------------------------------- dependencies
-def get_vector_store(settings: SettingsDep) -> VectorStore:
-    """Return the process-wide :class:`~lkap_api.kb.store.LanceDBStore`."""
-    return get_lancedb_store(settings.data_dir)
+def get_vector_store(settings: SettingsDep, db: DbDep) -> VectorStore:
+    """The configured vector store (V5-13: pgvector on Postgres, bound to the request's session)."""
+    return resolve_store(settings, db)
 
 
 VectorStoreDep = Annotated[VectorStore, Depends(get_vector_store)]

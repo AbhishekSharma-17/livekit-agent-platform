@@ -104,3 +104,38 @@ It takes well under a second on the dev database. The api needs no restart to st
 ## Re-rehearsal after the re-chain (coordinator, 2026-09-25)
 
 `v5_001_knowledge_p0` now has `down_revision = "v4_003_session_estimates"` (ask #8). On a fresh `.backup` copy of the dev DB at `v4_002_provider_models`: `upgrade head` ran `v4_003` then `v5_001`; `downgrade v4_002_provider_models` ran both down; `upgrade head` again; row counts (agents 19, sessions 63, kb_chunks 154, tools 12) unchanged at every step; `kb_chunks_fts` holds 154 rows; `integrity_check` ok, `foreign_key_check` clean; `alembic check` reports no drift.
+
+## `v5_003_pgvector` (V5-13)
+
+`down_revision = "v5_010_tool_provider_kind"`. The ledger numbers this revision 003, but the chain puts it after the current head.
+
+### What the revision does
+
+- **SQLite:** nothing, in both directions. LanceDB stays the store. `KbVector` is outside `Base.metadata`, so `create_all` and `alembic check` on SQLite are unchanged.
+- **Postgres, upgrade:** `CREATE EXTENSION IF NOT EXISTS vector`, then `kb_vectors` (`chunk_id` PK and FK to `kb_chunks.id ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED`, `kb_id` with a btree index, and `embedding vector` with no fixed width). It also creates one partial HNSW index per existing knowledge base whose `dimension` is recorded: `kbv_hnsw_<id>_<d>` on `(embedding::vector(<d>)) vector_cosine_ops WHERE kb_id = '<id>' AND vector_dims(embedding) = <d>`. That is `halfvec` from 2,001 to 4,000 dimensions on pgvector 0.7 or later, and nothing above that. Every statement is `IF NOT EXISTS`. The revision copies no vectors: `python -m lkap_api.kb.jobs reindex --all` does that afterwards.
+- **Postgres, downgrade:** `DROP TABLE IF EXISTS kb_vectors`, which drops its indexes too. The extension stays.
+
+### Rehearsal on a copy of the dev database (SQLite, 2026-09-27)
+
+`sqlite3 api/data/lkap.db ".backup <scratchpad>/devcopy.db"` at `v5_010_tool_provider_kind` (18 knowledge bases, 154 chunks): `upgrade head`, `downgrade v5_010_tool_provider_kind`, `upgrade head`. The row counts were unchanged at every step, and no `kb_vectors` table appeared. A fresh scratch database did the same, and `alembic check` found no drift.
+
+### Rehearsal on Postgres (2026-09-27)
+
+Run on a scratch PostgreSQL 16.2 server with pgvector 0.6.2 (the `pgserver` wheel's binaries, in a scratch directory; Docker is not running on this machine). Database `lkap_mig`:
+
+- `upgrade head` from empty. `kb_vectors`, `pk_kb_vectors` and `ix_kb_vectors_kb_id` were created.
+- Two knowledge bases were inserted (384 and 3,072 dimensions), then `downgrade v5_010_tool_provider_kind` and `upgrade head`. The 384-dimension knowledge base got its `kbv_hnsw_…_384` index. The 3,072-dimension one got none, which is correct for pgvector below 0.7.
+- `stamp v5_010_tool_provider_kind`, then `upgrade head` over the existing table, index and extension: no error (idempotent).
+- The CI sequence: `downgrade 4135323c6ecc`, `upgrade head`, `downgrade base`, `upgrade head`. All clean.
+- `alembic check` on Postgres reports only `kb_vectors` and its index as "remove". That is expected: `alembic/env.py` compares against `Base.metadata` only. The fix is filed as an ask on `env.py`. CI does not run `check` on Postgres.
+
+The CI job (`pgvector/pgvector:pg16`, pgvector 0.8.x) repeats the CI sequence in "Migrate up, down and up again on Postgres". It also runs `tests/test_kb_store_pgvector.py` and the Postgres test of `tests/test_kb_reindex.py`, where the `halfvec` and iterative-scan branches that 0.6.2 skips are exercised.
+
+### To apply (coordinator)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_003.db"
+cd api && uv run alembic upgrade head      # v5_010_tool_provider_kind -> v5_003_pgvector (a no-op on SQLite)
+```
+
+On a Postgres deployment, back up first (`scripts/backup.sh`), switch the server image to `pgvector/pgvector:pg16`, upgrade, then run `python -m lkap_api.kb.jobs reindex --all` (docs/RUNBOOK.md §9.2).

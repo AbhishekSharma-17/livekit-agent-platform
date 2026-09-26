@@ -1,84 +1,113 @@
-"""Vector storage behind a swappable :class:`VectorStore` Protocol.
+"""Vector storage behind a swappable :class:`VectorStore` Protocol (v2 since V5-13).
 
-:class:`LanceDBStore` is the concrete implementation (file-based, no server,
-per docs/ARCHITECTURE.md §D6): one LanceDB table per knowledge base, named
-``kb_{kb_id}``, cosine distance. The table stores only the vector and enough
-ids to join back to :class:`~lkap_api.db.models.KbChunk` for the text —
-LanceDB is not the source of truth, SQLite is (docs/CONTRACTS.md §5).
+Two built-in implementations (``kb/stores/``), chosen by :func:`resolve_store`
+("the default store follows the database", D-V5-12/D-V5-13):
 
-LanceDB's Python client is synchronous; every call here runs on a worker
-thread via :func:`asyncio.to_thread` so the event loop is never blocked, and
-writes are serialised with a lock (LanceDB is single-writer).
+* :class:`~lkap_api.kb.stores.lancedb.LanceDBStore` — file-based, no server
+  (docs/ARCHITECTURE.md §D6); the default when ``LKAP_DATABASE_URL`` is SQLite
+  (dev, laptop, single container), and whenever ``LKAP_VECTOR_STORE=lancedb``.
+* :class:`~lkap_api.kb.stores.pgvector.PgVectorStore` — the ``kb_vectors``
+  table in the same Postgres database as the chunk rows (migration
+  ``v5_003_pgvector``); the default when ``LKAP_DATABASE_URL`` is Postgres.
+  It runs on the caller's session, so its writes share the chunk rows'
+  transaction, and there is no second writer and no shared ``/data`` volume
+  to coordinate.
 
-V5-04 (D-V5-12, single writer): in production (``LKAP_JOBS_BACKEND=arq``)
-only the ``jobs`` process writes here — ingestion and deletes are both jobs
-(``kb_ingest``, ``kb_delete``); the api process only queries. Every ingest
-job ends with :meth:`LanceDBStore.optimize`, which compacts the table's
-fragments and, above :data:`ANN_INDEX_MIN_ROWS` rows, builds an ANN index.
+Neither store is the source of truth for chunk text (D-V5-37): the search
+pipeline joins every hit back to ``kb_chunks``. Moving a knowledge base
+between stores, or onto a new embedder, is the ``kb_reindex`` job
+(:mod:`lkap_api.kb.jobs`), which re-embeds the chunk rows.
+
+The Protocol, per K §5.1, with one deliberate difference: ``query`` keeps
+``k`` as its third positional argument (``query(kb_id, vector, k, *, text,
+filters)``), so every caller and test double written against v1 keeps
+working; ``text`` and ``filters`` are keyword-only. A store that declares no
+``capabilities`` (a v1 test double) is treated as :data:`NO_CAPABILITIES`
+(:func:`store_capabilities`).
 """
 
 from __future__ import annotations
 
-import asyncio
-import re
-from dataclasses import dataclass
+from collections.abc import Mapping
 from datetime import timedelta
-from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Final, Literal, Protocol, runtime_checkable
 
-import lancedb
-from lancedb.query import LanceVectorQueryBuilder
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api.logging import get_logger
+from lkap_api.errors import UnprocessableEntityError
+from lkap_api.kb.stores import (
+    NO_CAPABILITIES,
+    SAFE_ID,
+    StoreCapabilities,
+    StoreHealth,
+    VectorHit,
+    VectorRecord,
+)
+from lkap_api.kb.stores.lancedb import LanceDBStore, clear_store_cache, get_lancedb_store
+from lkap_api.kb.stores.pgvector import PgVectorStore
+from lkap_api.settings import Settings
 
-log = get_logger(__name__)
+__all__ = [
+    "ANN_INDEX_MIN_ROWS",
+    "NO_CAPABILITIES",
+    "OPTIMIZE_KEEP_VERSIONS_FOR",
+    "LanceDBStore",
+    "PgVectorStore",
+    "StoreCapabilities",
+    "StoreHealth",
+    "StoreKind",
+    "VectorHit",
+    "VectorRecord",
+    "VectorStore",
+    "VectorStoreConfigError",
+    "clear_store_cache",
+    "get_lancedb_store",
+    "resolve_store",
+    "store_capabilities",
+    "vector_store_kind",
+]
 
-#: Ids are our own uuid4 hex values; this guards the hand-built SQL `IN (...)`
-#: clauses against anything else ever reaching them.
-_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+#: Kept for callers that validated ids against it before V5-13.
+_SAFE_ID = SAFE_ID
 
-#: A table with at least this many rows gets an ANN (IVF-PQ, cosine) index; a
-#: smaller one is searched exhaustively, which is exact and fast enough.
+#: A LanceDB table with at least this many rows gets an ANN (IVF-PQ, cosine)
+#: index; a smaller one is searched exhaustively, which is exact and fast enough.
 ANN_INDEX_MIN_ROWS = 50_000
-#: Old table versions `optimize` keeps (a reader mid-query still sees its version).
-OPTIMIZE_KEEP_VERSIONS_FOR = timedelta(minutes=10)
+#: Old LanceDB table versions `optimize` keeps (a reader mid-query still sees its version).
+OPTIMIZE_KEEP_VERSIONS_FOR: Final = timedelta(minutes=10)
 
-
-def _quoted_ids(ids: list[str]) -> str:
-    for value in ids:
-        if not _SAFE_ID.match(value):
-            raise ValueError(f"unsafe id for a LanceDB filter: {value!r}")
-    return ", ".join(f"'{value}'" for value in ids)
-
-
-@dataclass(slots=True, frozen=True)
-class VectorRecord:
-    """One chunk's vector, keyed by its `KbChunk.id`."""
-
-    id: str
-    vector: list[float]
-    document_id: str
-
-
-@dataclass(slots=True, frozen=True)
-class VectorHit:
-    """One nearest-neighbour result: a chunk id, its document and a similarity score."""
-
-    id: str
-    document_id: str
-    score: float
+#: The two built-in stores (``LKAP_VECTOR_STORE``).
+StoreKind = Literal["lancedb", "pgvector"]
 
 
 @runtime_checkable
 class VectorStore(Protocol):
-    """Per-knowledge-base vector upsert/query/delete."""
+    """Per-knowledge-base vector storage (v2, K §5.1)."""
+
+    @property
+    def capabilities(self) -> StoreCapabilities:
+        """What the store does natively (hybrid, filters, text, namespaces)."""
+        ...
+
+    async def ensure_namespace(self, kb_id: str, dimension: int) -> None:
+        """Prepare the knowledge base's namespace (table, index) for ``dimension``-wide vectors."""
+        ...
 
     async def upsert(self, kb_id: str, records: list[VectorRecord]) -> None:
         """Insert or replace vectors for the given chunk ids."""
         ...
 
-    async def query(self, kb_id: str, vector: list[float], k: int) -> list[VectorHit]:
-        """Return the ``k`` nearest chunks to ``vector`` (best first)."""
+    async def query(
+        self,
+        kb_id: str,
+        vector: list[float],
+        k: int,
+        *,
+        text: str | None = None,
+        filters: Mapping[str, object] | None = None,
+    ) -> list[VectorHit]:
+        """Return the ``k`` best chunks (best first); ``text`` is used only by hybrid-capable stores."""
         ...
 
     async def delete_document(self, kb_id: str, document_id: str) -> None:
@@ -86,137 +115,76 @@ class VectorStore(Protocol):
         ...
 
     async def delete_kb(self, kb_id: str) -> None:
-        """Drop the whole knowledge base's table."""
+        """Remove the whole knowledge base's vectors (and its namespace)."""
         ...
 
     async def optimize(self, kb_id: str) -> None:
         """Compact the knowledge base's storage and (re)build its index when it is large enough."""
         ...
 
-
-class LanceDBStore:
-    """LanceDB-backed :class:`VectorStore`, rooted at ``{data_dir}/lancedb``."""
-
-    def __init__(self, data_dir: str | Path) -> None:
-        """Create the store (does not open a connection until first use)."""
-        self._uri = str(Path(data_dir) / "lancedb")
-        self._db: lancedb.DBConnection | None = None
-        self._write_lock = asyncio.Lock()
-
-    @staticmethod
-    def _table_name(kb_id: str) -> str:
-        return f"kb_{kb_id}"
-
-    def _connect(self) -> lancedb.DBConnection:
-        if self._db is None:
-            self._db = lancedb.connect(self._uri)
-        return self._db
-
-    async def upsert(self, kb_id: str, records: list[VectorRecord]) -> None:
-        """Insert or replace vectors for the given chunk ids.
-
-        Raises:
-            ValueError: If any record or document id contains characters
-                outside `[A-Za-z0-9_-]` (our ids are always uuid4 hex; this
-                guards the hand-built SQL filters below).
-        """
-        if not records:
-            return
-        ids = _quoted_ids([r.id for r in records])  # validates before touching the table
-        async with self._write_lock:
-            await asyncio.to_thread(self._upsert_sync, kb_id, records, ids)
-
-    def _upsert_sync(self, kb_id: str, records: list[VectorRecord], quoted_ids: str) -> None:
-        db = self._connect()
-        table_name = self._table_name(kb_id)
-        rows = [{"id": r.id, "vector": r.vector, "document_id": r.document_id} for r in records]
-        if table_name in db.table_names():
-            table = db.open_table(table_name)
-            table.delete(f"id IN ({quoted_ids})")
-            table.add(rows)
-        else:
-            db.create_table(table_name, data=rows)
-        log.debug("kb_vectors_upserted", kb_id=kb_id, count=len(records))
-
-    async def query(self, kb_id: str, vector: list[float], k: int) -> list[VectorHit]:
-        """Return the ``k`` nearest chunks to ``vector`` (best first)."""
-        return await asyncio.to_thread(self._query_sync, kb_id, vector, k)
-
-    def _query_sync(self, kb_id: str, vector: list[float], k: int) -> list[VectorHit]:
-        db = self._connect()
-        table_name = self._table_name(kb_id)
-        if table_name not in db.table_names():
-            return []
-        table = db.open_table(table_name)
-        if table.count_rows() == 0:
-            return []
-        query = cast(LanceVectorQueryBuilder, table.search(vector))
-        rows = query.metric("cosine").limit(max(k, 1)).to_list()
-        return [
-            VectorHit(id=row["id"], document_id=row["document_id"], score=1.0 - float(row["_distance"]))
-            for row in rows
-        ]
-
-    async def delete_document(self, kb_id: str, document_id: str) -> None:
-        """Remove every vector belonging to one document."""
-        async with self._write_lock:
-            await asyncio.to_thread(self._delete_document_sync, kb_id, document_id)
-
-    def _delete_document_sync(self, kb_id: str, document_id: str) -> None:
-        db = self._connect()
-        table_name = self._table_name(kb_id)
-        if table_name in db.table_names():
-            db.open_table(table_name).delete(f"document_id IN ({_quoted_ids([document_id])})")
-
-    async def delete_kb(self, kb_id: str) -> None:
-        """Drop the whole knowledge base's table."""
-        async with self._write_lock:
-            await asyncio.to_thread(self._delete_kb_sync, kb_id)
-
-    def _delete_kb_sync(self, kb_id: str) -> None:
-        db = self._connect()
-        table_name = self._table_name(kb_id)
-        if table_name in db.table_names():
-            db.drop_table(table_name)
-
-    async def optimize(self, kb_id: str) -> None:
-        """Compact the table, prune old versions and build the ANN index above the threshold.
-
-        Called at the end of every ingest and delete job (V5-04). Each ingest
-        appends a fragment and each delete a deletion file, so without this a
-        busy knowledge base's queries slow down over time. A no-op for a
-        knowledge base with no table.
-        """
-        async with self._write_lock:
-            await asyncio.to_thread(self._optimize_sync, kb_id)
-
-    def _optimize_sync(self, kb_id: str) -> None:
-        db = self._connect()
-        table_name = self._table_name(kb_id)
-        if table_name not in db.table_names():
-            return
-        table = db.open_table(table_name)
-        rows = table.count_rows()
-        if rows >= ANN_INDEX_MIN_ROWS and not any(
-            index.columns == ["vector"] for index in table.list_indices()
-        ):
-            table.create_index(metric="cosine", vector_column_name="vector", index_type="IVF_PQ")
-            log.info("kb_vector_index_created", kb_id=kb_id, rows=rows)
-        table.optimize(cleanup_older_than=OPTIMIZE_KEEP_VERSIONS_FOR)
-        log.debug("kb_vectors_optimized", kb_id=kb_id, rows=rows)
+    async def health(self) -> StoreHealth:
+        """Whether the store is usable, and why not."""
+        ...
 
 
-_STORE_CACHE: dict[str, LanceDBStore] = {}
+def store_capabilities(store: object) -> StoreCapabilities:
+    """``store.capabilities``, or :data:`NO_CAPABILITIES` for a store that declares none."""
+    capabilities = getattr(store, "capabilities", None)
+    return capabilities if isinstance(capabilities, StoreCapabilities) else NO_CAPABILITIES
 
 
-def get_lancedb_store(data_dir: str | Path) -> LanceDBStore:
-    """Return the process-wide :class:`LanceDBStore`, cached by data dir."""
-    key = str(Path(data_dir))
-    if key not in _STORE_CACHE:
-        _STORE_CACHE[key] = LanceDBStore(data_dir)
-    return _STORE_CACHE[key]
+class VectorStoreConfigError(UnprocessableEntityError):
+    """``LKAP_VECTOR_STORE`` names a store the configured database cannot serve."""
+
+    code = "vector_store_misconfigured"
 
 
-def clear_store_cache() -> None:
-    """Drop cached store instances (tests only)."""
-    _STORE_CACHE.clear()
+def _is_postgres(url: str) -> bool:
+    return make_url(url).get_backend_name() == "postgresql"
+
+
+def vector_store_kind(settings: Settings) -> StoreKind:
+    """Which store serves this process: ``LKAP_VECTOR_STORE``, else the database's default.
+
+    Unset (the default): ``pgvector`` when ``LKAP_DATABASE_URL`` is Postgres,
+    ``lancedb`` otherwise. ``lancedb`` forces LanceDB on any database.
+
+    Raises:
+        VectorStoreConfigError: ``LKAP_VECTOR_STORE=pgvector`` with a database that is not Postgres.
+    """
+    postgres = _is_postgres(settings.resolved_database_url)
+    match settings.vector_store:
+        case "lancedb":
+            return "lancedb"
+        case "pgvector":
+            if not postgres:
+                raise VectorStoreConfigError(
+                    "LKAP_VECTOR_STORE=pgvector needs a Postgres LKAP_DATABASE_URL; "
+                    "unset it (or set lancedb) to use the file-based store"
+                )
+            return "pgvector"
+        case _:
+            return "pgvector" if postgres else "lancedb"
+
+
+def resolve_store(settings: Settings, session: AsyncSession | None = None) -> VectorStore:
+    """The vector store for this process's configuration.
+
+    Args:
+        settings: Supplies ``LKAP_VECTOR_STORE``, the database url and the data dir.
+        session: The caller's session. Required for pgvector, whose statements
+            run in that session's transaction (so vectors commit with the chunk
+            rows); ignored by LanceDB. Build one store per session.
+
+    Returns:
+        The process-wide :class:`LanceDBStore`, or a :class:`PgVectorStore` bound to ``session``.
+
+    Raises:
+        VectorStoreConfigError: See :func:`vector_store_kind`.
+        ValueError: pgvector was chosen but no session was given (a programming error).
+    """
+    if vector_store_kind(settings) == "pgvector":
+        if session is None:
+            raise ValueError("the pgvector store runs on the caller's session; pass one to resolve_store")
+        return PgVectorStore(session)
+    return get_lancedb_store(settings.data_dir)

@@ -16,17 +16,19 @@
 #   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env up -d --build
 #   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env up -d --build --scale api=2   # HA
 #
-# LanceDB / SQLite caveat (carried from v1 docs/ARCHITECTURE.md §14, not
-# solved here): `api` is "uvicorn --workers 1" and LanceDB is a single-writer
-# store. Running `--scale api=2` against the SAME `/data` volume is safe for
-# the SQL tables (Postgres, when `LKAP_DATABASE_URL` is set — see below) but
-# NOT verified safe for concurrent LanceDB (KB) writes from two replicas.
-# Until KB storage moves off single-writer LanceDB, treat `--scale api=2`
-# as HA for read/session traffic, not for concurrent KB ingestion; a real
-# fix is out of this package's scope. Postgres is effectively required
-# (not optional, unlike the dev compose file) once you scale past one
-# replica — two `api` processes both writing SQLite from two containers is
-# not the same "single-writer" story sqlite+aiosqlite has in dev.
+# Knowledge-base vectors (V5-13): with Postgres as `LKAP_DATABASE_URL` (the
+# default here) they live in Postgres itself — the `kb_vectors` table of
+# migration `v5_003_pgvector`, which is why the `postgres` service runs the
+# `pgvector/pgvector:pg16` image. They commit with the chunk rows, every
+# `api` replica and `jobs` read and write them safely, and `pg_dump` backs
+# them up. Upgrading an existing deployment: after `migrate` has run, re-embed
+# each knowledge base once with `python -m lkap_api.kb.jobs reindex --all`
+# (docs/RUNBOOK.md, "Knowledge vectors in Postgres"). LanceDB (files on the
+# `api-data` volume, single writer) is used only when `LKAP_VECTOR_STORE=lancedb`.
+# Postgres is effectively required (not optional, unlike the dev compose
+# file) once you scale past one replica — two `api` processes both writing
+# SQLite from two containers is not the same "single-writer" story
+# sqlite+aiosqlite has in dev.
 #
 # `--forwarded-allow-ips`: the `backend` network below is pinned to a fixed
 # subnet precisely so this value is a stable CIDR, not a container IP that
@@ -264,7 +266,9 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16
+    # pgvector/pgvector:pg16 is postgres:16 plus the `vector` extension (V5-13).
+    # Switching an existing volume from postgres:16 keeps its data (same major).
+    image: pgvector/pgvector:pg16
     networks: [backend]
     environment:
       POSTGRES_USER: lkap
@@ -333,11 +337,9 @@ services:
     restart: "no"
 
 volumes:
-  # Shared by `api` and `jobs` (`/data`: LanceDB vectors, model cache). Only
-  # `jobs` writes LanceDB: knowledge ingest and deletes are both jobs
-  # (`kb_ingest`, `kb_delete`, V5-04), and `api` only queries it. Exception
-  # until V5-13: creating an agent from a starter with knowledge seeds still
-  # ingests those seeds in the `api` process.
+  # Shared by `api` and `jobs` (`/data`: the embedding model cache). LanceDB
+  # vectors live here only when `LKAP_VECTOR_STORE=lancedb`; then only `jobs`
+  # writes them (ingest, deletes and re-index are all jobs) and `api` queries.
   api-data:
   postgres-data:
   redis-data:

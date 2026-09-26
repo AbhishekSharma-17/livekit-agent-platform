@@ -284,6 +284,20 @@ Any model id a vendor accepts can be typed into a slot; the registry's list is a
 - **Clearing one.** There is no delete route. To forget a record, back up the database (§6), then run `DELETE FROM provider_models WHERE workspace_id = '<ws>' AND provider_home = '<home>' AND kind = '<kind>' AND model_id = '<id>';`. To clear a stale "no longer in the catalog" warning without deleting, fetch the catalog again with `?refresh=true`; the flag clears when the vendor lists the id again.
 - **Live catalogs.** Deepgram's and Rime's lists are public and are fetched without a key (cached 24 h for everyone); OpenRouter's are cached 6 h, everything else 1 h. `GET /v1/providers/{id}/catalog` takes `q`, `limit` (≤ 1000, default 200), `offset` and `model` (a TTS model's voices) and searches the cached list; only OpenRouter entries forward `q` to the vendor, and only with `search_vendor=true`.
 
+### 9.2 Knowledge vectors in Postgres (V5-13)
+
+Where knowledge-base vectors live follows the database. With a Postgres `LKAP_DATABASE_URL` they are rows of the `kb_vectors` table in that same database (the pgvector store). With SQLite they stay in LanceDB files under `LKAP_DATA_DIR/lancedb`. `LKAP_VECTOR_STORE=lancedb` forces LanceDB on any database. `LKAP_VECTOR_STORE=pgvector` is refused on SQLite. Leave it unset unless you have a reason.
+
+- **The server needs pgvector.** From migration `v5_003_pgvector` on, the Postgres server must have the `vector` extension. `deploy/docker-compose.prod.yml` uses `pgvector/pgvector:pg16`, which is `postgres:16` plus the extension, so an existing data volume works unchanged. On a plain `postgres` server the migration stops with `extension "vector" is not available`.
+- **Upgrading a deployment that already has knowledge bases** (their vectors are still in LanceDB):
+  1. Back up (§6).
+  2. Switch the image and upgrade: `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env up -d --build`. The `migrate` service runs `alembic upgrade head`, which creates the extension and `kb_vectors`.
+  3. Re-embed every knowledge base into Postgres: `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/prod.env run --rm jobs python -m lkap_api.kb.jobs reindex --all`. Use `--kb <id>` (repeatable) for one knowledge base. With `LKAP_JOBS_BACKEND=arq` this queues one `kb_reindex` job per knowledge base for the `jobs` service; with `inline` it runs them before it returns. Each job writes `progress` (`{done, total}`) and `result` into its `jobs` row's payload.
+  4. That's it. Search a knowledge base from the console to check. Until step 3 finishes for a knowledge base, its search returns no vector hits (keyword matches still work in hybrid mode). The old LanceDB files under `/data/lancedb` are no longer read. Delete them once you are satisfied.
+- **Changing the embedder** (`LKAP_EMBEDDER`, `LKAP_EMBED_MODEL`) uses the same `reindex` command, on any store. It re-embeds the stored chunk text with the new embedder and records the new model and width on each knowledge base, which otherwise refuses queries from another model (`kb_embedder_mismatch`). It does not re-split documents. For that, use **Re-index** on the knowledge base (`POST /v1/knowledge-bases/{id}/reindex`).
+- **Backups.** `pg_dump` now covers the vectors along with everything else, and a restore never leaves vectors without their chunks (they commit in one transaction). Only the LanceDB case still needs `LKAP_DATA_DIR` in the backup for vectors.
+- **One HNSW index per knowledge base.** Each knowledge base gets a partial index named `kbv_hnsw_<kb id>_<dimension>`, created on its first write and replaced on a width change. Above 2,000 dimensions it uses `halfvec` (pgvector 0.7 or later). Above 4,000 there is no index, and search is exact.
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:

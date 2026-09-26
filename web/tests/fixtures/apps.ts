@@ -8,6 +8,7 @@ import type {
   ToolkitOut,
   ToolkitPage,
 } from "@/contracts/lkap-contracts";
+import type { ToolProviderCategoryOut, ToolProviderCategoryPage } from "@/components/console/lib/api-hooks";
 
 /**
  * Fixtures for Tools -> Apps (Composio, docs/v5/COMPOSIO.md §6, V5-22):
@@ -54,6 +55,17 @@ export const TOOLKIT_GITHUB_CONNECTED = toolkitFixture({
 
 export function toolkitPage(items: ToolkitOut[] = [toolkitFixture(), TOOLKIT_SLACK], nextCursor: string | null = null): ToolkitPage {
   return { items, next_cursor: nextCursor, total: items.length };
+}
+
+/** `GET /v1/tool-providers/composio/categories` — the gallery's complete category list. */
+export function categoryPage(
+  items: ToolProviderCategoryOut[] = [
+    { id: "scheduling", name: "Scheduling" },
+    { id: "communication", name: "Communication" },
+    { id: "developer-tools", name: "Developer tools" },
+  ],
+): ToolProviderCategoryPage {
+  return { items };
 }
 
 export function connectionFixture(overrides: Partial<AppConnectionOut> = {}): AppConnectionOut {

@@ -425,6 +425,41 @@ async def test_connected_only_lists_the_workspace_apps(
     assert body["items"][0]["connected"] is True
 
 
+async def test_categories_are_aggregated_across_pages_and_cached(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    first = (await admin_client.get(f"{BASE}/categories")).json()
+    await admin_client.get(f"{BASE}/categories")
+
+    reason = "one page followed for the next_cursor, then a cache hit"
+    assert len(world.calls_of("list_toolkit_categories")) == 2, reason
+    assert first["items"] == [
+        {"id": "scheduling", "name": "Scheduling"},
+        {"id": "crm", "name": "CRM"},
+        {"id": "developer-tools", "name": "Developer tools"},
+        {"id": "data", "name": "Data"},
+    ]
+
+
+async def test_categories_refresh_bypasses_the_cache(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await admin_client.get(f"{BASE}/categories")
+    await admin_client.get(f"{BASE}/categories", params={"refresh": "true"})
+
+    # Two vendor pages (first page + its `next_cursor`) per call, twice — the
+    # second call's `refresh=true` bypasses the one-entry cache entirely.
+    assert len(world.calls_of("list_toolkit_categories")) == 4
+
+
+async def test_toolkits_filter_by_category_id(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    body = (await admin_client.get(f"{BASE}/toolkits", params={"category": "scheduling"})).json()
+
+    assert [item["slug"] for item in body["items"]] == ["googlecalendar"]
+
+
 async def test_one_toolkit_lists_what_each_connect_method_asks_for(
     admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
 ) -> None:
@@ -1271,6 +1306,19 @@ async def test_adapter_sends_the_key_header_and_the_documented_paths() -> None:
         "user_id": "ws:w1",
         "callback_url": "http://127.0.0.1:8080/cb?flow=x",
     }
+
+
+async def test_adapter_lists_toolkit_categories_with_the_key_header() -> None:
+    build, seen = _recording({})
+    adapter = build(VALID_KEY)
+
+    await adapter.list_toolkit_categories(cursor="c1", limit=100)
+
+    assert len(seen) == 1
+    request = seen[0]
+    assert request.headers["x-api-key"] == VALID_KEY
+    assert (request.method, request.url.path) == ("GET", "/api/v3.1/toolkits/categories")
+    assert dict(request.url.params) == {"cursor": "c1", "limit": "100"}
 
 
 async def test_adapter_auth_config_and_key_connection_bodies() -> None:

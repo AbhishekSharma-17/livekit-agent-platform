@@ -75,6 +75,7 @@ from lkap_contracts.tool_providers import (
     label_slug,
     workspace_subject,
 )
+from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,6 +112,11 @@ CATALOG_TTL_S: Final = 600.0
 
 #: Most entries the in-process catalogue cache keeps.
 CATALOG_CACHE_MAX: Final = 512
+
+#: Vendor pages followed when aggregating `/toolkits/categories` into one list
+#: (the category list is small — Composio's own docs show ~40 — so this caps
+#: work if the vendor ever pages it more finely than expected).
+CATEGORY_PAGE_CAP: Final = 10
 
 #: Pasted-key tests per workspace per minute.
 KEY_TEST_PER_MIN: Final = 10
@@ -799,6 +805,32 @@ def _auth_fields(item: dict[str, Any]) -> dict[str, list[AppAuthField]]:
     return out
 
 
+class ToolProviderCategoryOut(BaseModel):
+    """One toolkit category. Kept api-local (docs/CONTRACTS.md §1: not every
+    response model needs a generated TS type) rather than added to
+    ``lkap_contracts`` — the web hook declares its own matching interface.
+
+    ``id`` is what `GET .../toolkits?category=` filters on; ``name`` is the
+    vendor's display label (title-cased already, most of the time).
+    """
+
+    id: str
+    name: str
+
+
+class ToolProviderCategoryPage(BaseModel):
+    """Every category the vendor knows, aggregated across its own pages (see :func:`list_categories`)."""
+
+    items: list[ToolProviderCategoryOut]
+
+
+def category_out(item: dict[str, Any]) -> ToolProviderCategoryOut:
+    """A vendor category trimmed for the console."""
+    id_ = (_str(item.get("id")) or _str(item.get("slug"))).lower()
+    name = scrub_vendor_text(item.get("name") or id_, limit=60)
+    return ToolProviderCategoryOut(id=id_, name=name)
+
+
 def toolkit_out(item: dict[str, Any], *, detail: bool = False) -> ToolkitOut:
     """A vendor toolkit trimmed for the console (logo, description and categories live in ``meta``)."""
     meta = _dict(item.get("meta"))
@@ -934,6 +966,49 @@ async def get_toolkit(
     )
     connections = await list_connection_records(db, vault, ctx.workspace_id)
     return _mark_connected([toolkit_out(raw, detail=True)], connections)[0]
+
+
+async def list_categories(
+    db: AsyncSession,
+    vault: Vault,
+    factory: AdapterFactory,
+    cache: CatalogCache,
+    ctx: WorkspaceContext,
+    *,
+    refresh: bool = False,
+) -> ToolProviderCategoryPage:
+    """Every toolkit category Composio knows (``GET /toolkits/categories``), for the
+    gallery's category filter — the complete list, not just the categories seen among
+    whatever toolkit page happens to be loaded. Composio's own pages are followed and
+    flattened into one list (capped at :data:`CATEGORY_PAGE_CAP` vendor pages) and the
+    result is cached as a single entry, same TTL as the toolkit catalogue: the category
+    list is small and changes rarely, so paging it further to the console gains nothing.
+
+    Composio's categories endpoint carries no per-category counts, so none are
+    synthesised here — a count derived from whatever toolkit page happens to be
+    loaded client-side would misrepresent the true, complete count.
+    """
+    adapter, credential = await workspace_adapter(db, vault, factory, ctx.workspace_id)
+    key = _cache_key(credential, "categories")
+    if not refresh:
+        hit = cache.get(key)
+        if hit is not None:
+            return ToolProviderCategoryPage.model_validate(hit)
+    raw_items: list[dict[str, Any]] = []
+    cursor: str | None = None
+    for _ in range(CATEGORY_PAGE_CAP):
+        try:
+            page = await adapter.list_toolkit_categories(cursor=cursor, limit=100)
+        except ToolProviderError as exc:
+            raise api_error(exc) from exc
+        raw_items.extend(_dict(item) for item in _list(page.get("items")))
+        cursor = _str(page.get("next_cursor")) or None
+        if not cursor:
+            break
+    valid_items = [item for item in raw_items if item.get("id") or item.get("name")]
+    out = ToolProviderCategoryPage(items=[category_out(item) for item in valid_items])
+    cache.put(key, out.model_dump(mode="json"))
+    return out
 
 
 async def list_actions(
@@ -1962,6 +2037,7 @@ __all__ = [
     "DESTRUCTIVE_SCAN_PAGES",
     "FLOW_TTL",
     "KEY_TEST_PER_MIN",
+    "CATEGORY_PAGE_CAP",
     "AppConnection",
     "AppsNotEnabledError",
     "account_naming",
@@ -1975,9 +2051,12 @@ __all__ = [
     "CatalogCache",
     "KeyState",
     "ToolProviderApiError",
+    "ToolProviderCategoryOut",
+    "ToolProviderCategoryPage",
     "ToolProviderKeyRejectedError",
     "action_out",
     "api_error",
+    "category_out",
     "connect",
     "console_redirect",
     "destructive_actions",
@@ -1987,6 +2066,7 @@ __all__ = [
     "handle_callback",
     "key_state",
     "list_actions",
+    "list_categories",
     "list_connections",
     "list_toolkits",
     "pick_actions",

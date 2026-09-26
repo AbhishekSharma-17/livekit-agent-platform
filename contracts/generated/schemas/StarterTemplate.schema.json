@@ -212,7 +212,8 @@
             "choices",
             "details",
             "markdown",
-            "steps"
+            "steps",
+            "consent"
           ],
           "title": "Type",
           "type": "string"
@@ -1372,9 +1373,29 @@
           "title": "Audio Only",
           "type": "boolean"
         },
+        "consent_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The question asked before recording when no consent block supplies one; empty uses the workspace's recording question (Settings → Compliance).",
+          "title": "Consent Text"
+        },
         "enabled": {
           "default": false,
           "title": "Enabled",
+          "type": "boolean"
+        },
+        "require_consent": {
+          "default": false,
+          "description": "Start the recording only after the caller agrees (a tap on a consent block, or out loud); a caller who declines is never recorded.",
+          "title": "Require Consent",
           "type": "boolean"
         },
         "retention_days": {

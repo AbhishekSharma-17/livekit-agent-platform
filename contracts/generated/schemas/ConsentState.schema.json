@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "ConsentRecord": {
+      "description": "One answer as ``sessions.consent_state`` keeps it: the event plus when it happened (epoch seconds).",
+      "properties": {
+        "accepted": {
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "at": {
+          "title": "At",
+          "type": "number"
+        },
+        "block_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The consent block answered, if there is one.",
+          "title": "Block Id"
+        },
+        "kind": {
+          "enum": [
+            "recording",
+            "ai_disclosure",
+            "terms",
+            "custom"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "tap",
+            "voice"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "text_hash": {
+          "description": "SHA-256 of the exact text, lowercase hex.",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Text Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "accepted",
+        "method",
+        "text_hash",
+        "at"
+      ],
+      "title": "ConsentRecord",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ConsentState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``sessions.consent_state``: the latest answer per consent kind (a later answer replaces it).",
+  "properties": {
+    "latest": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ConsentRecord"
+      },
+      "default": {},
+      "propertyNames": {
+        "enum": [
+          "recording",
+          "ai_disclosure",
+          "terms",
+          "custom"
+        ]
+      },
+      "title": "Latest",
+      "type": "object"
+    }
+  },
+  "title": "ConsentState",
+  "type": "object"
+}

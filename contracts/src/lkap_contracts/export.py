@@ -26,6 +26,7 @@ from lkap_contracts.agent_config import (
     AgentConfig,
     AgentLimits,
     AvatarOptions,
+    DisclosureConfig,
     LocaleConfig,
     PanelLayout,
     QaConfig,
@@ -34,6 +35,14 @@ from lkap_contracts.agent_config import (
 )
 from lkap_contracts.blocks import BLOCK_CONFIG_MODELS, block_config_schema_name
 from lkap_contracts.common import Issue
+from lkap_contracts.compliance import (
+    ComplianceOut,
+    CompliancePreset,
+    ComplianceSettings,
+    ConsentEvent,
+    ConsentState,
+    ResolvedCompliance,
+)
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.fleet import (
@@ -86,6 +95,7 @@ from lkap_contracts.ui_protocol import (
     BlockSpec,
     BlockSubmitPayload,
     ChoicesBlockState,
+    ConsentBlockState,
     DetailsBlockState,
     DocumentBlockState,
     FormBlockState,
@@ -122,6 +132,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "AvatarOptions": AvatarOptions,
     "PanelLayout": PanelLayout,
     "RecordingConfig": RecordingConfig,
+    "DisclosureConfig": DisclosureConfig,
     "QaConfig": QaConfig,
     "ResolvedAgentConfig": ResolvedAgentConfig,
     "DispatchMetadata": DispatchMetadata,
@@ -163,6 +174,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "DetailsBlockState": DetailsBlockState,
     "MarkdownBlockState": MarkdownBlockState,
     "StepsBlockState": StepsBlockState,
+    "ConsentBlockState": ConsentBlockState,
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
     "RequestableState": RequestableState,
@@ -255,6 +267,13 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SessionOut": api_models.SessionOut,
     "SessionDetailOut": api_models.SessionDetailOut,
     "LocaleEvent": api_models.LocaleEvent,
+    # V5-15: consent and disclosure
+    "ConsentEvent": ConsentEvent,
+    "ConsentState": ConsentState,
+    "ComplianceSettings": ComplianceSettings,
+    "CompliancePreset": CompliancePreset,
+    "ResolvedCompliance": ResolvedCompliance,
+    "ComplianceOut": ComplianceOut,
     "SessionLatency": api_models.SessionLatency,
     "CostLine": api_models.CostLine,
     "SessionCost": api_models.SessionCost,

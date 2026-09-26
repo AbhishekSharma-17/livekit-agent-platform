@@ -27,6 +27,7 @@ const SCHEMA_FILE: Record<string, string> = {
   details: "DetailsBlockState",
   markdown: "MarkdownBlockState",
   steps: "StepsBlockState",
+  consent: "ConsentBlockState",
 };
 
 type JsonSchema = {

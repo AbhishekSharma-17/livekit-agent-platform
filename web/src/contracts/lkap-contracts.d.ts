@@ -61,6 +61,9 @@ export interface LkapContracts {
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
   ChoicesBlockState?: ChoicesBlockState;
+  ComplianceOut?: ComplianceOut;
+  CompliancePreset?: CompliancePreset;
+  ComplianceSettings?: ComplianceSettings;
   ConfigVersionOut?: ConfigVersionOut;
   ConfigVersionPage?: ConfigVersionPage;
   ConnectRequest?: ConnectRequest;
@@ -74,6 +77,9 @@ export interface LkapContracts {
   ConnectionRotateIn?: ConnectionRotateIn;
   ConnectionTestResult?: ConnectionTestResult;
   ConnectionUpdate?: ConnectionUpdate;
+  ConsentBlockState?: ConsentBlockState;
+  ConsentEvent?: ConsentEvent;
+  ConsentState?: ConsentState;
   CostAssumptionsOut?: CostAssumptionsOut;
   CostDriver?: CostDriver;
   CostEstimate?: CostEstimate;
@@ -85,6 +91,7 @@ export interface LkapContracts {
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
   DetailsBlockState?: DetailsBlockState;
+  DisclosureConfig?: DisclosureConfig;
   DispatchMetadata?: DispatchMetadata;
   DispatchRuleCreate?: DispatchRuleCreate;
   DispatchRuleOut?: DispatchRuleOut;
@@ -187,6 +194,7 @@ export interface LkapContracts {
   ReplicaHandle?: ReplicaHandle;
   RequestableState?: RequestableState;
   ResolvedAgentConfig?: ResolvedAgentConfig;
+  ResolvedCompliance?: ResolvedCompliance;
   SessionCost?: SessionCost;
   SessionDetailOut?: SessionDetailOut;
   SessionEventIn?: SessionEventIn;
@@ -331,6 +339,7 @@ export interface AgentActionResult {
  */
 export interface AgentConfig {
   capabilities?: CapabilitiesConfig;
+  disclosure?: DisclosureConfig;
   flow?: FlowSpec | null;
   instructions: string;
   knowledge?: KnowledgeConfig;
@@ -363,6 +372,26 @@ export interface CapabilitiesConfig {
   dtmf?: boolean;
   screen_share?: boolean;
   vision_inject_per_turn?: boolean;
+}
+/**
+ * Telling callers they are talking to an AI (V5-15, D-V5-22): on by default.
+ *
+ * ``greeting`` puts the line at the start of the spoken greeting (a
+ * ``{disclosure}`` placeholder in the greeting marks where, otherwise it goes
+ * first); ``banner`` leaves it to the on-screen banner of a ``consent`` block;
+ * ``both`` does both. On a phone call there is no screen, so ``banner`` is
+ * spoken in the greeting too.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DisclosureConfig".
+ */
+export interface DisclosureConfig {
+  enabled?: boolean;
+  position?: "greeting" | "banner" | "both";
+  /**
+   * The disclosure line; empty uses the workspace's (Settings → Compliance).
+   */
+  text?: string | null;
 }
 /**
  * The whole graph, validated structurally on construction.
@@ -636,7 +665,8 @@ export interface BlockSpec {
     | "choices"
     | "details"
     | "markdown"
-    | "steps";
+    | "steps"
+    | "consent";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -781,7 +811,15 @@ export interface QaConfig {
  */
 export interface RecordingConfig {
   audio_only?: boolean;
+  /**
+   * The question asked before recording when no consent block supplies one; empty uses the workspace's recording question (Settings → Compliance).
+   */
+  consent_text?: string | null;
   enabled?: boolean;
+  /**
+   * Start the recording only after the caller agrees (a tap on a consent block, or out loud); a caller who declines is never recorded.
+   */
+  require_consent?: boolean;
   retention_days?: number | null;
   storage_config_id?: string | null;
 }
@@ -1606,6 +1644,64 @@ export interface ChoiceReveal {
   explanation?: string | null;
 }
 /**
+ * ``GET /v1/workspaces/{id}/compliance``: the stored settings, the effective texts and every preset.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ComplianceOut".
+ */
+export interface ComplianceOut {
+  effective: ResolvedCompliance;
+  presets: CompliancePreset[];
+  settings: ComplianceSettings;
+}
+/**
+ * The effective wording for one workspace: its rewrites, else its jurisdiction's preset.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ResolvedCompliance".
+ */
+export interface ResolvedCompliance {
+  disclosure_text?: string;
+  jurisdiction?: "eu" | "in" | "us";
+  recording_text?: string;
+}
+/**
+ * One jurisdiction's starting wording (Settings → Compliance), used where nothing is rewritten.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CompliancePreset".
+ */
+export interface CompliancePreset {
+  counsel_note: string;
+  disclosure_text: string;
+  jurisdiction: "eu" | "in" | "us";
+  label: string;
+  recording_text: string;
+}
+/**
+ * ``workspaces.settings.compliance``: the jurisdiction and any rewritten wording (Settings → Compliance).
+ *
+ * A text left empty (``None`` or blank) uses the jurisdiction's preset.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ComplianceSettings".
+ */
+export interface ComplianceSettings {
+  /**
+   * The builder acknowledged that the wording must be checked with counsel.
+   */
+  counsel_note_ack?: boolean;
+  /**
+   * The AI disclosure line; empty uses the jurisdiction's preset.
+   */
+  disclosure_text?: string | null;
+  jurisdiction?: "eu" | "in" | "us";
+  /**
+   * The question asked before recording; empty uses the jurisdiction's preset.
+   */
+  recording_text?: string | null;
+}
+/**
  * One row of ``GET /v1/agents/{id}/versions``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -1807,6 +1903,82 @@ export interface ConnectionUpdate {
   url?: string | null;
   use_inference?: boolean | null;
   worker_image?: ("slim" | "full") | null;
+}
+/**
+ * A consent question or disclosure the caller accepts or declines (``request_consent``, V5-15).
+ *
+ * ``status`` is the request lifecycle every requestable block shares
+ * (:class:`RequestableState`); the caller's decision is ``accepted``
+ * (``None`` until they answer). A tap answers with ``block_submit {values:
+ * {accepted: true | false}}``; a spoken answer is recorded by
+ * ``record_consent`` (``method="voice"``). ``text`` is the exact wording
+ * shown (the block's ``config.text``, else the workspace's preset for its
+ * ``kind``) and ``text_hash`` its SHA-256 once answered, so the answer is
+ * tied to the wording (``lkap_contracts.compliance.consent_text_hash``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConsentBlockState".
+ */
+export interface ConsentBlockState {
+  accepted?: boolean | null;
+  at?: number | null;
+  kind?: "recording" | "ai_disclosure" | "terms" | "custom";
+  method?: ("tap" | "voice") | null;
+  required?: boolean;
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
+  text?: string;
+  text_hash?: string | null;
+}
+/**
+ * Payload of the ``consent`` session event: one answer to one consent question.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConsentEvent".
+ */
+export interface ConsentEvent {
+  accepted: boolean;
+  /**
+   * The consent block answered, if there is one.
+   */
+  block_id?: string | null;
+  kind: "recording" | "ai_disclosure" | "terms" | "custom";
+  method: "tap" | "voice";
+  /**
+   * SHA-256 of the exact text, lowercase hex.
+   */
+  text_hash: string;
+}
+/**
+ * ``sessions.consent_state``: the latest answer per consent kind (a later answer replaces it).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConsentState".
+ */
+export interface ConsentState {
+  latest?: {
+    [k: string]: ConsentRecord;
+  };
+}
+/**
+ * One answer as ``sessions.consent_state`` keeps it: the event plus when it happened (epoch seconds).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConsentRecord".
+ */
+export interface ConsentRecord {
+  accepted: boolean;
+  at: number;
+  /**
+   * The consent block answered, if there is one.
+   */
+  block_id?: string | null;
+  kind: "recording" | "ai_disclosure" | "terms" | "custom";
+  method: "tap" | "voice";
+  /**
+   * SHA-256 of the exact text, lowercase hex.
+   */
+  text_hash: string;
 }
 /**
  * ``GET /v1/cost-estimates/assumptions``: the workspace's effective assumptions.
@@ -4170,6 +4342,7 @@ export interface ResolvedAgentConfig {
   agent_slug: string;
   business_timezone?: string | null;
   channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
+  compliance?: ResolvedCompliance | null;
   config: AgentConfig;
   config_version: number;
   connection?: ConnectionInfo;

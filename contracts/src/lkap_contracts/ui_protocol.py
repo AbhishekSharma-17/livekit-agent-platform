@@ -10,6 +10,8 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, TEXT_HASH_PATTERN, ConsentKind, ConsentMethod
+
 TOPIC_UI_STATE = "lkap.ui.state"
 TOPIC_UI_ACTIVITY = "lkap.ui.activity"
 TOPIC_UI_ASSET = "lkap.ui.asset"
@@ -106,6 +108,7 @@ BlockType = Literal[
     "details",
     "markdown",
     "steps",
+    "consent",
 ]
 
 
@@ -316,6 +319,28 @@ class StepsBlockState(BaseModel):
 
     steps: list[StepItem] = []
     current: str | None = None
+
+
+class ConsentBlockState(RequestableState):
+    """A consent question or disclosure the caller accepts or declines (``request_consent``, V5-15).
+
+    ``status`` is the request lifecycle every requestable block shares
+    (:class:`RequestableState`); the caller's decision is ``accepted``
+    (``None`` until they answer). A tap answers with ``block_submit {values:
+    {accepted: true | false}}``; a spoken answer is recorded by
+    ``record_consent`` (``method="voice"``). ``text`` is the exact wording
+    shown (the block's ``config.text``, else the workspace's preset for its
+    ``kind``) and ``text_hash`` its SHA-256 once answered, so the answer is
+    tied to the wording (``lkap_contracts.compliance.consent_text_hash``).
+    """
+
+    kind: ConsentKind = "recording"
+    text: str = Field(default="", max_length=MAX_CONSENT_TEXT_CHARS)
+    required: bool = True
+    accepted: bool | None = None
+    method: ConsentMethod | None = None
+    at: float | None = None
+    text_hash: str | None = Field(default=None, pattern=TEXT_HASH_PATTERN)
 
 
 class UiState(BaseModel):

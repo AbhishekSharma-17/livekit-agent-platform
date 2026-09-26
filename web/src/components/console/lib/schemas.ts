@@ -340,6 +340,7 @@ export const BLOCK_TYPE_VALUES = [
   "details",
   "markdown",
   "steps",
+  "consent",
 ] as const;
 
 /** Block ids key `UiState.blocks` and appear in patch paths: no `/`, no spaces. */

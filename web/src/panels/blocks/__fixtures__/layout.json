@@ -17,6 +17,7 @@
     { "id": "injured", "type": "choices", "title": null, "config": {}, "order": 12 },
     { "id": "claim", "type": "details", "title": "Claim details", "config": { "columns": 2 }, "order": 13 },
     { "id": "recap", "type": "markdown", "title": null, "config": {}, "order": 14 },
-    { "id": "progress", "type": "steps", "title": "Progress", "config": { "source": "flow" }, "order": 15 }
+    { "id": "progress", "type": "steps", "title": "Progress", "config": { "source": "flow" }, "order": 15 },
+    { "id": "recording_consent", "type": "consent", "title": null, "config": { "kind": "recording" }, "order": 16 }
   ]
 }

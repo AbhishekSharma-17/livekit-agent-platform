@@ -186,6 +186,14 @@ describe("each block renders its fixture state", () => {
     ],
     ["video", (el) => void expect(within(el).getByText("Turn on your camera to show it here.")).toBeTruthy()],
     ["custom", (el) => void expect(within(el).getByText("Show raw state")).toBeTruthy()],
+    [
+      "consent",
+      (el) => {
+        expect(within(el).getByText(/Is it okay if we record it/)).toBeTruthy();
+        expect(within(el).getByRole("button", { name: "Accept" })).toBeTruthy();
+        expect(within(el).getByRole("button", { name: "Decline" })).toBeTruthy();
+      },
+    ],
   ];
 
   it.each(cases)("%s", async (type, check) => {
@@ -212,6 +220,7 @@ describe("each block has an empty state", () => {
     transcript: /conversation appears here/,
     video: /avatar.s video appears here/,
     custom: /Nothing from the pack yet/,
+    consent: /will ask for your agreement here/,
   };
   it.each(Object.entries(empties))("%s", async (type, text) => {
     render(
@@ -342,6 +351,66 @@ describe("form block", () => {
     const next = { ...BLOCK_FIXTURE_STATES.form, values: { full_name: "New prefill" } };
     rerender(<Block spec={spec} {...panelProps({ state: fixtureUiState({ intake: next }) })} />);
     expect((screen.getByLabelText("Full name") as HTMLInputElement).value).toBe("New prefill");
+  });
+});
+
+describe("consent block (V5-17)", () => {
+  const spec = specOf("consent");
+
+  it("accepts through perform as block_submit {accepted: true}", async () => {
+    const perform = vi.fn(async () => ({ ok: true, payload: {} }));
+    render(<Block spec={spec} {...panelProps({ perform })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await waitFor(() =>
+      expect(perform).toHaveBeenCalledWith({
+        action: "block_submit",
+        payload: { block_id: "recording_consent", values: { accepted: true } },
+      }),
+    );
+  });
+
+  it("declines through perform as block_submit {accepted: false} — decline is the answer, not a cancel", async () => {
+    const perform = vi.fn(async () => ({ ok: true, payload: {} }));
+    render(<Block spec={spec} {...panelProps({ perform })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    await waitFor(() =>
+      expect(perform).toHaveBeenCalledWith({
+        action: "block_submit",
+        payload: { block_id: "recording_consent", values: { accepted: false } },
+      }),
+    );
+  });
+
+  it("shows the agent's refusal and lets the caller retry", async () => {
+    const perform = vi.fn(async () => ({ ok: false, payload: {}, error: "already answered" }));
+    render(<Block spec={spec} {...panelProps({ perform })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "already answered");
+  });
+
+  it("shows who agreed, how and when once submitted", () => {
+    const submitted = { ...(BLOCK_FIXTURE_STATES.consent ?? {}), status: "submitted", accepted: true, method: "tap", at: 1777000000 };
+    const state = fixtureUiState({ recording_consent: submitted });
+    render(<Block spec={spec} {...panelProps({ state })} />);
+    expect(screen.getByText("Agreed")).toBeTruthy();
+    expect(screen.getByText(/by tap/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+  });
+
+  it("shows what was declined too, not just what was agreed to", () => {
+    const submitted = { ...(BLOCK_FIXTURE_STATES.consent ?? {}), status: "submitted", accepted: false, method: "voice" };
+    const state = fixtureUiState({ recording_consent: submitted });
+    render(<Block spec={spec} {...panelProps({ state })} />);
+    expect(screen.getByText("Declined")).toBeTruthy();
+    expect(screen.getByText(/by voice/)).toBeTruthy();
+  });
+
+  it("shows a plain dismissal message once cancelled, with no Accept/Decline controls", () => {
+    const state = fixtureUiState({ recording_consent: { ...(BLOCK_FIXTURE_STATES.consent ?? {}), status: "cancelled" } });
+    render(<Block spec={spec} {...panelProps({ state })} />);
+    expect(screen.getByText("You dismissed this without answering.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
   });
 });
 
@@ -502,6 +571,68 @@ describe("composite panel", () => {
     render(<PackPanel {...panelProps()} />);
     expect(screen.getByRole("heading", { name: /Why I said that/ })).toBeTruthy();
     expect(screen.getByText("claims-faq.md")).toBeTruthy();
+  });
+
+  describe("the consent banner (V5-15/V5-17)", () => {
+    it("shows the fixed disclosure line, panel-level, not the fixture's recording question", async () => {
+      // The fixture's consent block is `kind: "recording"` (its own text asks
+      // about recording, not disclosure) with `show_banner` at its default
+      // `true` — the banner is the AI disclosure, never a repeat of whatever
+      // else that block is asking (`ConsentBlockConfig`'s own docstring).
+      render(<CompositePanel {...panelProps()} />);
+      const banner = await screen.findByRole("note");
+      expect(banner.textContent).toBe("You're talking to an AI assistant.");
+    });
+
+    it("shows an ai_disclosure block's own wording instead of the fixed line", () => {
+      const layout: PanelLayout = {
+        panel_id: "composite",
+        layout: "side",
+        blocks: [{ id: "disclosure", type: "consent", title: null, config: { kind: "ai_disclosure" }, order: 0 }],
+      };
+      const state = {
+        ...emptyUiState(),
+        blocks: { disclosure: { kind: "ai_disclosure", text: "Heads up — you're speaking with an AI today." } },
+      };
+      render(<CompositePanel {...panelProps({ agent: agent(layout), state: state as never })} />);
+      expect(screen.getByRole("note").textContent).toBe("Heads up — you're speaking with an AI today.");
+    });
+
+    it("prefers an ai_disclosure block over a recording one when a layout has both", () => {
+      const layout: PanelLayout = {
+        panel_id: "composite",
+        layout: "side",
+        blocks: [
+          { id: "recording_consent", type: "consent", title: null, config: { kind: "recording" }, order: 0 },
+          { id: "disclosure", type: "consent", title: null, config: { kind: "ai_disclosure" }, order: 1 },
+        ],
+      };
+      const state = {
+        ...emptyUiState(),
+        blocks: {
+          recording_consent: { kind: "recording", text: "Can we record this call?" },
+          disclosure: { kind: "ai_disclosure", text: "Just so you know, I'm an AI." },
+        },
+      };
+      render(<CompositePanel {...panelProps({ agent: agent(layout), state: state as never })} />);
+      expect(screen.getByRole("note").textContent).toBe("Just so you know, I'm an AI.");
+    });
+
+    it("shows nothing when the only consent block opts out with show_banner: false", () => {
+      const layout: PanelLayout = {
+        panel_id: "composite",
+        layout: "side",
+        blocks: [{ id: "c1", type: "consent", title: null, config: { show_banner: false }, order: 0 }],
+      };
+      render(<CompositePanel {...panelProps({ agent: agent(layout), state: emptyUiState() })} />);
+      expect(screen.queryByRole("note")).toBeNull();
+    });
+
+    it("shows no other source — a layout without any consent block has no banner", () => {
+      const layout: PanelLayout = { panel_id: "composite", layout: "side", blocks: DEFAULT_COMPOSITE_BLOCKS as BlockSpec[] };
+      render(<CompositePanel {...panelProps({ agent: agent(layout), state: emptyUiState() })} />);
+      expect(screen.queryByRole("note")).toBeNull();
+    });
   });
 });
 

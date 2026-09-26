@@ -34,12 +34,22 @@ import re
 import statistics
 import time
 from collections.abc import Sequence
-from datetime import datetime
-from typing import Any, Literal, Protocol, cast, get_args
+from typing import Any, Protocol, cast, get_args
 
 from fastapi import BackgroundTasks
-from lkap_contracts.api_models import KbRerankMode, KbSearchMode, KbSearchResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from lkap_contracts.api_models import (
+    EvalRunStatus,
+    KbEvalHitRef,
+    KbEvalItemResult,
+    KbEvalResult,
+    KbEvalTagScore,
+    KbSearchResponse,
+)
+from lkap_contracts.api_models import EvalSkipReason as EvalSkipReason
+from lkap_contracts.api_models import EvalStatus as EvalStatus
+from lkap_contracts.api_models import KbEvalRunOut as KbEvalRunOut
+from lkap_contracts.api_models import KbEvaluateIn as KbEvaluateIn
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,106 +70,9 @@ log = get_logger(__name__)
 #: How many of each question's top hits the stored result keeps (ids and scores only, never text).
 TOP_HITS_KEPT = 3
 
-EvalStatus = Literal["found", "missed", "skipped"]
-EvalSkipReason = Literal["expected_document_deleted"]
-EvalRunStatus = Literal["pending", "running", "done", "failed", "dead"]
+#: `EvalRunStatus`'s members, so a job row with a status the contract doesn't
+#: recognise (should not happen) falls back to `"failed"` in :func:`run_out`.
 _RUN_STATUSES: frozenset[str] = frozenset(get_args(EvalRunStatus))
-
-
-# --------------------------------------------------------------------------- models
-class KbEvaluateIn(BaseModel):
-    """``POST /v1/knowledge-bases/{id}/evaluate``: the search options every question runs with.
-
-    The defaults are an agent's knowledge defaults (``KnowledgeConfig``), so a
-    bare call measures what a new agent retrieves.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    mode: KbSearchMode = Field(
-        default="hybrid",
-        description="`hybrid` (keyword matches fused with embedding similarity) or `vector`.",
-    )
-    rerank: KbRerankMode = Field(
-        default="none", description="`local` rescores the top candidates with the local cross-encoder."
-    )
-    min_score: float | None = Field(
-        default=None, ge=0.0, le=1.0, description="Drop hits whose `score` is below this (0-1)."
-    )
-    k: int = Field(default=4, ge=1, le=20, description="A question is found when a match is in the top `k`.")
-
-
-class KbEvalHitRef(BaseModel):
-    """One of a question's top hits, by reference (no chunk text is stored)."""
-
-    chunk_id: str
-    document_id: str
-    filename: str
-    score: float
-
-
-class KbEvalItemResult(BaseModel):
-    """How one golden question scored."""
-
-    eval_id: str
-    question: str
-    expected_document_id: str | None = None
-    expected_text: str | None = None
-    tags: list[str] = Field(default_factory=list)
-    status: EvalStatus
-    skip_reason: EvalSkipReason | None = None
-    rank: int | None = Field(default=None, description="1-based position of the first matching hit.")
-    reciprocal_rank: float = 0.0
-    latency_ms: float | None = None
-    top_hits: list[KbEvalHitRef] = Field(default_factory=list)
-
-
-class KbEvalTagScore(BaseModel):
-    """The scores of the questions carrying one tag."""
-
-    tag: str
-    scored: int
-    found: int
-    recall_at_k: float | None
-    recall_at_1: float | None
-    mrr: float | None
-
-
-class KbEvalResult(BaseModel):
-    """One evaluation run: the options, the totals, the scores and every question's outcome."""
-
-    kb_id: str
-    mode: KbSearchMode
-    rerank: KbRerankMode
-    min_score: float | None
-    k: int
-    embedder_model: str | None = None
-    total: int
-    scored: int = Field(description="Questions that were run (total minus skipped).")
-    found: int
-    skipped: int
-    recall_at_k: float | None = Field(description="found / scored; null when nothing could be scored.")
-    recall_at_1: float | None = Field(description="Share of scored questions whose first hit matched.")
-    mrr: float | None = Field(description="Mean reciprocal rank over the scored questions.")
-    latency_ms_p50: float | None = None
-    by_tag: list[KbEvalTagScore] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list, description="Distinct search warnings seen in the run.")
-    items: list[KbEvalItemResult] = Field(default_factory=list)
-    started_at: datetime
-    finished_at: datetime
-
-
-class KbEvalRunOut(BaseModel):
-    """An evaluation job: its status and, once ``done``, its result."""
-
-    job_id: str
-    kb_id: str
-    status: EvalRunStatus
-    error: str | None = None
-    options: KbEvaluateIn
-    result: KbEvalResult | None = None
-    created_at: datetime
-    updated_at: datetime
 
 
 # --------------------------------------------------------------------------- scoring

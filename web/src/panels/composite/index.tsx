@@ -35,6 +35,7 @@ import { Block, blockDomId } from "@/panels/blocks";
 import { PanelEmpty } from "@/panels/generic/blocks";
 import type { PanelDefinition, PanelProps } from "@/panels/registry";
 
+import { bannerTextOf, ConsentBanner } from "./banner";
 import type { BlockType } from "./layout";
 import { COMPOSITE_PANEL_ID, panelLayoutOf } from "./layout";
 import { handleCompositeRequest, subscribeCompositeRequests, type CompositeRequestEvent } from "./requests";
@@ -94,6 +95,9 @@ export function CompositePanel(props: PanelProps) {
   );
 
   const wide = layout.layout === "wide";
+  // V5-15/V5-17: the persistent "you're talking to an AI assistant" banner —
+  // panel-level (`./banner.tsx`) so it stays put while the blocks scroll.
+  const banner = bannerTextOf(layout.blocks, props.state.blocks);
 
   return (
     <div
@@ -101,6 +105,11 @@ export function CompositePanel(props: PanelProps) {
       data-layout={layout.layout}
       className={cn("flex h-full flex-col overflow-y-auto", wide && "xl:grid xl:auto-rows-min xl:grid-cols-2 xl:content-start")}
     >
+      {banner ? (
+        <div className={cn(wide && "xl:col-span-2")}>
+          <ConsentBanner text={banner} />
+        </div>
+      ) : null}
       {layout.blocks.length === 0 ? (
         <div className="px-4 py-4">
           <PanelEmpty>This panel has no blocks yet.</PanelEmpty>

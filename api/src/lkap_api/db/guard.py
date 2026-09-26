@@ -47,6 +47,8 @@ TENANT_TABLES: frozenset[str] = frozenset(
         "usage_daily",
         "workspace_providers",
         "provider_models",  # V4-07 (asks #26)
+        "mcp_oauth_clients",  # V5-14
+        "mcp_oauth_flows",  # V5-14 (the callback's lookup by state is a marked cross-workspace read)
         "session_assets",  # V5-19
     }
 )

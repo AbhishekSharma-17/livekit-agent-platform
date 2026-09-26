@@ -163,6 +163,21 @@ cd api && uv run alembic upgrade head      # v5_010_tool_provider_kind -> v5_009
 
 Instant on the dev database. **Order matters:** backup → `upgrade head` → restart the api → restart the worker. `Session.consent_state` is a mapped column, so an api on the V5-15 code against an unmigrated database fails on every `sessions` read, not only on consent writes. In the window between the api and the worker restarts, an old worker never holds a consent-gated recording back, so the new api answers its start with 409 (recorded as a failed recording) for any agent that already has `recording.require_consent: true` (none do before V5-17 ships the switch).
 
+## `v5_004_mcp_oauth` (V5-14)
+
+`down_revision = "v5_003_pgvector"`. Additive: two new tables, nothing existing changes.
+
+### What the revision does
+
+- **Upgrade (both dialects):** `mcp_oauth_clients` (`id` PK, `workspace_id` FK → `workspaces` `ON DELETE CASCADE`, `issuer`, `client_id`, `registration` checked `IN ('preregistered','dcr')`, `redirect_uri`, `token_endpoint_auth_method`, `ciphertext` (a vault bag, nullable), `registration_client_uri`, `client_secret_expires_at`, timestamps; index `ix_mcp_oauth_clients_workspace_issuer`) and `mcp_oauth_flows` (`state_hash` PK, `workspace_id` FK, `tool_id` FK → `tools` `ON DELETE CASCADE`, `actor_type`, `actor_id`, `verifier_ciphertext`, `issuer`, `iss_parameter_supported`, `resource`, `token_endpoint`, `revocation_endpoint`, `registration` checked `IN ('preregistered','cimd','dcr')`, `client_id`, `client_row_id` FK → `mcp_oauth_clients` `ON DELETE CASCADE`, `token_endpoint_auth_method`, `scopes`, `redirect_uri`, `created_at`, `expires_at`, `consumed_at`; indexes `ix_mcp_oauth_flows_tool`, `ix_mcp_oauth_flows_expires`).
+- **Downgrade:** drops both (flows first). `mcp-oauth` credentials a finished sign-in wrote stay in `credentials`.
+
+### Rehearsal (SQLite, 2026-09-27)
+
+Fresh scratch database in the session scratchpad (never `api/data/lkap.db`): `upgrade head` (… → `v5_003_pgvector` → `v5_004_mcp_oauth`), `downgrade v5_003_pgvector` (both tables gone), `upgrade head` (both tables and the three indexes back), `alembic current` = `v5_004_mcp_oauth (head)`, `alembic check`: "No new upgrade operations detected." `tests/test_mcp_oauth.py::test_the_migration_goes_up_down_and_up_on_a_scratch_copy` repeats up/down/up on a copy of the v1 seed, and `tests/test_migrations.py` confirms the models match head exactly.
+
+Postgres was not rehearsed locally (no server on this machine); the DDL uses only portable types (`TEXT`, `BYTEA` via `LargeBinary`, `BOOLEAN`, `TIMESTAMP`), and the CI Postgres job's up/down/up sequence covers it.
+
 ## `v5_002_session_uploads` (V5-19)
 
 ### What the revision does
@@ -200,6 +215,10 @@ job's up/down/up step runs it.
 ### To apply (coordinator)
 
 ```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_004.db"
+cd api && uv run alembic upgrade head      # v5_003_pgvector -> v5_004_mcp_oauth
+```
+
 sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_002.db"
 cd api && uv run alembic upgrade head      # v5_009_consent -> v5_002_session_uploads
 ```

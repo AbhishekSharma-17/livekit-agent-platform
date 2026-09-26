@@ -607,11 +607,11 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-09 | Opus | 2 | merged | | | |
 | V5-22 | Sonnet | 2 | merged | | | |
 | V5-47 | Opus | 2 | merged | | Composio live check | |
-| V5-10 | Sonnet | 3 | planned | | | |
+| V5-10 | Sonnet | 3 | merged | | | |
 | V5-11 | Sonnet | 3 | merged | | | |
 | V5-12 | Sonnet | 3 | merged | | | |
 | V5-13 | Opus | 3 | merged | | needs Docker | |
-| V5-14 | Opus | 3 | planned | | with V5-16 | |
+| V5-14 | Opus | 3 | merged | | with V5-16 | |
 | V5-15 | Opus | 3 | merged | | | |
 | V5-48 | Sonnet | 3 | merged | | Composio live check | |
 | V5-49 | Opus | 3 | merged | | | R-V5-9 |
@@ -621,7 +621,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-53 | Opus | 4 | merged | | Composio live check | R-V5-13 |
 | V5-54 | Sonnet | 4 | merged | | | R-V5-13 |
 | V5-16 | Opus | 4 | planned | | needs a Linear account | |
-| V5-17 | Sonnet | 4 | planned | | | |
+| V5-17 | Sonnet | 4 | merged | | | |
 | V5-19 | Opus | 4 | planned | | | |
 | V5-20 | Opus | 4 | planned | | deferred (needs store keys) | |
 | V5-21 | Sonnet | 5 | planned | | needs a Linear account | |

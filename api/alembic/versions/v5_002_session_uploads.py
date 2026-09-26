@@ -16,7 +16,7 @@ Chained after ``v5_009_consent``, the head when V5-19 started (ledger numbers
 are not chain order).
 
 Revision ID: v5_002_session_uploads
-Revises: v5_009_consent
+Revises: v5_004_mcp_oauth
 Create Date: 2026-09-27
 """
 
@@ -29,7 +29,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "v5_002_session_uploads"
-down_revision: str | None = "v5_009_consent"
+down_revision: str | None = "v5_004_mcp_oauth"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

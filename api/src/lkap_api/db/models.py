@@ -560,6 +560,83 @@ class Tool(Base):
     )
 
 
+class McpOauthClient(Base):
+    """V5-14: an OAuth client LKAP holds at one authorization server, per workspace.
+
+    A dynamically registered client (``dcr``) is reused by every tool of the workspace
+    whose server signs in at the same ``issuer`` (research-v4 tools §4.3.2); a
+    ``preregistered`` row keeps the client secret an admin supplied when starting a
+    sign-in. ``ciphertext`` is a vault bag (``client_secret``, ``registration_access_token``)
+    and is never returned by any route.
+    """
+
+    __tablename__ = "mcp_oauth_clients"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    issuer: Mapped[str] = mapped_column(Text, nullable=False)
+    client_id: Mapped[str] = mapped_column(Text, nullable=False)
+    registration: Mapped[str] = mapped_column(String(16), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    token_endpoint_auth_method: Mapped[str] = mapped_column(String(32), nullable=False)
+    ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    registration_client_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_secret_expires_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint("registration IN ('preregistered','dcr')", name="registration_valid"),
+        Index("ix_mcp_oauth_clients_workspace_issuer", "workspace_id", "issuer"),
+    )
+
+
+class McpOauthFlow(Base):
+    """V5-14: one pending MCP sign-in, from ``oauth/start`` to the callback (10 minutes, single use).
+
+    The browser's ``state`` is stored only as its SHA-256 (``state_hash``); the PKCE
+    verifier only inside the vault (``verifier_ciphertext``). ``issuer`` is the
+    authorization server's ``issuer`` exactly as its validated metadata spelled it, so
+    the callback's RFC 9207 comparison is byte-for-byte. ``actor_*`` is the admin who
+    started it (the audit trail of the callback). Swept by the sessions sweep.
+    """
+
+    __tablename__ = "mcp_oauth_flows"
+
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    workspace_id: Mapped[str] = workspace_fk()
+    tool_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("tools.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verifier_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    issuer: Mapped[str] = mapped_column(Text, nullable=False)
+    iss_parameter_supported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    resource: Mapped[str] = mapped_column(Text, nullable=False)
+    token_endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    revocation_endpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    registration: Mapped[str] = mapped_column(String(16), nullable=False)
+    client_id: Mapped[str] = mapped_column(Text, nullable=False)
+    client_row_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("mcp_oauth_clients.id", ondelete="CASCADE"), nullable=True
+    )
+    token_endpoint_auth_method: Mapped[str] = mapped_column(String(32), nullable=False)
+    scopes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    expires_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False)
+    consumed_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("registration IN ('preregistered','cimd','dcr')", name="registration_valid"),
+        Index("ix_mcp_oauth_flows_tool", "tool_id"),
+        Index("ix_mcp_oauth_flows_expires", "expires_at"),
+    )
+
+
 class KnowledgeBase(Base):
     """A knowledge base; its metadata here, its vectors in the configured vector store.
 

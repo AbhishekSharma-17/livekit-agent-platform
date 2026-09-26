@@ -475,11 +475,11 @@ def test_v5_002_upgrades_downgrades_and_upgrades_again(
         monkeypatch.delenv(name, raising=False)
     database = tmp_path / "lkap.db"
     shutil.copy(Path(__file__).resolve().parent / "fixtures" / "v1_seed.sqlite", database)
-    _migrate(database, "v5_009_consent")
+    _migrate(database, "v5_004_mcp_oauth")
     assert "session_assets" not in _tables(database)
     _migrate(database, "v5_002_session_uploads")
     assert "session_assets" in _tables(database)
-    _migrate(database, "v5_009_consent", downgrade=True)
+    _migrate(database, "v5_004_mcp_oauth", downgrade=True)
     assert "session_assets" not in _tables(database)
     _migrate(database, "head")
     assert "session_assets" in _tables(database)

@@ -489,6 +489,58 @@ class ToolDryRunResult(BaseModel):
     duration_ms: int
 
 
+# ------------------------------------------------------------------ MCP sign-in (V5-14)
+#: How the api obtained the OAuth client id it signs in with (research-v4 tools §4.3.5).
+McpOauthRegistration = Literal["preregistered", "cimd", "dcr"]
+
+
+class McpOauthStartIn(BaseModel):
+    """``POST /v1/tools/{id}/oauth/start``: begin signing in to an MCP server's OAuth provider.
+
+    ``client_secret`` is for a pre-registered confidential client only. It is write-only:
+    stored in the vault, sent to the provider's token endpoint, never returned or logged.
+    """
+
+    client_secret: str | None = Field(default=None, min_length=1, max_length=2000)
+    authorization_server: str | None = Field(default=None, max_length=2000)
+    """When the server names several sign-in providers, the one to use (default: the first)."""
+
+
+class McpOauthStartOut(BaseModel):
+    """``POST /v1/tools/{id}/oauth/start``: where to send the admin's browser, or what is missing.
+
+    ``status="redirect"``: open ``authorization_url``; the sign-in must finish before
+    ``expires_at``. ``status="needs_client_registration"``: the provider offers no automatic
+    registration, so an admin registers an app with it (``redirect_uri`` is the address to
+    paste), then saves the server with ``auth.registration="preregistered"`` and the client id.
+    Never carries a token or a client secret.
+    """
+
+    status: Literal["redirect", "needs_client_registration"]
+    authorization_url: str | None = None
+    expires_at: datetime | None = None
+    redirect_uri: str
+    issuer: str | None = None
+    registration: McpOauthRegistration | None = None
+
+
+class McpOauthStatusOut(BaseModel):
+    """``GET /v1/tools/{id}/oauth/status``: the tool's sign-in, without any token material.
+
+    ``worker_supported`` stays ``False`` until the worker can use the token (V5-16): a
+    connected server is saved but not yet usable in a session.
+    """
+
+    status: Literal["not_connected", "connected", "needs_reauth", "revoked"]
+    issuer: str | None = None
+    scopes: list[str] = []
+    expires_at: datetime | None = None
+    connected_at: datetime | None = None
+    last_refresh_at: datetime | None = None
+    registration: McpOauthRegistration | None = None
+    worker_supported: bool = False
+
+
 # ------------------------------------------------------------------ knowledge bases
 class KbCreate(BaseModel):
     """``POST /v1/knowledge-bases``."""
@@ -719,6 +771,110 @@ class KbSearchResponse(BaseModel):
     timings_ms: dict[str, float] = Field(
         default_factory=dict, description="`embed`, `retrieve`, `rerank` and `total`, in milliseconds."
     )
+
+
+# ---------------------------------------------------------------------------- knowledge base evals (V5-05)
+#: How one golden question scored.
+EvalStatus = Literal["found", "missed", "skipped"]
+#: Why a question was left out of the run without being scored.
+EvalSkipReason = Literal["expected_document_deleted"]
+#: An evaluation run's lifecycle, mirroring the `kb_evaluate` job's status.
+EvalRunStatus = Literal["pending", "running", "done", "failed", "dead"]
+
+
+class KbEvaluateIn(BaseModel):
+    """``POST /v1/knowledge-bases/{id}/evaluate``: the search options every question runs with.
+
+    The defaults are an agent's knowledge defaults (``KnowledgeConfig``: ``mode="hybrid"``, ``k=4``), not
+    ``KbSearchOptions``'s (``mode="vector"``), so a bare call measures what a new agent retrieves.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: KbSearchMode = Field(
+        default="hybrid",
+        description="`hybrid` (keyword matches fused with embedding similarity) or `vector`.",
+    )
+    rerank: KbRerankMode = Field(
+        default="none", description="`local` rescores the top candidates with the local cross-encoder."
+    )
+    min_score: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Drop hits whose `score` is below this (0-1)."
+    )
+    k: int = Field(default=4, ge=1, le=20, description="A question is found when a match is in the top `k`.")
+
+
+class KbEvalHitRef(BaseModel):
+    """One of a question's top hits, by reference (no chunk text is stored)."""
+
+    chunk_id: str
+    document_id: str
+    filename: str
+    score: float
+
+
+class KbEvalItemResult(BaseModel):
+    """How one golden question scored."""
+
+    eval_id: str
+    question: str
+    expected_document_id: str | None = None
+    expected_text: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    status: EvalStatus
+    skip_reason: EvalSkipReason | None = None
+    rank: int | None = Field(default=None, description="1-based position of the first matching hit.")
+    reciprocal_rank: float = 0.0
+    latency_ms: float | None = None
+    top_hits: list[KbEvalHitRef] = Field(default_factory=list)
+
+
+class KbEvalTagScore(BaseModel):
+    """The scores of the questions carrying one tag."""
+
+    tag: str
+    scored: int
+    found: int
+    recall_at_k: float | None
+    recall_at_1: float | None
+    mrr: float | None
+
+
+class KbEvalResult(BaseModel):
+    """One evaluation run: the options, the totals, the scores and every question's outcome."""
+
+    kb_id: str
+    mode: KbSearchMode
+    rerank: KbRerankMode
+    min_score: float | None
+    k: int
+    embedder_model: str | None = None
+    total: int
+    scored: int = Field(description="Questions that were run (total minus skipped).")
+    found: int
+    skipped: int
+    recall_at_k: float | None = Field(description="found / scored; null when nothing could be scored.")
+    recall_at_1: float | None = Field(description="Share of scored questions whose first hit matched.")
+    mrr: float | None = Field(description="Mean reciprocal rank over the scored questions.")
+    latency_ms_p50: float | None = None
+    by_tag: list[KbEvalTagScore] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list, description="Distinct search warnings seen in the run.")
+    items: list[KbEvalItemResult] = Field(default_factory=list)
+    started_at: datetime
+    finished_at: datetime
+
+
+class KbEvalRunOut(BaseModel):
+    """An evaluation job: its status and, once ``done``, its result."""
+
+    job_id: str
+    kb_id: str
+    status: EvalRunStatus
+    error: str | None = None
+    options: KbEvaluateIn
+    result: KbEvalResult | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 # ---------------------------------------------------------------------------- packs

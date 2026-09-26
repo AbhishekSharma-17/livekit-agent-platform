@@ -44,11 +44,19 @@ import datetime as dt
 from typing import Any, cast
 
 from lkap_contracts.agent_config import AgentConfig
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
-from lkap_api.db.models import Agent, Job, LiveKitConnection, SessionEvent, utcnow
+from lkap_api.db.models import (
+    Agent,
+    Job,
+    LiveKitConnection,
+    McpOauthClient,
+    McpOauthFlow,
+    SessionEvent,
+    utcnow,
+)
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.jobs.context import JobContext
@@ -293,6 +301,37 @@ async def sweep_app_connections(db: Database, settings: Settings, *, now: dt.dat
         return await expire_stale_connections(session, Vault(settings.master_key), now=now)
 
 
+async def sweep_mcp_oauth(db: Database, *, now: dt.datetime | None = None) -> tuple[int, int]:
+    """Delete finished or expired MCP sign-in flows and lapsed OAuth clients (V5-14).
+
+    A flow row lives ten minutes and is used once: consumed rows and rows past
+    ``expires_at`` are deleted. A dynamically registered client whose secret has
+    expired (``client_secret_expires_at``) is deleted too, so the next sign-in
+    registers afresh. Both tables are platform-wide here (no workspace filter).
+
+    Returns:
+        ``(flows_deleted, clients_deleted)``.
+    """
+    ts = now or utcnow()
+    async with db.session() as session:
+        flows = await session.execute(
+            delete(McpOauthFlow).where(
+                or_(McpOauthFlow.consumed_at.is_not(None), McpOauthFlow.expires_at <= ts)
+            )
+        )
+        clients = await session.execute(
+            delete(McpOauthClient).where(
+                McpOauthClient.client_secret_expires_at.is_not(None),
+                McpOauthClient.client_secret_expires_at <= ts,
+            )
+        )
+    flows_deleted = cast(CursorResult[Any], flows).rowcount or 0
+    clients_deleted = cast(CursorResult[Any], clients).rowcount or 0
+    if flows_deleted or clients_deleted:
+        log.info("mcp_oauth_swept", flows=flows_deleted, clients=clients_deleted)
+    return flows_deleted, clients_deleted
+
+
 async def sweep_loop(db: Database, settings: Settings) -> None:
     """Run every sweep forever, every `LKAP_SESSION_SWEEP_INTERVAL_S` seconds:
     `sweep_orphaned_sessions`, `sweep_once`, `sweep_recording_retention` and
@@ -316,6 +355,7 @@ async def sweep_loop(db: Database, settings: Settings) -> None:
             await sweep_recording_retention(db, settings)
             await sweep_stuck_calls(db)  # R-V2-24: calls stuck in `dialing` / left open
             await sweep_app_connections(db, settings)  # V5-18: unfinished app sign-ins
+            await sweep_mcp_oauth(db)  # V5-14: finished or expired MCP sign-in flows
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - a sweep failure must never kill the loop

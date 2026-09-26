@@ -29,7 +29,7 @@ steps 2, 3 and 7 can run before V5-23 with direct calls, steps 4–6 need it.
    31 MB video: refused on the block before the upload starts, with the plain reason. Send a fourth file
    to a `max_files: 3` block: refused. Record the time from send to the block showing the file. From
    an iPhone, send a HEIC photo from the library (not the camera): note whether it shows in the
-   gallery and whether `describe_asset` can read it (ask #118).
+   gallery and whether `describe_asset` can read it (ask #134).
 5. A printed **fictional** sample ID (never a real person's): the agent calls `request_upload`, then
    `describe_asset(task="extract_id")`; the fields land in the `details` block through `set_details`
    after the agent confirms them with the caller. The worker log shows `builtin_tool.describe_asset`
@@ -42,7 +42,7 @@ steps 2, 3 and 7 can run before V5-23 with direct calls, steps 4–6 need it.
 7. Retention: end the throwaway agent's session, set its `ended_at` back two days on the scratch
    database, wait one sweep (`LKAP_SESSION_SWEEP_INTERVAL_S`): its rows are gone from
    `session_assets` and the files from `LKAP_DATA_DIR/storage/sessions/<id>/`.
-8. Barge-in (ask #114): while the picker is open, say "one moment": the request is withdrawn, a file
+8. Barge-in (ask #130): while the picker is open, say "one moment": the request is withdrawn, a file
    sent afterwards is refused as not requested, and the agent asks again. Note how often this happens in
    the run; it decides #114.
 9. Clean up: the `Demo — ` agents, the knowledge base, the Builder key; stop the scratch api and worker.

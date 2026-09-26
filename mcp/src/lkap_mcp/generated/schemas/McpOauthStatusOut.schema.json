@@ -1,0 +1,103 @@
+{
+  "$id": "lkap-contracts/McpOauthStatusOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/tools/{id}/oauth/status``: the tool's sign-in, without any token material.\n\n``worker_supported`` stays ``False`` until the worker can use the token (V5-16): a\nconnected server is saved but not yet usable in a session.",
+  "properties": {
+    "connected_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connected At"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "issuer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Issuer"
+    },
+    "last_refresh_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Refresh At"
+    },
+    "registration": {
+      "anyOf": [
+        {
+          "enum": [
+            "preregistered",
+            "cimd",
+            "dcr"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Registration"
+    },
+    "scopes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Scopes",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "not_connected",
+        "connected",
+        "needs_reauth",
+        "revoked"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "worker_supported": {
+      "default": false,
+      "title": "Worker Supported",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "McpOauthStatusOut",
+  "type": "object"
+}

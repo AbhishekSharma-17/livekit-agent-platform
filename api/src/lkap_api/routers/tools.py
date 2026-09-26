@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Query, Response, status
 from lkap_contracts.api_models import ToolCreate, ToolDryRunRequest, ToolDryRunResult, ToolOut, ToolPage
+from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpOAuthAuth,
@@ -35,6 +36,7 @@ from lkap_api.db.models import Agent, Credential, Tool, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
+from lkap_api.mcp_oauth.credential import STATUS_ACTIVE, binds_tool, load_sign_in, parse_time
 from lkap_api.mcp_test import McpTestError, list_mcp_tools
 from lkap_api.settings import Settings
 from lkap_api.tool_providers.bindings import (
@@ -116,15 +118,23 @@ async def _workspace_credential(db: AsyncSession, workspace_id: str, credential_
 def _check_mcp_definition(definition: McpServerDefinition, settings: Settings) -> None:
     """V5-09: an MCP server's auth kind and url, at save and before a test connection.
 
-    ``oauth`` is refused until V5-14 ships the sign-in flow (``422 oauth_not_available``).
     The url must pass :meth:`net_guard.McpPolicy.problem`: the network guard, ``https``
     outside a dev loopback host, and ``LKAP_MCP_ALLOWED_HOSTS`` when set (D-V5-4).
+    V5-14: an ``oauth`` server's url carries no ``{{ secret.* }}`` placeholder (its
+    credential is the sign-in, whose tokens must never be substituted into a url), and a
+    pre-registered client names its client id.
     """
     if isinstance(definition.auth, McpOAuthAuth):
-        raise UnprocessableEntityError(
-            "signing in to an MCP server is not available yet: use header auth (an API key) for now",
-            details={"field": "definition.auth.kind", "reason": "oauth_not_available"},
-        )
+        if _SECRET_RE.search(definition.url):
+            raise UnprocessableEntityError(
+                "an MCP server that signs in may not put secrets in its url",
+                details={"field": "definition.url", "reason": "oauth_url_placeholder"},
+            )
+        if definition.auth.registration == "preregistered" and not definition.auth.client_id:
+            raise UnprocessableEntityError(
+                "a pre-registered sign-in needs the client id of the app registered with the provider",
+                details={"field": "definition.auth.client_id", "reason": "client_id_required"},
+            )
     problem = net_guard.mcp_policy(settings).problem(definition.url)
     if problem is not None:
         raise UnprocessableEntityError(
@@ -133,7 +143,13 @@ def _check_mcp_definition(definition: McpServerDefinition, settings: Settings) -
 
 
 async def _check_payload(
-    db: AsyncSession, vault: Vault, ctx: WorkspaceContext, payload: ToolCreate, settings: Settings
+    db: AsyncSession,
+    vault: Vault,
+    ctx: WorkspaceContext,
+    payload: ToolCreate,
+    settings: Settings,
+    *,
+    tool_id: str | None = None,
 ) -> None:
     """Validate cross-references, kind/definition agreement and secret placeholders.
 
@@ -144,6 +160,11 @@ async def _check_payload(
     unresolved names, never a value). An MCP server's header auth binds an
     ``http-tool-secret`` bag through ``auth.credential_id``, which the contract
     mirrors to the deprecated top-level ``credential_id`` checked here (V5-09).
+
+    V5-14: an ``oauth`` MCP server binds only its own ``mcp-oauth`` sign-in: on update
+    (``tool_id`` set), when the credential's bag names this tool and a resource covering
+    the url. The sign-in callback writes that binding; nothing else may create it, and no
+    other definition may reference an ``mcp-oauth`` credential.
     """
     if payload.definition.kind != payload.kind:
         raise UnprocessableEntityError(
@@ -174,7 +195,11 @@ async def _check_payload(
         credential = await _workspace_credential(db, ctx.workspace_id, credential_id)
         if credential is None:
             raise UnprocessableEntityError(f"unknown credential '{credential_id}'")
-        if is_composio_credential(credential.provider_id):
+        if credential.provider_id == MCP_OAUTH_PROVIDER_ID or isinstance(
+            getattr(payload.definition, "auth", None), McpOAuthAuth
+        ):
+            _check_sign_in_binding(payload, credential, vault, tool_id)
+        elif is_composio_credential(credential.provider_id):
             # V5-18 (COMPOSIO.md §4, D-V5-C10): the Composio key binds only to Composio app
             # servers (and V5-47's action tools); an HTTP tool could send it anywhere.
             problem = composio_binding_problem(payload.definition, credential.provider_id)
@@ -202,6 +227,31 @@ async def _check_payload(
             raise UnprocessableEntityError(
                 f"unknown secret name(s) for credential '{credential_id}': {', '.join(unknown)}"
             )
+
+
+def _check_sign_in_binding(
+    payload: ToolCreate, credential: Credential, vault: Vault, tool_id: str | None
+) -> None:
+    """V5-14: an ``mcp-oauth`` credential binds only to the oauth MCP tool whose sign-in wrote it."""
+    definition = payload.definition
+    details = {"credential_id": credential.id, "provider_id": credential.provider_id}
+    if not isinstance(definition, McpServerDefinition) or not isinstance(definition.auth, McpOAuthAuth):
+        raise UnprocessableEntityError(
+            "an MCP sign-in credential belongs to the MCP server that signed in, not to this tool",
+            details={**details, "reason": "oauth_credential_misuse"},
+        )
+    if credential.provider_id != MCP_OAUTH_PROVIDER_ID:
+        raise UnprocessableEntityError(
+            "an MCP server that signs in takes no key: its credential is created by signing in",
+            details={**details, "reason": "oauth_credential_misuse"},
+        )
+    if tool_id is None or not binds_tool(
+        vault.decrypt(credential.ciphertext), tool_id=tool_id, url=definition.url
+    ):
+        raise UnprocessableEntityError(
+            "this sign-in belongs to another server or address: clear auth.credential_id and sign in again",
+            details={**details, "reason": "oauth_credential_mismatch"},
+        )
 
 
 async def _check_provider_binding(
@@ -309,8 +359,9 @@ async def update_tool(
 ) -> ToolOut:
     """Replace a tool definition."""
     row = await _load(db, ctx, tool_id)
-    await _check_payload(db, vault, ctx, payload, settings)
-    definition = _keep_mcp_snapshot(_definition_of(row), payload.definition)
+    await _check_payload(db, vault, ctx, payload, settings, tool_id=row.id)
+    stored = _definition_of(row)
+    definition = _keep_oauth_sign_in(stored, _keep_mcp_snapshot(stored, payload.definition))
     row.agent_id = payload.agent_id
     row.kind = payload.kind
     row.name = payload.name
@@ -337,6 +388,32 @@ def _keep_mcp_snapshot(stored: ToolDefinition, incoming: ToolDefinition) -> Tool
     ):
         return incoming.model_copy(
             update={"cached_tools": stored.cached_tools, "cached_at": stored.cached_at}
+        )
+    return incoming
+
+
+def _keep_oauth_sign_in(stored: ToolDefinition, incoming: ToolDefinition) -> ToolDefinition:
+    """Carry an oauth server's sign-in over a save that does not send it (V5-14).
+
+    The callback writes ``auth.credential_id``; an editor that re-posts the definition it
+    loaded before the sign-in finished would otherwise drop it. Kept only while the url
+    and the auth kind are unchanged (a new address needs a new sign-in).
+    """
+    if (
+        isinstance(stored, McpServerDefinition)
+        and isinstance(incoming, McpServerDefinition)
+        and isinstance(stored.auth, McpOAuthAuth)
+        and isinstance(incoming.auth, McpOAuthAuth)
+        and stored.auth.credential_id is not None
+        and incoming.auth.credential_id is None
+        and stored.url == incoming.url
+    ):
+        credential_id = stored.auth.credential_id
+        return incoming.model_copy(
+            update={
+                "auth": incoming.auth.model_copy(update={"credential_id": credential_id}),
+                "credential_id": credential_id,
+            }
         )
     return incoming
 
@@ -509,6 +586,32 @@ async def _mcp_request_headers(
     return dict(resolved.headers)
 
 
+async def _oauth_request_headers(
+    db: AsyncSession, vault: Vault, row: Tool, definition: McpServerDefinition
+) -> dict[str, str] | McpTestResult:
+    """V5-14: the stored sign-in's access token as a bearer header, or why there is none.
+
+    The token is never substituted into the definition (``resolve_tool_definition`` is not
+    used for oauth servers here). An expired token is reported, not refreshed (V5-16).
+    """
+    assert isinstance(definition.auth, McpOAuthAuth)  # noqa: S101 - narrowed by the caller
+    loaded = await load_sign_in(
+        db, vault, workspace_id=row.workspace_id, credential_id=definition.auth.credential_id
+    )
+    if loaded is None or not binds_tool(loaded[1], tool_id=row.id, url=definition.url):
+        return McpTestResult(ok=False, reason="needs_auth", error="sign in to this server first")
+    bag = loaded[1]
+    token = bag.get("access_token")
+    if bag.get("status") != STATUS_ACTIVE or not token:
+        return McpTestResult(
+            ok=False, reason="needs_auth", error="the sign-in needs to be renewed: sign in again"
+        )
+    expires_at = parse_time(bag.get("expires_at"))
+    if expires_at is not None and expires_at <= datetime.now(UTC):
+        return McpTestResult(ok=False, reason="needs_auth", error="the sign-in has expired: sign in again")
+    return {"Authorization": f"Bearer {token}"}
+
+
 @router.post(
     "/{tool_id}/test",
     response_model=McpTestResult,
@@ -541,7 +644,13 @@ async def test_mcp_tool(
             "an app server may only connect to its provider's https host",
             details={"field": "definition.url", "reason": "blocked_destination"},
         )
-    headers = await _mcp_request_headers(db, vault, row, definition)
+    if isinstance(definition.auth, McpOAuthAuth):
+        headers_or_result = await _oauth_request_headers(db, vault, row, definition)
+        if isinstance(headers_or_result, McpTestResult):
+            return headers_or_result
+        headers = headers_or_result
+    else:
+        headers = await _mcp_request_headers(db, vault, row, definition)
 
     started = time.perf_counter()
     try:

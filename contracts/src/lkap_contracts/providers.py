@@ -35,6 +35,9 @@ FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "mo
 #: ``removed`` — withdrawn by its vendor.
 Availability = Literal["available", "deferred", "incompatible", "removed"]
 
+#: The registry id of an MCP server's OAuth sign-in credential (V5-14).
+MCP_OAUTH_PROVIDER_ID = "mcp-oauth"
+
 #: Whether a provider has completed a live call on this platform.
 Verification = Literal["verified", "unverified"]
 
@@ -3074,6 +3077,25 @@ _NEW: list[ProviderSpec] = [
         "Composio's shared sign-in include 20,000 of those, then a small per-call fee.",
         docs_url="https://docs.composio.dev/docs/authenticating-tools",
         get_key_url="https://platform.composio.dev",
+    ),
+    # ------------------------------------------------ MCP server sign-in (V5-14)
+    # The tokens of one MCP server's OAuth sign-in (research-v4 tools §4.3.2). Written only by
+    # the api's sign-in callback, never typed by an admin: no secret fields, and a tool binds
+    # one only when the bag names that tool and its url. Listed after `http-tool-secret`, which
+    # the console finds as "the" secret bag by kind, and outside the v1 slim set. The card's
+    # `kind: "oauth"` would add a `ProviderKind` member that exhaustive web maps key on, so it
+    # is a `secret_bag` until a ruling adds that kind.
+    _full(
+        MCP_OAUTH_PROVIDER_ID,
+        "secret_bag",
+        "MCP server sign-in",
+        "LKAP",
+        "",
+        "",
+        requires_credential=False,
+        secret_fields=[],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Created by signing in to an MCP server from its tool page; not added by hand.",
     ),
 ]
 

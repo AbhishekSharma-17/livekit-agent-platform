@@ -154,10 +154,21 @@ afterEach(() => {
 });
 
 describe("SettingsTabs", () => {
-  it("defaults to the Workspace tab and lists all six v2 tab ids plus the two this package fills in", () => {
+  it("defaults to the Workspace tab and lists all six v2 tab ids plus the ones later packages fill in", () => {
     renderSettings();
 
-    for (const label of ["Workspace", "Appearance", "Team", "API keys", "Webhooks", "Storage", "Environment", "Danger zone"]) {
+    for (const label of [
+      "Workspace",
+      "Appearance",
+      "Team",
+      "API keys",
+      "Webhooks",
+      // V5-17: Compliance, between Webhooks and Storage.
+      "Compliance",
+      "Storage",
+      "Environment",
+      "Danger zone",
+    ]) {
       expect(screen.getByRole("tab", { name: label })).toBeTruthy();
     }
     expect(screen.getByRole("tab", { name: "Workspace" }).getAttribute("aria-selected")).toBe("true");

@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/KbEvalHitRef.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One of a question's top hits, by reference (no chunk text is stored).",
+  "properties": {
+    "chunk_id": {
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "filename": {
+      "title": "Filename",
+      "type": "string"
+    },
+    "score": {
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "chunk_id",
+    "document_id",
+    "filename",
+    "score"
+  ],
+  "title": "KbEvalHitRef",
+  "type": "object"
+}

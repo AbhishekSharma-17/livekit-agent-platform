@@ -39,6 +39,113 @@ export const avatarOptionsSchema = z.object({
 });
 export type AvatarOptionsForm = z.infer<typeof avatarOptionsSchema>;
 
+/**
+ * `TurnHandlingOptions` and its nested SDK mirrors (V5-07,
+ * `lkap_contracts.turn_handling`): every field optional (unset = the SDK's
+ * own default at session start) and every level keeps unknown keys via
+ * `.catchall` — the api's models use `extra="allow"` for the same reason
+ * (a newer SDK's key still round-trips), and `zodResolver` (`lib/zod-resolver.ts`)
+ * submits `schema.safeParse(values).data`, which **drops** any key a plain
+ * `z.object()` doesn't know about; without `.catchall` the Conversation
+ * section's "Advanced" JSON editor (V5-11) would silently lose them on Save.
+ */
+export const endpointingOptionsSchema = z
+  .object({
+    mode: z.enum(["fixed", "dynamic"]).nullable().optional(),
+    min_delay: z.number().min(0).nullable().optional(),
+    max_delay: z.number().min(0).nullable().optional(),
+    alpha: z.number().min(0).max(1).nullable().optional(),
+  })
+  .catchall(z.unknown());
+export type EndpointingOptionsForm = z.infer<typeof endpointingOptionsSchema>;
+
+export const interruptionOptionsSchema = z
+  .object({
+    enabled: z.boolean().nullable().optional(),
+    mode: z.enum(["adaptive", "vad"]).nullable().optional(),
+    min_duration: z.number().min(0).nullable().optional(),
+    min_words: z.number().int().min(0).nullable().optional(),
+    false_interruption_timeout: z.number().min(0).nullable().optional(),
+    resume_false_interruption: z.boolean().nullable().optional(),
+  })
+  .catchall(z.unknown());
+export type InterruptionOptionsForm = z.infer<typeof interruptionOptionsSchema>;
+
+export const preemptiveGenerationOptionsSchema = z
+  .object({
+    enabled: z.boolean().nullable().optional(),
+    preemptive_tts: z.boolean().nullable().optional(),
+    max_speech_duration: z.number().min(0).nullable().optional(),
+    max_retries: z.number().int().min(0).nullable().optional(),
+  })
+  .catchall(z.unknown());
+export type PreemptiveGenerationOptionsForm = z.infer<typeof preemptiveGenerationOptionsSchema>;
+
+export const userTurnLimitOptionsSchema = z
+  .object({
+    max_words: z.number().int().min(1).nullable().optional(),
+    max_duration: z.number().min(0).nullable().optional(),
+  })
+  .catchall(z.unknown());
+export type UserTurnLimitOptionsForm = z.infer<typeof userTurnLimitOptionsSchema>;
+
+export const turnHandlingOptionsSchema = z
+  .object({
+    /** Set by the platform; the api refuses it here (kept so a stored value still validates). */
+    turn_detection: z.enum(["stt", "vad", "realtime_llm", "manual"]).nullable().optional(),
+    endpointing: endpointingOptionsSchema.nullable().optional(),
+    interruption: interruptionOptionsSchema.nullable().optional(),
+    preemptive_generation: preemptiveGenerationOptionsSchema.nullable().optional(),
+    user_turn_limit: userTurnLimitOptionsSchema.nullable().optional(),
+  })
+  .catchall(z.unknown());
+export type TurnHandlingOptionsForm = z.infer<typeof turnHandlingOptionsSchema>;
+
+/** `TurnDetectorSettings` (V5-07): where the end-of-turn model runs and its sensitivity. */
+export const turnDetectorSettingsSchema = z.object({
+  mode: z.enum(["hosted", "local"]).nullable().optional(),
+  unlikely_threshold: z.number().min(0).max(1).nullable().optional(),
+});
+export type TurnDetectorSettingsForm = z.infer<typeof turnDetectorSettingsSchema>;
+
+/** `PipelineConfig.conversation_preset` (V5-07). Optional: fixtures built before this field don't need it. */
+export const CONVERSATION_PRESET_VALUES = ["patient", "balanced", "snappy", "telephony", "custom"] as const;
+
+/**
+ * True when every own value of `obj` is `undefined` or `null` (an object
+ * `zodResolver` would otherwise submit as `{}`/all-`null`). `null` counts as
+ * empty here because every leaf this is used on documents `None`/`null` as
+ * "unset" (never a distinct third state) — and RHF's own default-value
+ * cloning, observed empirically, fills an unmounted nested `Controller`'s
+ * leaf with `null` rather than leaving it `undefined` when its parent
+ * object's own default was `null` (e.g. a stored `turn_detector: null`).
+ */
+function isEffectivelyEmpty(obj: Record<string, unknown>): boolean {
+  return Object.values(obj).every((value) => value === undefined || value === null);
+}
+
+/**
+ * Mounting a `Controller` for a leaf that was never set (e.g. `interruption.min_words`
+ * with no `interruption` in the stored config at all) makes RHF materialize the whole
+ * path, so `turnHandlingOptionsSchema`'s parse turns an absent `interruption` into a
+ * present-but-empty `{}` — and `{}` is not `undefined`, so it round-trips onto the save
+ * payload as a real (if inert) change to a config the user never touched. This drops
+ * any `endpointing`/`interruption`/`preemptive_generation`/`user_turn_limit` that
+ * parsed to "every field unset", so choosing a preset (or editing an unrelated field)
+ * truly "leaves `turn_handling` untouched" (V5-11 acceptance) rather than padding it
+ * with empty siblings on every save.
+ */
+function pruneEmptyTurnHandlingGroups(value: TurnHandlingOptionsForm): TurnHandlingOptionsForm {
+  const cleaned = { ...value };
+  for (const key of ["endpointing", "interruption", "preemptive_generation", "user_turn_limit"] as const) {
+    const nested = cleaned[key];
+    if (nested && typeof nested === "object" && isEffectivelyEmpty(nested)) {
+      delete cleaned[key];
+    }
+  }
+  return cleaned;
+}
+
 export const pipelineConfigSchema = z
   .object({
     mode: z.enum(["realtime", "cascaded", "half_cascade"]),
@@ -54,7 +161,10 @@ export const pipelineConfigSchema = z
     vad: providerRefSchema.nullable().optional(),
     turn_detection: providerRefSchema.nullable().optional(),
     noise_cancellation: providerRefSchema.nullable().optional(),
-    turn_handling: z.record(z.string(), z.unknown()).optional(),
+    /** V5-07/V5-11 (`editor/sections/conversation-section.tsx`): turn-taking, presets, the detector. */
+    turn_handling: turnHandlingOptionsSchema.optional(),
+    conversation_preset: z.enum(CONVERSATION_PRESET_VALUES).optional(),
+    turn_detector: turnDetectorSettingsSchema.nullable().optional(),
   })
   .superRefine((val, ctx) => {
     // Slot requirements per mode (CONTRACTS-V2 §4.3): realtime → realtime;
@@ -69,6 +179,15 @@ export const pipelineConfigSchema = z
     if ((val.mode === "cascaded" || val.mode === "half_cascade") && !val.tts) {
       ctx.addIssue({ code: "custom", path: ["tts"], message: "Choose a text-to-speech provider." });
     }
+  })
+  .transform((val) => {
+    // See `pruneEmptyTurnHandlingGroups` above: undo the RHF-mounting artefact for
+    // both `turn_handling`'s nested groups and `turn_detector` itself (an
+    // effectively-empty `turn_detector` goes back to `null`, its usual "unset" shape).
+    const cleaned = { ...val };
+    if (cleaned.turn_handling) cleaned.turn_handling = pruneEmptyTurnHandlingGroups(cleaned.turn_handling);
+    if (cleaned.turn_detector && isEffectivelyEmpty(cleaned.turn_detector)) cleaned.turn_detector = null;
+    return cleaned;
   });
 
 export const voiceConfigSchema = z.object({
@@ -77,8 +196,15 @@ export const voiceConfigSchema = z.object({
   language: z.string().min(1, "Language is required"),
   allow_interruptions: z.boolean(),
   user_away_timeout_s: z.number().nullable().optional(),
-  /** V4-13: the Conversation card's thinking-sound picker (BACKGROUND-TOOLS.md D-V4-38). */
+  /** V4-13: the Conversation section's thinking-sound picker (BACKGROUND-TOOLS.md D-V4-38). */
   thinking_sound: z.enum(["none", "keyboard_typing", "keyboard_typing2", "office_ambience"]),
+  /**
+   * V5-07/V5-11: the Conversation section's background-sound picker. Optional
+   * (like `locale`/`tools.apps` above) so fixtures built before V5-07 don't
+   * need updating; `DEFAULT_VOICE` (`agents/defaults.ts`) always supplies
+   * `"none"` in the real editor.
+   */
+  ambient_sound: z.string().optional(),
 });
 
 export const capabilitiesConfigSchema = z.object({

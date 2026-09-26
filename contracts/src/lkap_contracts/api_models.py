@@ -414,11 +414,32 @@ class NodeSpecsResponse(BaseModel):
 
 # -------------------------------------------------------------------------- connect
 class ConnectRequest(BaseModel):
-    """``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored."""
+    """``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.
+
+    ``participant_metadata`` becomes the caller's participant attributes. One key is
+    read by the platform (R-V5-10): ``timezone``, the browser's
+    ``Intl.DateTimeFormat().resolvedOptions().timeZone``. The api checks it against the
+    IANA database and stamps it as the ``lkap.tz`` attribute; an unknown name is dropped
+    (never a 422). Keys starting with ``lkap.`` are reserved and dropped.
+    """
 
     participant_name: str = "Guest"
     participant_identity: str | None = None
-    participant_metadata: dict[str, str] = {}
+    participant_metadata: dict[str, str] = Field(
+        default={},
+        description="Caller attributes (at most 2 KB). `timezone` = the browser's IANA timezone; "
+        "keys starting with `lkap.` are reserved and dropped.",
+    )
+
+
+class TextSessionCreate(ConnectRequest):
+    """``POST /v1/agents/{id_or_slug}/text-sessions`` (R-V5-10: a ``ConnectRequest`` plus the zone)."""
+
+    timezone: str | None = Field(
+        default=None,
+        description="The browser's IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`); "
+        "an unknown name is ignored. Wins over `participant_metadata.timezone`.",
+    )
 
 
 class ConnectResponse(BaseModel):
@@ -922,6 +943,32 @@ class SessionOut(BaseModel):
     #: recording is visible without opening the session; the reason itself
     #: is only on `SessionDetailOut.recording.error` (list rows stay light).
     recording_status: RecordingStatus = "none"
+    caller_timezone: str | None = Field(
+        default=None,
+        description="The caller's timezone the agent used (the `locale` event, R-V5-10); null before "
+        "the session's summary or for a session that never started.",
+    )
+
+    @model_validator(mode="after")
+    def _caller_timezone_from_usage(self) -> "SessionOut":
+        """Fill ``caller_timezone`` from ``usage["caller_timezone"]``, where the summary stores it."""
+        if self.caller_timezone is None and isinstance(self.usage, dict):
+            value = self.usage.get("caller_timezone")
+            if isinstance(value, str) and value:
+                self.caller_timezone = value
+        return self
+
+
+#: Where a session's caller timezone came from (the ``locale`` session event, R-V5-10).
+LocaleSource = Literal["browser", "number", "business", "workspace", "default"]
+
+
+class LocaleEvent(BaseModel):
+    """Payload of the ``locale`` session event the worker records at session start (R-V5-10)."""
+
+    caller_timezone: str
+    source: LocaleSource
+    business_timezone: str
 
 
 class SessionDetailOut(SessionOut):

@@ -838,6 +838,23 @@
       "title": "KnowledgeConfig",
       "type": "object"
     },
+    "LocaleConfig": {
+      "description": "Whose clock the agent talks in (R-V5-10).\n\n``AgentConfig.timezone`` stays the **business** timezone (opening hours, seeds,\nbooking defaults); this block says how the **caller's** timezone is chosen at\nsession start.",
+      "properties": {
+        "caller_timezone": {
+          "default": "detect",
+          "description": "`detect` uses the caller's own timezone (from the browser, else the phone number, else the business timezone); `business` always uses the business timezone.",
+          "enum": [
+            "detect",
+            "business"
+          ],
+          "title": "Caller Timezone",
+          "type": "string"
+        }
+      },
+      "title": "LocaleConfig",
+      "type": "object"
+    },
     "PanelLayout": {
       "description": "Which panel renders the session, and (for ``composite``) its blocks.",
       "properties": {
@@ -1954,6 +1971,12 @@
         "top_k": 4
       }
     },
+    "locale": {
+      "$ref": "#/$defs/LocaleConfig",
+      "default": {
+        "caller_timezone": "detect"
+      }
+    },
     "pack_settings": {
       "additionalProperties": true,
       "default": {},
@@ -1996,6 +2019,7 @@
     },
     "timezone": {
       "default": "UTC",
+      "description": "The business timezone (IANA name): opening hours and bookings are in this zone.",
       "title": "Timezone",
       "type": "string"
     },

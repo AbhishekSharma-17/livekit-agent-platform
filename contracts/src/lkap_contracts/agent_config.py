@@ -49,12 +49,14 @@ __all__ = [
     "AgentLimits",
     "AppsMode",
     "AvatarOptions",
+    "CallerTimezoneMode",
     "CapabilitiesConfig",
     "ConnectionInfo",
     "ConversationPreset",
     "KnowledgeConfig",
     "KnowledgeQueryMode",
     "KnowledgeSearchMode",
+    "LocaleConfig",
     "PanelLayout",
     "PipelineConfig",
     "PipelineMode",
@@ -247,6 +249,27 @@ class PanelLayout(BaseModel):
     blocks: list[BlockSpec] = []
 
 
+#: ``LocaleConfig.caller_timezone``: ``detect`` resolves the caller's own zone per session
+#: (browser, then phone number, then the business zone); ``business`` always uses the
+#: business timezone (R-V5-10).
+CallerTimezoneMode = Literal["detect", "business"]
+
+
+class LocaleConfig(BaseModel):
+    """Whose clock the agent talks in (R-V5-10).
+
+    ``AgentConfig.timezone`` stays the **business** timezone (opening hours, seeds,
+    booking defaults); this block says how the **caller's** timezone is chosen at
+    session start.
+    """
+
+    caller_timezone: CallerTimezoneMode = Field(
+        default="detect",
+        description="`detect` uses the caller's own timezone (from the browser, else the phone "
+        "number, else the business timezone); `business` always uses the business timezone.",
+    )
+
+
 class AgentLimits(BaseModel):
     """Per-agent guard rails enforced by ``connect`` (CONTRACTS-V2 §3.3)."""
 
@@ -278,7 +301,12 @@ class AgentConfig(BaseModel):
     #: R-V2-21: the transfer destinations (``transfer_call`` registers only when non-empty).
     telephony: TelephonyConfig = TelephonyConfig()
     pack_settings: dict[str, Any] = {}
-    timezone: str = "UTC"
+    timezone: str = Field(
+        default="UTC",
+        description="The business timezone (IANA name): opening hours and bookings are in this zone.",
+    )
+    locale: LocaleConfig = LocaleConfig()
+    """How the caller's timezone is chosen (R-V5-10); agents saved before it behave as ``detect``."""
 
 
 class ResolvedProvider(BaseModel):
@@ -331,6 +359,13 @@ class ResolvedAgentConfig(BaseModel):
     #: of its LLM/STT/TTS calls and post them as one ``metrics {kind: "provider_requests"}``
     #: event; empty (the default) collects nothing.
     cost_reconcile: list[str] = []
+    #: R-V5-10: the effective business timezone: ``config.timezone`` when it is a valid IANA
+    #: name, else the workspace default (``workspaces.settings.locale.timezone``), else
+    #: ``"UTC"``. The api also writes it into this document's ``config.timezone``. ``None``
+    #: (an api before V5-51) = the worker reads ``config.timezone`` itself.
+    business_timezone: str | None = None
+    #: R-V5-10: ``config.locale``, repeated here for the worker.
+    locale: LocaleConfig = LocaleConfig()
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

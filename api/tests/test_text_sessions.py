@@ -10,12 +10,14 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import jwt
 from auth_helpers import set_agent_columns
 from conftest import create_agent
 from sqlalchemy import select
 
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
+from lkap_api.settings import Settings
 
 WEB = {"Origin": "http://localhost:3000"}
 
@@ -117,3 +119,49 @@ async def test_embed_policy_unknown_agent_is_404(client: httpx.AsyncClient) -> N
     response = await client.get("/v1/agents/does-not-exist/embed-policy")
 
     assert response.status_code == 404
+
+
+# ------------------------------------------------------------ caller timezone (R-V5-10)
+def _attributes(response: httpx.Response, settings: Settings) -> dict[str, str] | None:
+    claims: dict[str, Any] = jwt.decode(
+        response.json()["participantToken"],
+        settings.livekit_api_secret,
+        algorithms=["HS256"],
+        issuer=settings.livekit_api_key,
+    )
+    attributes: dict[str, str] | None = claims.get("attributes")
+    return attributes
+
+
+async def test_start_text_session_stamps_the_timezone_field_as_lkap_tz(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    response = await _start(client, agent, json={"timezone": "Asia/Kolkata"}, headers=WEB)
+
+    assert response.status_code == 200, response.text
+    assert _attributes(response, settings) == {"lkap.tz": "Asia/Kolkata"}
+
+
+async def test_start_text_session_reads_the_metadata_timezone_too(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    response = await _start(
+        client, agent, json={"participant_metadata": {"timezone": "Europe/London"}}, headers=WEB
+    )
+
+    assert _attributes(response, settings) == {"lkap.tz": "Europe/London"}
+
+
+async def test_start_text_session_drops_an_invalid_timezone_without_an_error(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    response = await _start(client, agent, json={"timezone": "Nowhere/Land"}, headers=WEB)
+
+    assert response.status_code == 200, response.text
+    assert _attributes(response, settings) is None

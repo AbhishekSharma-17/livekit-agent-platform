@@ -38,7 +38,7 @@ import type { AgentOut, ToolExecution, ToolOut } from "@/contracts/lkap-contract
  * since the contract carries no grouping of its own.
  */
 const BUILTIN_GROUPS: { label: string; tools: string[] }[] = [
-  { label: "Conversation", tools: ["end_call", "current_time"] },
+  { label: "Conversation", tools: ["end_call", "current_time", "convert_time"] },
   { label: "Knowledge", tools: ["search_knowledge"] },
   { label: "Vision", tools: ["describe_current_frame", "pin_frame"] },
   { label: "Panel", tools: ["push_note", "set_status"] },

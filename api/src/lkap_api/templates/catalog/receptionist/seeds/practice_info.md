@@ -4,6 +4,8 @@ Acme Dental is a fictional practice used by the Receptionist starter. Replace th
 
 ## Opening hours
 
+All times below are in the business's own timezone (the agent's business timezone); convert them to the caller's time when you answer.
+
 - Monday to Thursday: 8:00 am to 6:00 pm
 - Friday: 8:00 am to 3:00 pm
 - Saturday: 9:00 am to 12:00 pm, check-ups and cleanings only

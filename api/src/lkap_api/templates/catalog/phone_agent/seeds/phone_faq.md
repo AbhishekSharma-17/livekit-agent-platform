@@ -4,6 +4,8 @@ Acme is a fictional small business used by the Phone agent starter. Replace this
 
 ## Opening hours
 
+All times below are in the business's own timezone (the agent's business timezone); convert them to the caller's time when you answer.
+
 - Monday to Friday: 9 am to 6 pm.
 - Saturday: 10 am to 2 pm.
 - Closed on Sundays and public holidays.

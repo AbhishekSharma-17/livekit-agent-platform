@@ -71,8 +71,12 @@ def register(registry: Registry) -> None:
     async def session_get(
         session_id: str, include_transcript: bool = True, include_recording_url: bool = False
     ) -> ToolResult:
-        """One session: transcript (untrusted), QA, cost lines, latency, disposition, variables."""
+        """One session: transcript (untrusted), QA, costs, latency, disposition, variables, caller zone."""
         session = await client.get(f"/v1/sessions/{seg(session_id)}")
+        if not session.get("caller_timezone"):
+            # R-V5-10: an api before the field keeps the zone only in the summary's usage.
+            usage = session.get("usage") if isinstance(session.get("usage"), dict) else {}
+            session["caller_timezone"] = usage.get("caller_timezone") if usage else None
         if not include_transcript:
             session.pop("transcript", None)
         else:

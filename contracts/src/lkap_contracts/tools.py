@@ -29,6 +29,7 @@ BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "set_status",
     "escalate_to_human",
     "current_time",
+    "convert_time",
 )
 
 #: Built-ins registered only when the agent has camera or screen share on.
@@ -172,6 +173,7 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "set_status",
         "pin_frame",
         "current_time",
+        "convert_time",
         # Composio Tool Router meta tools (docs/v5/COMPOSIO.md D-V5-C7): running an action,
         # opening a connection or waiting on one always waits for the result.
         "COMPOSIO_MULTI_EXECUTE_TOOL",

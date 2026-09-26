@@ -13,10 +13,12 @@ demoted or removed. API keys can reach these routes only with the ``*`` scope.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from lkap_contracts.api_models import Page
+from lkap_contracts.common import is_iana_timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -155,19 +157,61 @@ async def list_workspaces(principal: PrincipalDep, db: DbDep) -> Page[WorkspaceO
     return Page[WorkspaceOut](items=items, total=len(items))
 
 
+#: ``workspaces.settings`` key of the locale defaults (R-V5-10): ``{"timezone": <IANA name>}``.
+LOCALE_KEY = "locale"
+
+
+def default_timezone_of(settings: Mapping[str, Any] | None) -> str | None:
+    """``settings.locale.timezone`` when it is an IANA name, else ``None`` (R-V5-10)."""
+    locale = (settings or {}).get(LOCALE_KEY)
+    zone = locale.get("timezone") if isinstance(locale, dict) else None
+    return zone if isinstance(zone, str) and is_iana_timezone(zone) else None
+
+
+async def workspace_default_timezone(db: AsyncSession, workspace_id: str) -> str | None:
+    """The workspace's default timezone for new agents (``None`` when unset or unknown)."""
+    workspace = await db.get(Workspace, workspace_id)
+    return default_timezone_of(workspace.settings if workspace is not None else None)
+
+
+def _merge_locale(current: Any, incoming: Any) -> dict[str, Any]:
+    """Merge ``settings.locale`` one level down; ``timezone`` must be an IANA name (null clears it).
+
+    Raises:
+        UnprocessableEntityError: ``locale`` is not an object, or its ``timezone`` is unknown.
+    """
+    if not isinstance(incoming, dict):
+        raise UnprocessableEntityError("settings.locale must be an object")
+    locale = dict(current) if isinstance(current, dict) else {}
+    locale.update(incoming)
+    zone = locale.get("timezone")
+    if zone is None or zone == "":
+        locale.pop("timezone", None)
+    elif not is_iana_timezone(zone):
+        raise UnprocessableEntityError(
+            "settings.locale.timezone must be an IANA timezone name such as Europe/London",
+            details={"timezone": zone},
+        )
+    return locale
+
+
 def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    """Merge top-level keys, except ``cost``, whose own keys are merged one level down.
+    """Merge top-level keys, except ``cost`` and ``locale``, whose own keys are merged one level down.
 
     V4-17 (D-V4-45): the reconciliation opt-in (``cost.reconcile``) is written with this
     route, and a shallow merge would drop the workspace prices stored beside it
     (``cost.prices``, written by ``PUT /v1/workspace/prices``). ``cost.reconcile`` is
-    validated here.
+    validated here. R-V5-10: ``locale.timezone`` (the default timezone for new agents)
+    is validated here too.
 
     Raises:
-        UnprocessableEntityError: ``cost`` is not an object, or ``cost.reconcile`` names
-            an unknown vendor or one whose client is not built yet.
+        UnprocessableEntityError: ``cost`` or ``locale`` is not an object, ``cost.reconcile``
+            names an unknown vendor or one whose client is not built yet, or
+            ``locale.timezone`` is not an IANA timezone name.
     """
     merged = {**current, **incoming}
+    if LOCALE_KEY in incoming:
+        merged[LOCALE_KEY] = _merge_locale(current.get(LOCALE_KEY), incoming[LOCALE_KEY])
     if "cost" in incoming:
         cost_in = incoming["cost"]
         if not isinstance(cost_in, dict):
@@ -187,7 +231,10 @@ def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
     "/workspaces/{workspace_id}",
     response_model=WorkspaceOut,
     summary="Update a workspace",
-    description="Rename a workspace or merge keys into its `settings`. Needs `admin`.",
+    description=(
+        "Rename a workspace or merge keys into its `settings`. Needs `admin`. "
+        "`settings.locale.timezone` is the default timezone for new agents (an IANA name; null clears it)."
+    ),
 )
 async def update_workspace(payload: WorkspaceUpdate, ctx: PathWorkspaceDep, db: DbDep) -> WorkspaceOut:
     """Rename or reconfigure the workspace."""

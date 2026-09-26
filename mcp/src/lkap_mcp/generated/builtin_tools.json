@@ -57,7 +57,8 @@
     "push_note",
     "set_status",
     "escalate_to_human",
-    "current_time"
+    "current_time",
+    "convert_time"
   ],
   "vision_tool_names": [
     "describe_current_frame",

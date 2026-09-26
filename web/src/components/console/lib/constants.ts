@@ -35,7 +35,12 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
     label: "Escalate to human",
     help: "Flags the session as needing human follow-up.",
   },
-  { name: "current_time", label: "Current time", help: "Returns the current date/time in the agent's timezone." },
+  {
+    name: "current_time",
+    label: "Current time",
+    help: "Returns the current date and time in the caller's timezone, and in the business timezone.",
+  },
+  { name: "convert_time", label: "Convert time", help: "Converts a time from one timezone to another." },
 ];
 
 export const PROVIDER_KIND_LABELS: Record<string, string> = {

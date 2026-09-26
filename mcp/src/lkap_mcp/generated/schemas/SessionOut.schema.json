@@ -11,6 +11,19 @@
       "title": "Agent Name",
       "type": "string"
     },
+    "caller_timezone": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The caller's timezone the agent used (the `locale` event, R-V5-10); null before the session's summary or for a session that never started.",
+      "title": "Caller Timezone"
+    },
     "channel": {
       "default": "web",
       "enum": [

@@ -100,6 +100,7 @@ from lkap_agent.flow.variables import (
     render_template,
     transcript_text,
 )
+from lkap_agent.locale import ensure_session_locale, session_locale
 from lkap_agent.logging import get_logger
 from lkap_agent.platform_agent import SessionContext, compose_instructions
 from lkap_agent.providers.factory import ProviderFactory
@@ -107,6 +108,9 @@ from lkap_agent.ui.blocks import flow_steps_specs, flow_steps_state, resolve_blo
 
 if TYPE_CHECKING:
     from lkap_agent.flow.node_agent import FlowNodeAgent
+
+#: The flow variable seeded with the caller's IANA timezone at the first node's entry (R-V5-10).
+CALLER_TIMEZONE_VARIABLE = "caller_timezone"
 
 __all__ = [
     "CANCELLED_BY_STEP_CHANGE",
@@ -379,7 +383,11 @@ class FlowRuntime:
             parts.append(known)
         base = "\n\n".join(p.strip() for p in parts if p and p.strip())
         return compose_instructions(
-            base, mode=self.services.ctx.pipeline_mode, manifest=self.services.pack.manifest
+            base,
+            mode=self.services.ctx.pipeline_mode,
+            manifest=self.services.pack.manifest,
+            # R-V5-10: the same date-and-time stamp as a prompt agent's, fixed at session start.
+            locale=session_locale(self.services.ctx),
         )
 
     def _transitions_text(self, edges: list[FlowEdge]) -> str:
@@ -476,6 +484,10 @@ class FlowRuntime:
             self.state.current_node = node.id
             self.state.path.append(node.id)
         self._kb.set_scope(self.kb_ids_for(node))
+        # R-V5-10: the caller's timezone, resolved once per session, seeds `caller_timezone`
+        # for node prompts and tool arguments (a call's own seed value wins).
+        locale = ensure_session_locale(self.services.ctx, linked=agent.linked_participant())
+        self.state.variables.setdefault(CALLER_TIMEZONE_VARIABLE, locale.caller_timezone)
         if handoff is not None:
             source, edge_id, reason = handoff
             self._record("handoff", {"from": source, "to": node.id, "edge_id": edge_id, "reason": reason})

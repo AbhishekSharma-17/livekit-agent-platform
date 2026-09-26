@@ -70,7 +70,7 @@ from lkap_api.errors import ForbiddenError, NotFoundError, UnprocessableEntityEr
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.limits import live_session_count as live_session_count
 from lkap_api.limits import reserve_session_slot
-from lkap_api.livekit_tokens import new_participant_identity, room_name_for
+from lkap_api.livekit_tokens import new_participant_identity, participant_attributes, room_name_for
 from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
 from lkap_api.settings import Settings
@@ -154,7 +154,9 @@ def _check_metadata(metadata: dict[str, str]) -> None:
         "per-agent rate limits and `max_concurrent_sessions` (429 `rate_limited` / `agent_busy`). "
         "Builders of the agent's workspace may also connect to unpublished agents (test mode) "
         "and choose the participant identity. The dispatch and its ID-only metadata are "
-        "decided here, never by the client; the token lives `max_session_duration_s`."
+        "decided here, never by the client; the token lives `max_session_duration_s`. "
+        "`participant_metadata.timezone` (the browser's IANA timezone) becomes the caller's "
+        "timezone for the agent; an unknown name is ignored."
     ),
 )
 async def connect(
@@ -233,7 +235,8 @@ async def connect(
             identity=identity,
             participant_name=payload.participant_name,
             channel=channel,
-            attributes=payload.participant_metadata or None,
+            # R-V5-10: `lkap.tz` from a valid `timezone`; client `lkap.*` keys dropped.
+            attributes=participant_attributes(payload.participant_metadata),
             ttl=dt.timedelta(seconds=limits.max_session_duration_s),
         )
         db.add(

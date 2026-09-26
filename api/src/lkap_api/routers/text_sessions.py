@@ -26,7 +26,7 @@ import json
 
 from fastapi import APIRouter, BackgroundTasks, Request
 from lkap_contracts.agent_config import AgentLimits
-from lkap_contracts.api_models import ConnectRequest, ConnectResponse
+from lkap_contracts.api_models import ConnectResponse, TextSessionCreate
 from pydantic import BaseModel
 
 from lkap_api.auth.deps import OptionalPrincipalDep, client_ip
@@ -39,7 +39,7 @@ from lkap_api.db.models import new_id
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, UnprocessableEntityError
 from lkap_api.limits import reserve_session_slot
-from lkap_api.livekit_tokens import new_participant_identity, room_name_for
+from lkap_api.livekit_tokens import new_participant_identity, participant_attributes, room_name_for
 from lkap_api.logging import get_logger
 from lkap_api.routers.agents import agent_config_of, load_agent, to_public
 from lkap_api.routers.connect import (
@@ -110,12 +110,14 @@ async def embed_policy(id_or_slug: str, db: DbDep) -> EmbedPolicy:
         'always mints `channel="text"`: the worker starts with every audio slot dropped and '
         "typed input on, and accepts `rewind`/`inject_user_text` over `lkap.agent.action` "
         "(CONTRACTS-V2 §3.4). Used by the console's Test chat drawer (privileged, unpublished "
-        "agents included) and the widget's text mode (public, subject to `allowed_origins`)."
+        "agents included) and the widget's text mode (public, subject to `allowed_origins`). "
+        "`timezone` (or `participant_metadata.timezone`) is the browser's IANA timezone, used as "
+        "the caller's; an unknown name is ignored."
     ),
 )
 async def start_text_session(
     id_or_slug: str,
-    payload: ConnectRequest,
+    payload: TextSessionCreate,
     request: Request,
     db: DbDep,
     settings: SettingsDep,
@@ -182,7 +184,8 @@ async def start_text_session(
             identity=identity,
             participant_name=payload.participant_name,
             channel="text",
-            attributes=payload.participant_metadata or None,
+            # R-V5-10: `lkap.tz` from a valid `timezone`; client `lkap.*` keys dropped.
+            attributes=participant_attributes(payload.participant_metadata, timezone=payload.timezone),
             ttl=dt.timedelta(seconds=limits.max_session_duration_s),
         )
         db.add(

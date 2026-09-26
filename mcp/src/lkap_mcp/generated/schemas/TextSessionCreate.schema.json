@@ -1,7 +1,7 @@
 {
-  "$id": "lkap-contracts/ConnectRequest.schema.json",
+  "$id": "lkap-contracts/TextSessionCreate.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.\n\n``participant_metadata`` becomes the caller's participant attributes. One key is\nread by the platform (R-V5-10): ``timezone``, the browser's\n``Intl.DateTimeFormat().resolvedOptions().timeZone``. The api checks it against the\nIANA database and stamps it as the ``lkap.tz`` attribute; an unknown name is dropped\n(never a 422). Keys starting with ``lkap.`` are reserved and dropped.",
+  "description": "``POST /v1/agents/{id_or_slug}/text-sessions`` (R-V5-10: a ``ConnectRequest`` plus the zone).",
   "properties": {
     "participant_identity": {
       "anyOf": [
@@ -28,8 +28,21 @@
       "default": "Guest",
       "title": "Participant Name",
       "type": "string"
+    },
+    "timezone": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The browser's IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`); an unknown name is ignored. Wins over `participant_metadata.timezone`.",
+      "title": "Timezone"
     }
   },
-  "title": "ConnectRequest",
+  "title": "TextSessionCreate",
   "type": "object"
 }

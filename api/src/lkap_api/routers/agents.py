@@ -65,6 +65,7 @@ from lkap_api.logging import get_logger
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
 from lkap_api.routers.costs import estimate_for_request
+from lkap_api.routers.workspaces import workspace_default_timezone
 from lkap_api.settings import Settings
 from lkap_api.storage.resolve import default_storage
 from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
@@ -356,6 +357,9 @@ async def _seed_from(
     bytes in storage; nothing is embedded here. The returned
     :class:`~lkap_api.kb.seed.SeedImport` carries one ``KB_INGEST`` payload per
     file, which the caller enqueues after it commits (:func:`_enqueue_seed_ingests`).
+
+    R-V5-10: a starter that sets no ``timezone`` takes the workspace default
+    (``settings.locale.timezone``), so new agents stop defaulting to UTC.
     """
     connection = await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id)
     config = seed_from_template(
@@ -364,6 +368,10 @@ async def _seed_from(
         credentials_by_provider=await _credentials_by_provider(db, workspace_id),
         connection=connection,
     )
+    if template.timezone is None:
+        default_timezone = await workspace_default_timezone(db, workspace_id)
+        if default_timezone is not None:
+            config.timezone = default_timezone
     seeds = SeedImport()
     if manifest.kb_seeds or template.kb_seeds:
         # Metadata only (model id and width for the new knowledge bases): no model is loaded.

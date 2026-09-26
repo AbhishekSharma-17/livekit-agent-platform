@@ -11,12 +11,48 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from collections.abc import Mapping
 
 from livekit.api import AccessToken, RoomAgentDispatch, RoomConfiguration, VideoGrants
+from lkap_contracts.common import CALLER_TIMEZONE_ATTRIBUTE, is_iana_timezone
 from lkap_contracts.dispatch import DispatchMetadata
 
 #: Participant tokens live long enough for a demo call, short enough to expire.
 TOKEN_TTL = dt.timedelta(hours=2)
+
+#: Participant attributes the platform sets itself; a client never supplies one (R-V5-10).
+RESERVED_ATTRIBUTE_PREFIX = "lkap."
+
+#: The ``participant_metadata`` key carrying the browser's IANA timezone (R-V5-10).
+TIMEZONE_METADATA_KEY = "timezone"
+
+
+def participant_attributes(
+    metadata: Mapping[str, str], *, timezone: str | None = None
+) -> dict[str, str] | None:
+    """The caller's token attributes from ``participant_metadata`` (R-V5-10).
+
+    Every ``lkap.*`` key the client sent is dropped, so the worker can trust the
+    platform's own. The caller's timezone (``timezone``, else
+    ``metadata["timezone"]``) is kept only when it is an IANA name, as
+    ``lkap.tz``; the raw ``timezone`` key is never forwarded, and an unknown name
+    is dropped without an error.
+
+    Args:
+        metadata: ``ConnectRequest.participant_metadata`` (already size-checked).
+        timezone: ``TextSessionCreate.timezone``, which wins when valid.
+
+    Returns:
+        The attributes, or ``None`` when nothing is left.
+    """
+    attributes = {
+        key: value for key, value in metadata.items() if not key.startswith(RESERVED_ATTRIBUTE_PREFIX)
+    }
+    from_metadata = attributes.pop(TIMEZONE_METADATA_KEY, None)
+    zone = next((name for name in (timezone, from_metadata) if is_iana_timezone(name)), None)
+    if zone is not None:
+        attributes[CALLER_TIMEZONE_ATTRIBUTE] = zone
+    return attributes or None
 
 
 def room_name_for(session_id: str) -> str:

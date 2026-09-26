@@ -61,6 +61,8 @@ from livekit.agents import (
 from livekit.agents import llm as lk_llm
 from livekit.agents.metrics import LLMMetrics, STTMetrics, TTSMetrics
 from lkap_contracts.api_models import (
+    LocaleEvent,
+    LocaleSource,
     SessionEventIn,
     SessionLatency,
     SessionMetricsIn,
@@ -75,11 +77,13 @@ from lkap_agent.logging import get_logger
 from lkap_agent.tools.provider import REAUTH_MESSAGE
 
 __all__ = [
+    "LOCALE_EVENT",
     "MAX_PROVIDER_REQUEST_IDS",
     "LatencyCollector",
     "ProviderRequestCollector",
     "SessionObserver",
     "bind_session_context",
+    "locale_event_payload",
     "percentile",
     "transcript_from_history",
 ]
@@ -161,6 +165,20 @@ _ENTRY_SUFFIX = re.compile(r"_(?:final|update_\d+)$")
 def _base_call_ids(entry_ids: list[str]) -> list[str]:
     """The tool calls a deferred reply covers, in order, from its entry ids (no duplicates)."""
     return list(dict.fromkeys(_ENTRY_SUFFIX.sub("", entry_id) for entry_id in entry_ids))
+
+
+#: R-V5-10: recorded once at session start (`lkap_agent.locale.ensure_session_locale`); the
+#: api copies its `caller_timezone` into the summary's `usage`.
+LOCALE_EVENT: Final[str] = "locale"
+
+
+def locale_event_payload(
+    *, caller_timezone: str, source: LocaleSource, business_timezone: str
+) -> dict[str, Any]:
+    """The `locale` event's payload (`LocaleEvent`, docs/CONTRACTS.md §7)."""
+    return LocaleEvent(
+        caller_timezone=caller_timezone, source=source, business_timezone=business_timezone
+    ).model_dump()
 
 
 def bind_session_context(*, session_id: str, agent_id: str, job_id: str) -> None:

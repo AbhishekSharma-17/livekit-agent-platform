@@ -6,6 +6,7 @@ import asyncio
 import inspect
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -19,7 +20,7 @@ from fakes.fake_ctx import (
     FakeStructuredLLM,
     FakeUiChannel,
 )
-from fakes.fake_room import FakeRoom
+from fakes.fake_room import FakeRemoteParticipant, FakeRoom
 from livekit import rtc
 from livekit.agents import (
     NOT_GIVEN,
@@ -42,6 +43,7 @@ from lkap_contracts.tools import HttpToolDefinition, ToolExecution
 from packs.base import FrameSnapshot
 
 from lkap_agent import platform_agent as platform_agent_module
+from lkap_agent.locale import LOCALE_USERDATA_KEY, SessionLocale
 from lkap_agent.packs.loader import NullPack, null_manifest
 from lkap_agent.platform_agent import (
     IN_PROGRESS_NOTE,
@@ -138,6 +140,130 @@ def test_compose_instructions_omits_a_missing_pack_addendum() -> None:
     prompt = compose_instructions("Be brief.", mode="realtime", manifest=null_manifest())
 
     assert prompt == f"Be brief.\n\n{PIPELINE_NOTES['realtime']}"
+
+
+# ------------------------------------------------------------ date and time (R-V5-10)
+
+#: 20:15 UTC on Friday 25 September 2026: 01:45 on Saturday in Kolkata, 21:15 on Friday in London.
+_NOW = datetime(2026, 9, 25, 20, 15, tzinfo=UTC)
+
+
+class _Clock:
+    """A settable session clock (never the machine's)."""
+
+    def __init__(self, now: datetime = _NOW) -> None:
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+def _session_locale(clock: _Clock | None = None) -> SessionLocale:
+    return SessionLocale(
+        caller_timezone="Asia/Kolkata",
+        source="browser",
+        business_timezone="Europe/London",
+        started_at=_NOW,
+        clock=clock or _Clock(),
+    )
+
+
+def test_compose_instructions_places_the_stamp_once_before_the_pipeline_note() -> None:
+    manifest = null_manifest().model_copy(update={"instructions_by_mode": {"cascaded": "Pack rule."}})
+    locale = _session_locale()
+
+    prompt = compose_instructions("Be brief.", mode="cascaded", manifest=manifest, locale=locale)
+
+    assert prompt.count("Current date and time:") == 1
+    assert (
+        prompt.index("Pack rule.") < prompt.index(locale.stamp()) < prompt.index(PIPELINE_NOTES["cascaded"])
+    )
+
+
+def _located_config(timezone: str = "Europe/London") -> ResolvedAgentConfig:
+    base = resolved_config(greeting="")
+    return base.model_copy(update={"config": base.config.model_copy(update={"timezone": timezone})})
+
+
+async def test_on_enter_resolves_the_callers_zone_and_stamps_the_prompt_once() -> None:
+    room = FakeRoom()
+    room.add_remote_participant(FakeRemoteParticipant("user-1", attributes={"lkap.tz": "Asia/Kolkata"}))
+    events: list[tuple[str, dict[str, Any]]] = []
+    config = _located_config()
+    ctx = _context(config)
+    ctx.room = cast(rtc.Room, room)
+    ctx.record_event = lambda t, p: events.append((t, p))
+    agent = PlatformAgent(ctx=ctx, pack=NullPack(), has_tts=True)
+    assert "Current date and time:" not in agent.instructions  # built before the room connects
+
+    await agent.on_enter()
+
+    locale = ctx.userdata[LOCALE_USERDATA_KEY]
+    assert isinstance(locale, SessionLocale)
+    assert (locale.caller_timezone, locale.source) == ("Asia/Kolkata", "browser")
+    assert agent.instructions.count("Current date and time:") == 1
+    assert locale.stamp() in agent.instructions
+    assert "The business runs on Europe/London" in agent.instructions
+    assert [e for e in events if e[0] == "locale"] == [
+        (
+            "locale",
+            {"caller_timezone": "Asia/Kolkata", "source": "browser", "business_timezone": "Europe/London"},
+        )
+    ]
+
+
+async def test_on_enter_without_a_caller_uses_the_business_timezone_as_today() -> None:
+    ctx = _context(_located_config("America/Chicago"))
+    agent = PlatformAgent(ctx=ctx, pack=NullPack(), has_tts=True)
+
+    await agent.on_enter()
+
+    locale = ctx.userdata[LOCALE_USERDATA_KEY]
+    assert (locale.caller_timezone, locale.source) == ("America/Chicago", "business")
+    assert "The business runs on" not in agent.instructions
+
+
+async def test_a_long_session_gets_one_time_note_at_the_tail_and_the_prompt_stays_identical() -> None:
+    clock = _Clock()
+    ctx = _context(_located_config())
+    ctx.userdata[LOCALE_USERDATA_KEY] = _session_locale(clock)
+    agent = PlatformAgent(ctx=ctx, pack=NullPack(), has_tts=True)
+    prompt_before = agent.instructions
+
+    async def turn(minutes: int, text: str) -> ChatContext:
+        clock.now = _NOW + timedelta(minutes=minutes)
+        turn_ctx = agent.chat_ctx.copy()
+        await agent.on_user_turn_completed(turn_ctx, llm.ChatMessage(role="user", content=[text]))
+        return turn_ctx
+
+    early = await turn(10, "What time is it?")
+    late = await turn(16, "And now?")
+    again = await turn(17, "Still there?")
+
+    def notes(chat_ctx: ChatContext) -> list[str]:
+        return [
+            item.text_content or ""
+            for item in chat_ctx.items
+            if isinstance(item, llm.ChatMessage)
+            and item.role == "system"
+            and "Time now" in (item.text_content or "")
+        ]
+
+    assert notes(early) == []
+    assert notes(late) == ["Time now: 02:01 (Asia/Kolkata)"]
+    assert late.items[-1].text_content == "Time now: 02:01 (Asia/Kolkata)"  # type: ignore[union-attr]
+    assert notes(agent.chat_ctx) == ["Time now: 02:01 (Asia/Kolkata)"]  # persisted once
+    assert notes(again) == ["Time now: 02:01 (Asia/Kolkata)"]  # the persisted one, no second note
+    assert agent.instructions == prompt_before
+
+
+async def test_no_time_note_before_the_locale_is_resolved() -> None:
+    agent = _agent(resolved_config())
+    turn_ctx = ChatContext.empty()
+
+    await agent.on_user_turn_completed(turn_ctx, llm.ChatMessage(role="user", content=["hi"]))
+
+    assert turn_ctx.items == []
 
 
 # -------------------------------------------------------------- greeting mode

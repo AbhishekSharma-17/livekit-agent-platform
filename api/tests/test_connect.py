@@ -184,3 +184,54 @@ async def test_connect_never_logs_or_returns_configuration(
     assert "config" not in response.json()["agent"]
     assert marker not in captured_text(log_capture)
     assert response.json()["participantToken"] not in captured_text(log_capture)
+
+
+# ------------------------------------------------------------ caller timezone (R-V5-10)
+async def test_connect_stamps_a_valid_browser_timezone_as_lkap_tz(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    body = (
+        await client.post(
+            f"/v1/agents/{agent['id']}/connect",
+            json={"participant_metadata": {"timezone": "Asia/Kolkata", "tier": "gold"}},
+            headers=WEB,
+        )
+    ).json()
+
+    assert _claims(body["participantToken"], settings)["attributes"] == {
+        "tier": "gold",
+        "lkap.tz": "Asia/Kolkata",
+    }
+
+
+async def test_connect_drops_an_invalid_timezone_without_an_error(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    response = await client.post(
+        f"/v1/agents/{agent['id']}/connect",
+        json={"participant_metadata": {"timezone": "Mars/Olympus_Mons"}},
+        headers=WEB,
+    )
+
+    assert response.status_code == 200, response.text
+    assert "attributes" not in _claims(response.json()["participantToken"], settings)
+
+
+async def test_connect_never_forwards_a_client_lkap_attribute(
+    client: httpx.AsyncClient, admin_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    agent = await create_agent(admin_client)
+
+    body = (
+        await client.post(
+            f"/v1/agents/{agent['id']}/connect",
+            json={"participant_metadata": {"lkap.tz": "Asia/Kolkata", "tier": "gold"}},
+            headers=WEB,
+        )
+    ).json()
+
+    assert _claims(body["participantToken"], settings)["attributes"] == {"tier": "gold"}

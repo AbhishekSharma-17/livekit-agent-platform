@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/ConnectRequest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.",
+  "description": "``POST /v1/agents/{id_or_slug}/connect`` — any ``roomConfig`` is ignored.\n\n``participant_metadata`` becomes the caller's participant attributes. One key is\nread by the platform (R-V5-10): ``timezone``, the browser's\n``Intl.DateTimeFormat().resolvedOptions().timeZone``. The api checks it against the\nIANA database and stamps it as the ``lkap.tz`` attribute; an unknown name is dropped\n(never a 422). Keys starting with ``lkap.`` are reserved and dropped.",
   "properties": {
     "participant_identity": {
       "anyOf": [
@@ -20,6 +20,7 @@
         "type": "string"
       },
       "default": {},
+      "description": "Caller attributes (at most 2 KB). `timezone` = the browser's IANA timezone; keys starting with `lkap.` are reserved and dropped.",
       "title": "Participant Metadata",
       "type": "object"
     },

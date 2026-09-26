@@ -1607,7 +1607,7 @@ async def test_a_flow_agent_starts_its_flow_state_with_the_call_variables() -> N
     await run_session(ctx, _deps(api, factory=factory, session_starter=starter))
 
     state = starter.agent.context.userdata["flow"]
-    assert state.variables == {"claim_id": "C-1", "n": 2}
+    assert state.variables == {"claim_id": "C-1", "n": 2, "caller_timezone": "UTC"}  # R-V5-10 seed
     assert "claim_id" not in resolved.config.instructions  # flows render it themselves
     await ctx.fire_shutdown("done")
 

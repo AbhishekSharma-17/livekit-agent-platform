@@ -1,0 +1,94 @@
+{
+  "Insurance policy lines": [
+    {
+      "question": "Is a basement flood from a failed sump pump covered on a homeowners policy?",
+      "expected_text": "water backup and sump overflow endorsement",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "What does an HO-4 policy cover?",
+      "expected_text": "Covers personal property and personal liability for a tenant",
+      "tags": [
+        "en",
+        "identifier"
+      ]
+    },
+    {
+      "question": "and if the car was stolen instead?",
+      "expected_text": "comprehensive (theft, weather, animal strikes",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    },
+    {
+      "question": "What do I need to send for a trip cancellation claim?",
+      "expected_text": "the original itinerary",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "Does the supplemental medical plan pay emergency room copays?",
+      "expected_text": "urgent care and emergency room copays",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "meri gaadi chori ho gayi, kya cover hoga?",
+      "expected_text": "comprehensive (theft, weather, animal strikes",
+      "tags": [
+        "hi-Latn",
+        "natural"
+      ]
+    }
+  ],
+  "Intake playbook": [
+    {
+      "question": "What information does every claim need at minimum?",
+      "expected_text": "the date of loss, the loss location",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "Why would a claim be sent to SIU?",
+      "expected_text": "reporting more than 90 days after the loss",
+      "tags": [
+        "en",
+        "identifier"
+      ]
+    },
+    {
+      "question": "What should I do if the caller says someone is hurt?",
+      "expected_text": "contact emergency services if anyone is currently in danger",
+      "tags": [
+        "en",
+        "natural"
+      ]
+    },
+    {
+      "question": "and for a theft, which report?",
+      "expected_text": "a police or incident report is expected for theft",
+      "tags": [
+        "en",
+        "fragment"
+      ]
+    },
+    {
+      "question": "claim ke liye kaunse photos chahiye?",
+      "expected_text": "photos or video of the damage taken before cleanup",
+      "tags": [
+        "hi-Latn",
+        "natural"
+      ]
+    }
+  ]
+}

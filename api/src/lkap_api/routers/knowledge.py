@@ -27,6 +27,11 @@ another embedder with a warning instead of refusing the whole search. Deletes
 no longer write the vector store: they delete the SQL rows and enqueue
 `kb_delete` (`kb/jobs.py`), so in production only the jobs process writes
 vectors (D-V5-12).
+
+V5-05 (the eval harness): ``POST .../evaluate`` runs the evaluation set as a
+``kb_evaluate`` job (:mod:`lkap_api.kb.evals`) and returns its id;
+``GET .../evaluate/{job_id}`` and ``GET .../evaluate/latest`` read the run's
+status and result (recall@k, MRR, every question's outcome) back.
 """
 
 from __future__ import annotations
@@ -66,6 +71,15 @@ from lkap_api.jobs.deps import JobsDep
 from lkap_api.jobs.kinds import KB_INGEST
 from lkap_api.jobs.service import JobsService
 from lkap_api.kb.embed import Embedder, check_kb_embedder, record_kb_embedder, resolve_embedder
+from lkap_api.kb.evals import (
+    KbEvalRunOut,
+    KbEvaluateIn,
+    enqueue_kb_evaluate,
+    get_run,
+    latest_run,
+    load_evals,
+    run_out,
+)
 from lkap_api.kb.ingest import (
     IMPORT_SUFFIX,
     ChunkingConfig,
@@ -235,18 +249,6 @@ def _eval_out(row: KbEval) -> KbEvalOut:
         expected_text=row.expected_text,
         tags=list(row.tags or []),
         created_at=row.created_at,
-    )
-
-
-async def _load_evals(db: AsyncSession, kb_id: str) -> list[KbEval]:
-    return list(
-        (
-            await db.execute(
-                select(KbEval).where(KbEval.kb_id == kb_id).order_by(KbEval.ordinal, KbEval.created_at)
-            )
-        )
-        .scalars()
-        .all()
     )
 
 
@@ -650,7 +652,7 @@ async def search_kb(
     )
 
 
-# --------------------------------------------------------------------------- evals (V5-01; runner: V5-05)
+# --------------------------------------------------------------------------- evals (V5-01)
 @admin_router.get(
     "/{kb_id}/evals",
     response_model=KbEvalSetOut,
@@ -660,7 +662,7 @@ async def search_kb(
 async def get_evals(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KbEvalSetOut:
     """Return the stored evaluation set."""
     await _load_kb(db, ctx, kb_id)
-    rows = await _load_evals(db, kb_id)
+    rows = await load_evals(db, kb_id)
     return KbEvalSetOut(items=[_eval_out(row) for row in rows], total=len(rows))
 
 
@@ -714,6 +716,100 @@ async def put_evals(kb_id: str, payload: KbEvalSetIn, db: DbDep, ctx: AdminCtxDe
     await db.flush()
     log.info("kb_evals_replaced", kb_id=kb_id, count=len(rows))
     return KbEvalSetOut(items=[_eval_out(row) for row in rows], total=len(rows))
+
+
+# --------------------------------------------------------------------------- evaluate (V5-05)
+@admin_router.post(
+    "/{kb_id}/evaluate",
+    response_model=KbEvalRunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Evaluate retrieval",
+    description=(
+        "Runs every golden question of the evaluation set through the same search the agent uses, "
+        "with the given `mode`, `rerank`, `min_score` and `k` (by default an agent's defaults: "
+        "hybrid, no rerank, no floor, top 4), as a background job. A question is found when one of "
+        "the top `k` hits is its expected document or contains its expected text. The run reports "
+        "`recall_at_k` (found / scored), `recall_at_1`, `mrr` (mean reciprocal rank), the same per "
+        "tag, and every question's rank and top hits; a question whose expected document was deleted "
+        "is `skipped` and left out of the averages. Poll `GET .../evaluate/{job_id}` until `status` "
+        "is `done`; `GET .../evaluate/latest` returns the last finished run. 422 when the set is "
+        "empty or the knowledge base was built by another embedder than the one configured now."
+    ),
+)
+async def evaluate_kb(
+    kb_id: str,
+    db: DbDep,
+    embedder: EmbedderDep,
+    jobs: JobsDep,
+    background_tasks: BackgroundTasks,
+    ctx: AdminCtxDep,
+    payload: KbEvaluateIn | None = None,
+) -> KbEvalRunOut:
+    """Enqueue an evaluation run of the knowledge base's evaluation set.
+
+    Raises:
+        UnprocessableEntityError: The evaluation set is empty, or the embedder does not match.
+    """
+    options = payload or KbEvaluateIn()
+    _check_k(options.k)
+    kb = await _load_kb(db, ctx, kb_id)
+    check_kb_embedder(kb, embedder)
+    count_query = select(func.count()).select_from(KbEval).where(KbEval.kb_id == kb_id)
+    count = (await db.execute(count_query)).scalar_one()
+    if count == 0:
+        raise UnprocessableEntityError(
+            "the knowledge base has no evaluation set; add golden questions with PUT .../evals first",
+            details={"field": "evals"},
+        )
+    now = utcnow()
+    job_id = await enqueue_kb_evaluate(
+        jobs, kb_id=kb_id, workspace_id=ctx.workspace_id, options=options, background_tasks=background_tasks
+    )
+    log.info("kb_evaluate_queued", kb_id=kb_id, job_id=job_id, evals=count, mode=options.mode, k=options.k)
+    return KbEvalRunOut(
+        job_id=job_id, kb_id=kb_id, status="pending", options=options, created_at=now, updated_at=now
+    )
+
+
+@admin_router.get(
+    "/{kb_id}/evaluate/latest",
+    response_model=KbEvalRunOut,
+    summary="Latest evaluation",
+    description="The most recently finished evaluation run of this knowledge base; 404 when none has.",
+)
+async def latest_evaluation(kb_id: str, db: DbDep, ctx: AdminCtxDep) -> KbEvalRunOut:
+    """Return the last ``done`` evaluation run.
+
+    Raises:
+        NotFoundError: No evaluation of this knowledge base has finished.
+    """
+    await _load_kb(db, ctx, kb_id)
+    row = await latest_run(db, kb_id)
+    if row is None:
+        raise NotFoundError(f"knowledge base '{kb_id}' has no finished evaluation")
+    return run_out(row)
+
+
+@admin_router.get(
+    "/{kb_id}/evaluate/{job_id}",
+    response_model=KbEvalRunOut,
+    summary="Get an evaluation run",
+    description=(
+        "One evaluation run's status (`pending`, `running`, `done`, `failed`, `dead`) and, once "
+        "`done`, its result."
+    ),
+)
+async def get_evaluation(kb_id: str, job_id: str, db: DbDep, ctx: AdminCtxDep) -> KbEvalRunOut:
+    """Return one evaluation run of this knowledge base.
+
+    Raises:
+        NotFoundError: ``job_id`` is not an evaluation run of this knowledge base.
+    """
+    await _load_kb(db, ctx, kb_id)
+    row = await get_run(db, kb_id, job_id)
+    if row is None:
+        raise NotFoundError(f"unknown evaluation run '{job_id}' of knowledge base '{kb_id}'")
+    return run_out(row)
 
 
 # --------------------------------------------------------------------------- re-index (V5-01)

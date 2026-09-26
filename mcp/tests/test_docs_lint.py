@@ -486,6 +486,9 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
         {"kb_id", "text", "filename", "file_path", "url", "wait", "timeout_s", "plan"}
     ),
     "kb_search": frozenset({"kb_id", "query", "top_k"}),
+    "kb_evals_set": frozenset({"kb_id", "items", "plan"}),
+    "kb_evaluate": frozenset({"kb_id", "mode", "rerank", "min_score", "k", "wait", "timeout_s", "plan"}),
+    "kb_evaluate_result": frozenset({"kb_id", "job_id"}),
     # 4.6 tools
     "tool_list": frozenset({"agent_id", "kind"}),
     "tool_get": frozenset({"tool_id"}),

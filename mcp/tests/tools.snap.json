@@ -9875,6 +9875,260 @@
       ],
       "write_scopes": []
     },
+    "kb_evals_set": {
+      "_meta": {
+        "lkap/data": [
+          "KbEvalSetOut"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "KbEvalSetOut",
+      "description": "Replace a knowledge base's evaluation set (golden questions for kb_evaluate).",
+      "gate": null,
+      "inputSchema": {
+        "$defs": {
+          "KbEvalIn": {
+            "additionalProperties": false,
+            "description": "One golden question: found when a top-k hit is the expected document or contains the expected text.",
+            "properties": {
+              "expected_document_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Document Id"
+              },
+              "expected_text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Text"
+              },
+              "question": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "tags": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Tags",
+                "type": "array"
+              }
+            },
+            "required": [
+              "question"
+            ],
+            "title": "KbEvalIn",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "items": {
+            "description": "The complete set of golden questions (replaces the stored one; [] clears it). Each names expected_document_id (a document of this knowledge base, see kb_get), expected_text (a passage a correct hit contains) or both.",
+            "items": {
+              "$ref": "#/$defs/KbEvalIn"
+            },
+            "maxItems": 500,
+            "title": "Items",
+            "type": "array"
+          },
+          "kb_id": {
+            "title": "Kb Id",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kb_id",
+          "items"
+        ],
+        "title": "kb_evals_setArguments",
+        "type": "object"
+      },
+      "kind": "idempotent_write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
+    "kb_evaluate": {
+      "_meta": {
+        "lkap/data": [
+          "KbEvalRunOut"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "KbEvalRunOut",
+      "description": "Run a knowledge base's golden questions through its search and report recall@k and MRR.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "k": {
+            "default": 4,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "K",
+            "type": "integer"
+          },
+          "kb_id": {
+            "title": "Kb Id",
+            "type": "string"
+          },
+          "min_score": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min Score"
+          },
+          "mode": {
+            "default": "hybrid",
+            "enum": [
+              "hybrid",
+              "vector"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "rerank": {
+            "default": "none",
+            "enum": [
+              "none",
+              "local"
+            ],
+            "title": "Rerank",
+            "type": "string"
+          },
+          "timeout_s": {
+            "default": 120,
+            "exclusiveMinimum": 0,
+            "maximum": 600,
+            "title": "Timeout S",
+            "type": "number"
+          },
+          "wait": {
+            "default": true,
+            "title": "Wait",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kb_id"
+        ],
+        "title": "kb_evaluateArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
+    "kb_evaluate_result": {
+      "_meta": {
+        "lkap/data": [
+          "KbEvalRunOut"
+        ],
+        "lkap/scopes": [
+          "agents:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "KbEvalRunOut",
+      "description": "Read an evaluation run of a knowledge base (by job id, or the latest finished one).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A run from kb_evaluate; omit for the latest finished run",
+            "title": "Job Id"
+          },
+          "kb_id": {
+            "title": "Kb Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kb_id"
+        ],
+        "title": "kb_evaluate_resultArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "agents:read"
+      ],
+      "write_scopes": []
+    },
     "kb_get": {
       "_meta": {
         "lkap/data": [
@@ -12690,6 +12944,9 @@
       "cost_summary",
       "kb_add_document",
       "kb_create",
+      "kb_evals_set",
+      "kb_evaluate",
+      "kb_evaluate_result",
       "kb_get",
       "kb_list",
       "kb_search",
@@ -12756,6 +13013,9 @@
       "cost_summary",
       "kb_add_document",
       "kb_create",
+      "kb_evals_set",
+      "kb_evaluate",
+      "kb_evaluate_result",
       "kb_get",
       "kb_list",
       "kb_search",
@@ -12810,6 +13070,7 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "kb_evaluate_result",
       "kb_get",
       "kb_list",
       "lkap_describe",
@@ -12869,6 +13130,9 @@
       "cost_summary",
       "kb_add_document",
       "kb_create",
+      "kb_evals_set",
+      "kb_evaluate",
+      "kb_evaluate_result",
       "kb_get",
       "kb_list",
       "kb_search",
@@ -12943,6 +13207,9 @@
       "cost_summary",
       "kb_add_document",
       "kb_create",
+      "kb_evals_set",
+      "kb_evaluate",
+      "kb_evaluate_result",
       "kb_get",
       "kb_list",
       "kb_search",
@@ -12997,6 +13264,7 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "kb_evaluate_result",
       "kb_get",
       "kb_list",
       "lkap_describe",

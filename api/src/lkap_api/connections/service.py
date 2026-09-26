@@ -79,12 +79,18 @@ _URL_SCHEMES = frozenset({"ws", "wss", "http", "https"})
 
 
 # ------------------------------------------------------------------------- helpers
-def validate_url(url: str) -> str:
+def validate_url(url: str, deployment_type: str) -> str:
     """Return a normalised connection url or raise a 422.
+
+    Args:
+        url: The LiveKit server url.
+        deployment_type: ``cloud`` (public addresses only) or ``self_hosted``
+            (loopback, private and CGNAT addresses allowed too).
 
     Raises:
         UnprocessableEntityError: Unless the url is ``ws(s)://`` or ``http(s)://`` with a host
-            that is not a private, loopback or metadata address (``lkap_api.net_guard``).
+            the network guard allows for this deployment type (``lkap_api.net_guard``);
+            metadata addresses are never allowed.
     """
     cleaned = url.strip().rstrip("/")
     parsed = urlparse(cleaned)
@@ -93,11 +99,11 @@ def validate_url(url: str) -> str:
             "url must be a ws://, wss://, http:// or https:// LiveKit server url",
             details={"field": "url"},
         )
-    # V2-21 / S1: no private, loopback or metadata address unless allowlisted
-    # (LKAP_NET_ALLOW_PRIVATE_HOSTS; dev allows localhost for a self-hosted server).
-    net_guard.validate_url(
-        cleaned, net_guard.policy_from_settings(get_settings()), field_name="url", schemes=_URL_SCHEMES
-    )
+    # V2-21 / S1: a Cloud connection reaches no private, loopback or metadata address
+    # unless allowlisted (LKAP_NET_ALLOW_PRIVATE_HOSTS); a self-hosted one may reach
+    # loopback, RFC 1918, ULA and CGNAT (a tailnet), never metadata.
+    policy = net_guard.policy_from_settings(get_settings()).for_connection(deployment_type)
+    net_guard.validate_url(cleaned, policy, field_name="url", schemes=_URL_SCHEMES)
     return cleaned
 
 
@@ -513,7 +519,7 @@ async def create_connection(
         UnprocessableEntityError: On an invalid url, slug, agent name or mode.
         ConflictError: If the slug is already used in the workspace.
     """
-    url = validate_url(payload.url)
+    url = validate_url(payload.url, payload.deployment_type)
     _validate_fields(
         slug=payload.slug,
         agent_name=payload.agent_name,
@@ -588,7 +594,7 @@ async def update_connection(
     row = await get_connection(db, workspace_id, connection_id)
     changes = payload.model_dump(exclude_unset=True)
     if "url" in changes and changes["url"] is not None:
-        changes["url"] = validate_url(changes["url"])
+        changes["url"] = validate_url(changes["url"], row.deployment_type)
     _validate_fields(
         agent_name=changes.get("agent_name"),
         replicas=changes.get("replicas"),
@@ -728,15 +734,17 @@ class UnsavedConnection:
     credentials_version: int
     api_key_ct: bytes
     api_secret_ct: bytes
+    deployment_type: str = "cloud"
 
     @classmethod
     def from_create(cls, vault: Vault, payload: ConnectionCreate) -> UnsavedConnection:
         """Build one from a create payload (validates the url)."""
         return cls(
             id=f"unsaved-{new_id()}",
-            url=validate_url(payload.url),
+            url=validate_url(payload.url, payload.deployment_type),
             agent_name=payload.agent_name,
             credentials_version=1,
             api_key_ct=vault.encrypt({"api_key": payload.api_key.strip()}),
             api_secret_ct=vault.encrypt({"api_secret": payload.api_secret.strip()}),
+            deployment_type=payload.deployment_type,
         )

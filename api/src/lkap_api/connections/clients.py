@@ -71,6 +71,9 @@ class ConnectionRowLike(Protocol):
     def agent_name(self) -> str: ...  # noqa: D102 - protocol member
 
     @property
+    def deployment_type(self) -> str: ...  # noqa: D102 - protocol member
+
+    @property
     def credentials_version(self) -> int: ...  # noqa: D102 - protocol member
 
     @property
@@ -121,6 +124,9 @@ class ConnectionClientFactory:
             clock: Monotonic clock, injectable for tests.
             net_policy: The outbound network guard's allowlist; by default read
                 from the process settings at each call (``LKAP_NET_ALLOW_PRIVATE_HOSTS``).
+                Each call narrows it to the row's ``deployment_type``
+                (:meth:`~lkap_api.net_guard.NetPolicy.for_connection`): a self-hosted
+                connection may reach loopback, private and CGNAT addresses.
             net_resolver: Builds the name resolver the guard wraps (tests inject a
                 fake; by default aiohttp's own).
         """
@@ -178,6 +184,11 @@ class ConnectionClientFactory:
             del self._cache[key]
 
     # --------------------------------------------------------------------- clients
+    def _policy_for(self, row: ConnectionRowLike) -> net_guard.NetPolicy:
+        """The guard policy for this connection: the process allowlist, by deployment type."""
+        base = self._net_policy or net_guard.policy_from_settings(get_settings())
+        return base.for_connection(row.deployment_type)
+
     @asynccontextmanager
     async def api(
         self,
@@ -199,7 +210,7 @@ class ConnectionClientFactory:
             A client authenticated with this connection's key/secret.
         """
         creds = self.credentials(row)
-        policy = self._net_policy or net_guard.policy_from_settings(get_settings())
+        policy = self._policy_for(row)
         # V2-21 / S1: IP-literal hosts never reach aiohttp's resolver, so they are
         # checked here; names are checked by the guarded resolver at connect time,
         # against the very address the socket then uses (no DNS-rebinding window).
@@ -237,7 +248,7 @@ class ConnectionClientFactory:
         from lkap_api.telephony.phone_numbers import PhoneNumberClient, sign
 
         creds = self.credentials(row)
-        policy = self._net_policy or net_guard.policy_from_settings(get_settings())
+        policy = self._policy_for(row)
         problem = net_guard.check_url(creds.url, policy, schemes=net_guard.LIVEKIT_SCHEMES)
         if problem is not None:
             raise net_guard.BlockedDestinationError(f"blocked destination: {problem}")

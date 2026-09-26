@@ -212,9 +212,10 @@ async def test_guarded_resolver_refuses_inward_answers_for_the_livekit_client() 
 
 # ======================================================== S1: connection urls
 @pytest.mark.parametrize(
-    "url", ["wss://169.254.169.254", "ws://10.0.0.5:7880", "http://[fd00:ec2::254]", "ws://metadata"]
+    "url",
+    ["wss://169.254.169.254", "ws://100.100.100.200:7880", "http://[fd00:ec2::254]", "ws://metadata"],
 )
-async def test_connection_create_and_unsaved_test_refuse_private_urls(
+async def test_connection_create_and_unsaved_test_refuse_metadata_urls_even_self_hosted(
     admin_client: httpx.AsyncClient, url: str
 ) -> None:
     body = {
@@ -297,11 +298,12 @@ async def test_probe_of_a_name_that_resolves_inward_is_blocked_at_connect_time(s
         vault, net_policy=PROD, net_resolver=lambda: _FakeResolver({"rebind.example": ["10.0.0.1"]})
     )
 
-    result = await probe_connection(factory, row, deployment_type="self_hosted", use_inference=False)
+    result = await probe_connection(factory, row, deployment_type="cloud", use_inference=False)
 
     assert result.ok is False
     assert "blocked destination" in result.message
     assert "10.0.0.1" in result.message
+    assert net_guard.SELF_HOSTED_HINT in result.message
 
 
 def test_guarded_transport_really_installs_the_guarded_backend() -> None:

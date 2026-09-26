@@ -46,6 +46,14 @@ const TAB_GROUPS: { id: string; label: string; kinds: ProviderKind[] }[] = [
 const TAB_IDS = new Set(TAB_GROUPS.map((t) => t.id));
 const DEFAULT_TAB = TAB_GROUPS[0]!.id;
 
+//: `lkap_contracts.providers.MCP_OAUTH_PROVIDER_ID` (not exported to the generated `.d.ts` —
+//: it's a plain module constant, not a pydantic model). Hidden here for the same reason as
+//: `credential-list.tsx`'s Keys page (docs/v5/_asks.md #108, V5-14/V5-21): it is a
+//: `secret_bag` registry entry with `requires_credential: false` and no secret fields,
+//: created only by signing in to an MCP server from its tool page — "Enable" here would let
+//: an admin create a useless hand-made row.
+const MCP_OAUTH_PROVIDER_ID = "mcp-oauth";
+
 export function ProvidersCatalog() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,7 +86,7 @@ export function ProvidersCatalog() {
   const group = TAB_GROUPS.find((t) => t.id === activeTab) ?? TAB_GROUPS[0]!;
   const needle = search.trim().toLowerCase();
 
-  const inKind = providers.filter((p) => group.kinds.includes(p.kind));
+  const inKind = providers.filter((p) => group.kinds.includes(p.kind) && p.id !== MCP_OAUTH_PROVIDER_ID);
   const matching = needle === "" ? inKind : inKind.filter((p) => p.label.toLowerCase().includes(needle) || p.vendor.toLowerCase().includes(needle));
 
   const available = matching.filter((p) => (p.availability ?? "available") === "available");

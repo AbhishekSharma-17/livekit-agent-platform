@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
-import { mcpOauthStatus, mcpOauthTool, mcpTestResultOk } from "./fixtures/mcp-presets";
+import { mcpOauthStartRedirect, mcpOauthStatus, mcpOauthTool, mcpTestResultOk } from "./fixtures/mcp-presets";
 
 /**
  * The per-tool execution options table (V4-13, BACKGROUND-TOOLS.md §7): rows
@@ -230,6 +230,69 @@ describe("McpToolEditorDialog — auth (docs/v5/_asks.md #66)", () => {
     const radio = await screen.findByLabelText("Sign in with the vendor");
     expect(radio.getAttribute("aria-checked")).toBe("true");
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("Sign in opens the vendor's page without also navigating this tab away", async () => {
+    // `window.open(url, "_blank", "noopener")` always returns `null` per spec — even when
+    // the popup opened — so a naive `if (!popup) location.assign(url)` fallback would
+    // navigate the console away on *every* successful sign-in. Cover both outcomes.
+    const tool = mcpOauthTool();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth/status")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStatus({ status: "not_connected" }) } as Response;
+        }
+        if (url.includes("oauth/start")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStartRedirect() } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    const openMock = vi.fn().mockReturnValue({ opener: "not-null-yet" });
+    vi.stubGlobal("open", openMock);
+    const assignMock = vi.fn();
+    Object.defineProperty(window, "location", { value: { ...window.location, assign: assignMock }, writable: true });
+
+    renderWithClient(
+      <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(openMock).toHaveBeenCalledWith("https://mcp.linear.app/authorize?flow=1", "_blank"));
+    // The popup handle is real (not blocked) — never fall back to navigating this tab.
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(await screen.findByText("Waiting for you to finish signing in…")).toBeTruthy();
+  });
+
+  it("falls back to navigating this tab only when the popup is actually blocked", async () => {
+    const tool = mcpOauthTool();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth/status")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStatus({ status: "not_connected" }) } as Response;
+        }
+        if (url.includes("oauth/start")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStartRedirect() } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    vi.stubGlobal("open", vi.fn().mockReturnValue(null));
+    const assignMock = vi.fn();
+    Object.defineProperty(window, "location", { value: { ...window.location, assign: assignMock }, writable: true });
+
+    renderWithClient(
+      <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith("https://mcp.linear.app/authorize?flow=1"));
   });
 
   it("gates Test connection and Sign in behind a save once the draft has unsaved edits", async () => {

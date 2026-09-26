@@ -444,8 +444,12 @@ export function useRevokeMcpOauth() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<McpOauthStatusOut>(`tools/${id}/oauth/revoke`),
-    onSuccess: (_result, id) => {
-      void queryClient.invalidateQueries({ queryKey: keys.mcpOauthStatus(id) });
+    onSuccess: () => {
+      // Prefix match: also covers `keys.mcpOauthStatus(id)` (nested under `["tools", ...]`).
+      // The revoke clears `auth.credential_id` on the tool row too, so the list needs
+      // refreshing, not just the status sub-key — otherwise a Save right after Disconnect
+      // could post a credential id for a bag that no longer exists.
+      void queryClient.invalidateQueries({ queryKey: ["tools"] });
     },
   });
 }

@@ -226,21 +226,45 @@ export function McpToolEditorDialog({
   );
   const [freeTextRow, setFreeTextRow] = React.useState("");
 
+  // Full reset, but only on the transition to `open` — never on a `tool` identity change
+  // while the dialog is already open. Test connection's own success handler invalidates
+  // the `tools` list (it just wrote `cached_tools` server-side), and Connect/Disconnect do
+  // the same for the credential id below; if this effect also depended on `tool`, that
+  // refetch would wipe the "OK · n tools" result and any checkbox the admin had already
+  // toggled a moment after they appeared.
   React.useEffect(() => {
-    if (open) {
-      const fresh = draftFromTool(tool);
-      setDraft(fresh);
-      initialSignature.current = connectionSignature(fresh);
-      const nextDef = tool?.definition.kind === "mcp" ? tool.definition : undefined;
-      const options = nextDef?.tool_options ?? {};
-      setToolOptions(
-        Object.fromEntries(Object.entries(options).map(([name, exec]) => [name, mcpOptionFromExecution(exec)])),
-      );
-      setDiscovered((nextDef?.cached_tools ?? []).map((t) => t.name));
-      setFreeTextRow("");
-      setErrors({});
-      setPresetId(null);
-      setTestResult(null);
+    if (!open) return;
+    const fresh = draftFromTool(tool);
+    setDraft(fresh);
+    initialSignature.current = connectionSignature(fresh);
+    const nextDef = tool?.definition.kind === "mcp" ? tool.definition : undefined;
+    const options = nextDef?.tool_options ?? {};
+    setToolOptions(
+      Object.fromEntries(Object.entries(options).map(([name, exec]) => [name, mcpOptionFromExecution(exec)])),
+    );
+    setDiscovered((nextDef?.cached_tools ?? []).map((t) => t.name));
+    setFreeTextRow("");
+    setErrors({});
+    setPresetId(null);
+    setTestResult(null);
+    // `tool` is read once per open, deliberately excluded from the deps (see above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // While already open, a background refetch of the same tool (Test connection, Connect,
+  // Disconnect all invalidate the `tools` list) may hand us a new `tool` object. Sync only
+  // the server-owned fields a refetch is actually meant to update — never the draft, the
+  // execution options, or the just-shown test result the admin may be mid-edit of.
+  React.useEffect(() => {
+    if (!open || !tool || tool.definition.kind !== "mcp") return;
+    const def = tool.definition;
+    const credentialId = def.auth?.kind === "oauth" ? (def.auth.credential_id ?? null) : null;
+    setDraft((d) => (d.oauthCredentialId === credentialId ? d : { ...d, oauthCredentialId: credentialId }));
+    const cachedNames = (def.cached_tools ?? []).map((t) => t.name);
+    if (cachedNames.length > 0) {
+      // Never shrink back to a stale, earlier fetch's shorter list — only adopt a server
+      // list that is at least as complete as what a just-run Test connection already put here.
+      setDiscovered((current) => (cachedNames.length >= current.length ? cachedNames : current));
     }
   }, [open, tool]);
 
@@ -296,6 +320,10 @@ export function McpToolEditorDialog({
     setDraft((d) => {
       const current = allowedToolNames.length > 0 ? allowedToolNames : discovered;
       const next = checked ? Array.from(new Set([...current, name])) : current.filter((n) => n !== name);
+      // An empty `allowed_tools` means "no restriction" to the contract, the opposite of
+      // what unchecking the last box means here — refuse rather than silently re-allowing
+      // every tool the admin just excluded.
+      if (next.length === 0) return d;
       return { ...d, allowed_tools: next.join(", ") };
     });
   }
@@ -335,9 +363,11 @@ export function McpToolEditorDialog({
     }
     if (draft.name.trim() === "") nextErrors.name = "Name is required.";
     if (draft.url.trim() === "") nextErrors.url = "URL is required.";
-    if (draft.authKind === "own_oauth" && draft.oauthClientId.trim() === "") {
-      nextErrors.oauthClientId = "The vendor's client id is required for your own OAuth app.";
-    }
+    // No save-time check on the client id: `McpOAuthAuth.client_id` is optional, and an
+    // admin choosing "Your own OAuth app" needs to save the server *before* they can see
+    // this deployment's return address (it only appears once Sign in is attempted) — the
+    // client id comes after that, on a second save. `clientIdSet` below is what actually
+    // gates Sign in.
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -520,19 +550,26 @@ export function McpToolEditorDialog({
             {isOauth ? (
               <>
                 {draft.authKind === "own_oauth" ? (
-                  <Field
-                    label="Client id"
-                    htmlFor={`${uid}-oauth-client-id`}
-                    required
-                    error={errors.oauthClientId}
-                    hint="From the OAuth app you register with the vendor."
-                  >
-                    <Input
-                      id={`${uid}-oauth-client-id`}
-                      value={draft.oauthClientId}
-                      onChange={(e) => setDraft((d) => ({ ...d, oauthClientId: e.target.value }))}
-                    />
-                  </Field>
+                  <>
+                    <p className="rounded-md bg-muted/50 px-3 py-2 text-[0.8125rem] text-muted-foreground">
+                      Register an app with the vendor first — its return address is this deployment&apos;s own
+                      address with <code className="font-mono">/v1/oauth/mcp/callback</code> appended. Once you
+                      have a client id, save this server, then use Sign in below.
+                    </p>
+                    <Field
+                      label="Client id"
+                      htmlFor={`${uid}-oauth-client-id`}
+                      optional
+                      error={errors.oauthClientId}
+                      hint="From the OAuth app you register with the vendor. Sign in stays disabled until this is set and saved."
+                    >
+                      <Input
+                        id={`${uid}-oauth-client-id`}
+                        value={draft.oauthClientId}
+                        onChange={(e) => setDraft((d) => ({ ...d, oauthClientId: e.target.value }))}
+                      />
+                    </Field>
+                  </>
                 ) : null}
                 <Field
                   label="Scope override"

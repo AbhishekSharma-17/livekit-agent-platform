@@ -79,14 +79,21 @@ export function McpOauthStatusPanel({
   const [registerAt, setRegisterAt] = React.useState<{ redirectUri: string; issuer: string | null } | null>(null);
   const secretId = React.useId();
 
+  const queryClient = useQueryClient();
   const statusQuery = useMcpOauthStatus(toolId, { poll: waiting });
   const start = useStartMcpOauth();
   const revoke = useRevokeMcpOauth();
 
   const status = statusQuery.data?.status;
   React.useEffect(() => {
-    if (waiting && (status === "connected" || status === "needs_reauth")) setWaiting(false);
-  }, [waiting, status]);
+    if (waiting && (status === "connected" || status === "needs_reauth")) {
+      setWaiting(false);
+      // The callback just bound a fresh `mcp-oauth` credential to this tool's
+      // `auth.credential_id` (or flipped it to needs_reauth); refresh the tool list so a
+      // Save right after Connect doesn't post the pre-connect (null or stale) id back.
+      void queryClient.invalidateQueries({ queryKey: ["tools"] });
+    }
+  }, [waiting, status, queryClient]);
 
   if (toolId === null) {
     return (
@@ -110,10 +117,20 @@ export function McpOauthStatusPanel({
       }
       const url = result.authorization_url;
       if (!url) return;
-      // R-V5-14: same browser, never a link to copy.
-      const popup = window.open(url, "_blank", "noopener,noreferrer");
-      if (!popup) window.location.assign(url);
-      setWaiting(true);
+      // R-V5-14: same browser, never a link to copy. `noopener` in the features string
+      // makes `window.open` return `null` even when the popup *did* open (the HTML spec:
+      // a `noopener` window has no handle back to the opener) — passing it here would make
+      // every sign-in also navigate this tab away via the `!popup` fallback below. Instead,
+      // take the handle and sever `opener` on it directly (the same effect as `noopener`,
+      // without losing the return value).
+      const popup = window.open(url, "_blank");
+      if (popup) {
+        popup.opener = null;
+        setWaiting(true);
+      } else {
+        // Popup blocked: still the admin's own browser, per R-V5-14 — never a copyable link.
+        window.location.assign(url);
+      }
     } catch (error) {
       toast.error(errorMessage(error));
     }

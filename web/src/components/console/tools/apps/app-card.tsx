@@ -3,12 +3,22 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConnectAppDialog } from "@/components/console/tools/apps/connect-app-dialog";
 import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
+import { useToolProviderConnections } from "@/components/console/lib/api-hooks";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import type { ToolkitOut } from "@/contracts/lkap-contracts";
+import { pluralize } from "@/lib/format";
+import type { AppConnectionOut, ToolkitOut } from "@/contracts/lkap-contracts";
 
 /** A toolkit's logo, or its vendor monogram when there is none (or it fails to load). */
 function AppLogo({ toolkit }: { toolkit: ToolkitOut }) {
@@ -30,13 +40,22 @@ function AppLogo({ toolkit }: { toolkit: ToolkitOut }) {
 }
 
 /**
- * One app in the gallery (docs/v5/COMPOSIO.md §6): logo, name, category
- * chips and either a Connect button or, once connected, its live
- * `ConnectionRow` (status, Reconnect, Disconnect, Actions).
+ * One app in the gallery (docs/v5/COMPOSIO.md §6, R-V5-13): logo, name,
+ * category chips and either a Connect button or, once connected, its live
+ * account(s) — a single `ConnectionRow` for one account, or an "N accounts"
+ * chip plus a button that opens every account in a dialog — and "Add
+ * another account" underneath.
  */
 export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
   const { canWrite } = useWriteAccess();
   const writeReason = writeAccessReason();
+  const connectionsQuery = useToolProviderConnections();
+  const accounts = React.useMemo(
+    () => (connectionsQuery.data?.items ?? []).filter((connection) => connection.toolkit === toolkit.slug),
+    [connectionsQuery.data, toolkit.slug],
+  );
+  const [accountsOpen, setAccountsOpen] = React.useState(false);
+  const [addAccountOpen, setAddAccountOpen] = React.useState(false);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
@@ -47,7 +66,7 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
             <span className="truncate text-sm font-medium text-foreground">{toolkit.name}</span>
             {toolkit.connected ? (
               <StatusChip tone="success" size="sm">
-                Connected
+                {accounts.length > 1 ? pluralize(accounts.length, "account", "accounts") : "Connected"}
               </StatusChip>
             ) : null}
           </div>
@@ -63,7 +82,25 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
       </div>
 
       {toolkit.connected && toolkit.connection_id ? (
-        <ConnectionRow connectionId={toolkit.connection_id} toolkit={toolkit} />
+        <div className="flex flex-col items-start gap-2">
+          {accounts.length > 1 ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setAccountsOpen(true)}>
+              Manage {pluralize(accounts.length, "account", "accounts")}
+            </Button>
+          ) : (
+            <ConnectionRow connectionId={toolkit.connection_id} toolkit={toolkit} />
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!canWrite}
+            title={canWrite ? undefined : writeReason}
+            onClick={() => setAddAccountOpen(true)}
+          >
+            Add another account
+          </Button>
+        </div>
       ) : (
         <ConnectAppDialog
           toolkit={toolkit}
@@ -74,6 +111,45 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
           }
         />
       )}
+
+      {accounts.length > 1 ? <AppAccountsDialog open={accountsOpen} onOpenChange={setAccountsOpen} toolkit={toolkit} accounts={accounts} /> : null}
+      <ConnectAppDialog toolkit={toolkit} open={addAccountOpen} onOpenChange={setAddAccountOpen} isAddingAccount />
     </div>
+  );
+}
+
+/**
+ * Every account of this app (R-V5-13, docs/v5/PLAN-V5.md V5-54 card): one
+ * `ConnectionRow` per account (label, status, Default chip, Rename, Make
+ * default, Reconnect, Disconnect, Actions), in a dialog rather than a side
+ * drawer.
+ */
+function AppAccountsDialog({
+  open,
+  onOpenChange,
+  toolkit,
+  accounts,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  toolkit: Pick<ToolkitOut, "slug" | "name" | "auth_fields">;
+  accounts: AppConnectionOut[];
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="md" aria-describedby="app-accounts-description">
+        <DialogHeader>
+          <DialogTitle>{toolkit.name} accounts</DialogTitle>
+          <DialogDescription id="app-accounts-description">
+            Every account of {toolkit.name} connected to this workspace.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-2">
+          {accounts.map((account) => (
+            <ConnectionRow key={account.id} connectionId={account.id} toolkit={toolkit} />
+          ))}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }

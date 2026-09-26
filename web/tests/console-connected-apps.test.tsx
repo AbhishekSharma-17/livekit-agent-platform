@@ -8,10 +8,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toFormValues } from "@/components/console/agents/editor/form-values";
 import { ConnectedAppsCard } from "@/components/console/agents/tabs/connected-apps-card";
 import { ToolsList } from "@/components/console/tools/tools-list";
+import { requestSummary } from "@/components/console/tools/tool-row";
 import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
 import { zodResolver } from "@/components/console/lib/zod-resolver";
 import type { AgentOut, ProvidersResponse, ToolOut, ToolPage } from "@/contracts/lkap-contracts";
-import { ACTION_DELETE_REPO, actionFixture, actionPage, appsStatusFixture, connectionFixture, connectionPage } from "./fixtures/apps";
+import {
+  ACTION_DELETE_REPO,
+  actionFixture,
+  actionPage,
+  appsStatusFixture,
+  connectionFixture,
+  connectionFixtureAccounts,
+  connectionPage,
+} from "./fixtures/apps";
 
 /**
  * V5-48 (docs/v5/COMPOSIO.md §6, the console-side half): the agent editor's
@@ -386,6 +395,71 @@ describe("ConnectedAppsCard", () => {
       await waitFor(() => expect(latest?.config.tools.apps?.denied_actions ?? []).toContain("GITHUB_DELETE_REPO"));
       expect(latest?.config.tools.apps?.reviewed_actions ?? []).toContain("GITHUB_DELETE_REPO");
     });
+  });
+
+  describe("R-V5-13: several accounts of one app — the per-app account chooser", () => {
+    it('in the app-server mode, an app with two accounts shows "Which accounts" with the default preselected, and checking a second account posts both ids', async () => {
+      const accounts = connectionFixtureAccounts();
+      stubApi((call) => {
+        if (call.url.includes("/tool-providers/composio/connections") && call.method === "GET") {
+          return { status: 200, body: connectionPage(accounts) };
+        }
+        return undefined;
+      });
+      const agentInServerMode = {
+        ...AGENT,
+        config: { ...AGENT.config, tools: { apps: { mode: "server", allowed_toolkits: ["github"] } } },
+      } as unknown as AgentOut;
+      render(<Harness agent={agentInServerMode} />);
+      await screen.findByText("Connected apps", { selector: "h2" });
+
+      expect(await screen.findByText("Which accounts")).toBeTruthy();
+      const workCheckbox = screen.getByRole("checkbox", { name: /Work/ });
+      const personalCheckbox = screen.getByRole("checkbox", { name: /Personal/ });
+      // The default account is preselected, and — being the only one picked
+      // — its own checkbox can't be unchecked down to zero.
+      expect(workCheckbox.getAttribute("aria-checked")).toBe("true");
+      expect((workCheckbox as HTMLButtonElement).disabled).toBe(true);
+      expect(personalCheckbox.getAttribute("aria-checked")).toBe("false");
+
+      fireEvent.click(personalCheckbox);
+
+      await waitFor(() => expect(latest?.config.tools.apps?.accounts?.github).toEqual(["conn_work", "conn_personal"]));
+    });
+
+    it('in "Use picked actions" mode, two accounts of one app each get their own Actions button, labelled by account', async () => {
+      const accounts = connectionFixtureAccounts();
+      stubApi((call) => {
+        if (call.url.includes("/tool-providers/composio/connections") && call.method === "GET") {
+          return { status: 200, body: connectionPage(accounts) };
+        }
+        return undefined;
+      });
+      const agentInActionsMode = {
+        ...AGENT,
+        config: { ...AGENT.config, tools: { apps: { mode: "actions" } } },
+      } as unknown as AgentOut;
+      render(<Harness agent={agentInActionsMode} />);
+      await screen.findByText("Connected apps", { selector: "h2" });
+
+      expect(await screen.findByText(/\(Work\)/)).toBeTruthy();
+      expect(screen.getByText(/\(Personal\)/)).toBeTruthy();
+      expect(screen.getAllByRole("button", { name: "Actions" })).toHaveLength(2);
+    });
+  });
+});
+
+describe("ToolRow / requestSummary — the account label on a provider tool's row (R-V5-13)", () => {
+  it("shows the tool's own description (already \"(<label>) \"-prefixed by materialise.py for a multi-account app) instead of the generic \"App action · toolkit\" line", () => {
+    const tool = providerTool({
+      definition: { ...providerTool().definition, description: "(Work) Send an email" },
+    });
+    expect(requestSummary(tool)).toBe("(Work) Send an email");
+  });
+
+  it("falls back to the generic line when a provider tool somehow has no description", () => {
+    const tool = providerTool({ definition: { ...providerTool().definition, description: "", toolkit: "gmail" } });
+    expect(requestSummary(tool)).toBe("App action · gmail");
   });
 });
 

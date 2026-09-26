@@ -27,6 +27,7 @@ import type {
   AppKeyTestOut,
   AppReconnectIn,
   AppsStatusOut,
+  ConnectionRenameIn,
   CredentialCreate,
   CredentialOut,
   CredentialPage,
@@ -684,6 +685,27 @@ export function useConnectApp() {
       // Connect-button vs `ConnectionRow` (`ToolkitOut.connected`) — a
       // narrower invalidation (just `appsConnections`/`appsStatus`) leaves
       // the gallery showing "Connect" on an app that just connected.
+      void queryClient.invalidateQueries({ queryKey: ["apps"] });
+    },
+  });
+}
+
+/**
+ * `PATCH .../connections/{id}` — rename an account (also at Composio) and/or
+ * make it its app's default (R-V5-13, `rename-account-dialog.tsx` and the
+ * app card's "Make default"). A 409 is always the duplicate-label refusal
+ * for a rename, or "not active yet" for a default it can't do — the callers
+ * map the status themselves rather than trusting the generic `conflict` code.
+ */
+export function useUpdateConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ConnectionRenameIn }) =>
+      api.patch<AppConnectionOut>(`${APPS_BASE}/connections/${id}`, body),
+    onSuccess: () => {
+      // Every account of the app: `AppCard`'s accounts dialog and the
+      // Connected apps card's chooser both read `appsConnections`, and a
+      // rename/default change must show up in both places right away.
       void queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });

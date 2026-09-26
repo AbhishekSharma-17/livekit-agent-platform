@@ -105,9 +105,21 @@ export function KbEvalDialog({
   const documentsQuery = useKbDocuments(kbId);
   const putEvals = usePutKbEvals(kbId);
 
+  // Read through a ref, not a dependency: `evals` is a fresh array reference
+  // on every render while its query is loading (`evalsQuery.data?.items ?? []`
+  // in the caller) and again whenever react-query refetches it in the
+  // background (e.g. `refetchOnWindowFocus`) — depending on it directly would
+  // wipe whatever the admin is mid-typing every time that happens. Seed only
+  // on the open transition (`false` → `true`), from whatever `evals` holds at
+  // that moment.
+  const evalsRef = React.useRef(evals);
+  evalsRef.current = evals;
   React.useEffect(() => {
-    if (open) setRows(evals.length > 0 ? evals.map(toDraft) : [emptyDraft()]);
-  }, [open, evals]);
+    if (open) {
+      const current = evalsRef.current;
+      setRows(current.length > 0 ? current.map(toDraft) : [emptyDraft()]);
+    }
+  }, [open]);
 
   const documents = documentsQuery.data?.items ?? [];
   const issues = rows.map(rowIssue);

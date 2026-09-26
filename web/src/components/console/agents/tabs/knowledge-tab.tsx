@@ -35,10 +35,13 @@ function rerankOnServer(value: string | undefined): boolean {
 }
 
 /**
- * "Knowledge (section)" (docs/UI_UX_SPEC.md §4.7, §7.6). Unchanged by the v2
- * amendments. Uploading/searching documents happens on the dedicated
- * `/console/knowledge` pages; this tab only attaches existing knowledge
- * bases to the agent and sets retrieval behaviour.
+ * "Knowledge (section)" (docs/UI_UX_SPEC.md §4.7, §7.6). The "Retrieval"
+ * card gains the V5-06 `KnowledgeConfig` v2 fields in V5-10: search mode,
+ * a minimum-match floor, prepare-answers-early, re-ranking, context for
+ * follow-ups, skip-short-replies and how much text to include. Uploading
+ * and test-searching documents happens on the dedicated `/console/knowledge`
+ * pages; this tab only attaches existing knowledge bases to the agent and
+ * sets retrieval behaviour.
  */
 export function KnowledgeTab() {
   const topKId = React.useId();

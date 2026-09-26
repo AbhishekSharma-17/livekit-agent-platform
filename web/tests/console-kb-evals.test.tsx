@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { KbEvalDialog } from "@/components/console/knowledge/kb-eval-dialog";
 import { KbEvalsCard } from "@/components/console/knowledge/kb-evals-card";
 import type { KbEvalOut, KbEvalRunOut, KbEvalSetOut } from "@/contracts/lkap-contracts";
 
@@ -169,5 +170,43 @@ describe("KbEvalsCard — eval runner (docs/v5/PLAN-V5.md V5-10)", () => {
     expect(screen.getAllByText("100%")).toHaveLength(2); // recall@1 and recall@k
     expect(screen.getByText("MRR")).toBeTruthy();
     expect(screen.getByText("1.00")).toBeTruthy();
+  });
+
+  it("doesn't wipe a mid-edit question when its parent re-renders with a new (but equal) evals array", async () => {
+    // Simulates react-query handing back a fresh array reference for the same
+    // data — a background refetch (e.g. refetchOnWindowFocus), or simply the
+    // `evalsQuery.data?.items ?? []` fallback the card uses while loading —
+    // which must not re-seed the dialog's draft rows out from under typing.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/documents")) return jsonResponse({ items: [], total: 0 });
+        return jsonResponse({});
+      }),
+    );
+
+    function Harness({ evals }: { evals: KbEvalOut[] }) {
+      return <KbEvalDialog kbId="kb-1" open onOpenChange={() => {}} evals={evals} />;
+    }
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <Harness evals={[]} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(await screen.findByLabelText("Question 1"), {
+      target: { value: "Still typing this one…" },
+    });
+
+    // A brand new array, same (empty) content — not the same reference.
+    rerender(
+      <QueryClientProvider client={client}>
+        <Harness evals={[]} />
+      </QueryClientProvider>,
+    );
+
+    expect((screen.getByLabelText("Question 1") as HTMLInputElement).value).toBe("Still typing this one…");
   });
 });

@@ -485,6 +485,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(apps_issues(ctx))
     findings.extend(conversation_preset_issues(ctx))
     findings.extend(telephony_noise_cancellation_issues(ctx))
+    findings.extend(speech_latency_issues(ctx))
     findings.extend(choices_on_phone_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
@@ -923,6 +924,74 @@ def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
             "available on this platform yet"
         )
     return [Issue(path="pipeline.conversation_preset", message=message, severity="warning")]
+
+
+#: Speech providers that answer one whole request at a time (no streaming), with the latency
+#: that costs, in words an admin can act on (docs/v5/_briefs/openrouter-voice-diagnosis.md).
+BATCH_SPEECH_MESSAGES: Final[dict[str, str]] = {
+    "openrouter-stt": (
+        "OpenRouter transcribes each turn in one request after you stop speaking (no live "
+        "transcript), which adds roughly 0.5-2 s per turn; for a snappy voice agent use a streaming "
+        "STT such as LiveKit Inference or Deepgram"
+    ),
+    "openrouter-tts": (
+        "OpenRouter speech is not streamed: each sentence is synthesised in full before it starts "
+        "playing, which adds roughly 1-2.5 s before the agent speaks; for a snappy voice agent use a "
+        "streaming TTS such as LiveKit Inference or Cartesia"
+    ),
+}
+
+#: STT classes whose ``language`` must be one ISO-639-1 code (OpenAI's and OpenRouter's
+#: ``/audio/transcriptions``); the worker maps anything else (lkap_agent.providers.factory).
+_ISO_639_1_STT_CLASSES: Final[frozenset[str]] = frozenset({"livekit.plugins.openai.STT"})
+_ISO_639_1: Final[re.Pattern[str]] = re.compile(r"^[a-z]{2}$")
+
+
+def speech_latency_issues(ctx: ValidationContext) -> list[Issue]:
+    """Warn about batch-only speech providers and language codes they cannot take.
+
+    Only the slots a voice session actually uses are checked: ``stt`` in cascaded
+    mode, ``tts`` in cascaded and half-cascade mode.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        A warning per batch-only speech slot, plus one at ``pipeline.stt.fields.language``
+        when an OpenAI-style transcriber is given a code it would reject.
+    """
+    pipeline = ctx.config.pipeline
+    slots: list[tuple[str, ProviderRef | None]] = []
+    if pipeline.mode == "cascaded":
+        slots.append(("stt", pipeline.stt))
+    if pipeline.mode in ("cascaded", "half_cascade"):
+        slots.append(("tts", pipeline.tts))
+    issues: list[Issue] = []
+    for slot, ref in slots:
+        if ref is None:
+            continue
+        message = BATCH_SPEECH_MESSAGES.get(ref.provider_id)
+        if message is not None:
+            issues.append(Issue(path=f"pipeline.{slot}", message=message, severity="warning"))
+        spec = _spec_or_none(ref.provider_id)
+        if slot != "stt" or spec is None or spec.python_class not in _ISO_639_1_STT_CLASSES:
+            continue
+        language = ref.fields.get("language")
+        if isinstance(language, str) and not _ISO_639_1.match(language.strip()):
+            code = language.strip()
+            detail = (
+                "the language will be auto-detected"
+                if code.lower() in ("", "multi", "auto", "detect")
+                else f"'{code.replace('_', '-').split('-', 1)[0].lower()}' will be sent instead"
+            )
+            issues.append(
+                Issue(
+                    path="pipeline.stt.fields.language",
+                    message=f"'{code}' is not a two-letter language code this transcriber accepts; {detail}",
+                    severity="warning",
+                )
+            )
+    return issues
 
 
 #: Below this many tool steps, a chain of background announcements can exhaust the budget

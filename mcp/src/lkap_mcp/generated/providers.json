@@ -2482,12 +2482,12 @@
           "supports_video": false
         }
       ],
-      "notes": "Voices are per model — pick the model first, then a voice it lists. Non-streaming, like OpenAI TTS: one request per sentence.",
+      "notes": "Voices are per model — pick the model first, then a voice it lists. Non-streaming, like OpenAI TTS: one request per sentence, so the first audio of every reply waits for a whole sentence to be synthesised. PCM for every model except Voxtral (MP3 only), at the sample rate OpenRouter declares. For low latency prefer LiveKit Inference TTS or Cartesia.",
       "package": "livekit-plugins-openai",
       "price_note": null,
       "price_ref": null,
       "probe": "openai_speech",
-      "python_class": "livekit.plugins.openai.TTS",
+      "python_class": "lkap_agent.providers.openrouter.OpenRouterTTS",
       "requires_credential": true,
       "secret_fields": [
         {

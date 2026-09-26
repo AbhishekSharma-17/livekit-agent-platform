@@ -1351,7 +1351,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         label="OpenRouter (TTS)",
         vendor="OpenRouter",
         package="livekit-plugins-openai",
-        python_class="livekit.plugins.openai.TTS",
+        python_class="lkap_agent.providers.openrouter.OpenRouterTTS",
         credential_provider=OPENROUTER_CREDENTIAL_HOME,
         secret_fields=[_openrouter_key()],
         fields=[
@@ -1380,7 +1380,9 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         ),
         test="openrouter_tts_models",
         notes="Voices are per model — pick the model first, then a voice it lists. Non-streaming, like "
-        "OpenAI TTS: one request per sentence.",
+        "OpenAI TTS: one request per sentence, so the first audio of every reply waits for a whole "
+        "sentence to be synthesised. PCM for every model except Voxtral (MP3 only), at the sample "
+        "rate OpenRouter declares. For low latency prefer LiveKit Inference TTS or Cartesia.",
         docs_url="https://docs.livekit.io/agents/models/tts/openai/",
         get_key_url=_OPENROUTER_KEY_URL,
         probe="openai_speech",

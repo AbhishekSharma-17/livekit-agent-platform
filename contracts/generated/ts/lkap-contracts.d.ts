@@ -2003,10 +2003,12 @@ export interface ConnectionUpdate {
  * ``status`` is the request lifecycle every requestable block shares
  * (:class:`RequestableState`); the caller's decision is ``accepted``
  * (``None`` until they answer). A tap answers with ``block_submit {values:
- * {accepted: true | false}}``; a spoken answer is recorded by
- * ``record_consent`` (``method="voice"``). ``text`` is the exact wording
- * shown (the block's ``config.text``, else the workspace's preset for its
- * ``kind``) and ``text_hash`` its SHA-256 once answered, so the answer is
+ * {accepted: true | false}}`` (only ``accepted`` is read from a browser,
+ * V5-27 S5-3); a spoken answer is recorded by ``record_consent`` (always
+ * ``method="voice"``, with the user turn it was heard in, S5-4). ``text`` is
+ * the exact wording shown (the block's ``config.text``, else the workspace's
+ * preset for its ``kind``) and ``text_hash`` its SHA-256 once answered; the
+ * worker hashes the wording it computed, never block state, so the answer is
  * tied to the wording (``lkap_contracts.compliance.consent_text_hash``).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -2055,6 +2057,12 @@ export interface ConsentEvent {
 export interface ConsentState {
   latest?: {
     [k: string]: ConsentRecord;
+  };
+  /**
+   * When an accepted answer was replaced by a decline (epoch seconds), per kind (V5-27, S5-5): for `recording` the worker stops the Egress then.
+   */
+  withdrawn_at?: {
+    [k: string]: number;
   };
 }
 /**

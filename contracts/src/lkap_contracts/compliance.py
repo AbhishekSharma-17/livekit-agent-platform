@@ -238,6 +238,11 @@ class ConsentState(BaseModel):
     """``sessions.consent_state``: the latest answer per consent kind (a later answer replaces it)."""
 
     latest: dict[ConsentKind, ConsentRecord] = {}
+    withdrawn_at: dict[ConsentKind, float] = Field(
+        default={},
+        description="When an accepted answer was replaced by a decline (epoch seconds), per kind "
+        "(V5-27, S5-5): for `recording` the worker stops the Egress then.",
+    )
 
     def answer(self, kind: ConsentKind) -> bool | None:
         """``True``/``False`` when the caller answered ``kind``, ``None`` when they never did."""
@@ -245,7 +250,13 @@ class ConsentState(BaseModel):
         return record.accepted if record is not None else None
 
     def with_event(self, event: ConsentEvent, *, at: float) -> ConsentState:
-        """A copy with ``event`` recorded as the latest answer of its kind."""
+        """A copy with ``event`` recorded as the latest answer of its kind.
+
+        A decline that replaces an acceptance records ``withdrawn_at`` for that kind.
+        """
         latest = dict(self.latest)
+        withdrawn = dict(self.withdrawn_at)
+        if not event.accepted and self.answer(event.kind) is True:
+            withdrawn[event.kind] = at
         latest[event.kind] = ConsentRecord(**event.model_dump(), at=at)
-        return ConsentState(latest=latest)
+        return ConsentState(latest=latest, withdrawn_at=withdrawn)

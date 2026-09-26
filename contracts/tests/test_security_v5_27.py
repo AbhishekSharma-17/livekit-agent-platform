@@ -14,7 +14,7 @@ from lkap_contracts.api_models import (
     KbCreate,
     KbSearchRequest,
 )
-from lkap_contracts.compliance import ConsentEvent, consent_text_hash
+from lkap_contracts.compliance import ConsentEvent, ConsentState, consent_text_hash
 from lkap_contracts.packs import KbSeed
 from lkap_contracts.tool_providers import action_risk
 from lkap_contracts.tools import McpServerDefinition, McpToolSnapshot
@@ -79,6 +79,22 @@ def test_consent_event_turn_id_is_additive_and_bounded() -> None:
     assert event.model_dump()["turn_id"] == "t1"
     with pytest.raises(ValidationError):
         ConsentEvent(kind="recording", accepted=True, method="voice", text_hash=digest, turn_id="x" * 65)
+
+
+def test_consent_state_records_when_an_acceptance_is_withdrawn() -> None:
+    """S5-5: a decline that replaces an acceptance is dated; a first decline is not a withdrawal."""
+    digest = consent_text_hash("May we record?")
+
+    def event(accepted: bool) -> ConsentEvent:
+        return ConsentEvent(kind="recording", accepted=accepted, method="tap", text_hash=digest)
+
+    declined_first = ConsentState().with_event(event(False), at=1.0)
+    assert declined_first.withdrawn_at == {}
+    withdrawn = ConsentState().with_event(event(True), at=1.0).with_event(event(False), at=2.0)
+    assert withdrawn.withdrawn_at == {"recording": 2.0}
+    assert withdrawn.answer("recording") is False
+    # Stored before V5-27 (no key): still reads.
+    assert ConsentState.model_validate({"latest": {}}).withdrawn_at == {}
 
 
 # ---------------------------------------------------------------- S5-13, S5-29

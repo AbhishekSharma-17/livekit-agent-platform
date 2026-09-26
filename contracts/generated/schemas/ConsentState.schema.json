@@ -93,6 +93,23 @@
       },
       "title": "Latest",
       "type": "object"
+    },
+    "withdrawn_at": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "default": {},
+      "description": "When an accepted answer was replaced by a decline (epoch seconds), per kind (V5-27, S5-5): for `recording` the worker stops the Egress then.",
+      "propertyNames": {
+        "enum": [
+          "recording",
+          "ai_disclosure",
+          "terms",
+          "custom"
+        ]
+      },
+      "title": "Withdrawn At",
+      "type": "object"
     }
   },
   "title": "ConsentState",

@@ -551,7 +551,7 @@ function ListWithCustom({
         }
         onChange(next);
       }}
-      groups={[{ options }, { options: [{ value: CUSTOM, label: customLabel }] }]}
+      groups={[{ options }, { options: [{ value: CUSTOM, label: customLabel, pinned: true }] }]}
       placeholder={placeholder}
       {...aria}
     />

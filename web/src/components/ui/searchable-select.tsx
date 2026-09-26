@@ -22,6 +22,8 @@ export interface SearchableSelectOption {
   /** Shown right-aligned on the row, e.g. an app count for a category. */
   count?: number
   disabled?: boolean
+  /** Stays visible no matter what is typed (an escape hatch like "Other code…" — the one moment it exists for is when nothing else matches). */
+  pinned?: boolean
 }
 
 export interface SearchableSelectGroup {
@@ -65,7 +67,7 @@ function normalize(text: string): string {
 }
 
 function matches(option: SearchableSelectOption, needle: string): boolean {
-  if (needle === "") return true
+  if (needle === "" || option.pinned) return true
   return normalize(option.label).includes(needle) || normalize(option.value).includes(needle)
 }
 
@@ -123,7 +125,6 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
-  const listId = React.useId()
 
   const groups = React.useMemo<SearchableSelectGroup[]>(
     () => groupsProp ?? (options ? [{ options }] : []),
@@ -154,10 +155,12 @@ export function SearchableSelect({
 
   const needle = normalize(query)
   const visibleGroups = filterGroups(groups, needle)
-  // The "All …" row is pinned above every group and stays visible no matter
-  // what is typed — it is not itself a value to search for, it resets the
-  // filter. Only the option groups below it count toward "nothing matches".
-  const nothingVisible = visibleGroups.every((g) => g.options.length === 0)
+  // The "All …" row and any `pinned` option (e.g. a "Custom…" escape) stay
+  // visible no matter what is typed — they are not themselves a value to
+  // search for. Only the *searchable* rows count toward "nothing matches",
+  // so the escape hatch reads as an offer alongside the empty state, not as
+  // proof something matched.
+  const nothingVisible = visibleGroups.every((g) => g.options.every((o) => o.pinned))
 
   const triggerContent = React.useMemo(() => {
     if (multiple) {
@@ -185,7 +188,6 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-controls={open ? listId : undefined}
           aria-label={ariaLabel}
           aria-describedby={describedBy}
           aria-invalid={invalid}
@@ -209,7 +211,13 @@ export function SearchableSelect({
       >
         <Command shouldFilter={false} label={ariaLabel}>
           <CommandInput value={query} onValueChange={setQuery} placeholder={searchPlaceholder} />
-          <CommandList id={listId} className="max-h-[min(18rem,50dvh)]">
+          {/* No explicit `id` here: cmdk overwrites whatever `id` prop `CommandList`
+              is given with its own internally generated one, so a hand-rolled id
+              (and an `aria-controls` on the trigger pointing at it) would name a
+              DOM node cmdk never actually creates. Radix's `PopoverTrigger`
+              already sets the trigger's `aria-controls` to the popover content's
+              real id on its own. */}
+          <CommandList className="max-h-[min(18rem,50dvh)]">
             {loading ? (
               <p className="px-3 py-4 text-center text-sm text-muted-foreground">{loadingText}</p>
             ) : (

@@ -1307,6 +1307,19 @@ async def test_adapter_sends_the_key_header_and_the_documented_paths() -> None:
     }
 
 
+async def test_adapter_lists_toolkit_categories_with_the_key_header() -> None:
+    build, seen = _recording({})
+    adapter = build(VALID_KEY)
+
+    await adapter.list_toolkit_categories(cursor="c1", limit=100)
+
+    assert len(seen) == 1
+    request = seen[0]
+    assert request.headers["x-api-key"] == VALID_KEY
+    assert (request.method, request.url.path) == ("GET", "/api/v3.1/toolkits/categories")
+    assert dict(request.url.params) == {"cursor": "c1", "limit": "100"}
+
+
 async def test_adapter_auth_config_and_key_connection_bodies() -> None:
     build, seen = _recording({})
     adapter = build(VALID_KEY)

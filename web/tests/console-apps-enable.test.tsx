@@ -73,7 +73,10 @@ function bodyField(call: Call, path: string[]): unknown {
   return value;
 }
 
-function stubApi(overrides: (call: Call) => { status: number; body: unknown } | undefined = () => undefined) {
+function stubApi(
+  overrides: (call: Call) => { status: number; body: unknown } | undefined | Promise<{ status: number; body: unknown } | undefined> = () =>
+    undefined,
+) {
   const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
@@ -81,7 +84,10 @@ function stubApi(overrides: (call: Call) => { status: number; body: unknown } | 
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       const call = { url: String(input), method: init?.method ?? "GET", body };
       calls.push(call);
-      const override = overrides(call);
+      // Awaited even for a synchronous override (a no-op then): lets a test
+      // gate one route behind a promise it controls, to prove two other
+      // routes fire before that one resolves (a parallel-vs-waterfall check).
+      const override = await overrides(call);
       let status = 200;
       let responseBody: unknown;
       if (override) ({ status, body: responseBody } = override);
@@ -205,6 +211,35 @@ describe("AppsTab — Enable Composio", () => {
     expect(await screen.findByText("Valid")).toBeTruthy();
     expect(calls.some((c) => c.url.includes("/credentials") && c.method === "POST" && bodyField(c, ["provider_id"]) === "composio")).toBe(true);
     expect(calls.some((c) => c.url.endsWith("/tool-providers/composio/enable") && c.method === "POST")).toBe(true);
+  });
+});
+
+describe("AppsTab — status and the gallery's queries run in parallel", () => {
+  it("fires the toolkits and categories requests before `status` resolves, not after", async () => {
+    // Regression: `AppGallery` used to mount only once `status` had resolved
+    // to "enabled" — a strict waterfall. Gate `status` behind a promise this
+    // test controls, and prove the other two requests already went out
+    // while it is still pending.
+    let releaseStatus = () => {};
+    const statusGate = new Promise<void>((resolve) => {
+      releaseStatus = resolve;
+    });
+    const calls = stubApi(async (call) => {
+      if (call.url.endsWith("/tool-providers/composio/status")) {
+        await statusGate;
+        return { status: 200, body: appsStatusFixture() };
+      }
+      return undefined;
+    });
+    renderTab();
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/tool-providers/composio/toolkits?"))).toBe(true));
+    expect(calls.some((c) => c.url.endsWith("/tool-providers/composio/categories"))).toBe(true);
+    // `status` has not answered yet — the tab is still on its loading skeleton.
+    expect(screen.queryByText("Valid")).toBeNull();
+
+    releaseStatus();
+    expect(await screen.findByText("Valid")).toBeTruthy();
   });
 });
 

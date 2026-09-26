@@ -112,6 +112,29 @@ describe("SearchableSelect", () => {
     expect(screen.getByText("Scheduling")).toBeTruthy();
   });
 
+  it("a pinned option (a 'Custom…' escape) stays visible under a search that matches nothing else", async () => {
+    function PinnedHarness() {
+      const [value, setValue] = React.useState("");
+      return (
+        <SearchableSelect
+          aria-label="Category"
+          groups={[
+            { options: OPTIONS },
+            { options: [{ value: "custom", label: "Other value…", pinned: true }] },
+          ]}
+          value={value}
+          onValueChange={setValue}
+        />
+      );
+    }
+    render(<PinnedHarness />);
+    open();
+    const input = await screen.findByPlaceholderText("Search…");
+    fireEvent.change(input, { target: { value: "nothing-like-this" } });
+    expect(await screen.findByText("Nothing matches.")).toBeTruthy();
+    expect(screen.getByText("Other value…")).toBeTruthy();
+  });
+
   it("shows the empty state when nothing matches", async () => {
     render(<Harness />);
     open();

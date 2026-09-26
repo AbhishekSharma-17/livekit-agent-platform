@@ -89,7 +89,23 @@ const keys = {
   /** Tools -> Apps (Composio, docs/v5/COMPOSIO.md §6). */
   appsStatus: ["apps", "status"] as const,
   appsCategories: ["apps", "categories"] as const,
-  appsToolkits: (params: ToolkitListParams) => ["apps", "toolkits", params] as const,
+  // Normalized to the same shape the request itself sends (falsy ->
+  // `undefined`, so an omitted field and an explicit falsy one hash
+  // identically): `AppsTab`'s speculative prefetch and `AppGallery`'s own
+  // default-view call must land on the very same cache entry, or the
+  // "warm the gallery's query in parallel with status" fix silently does
+  // nothing (a third, wasted request instead of a shared one).
+  appsToolkits: (params: ToolkitListParams) =>
+    [
+      "apps",
+      "toolkits",
+      {
+        query: params.query || undefined,
+        category: params.category || undefined,
+        connectedOnly: params.connectedOnly || undefined,
+        limit: params.limit,
+      },
+    ] as const,
   appsToolkit: (slug: string) => ["apps", "toolkit", slug] as const,
   appsActions: (slug: string, params: AppActionListParams) => ["apps", "actions", slug, params] as const,
   appsConnections: ["apps", "connections"] as const,
@@ -554,7 +570,7 @@ export interface ToolkitListParams {
  * `placeholderData: keepPreviousData` keeps the last page's apps on screen
  * while the new query settles, instead of a loading flash between keystrokes.
  */
-export function useToolProviderToolkits(params: ToolkitListParams, options?: { enabled?: boolean }) {
+export function useToolProviderToolkits(params: ToolkitListParams, options?: { enabled?: boolean; retry?: boolean }) {
   return useInfiniteQuery({
     queryKey: keys.appsToolkits(params),
     initialPageParam: null as string | null,
@@ -568,6 +584,11 @@ export function useToolProviderToolkits(params: ToolkitListParams, options?: { e
       }),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: options?.enabled ?? true,
+    // `AppsTab`'s speculative prefetch (fired before `status` confirms Apps
+    // are even enabled) passes `retry: false`: a 409 `apps_not_enabled`
+    // never succeeds on retry, so the default retry would just double a
+    // request that was already a guess.
+    retry: options?.retry,
     placeholderData: keepPreviousData,
   });
 }
@@ -590,11 +611,12 @@ export interface ToolProviderCategoryPage {
  * `useToolProviderToolkits`'s categories (only the ones seen among the apps
  * loaded so far), this is the complete list.
  */
-export function useToolProviderCategories(options?: { enabled?: boolean }) {
+export function useToolProviderCategories(options?: { enabled?: boolean; retry?: boolean }) {
   return useQuery({
     queryKey: keys.appsCategories,
     queryFn: () => api.get<ToolProviderCategoryPage>(`${APPS_BASE}/categories`),
     enabled: options?.enabled ?? true,
+    retry: options?.retry,
   });
 }
 

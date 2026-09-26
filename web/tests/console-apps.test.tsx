@@ -236,10 +236,14 @@ describe("AppGallery", () => {
     await waitFor(() => expect(calls.some((c) => c.url.includes("/toolkits?") && c.url.includes("category=scheduling"))).toBe(true));
 
     // Trigger now reads "Scheduling"; reopen and pick "All categories" to clear the filter.
+    // Snapshot the count first — the very first (unfiltered) mount already made a
+    // `category`-free call, so asserting ">0" without this baseline would pass
+    // even if picking "All categories" sent nothing new.
+    const beforeReset = calls.length;
     fireEvent.click(screen.getAllByRole("combobox", { name: "Category" }).find((el) => el.tagName === "BUTTON")!);
     fireEvent.click(await within(await screen.findByRole("dialog")).findByText("All categories"));
     await waitFor(() =>
-      expect(calls.filter((c) => c.url.includes("/toolkits?") && !c.url.includes("category=")).length).toBeGreaterThan(0),
+      expect(calls.slice(beforeReset).some((c) => c.url.includes("/toolkits?") && !c.url.includes("category="))).toBe(true),
     );
   });
 

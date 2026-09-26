@@ -159,6 +159,23 @@ describe("RegistryForm", () => {
     expect(onChange).toHaveBeenCalledWith("language", "ja");
   });
 
+  it("the language picker's 'Other code…' escape stays offered even when the search matches no BCP-47 code", async () => {
+    // Regression: the custom-escape option used to live in the same
+    // searchable group as the known values, so typing anything that didn't
+    // match a real language hid it along with everything else — exactly the
+    // one moment a builder needs it.
+    const fields: ProviderSpec["fields"] = [{ name: "language", label: "Language", type: "string", default: "en" }];
+    const { container } = render(
+      <RegistryForm fields={fields ?? []} values={{ language: "en" }} onChange={() => {}} idPrefix="nolang" />,
+    );
+    fireEvent.click(container.querySelector("#nolang-language")!);
+    const input = await screen.findByPlaceholderText("Search…");
+    fireEvent.change(input, { target: { value: "sw" } });
+    const listbox = within(await screen.findByRole("dialog"));
+    expect(listbox.getByText("Nothing matches.")).toBeTruthy();
+    expect(listbox.getByText("Other code…")).toBeTruthy();
+  });
+
   it("the voice picker's 'Custom voice…' escape switches to free text", async () => {
     const fields: ProviderSpec["fields"] = [{ name: "voice", label: "Voice", type: "string", required: false }];
     const onChange = vi.fn();

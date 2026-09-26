@@ -1,0 +1,46 @@
+{
+  "id": "cal_com.booking_list",
+  "group": "cal_com",
+  "group_label": "Cal.com bookings",
+  "secret_names": [
+    "CAL_API_KEY"
+  ],
+  "docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+  "label": "Find the caller's bookings",
+  "summary": "Lists the caller's upcoming bookings by their email address.",
+  "risk": "read",
+  "defaults": [],
+  "definition": {
+    "kind": "http",
+    "name": "booking_list",
+    "description": "List the caller's upcoming bookings by their email address.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "The caller's email address."
+        }
+      },
+      "required": [
+        "email"
+      ]
+    },
+    "method": "GET",
+    "url": "https://api.cal.com/v2/bookings?attendeeEmail={{ email }}&status=upcoming",
+    "headers": {
+      "Authorization": "Bearer {{ secret.CAL_API_KEY }}",
+      "cal-api-version": "2024-08-13"
+    },
+    "allowed_hosts": [
+      "api.cal.com"
+    ],
+    "timeout_s": 10,
+    "max_result_chars": 1500,
+    "result_path": "/data",
+    "execution": {
+      "mode": "auto",
+      "announce": "Looking up the bookings."
+    }
+  }
+}

@@ -45,7 +45,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lkap_api import webhooks
 from lkap_api.config_service import (
     SLOT_KIND,
+    builtin_credential_ids,
     installed_provider_ids,
+    resolve_builtin_providers,
     resolve_providers,
     resolve_tool_definition,
 )
@@ -148,6 +150,8 @@ def _credential_ids(config: AgentConfig) -> set[str]:
     qa = effective_qa(config)  # R-V2-11: a flow `qa` node turns QA on
     if qa.enabled and qa.model is not None and qa.model.credential_id:
         ids.add(qa.model.credential_id)
+    # V5-25: the keys of the curated built-ins (web search, SMS, the team webhook).
+    ids |= builtin_credential_ids(config)
     return ids
 
 
@@ -310,6 +314,8 @@ async def _build_resolved(
         locale=config.locale,
         # V5-15: the workspace's disclosure and recording wording (Settings → Compliance).
         compliance=await workspace_compliance(db, agent.workspace_id),
+        # V5-25: the curated built-ins' vendors with their keys.
+        builtin_providers=resolve_builtin_providers(config, secrets),
     )
 
 

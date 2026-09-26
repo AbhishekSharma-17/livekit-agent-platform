@@ -11,9 +11,16 @@ from typing import Any
 import httpx
 import pytest
 from conftest import create_agent, inference_config
-from lkap_contracts.agent_config import KnowledgeConfig, ProviderRef, ToolsConfig
+from lkap_contracts.agent_config import (
+    KnowledgeConfig,
+    NotifyTeamConfig,
+    ProviderRef,
+    ResolvedAgentConfig,
+    ToolsConfig,
+)
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
 from lkap_contracts.providers import get
+from lkap_contracts.telephony import SmsTarget, TelephonyConfig, TransferTarget
 from lkap_contracts.tools import (
     McpServerDefinition,
     McpServerOrigin,
@@ -24,7 +31,10 @@ from lkap_contracts.tools import (
 from lkap_api.config_service import (
     ValidationContext,
     apps_issues,
+    builtin_credential_ids,
+    curated_tool_issues,
     register_validator,
+    resolve_builtin_providers,
     resolve_tool_definition,
     validate,
     validate_agent_config,
@@ -1032,3 +1042,218 @@ def test_every_stored_config_resolves_hybrid_search_without_a_floor() -> None:
         config = inference_config(knowledge=knowledge)
         paths = {i.path for i in validate(ValidationContext(config=config)).issues}
         assert not paths & {"knowledge.min_score", "knowledge.rerank"}, name
+
+
+# ---------------------------------------------------------------- V5-25 curated built-ins
+_CURATED_CREDENTIALS = {
+    "k-tavily": "tavily-search",
+    "k-twilio": "twilio-sms",
+    "k-secret": "http-tool-secret",
+    "k-openai": "openai-llm",
+}
+
+
+def _curated(**tools: Any) -> list[Any]:
+    config = inference_config()
+    config.tools = ToolsConfig(**tools)
+    return curated_tool_issues(ValidationContext(config=config, credential_providers=_CURATED_CREDENTIALS))
+
+
+def _messages(issues: list[Any], severity: str = "error") -> list[tuple[str, str]]:
+    return [(i.path, i.message) for i in issues if i.severity == severity]
+
+
+def test_curated_tools_unset_raise_nothing() -> None:
+    assert _curated() == []
+
+
+def test_web_search_without_a_key_is_an_error() -> None:
+    errors = _messages(_curated(web_search=ProviderRef(provider_id="tavily-search")))
+    assert errors == [("tools.web_search", "provider 'tavily-search' requires a credential")]
+
+
+@pytest.mark.parametrize(
+    ("ref", "fragment"),
+    [
+        (ProviderRef(provider_id="nope-search", credential_id="k-tavily"), "unknown provider"),
+        (ProviderRef(provider_id="openai-llm", credential_id="k-openai"), "expected web_search"),
+        (ProviderRef(provider_id="tavily-search", credential_id="k-missing"), "unknown credential"),
+        (
+            ProviderRef(provider_id="tavily-search", credential_id="k-twilio"),
+            "belongs to provider 'twilio-sms'",
+        ),
+        (
+            ProviderRef(
+                provider_id="tavily-search", credential_id="k-tavily", fields={"search_depth": "deep"}
+            ),
+            "must be one of basic, advanced",
+        ),
+    ],
+)
+def test_web_search_reference_errors(ref: ProviderRef, fragment: str) -> None:
+    errors = _messages(_curated(web_search=ref))
+    assert any(path == "tools.web_search" and fragment in message for path, message in errors), errors
+
+
+def test_a_valid_web_search_passes() -> None:
+    assert _curated(web_search=ProviderRef(provider_id="tavily-search", credential_id="k-tavily")) == []
+
+
+def test_sms_needs_a_key_and_an_international_sending_number() -> None:
+    missing = _messages(_curated(sms=ProviderRef(provider_id="twilio-sms", credential_id="k-twilio")))
+    assert ("tools.sms", "field 'from_number' is required for provider 'twilio-sms'") in missing
+    local = _messages(
+        _curated(
+            sms=ProviderRef(
+                provider_id="twilio-sms", credential_id="k-twilio", fields={"from_number": "0770"}
+            )
+        )
+    )
+    assert any("international format" in message for _, message in local)
+
+
+def _sms_config(**telephony: Any) -> list[Any]:
+    config = inference_config()
+    config.tools = ToolsConfig(
+        sms=ProviderRef(
+            provider_id="twilio-sms", credential_id="k-twilio", fields={"from_number": "+15550100000"}
+        )
+    )
+    config.telephony = TelephonyConfig(**telephony)
+    return curated_tool_issues(ValidationContext(config=config, credential_providers=_CURATED_CREDENTIALS))
+
+
+def test_send_sms_on_a_web_only_agent_without_saved_contacts_warns() -> None:
+    issues = _sms_config()
+    assert _messages(issues) == []
+    [(path, message)] = _messages(issues, "warning")
+    assert path == "tools.sms" and "no saved contacts" in message
+
+
+@pytest.mark.parametrize(
+    "telephony",
+    [
+        {"sms_targets": [SmsTarget(label="Desk", to="+15550009999")]},
+        {"transfer_targets": [TransferTarget(label="Desk", to="+15550009999")]},
+    ],
+)
+def test_send_sms_with_saved_contacts_or_a_phone_setup_does_not_warn(telephony: dict[str, Any]) -> None:
+    assert _sms_config(**telephony) == []
+
+
+def test_notify_team_needs_a_tool_secret_key() -> None:
+    assert _curated(notify_team=NotifyTeamConfig(credential_id="k-secret")) == []
+    unknown = _messages(_curated(notify_team=NotifyTeamConfig(credential_id="k-missing")))
+    assert unknown == [("tools.notify_team.credential_id", "unknown credential 'k-missing'")]
+    wrong = _messages(_curated(notify_team=NotifyTeamConfig(credential_id="k-openai")))
+    assert "tool-secret key" in wrong[0][1]
+
+
+@pytest.mark.parametrize(
+    ("host", "ok"),
+    [
+        ("docs.example.com", True),
+        ("https://docs.example.com", False),
+        ("docs.example.com/path", False),
+        ("127.0.0.1", False),
+        ("localhost", False),
+        ("printer.local", False),
+        ("metadata.google.internal", False),
+        ("nodot", False),
+    ],
+)
+def test_fetch_url_hosts_are_public_site_names(host: str, ok: bool) -> None:
+    errors = _messages(_curated(fetch_url_allowed_hosts=[host]))
+    assert (errors == []) is ok, errors
+    if not ok:
+        assert errors[0][0] == "tools.fetch_url_allowed_hosts[0]"
+
+
+def test_a_configured_tool_that_is_switched_off_warns() -> None:
+    warnings = _messages(
+        _curated(
+            web_search=ProviderRef(provider_id="tavily-search", credential_id="k-tavily"),
+            builtin_disabled=["web_search"],
+        ),
+        "warning",
+    )
+    assert warnings == [
+        ("tools.builtin_disabled", "'web_search' is switched off, so tools.web_search is unused")
+    ]
+
+
+def test_validate_runs_the_curated_checks() -> None:
+    config = inference_config()
+    config.tools = ToolsConfig(web_search=ProviderRef(provider_id="brave-search"))
+    result = validate(ValidationContext(config=config))
+    assert not result.ok
+    assert any(issue.path == "tools.web_search" for issue in result.issues)
+
+
+def test_builtin_credential_ids_and_resolution() -> None:
+    config = inference_config()
+    config.tools = ToolsConfig(
+        web_search=ProviderRef(provider_id="tavily-search", credential_id="k-tavily"),
+        sms=ProviderRef(
+            provider_id="telnyx-sms", credential_id="k-telnyx", fields={"from_number": "+15550100000"}
+        ),
+        notify_team=NotifyTeamConfig(credential_id="k-secret", secret_name="HOOK"),
+    )
+    assert builtin_credential_ids(config) == {"k-tavily", "k-telnyx", "k-secret"}
+
+    resolved = resolve_builtin_providers(
+        config,
+        {
+            "k-tavily": {"api_key": "tvly-not-real"},
+            "k-telnyx": {"api_key": "KEY-not-real"},
+            "k-secret": {"HOOK": "https://hooks.example.com/x", "OTHER": "unrelated"},
+        },
+    )
+
+    assert resolved["web_search"].kwargs == {"search_depth": "basic", "api_key": "tvly-not-real"}
+    assert resolved["sms"].kwargs == {"from_number": "+15550100000", "api_key": "KEY-not-real"}
+    assert resolved["notify_team"].kwargs == {"webhook_url": "https://hooks.example.com/x"}
+
+
+def test_a_tool_whose_key_is_missing_or_lacks_the_secret_is_left_out() -> None:
+    config = inference_config()
+    config.tools = ToolsConfig(
+        web_search=ProviderRef(provider_id="tavily-search", credential_id="k-gone"),
+        notify_team=NotifyTeamConfig(credential_id="k-secret"),
+    )
+    assert resolve_builtin_providers(config, {"k-secret": {"SOMETHING_ELSE": "x"}}) == {}
+
+
+async def test_the_resolved_session_carries_the_builtin_providers(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient
+) -> None:
+    """End to end: the keys ride `builtin_providers`, never `resolved` (which the factory builds)."""
+
+    async def _key(provider_id: str, secrets: dict[str, str]) -> str:
+        response = await admin_client.post(
+            "/v1/credentials", json={"provider_id": provider_id, "label": provider_id, "secrets": secrets}
+        )
+        assert response.status_code == 201, response.text
+        return str(response.json()["id"])
+
+    search_key = await _key("tavily-search", {"api_key": "tvly-resolved-only"})
+    hook_key = await _key("http-tool-secret", {"TEAM_WEBHOOK_URL": "https://hooks.example.com/resolved"})
+    config = inference_config()
+    config.tools = ToolsConfig(
+        web_search=ProviderRef(provider_id="tavily-search", credential_id=search_key),
+        notify_team=NotifyTeamConfig(credential_id=hook_key),
+    )
+    agent = await create_agent(admin_client, config=json.loads(config.model_dump_json()))
+    session_id = (await admin_client.post(f"/v1/agents/{agent['id']}/connect", json={})).json()["sessionId"]
+
+    response = await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")
+
+    assert response.status_code == 200, response.text
+    resolved = ResolvedAgentConfig.model_validate(response.json())
+    assert resolved.builtin_providers["web_search"].kwargs["api_key"] == "tvly-resolved-only"
+    assert resolved.builtin_providers["notify_team"].kwargs == {
+        "webhook_url": "https://hooks.example.com/resolved"
+    }
+    assert "web_search" not in resolved.resolved
+    agent_view = await admin_client.get(f"/v1/agents/{agent['id']}")
+    assert "tvly-resolved-only" not in agent_view.text

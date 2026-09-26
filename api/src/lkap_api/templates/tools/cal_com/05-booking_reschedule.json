@@ -1,0 +1,53 @@
+{
+  "id": "cal_com.booking_reschedule",
+  "group": "cal_com",
+  "group_label": "Cal.com bookings",
+  "secret_names": [
+    "CAL_API_KEY"
+  ],
+  "docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+  "label": "Move a booking",
+  "summary": "Moves a booking to another free time the caller chose.",
+  "risk": "write",
+  "defaults": [],
+  "definition": {
+    "kind": "http",
+    "name": "booking_reschedule",
+    "description": "Move a booking to a new time the caller chose from booking_check_availability. Confirm the new time with the caller first.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "booking_uid": {
+          "type": "string",
+          "description": "The booking's uid, from booking_list or booking_create."
+        },
+        "start": {
+          "type": "string",
+          "description": "The new start time (ISO 8601)."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why it is moving, in a few words."
+        }
+      },
+      "required": [
+        "booking_uid",
+        "start",
+        "reason"
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.cal.com/v2/bookings/{{ booking_uid }}/reschedule",
+    "headers": {
+      "Authorization": "Bearer {{ secret.CAL_API_KEY }}",
+      "cal-api-version": "2024-08-13"
+    },
+    "allowed_hosts": [
+      "api.cal.com"
+    ],
+    "timeout_s": 10,
+    "max_result_chars": 1500,
+    "result_path": "/data",
+    "body_template": "{\"start\": \"{{ start }}\", \"reschedulingReason\": \"{{ reason }}\"}"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "id": "cal_com.booking_create",
+  "group": "cal_com",
+  "group_label": "Cal.com bookings",
+  "secret_names": [
+    "CAL_API_KEY"
+  ],
+  "docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+  "label": "Book a time",
+  "summary": "Books the chosen time for the caller (asks for their name and email first).",
+  "risk": "write",
+  "defaults": [
+    {
+      "name": "event_type_id",
+      "label": "Event type id",
+      "help": "The number in the event type's link in Cal.com (Event Types → the event → its id).",
+      "required": true
+    }
+  ],
+  "definition": {
+    "kind": "http",
+    "name": "booking_create",
+    "description": "Book a time the caller chose from booking_check_availability. Read the time and email back and get a yes before calling.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "event_type_id": {
+          "type": "integer",
+          "description": "The Cal.com event type to book (leave out to use the agent's default)."
+        },
+        "start": {
+          "type": "string",
+          "description": "The chosen start time as given by booking_check_availability (ISO 8601)."
+        },
+        "name": {
+          "type": "string",
+          "description": "The caller's full name."
+        },
+        "email": {
+          "type": "string",
+          "description": "The caller's email address (spell it back first)."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "The caller's IANA time zone, from the time note in your instructions (e.g. Europe/London)."
+        }
+      },
+      "required": [
+        "event_type_id",
+        "start",
+        "name",
+        "email",
+        "time_zone"
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.cal.com/v2/bookings",
+    "headers": {
+      "Authorization": "Bearer {{ secret.CAL_API_KEY }}",
+      "cal-api-version": "2024-08-13"
+    },
+    "allowed_hosts": [
+      "api.cal.com"
+    ],
+    "timeout_s": 10,
+    "max_result_chars": 1500,
+    "result_path": "/data",
+    "body_template": "{\"start\": \"{{ start }}\", \"eventTypeId\": {{ event_type_id }}, \"attendee\": {\"name\": \"{{ name }}\", \"email\": \"{{ email }}\", \"timeZone\": \"{{ time_zone }}\"}}"
+  }
+}

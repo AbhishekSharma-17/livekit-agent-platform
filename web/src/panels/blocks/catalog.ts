@@ -38,6 +38,7 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "details",
   "markdown",
   "steps",
+  "consent",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -59,7 +60,9 @@ export type BlockToolName =
   | "resolve_choice"
   | "set_details"
   | "show_text"
-  | "set_steps";
+  | "set_steps"
+  | "request_consent"
+  | "record_consent";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -91,6 +94,10 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   set_details: new Set<BlockType>(["details"]),
   show_text: new Set<BlockType>(["markdown"]),
   set_steps: new Set<BlockType>(["steps"]),
+  // V5-15: `record_consent` is also registered without a consent block when
+  // `recording.require_consent` is on (a spoken answer on any channel).
+  request_consent: new Set<BlockType>(["consent"]),
+  record_consent: new Set<BlockType>(["consent"]),
 };
 
 /** One field of a block's config form. */
@@ -107,6 +114,15 @@ export type BlockConfigField =
       options: readonly { value: string; label: string }[];
     }
   | { key: "columns"; label: string; kind: "columns"; hint?: string; default: TableColumn[] }
+  | {
+      key: string;
+      label: string;
+      /** Free text (`consent.text`, V5-15); empty means "use the default". */
+      kind: "text";
+      hint?: string;
+      default: string;
+      maxLength: number;
+    }
   | {
       key: string;
       label: string;
@@ -149,6 +165,18 @@ export const CHOICE_LAYOUTS = [
 export const STEPS_SOURCES = [
   { value: "manual", label: "The agent" },
   { value: "flow", label: "The flow" },
+] as const;
+
+export const CONSENT_KINDS = [
+  { value: "recording", label: "Recording the call" },
+  { value: "ai_disclosure", label: "Talking to an AI" },
+  { value: "terms", label: "Terms" },
+  { value: "custom", label: "Something else" },
+] as const;
+
+export const CONSENT_DECLINE_ACTIONS = [
+  { value: "continue", label: "Carry on without it" },
+  { value: "end_call", label: "Say goodbye and end the call" },
 ] as const;
 
 /** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */
@@ -356,6 +384,36 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       { key: "show_notes", label: "Show notes under steps", kind: "boolean", default: true },
     ],
     filledBy: "set_steps or the flow",
+  },
+  // V5-15: minimal entry (PLAN-V5 §0.1, R-V5-7); the renderer, the banner and the
+  // composer editor come with V5-17.
+  consent: {
+    type: "consent",
+    label: "Consent",
+    description: "Asks the caller to agree, for example before the call is recorded.",
+    defaultTitle: null,
+    idStem: "consent",
+    configFields: [
+      { key: "kind", label: "Asks about", kind: "select", default: "recording", options: CONSENT_KINDS },
+      {
+        key: "text",
+        label: "Wording",
+        kind: "text",
+        hint: "Leave empty to use the workspace's wording (Settings, Compliance).",
+        default: "",
+        maxLength: 2000,
+      },
+      { key: "required", label: "Required", kind: "boolean", default: true },
+      {
+        key: "decline_action",
+        label: "If the caller says no",
+        kind: "select",
+        default: "continue",
+        options: CONSENT_DECLINE_ACTIONS,
+      },
+      { key: "show_banner", label: "Show the AI assistant banner", kind: "boolean", default: true },
+    ],
+    filledBy: "request_consent",
   },
 };
 

@@ -1008,7 +1008,7 @@ def test_the_migration_goes_up_down_and_up_on_a_scratch_copy(
 
     _migrate_copy(database, "v5_004_mcp_oauth")
     assert added <= _tables(database)
-    _migrate_copy(database, "v5_003_pgvector", downgrade=True)
+    _migrate_copy(database, "v5_009_consent", downgrade=True)
     assert not added & _tables(database)
     _migrate_copy(database, "v5_004_mcp_oauth")
     assert added <= _tables(database)

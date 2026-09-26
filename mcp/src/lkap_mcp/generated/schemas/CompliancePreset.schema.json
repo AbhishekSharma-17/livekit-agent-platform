@@ -1,0 +1,41 @@
+{
+  "$id": "lkap-contracts/CompliancePreset.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One jurisdiction's starting wording (Settings → Compliance), used where nothing is rewritten.",
+  "properties": {
+    "counsel_note": {
+      "title": "Counsel Note",
+      "type": "string"
+    },
+    "disclosure_text": {
+      "title": "Disclosure Text",
+      "type": "string"
+    },
+    "jurisdiction": {
+      "enum": [
+        "eu",
+        "in",
+        "us"
+      ],
+      "title": "Jurisdiction",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "recording_text": {
+      "title": "Recording Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "jurisdiction",
+    "label",
+    "disclosure_text",
+    "recording_text",
+    "counsel_note"
+  ],
+  "title": "CompliancePreset",
+  "type": "object"
+}

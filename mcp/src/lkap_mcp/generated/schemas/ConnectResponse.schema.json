@@ -99,7 +99,8 @@
             "choices",
             "details",
             "markdown",
-            "steps"
+            "steps",
+            "consent"
           ],
           "title": "Type",
           "type": "string"

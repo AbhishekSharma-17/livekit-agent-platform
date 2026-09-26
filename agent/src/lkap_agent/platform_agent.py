@@ -160,10 +160,12 @@ _VISION_MAX_PX: Final[int] = 512
 #: How the retrieved knowledge is framed for the model.
 _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
 
-#: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form` and
-#: `request_choice` (R-V5-1) return `None` and their result arrives later as a
-#: background result.
-_REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset({"request_form", "request_choice"})
+#: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form`,
+#: `request_choice` and `request_consent` (R-V5-1, ask #1) return `None` and their
+#: result arrives later as a background result.
+_REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset(
+    {"request_form", "request_choice", "request_consent"}
+)
 
 #: `SessionContext.userdata` key: the barge-in handler is registered (once per session, V5-08).
 _BARGE_IN_KEY: Final[str] = "_lkap_barge_in_wired"
@@ -330,9 +332,9 @@ class PlatformAgent(Agent):
             # model must act on (asks #30), so its reply is never suppressed there.
             silent |= _REALTIME_SILENT_BUILTINS
             if getattr(ctx, "channel", "web") in VOICE_ONLY_CHANNELS:
-                # On a phone call `request_choice` shows nothing and answers at once
-                # (`{"channel": "voice_only"}`): the model must ask out loud, so keep its reply.
-                silent -= {"request_choice"}
+                # On a phone call `request_choice` / `request_consent` show nothing and answer at
+                # once (`{"channel": "voice_only"}`): the model must ask out loud, so keep its reply.
+                silent -= {"request_choice", "request_consent"}
         self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
         # R-V5-10: a caller-supplied prompt (a flow node's) is recomposed by its owner.

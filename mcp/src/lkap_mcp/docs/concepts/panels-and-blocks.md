@@ -12,7 +12,7 @@ code, not the block system).
 
 Every `BlockSpec.config` is validated against its type's own strict schema
 (unknown keys are rejected) — `lkap_describe("block", type)` returns that
-schema. The sixteen block types:
+schema. The seventeen block types:
 
 | Type | Config | What it shows |
 |---|---|---|
@@ -32,6 +32,7 @@ schema. The sixteen block types:
 | `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows) | A key-value card of facts collected so far; `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
 | `markdown` | `max_chars` (200–50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
 | `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
+| `consent` | `kind` (`recording`/`ai_disclosure`/`terms`/`custom`), `text` (empty = the workspace's wording for `recording` and `ai_disclosure`), `required`, `decline_action` (`continue`/`end_call`), `show_banner` | A question the caller accepts or declines, such as agreeing to be recorded, plus the "you're talking to an AI assistant" banner. The text is public by design. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
 session holds that document and the panel has a `document` block, the page
@@ -59,11 +60,18 @@ Attaching a block registers matching worker tools automatically (on top of
 - `set_steps` (a `steps` block with `source: "manual"`) — marks steps
   `pending`, `active`, `done`, `skipped` or `failed`. A `source: "flow"`
   block has no tool.
+- `request_consent` (a `consent` block) — shows the wording and waits for
+  Accept or Decline; `record_consent` records a yes or no the caller said
+  out loud (it is also registered without a block when the agent asks for
+  consent before recording). Every answer is stored as a `consent` session
+  event with the SHA-256 of the exact wording. A declined required consent
+  with `decline_action: "end_call"` ends the call after a goodbye.
 
 `agent_validate` warns when a `choices` block sits on an agent set up for
 phone calls (keypad input or transfer destinations: phone callers see no
 screen), and when a `source: "flow"` steps block has no flow to follow or
-names a step the flow does not have.
+names a step the flow does not have. A `terms` or `custom` consent block
+without its own `text` is an error.
 
 ## Building a composite panel
 

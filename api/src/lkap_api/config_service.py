@@ -66,6 +66,13 @@ from lkap_contracts.agent_config import (
     effective_qa,
 )
 from lkap_contracts.api_models import CatalogItem, Issue, ProviderModelOut, Severity, ValidationResult
+from lkap_contracts.compliance import (
+    COMPLIANCE_KEY,
+    COMPLIANCE_PRESETS,
+    DEFAULT_JURISDICTION,
+    ComplianceSettings,
+    Jurisdiction,
+)
 from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import (
@@ -109,6 +116,7 @@ from lkap_api.db.models import (
     ProviderCatalogCache,
     Tool,
     WorkerInstance,
+    Workspace,
     WorkspaceProvider,
 )
 
@@ -242,6 +250,8 @@ class ValidationContext:
     connection_statuses: Mapping[str, str] = dataclasses.field(default_factory=dict)
     """``{connection_id: status}`` of every connected-app row (V5-47, COMPOSIO.md §4): the status
     V5-18 mirrors into ``credentials.last_test_message`` (``active``, ``expired`` …)."""
+    jurisdiction: Jurisdiction = DEFAULT_JURISDICTION
+    """The workspace's ``settings.compliance.jurisdiction`` (V5-15), named by the disclosure warning."""
 
     def fingerprint_for(self, ref: ProviderRef) -> str | None:
         """The fingerprint of the credential ``ref`` uses, if it uses one."""
@@ -487,6 +497,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(telephony_noise_cancellation_issues(ctx))
     findings.extend(speech_latency_issues(ctx))
     findings.extend(choices_on_phone_issues(ctx))
+    findings.extend(consent_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -732,6 +743,86 @@ def choices_on_phone_issues(ctx: ValidationContext) -> list[Issue]:
         for index, block in enumerate(config.panel.blocks)
         if block.type == "choices"
     ]
+
+
+#: V5-15: a `require_consent` agent whose panel has no recording consent block.
+CONSENT_BLOCK_MISSING_MESSAGE: Final[str] = (
+    "callers can agree to the recording out loud; add a consent block so they can also tap to accept"
+)
+
+
+def consent_issues(ctx: ValidationContext) -> list[Issue]:
+    """Recording consent and AI disclosure checks (V5-15, D-V5-22). A built-in check.
+
+    * ``recording.require_consent`` with recording off → warning (it does nothing).
+    * ``recording.require_consent`` on a composite panel without a ``recording``
+      consent block → warning: voice answers still work (``record_consent``).
+    * ``disclosure.enabled`` off → warning naming the workspace's jurisdiction.
+    * ``disclosure.position == "banner"`` on a composite panel with no consent block
+      showing the banner → warning (phone callers still hear it in the greeting).
+    * a ``terms``/``custom`` consent block without its own ``text`` → error (only
+      ``recording`` and ``ai_disclosure`` fall back to the workspace's wording).
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        The issues, at ``recording.require_consent``, ``disclosure.*`` or
+        ``panel.blocks[i].config.text``.
+    """
+    config = ctx.config
+    issues: list[Issue] = []
+    composite = config.panel.panel_id == "composite"
+    consent_blocks = [(i, b) for i, b in enumerate(config.panel.blocks) if b.type == "consent"]
+    if config.recording.require_consent and not config.recording.enabled:
+        issues.append(
+            Issue(
+                path="recording.require_consent",
+                message="asking for consent does nothing while recording is off",
+                severity="warning",
+            )
+        )
+    elif config.recording.require_consent and composite:
+        if not any(b.config.get("kind", "recording") == "recording" for _, b in consent_blocks):
+            issues.append(
+                Issue(
+                    path="recording.require_consent",
+                    message=CONSENT_BLOCK_MISSING_MESSAGE,
+                    severity="warning",
+                )
+            )
+    if not config.disclosure.enabled:
+        label = COMPLIANCE_PRESETS[ctx.jurisdiction].label
+        issues.append(
+            Issue(
+                path="disclosure.enabled",
+                message=f"callers will not be told they are talking to an AI; in {label} the law expects "
+                "them to be told (confirm with counsel)",
+                severity="warning",
+            )
+        )
+    elif config.disclosure.position == "banner" and composite:
+        if not any(b.config.get("show_banner", True) is not False for _, b in consent_blocks):
+            issues.append(
+                Issue(
+                    path="disclosure.position",
+                    message="the disclosure shows only as a banner, and no consent block on this panel "
+                    "shows one (phone callers still hear it in the greeting)",
+                    severity="warning",
+                )
+            )
+    for index, block in consent_blocks:
+        kind = block.config.get("kind", "recording")
+        text = block.config.get("text")
+        if kind in ("terms", "custom") and not (isinstance(text, str) and text.strip()):
+            issues.append(
+                Issue(
+                    path=f"panel.blocks[{index}].config.text",
+                    message="a terms or custom consent block needs its own wording",
+                    severity="error",
+                )
+            )
+    return issues
 
 
 def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
@@ -1451,6 +1542,7 @@ async def validation_context_for(
         tool_names_by_id=tool_names_by_id,
         tool_definitions_by_id=tool_definitions_by_id,
         connection_statuses=connection_statuses,
+        jurisdiction=await _jurisdiction(db, workspace_id),
         telephony_policy=await _telephony_policy(db, workspace_id),
         credential_fingerprints={row[0]: row[2] for row in credential_rows},
         model_records=await _model_records(db, workspace_id),
@@ -1498,6 +1590,16 @@ async def _catalog_items(
             if isinstance(raw, dict) and isinstance(raw.get("id"), str):
                 bucket.setdefault(raw["id"], CatalogItem.model_validate(raw))
     return out
+
+
+async def _jurisdiction(db: AsyncSession, workspace_id: str) -> Jurisdiction:
+    """The workspace's compliance jurisdiction (V5-15), ``in`` when unset or unreadable."""
+    workspace = await db.get(Workspace, workspace_id)
+    raw = (workspace.settings or {}).get(COMPLIANCE_KEY) if workspace is not None else None
+    try:
+        return ComplianceSettings.model_validate(raw if isinstance(raw, dict) else {}).jurisdiction
+    except ValidationError:
+        return DEFAULT_JURISDICTION
 
 
 async def _telephony_policy(db: AsyncSession, workspace_id: str) -> TelephonyPolicy:

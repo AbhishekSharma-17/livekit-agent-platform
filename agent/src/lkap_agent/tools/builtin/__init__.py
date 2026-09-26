@@ -33,7 +33,9 @@ from .escalate_to_human import build_escalate_to_human_tool
 from .http_request import build_http_request_tool
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
+from .record_consent import build_record_consent_tool
 from .request_choice import build_request_choice_tool
+from .request_consent import build_request_consent_tool
 from .request_form import build_request_form_tool
 from .resolve_choice import build_resolve_choice_tool
 from .search_knowledge import build_search_knowledge_tool
@@ -58,7 +60,9 @@ __all__ = [
     "build_http_request_tool",
     "build_pin_frame_tool",
     "build_push_note_tool",
+    "build_record_consent_tool",
     "build_request_choice_tool",
+    "build_request_consent_tool",
     "build_request_form_tool",
     "build_resolve_choice_tool",
     "build_search_knowledge_tool",
@@ -131,8 +135,10 @@ def build_builtin_tools(
         write: `update_block` for any non-envelope block, `show_document` /
         `table_append` / `request_form` for a `document` / `table` / `form`
         block, `request_choice` and `resolve_choice` for a `choices` block,
-        `set_details` / `show_text` for a `details` / `markdown` block, and
-        `set_steps` for a `steps` block that does not follow the flow (V5-08).
+        `set_details` / `show_text` for a `details` / `markdown` block,
+        `set_steps` for a `steps` block that does not follow the flow (V5-08),
+        and `request_consent` / `record_consent` for a `consent` block (V5-15;
+        `record_consent` also without one when `recording.require_consent`).
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -213,5 +219,12 @@ def build_builtin_tools(
         tools.append(build_show_text_tool(ctx))
     if manual_steps_blocks(list(ctx.config.panel.blocks)) and _want("set_steps"):
         tools.append(build_set_steps_tool(ctx))
+    if "consent" in block_types and _want("request_consent"):
+        tools.append(build_request_consent_tool(ctx))
+    # V5-15: a spoken answer also works without any consent block when the recording waits for it.
+    recording = ctx.config.recording
+    waits_for_consent = recording.enabled and recording.require_consent
+    if ("consent" in block_types or waits_for_consent) and _want("record_consent"):
+        tools.append(build_record_consent_tool(ctx))
 
     return tools

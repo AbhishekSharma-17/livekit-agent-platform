@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
+from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, DisclosurePosition, ResolvedCompliance
 from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.providers import ModelCapabilities
@@ -53,6 +54,8 @@ __all__ = [
     "CapabilitiesConfig",
     "ConnectionInfo",
     "ConversationPreset",
+    "DisclosureConfig",
+    "DisclosurePosition",
     "KnowledgeConfig",
     "KnowledgeQueryMode",
     "KnowledgeSearchMode",
@@ -65,6 +68,7 @@ __all__ = [
     "QaConfig",
     "RecordingConfig",
     "ResolvedAgentConfig",
+    "ResolvedCompliance",
     "ResolvedProvider",
     "TelephonyConfig",
     "ThinkingSound",
@@ -231,6 +235,36 @@ class RecordingConfig(BaseModel):
     audio_only: bool = True
     storage_config_id: str | None = None
     retention_days: int | None = None
+    require_consent: bool = Field(
+        default=False,
+        description="Start the recording only after the caller agrees (a tap on a consent block, or out "
+        "loud); a caller who declines is never recorded.",
+    )
+    consent_text: str | None = Field(
+        default=None,
+        max_length=MAX_CONSENT_TEXT_CHARS,
+        description="The question asked before recording when no consent block supplies one; empty uses "
+        "the workspace's recording question (Settings → Compliance).",
+    )
+
+
+class DisclosureConfig(BaseModel):
+    """Telling callers they are talking to an AI (V5-15, D-V5-22): on by default.
+
+    ``greeting`` puts the line at the start of the spoken greeting (a
+    ``{disclosure}`` placeholder in the greeting marks where, otherwise it goes
+    first); ``banner`` leaves it to the on-screen banner of a ``consent`` block;
+    ``both`` does both. On a phone call there is no screen, so ``banner`` is
+    spoken in the greeting too.
+    """
+
+    enabled: bool = True
+    text: str | None = Field(
+        default=None,
+        max_length=MAX_CONSENT_TEXT_CHARS,
+        description="The disclosure line; empty uses the workspace's (Settings → Compliance).",
+    )
+    position: DisclosurePosition = "both"
 
 
 class QaConfig(BaseModel):
@@ -307,6 +341,8 @@ class AgentConfig(BaseModel):
     )
     locale: LocaleConfig = LocaleConfig()
     """How the caller's timezone is chosen (R-V5-10); agents saved before it behave as ``detect``."""
+    disclosure: DisclosureConfig = DisclosureConfig()
+    """The AI disclosure (V5-15). On by default: agents saved before it now open with the line."""
 
 
 class ResolvedProvider(BaseModel):
@@ -366,6 +402,9 @@ class ResolvedAgentConfig(BaseModel):
     business_timezone: str | None = None
     #: R-V5-10: ``config.locale``, repeated here for the worker.
     locale: LocaleConfig = LocaleConfig()
+    #: V5-15: the workspace's effective disclosure and recording wording (Settings → Compliance).
+    #: ``None`` (an api before V5-15) = the worker uses the default jurisdiction's preset.
+    compliance: ResolvedCompliance | None = None
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

@@ -67,7 +67,15 @@ describe("toFormValues", () => {
     expect(values.mode).toBe("prompt");
     expect(values.limits.max_session_duration_s).toBe(1800);
     expect(values.allowed_origins).toEqual([]);
-    expect(values.config.recording).toEqual({ enabled: false, audio_only: true, storage_config_id: null, retention_days: null });
+    // V5-15: `require_consent` / `consent_text` default so an older agent records as before.
+    expect(values.config.recording).toEqual({
+      enabled: false,
+      audio_only: true,
+      storage_config_id: null,
+      retention_days: null,
+      require_consent: false,
+      consent_text: null,
+    });
   });
 
   it("round-trips through the schema", () => {

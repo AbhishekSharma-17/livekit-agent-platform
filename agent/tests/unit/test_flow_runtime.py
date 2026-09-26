@@ -21,6 +21,7 @@ from fakes.fake_tts import FakeTTS
 from livekit.agents import APIConnectOptions, llm
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr
 from lkap_contracts.agent_config import ResolvedAgentConfig
+from lkap_contracts.compliance import COMPLIANCE_PRESETS
 from lkap_contracts.flow import AgentNode, FlowSpec, StartNode
 from lkap_contracts.tools import ToolExecution
 from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
@@ -468,7 +469,9 @@ async def test_start_greeting_replaces_the_voice_greeting(greeting: str | None, 
     conversation = ScriptedLLM([])
     await _start(_flow_config(flow, greeting="Voice greeting."), conversation, FakeLLM(["{}"]))
     await _wait_for(lambda: bool(conversation.calls))
-    assert conversation.calls[0][0].endswith(f"Say exactly this and nothing more: {expected}")
+    # V5-15: the disclosure goes in front of the flow's start greeting too.
+    disclosure = COMPLIANCE_PRESETS["in"].disclosure_text
+    assert conversation.calls[0][0].endswith(f"Say exactly this and nothing more: {disclosure} {expected}")
 
 
 class _RecordingUi(NoopUiChannel):

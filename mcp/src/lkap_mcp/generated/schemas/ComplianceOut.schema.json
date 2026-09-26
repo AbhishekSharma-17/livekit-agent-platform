@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "CompliancePreset": {
+      "description": "One jurisdiction's starting wording (Settings → Compliance), used where nothing is rewritten.",
+      "properties": {
+        "counsel_note": {
+          "title": "Counsel Note",
+          "type": "string"
+        },
+        "disclosure_text": {
+          "title": "Disclosure Text",
+          "type": "string"
+        },
+        "jurisdiction": {
+          "enum": [
+            "eu",
+            "in",
+            "us"
+          ],
+          "title": "Jurisdiction",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "recording_text": {
+          "title": "Recording Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "jurisdiction",
+        "label",
+        "disclosure_text",
+        "recording_text",
+        "counsel_note"
+      ],
+      "title": "CompliancePreset",
+      "type": "object"
+    },
+    "ComplianceSettings": {
+      "additionalProperties": false,
+      "description": "``workspaces.settings.compliance``: the jurisdiction and any rewritten wording (Settings → Compliance).\n\nA text left empty (``None`` or blank) uses the jurisdiction's preset.",
+      "properties": {
+        "counsel_note_ack": {
+          "default": false,
+          "description": "The builder acknowledged that the wording must be checked with counsel.",
+          "title": "Counsel Note Ack",
+          "type": "boolean"
+        },
+        "disclosure_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The AI disclosure line; empty uses the jurisdiction's preset.",
+          "title": "Disclosure Text"
+        },
+        "jurisdiction": {
+          "default": "in",
+          "enum": [
+            "eu",
+            "in",
+            "us"
+          ],
+          "title": "Jurisdiction",
+          "type": "string"
+        },
+        "recording_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The question asked before recording; empty uses the jurisdiction's preset.",
+          "title": "Recording Text"
+        }
+      },
+      "title": "ComplianceSettings",
+      "type": "object"
+    },
+    "ResolvedCompliance": {
+      "description": "The effective wording for one workspace: its rewrites, else its jurisdiction's preset.",
+      "properties": {
+        "disclosure_text": {
+          "default": "Just so you know, you're talking to an AI assistant.",
+          "title": "Disclosure Text",
+          "type": "string"
+        },
+        "jurisdiction": {
+          "default": "in",
+          "enum": [
+            "eu",
+            "in",
+            "us"
+          ],
+          "title": "Jurisdiction",
+          "type": "string"
+        },
+        "recording_text": {
+          "default": "This call can be recorded so we have a record of it. Is it okay if we record it?",
+          "title": "Recording Text",
+          "type": "string"
+        }
+      },
+      "title": "ResolvedCompliance",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ComplianceOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/workspaces/{id}/compliance``: the stored settings, the effective texts and every preset.",
+  "properties": {
+    "effective": {
+      "$ref": "#/$defs/ResolvedCompliance"
+    },
+    "presets": {
+      "items": {
+        "$ref": "#/$defs/CompliancePreset"
+      },
+      "title": "Presets",
+      "type": "array"
+    },
+    "settings": {
+      "$ref": "#/$defs/ComplianceSettings"
+    }
+  },
+  "required": [
+    "settings",
+    "effective",
+    "presets"
+  ],
+  "title": "ComplianceOut",
+  "type": "object"
+}

@@ -19,6 +19,15 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from lkap_contracts.api_models import Page
 from lkap_contracts.common import is_iana_timezone
+from lkap_contracts.compliance import (
+    COMPLIANCE_KEY,
+    COMPLIANCE_PRESETS,
+    ComplianceOut,
+    ComplianceSettings,
+    ResolvedCompliance,
+    resolve_compliance,
+)
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -195,14 +204,52 @@ def _merge_locale(current: Any, incoming: Any) -> dict[str, Any]:
     return locale
 
 
+def compliance_settings_of(settings: Mapping[str, Any] | None) -> ComplianceSettings:
+    """``settings.compliance`` (V5-15), defaults when unset or unreadable (jurisdiction ``in``)."""
+    raw = (settings or {}).get(COMPLIANCE_KEY)
+    try:
+        return ComplianceSettings.model_validate(raw if isinstance(raw, dict) else {})
+    except ValidationError:
+        log.warning("workspace_compliance_unreadable")
+        return ComplianceSettings()
+
+
+async def workspace_compliance(db: AsyncSession, workspace_id: str) -> ResolvedCompliance:
+    """The workspace's effective disclosure and recording wording (its rewrites, else its preset)."""
+    workspace = await db.get(Workspace, workspace_id)
+    return resolve_compliance(compliance_settings_of(workspace.settings if workspace is not None else None))
+
+
+def _merge_compliance(current: Any, incoming: Any) -> dict[str, Any]:
+    """Merge ``settings.compliance`` one level down and validate it (V5-15, ``ComplianceSettings``).
+
+    Raises:
+        UnprocessableEntityError: ``compliance`` is not an object, names an unknown
+            key or jurisdiction, or a text is longer than 2000 characters.
+    """
+    if not isinstance(incoming, dict):
+        raise UnprocessableEntityError("settings.compliance must be an object")
+    merged = dict(current) if isinstance(current, dict) else {}
+    merged.update(incoming)
+    try:
+        return ComplianceSettings.model_validate(merged).model_dump(mode="json", exclude_none=True)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"]) or "compliance"
+        raise UnprocessableEntityError(
+            f"settings.compliance.{where}: {first['msg']}", details={"field": where}
+        ) from exc
+
+
 def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    """Merge top-level keys, except ``cost`` and ``locale``, whose own keys are merged one level down.
+    """Merge top-level keys, except ``cost``, ``locale`` and ``compliance`` (merged one level down).
 
     V4-17 (D-V4-45): the reconciliation opt-in (``cost.reconcile``) is written with this
     route, and a shallow merge would drop the workspace prices stored beside it
     (``cost.prices``, written by ``PUT /v1/workspace/prices``). ``cost.reconcile`` is
     validated here. R-V5-10: ``locale.timezone`` (the default timezone for new agents)
-    is validated here too.
+    is validated here too. V5-15: ``compliance`` (jurisdiction, disclosure and recording
+    wording, the counsel acknowledgement) is validated as ``ComplianceSettings``.
 
     Raises:
         UnprocessableEntityError: ``cost`` or ``locale`` is not an object, ``cost.reconcile``
@@ -212,6 +259,8 @@ def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
     merged = {**current, **incoming}
     if LOCALE_KEY in incoming:
         merged[LOCALE_KEY] = _merge_locale(current.get(LOCALE_KEY), incoming[LOCALE_KEY])
+    if COMPLIANCE_KEY in incoming:
+        merged[COMPLIANCE_KEY] = _merge_compliance(current.get(COMPLIANCE_KEY), incoming[COMPLIANCE_KEY])
     if "cost" in incoming:
         cost_in = incoming["cost"]
         if not isinstance(cost_in, dict):
@@ -233,7 +282,9 @@ def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
     summary="Update a workspace",
     description=(
         "Rename a workspace or merge keys into its `settings`. Needs `admin`. "
-        "`settings.locale.timezone` is the default timezone for new agents (an IANA name; null clears it)."
+        "`settings.locale.timezone` is the default timezone for new agents (an IANA name; null clears it). "
+        "`settings.compliance` sets the jurisdiction (`eu`, `in`, `us`) and, optionally, the AI disclosure "
+        "and recording wording that replace its preset."
     ),
 )
 async def update_workspace(payload: WorkspaceUpdate, ctx: PathWorkspaceDep, db: DbDep) -> WorkspaceOut:
@@ -252,6 +303,31 @@ async def update_workspace(payload: WorkspaceUpdate, ctx: PathWorkspaceDep, db: 
     await db.flush()
     _audit(db, ctx, "workspace.update", workspace.id, fields=changed)
     return _workspace_out(workspace, ctx.role)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/compliance",
+    response_model=ComplianceOut,
+    summary="Get a workspace's consent and disclosure wording",
+    description=(
+        "The workspace's stored `settings.compliance`, the wording its agents actually use (its "
+        "rewrites, else its jurisdiction's preset) and the three presets (`eu`, `in`, `us`) with "
+        "their counsel notes, for Settings → Compliance. Change it with `PUT /v1/workspaces/{id}` "
+        "and `settings.compliance`."
+    ),
+)
+async def get_compliance(ctx: PathWorkspaceDep, db: DbDep) -> ComplianceOut:
+    """Return the workspace's compliance settings, effective wording and the presets (V5-15)."""
+    ctx.check(_READ)
+    workspace = await db.get(Workspace, ctx.workspace_id)
+    if workspace is None:
+        raise NotFoundError("workspace not found")
+    settings = compliance_settings_of(workspace.settings)
+    return ComplianceOut(
+        settings=settings,
+        effective=resolve_compliance(settings),
+        presets=list(COMPLIANCE_PRESETS.values()),
+    )
 
 
 # --------------------------------------------------------------------- members

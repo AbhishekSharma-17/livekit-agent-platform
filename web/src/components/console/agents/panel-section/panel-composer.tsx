@@ -31,6 +31,7 @@ import {
   PlusIcon,
   PuzzleIcon,
   QuoteIcon,
+  ShieldCheckIcon,
   StickyNoteIcon,
   Table2Icon,
   TextIcon,
@@ -79,6 +80,7 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   details: IdCardIcon,
   markdown: TextIcon,
   steps: ListOrderedIcon,
+  consent: ShieldCheckIcon,
 };
 
 /**

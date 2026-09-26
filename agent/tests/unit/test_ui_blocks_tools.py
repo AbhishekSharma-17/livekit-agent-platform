@@ -60,6 +60,8 @@ BLOCKS = [
     ),
     BlockSpec(id="recap", type="markdown", config={"max_chars": 300}, order=8),
     BlockSpec(id="progress", type="steps", config={"steps": [{"id": "intake", "label": "Intake"}]}, order=9),
+    # V5-15: consent.
+    BlockSpec(id="consent", type="consent", order=10),
 ]
 
 

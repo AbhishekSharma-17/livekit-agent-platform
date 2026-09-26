@@ -1,0 +1,11 @@
+{
+  "kind": "recording",
+  "text": "This call can be recorded so we have a record of it. Is it okay if we record it?",
+  "required": true,
+  "accepted": null,
+  "method": null,
+  "at": null,
+  "text_hash": null,
+  "status": "requested",
+  "submitted_at": null
+}

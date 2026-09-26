@@ -1,0 +1,54 @@
+{
+  "$id": "lkap-contracts/ComplianceSettings.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``workspaces.settings.compliance``: the jurisdiction and any rewritten wording (Settings → Compliance).\n\nA text left empty (``None`` or blank) uses the jurisdiction's preset.",
+  "properties": {
+    "counsel_note_ack": {
+      "default": false,
+      "description": "The builder acknowledged that the wording must be checked with counsel.",
+      "title": "Counsel Note Ack",
+      "type": "boolean"
+    },
+    "disclosure_text": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The AI disclosure line; empty uses the jurisdiction's preset.",
+      "title": "Disclosure Text"
+    },
+    "jurisdiction": {
+      "default": "in",
+      "enum": [
+        "eu",
+        "in",
+        "us"
+      ],
+      "title": "Jurisdiction",
+      "type": "string"
+    },
+    "recording_text": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The question asked before recording; empty uses the jurisdiction's preset.",
+      "title": "Recording Text"
+    }
+  },
+  "title": "ComplianceSettings",
+  "type": "object"
+}

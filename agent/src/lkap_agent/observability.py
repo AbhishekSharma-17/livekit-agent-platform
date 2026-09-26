@@ -69,6 +69,7 @@ from lkap_contracts.api_models import (
     SessionSummaryIn,
     TranscriptTurn,
 )
+from lkap_contracts.compliance import CONSENT_EVENT as _CONSENT_EVENT
 from lkap_contracts.flow import FlowState
 from lkap_contracts.ui_protocol import UiState
 
@@ -77,6 +78,7 @@ from lkap_agent.logging import get_logger
 from lkap_agent.tools.provider import REAUTH_MESSAGE
 
 __all__ = [
+    "CONSENT_EVENT",
     "LOCALE_EVENT",
     "MAX_PROVIDER_REQUEST_IDS",
     "LatencyCollector",
@@ -172,6 +174,12 @@ def _base_call_ids(entry_ids: list[str]) -> list[str]:
 LOCALE_EVENT: Final[str] = "locale"
 
 
+#: V5-15: one per consent answer (`lkap_contracts.compliance.ConsentEvent`), recorded by
+#: `tools/builtin/record_consent.settle_consent`; the api folds it into `sessions.consent_state`
+#: and the worker's recording gate (`main.py`) starts a consent-gated recording on it.
+CONSENT_EVENT: Final[str] = _CONSENT_EVENT
+
+
 def locale_event_payload(
     *, caller_timezone: str, source: LocaleSource, business_timezone: str
 ) -> dict[str, Any]:
@@ -261,6 +269,7 @@ class SessionObserver:
         self._flush_interval_s = flush_interval_s
         self._buffer: list[SessionEventIn] = []
         self._flush_task: asyncio.Task[None] | None = None
+        self._flush_lock = asyncio.Lock()
         self._session: AgentSession[Any] | None = None
         self._usage: dict[str, Any] = {}
         self._tool_started_at: dict[str, float] = {}
@@ -291,11 +300,19 @@ class SessionObserver:
             self._schedule_flush()
 
     async def flush(self) -> None:
-        """Send and clear the buffered events."""
-        if not self._buffer:
-            return
-        batch, self._buffer = self._buffer, []
-        await self._client.post_events(self._session_id, batch)
+        """Send and clear the buffered events.
+
+        Flushes run one at a time (V5-15): a flush started while another is still
+        posting waits for it, so once `await flush()` returns every event recorded
+        before the call has reached the api (the recording gate relies on that:
+        the api refuses to start a consent-gated recording before it has the
+        `consent` event).
+        """
+        async with self._flush_lock:
+            if not self._buffer:
+                return
+            batch, self._buffer = self._buffer, []
+            await self._client.post_events(self._session_id, batch)
 
     def _ensure_flush_loop(self) -> None:
         """Start the periodic flush on the first event, not on `attach`.

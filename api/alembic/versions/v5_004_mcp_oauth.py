@@ -18,7 +18,7 @@ both (pending sign-ins and stored registrations go with them; the ``mcp-oauth``
 credentials a finished sign-in wrote stay in ``credentials``).
 
 Revision ID: v5_004_mcp_oauth
-Revises: v5_003_pgvector
+Revises: v5_009_consent
 Create Date: 2026-09-27
 """
 
@@ -31,7 +31,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "v5_004_mcp_oauth"
-down_revision: str | None = "v5_003_pgvector"
+down_revision: str | None = "v5_009_consent"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

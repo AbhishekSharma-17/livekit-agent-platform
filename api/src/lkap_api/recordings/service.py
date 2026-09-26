@@ -37,6 +37,7 @@ from lkap_api.db.models import Session as SessionRow
 from lkap_api.deps import get_vault
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
+from lkap_api.recordings.consent import ensure_recording_consent
 from lkap_api.recordings.storage import resolve_egress_target
 from lkap_api.settings import get_settings
 
@@ -67,6 +68,9 @@ async def start_recording(
             Egress service, or a Cloud project that has never been tested).
         ConflictError: If `AgentConfig.recording.enabled` is false — the
             worker should not have called this, but the check stays server-side.
+        recordings.consent.RecordingConsentMissingError: (409) If the agent
+            records only after consent (`recording.require_consent`) and the
+            session's latest `recording` consent is not an acceptance (V5-15).
         recordings.storage.NoEgressStorageError: No S3-compatible storage
             config is reachable (see that module).
     """
@@ -88,6 +92,8 @@ async def start_recording(
     config = AgentConfig.model_validate(agent.config)
     if not config.recording.enabled:
         raise ConflictError(f"session '{session.id}' has no recording configured")
+    # V5-15: an agent that records only after consent needs an accepted `recording` answer.
+    ensure_recording_consent(session, config)
     if not capabilities_of(connection).egress_enabled:
         raise EgressNotEnabledError(
             f"connection '{connection.id}' has not verified Egress support (test the connection first)",

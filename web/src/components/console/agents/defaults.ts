@@ -77,6 +77,9 @@ export const DEFAULT_RECORDING: Required<RecordingConfig> = {
   audio_only: true,
   storage_config_id: null,
   retention_days: null,
+  // V5-15: record as before unless the author asks for consent first.
+  require_consent: false,
+  consent_text: null,
 };
 
 /** `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar card). */

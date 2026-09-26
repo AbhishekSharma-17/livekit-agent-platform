@@ -31,6 +31,7 @@ from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_
 from .calculate import build_calculate_tool
 from .convert_time import build_convert_time_tool
 from .current_time import build_current_time_tool
+from .describe_asset import build_describe_asset_tool, vision_llm
 from .describe_current_frame import build_describe_current_frame_tool
 from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
@@ -43,6 +44,7 @@ from .record_consent import build_record_consent_tool
 from .request_choice import build_request_choice_tool
 from .request_consent import build_request_consent_tool
 from .request_form import build_request_form_tool
+from .request_upload import build_request_upload_tool
 from .resolve_choice import build_resolve_choice_tool
 from .search_knowledge import build_search_knowledge_tool
 from .send_sms import build_send_sms_tool
@@ -65,6 +67,7 @@ __all__ = [
     "build_calculate_tool",
     "build_convert_time_tool",
     "build_current_time_tool",
+    "build_describe_asset_tool",
     "build_describe_current_frame_tool",
     "build_end_call_tool",
     "build_escalate_to_human_tool",
@@ -77,6 +80,7 @@ __all__ = [
     "build_request_choice_tool",
     "build_request_consent_tool",
     "build_request_form_tool",
+    "build_request_upload_tool",
     "build_resolve_choice_tool",
     "build_search_knowledge_tool",
     "build_send_sms_tool",
@@ -163,7 +167,11 @@ def build_builtin_tools(
         `set_details` / `show_text` for a `details` / `markdown` block,
         `set_steps` for a `steps` block that does not follow the flow (V5-08),
         and `request_consent` / `record_consent` for a `consent` block (V5-15;
-        `record_consent` also without one when `recording.require_consent`).
+        `record_consent` also without one when `recording.require_consent`),
+        `request_upload` for an `upload` block (V5-19). `describe_asset`
+        (V5-19) is registered on a cascaded pipeline whose LLM is not known to
+        be text-only, when the session can hold a picture: an `upload` or
+        `form` block, or camera / screen share (pinned frames are stored).
         V5-25: `calculate` and `spell_back` are registered like the time tools;
         `web_search` only with `tools.web_search`, `fetch_url` only with a
         non-empty `tools.fetch_url_allowed_hosts`, `send_sms` only with
@@ -296,6 +304,12 @@ def build_builtin_tools(
     waits_for_consent = recording.enabled and recording.require_consent
     if ("consent" in block_types or waits_for_consent) and _want("record_consent"):
         tools.append(build_record_consent_tool(ctx))
+    if "upload" in block_types and _want("request_upload"):
+        tools.append(build_request_upload_tool(ctx))
+    # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one.
+    holds_pictures = bool(block_types & {"upload", "form"}) or has_vision
+    if holds_pictures and _want("describe_asset") and vision_llm(ctx) is not None:
+        tools.append(build_describe_asset_tool(ctx))
 
     return tools
 

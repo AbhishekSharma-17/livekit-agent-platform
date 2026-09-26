@@ -45,6 +45,7 @@ from lkap_contracts.ui_protocol import (
     TOPIC_UI_ACTIVITY,
     TOPIC_UI_ASSET,
     TOPIC_UI_STATE,
+    TOPIC_UI_UPLOAD,
     TOPICS,
     UiStateMessage,
 )
@@ -334,10 +335,12 @@ def test_topics_match_the_documented_wire_values() -> None:
     assert TOPIC_UI_ASSET == "lkap.ui.asset"
     assert RPC_UI_REQUEST == "lkap.ui.request"
     assert RPC_AGENT_ACTION == "lkap.agent.action"
+    assert TOPIC_UI_UPLOAD == "lkap.ui.upload"
     assert TOPICS == {
         "TOPIC_UI_STATE": TOPIC_UI_STATE,
         "TOPIC_UI_ACTIVITY": TOPIC_UI_ACTIVITY,
         "TOPIC_UI_ASSET": TOPIC_UI_ASSET,
+        "TOPIC_UI_UPLOAD": TOPIC_UI_UPLOAD,
         "RPC_UI_REQUEST": RPC_UI_REQUEST,
         "RPC_AGENT_ACTION": RPC_AGENT_ACTION,
     }

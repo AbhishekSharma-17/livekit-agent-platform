@@ -1,5 +1,6 @@
 """Agent configuration: what an admin saves, and what the worker receives resolved."""
 
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -66,6 +67,9 @@ __all__ = [
     "KnowledgeQueryMode",
     "KnowledgeSearchMode",
     "LocaleConfig",
+    "McpOAuthAccess",
+    "McpOAuthTokenIn",
+    "McpOAuthTokenOut",
     "NotifyTeamConfig",
     "NotifyTeamStyle",
     "PanelLayout",
@@ -416,6 +420,47 @@ class ResolvedProvider(BaseModel):
     ``realtime`` from declared → detected → live catalog → registry; ``None`` = not resolved."""
 
 
+class McpOAuthAccess(BaseModel):
+    """V5-16: one signed-in MCP server's short-lived access, as the worker receives it.
+
+    The api is the OAuth client (research-v4 tools §4.3.6): it keeps the refresh token,
+    the client secret and the token endpoint, and hands the worker only an access token
+    that expires minutes from now. ``name`` and ``url`` match the server's entry in
+    :attr:`ResolvedAgentConfig.tools`; ``tool_id`` is what the worker names when it asks
+    ``POST /internal/v1/tools/{tool_id}/oauth/token`` for a fresh token. ``access_token``
+    is ``None`` when the api could not refresh it at session start (the worker fetches one
+    before its first request). **Contains a secret.**
+    """
+
+    tool_id: str
+    name: str
+    url: str
+    access_token: str | None = None
+    expires_at: datetime | None = None
+    """When ``access_token`` stops working (``None``: the provider did not say)."""
+
+
+class McpOAuthTokenIn(BaseModel):
+    """``POST /internal/v1/tools/{tool_id}/oauth/token`` (worker only, V5-16).
+
+    The token is bound to the session's agent: the api answers only when the session is
+    live and its agent uses the tool.
+    """
+
+    session_id: str = Field(min_length=1, max_length=64)
+    rejected_token_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    """The hex SHA-256 of an access token the MCP server just refused (401). When it is
+    still the current token the api refreshes; when another request already rotated it,
+    the api returns the new one without a second refresh."""
+
+
+class McpOAuthTokenOut(BaseModel):
+    """A fresh access token for one MCP server (never a refresh token). **Contains a secret.**"""
+
+    access_token: str
+    expires_at: datetime | None = None
+
+
 class ResolvedAgentConfig(BaseModel):
     """What the worker receives from ``/internal/v1/sessions/{id}/resolved``.
 
@@ -464,6 +509,10 @@ class ResolvedAgentConfig(BaseModel):
     #: V5-15: the workspace's effective disclosure and recording wording (Settings → Compliance).
     #: ``None`` (an api before V5-15) = the worker uses the default jurisdiction's preset.
     compliance: ResolvedCompliance | None = None
+    #: V5-16: the access of each MCP server that signs in (``auth.kind == "oauth"``), matched to
+    #: its ``tools`` entry by ``name`` and ``url``. Never a refresh token, a client secret or a
+    #: token endpoint. A server with no entry here has no usable sign-in; the worker skips it.
+    mcp_oauth: list[McpOAuthAccess] = []
     #: V5-25: the vendor each configured network built-in calls, with its key (``web_search``
     #: from ``config.tools.web_search``, ``sms`` from ``config.tools.sms``, ``notify_team`` with
     #: ``kwargs={"webhook_url": ...}``). **Contains secrets.** Empty (an api before V5-25) = those

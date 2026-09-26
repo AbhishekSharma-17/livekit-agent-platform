@@ -83,6 +83,13 @@ function numberOrNull(value: string): number | null {
   return value === "" ? null : Number(value);
 }
 
+/** `DisclosureConfig.position` (V5-15, D-V5-22). */
+const DISCLOSURE_POSITIONS: { value: NonNullable<AgentEditorForm["config"]["disclosure"]>["position"]; label: string }[] = [
+  { value: "greeting", label: "In the greeting" },
+  { value: "banner", label: "As an on-screen banner" },
+  { value: "both", label: "Both" },
+];
+
 export function ConversationSection() {
   const { control, watch, setValue, getValues } = useFormContext<AgentEditorForm>();
   const ctx = useEditorContext();
@@ -92,6 +99,7 @@ export function ConversationSection() {
   const maxToolSteps = watch("config.tools.max_tool_steps");
   const stepsWarning = executionDefault !== "blocking" && maxToolSteps < MIN_TOOL_STEPS_FOR_BACKGROUND;
   const noiseCancellation = watch("config.pipeline.noise_cancellation");
+  const disclosureEnabled = watch("config.disclosure.enabled") ?? true;
 
   const providersQuery = useProviders();
   const ncProvider = providersQuery.data?.providers.find((p) => p.id === noiseCancellation?.provider_id);
@@ -505,6 +513,88 @@ export function ConversationSection() {
               Advanced → Tool steps per turn).
             </p>
           ) : null}
+        </SectionRow>
+      </Section>
+
+      <Section
+        id="conversation-disclosure"
+        title="Disclosure"
+        description="Telling callers up front that they're talking to an AI, not a person (D-V5-22)."
+      >
+        <SectionRow>
+          <Field
+            inline
+            label="Tell callers they're talking to an AI"
+            htmlFor="disclosure-enabled"
+            hint="On by default for every agent."
+          >
+            <Controller
+              control={control}
+              name="config.disclosure.enabled"
+              render={({ field }) => (
+                <Switch
+                  id="disclosure-enabled"
+                  checked={field.value ?? true}
+                  onCheckedChange={field.onChange}
+                  aria-describedby={describedBy("disclosure-enabled")}
+                />
+              )}
+            />
+          </Field>
+        </SectionRow>
+        <SectionRow className="flex flex-col gap-1.5">
+          <Controller
+            control={control}
+            name="config.disclosure.position"
+            render={({ field }) => (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium leading-5">Where it appears</span>
+                <RadioGroup
+                  value={field.value ?? "both"}
+                  onValueChange={field.onChange}
+                  aria-label="Where the disclosure appears"
+                  data-issue-path="disclosure.position"
+                  className="gap-2.5"
+                >
+                  {DISCLOSURE_POSITIONS.map((option) => {
+                    const id = `disclosure-position-${option.value}`;
+                    return (
+                      <label key={option.value} htmlFor={id} className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem id={id} value={option.value} disabled={!disclosureEnabled} /> {option.label}
+                      </label>
+                    );
+                  })}
+                </RadioGroup>
+                <p className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                  On a phone call there&apos;s no screen, so the banner is spoken in the greeting too.
+                </p>
+              </div>
+            )}
+          />
+        </SectionRow>
+        <SectionRow>
+          <Field
+            label="Wording"
+            htmlFor="disclosure-text"
+            optional
+            hint="Leave empty to use the workspace's wording (Settings → Compliance)."
+          >
+            <Controller
+              control={control}
+              name="config.disclosure.text"
+              render={({ field }) => (
+                <Textarea
+                  id="disclosure-text"
+                  rows={2}
+                  maxLength={2000}
+                  disabled={!disclosureEnabled}
+                  value={field.value ?? ""}
+                  onChange={(event) => field.onChange(event.target.value === "" ? null : event.target.value)}
+                  aria-describedby={describedBy("disclosure-text")}
+                />
+              )}
+            />
+          </Field>
         </SectionRow>
       </Section>
 

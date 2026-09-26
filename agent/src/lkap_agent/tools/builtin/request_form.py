@@ -14,15 +14,30 @@ The model describes the fields; the tool turns them into a JSON schema
   it can submit, so the tool shows nothing and answers at once, telling the
   model to ask for the fields in the conversation. Waiting would block the
   turn until the form timed out.
+
+V5-19 adds the `phone`, `textarea` and `file` field types (the shared
+`lkap_contracts.ui_protocol.FormFieldType`). A `file` field goes through the
+upload path: the browser streams each file on `lkap.ui.upload` with the form's
+`block_id` and the field's name, the channel checks it against the field's
+`x-lkap-upload` limits and stores it, and the submitted value keeps only asset
+ids the session really stored for that field.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any, Final, Literal
+from typing import Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.agent_config import PipelineMode
+from lkap_contracts.blocks import validate_accept
+from lkap_contracts.ui_protocol import (
+    FORM_UPLOAD_KEY,
+    FORM_WIDGET_KEY,
+    MAX_UPLOAD_FILES,
+    FormFieldType,
+    FormUploadSpec,
+)
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field
 
@@ -31,6 +46,7 @@ from lkap_agent.ui.blocks import describe_blocks, pick_block, session_block_spec
 __all__ = [
     "BACKGROUND_FORM_MODES",
     "FORM_TIMEOUT_S",
+    "FieldType",
     "FormField",
     "build_request_form_tool",
     "fields_to_schema",
@@ -43,7 +59,8 @@ FORM_TIMEOUT_S: Final[float] = 120.0
 #: Pipelines whose model is a `RealtimeModel`: the form wait runs in the background.
 BACKGROUND_FORM_MODES: Final[frozenset[PipelineMode]] = frozenset({"realtime", "half_cascade"})
 
-FieldType = Literal["string", "number", "integer", "boolean", "date", "email", "select"]
+#: The field types a form offers (`lkap_contracts.ui_protocol.FormFieldType`).
+FieldType = FormFieldType
 
 
 class FormField(BaseModel):
@@ -54,26 +71,47 @@ class FormField(BaseModel):
     type: FieldType = Field(default="string", description="The kind of value.")
     required: bool = Field(default=False, description="Whether the user must fill it in.")
     options: list[str] = Field(default_factory=list, description="The choices, for type select only.")
+    accept: list[str] = Field(
+        default_factory=list,
+        description="For type file only: image/* or application/pdf (empty: photos and PDFs).",
+    )
+    max_files: int = Field(default=1, ge=1, le=MAX_UPLOAD_FILES, description="For type file only.")
 
 
 def fields_to_schema(fields: list[FormField]) -> dict[str, Any]:
     """The JSON schema (draft 2020-12 subset) a `form` block renders.
 
     Mapping: `string`/`number`/`integer`/`boolean` → the same JSON-schema
-    `type`; `date` → `{type: string, format: date}`; `email` → `{type:
-    string, format: email}`; `select` → `{type: string, enum: options}`.
-    `label` → `title`; `required: true` → listed in `required`. Property
-    order follows `fields`.
+    `type`; `date` / `email` / `phone` → `{type: string, format: <type>}`;
+    `select` → `{type: string, enum: options}`; `textarea` → `{type: string,
+    "x-lkap-widget": "textarea"}`; `file` → `{type: array, items: {type:
+    string}, maxItems, "x-lkap-widget": "file", "x-lkap-upload": {accept,
+    max_files, max_bytes}}` (the value is the stored asset ids). `label` →
+    `title`; `required: true` → listed in `required`. Property order follows
+    `fields`.
     """
     properties: dict[str, dict[str, Any]] = {}
     required: list[str] = []
     for field in fields:
         prop: dict[str, Any] = {"title": field.label}
         match field.type:
-            case "date" | "email":
+            case "date" | "email" | "phone":
                 prop.update(type="string", format=field.type)
             case "select":
                 prop.update(type="string", enum=list(field.options))
+            case "textarea":
+                prop.update({"type": "string", FORM_WIDGET_KEY: "textarea"})
+            case "file":
+                spec = FormUploadSpec(accept=validate_accept(field.accept), max_files=field.max_files)
+                prop.update(
+                    {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": spec.max_files,
+                        FORM_WIDGET_KEY: "file",
+                        FORM_UPLOAD_KEY: spec.model_dump(mode="json"),
+                    }
+                )
             case _:
                 prop["type"] = field.type
         properties[field.name] = prop
@@ -87,12 +125,15 @@ def fields_to_schema(fields: list[FormField]) -> dict[str, Any]:
 
 def text_channel_form_note(fields: list[FormField]) -> str:
     """The tool result on the text channel: no form is shown, ask in the conversation."""
-    labels = ", ".join(f"{f.label}{' (required)' if f.required else ''}" for f in fields)
-    return (
+    labels = ", ".join(f"{f.label}{' (required)' if f.required else ''}" for f in fields if f.type != "file")
+    note = (
         "No form was shown: this is a text chat, and forms cannot be filled in here. "
         "The answers will come by text in this conversation. "
         f"Ask the user for these, one or a few at a time: {labels}."
     )
+    if any(f.type == "file" for f in fields):
+        note += " Files can't be sent in this chat; continue without them."
+    return note
 
 
 def _validate_fields(fields: list[FormField]) -> None:
@@ -104,6 +145,11 @@ def _validate_fields(fields: list[FormField]) -> None:
     for field in fields:
         if field.type == "select" and not field.options:
             raise ToolError(f"Field {field.name!r} is a select; give it options.")
+        if field.type == "file":
+            try:
+                validate_accept(field.accept)
+            except ValueError as exc:
+                raise ToolError(f"Field {field.name!r}: {exc}.") from exc
 
 
 def build_request_form_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:

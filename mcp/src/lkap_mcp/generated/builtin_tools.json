@@ -10,7 +10,8 @@
     "show_text",
     "set_steps",
     "request_consent",
-    "record_consent"
+    "record_consent",
+    "request_upload"
   ],
   "block_tool_types": {
     "record_consent": [
@@ -24,6 +25,9 @@
     ],
     "request_form": [
       "form"
+    ],
+    "request_upload": [
+      "upload"
     ],
     "resolve_choice": [
       "choices"
@@ -73,6 +77,7 @@
     "escalate_to_human",
     "current_time",
     "convert_time",
+    "describe_asset",
     "calculate",
     "spell_back",
     "web_search",

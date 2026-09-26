@@ -6,19 +6,23 @@ import { Field } from "@/components/shared/field";
 import { Section, SectionRow } from "@/components/shared/section";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 
 import { describedBy } from "./field-aria";
 
 /**
  * Recording section (UI_UX_SPEC-V2-AMENDMENTS §2.3): switch, audio-only
- * (fixed on in Phase 1), storage config, retention. Edits
- * `config.recording` (`RecordingConfig`, CONTRACTS-V2 §4.3). Storage configs
- * have no api yet, so the connection/workspace default is shown read-only.
+ * (fixed on in Phase 1), storage config, retention, and — since V5-15/V5-17
+ * — "Ask for consent before recording" (`RecordingConfig.require_consent`)
+ * with its own wording (`.consent_text`). Edits `config.recording`
+ * (`RecordingConfig`, CONTRACTS-V2 §4.3). Storage configs have no api yet,
+ * so the connection/workspace default is shown read-only.
  */
 export function RecordingSection() {
   const { control, watch, formState } = useFormContext<AgentEditorForm>();
   const enabled = watch("config.recording.enabled");
+  const requireConsent = watch("config.recording.require_consent");
   const retentionError = formState.errors.config?.recording?.retention_days?.message;
 
   return (
@@ -118,6 +122,52 @@ export function RecordingSection() {
                   <InputGroupText>days</InputGroupText>
                 </InputGroupAddon>
               </InputGroup>
+            )}
+          />
+        </Field>
+      </SectionRow>
+      <SectionRow>
+        <Field
+          inline
+          label="Ask for consent before recording"
+          htmlFor="recording-require-consent"
+          hint="Starts the recording only after the caller agrees, either by tapping a consent block on screen or answering out loud. A caller who declines is never recorded."
+        >
+          <Controller
+            control={control}
+            name="config.recording.require_consent"
+            render={({ field }) => (
+              <Switch
+                id="recording-require-consent"
+                checked={field.value}
+                disabled={!enabled}
+                onCheckedChange={field.onChange}
+                aria-describedby={describedBy("recording-require-consent")}
+              />
+            )}
+          />
+        </Field>
+      </SectionRow>
+      <SectionRow>
+        <Field
+          label="Consent question"
+          htmlFor="recording-consent-text"
+          optional
+          hint="What the agent asks before recording. Leave empty to use the workspace's recording question (Settings → Compliance)."
+        >
+          <Controller
+            control={control}
+            name="config.recording.consent_text"
+            render={({ field }) => (
+              <Textarea
+                id="recording-consent-text"
+                rows={2}
+                maxLength={2000}
+                disabled={!enabled || !requireConsent}
+                value={field.value ?? ""}
+                onChange={(event) => field.onChange(event.target.value === "" ? null : event.target.value)}
+                aria-describedby={describedBy("recording-consent-text")}
+              />
             )}
           />
         </Field>

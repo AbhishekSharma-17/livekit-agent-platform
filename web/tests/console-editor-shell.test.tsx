@@ -719,7 +719,9 @@ describe("summary rail", () => {
     await ready();
     const rail = screen.getByRole("complementary", { name: "Agent summary" });
     expect(within(rail).getByText("Claim notebook")).toBeTruthy();
-    expect(within(rail).getByText("11 built-in")).toBeTruthy();
+    // V5-19: `describe_asset` joined `BUILTIN_TOOLS` (tool-names parity), so 9 became 10; V5-25 adds
+    // `calculate` and `spell_back` (the four network built-ins count only once configured): 12.
+    expect(within(rail).getByText("12 built-in")).toBeTruthy();
     expect(within(rail).getByText("None attached")).toBeTruthy();
     expect(within(rail).getByText("Version 2")).toBeTruthy();
     expect((within(rail).getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Takes first notice of loss");

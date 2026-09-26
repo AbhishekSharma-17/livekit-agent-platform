@@ -28,6 +28,7 @@ import { ActivityBlock } from "./activity";
 import { blockStateOf, blockTitle } from "./catalog";
 import { ChecklistBlock } from "./checklist";
 import { ChoicesBlock } from "./choices";
+import { ConsentBlock } from "./consent";
 import { CustomBlock } from "./custom";
 import { DetailsBlock } from "./details";
 import { FormBlock } from "./form";
@@ -83,8 +84,9 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   details: DetailsBlock as AnyBlockComponent,
   markdown: MarkdownBlock as AnyBlockComponent,
   steps: StepsBlock as AnyBlockComponent,
-  // V5-15 added this type to the contract; its renderer comes with V5-17.
-  consent: NotRenderedYetBlock,
+  consent: ConsentBlock as AnyBlockComponent,
+  // V5-19 added this type to the contract; its renderer comes with V5-23.
+  upload: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

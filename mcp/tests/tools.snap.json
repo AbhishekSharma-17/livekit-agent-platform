@@ -1039,7 +1039,8 @@
                   "details",
                   "markdown",
                   "steps",
-                  "consent"
+                  "consent",
+                  "upload"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -4447,7 +4448,8 @@
                   "details",
                   "markdown",
                   "steps",
-                  "consent"
+                  "consent",
+                  "upload"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -8512,7 +8514,8 @@
                   "details",
                   "markdown",
                   "steps",
-                  "consent"
+                  "consent",
+                  "upload"
                 ],
                 "title": "Type",
                 "type": "string"

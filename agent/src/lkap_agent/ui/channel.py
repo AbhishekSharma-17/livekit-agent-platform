@@ -28,6 +28,20 @@ here (`ui.blocks.open_citation`) before any pack callback.
 Note on attribute naming: the byte-stream attribute and `AssetRef` field
 carrying the caption are named `caption` (docs/CONTRACTS.md §10 wins over
 docs/ARCHITECTURE.md §9's `caption_ref`, which is stale).
+
+Caller files (V5-19): the browser streams a file on `lkap.ui.upload`
+(attributes `block_id`, `name`, and `field` for a form) while an `upload`
+block (or a form with that `file` field) is `requested`. `receive_upload`
+takes it only from the caller's identity, refuses it before reading when the
+declared size or the count is over the block's limits, stops reading past
+`max_bytes`, sniffs the real type (`lkap_contracts.blocks.sniff_mime`) against
+`accept`, and only then posts it to the api (`AssetApi.post_asset`, which
+checks it again). A stored file is streamed back on `lkap.ui.asset` under its
+stored id (the display path), appended to `/assets` (`stored: true`), to the
+block's `files` and, for an image, to every gallery; a refused one becomes a
+`rejected` row with the reason. The worker keeps the bytes of recent files in
+memory for `describe_asset` and reads older ones back from the api. The file's
+name and content never reach a log line.
 """
 
 from __future__ import annotations
@@ -37,20 +51,25 @@ import copy
 import mimetypes
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
 from livekit import rtc
-from lkap_contracts.api_models import KbHit
+from lkap_contracts.api_models import KbHit, SessionAssetOut
+from lkap_contracts.blocks import UploadBlockConfig, accept_allows, safe_filename, sniff_mime
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
+    FORM_UPLOAD_KEY,
+    FORM_WIDGET_KEY,
     RPC_AGENT_ACTION,
     RPC_UI_REQUEST,
     SNAPSHOT_EVERY_N_PATCHES,
     TOPIC_UI_ACTIVITY,
     TOPIC_UI_ASSET,
     TOPIC_UI_STATE,
+    TOPIC_UI_UPLOAD,
     ActivityEvent,
     AgentAction,
     AgentActionResult,
@@ -60,6 +79,7 @@ from lkap_contracts.ui_protocol import (
     BlockSubmitPayload,
     ChecklistItem,
     FormBlockState,
+    FormUploadSpec,
     KbCitation,
     Note,
     RequestableState,
@@ -71,11 +91,16 @@ from lkap_contracts.ui_protocol import (
     UiRequestResult,
     UiSnapshot,
     UiState,
+    UploadedFile,
+    UploadRejection,
+    UploadRejectReason,
 )
 from pydantic import BaseModel, ValidationError
 
+from lkap_agent.config_client import AssetApi, AssetRejectedError, ConfigClient
 from lkap_agent.logging import get_logger
 from lkap_agent.ui.blocks import (
+    ASSET_DOCUMENT_ID_KEY,
     BLOCK_STATE_MODELS,
     OPEN_CITATION,
     block_path,
@@ -86,7 +111,14 @@ from lkap_agent.ui.blocks import (
     validate_block_state,
 )
 
-__all__ = ["BARGE_IN", "REQUEST_ACK_TIMEOUT_S", "RequestMethod", "UiChannel"]
+__all__ = [
+    "ASSET_CACHE_BYTES",
+    "BARGE_IN",
+    "REQUEST_ACK_TIMEOUT_S",
+    "RequestMethod",
+    "UiChannel",
+    "rejection_message",
+]
 
 #: `Pack.on_ui_action(ctx, action, payload) -> payload` shape, bound by the caller.
 OnUiAction = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -119,6 +151,40 @@ BARGE_IN: Final[str] = "barge_in"
 REQUEST_ACK_TIMEOUT_S: Final[float] = 15.0
 #: Response timeout for the fire-and-forget `show_block` UI request (same 7 s caveat).
 SHOW_BLOCK_TIMEOUT_S: Final[float] = 10.0
+
+#: How many bytes of recent session files the worker keeps in memory (older ones are
+#: read back from the api when `describe_asset` needs them).
+ASSET_CACHE_BYTES: Final[int] = 48 * 1024 * 1024
+#: How many refused files an upload block lists (the newest).
+_MAX_REJECTIONS: Final[int] = 10
+
+
+def rejection_message(reason: UploadRejectReason, *, max_bytes: int = 0, max_files: int = 0) -> str:
+    """The line an upload block shows for a refused file (plain words, no jargon)."""
+    match reason:
+        case "too_large":
+            return f"This file is too large. Send one up to {max(1, max_bytes // (1024 * 1024))} MB."
+        case "type_not_allowed":
+            return "This type of file can't be sent here. Send a photo or a PDF."
+        case "too_many_files":
+            return f"You can send up to {max_files} file{'s' if max_files != 1 else ''} here."
+        case "empty":
+            return "This file is empty."
+        case "not_requested":
+            return "Files can be sent here once the assistant asks for them."
+        case _:
+            return "This file could not be saved. Please try again."
+
+
+@dataclass(slots=True, frozen=True)
+class _UploadTarget:
+    """Where a streamed file goes and the limits it must fit."""
+
+    block_id: str
+    field: str | None
+    accept: list[str]
+    max_files: int
+    max_bytes: int
 
 
 def _segments(path: str) -> list[str]:
@@ -346,6 +412,7 @@ class UiChannel:
         on_text_action: OnTextAction | None = None,
         record_event: RecordEvent | None = None,
         log: Any = None,
+        asset_api: AssetApi | None = None,
     ) -> None:
         self.seq = 0
         self.state = UiState()
@@ -365,13 +432,34 @@ class UiChannel:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._closed = False
         self._log = log or get_logger(__name__).bind(session_id=session_id)
+        # V5-19: the api's session-file routes, recent file bytes, and the files a form's
+        # `file` fields received (so a submitted asset id is one this session really stored).
+        self._asset_api = asset_api
+        self._owned_asset_client: ConfigClient | None = None
+        self._asset_api_unavailable = False
+        self._asset_cache: OrderedDict[str, tuple[str, bytes]] = OrderedDict()
+        self._asset_cache_bytes = 0
+        self._form_uploads: dict[tuple[str, str], list[str]] = {}
+        self._upload_handler_registered = False
+        self._upload_lock = asyncio.Lock()
 
     def start(self) -> None:
-        """Register the `lkap.agent.action` RPC handler on the local participant."""
+        """Register the `lkap.agent.action` RPC handler and the `lkap.ui.upload` byte-stream handler.
+
+        The byte-stream registration is guarded: minimal room doubles do not
+        implement it, and a room that already has an upload handler keeps it.
+        """
         self._room.local_participant.register_rpc_method(RPC_AGENT_ACTION, self._handle_agent_action)
+        register = getattr(self._room, "register_byte_stream_handler", None)
+        if callable(register):
+            try:
+                register(TOPIC_UI_UPLOAD, self._on_upload_stream)
+                self._upload_handler_registered = True
+            except ValueError:
+                self._log.warning("an lkap.ui.upload handler is already registered on this room")
 
     def close(self) -> None:
-        """Unregister the RPC handler and release every pending request with `None`.
+        """Unregister the handlers and release every pending request with `None`.
 
         The unregister is guarded because some minimal test doubles (e.g.
         `fakes.fake_room.FakeRoom`) implement `register_rpc_method` but not the
@@ -387,6 +475,19 @@ class UiChannel:
         unregister = getattr(self._room.local_participant, "unregister_rpc_method", None)
         if unregister is not None:
             unregister(RPC_AGENT_ACTION)
+        if self._upload_handler_registered:
+            unregister_stream = getattr(self._room, "unregister_byte_stream_handler", None)
+            if callable(unregister_stream):
+                unregister_stream(TOPIC_UI_UPLOAD)
+            self._upload_handler_registered = False
+        self._asset_cache.clear()
+        self._asset_cache_bytes = 0
+        client, self._owned_asset_client = self._owned_asset_client, None
+        if client is not None:
+            try:
+                asyncio.get_running_loop().create_task(client.aclose())
+            except RuntimeError:
+                pass  # no loop left: the process is exiting and the pool goes with it
 
     # --- platform wiring (not part of packs.base.UiChannel) ----------------------
 
@@ -397,6 +498,7 @@ class UiChannel:
         on_unsolicited_form: OnUnsolicitedForm | None = None,
         on_text_action: OnTextAction | None = None,
         record_event: RecordEvent | None = None,
+        asset_api: AssetApi | None = None,
     ) -> None:
         """Attach the platform callbacks for block actions, late form submissions and events.
 
@@ -404,6 +506,8 @@ class UiChannel:
         `on_text_action` (V2-18) handles `rewind`/`inject_user_text`; `main.py`
         binds it only for `channel="text"` sessions, before `PlatformAgent`
         binds the block callbacks, so calling `bind` twice never clobbers it.
+        `asset_api` (V5-19) is the worker's api client for session files; without
+        one the channel builds its own from the worker settings on first use.
         """
         if on_block_action is not None:
             self._on_block_action = on_block_action
@@ -413,6 +517,8 @@ class UiChannel:
             self._on_text_action = on_text_action
         if record_event is not None:
             self._record_event = record_event
+        if asset_api is not None:
+            self._asset_api = asset_api
 
     def init_blocks(self, specs: Iterable[BlockSpec]) -> None:
         """Seed `state.blocks` with the panel's empty block states (once per session).
@@ -488,7 +594,27 @@ class UiChannel:
         v2: an image is also appended to every `gallery` block's `asset_ids`,
         in the same patch, so a pinned frame shows up in the gallery.
         """
-        asset_id = str(uuid.uuid4())
+        return await self._publish_asset(data, mime, kind=kind, caption=caption, meta=meta)
+
+    async def _publish_asset(
+        self,
+        data: bytes,
+        mime: str,
+        *,
+        kind: str,
+        caption: str | None = None,
+        meta: dict[str, str] | None = None,
+        asset_id: str | None = None,
+        stored: bool = False,
+        name: str | None = None,
+        extra_ops: Iterable[UiPatchOp] = (),
+    ) -> str:
+        """Stream `data` on `lkap.ui.asset` and patch its `AssetRef` (plus `extra_ops`) in one patch.
+
+        `asset_id` is the stored asset's id for a file the api holds (V5-19),
+        else a fresh one. Images also join every gallery block.
+        """
+        asset_id = asset_id or str(uuid.uuid4())
         ext = (mimetypes.guess_extension(mime) or "").lstrip(".") or "bin"
         attributes = {
             "asset_id": asset_id,
@@ -505,9 +631,11 @@ class UiChannel:
         await writer.write(data)
         await writer.aclose()
         self._log.debug("ui_asset_pushed", asset_id=asset_id, kind=kind, mime=mime, size=len(data))
+        self._remember(asset_id, mime, data)
 
+        extra: dict[str, Any] = {"stored": True, "name": name, "size": len(data)} if stored else {}
         ref = AssetRef(
-            asset_id=asset_id, kind=kind, mime=mime, caption=caption, meta=meta or {}, ts=time.time()
+            asset_id=asset_id, kind=kind, mime=mime, caption=caption, meta=meta or {}, ts=time.time(), **extra
         )
         ops = [UiPatchOp(op="append", path="/assets", value=ref)]
         if mime.startswith("image/"):
@@ -516,8 +644,365 @@ class UiChannel:
                 for block_id, spec in self._block_specs.items()
                 if spec.type == "gallery" and block_id in self.state.blocks
             )
+        ops.extend(extra_ops)
         await self.patch(ops)
         return asset_id
+
+    # --- session files (V5-19) --------------------------------------------------
+
+    def _assets(self) -> AssetApi | None:
+        """The api's session-file routes: the bound client, else one built from the worker settings."""
+        if self._asset_api is not None:
+            return self._asset_api
+        if self._asset_api_unavailable:
+            return None
+        try:
+            from lkap_agent.settings import get_settings  # noqa: PLC0415 - only when first needed
+
+            settings = get_settings()
+            client = ConfigClient(settings.api_base_url, settings.service_token)
+        except Exception:  # noqa: BLE001 - no api settings: files are refused, never crash the call
+            self._asset_api_unavailable = True
+            self._log.warning("session files cannot be stored: no api client is available")
+            return None
+        self._asset_api = self._owned_asset_client = client
+        return client
+
+    def _remember(self, asset_id: str, mime: str, data: bytes) -> None:
+        """Keep a file's bytes for `describe_asset`, evicting the oldest past `ASSET_CACHE_BYTES`."""
+        if len(data) > ASSET_CACHE_BYTES:
+            return
+        previous = self._asset_cache.pop(asset_id, None)
+        if previous is not None:
+            self._asset_cache_bytes -= len(previous[1])
+        self._asset_cache[asset_id] = (mime, data)
+        self._asset_cache_bytes += len(data)
+        while self._asset_cache_bytes > ASSET_CACHE_BYTES and self._asset_cache:
+            _, (_, evicted) = self._asset_cache.popitem(last=False)
+            self._asset_cache_bytes -= len(evicted)
+
+    async def asset_bytes(self, asset_id: str) -> tuple[bytes, str] | None:
+        """The bytes and type of an asset of this session: from memory, else (stored ones) the api.
+
+        Returns:
+            `(data, mime)`, or `None` when the asset is unknown to this session or gone.
+        """
+        cached = self._asset_cache.get(asset_id)
+        if cached is not None:
+            self._asset_cache.move_to_end(asset_id)
+            return cached[1], cached[0]
+        ref = next((a for a in self.state.assets if a.asset_id == asset_id), None)
+        api = self._assets() if ref is not None and ref.stored else None
+        if ref is None or api is None:
+            return None
+        try:
+            data = await api.asset_content(self._session_id, asset_id)
+        except AssetRejectedError as exc:
+            self._log.debug("session file could not be read back", asset_id=asset_id, status=exc.status)
+            return None
+        self._remember(asset_id, ref.mime, data)
+        return data, ref.mime
+
+    async def store_asset(
+        self,
+        data: bytes,
+        mime: str,
+        kind: str,
+        caption: str | None = None,
+        meta: dict[str, str] | None = None,
+        *,
+        store_kind: Literal["frame", "signature"] = "frame",
+    ) -> str:
+        """Store a file the agent made (a pinned frame) through the api, then show it (V5-19).
+
+        Best effort: when the api refuses or is unreachable the file is shown
+        exactly as `push_asset` always did (not stored), so the panel never
+        loses the picture.
+
+        Returns:
+            The asset id (the stored id when the api kept it).
+        """
+        api = self._assets()
+        stored: SessionAssetOut | None = None
+        if api is not None:
+            try:
+                stored = await api.post_asset(
+                    self._session_id,
+                    data,
+                    name=f"{kind}{mimetypes.guess_extension(mime) or ''}",
+                    mime=mime,
+                    kind=store_kind,
+                    meta={k: v for k, v in (meta or {}).items() if k in ("source", "caption")},
+                )
+            except AssetRejectedError as exc:
+                self._log.warning("a pinned file was not stored", status=exc.status)
+        if stored is None:
+            return await self._publish_asset(data, mime, kind=kind, caption=caption, meta=meta)
+        return await self._publish_asset(
+            data,
+            stored.mime,
+            kind=kind,
+            caption=caption,
+            meta=meta,
+            asset_id=stored.id,
+            stored=True,
+            name=stored.name,
+        )
+
+    async def asset_from_document(self, document_id: str) -> tuple[str | None, str | None]:
+        """Make sure the session holds a cited KB document, copying it in on first use (R-V5-5).
+
+        Returns:
+            `(asset_id, None)` when the session holds it (now or already), else
+            `(None, reason)`: `no_preview` for a document a citation cannot show,
+            `no_source` when it is not one of the agent's or the api is unavailable.
+        """
+        held = next(
+            (
+                a.asset_id
+                for a in reversed(self.state.assets)
+                if a.meta.get(ASSET_DOCUMENT_ID_KEY) == document_id
+            ),
+            None,
+        )
+        if held is not None:
+            return held, None
+        api = self._assets()
+        if api is None:
+            return None, "no_source"
+        try:
+            stored = await api.asset_from_document(self._session_id, document_id)
+            data = await api.asset_content(self._session_id, stored.id)
+        except AssetRejectedError as exc:
+            self._log.debug("cited document not copied", document_id=document_id, status=exc.status)
+            return None, ("no_preview" if exc.status == 415 else "no_source")
+        asset_id = await self._publish_asset(
+            data,
+            stored.mime,
+            kind="document",
+            caption=stored.name,
+            meta={ASSET_DOCUMENT_ID_KEY: document_id},
+            asset_id=stored.id,
+            stored=True,
+            name=stored.name,
+        )
+        return asset_id, None
+
+    def _on_upload_stream(self, reader: Any, participant_identity: str) -> None:
+        """`lkap.ui.upload` byte-stream handler (synchronous, as the SDK calls it)."""
+        self._spawn(self.receive_upload(reader, participant_identity))
+
+    def _is_caller(self, identity: str) -> bool:
+        """Whether `identity` is the session's caller (never an avatar or another agent)."""
+        try:
+            return identity == self._remote_identity()
+        except RuntimeError:
+            return False
+
+    def _upload_target(self, block_id: str, field: str | None) -> _UploadTarget | None:
+        """The requested `upload` block (or form `file` field) a stream may fill, with its limits."""
+        state = self.state.blocks.get(block_id) if block_id else None
+        if not isinstance(state, dict) or state.get("status") != "requested":
+            return None
+        block_type = self._block_type(block_id)
+        if block_type == "upload":
+            try:
+                config = UploadBlockConfig.model_validate(self._block_specs[block_id].config)
+            except ValidationError:
+                config = UploadBlockConfig()
+            return _UploadTarget(block_id, None, list(config.accept), config.max_files, config.max_bytes)
+        if block_type == "form" and field:
+            schema = state.get("schema")
+            properties = schema.get("properties") if isinstance(schema, dict) else None
+            prop = properties.get(field) if isinstance(properties, dict) else None
+            if isinstance(prop, dict) and prop.get(FORM_WIDGET_KEY) == "file":
+                try:
+                    spec = FormUploadSpec.model_validate(prop.get(FORM_UPLOAD_KEY) or {})
+                except ValidationError:
+                    spec = FormUploadSpec()
+                return _UploadTarget(block_id, field, list(spec.accept), spec.max_files, spec.max_bytes)
+        return None
+
+    def _received(self, target: _UploadTarget) -> int:
+        if target.field is not None:
+            return len(self._form_uploads.get((target.block_id, target.field), []))
+        files = (self.state.blocks.get(target.block_id) or {}).get("files")
+        return len(files) if isinstance(files, list) else 0
+
+    async def _reject_upload(
+        self, block_id: str, name: str, reason: UploadRejectReason, *, target: _UploadTarget | None = None
+    ) -> None:
+        """Show why a file was refused (on an `upload` block) and record it (no filename in the event)."""
+        if self._block_type(block_id) == "upload" and block_id in self.state.blocks:
+            rejection = UploadRejection(
+                name=name,
+                reason=reason,
+                message=rejection_message(
+                    reason,
+                    max_bytes=target.max_bytes if target else 0,
+                    max_files=target.max_files if target else 0,
+                ),
+            )
+            earlier = (self.state.blocks.get(block_id) or {}).get("rejected")
+            kept = earlier[-(_MAX_REJECTIONS - 1) :] if isinstance(earlier, list) else []
+            await self.patch(
+                [
+                    # The last few refusals only: a flood of bad files cannot grow the state.
+                    UiPatchOp(op="set", path=block_path(block_id, "rejected"), value=[*kept, rejection]),
+                    UiPatchOp(op="set", path=block_path(block_id, "progress"), value=None),
+                ]
+            )
+        self._record("block_update", {"block_id": block_id, "op": "file_rejected", "reason": reason})
+
+    async def _read_upload(self, reader: Any, target: _UploadTarget, declared: int) -> bytes | None:
+        """Read the stream, stopping (`None`) as soon as it passes `max_bytes`; progress in quarters."""
+        chunks: list[bytes] = []
+        total = 0
+        quarter = 0
+        async for chunk in reader:
+            total += len(chunk)
+            if total > target.max_bytes:
+                return None
+            chunks.append(chunk)
+            if target.field is None and declared > 0 and (reached := min(3, total * 4 // declared)) > quarter:
+                quarter = reached
+                await self.patch(
+                    [UiPatchOp(op="set", path=block_path(target.block_id, "progress"), value=quarter / 4)]
+                )
+        return b"".join(chunks)
+
+    async def receive_upload(self, reader: Any, sender_identity: str) -> UploadedFile | None:
+        """Take one file from `lkap.ui.upload`, check it, store it through the api and show it.
+
+        Refused, with a `rejected` row on an upload block: a stream for a block
+        that is not asking (`not_requested`), one file too many, a declared or
+        actual size over `max_bytes` (the declared size is checked before a
+        byte is read), an empty file, bytes that are not an allowed type
+        (sniffed, whatever the name or declared type says), and anything the api
+        refuses. A stream from anyone but the caller is dropped silently.
+
+        Returns:
+            The stored file, or `None` when it was refused.
+        """
+        info = getattr(reader, "info", None)
+        attributes = dict(getattr(info, "attributes", None) or {})
+        block_id = str(attributes.get("block_id") or "")
+        field = str(attributes.get("field") or "") or None
+        name = safe_filename(attributes.get("name") or getattr(info, "name", None))
+        declared = int(getattr(info, "size", 0) or 0)
+        try:
+            if not self._is_caller(sender_identity):
+                self._log.debug("an upload from a participant other than the caller was dropped")
+                return None
+            # One file at a time: parallel streams can never slip past `max_files` together.
+            async with self._upload_lock:
+                return await self._check_and_store(reader, block_id, field, name, declared)
+        finally:
+            close = getattr(reader, "close", None)
+            if callable(close):
+                close()
+
+    async def _check_and_store(
+        self, reader: Any, block_id: str, field: str | None, name: str, declared: int
+    ) -> UploadedFile | None:
+        target = self._upload_target(block_id, field)
+        if target is None:
+            await self._reject_upload(block_id, name, "not_requested")
+            return None
+        if self._received(target) >= target.max_files:
+            await self._reject_upload(block_id, name, "too_many_files", target=target)
+            return None
+        if declared > target.max_bytes:
+            await self._reject_upload(block_id, name, "too_large", target=target)
+            return None
+        try:
+            data = await self._read_upload(reader, target, declared)
+        except Exception:  # noqa: BLE001 - an aborted stream (rtc.StreamError) is a failed upload
+            await self._reject_upload(block_id, name, "failed", target=target)
+            return None
+        if data is None:
+            await self._reject_upload(block_id, name, "too_large", target=target)
+            return None
+        if not data:
+            await self._reject_upload(block_id, name, "empty", target=target)
+            return None
+        mime = sniff_mime(data)
+        if mime is None or not accept_allows(target.accept, mime):
+            await self._reject_upload(block_id, name, "type_not_allowed", target=target)
+            return None
+        return await self._store_upload(target, name, mime, data)
+
+    async def _store_upload(
+        self, target: _UploadTarget, name: str, mime: str, data: bytes
+    ) -> UploadedFile | None:
+        api = self._assets()
+        if api is None:
+            await self._reject_upload(target.block_id, name, "failed", target=target)
+            return None
+        meta = {"block_id": target.block_id, **({"field": target.field} if target.field else {})}
+        try:
+            stored = await api.post_asset(
+                self._session_id, data, name=name, mime=mime, kind="upload", meta=meta
+            )
+        except AssetRejectedError as exc:
+            reasons: dict[int, UploadRejectReason] = {
+                413: "too_large",
+                415: "type_not_allowed",
+                409: "too_many_files",
+            }
+            reason: UploadRejectReason = reasons.get(exc.status, "failed")
+            await self._reject_upload(target.block_id, name, reason, target=target)
+            return None
+        file = UploadedFile(
+            asset_id=stored.id, name=stored.name, mime=stored.mime, size=stored.size, sha256=stored.sha256
+        )
+        ops: list[UiPatchOp] = []
+        if target.field is None:
+            ops = [
+                UiPatchOp(op="append", path=block_path(target.block_id, "files"), value=file),
+                UiPatchOp(op="set", path=block_path(target.block_id, "progress"), value=None),
+            ]
+        else:
+            self._form_uploads.setdefault((target.block_id, target.field), []).append(stored.id)
+        await self._publish_asset(
+            data,
+            stored.mime,
+            kind="upload",
+            caption=stored.name,
+            meta=meta,
+            asset_id=stored.id,
+            stored=True,
+            name=stored.name,
+            extra_ops=ops,
+        )
+        self._record(
+            "block_update",
+            {
+                "block_id": target.block_id,
+                "block_type": self._block_type(target.block_id),
+                "op": "file_received",
+                "asset_id": stored.id,
+                "mime": stored.mime,
+                "size": stored.size,
+            },
+        )
+        return file
+
+    def _verified_form_values(self, block_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        """A form answer whose `file` fields keep only asset ids this session stored for that field."""
+        state = self.state.blocks.get(block_id)
+        schema = state.get("schema") if isinstance(state, dict) else None
+        properties = schema.get("properties") if isinstance(schema, dict) else None
+        if not isinstance(properties, dict):
+            return values
+        cleaned = dict(values)
+        for field, prop in properties.items():
+            if not (isinstance(prop, dict) and prop.get(FORM_WIDGET_KEY) == "file") or field not in cleaned:
+                continue
+            received = self._form_uploads.get((block_id, str(field)), [])
+            submitted = cleaned[field] if isinstance(cleaned[field], list) else []
+            cleaned[field] = [asset_id for asset_id in submitted if asset_id in received]
+        return cleaned
 
     async def activity(self, event: ActivityEvent) -> None:
         """Record an `ActivityEvent`: broadcast on `lkap.ui.activity` *and* upsert it
@@ -678,6 +1163,9 @@ class UiChannel:
             The submitted values, or `None` on cancel, timeout or session close.
         """
         prefill_values = dict(prefill or {})
+        # V5-19: a new form starts with no received files for its `file` fields.
+        for key in [k for k in self._form_uploads if k[0] == block_id]:
+            del self._form_uploads[key]
         state = FormBlockState.model_validate(
             {"schema": schema, "values": prefill_values, "status": "requested"}
         ).model_dump(mode="json", by_alias=True)
@@ -941,9 +1429,10 @@ class UiChannel:
 
         One patch, three ops: `set .../values`, `set .../status = "submitted"`,
         `set .../submitted_at`. With nobody waiting (timed out, cancelled
-        tool), the values go to the unsolicited-form callback instead.
+        tool), the values go to the unsolicited-form callback instead. A `file`
+        field keeps only the asset ids this session stored for it (V5-19).
         """
-        values = jsonable(values)
+        values = self._verified_form_values(block_id, jsonable(values))
         await self.patch(
             [
                 UiPatchOp(op="set", path=block_path(block_id, "values"), value=values),
@@ -993,7 +1482,9 @@ class UiChannel:
         """
         block_type = self._block_type(block_id)
         model = BLOCK_STATE_MODELS.get(block_type)
-        if model is None:
+        if model is None or block_type == "upload":
+            # V5-19: an upload block's `files` are written by the worker only, from what it
+            # received and stored; a browser answer never replaces them.
             return []
         if block_type == "choices" and "selected" in values:
             error = choice_selection_error(self.state.blocks.get(block_id) or {}, values["selected"])

@@ -2,6 +2,7 @@ import type {
   AgentLimits,
   AvatarOptions,
   CapabilitiesConfig,
+  DisclosureConfig,
   KnowledgeConfig,
   LocaleConfig,
   RecordingConfig,
@@ -85,6 +86,19 @@ export const DEFAULT_RECORDING: Required<RecordingConfig> = {
   // V5-15: record as before unless the author asks for consent first.
   require_consent: false,
   consent_text: null,
+};
+
+/**
+ * `DisclosureConfig` defaults (V5-15, D-V5-22): on, in both places, using the
+ * workspace's wording — mirrors the stored default so a fixture built before
+ * this field existed still resolves to the same on-by-default behaviour.
+ * V5-17's edit outside its exclusive files (`agents/defaults.ts`), same
+ * rationale as `DEFAULT_RECORDING`'s `require_consent`/`consent_text` above.
+ */
+export const DEFAULT_DISCLOSURE: Required<DisclosureConfig> = {
+  enabled: true,
+  position: "both",
+  text: null,
 };
 
 /** `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar card). */

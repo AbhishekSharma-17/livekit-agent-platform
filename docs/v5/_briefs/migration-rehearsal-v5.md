@@ -178,9 +178,53 @@ Fresh scratch database in the session scratchpad (never `api/data/lkap.db`): `up
 
 Postgres was not rehearsed locally (no server on this machine); the DDL uses only portable types (`TEXT`, `BYTEA` via `LargeBinary`, `BOOLEAN`, `TIMESTAMP`), and the CI Postgres job's up/down/up sequence covers it.
 
+## `v5_002_session_uploads` (V5-19)
+
+### What the revision does
+
+Creates `session_assets` (`id`, `session_id` → `sessions` ON DELETE CASCADE, `workspace_id` →
+`workspaces` ON DELETE CASCADE, `kind` with the CHECK `kind IN ('upload','frame','signature','document')`,
+`name`, `mime`, `size`, `storage_key` UNIQUE, `sha256`, `meta` JSON nullable, `created_at`) and two
+indexes (`ix_session_assets_session (session_id, created_at)`, `ix_session_assets_workspace`). A new
+table only: no existing table is touched on either dialect, so there is nothing to rebuild and no data
+to backfill. `downgrade()` drops the indexes and the table; the stored bytes stay in the storage
+backend under `sessions/` (they are not the database's). Chained after `v5_009_consent`, the head when
+V5-19 started (ledger numbers are not chain order). Two ledger deviations: `meta` and the `document`
+kind (ask #116).
+
+### Rehearsal on a scratch database (V5-19, 2026-09-27)
+
+As for V5-15, the worktree has no dev database and the package rules keep the live one out of reach,
+so the rehearsal ran on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session
+scratchpad with the alembic CLI: `upgrade head` ran every revision from the v1 head through
+`v5_009_consent` to `v5_002_session_uploads`; `alembic current` = `v5_002_session_uploads (head)`;
+`downgrade v5_009_consent` dropped the table; `upgrade head` again; `alembic check` = "No new upgrade
+operations detected".
+
+### Tests
+
+- `api/tests/test_session_assets.py::test_v5_002_upgrades_downgrades_and_upgrades_again` (SQLite): up,
+  down, up on a copy of the v1 seed; the table exists only when it should.
+- `api/tests/test_migrations.py` (existing): a fresh `upgrade head` matches the models
+  (`SessionAsset`), no drift; `test_health.py`: the head id keeps the `v5_` prefix.
+
+**Postgres: not executed** (no Postgres here). The revision uses only `op.create_table` /
+`op.create_index` / `op.drop_*` with portable types (`sa.JSON`, `sa.DateTime`); the CI `test-postgres`
+job's up/down/up step runs it.
+
 ### To apply (coordinator)
 
 ```
 sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_004.db"
 cd api && uv run alembic upgrade head      # v5_003_pgvector -> v5_004_mcp_oauth
 ```
+
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_002.db"
+cd api && uv run alembic upgrade head      # v5_009_consent -> v5_002_session_uploads
+```
+
+Instant on the dev database. **Order:** backup → `upgrade head` → restart the api → restart the
+worker. The api mounts the new routes and starts the retention loop at boot; an api on this code
+against an unmigrated database fails only on the new routes and in that loop (logged, retried), not
+on existing ones. An old worker never posts files, so the order between the two restarts does not
+matter otherwise.

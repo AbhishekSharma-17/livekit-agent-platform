@@ -6,7 +6,7 @@ subsequent change. The browser applies patches strictly in ``seq`` order and ask
 for a fresh snapshot over RPC when it sees a gap.
 """
 
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Final, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -15,6 +15,10 @@ from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, TEXT_HASH_PATTERN,
 TOPIC_UI_STATE = "lkap.ui.state"
 TOPIC_UI_ACTIVITY = "lkap.ui.activity"
 TOPIC_UI_ASSET = "lkap.ui.asset"
+#: Browser -> agent byte stream carrying a caller's file for an ``upload`` block or a
+#: ``form`` file field (V5-19). Stream attributes: ``block_id`` (required), ``name`` (the
+#: file's display name) and, for a form, ``field`` (the property name).
+TOPIC_UI_UPLOAD = "lkap.ui.upload"
 RPC_UI_REQUEST = "lkap.ui.request"
 RPC_AGENT_ACTION = "lkap.agent.action"
 
@@ -24,6 +28,7 @@ TOPICS: dict[str, str] = {
     "TOPIC_UI_STATE": TOPIC_UI_STATE,
     "TOPIC_UI_ACTIVITY": TOPIC_UI_ACTIVITY,
     "TOPIC_UI_ASSET": TOPIC_UI_ASSET,
+    "TOPIC_UI_UPLOAD": TOPIC_UI_UPLOAD,
     "RPC_UI_REQUEST": RPC_UI_REQUEST,
     "RPC_AGENT_ACTION": RPC_AGENT_ACTION,
 }
@@ -65,8 +70,22 @@ class ChecklistItem(BaseModel):
     hint: str | None = None
 
 
+#: What a stored session asset is (``session_assets.kind``, V5-19): a caller's
+#: ``upload``, a pinned camera/screen ``frame``, a drawn ``signature``, or a knowledge-base
+#: ``document`` copied in so a citation can open it (R-V5-5).
+SessionAssetKind = Literal["upload", "frame", "signature", "document"]
+
+
 class AssetRef(BaseModel):
-    """Points at bytes already delivered on the ``lkap.ui.asset`` byte stream."""
+    """Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.
+
+    ``kind`` is the display kind (``photo`` for a pinned frame, a pack-defined
+    kind, ``upload``). V5-19: ``stored`` says the bytes are also kept in the
+    session's asset store (``session_assets``); ``asset_id`` is then the stored
+    asset's id, which the console lists and downloads after the call. ``name``
+    and ``size`` describe the file. The browser still renders from the bytes
+    delivered on ``lkap.ui.asset`` (the display path).
+    """
 
     asset_id: str
     kind: str
@@ -74,6 +93,9 @@ class AssetRef(BaseModel):
     caption: str | None = None
     meta: dict[str, str] = {}
     ts: float
+    stored: bool = False
+    name: str | None = None
+    size: int | None = Field(default=None, ge=0)
 
 
 class ActivityEvent(BaseModel):
@@ -109,6 +131,7 @@ BlockType = Literal[
     "markdown",
     "steps",
     "consent",
+    "upload",
 ]
 
 
@@ -341,6 +364,91 @@ class ConsentBlockState(RequestableState):
     method: ConsentMethod | None = None
     at: float | None = None
     text_hash: str | None = Field(default=None, pattern=TEXT_HASH_PATTERN)
+
+
+#: SHA-256 of a stored file, lowercase hex.
+SHA256_PATTERN: Final[str] = r"^[0-9a-f]{64}$"
+#: The largest file a caller may send, whatever a block says (25 MiB, like a KB upload).
+MAX_UPLOAD_BYTES: Final[int] = 25 * 1024 * 1024
+#: ``max_bytes`` of an upload block or form file field that does not set one (10 MiB).
+DEFAULT_UPLOAD_MAX_BYTES: Final[int] = 10 * 1024 * 1024
+#: The most files one upload request may take.
+MAX_UPLOAD_FILES: Final[int] = 10
+
+
+class UploadedFile(BaseModel):
+    """One file the worker received, checked and stored for an ``upload`` block (V5-19).
+
+    Written by the worker only: a ``block_submit`` never replaces the list
+    (the browser's answer names asset ids; the worker keeps what it verified).
+    """
+
+    asset_id: str = Field(min_length=1)
+    name: str
+    mime: str
+    size: int = Field(ge=0)
+    sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+
+
+#: Why the worker refused a file (the renderer shows the rejection's ``message``).
+UploadRejectReason = Literal[
+    "too_large", "type_not_allowed", "too_many_files", "empty", "not_requested", "failed"
+]
+
+
+class UploadRejection(BaseModel):
+    """A file the worker refused, and why (V5-19)."""
+
+    name: str
+    reason: UploadRejectReason
+    message: str
+
+
+class UploadBlockState(RequestableState):
+    """Files the caller sends from their device (``request_upload``, V5-19).
+
+    While ``status`` is ``requested`` the browser streams each file on
+    ``lkap.ui.upload`` (attributes ``block_id``, ``name``). The worker checks it
+    against the block config's ``accept``, ``max_bytes`` and ``max_files`` (it
+    sniffs the bytes and never trusts the declared type), stores it through the
+    api and appends it to ``files``, or appends a ``rejected`` row. ``progress``
+    (0-1) is how much of the file being received has arrived. The browser then
+    answers ``block_submit {values: {files: [asset_id, ...]}}``.
+    """
+
+    prompt: str = ""
+    files: list[UploadedFile] = []
+    rejected: list[UploadRejection] = []
+    progress: float | None = Field(default=None, ge=0, le=1)
+
+
+#: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).
+#: How each lands in the form's JSON schema (``FormBlockState.schema``):
+#:
+#: * ``string`` / ``number`` / ``integer`` / ``boolean`` → the same JSON-schema ``type``;
+#: * ``date`` / ``email`` / ``phone`` → ``{type: "string", format: <the type>}``;
+#: * ``select`` → ``{type: "string", enum: [...options]}``;
+#: * ``textarea`` → ``{type: "string", "x-lkap-widget": "textarea"}`` (several lines);
+#: * ``file`` → ``{type: "array", items: {type: "string"}, maxItems: <max_files>,
+#:   "x-lkap-widget": "file", "x-lkap-upload": {accept, max_files, max_bytes}}``. The
+#:   browser streams each file on ``lkap.ui.upload`` with ``block_id`` = the form block and
+#:   ``field`` = the property name, and submits the stored asset ids as the field's value.
+FormFieldType = Literal[
+    "string", "number", "integer", "boolean", "date", "phone", "email", "select", "textarea", "file"
+]
+FORM_FIELD_TYPES: Final[tuple[str, ...]] = get_args(FormFieldType)
+#: JSON-schema extension key naming the widget a form property renders as.
+FORM_WIDGET_KEY: Final[str] = "x-lkap-widget"
+#: JSON-schema extension key carrying a ``file`` field's limits (:class:`FormUploadSpec`).
+FORM_UPLOAD_KEY: Final[str] = "x-lkap-upload"
+
+
+class FormUploadSpec(BaseModel):
+    """The limits of a form's ``file`` field (``x-lkap-upload``); empty ``accept`` = images and PDFs."""
+
+    accept: list[str] = []
+    max_files: int = Field(default=1, ge=1, le=MAX_UPLOAD_FILES)
+    max_bytes: int = Field(default=DEFAULT_UPLOAD_MAX_BYTES, ge=1, le=MAX_UPLOAD_BYTES)
 
 
 class UiState(BaseModel):

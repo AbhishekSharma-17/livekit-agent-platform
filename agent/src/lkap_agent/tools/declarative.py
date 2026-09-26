@@ -53,6 +53,7 @@ from lkap_agent.tools.execution import (
     run_with_policy,
     tool_flags,
 )
+from lkap_agent.tools.mcp_auth import McpOAuthBinding, ServerToken, bearer_transport_factory
 
 _log = get_logger(__name__)
 
@@ -393,6 +394,7 @@ def build_mcp_toolsets(
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     flow_node: bool = False,
     host_ceiling: HostCeiling = FROM_SETTINGS,
+    oauth: McpOAuthBinding | None = None,
 ) -> list[Any]:
     """Build one `MCPToolset` over a guarded server per `McpServerDefinition` whose URL is public.
 
@@ -421,12 +423,18 @@ def build_mcp_toolsets(
         flow_node: The toolsets belong to a flow node (the 1.8.3 gate, R-V4-39).
         host_ceiling: `LKAP_MCP_ALLOWED_HOSTS` as `Settings.mcp_host_ceiling`; the default
             reads the worker's settings.
+        oauth: The session's access to its signed-in servers (V5-16); without it an
+            `oauth` server is skipped.
 
     Returns:
         `MCPToolset` instances, ready to pass to `Agent(tools=...)`.
     """
     servers = _guarded_mcp_servers(
-        defs, on_skipped=on_skipped, transport_factory=transport_factory, host_ceiling=host_ceiling
+        defs,
+        on_skipped=on_skipped,
+        transport_factory=transport_factory,
+        host_ceiling=host_ceiling,
+        oauth=oauth,
     )
     if not servers:
         return []
@@ -468,6 +476,7 @@ def build_mcp_servers(
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     flow_node: bool = False,
     host_ceiling: HostCeiling = FROM_SETTINGS,
+    oauth: McpOAuthBinding | None = None,
 ) -> list[Any]:
     """Deprecated alias of :func:`build_mcp_toolsets` (kept for one release; warns once).
 
@@ -487,6 +496,7 @@ def build_mcp_servers(
         transport_factory=transport_factory,
         flow_node=flow_node,
         host_ceiling=host_ceiling,
+        oauth=oauth,
     )
 
 
@@ -496,14 +506,25 @@ def build_guarded_mcp_servers(
     on_skipped: McpSkipCallback | None = None,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     host_ceiling: HostCeiling = FROM_SETTINGS,
+    oauth: McpOAuthBinding | None = None,
 ) -> list[Any]:
     """The guarded servers alone (what :func:`build_mcp_toolsets` wraps); see `_guarded_mcp_servers`."""
     return [
         server
         for _definition, server in _guarded_mcp_servers(
-            defs, on_skipped=on_skipped, transport_factory=transport_factory, host_ceiling=host_ceiling
+            defs,
+            on_skipped=on_skipped,
+            transport_factory=transport_factory,
+            host_ceiling=host_ceiling,
+            oauth=oauth,
         )
     ]
+
+
+#: Why an `oauth` server without an api-issued access is skipped (no url, no provider detail).
+MCP_OAUTH_UNAVAILABLE: Final = (
+    "this server's sign-in is not available to the session (an admin may need to sign in again)"
+)
 
 
 def _guarded_mcp_servers(
@@ -512,6 +533,7 @@ def _guarded_mcp_servers(
     on_skipped: McpSkipCallback | None = None,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     host_ceiling: HostCeiling = FROM_SETTINGS,
+    oauth: McpOAuthBinding | None = None,
 ) -> list[tuple[McpServerDefinition, Any]]:
     """Build one guarded `MCPServerHTTP` per `McpServerDefinition` whose URL is public.
 
@@ -533,8 +555,10 @@ def _guarded_mcp_servers(
     Auth (`definition.auth`): `none` and `header` connect with the definition's
     headers. The api substitutes secrets into both `auth.headers` and the deprecated
     top-level `headers` mirror, which are equal once validated, so the top-level
-    field is what the SDK receives. `oauth` is skipped until the worker has an
-    api-issued bearer (V5-16).
+    field is what the SDK receives. `oauth` (V5-16) connects through
+    :class:`~lkap_agent.tools.mcp_auth.ApiIssuedBearer` over the same guarded transport,
+    with the access the api issued for the server (`oauth`, matched by name and url);
+    a server the api issued none for is skipped with :data:`MCP_OAUTH_UNAVAILABLE`.
 
     `livekit.agents.mcp` needs the optional `mcp` package (the `mcp` extra of
     `livekit-agents` in `agent/pyproject.toml`). When the import fails this
@@ -550,6 +574,7 @@ def _guarded_mcp_servers(
         transport_factory: Builds each client's transport; defaults to
             `guarded_transport`. Tests pass a fake.
         host_ceiling: `Settings.mcp_host_ceiling`, or :data:`FROM_SETTINGS` to read it.
+        oauth: The session's access to its signed-in servers (V5-16).
 
     Returns:
         ``(definition, server)`` pairs; :func:`build_mcp_toolsets` wraps each server
@@ -560,6 +585,7 @@ def _guarded_mcp_servers(
 
     ceiling = get_settings().mcp_host_ceiling if host_ceiling == FROM_SETTINGS else host_ceiling
     kept: list[McpServerDefinition] = []
+    tokens: dict[int, ServerToken] = {}
     for definition in defs:
         try:
             check_url_public(definition.url)
@@ -567,7 +593,10 @@ def _guarded_mcp_servers(
                 check_origin_host(definition.url)
             check_mcp_host(definition.url, ceiling)
             if isinstance(definition.auth, McpOAuthAuth):
-                raise HttpToolSecurityError("signing in to an MCP server is not supported by this worker yet")
+                access = oauth.access_for(definition) if oauth is not None else None
+                if oauth is None or access is None:
+                    raise HttpToolSecurityError(MCP_OAUTH_UNAVAILABLE)
+                tokens[id(definition)] = ServerToken(access, oauth)
         except HttpToolSecurityError as exc:
             reason = str(exc)
             _log.warning("declarative_tool.mcp_server_refused", mcp_server=definition.name, reason=reason)
@@ -589,18 +618,27 @@ def _guarded_mcp_servers(
         )
         return []
 
-    return [
-        (
-            definition,
-            GuardedMCPServerHTTP(
-                url=definition.url,
-                transport_type="streamable_http",
-                allowed_tools=definition.allowed_tools,
-                headers=definition.headers,
-                timeout=definition.timeout_s,
-                sse_read_timeout=definition.sse_read_timeout_s,
-                transport_factory=transport_factory or guarded_transport,
-            ),
+    base = transport_factory or guarded_transport
+    built: list[tuple[McpServerDefinition, Any]] = []
+    for definition in kept:
+        token = tokens.get(id(definition))
+        factory = (
+            bearer_transport_factory(base, token, record_event=oauth.record_event if oauth else None)
+            if token is not None
+            else base
         )
-        for definition in kept
-    ]
+        built.append(
+            (
+                definition,
+                GuardedMCPServerHTTP(
+                    url=definition.url,
+                    transport_type="streamable_http",
+                    allowed_tools=definition.allowed_tools,
+                    headers=definition.headers,
+                    timeout=definition.timeout_s,
+                    sse_read_timeout=definition.sse_read_timeout_s,
+                    transport_factory=factory,
+                ),
+            )
+        )
+    return built

@@ -62,6 +62,8 @@ BLOCKS = [
     BlockSpec(id="progress", type="steps", config={"steps": [{"id": "intake", "label": "Intake"}]}, order=9),
     # V5-15: consent.
     BlockSpec(id="consent", type="consent", order=10),
+    # V5-19: upload.
+    BlockSpec(id="docs", type="upload", order=11),
 ]
 
 

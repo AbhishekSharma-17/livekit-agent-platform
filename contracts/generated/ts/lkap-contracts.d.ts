@@ -110,6 +110,7 @@ export interface LkapContracts {
   FlowState?: FlowState;
   FlowValidateRequest?: FlowValidateRequest;
   FormBlockState?: FormBlockState;
+  FormUploadSpec?: FormUploadSpec;
   GalleryBlockState?: GalleryBlockState;
   GlobalNode?: GlobalNode;
   HealthResponse?: HealthResponse;
@@ -205,6 +206,9 @@ export interface LkapContracts {
   RequestableState?: RequestableState;
   ResolvedAgentConfig?: ResolvedAgentConfig;
   ResolvedCompliance?: ResolvedCompliance;
+  SessionAssetFromDocumentIn?: SessionAssetFromDocumentIn;
+  SessionAssetOut?: SessionAssetOut;
+  SessionAssetPage?: SessionAssetPage;
   SessionCost?: SessionCost;
   SessionDetailOut?: SessionDetailOut;
   SessionEventIn?: SessionEventIn;
@@ -257,6 +261,7 @@ export interface LkapContracts {
   UiRequestResult?: UiRequestResult;
   UiSnapshot?: UiSnapshot;
   UiState?: UiState;
+  UploadBlockState?: UploadBlockState;
   UserOut?: UserOut;
   ValidationResult?: ValidationResult;
   VariableSpec?: VariableSpec;
@@ -682,7 +687,8 @@ export interface BlockSpec {
     | "details"
     | "markdown"
     | "steps"
-    | "consent";
+    | "consent"
+    | "upload";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -2664,6 +2670,17 @@ export interface FormBlockState {
   };
 }
 /**
+ * The limits of a form's ``file`` field (``x-lkap-upload``); empty ``accept`` = images and PDFs.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "FormUploadSpec".
+ */
+export interface FormUploadSpec {
+  accept?: string[];
+  max_bytes?: number;
+  max_files?: number;
+}
+/**
  * Images delivered on the asset stream, with one optionally selected.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -4635,6 +4652,7 @@ export interface ResolvedAgentConfig {
   installed_provider_ids?: string[] | null;
   kb_ids: string[];
   locale?: LocaleConfig;
+  mcp_oauth?: McpOAuthAccess[];
   pack_id: string;
   panel?: PanelLayout;
   participant_identity: string;
@@ -4665,6 +4683,71 @@ export interface ResolvedProvider {
   model: string | null;
   provider_id: string;
   python_class: string;
+}
+/**
+ * V5-16: one signed-in MCP server's short-lived access, as the worker receives it.
+ *
+ * The api is the OAuth client (research-v4 tools §4.3.6): it keeps the refresh token,
+ * the client secret and the token endpoint, and hands the worker only an access token
+ * that expires minutes from now. ``name`` and ``url`` match the server's entry in
+ * :attr:`ResolvedAgentConfig.tools`; ``tool_id`` is what the worker names when it asks
+ * ``POST /internal/v1/tools/{tool_id}/oauth/token`` for a fresh token. ``access_token``
+ * is ``None`` when the api could not refresh it at session start (the worker fetches one
+ * before its first request). **Contains a secret.**
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOAuthAccess".
+ */
+export interface McpOAuthAccess {
+  access_token?: string | null;
+  expires_at?: string | null;
+  name: string;
+  tool_id: string;
+  url: string;
+}
+/**
+ * ``POST /internal/v1/sessions/{id}/assets/from-document``: the cited KB document to copy (R-V5-5).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionAssetFromDocumentIn".
+ */
+export interface SessionAssetFromDocumentIn {
+  document_id: string;
+}
+/**
+ * One stored file of a session (``session_assets``, V5-19): an upload, a pinned frame, a copied document.
+ *
+ * ``url`` is a signed, time-limited download link (``expires_at``), present on
+ * the console's ``GET /v1/sessions/{id}/assets`` and absent on the worker's
+ * routes. ``meta`` carries ``block_id`` for an upload and ``document_id`` for
+ * a copied knowledge-base document.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionAssetOut".
+ */
+export interface SessionAssetOut {
+  created_at: string;
+  expires_at?: string | null;
+  id: string;
+  kind: "upload" | "frame" | "signature" | "document";
+  meta?: {
+    [k: string]: string;
+  };
+  mime: string;
+  name: string;
+  session_id: string;
+  sha256: string;
+  size: number;
+  url?: string | null;
+}
+/**
+ * ``GET /v1/sessions/{id}/assets``: every stored file of the session, oldest first.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionAssetPage".
+ */
+export interface SessionAssetPage {
+  items?: SessionAssetOut[];
 }
 /**
  * The cost block of ``SessionDetailOut``: actual lines, and the estimate snapshotted at creation.
@@ -4768,6 +4851,13 @@ export interface UiState {
 /**
  * Points at bytes already delivered on the ``lkap.ui.asset`` byte stream.
  *
+ * ``kind`` is the display kind (``photo`` for a pinned frame, a pack-defined
+ * kind, ``upload``). V5-19: ``stored`` says the bytes are also kept in the
+ * session's asset store (``session_assets``); ``asset_id`` is then the stored
+ * asset's id, which the console lists and downloads after the call. ``name``
+ * and ``size`` describe the file. The browser still renders from the bytes
+ * delivered on ``lkap.ui.asset`` (the display path).
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AssetRef".
  */
@@ -4779,6 +4869,9 @@ export interface AssetRef {
     [k: string]: string;
   };
   mime: string;
+  name?: string | null;
+  size?: number | null;
+  stored?: boolean;
   ts: number;
 }
 /**
@@ -5629,6 +5722,55 @@ export interface UiSnapshot {
   state: UiState;
   type?: "snapshot";
   v?: 1;
+}
+/**
+ * Files the caller sends from their device (``request_upload``, V5-19).
+ *
+ * While ``status`` is ``requested`` the browser streams each file on
+ * ``lkap.ui.upload`` (attributes ``block_id``, ``name``). The worker checks it
+ * against the block config's ``accept``, ``max_bytes`` and ``max_files`` (it
+ * sniffs the bytes and never trusts the declared type), stores it through the
+ * api and appends it to ``files``, or appends a ``rejected`` row. ``progress``
+ * (0-1) is how much of the file being received has arrived. The browser then
+ * answers ``block_submit {values: {files: [asset_id, ...]}}``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UploadBlockState".
+ */
+export interface UploadBlockState {
+  files?: UploadedFile[];
+  progress?: number | null;
+  prompt?: string;
+  rejected?: UploadRejection[];
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
+}
+/**
+ * One file the worker received, checked and stored for an ``upload`` block (V5-19).
+ *
+ * Written by the worker only: a ``block_submit`` never replaces the list
+ * (the browser's answer names asset ids; the worker keeps what it verified).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UploadedFile".
+ */
+export interface UploadedFile {
+  asset_id: string;
+  mime: string;
+  name: string;
+  sha256?: string | null;
+  size: number;
+}
+/**
+ * A file the worker refused, and why (V5-19).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UploadRejection".
+ */
+export interface UploadRejection {
+  message: string;
+  name: string;
+  reason: "too_large" | "type_not_allowed" | "too_many_files" | "empty" | "not_requested" | "failed";
 }
 /**
  * ``POST /v1/agents/{id}/validate``.

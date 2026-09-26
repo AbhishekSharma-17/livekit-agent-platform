@@ -8,7 +8,9 @@ by creating the session with `POST /internal/v1/sessions/start` when it did not
 events, asks the api to start an Egress recording, and pushes latency metrics
 and a final summary from its shutdown callback. On phone calls it also reports
 the SIP leg's status and asks the api to transfer the caller (R-V2-20; these
-two calls replaced V2-17's separate telephony client).
+two calls replaced V2-17's separate telephony client). V5-16: it asks for a fresh
+access token of an MCP server that signs in (`mcp_oauth_token`); the answer is a
+secret and is never logged.
 
 Nothing in this module logs a response body: `ResolvedAgentConfig` carries
 decrypted vendor keys and substituted tool secrets.
@@ -16,11 +18,12 @@ decrypted vendor keys and substituted tool secrets.
 
 from __future__ import annotations
 
+import json
 from types import TracebackType
 from typing import TYPE_CHECKING, Protocol, Self
 
 import httpx
-from lkap_contracts.agent_config import ResolvedAgentConfig
+from lkap_contracts.agent_config import McpOAuthTokenIn, McpOAuthTokenOut, ResolvedAgentConfig
 from lkap_contracts.api_models import (
     CallReportIn,
     InternalKbSearchRequest,
@@ -30,6 +33,8 @@ from lkap_contracts.api_models import (
     KbSearchOptions,
     KbSearchResponse,
     RecordingStartOut,
+    SessionAssetFromDocumentIn,
+    SessionAssetOut,
     SessionEventIn,
     SessionEventsIn,
     SessionMetricsIn,
@@ -45,9 +50,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ApiKbClient",
+    "AssetApi",
+    "AssetRejectedError",
     "ConfigClient",
     "ConfigClientProtocol",
     "ConfigUnavailableError",
+    "McpOAuthTokenError",
     "RecordingUnavailableError",
     "SessionEndedError",
     "SessionNotFoundError",
@@ -59,6 +67,8 @@ _SERVICE_TOKEN_HEADER = "X-Service-Token"
 
 #: A cold transfer dials the target, so it may take far longer than a config call.
 _TRANSFER_TIMEOUT_S = 60.0
+#: Storing or reading a session file moves up to 25 MB.
+_ASSET_TIMEOUT_S = 60.0
 
 
 class ConfigUnavailableError(RuntimeError):
@@ -79,6 +89,60 @@ class SessionEndedError(ConfigUnavailableError):
 
 class RecordingUnavailableError(RuntimeError):
     """The api could not start an Egress recording (not installed, or it failed)."""
+
+
+class AssetRejectedError(RuntimeError):
+    """The api refused or failed to store / copy / read a session file (V5-19).
+
+    ``status`` is the HTTP status (``0`` when the api was unreachable): 404 an
+    unknown session, asset or document, 409 a full or ended session, 413 too
+    large, 415 a type the session does not take (``reason == "no_preview"`` for
+    a KB document a citation cannot show), 422 anything else it refused.
+    """
+
+    def __init__(self, message: str, *, status: int, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.reason = reason
+
+
+class AssetApi(Protocol):
+    """The worker's session-file calls (V5-19). Separate from :class:`ConfigClientProtocol`
+    so fakes of the older surface keep satisfying it; :class:`ConfigClient` implements both."""
+
+    async def post_asset(
+        self,
+        session_id: str,
+        data: bytes,
+        *,
+        name: str,
+        mime: str,
+        kind: str = "upload",
+        meta: dict[str, str] | None = None,
+    ) -> SessionAssetOut:
+        """Store a checked file; raises :class:`AssetRejectedError` when the api refuses it."""
+        ...
+
+    async def asset_from_document(self, session_id: str, document_id: str) -> SessionAssetOut:
+        """Copy a cited KB document into the session (once); raises :class:`AssetRejectedError`."""
+        ...
+
+    async def asset_content(self, session_id: str, asset_id: str) -> bytes:
+        """Read a stored file back; raises :class:`AssetRejectedError`."""
+        ...
+
+
+class McpOAuthTokenError(RuntimeError):
+    """No access token for an MCP server that signs in (V5-16).
+
+    ``reason`` is ``needs_reauth`` (409: an admin must sign in again) or ``unavailable``
+    (a transport error, a 503 while the provider cannot refresh, or anything else).
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        """Keep the machine-readable reason next to a value-free message."""
+        super().__init__(message)
+        self.reason = reason
 
 
 class ConfigClientProtocol(Protocol):
@@ -130,6 +194,10 @@ class ConfigClientProtocol(Protocol):
         self, session_id: str, to: str, participant_identity: str | None
     ) -> InternalTransferOut:
         """Ask the api to cold-transfer the session's caller; failures come back as a result."""
+        ...
+
+    async def mcp_oauth_token(self, tool_id: str, request: McpOAuthTokenIn) -> McpOAuthTokenOut:
+        """A fresh access token of an MCP server that signs in (V5-16); never logged."""
         ...
 
     async def aclose(self) -> None:
@@ -418,6 +486,126 @@ class ConfigClient:
             return InternalTransferOut.model_validate_json(response.content)
         except ValueError:
             return failed("unparseable transfer result")
+
+    # --- session files (V5-19) -------------------------------------------------
+
+    @staticmethod
+    def _asset_error(response: httpx.Response, what: str) -> AssetRejectedError:
+        reason: str | None = None
+        try:
+            details = response.json().get("error", {}).get("details")
+            if isinstance(details, dict) and isinstance(details.get("reason"), str):
+                reason = details["reason"]
+        except ValueError:
+            pass
+        return AssetRejectedError(
+            f"{what} answered HTTP {response.status_code}", status=response.status_code, reason=reason
+        )
+
+    async def post_asset(
+        self,
+        session_id: str,
+        data: bytes,
+        *,
+        name: str,
+        mime: str,
+        kind: str = "upload",
+        meta: dict[str, str] | None = None,
+    ) -> SessionAssetOut:
+        """Post ``POST /internal/v1/sessions/{id}/assets`` (multipart); the api checks the file again.
+
+        Raises:
+            AssetRejectedError: The api refused the file or was unreachable (never logs the name).
+        """
+        form = {"kind": kind, "name": name, "meta": json.dumps(meta or {})}
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/sessions/{session_id}/assets"),
+                files={"file": ("file", data, mime)},
+                data=form,
+                timeout=_ASSET_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            raise AssetRejectedError(f"api unreachable: {type(exc).__name__}", status=0) from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise self._asset_error(response, "assets")
+        try:
+            return SessionAssetOut.model_validate_json(response.content)
+        except ValueError as exc:
+            raise AssetRejectedError("assets returned an unparseable payload", status=502) from exc
+
+    async def asset_from_document(self, session_id: str, document_id: str) -> SessionAssetOut:
+        """Post ``POST /internal/v1/sessions/{id}/assets/from-document`` (R-V5-5).
+
+        Raises:
+            AssetRejectedError: 404 outside the agent's knowledge bases, 415 ``no_preview``.
+        """
+        body = SessionAssetFromDocumentIn(document_id=document_id)
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/sessions/{session_id}/assets/from-document"),
+                content=body.model_dump_json(),
+                headers={"content-type": "application/json"},
+                timeout=_ASSET_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            raise AssetRejectedError(f"api unreachable: {type(exc).__name__}", status=0) from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise self._asset_error(response, "assets/from-document")
+        try:
+            return SessionAssetOut.model_validate_json(response.content)
+        except ValueError as exc:
+            raise AssetRejectedError("from-document returned an unparseable payload", status=502) from exc
+
+    async def asset_content(self, session_id: str, asset_id: str) -> bytes:
+        """Get ``GET /internal/v1/sessions/{id}/assets/{asset_id}/content``.
+
+        Raises:
+            AssetRejectedError: The file is unknown, gone, or the api was unreachable.
+        """
+        try:
+            response = await self._client.get(
+                self._url(f"/internal/v1/sessions/{session_id}/assets/{asset_id}/content"),
+                timeout=_ASSET_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            raise AssetRejectedError(f"api unreachable: {type(exc).__name__}", status=0) from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise self._asset_error(response, "assets/content")
+        return response.content
+
+    async def mcp_oauth_token(self, tool_id: str, request: McpOAuthTokenIn) -> McpOAuthTokenOut:
+        """Post `POST /internal/v1/tools/{tool_id}/oauth/token` (V5-16).
+
+        Args:
+            tool_id: The MCP server's tool id (`McpOAuthAccess.tool_id`).
+            request: The session and, after a 401, the SHA-256 of the refused token.
+
+        Returns:
+            The new access token and its expiry. **A secret**: never log it.
+
+        Raises:
+            McpOAuthTokenError: `needs_reauth` on 409, `unavailable` on anything else.
+        """
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/tools/{tool_id}/oauth/token"),
+                content=request.model_dump_json(),
+                headers={"content-type": "application/json"},
+            )
+        except httpx.HTTPError as exc:
+            raise McpOAuthTokenError("unavailable", f"api unreachable: {type(exc).__name__}") from exc
+        if response.status_code == httpx.codes.CONFLICT:
+            raise McpOAuthTokenError("needs_reauth", "the MCP server needs to be signed in again")
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise McpOAuthTokenError("unavailable", f"token route answered HTTP {response.status_code}")
+        try:
+            return McpOAuthTokenOut.model_validate_json(response.content)
+        except ValueError as exc:
+            # Message only: the body holds the token.
+            raise McpOAuthTokenError(
+                "unavailable", "the token route returned an unparseable payload"
+            ) from exc
 
 
 class ApiKbClient:

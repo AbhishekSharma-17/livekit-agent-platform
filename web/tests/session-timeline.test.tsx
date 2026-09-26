@@ -364,6 +364,50 @@ describe("<TimelineView />", () => {
     render(<TimelineView session={detail()} events={[]} eventKinds={KINDS} />);
     expect(screen.getByText("Nothing was recorded for this call")).toBeTruthy();
   });
+
+  describe("consent events (V5-17)", () => {
+    it("reads in plain language, never as the generic 'Other' row", () => {
+      const consent = ev("consent", 500, {
+        kind: "recording",
+        accepted: true,
+        method: "tap",
+        text_hash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        block_id: "recording_consent",
+      });
+      render(<TimelineView session={detail()} events={[consent]} eventKinds={KINDS} />);
+      expect(screen.getByText(/Agreed/)).toBeTruthy();
+      expect(screen.getByText(/Recording the call/)).toBeTruthy();
+      expect(screen.getByText("by tap")).toBeTruthy();
+      expect(screen.queryByText("Consent")).toBeNull();
+    });
+
+    it("shows a decline the same way, by voice", () => {
+      const consent = ev("consent", 500, {
+        kind: "ai_disclosure",
+        accepted: false,
+        method: "voice",
+        text_hash: "0".repeat(64),
+      });
+      render(<TimelineView session={detail()} events={[consent]} eventKinds={KINDS} />);
+      expect(screen.getByText(/Declined/)).toBeTruthy();
+      expect(screen.getByText(/Talking to an AI/)).toBeTruthy();
+      expect(screen.getByText("by voice")).toBeTruthy();
+    });
+
+    it("keeps the text hash behind Details, never in the open row (README's raw-JSON rule)", () => {
+      const hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+      const consent = ev("consent", 500, { kind: "recording", accepted: true, method: "tap", text_hash: hash });
+      const { container } = render(<TimelineView session={detail()} events={[consent]} eventKinds={KINDS} />);
+      const row = container.querySelector("li[data-row=consent]");
+      expect(row).toBeTruthy();
+      const details = row?.querySelector("details");
+      expect(details?.open).toBe(false);
+      // The shortened hash labels the disclosure; the full hash is inside the
+      // (closed) JSON block — both present, neither in the open row itself.
+      expect(row?.querySelector("summary + div p")?.textContent).toContain(hash.slice(0, 8));
+      expect(row?.querySelector("pre")?.textContent).toContain(hash);
+    });
+  });
 });
 
 describe("session detail tab registry (WP-7 → V2-14 contract)", () => {

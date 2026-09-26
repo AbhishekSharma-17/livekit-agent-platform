@@ -101,6 +101,7 @@ from lkap_contracts.ui_protocol import (
     DetailsBlockState,
     DocumentBlockState,
     FormBlockState,
+    FormUploadSpec,
     GalleryBlockState,
     KbCitationsBlockState,
     MarkdownBlockState,
@@ -113,6 +114,7 @@ from lkap_contracts.ui_protocol import (
     UiRequestResult,
     UiSnapshot,
     UiState,
+    UploadBlockState,
     VideoBlockState,
 )
 
@@ -178,6 +180,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "MarkdownBlockState": MarkdownBlockState,
     "StepsBlockState": StepsBlockState,
     "ConsentBlockState": ConsentBlockState,
+    "UploadBlockState": UploadBlockState,
+    "FormUploadSpec": FormUploadSpec,
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
     "RequestableState": RequestableState,
@@ -291,6 +295,10 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SessionCost": api_models.SessionCost,
     "QaOut": api_models.QaOut,
     "RecordingOut": api_models.RecordingOut,
+    # V5-19: stored session files
+    "SessionAssetOut": api_models.SessionAssetOut,
+    "SessionAssetPage": api_models.SessionAssetPage,
+    "SessionAssetFromDocumentIn": api_models.SessionAssetFromDocumentIn,
     "AnalyticsBucket": api_models.AnalyticsBucket,
     "AnalyticsSummary": api_models.AnalyticsSummary,
     "AnalyticsDriver": api_models.AnalyticsDriver,

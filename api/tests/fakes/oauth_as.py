@@ -14,6 +14,10 @@ One ``httpx.MockTransport`` handler plays three parties, keyed by host:
 :meth:`OAuthWorld.authorize` stands in for the admin's browser at the consent screen:
 it reads the authorization url LKAP built and returns the callback query.
 No network, no real credentials.
+
+V5-16 adds the ``refresh_token`` grant (rotation, ``invalid_grant`` on demand; the MCP
+server then accepts only the newest access token), RFC 7009 revocation at ``/revoke``
+and RFC 7592 client deletion (``DELETE /register/{client_id}``), each recorded in order.
 """
 
 from __future__ import annotations
@@ -75,12 +79,24 @@ class OAuthWorld:
     refresh_token: str = "rt-fake-3Mv6Nb0Tc5Ry2Gu7"
     registered_secret: str | None = None
     """A client secret DCR issues (a confidential registration)."""
+    rotate_refresh: bool = True
+    """V5-16: each refresh issues a new refresh token (the old one stops working)."""
+    refresh_error: str | None = None
+    """V5-16: the ``error`` the refresh grant answers with (``invalid_grant``), or ``None``."""
+    refresh_status: int = 400
+    revoke_status: int = 200
+    delete_client_status: int = 204
     preregistered: dict[str, str | None] = field(default_factory=dict)
     """client_id → secret (``None``: a public pre-registered client)."""
 
     requests: list[httpx.Request] = field(default_factory=list)
     token_calls: list[dict[str, list[str]]] = field(default_factory=list)
     registrations: list[dict[str, Any]] = field(default_factory=list)
+    refresh_calls: list[dict[str, list[str]]] = field(default_factory=list)
+    revocations: list[tuple[str, str]] = field(default_factory=list)
+    """``(token_type_hint, token)`` per RFC 7009 call, in order."""
+    client_deletions: list[str] = field(default_factory=list)
+    _refreshes: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
     _grants: dict[str, _Grant] = field(default_factory=dict)
     _clients: dict[str, str | None] = field(default_factory=dict)
     _codes: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
@@ -237,7 +253,39 @@ class OAuthWorld:
             return httpx.Response(201, json=answer)
         if path == "/token" and request.method == "POST":
             return self._token(request)
+        if path == "/revoke" and request.method == "POST":
+            form = parse_qs(request.content.decode())
+            self.revocations.append(
+                ((form.get("token_type_hint") or [""])[0], (form.get("token") or [""])[0])
+            )
+            return httpx.Response(self.revoke_status)
+        if path.startswith("/register/") and request.method == "DELETE":
+            if request.headers.get("authorization") != "Bearer rat-fake-Pq8Lm2":
+                return httpx.Response(401)
+            self.client_deletions.append(path.rsplit("/", 1)[1])
+            return httpx.Response(self.delete_client_status)
         return httpx.Response(404)
+
+    def _refresh(self, request: httpx.Request, form: dict[str, list[str]]) -> httpx.Response:
+        self.refresh_calls.append(form)
+        client_id, secret = self._client_auth(request, form)
+        known = {**self._clients, **self.preregistered}
+        is_cimd = client_id is not None and client_id.startswith("https://")
+        if self.refresh_error is not None:
+            return httpx.Response(self.refresh_status, json={"error": self.refresh_error})
+        if (form.get("refresh_token") or [""])[0] != self.refresh_token or (
+            not is_cimd and (client_id not in known or known.get(client_id) != secret)
+        ):
+            return httpx.Response(400, json={"error": "invalid_grant"})
+        number = next(self._refreshes)
+        self.access_token = f"at-fake-refreshed-{number}-Qe3"
+        body: dict[str, Any] = {"access_token": self.access_token, "token_type": "bearer"}
+        if self.expires_in is not None:
+            body["expires_in"] = self.expires_in
+        if self.rotate_refresh:
+            self.refresh_token = f"rt-fake-rotated-{number}-Zk9"
+            body["refresh_token"] = self.refresh_token
+        return httpx.Response(200, json=body)
 
     def _client_auth(
         self, request: httpx.Request, form: dict[str, list[str]]
@@ -251,6 +299,8 @@ class OAuthWorld:
     def _token(self, request: httpx.Request) -> httpx.Response:
         form = parse_qs(request.content.decode())
         self.token_calls.append(form)
+        if form.get("grant_type") == ["refresh_token"]:
+            return self._refresh(request, form)
         client_id, secret = self._client_auth(request, form)
         code = (form.get("code") or [""])[0]
         grant = self._grants.pop(code, None)

@@ -1,6 +1,7 @@
 import {
   DEFAULT_AVATAR_OPTIONS,
   DEFAULT_CAPABILITIES,
+  DEFAULT_DISCLOSURE,
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
   DEFAULT_LOCALE,
@@ -73,6 +74,9 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       timezone: config.timezone ?? "UTC",
       locale: { ...DEFAULT_LOCALE, ...config.locale },
       recording: { ...DEFAULT_RECORDING, ...config.recording },
+      // V5-15's AI disclosure (D-V5-22); V5-17's edit outside its exclusive
+      // files, same rationale as `recording` above.
+      disclosure: { ...DEFAULT_DISCLOSURE, ...config.disclosure },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
       // V5-25: only the fields this editor shows. `DEFAULT_TELEPHONY` (defaults.ts) also carries
@@ -138,6 +142,9 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
     // R-V5-10: the Instructions tab's "Caller's time" radio (V5-52).
     locale: { ...stored.locale, ...edited.locale },
     recording: { ...stored.recording, ...edited.recording },
+    // V5-15's AI disclosure (D-V5-22), edited by the Conversation section's
+    // "Disclosure" card (V5-17).
+    disclosure: { ...stored.disclosure, ...edited.disclosure },
   };
   // R-V2-21: the Tools section edits `config.telephony` (the transfer destinations).
   if (edited.telephony !== undefined) config.telephony = { ...stored.telephony, ...edited.telephony };

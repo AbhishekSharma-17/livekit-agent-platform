@@ -74,6 +74,31 @@ describe("RecordingSection", () => {
     fireEvent.change(retention, { target: { value: "" } });
     await waitFor(() => expect(latest?.config.recording.retention_days).toBeNull());
   });
+
+  it("gates 'ask for consent' and its question on recording being on (V5-15, V5-17)", async () => {
+    render(
+      <Harness>
+        <RecordingSection />
+      </Harness>,
+    );
+    const requireConsent = screen.getByRole("switch", { name: "Ask for consent before recording" }) as HTMLButtonElement;
+    const consentText = screen.getByLabelText("Consent question") as HTMLTextAreaElement;
+    expect(requireConsent.disabled).toBe(true);
+    expect(consentText.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Record calls" }));
+    await waitFor(() => expect(requireConsent.disabled).toBe(false));
+    expect(consentText.disabled).toBe(true); // still off until require_consent is on
+
+    fireEvent.click(requireConsent);
+    await waitFor(() => expect(latest?.config.recording.require_consent).toBe(true));
+    expect(consentText.disabled).toBe(false);
+
+    fireEvent.change(consentText, { target: { value: "Is it okay if we record this?" } });
+    await waitFor(() => expect(latest?.config.recording.consent_text).toBe("Is it okay if we record this?"));
+    fireEvent.change(consentText, { target: { value: "" } });
+    await waitFor(() => expect(latest?.config.recording.consent_text).toBeNull());
+  });
 });
 
 describe("LimitsSection", () => {

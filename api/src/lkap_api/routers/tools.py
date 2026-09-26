@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 from lkap_contracts.api_models import ToolCreate, ToolDryRunRequest, ToolDryRunResult, ToolOut, ToolPage
 from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID
 from lkap_contracts.tools import (
@@ -33,10 +33,13 @@ from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import host_allowed, render_arguments, resolve_tool_definition
 from lkap_api.db.models import Agent, Credential, Tool, utcnow
+from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
-from lkap_api.mcp_oauth.credential import STATUS_ACTIVE, binds_tool, load_sign_in, parse_time
+from lkap_api.mcp_oauth.credential import binds_tool, load_sign_in
+from lkap_api.mcp_oauth.revoke import disconnect_tool
+from lkap_api.mcp_oauth.tokens import NeedsReauth, TokenUnavailable, get_access_token
 from lkap_api.mcp_test import McpTestError, list_mcp_tools
 from lkap_api.settings import Settings
 from lkap_api.tool_providers.bindings import (
@@ -422,11 +425,23 @@ def _keep_oauth_sign_in(stored: ToolDefinition, incoming: ToolDefinition) -> Too
     "/{tool_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a tool",
-    description="Removes the tool row; agents referencing it fail validation until updated.",
+    description=(
+        "Removes the tool row; agents referencing it fail validation until updated. An MCP "
+        "server that signs in is disconnected first: its sign-in is revoked at the provider "
+        "(best effort) and deleted."
+    ),
 )
-async def delete_tool(tool_id: str, db: DbDep, ctx: AdminCtxDep) -> Response:
-    """Delete a tool row."""
+async def delete_tool(
+    tool_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    client: HttpClientDep,
+    settings: SettingsDep,
+    ctx: AdminCtxDep,
+) -> Response:
+    """Delete a tool row (V5-16: an oauth MCP server's sign-in is revoked and deleted first)."""
     row = await _load(db, ctx, tool_id)
+    await disconnect_tool(db, vault, client, settings, ctx, row, trigger="tool_delete")
     await db.delete(row)
     log.info("tool_deleted", tool_id=tool_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -587,12 +602,18 @@ async def _mcp_request_headers(
 
 
 async def _oauth_request_headers(
-    db: AsyncSession, vault: Vault, row: Tool, definition: McpServerDefinition
+    database: Database,
+    db: AsyncSession,
+    vault: Vault,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    row: Tool,
+    definition: McpServerDefinition,
 ) -> dict[str, str] | McpTestResult:
-    """V5-14: the stored sign-in's access token as a bearer header, or why there is none.
+    """The sign-in's access token as a bearer header (refreshed when needed, V5-16), or why not.
 
     The token is never substituted into the definition (``resolve_tool_definition`` is not
-    used for oauth servers here). An expired token is reported, not refreshed (V5-16).
+    used for oauth servers here).
     """
     assert isinstance(definition.auth, McpOAuthAuth)  # noqa: S101 - narrowed by the caller
     loaded = await load_sign_in(
@@ -600,16 +621,25 @@ async def _oauth_request_headers(
     )
     if loaded is None or not binds_tool(loaded[1], tool_id=row.id, url=definition.url):
         return McpTestResult(ok=False, reason="needs_auth", error="sign in to this server first")
-    bag = loaded[1]
-    token = bag.get("access_token")
-    if bag.get("status") != STATUS_ACTIVE or not token:
+    try:
+        token = await get_access_token(
+            database,
+            vault,
+            client,
+            settings,
+            workspace_id=row.workspace_id,
+            credential_id=loaded[0].id,
+            tool_id=row.id,
+        )
+    except NeedsReauth:
         return McpTestResult(
             ok=False, reason="needs_auth", error="the sign-in needs to be renewed: sign in again"
         )
-    expires_at = parse_time(bag.get("expires_at"))
-    if expires_at is not None and expires_at <= datetime.now(UTC):
-        return McpTestResult(ok=False, reason="needs_auth", error="the sign-in has expired: sign in again")
-    return {"Authorization": f"Bearer {token}"}
+    except TokenUnavailable:
+        return McpTestResult(
+            ok=False, reason="unreachable", error="the sign-in provider could not refresh the token just now"
+        )
+    return {"Authorization": f"Bearer {token.access_token}"}
 
 
 @router.post(
@@ -626,6 +656,7 @@ async def _oauth_request_headers(
 )
 async def test_mcp_tool(
     tool_id: str,
+    request: Request,
     db: DbDep,
     vault: VaultDep,
     client: HttpClientDep,
@@ -645,7 +676,10 @@ async def test_mcp_tool(
             details={"field": "definition.url", "reason": "blocked_destination"},
         )
     if isinstance(definition.auth, McpOAuthAuth):
-        headers_or_result = await _oauth_request_headers(db, vault, row, definition)
+        database: Database = request.app.state.db
+        headers_or_result = await _oauth_request_headers(
+            database, db, vault, client, settings, row, definition
+        )
         if isinstance(headers_or_result, McpTestResult):
             return headers_or_result
         headers = headers_or_result

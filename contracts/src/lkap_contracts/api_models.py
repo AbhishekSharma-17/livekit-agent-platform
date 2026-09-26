@@ -53,7 +53,7 @@ from lkap_contracts.providers import (
 from lkap_contracts.telephony import DTMF_PATTERN, E164_PATTERN, TRANSFER_TARGET_PATTERN
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tools import ToolDefinition
-from lkap_contracts.ui_protocol import UiState
+from lkap_contracts.ui_protocol import SHA256_PATTERN, SessionAssetKind, UiState
 
 
 # --------------------------------------------------------------------------- shared
@@ -1138,6 +1138,40 @@ class SessionDetailOut(SessionOut):
     latency: SessionLatency = SessionLatency()
     qa: QaOut | None = None
     variables: dict[str, Any] = {}
+
+
+class SessionAssetOut(BaseModel):
+    """One stored file of a session (``session_assets``, V5-19): an upload, a pinned frame, a copied document.
+
+    ``url`` is a signed, time-limited download link (``expires_at``), present on
+    the console's ``GET /v1/sessions/{id}/assets`` and absent on the worker's
+    routes. ``meta`` carries ``block_id`` for an upload and ``document_id`` for
+    a copied knowledge-base document.
+    """
+
+    id: str
+    session_id: str
+    kind: SessionAssetKind
+    name: str
+    mime: str
+    size: int = Field(ge=0)
+    sha256: str = Field(pattern=SHA256_PATTERN)
+    meta: dict[str, str] = {}
+    created_at: datetime
+    url: str | None = None
+    expires_at: datetime | None = None
+
+
+class SessionAssetPage(BaseModel):
+    """``GET /v1/sessions/{id}/assets``: every stored file of the session, oldest first."""
+
+    items: list[SessionAssetOut] = []
+
+
+class SessionAssetFromDocumentIn(BaseModel):
+    """``POST /internal/v1/sessions/{id}/assets/from-document``: the cited KB document to copy (R-V5-5)."""
+
+    document_id: str = Field(min_length=1, max_length=64)
 
 
 class AnalyticsBucket(BaseModel):

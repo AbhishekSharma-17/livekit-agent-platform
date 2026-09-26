@@ -17,6 +17,7 @@ import respx
 from fakes.fake_ctx import FakeRunContext
 from livekit.agents import RunContext, ToolError
 from livekit.agents.llm import ToolFlag
+from lkap_contracts.agent_config import McpOAuthAccess, McpOAuthTokenIn, McpOAuthTokenOut
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpHeaderAuth,
@@ -27,14 +28,17 @@ from lkap_contracts.tools import (
     ToolExecution,
 )
 
+from lkap_agent.config_client import McpOAuthTokenError
 from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT, Settings
 from lkap_agent.tools.declarative import (
+    MCP_OAUTH_UNAVAILABLE,
     build_guarded_mcp_servers,
     build_http_tools,
     build_mcp_servers,
     build_mcp_toolsets,
 )
 from lkap_agent.tools.execution import bind_agent_policy, policy_of
+from lkap_agent.tools.mcp_auth import ApiIssuedBearer, McpOAuthBinding
 
 
 @pytest.fixture(autouse=True)
@@ -424,6 +428,13 @@ class TestComposioToolFinder:
         assert [tool.info.name for tool in tools] == ["lookup_item", "acmecrm_list_contacts"]
 
 
+class _NoTokens:
+    """A token source that is never asked (these tests only build servers)."""
+
+    async def mcp_oauth_token(self, tool_id: str, request: McpOAuthTokenIn) -> McpOAuthTokenOut:
+        raise McpOAuthTokenError("unavailable", "not in this test")
+
+
 class TestMcpAuth:
     """V5-09: the worker reads `auth`; header auth is today's headers, oauth waits for V5-16."""
 
@@ -453,11 +464,31 @@ class TestMcpAuth:
 
         assert not server._headers
 
-    def test_an_oauth_server_is_skipped_until_the_worker_can_sign_in(self) -> None:
+    def test_an_oauth_server_without_an_api_issued_access_is_skipped(self) -> None:
+        """V5-16 (was: skipped until the worker could sign in): no access, no connection."""
         skipped: list[str] = []
         defn = McpServerDefinition(name="crm", url="https://mcp.example.com/mcp", auth=McpOAuthAuth())
+        other = McpOAuthAccess(
+            tool_id="t2", name="other", url="https://mcp.example.com/mcp", access_token="x"
+        )
+        binding = McpOAuthBinding(session_id="s1", source=_NoTokens(), tokens=[other])
 
-        servers = build_guarded_mcp_servers([defn], on_skipped=lambda _d, reason: skipped.append(reason))
+        without = build_guarded_mcp_servers([defn], on_skipped=lambda _d, reason: skipped.append(reason))
+        unmatched = build_guarded_mcp_servers(
+            [defn], on_skipped=lambda _d, reason: skipped.append(reason), oauth=binding
+        )
 
-        assert servers == []
-        assert skipped and "not supported" in skipped[0]
+        assert without == [] and unmatched == []
+        assert skipped == [MCP_OAUTH_UNAVAILABLE, MCP_OAUTH_UNAVAILABLE]
+        assert "http" not in skipped[0]
+
+    def test_an_oauth_server_with_an_issued_access_connects_through_the_bearer(self) -> None:
+        defn = McpServerDefinition(name="crm", url="https://mcp.example.com/mcp", auth=McpOAuthAuth())
+        access = McpOAuthAccess(tool_id="t1", name="crm", url=defn.url, access_token="at-worker-1")
+        binding = McpOAuthBinding(session_id="s1", source=_NoTokens(), tokens=[access])
+
+        (server,) = build_guarded_mcp_servers([defn], oauth=binding)
+
+        transport = server._transport_factory()
+        assert isinstance(transport, ApiIssuedBearer)
+        assert not server._headers, "the token rides the transport, never the static headers"

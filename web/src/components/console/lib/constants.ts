@@ -41,6 +41,11 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
     help: "Returns the current date and time in the caller's timezone, and in the business timezone.",
   },
   { name: "convert_time", label: "Convert time", help: "Converts a time from one timezone to another." },
+  {
+    name: "describe_asset",
+    label: "Read a sent file",
+    help: "Describes a photo the caller sent or pinned, or reads the details off an ID card, using the agent's own language model.",
+  },
   // V5-25: rows only; the settings each network tool needs (search service, SMS service,
   // allowed sites, team webhook) are V5-28's Tools-tab slots.
   { name: "calculate", label: "Calculate", help: "Works out sums, percentages and instalments exactly." },
@@ -107,6 +112,7 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "set_steps", label: "Update steps", help: "Lets the agent mark steps as done when the block is not following the flow." },
   { name: "request_consent", label: "Ask for consent", help: "Lets the agent ask the caller to agree, for example before recording, and wait for the answer." },
   { name: "record_consent", label: "Record spoken consent", help: "Lets the agent record a yes or no the caller said out loud." },
+  { name: "request_upload", label: "Ask for files", help: "Lets the agent ask the caller to send photos or documents and wait for them." },
 ];
 
 /**

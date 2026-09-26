@@ -12,6 +12,7 @@ import { ApiKeysTab } from "./api-keys-tab";
 import { AiAgentsTab } from "./ai-agents-tab";
 import { WebhooksTab } from "./webhooks-tab";
 import { StorageTab } from "./storage-tab";
+import { ComplianceTab } from "./compliance-tab";
 import { DangerTab } from "./danger-tab";
 
 /**
@@ -26,6 +27,8 @@ import { DangerTab } from "./danger-tab";
  * backend genuinely doesn't exist yet; they say so plainly instead of
  * reusing that generic copy. `ai-agents` (v3, docs/v3/AGENT-ACCESS.md §5) is
  * V3-04's "Connect an AI agent" tab, between `api-keys` and `webhooks`.
+ * `compliance` (V5-15/V5-17, D-V5-22) is the workspace's jurisdiction and its
+ * AI disclosure / recording wording, between `webhooks` and `storage`.
  */
 interface TabDef {
   id: string;
@@ -40,6 +43,7 @@ const TABS: TabDef[] = [
   { id: "api-keys", label: "API keys", content: <ApiKeysTab /> },
   { id: "ai-agents", label: "AI agents", content: <AiAgentsTab /> },
   { id: "webhooks", label: "Webhooks", content: <WebhooksTab /> },
+  { id: "compliance", label: "Compliance", content: <ComplianceTab /> },
   { id: "storage", label: "Storage", content: <StorageTab /> },
   { id: "environment", label: "Environment", content: <EnvironmentTab /> },
   { id: "danger", label: "Danger zone", content: <DangerTab /> },

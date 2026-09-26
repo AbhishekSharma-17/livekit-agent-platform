@@ -58,6 +58,12 @@ describe("sessionsV2Extension registration", () => {
     expect(visibleTabs(tabs, { session }).map((t) => t.id)).toContain("recording");
   });
 
+  it("shows the Recording tab for a consent-gated 'none' recording that has a reason (V5-17)", () => {
+    const tabs = resolveSessionTabs(BUILTIN_SESSION_TABS, [sessionsV2Extension]);
+    const session = baseSession({ recording: { status: "none", error: "Not recorded: consent declined" } });
+    expect(visibleTabs(tabs, { session }).map((t) => t.id)).toContain("recording");
+  });
+
   it("registers the v2 timeline event kinds from CONTRACTS-V2 §3.4", () => {
     const kinds = resolveEventKinds(BUILTIN_EVENT_KINDS, [sessionsV2Extension]);
     for (const type of ["handoff", "block_update", "form_submitted", "dtmf", "transfer", "recording"]) {
@@ -108,6 +114,22 @@ describe("RecordingTab", () => {
     const { RecordingTab } = await import("@/components/console/sessions-v2/recording-tab");
     renderWithClient(<RecordingTab session={baseSession({ recording: { status: "failed" } })} />);
     expect(screen.getByText("The recording could not be produced for this session.")).toBeTruthy();
+  });
+
+  it("shows 'Not recorded: consent declined' for a consent-gated recording the caller declined (V5-17)", async () => {
+    const { RecordingTab } = await import("@/components/console/sessions-v2/recording-tab");
+    const session = baseSession({ recording: { status: "none", error: "Not recorded: consent declined" } });
+    renderWithClient(<RecordingTab session={session} />);
+    expect(screen.getByText("Not recorded: consent declined")).toBeTruthy();
+  });
+
+  it("shows the generic 'no recording' reason when status is none with no consent reason", async () => {
+    const { RecordingTab } = await import("@/components/console/sessions-v2/recording-tab");
+    renderWithClient(<RecordingTab session={baseSession({ recording: { status: "none" } })} />);
+    expect(screen.getByText("No recording")).toBeTruthy();
+    expect(
+      screen.getByText("This session's agent doesn't have recording turned on, or the call hasn't ended yet."),
+    ).toBeTruthy();
   });
 });
 

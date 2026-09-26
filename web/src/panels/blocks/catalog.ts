@@ -39,6 +39,7 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "markdown",
   "steps",
   "consent",
+  "upload",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -62,7 +63,8 @@ export type BlockToolName =
   | "show_text"
   | "set_steps"
   | "request_consent"
-  | "record_consent";
+  | "record_consent"
+  | "request_upload";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -98,6 +100,8 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   // `recording.require_consent` is on (a spoken answer on any channel).
   request_consent: new Set<BlockType>(["consent"]),
   record_consent: new Set<BlockType>(["consent"]),
+  // V5-19
+  request_upload: new Set<BlockType>(["upload"]),
 };
 
 /** One field of a block's config form. */
@@ -131,6 +135,15 @@ export type BlockConfigField =
       hint?: string;
       default: Record<string, unknown>[];
       itemKeys: readonly string[];
+    }
+  | {
+      key: string;
+      label: string;
+      /** Several values picked from `options` (`upload.accept`, V5-19); the editor comes with V5-23. */
+      kind: "multiselect";
+      hint?: string;
+      default: string[];
+      options: readonly { value: string; label: string }[];
     };
 
 export interface BlockCatalogEntry {
@@ -177,6 +190,18 @@ export const CONSENT_KINDS = [
 export const CONSENT_DECLINE_ACTIONS = [
   { value: "continue", label: "Carry on without it" },
   { value: "end_call", label: "Say goodbye and end the call" },
+] as const;
+
+/** `upload.accept` values (`lkap_contracts.blocks.UPLOAD_MIME_TYPES` plus `image/*`); never HTML or SVG. */
+export const UPLOAD_ACCEPT_OPTIONS = [
+  { value: "image/*", label: "Any photo" },
+  { value: "image/jpeg", label: "JPEG" },
+  { value: "image/png", label: "PNG" },
+  { value: "image/webp", label: "WebP" },
+  { value: "image/gif", label: "GIF" },
+  { value: "image/heic", label: "HEIC" },
+  { value: "image/heif", label: "HEIF" },
+  { value: "application/pdf", label: "PDF" },
 ] as const;
 
 /** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */
@@ -414,6 +439,35 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       { key: "show_banner", label: "Show the AI assistant banner", kind: "boolean", default: true },
     ],
     filledBy: "request_consent",
+  },
+  // V5-19: minimal entry (PLAN-V5 §0.1, R-V5-7); the renderer, the sender and the
+  // `multiselect` editor come with V5-23.
+  upload: {
+    type: "upload",
+    label: "Upload",
+    description: "Lets the caller send photos or documents from their device.",
+    defaultTitle: "Send a file",
+    idStem: "upload",
+    configFields: [
+      {
+        key: "accept",
+        label: "File types",
+        kind: "multiselect",
+        default: ["image/*", "application/pdf"],
+        options: UPLOAD_ACCEPT_OPTIONS,
+      },
+      { key: "max_files", label: "Most files at once", kind: "integer", default: 3, min: 1 },
+      {
+        key: "max_bytes",
+        label: "Largest file (bytes)",
+        kind: "integer",
+        hint: "Up to 25 MB (26214400 bytes).",
+        default: 10485760,
+        min: 1,
+      },
+      { key: "camera_capture", label: "Open the camera on phones", kind: "boolean", default: false },
+    ],
+    filledBy: "request_upload",
   },
 };
 

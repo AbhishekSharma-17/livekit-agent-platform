@@ -16,6 +16,7 @@ decrypted vendor keys and substituted tool secrets.
 
 from __future__ import annotations
 
+import json
 from types import TracebackType
 from typing import TYPE_CHECKING, Protocol, Self
 
@@ -30,6 +31,8 @@ from lkap_contracts.api_models import (
     KbSearchOptions,
     KbSearchResponse,
     RecordingStartOut,
+    SessionAssetFromDocumentIn,
+    SessionAssetOut,
     SessionEventIn,
     SessionEventsIn,
     SessionMetricsIn,
@@ -45,6 +48,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ApiKbClient",
+    "AssetApi",
+    "AssetRejectedError",
     "ConfigClient",
     "ConfigClientProtocol",
     "ConfigUnavailableError",
@@ -59,6 +64,8 @@ _SERVICE_TOKEN_HEADER = "X-Service-Token"
 
 #: A cold transfer dials the target, so it may take far longer than a config call.
 _TRANSFER_TIMEOUT_S = 60.0
+#: Storing or reading a session file moves up to 25 MB.
+_ASSET_TIMEOUT_S = 60.0
 
 
 class ConfigUnavailableError(RuntimeError):
@@ -79,6 +86,47 @@ class SessionEndedError(ConfigUnavailableError):
 
 class RecordingUnavailableError(RuntimeError):
     """The api could not start an Egress recording (not installed, or it failed)."""
+
+
+class AssetRejectedError(RuntimeError):
+    """The api refused or failed to store / copy / read a session file (V5-19).
+
+    ``status`` is the HTTP status (``0`` when the api was unreachable): 404 an
+    unknown session, asset or document, 409 a full or ended session, 413 too
+    large, 415 a type the session does not take (``reason == "no_preview"`` for
+    a KB document a citation cannot show), 422 anything else it refused.
+    """
+
+    def __init__(self, message: str, *, status: int, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.reason = reason
+
+
+class AssetApi(Protocol):
+    """The worker's session-file calls (V5-19). Separate from :class:`ConfigClientProtocol`
+    so fakes of the older surface keep satisfying it; :class:`ConfigClient` implements both."""
+
+    async def post_asset(
+        self,
+        session_id: str,
+        data: bytes,
+        *,
+        name: str,
+        mime: str,
+        kind: str = "upload",
+        meta: dict[str, str] | None = None,
+    ) -> SessionAssetOut:
+        """Store a checked file; raises :class:`AssetRejectedError` when the api refuses it."""
+        ...
+
+    async def asset_from_document(self, session_id: str, document_id: str) -> SessionAssetOut:
+        """Copy a cited KB document into the session (once); raises :class:`AssetRejectedError`."""
+        ...
+
+    async def asset_content(self, session_id: str, asset_id: str) -> bytes:
+        """Read a stored file back; raises :class:`AssetRejectedError`."""
+        ...
 
 
 class ConfigClientProtocol(Protocol):
@@ -418,6 +466,93 @@ class ConfigClient:
             return InternalTransferOut.model_validate_json(response.content)
         except ValueError:
             return failed("unparseable transfer result")
+
+    # --- session files (V5-19) -------------------------------------------------
+
+    @staticmethod
+    def _asset_error(response: httpx.Response, what: str) -> AssetRejectedError:
+        reason: str | None = None
+        try:
+            details = response.json().get("error", {}).get("details")
+            if isinstance(details, dict) and isinstance(details.get("reason"), str):
+                reason = details["reason"]
+        except ValueError:
+            pass
+        return AssetRejectedError(
+            f"{what} answered HTTP {response.status_code}", status=response.status_code, reason=reason
+        )
+
+    async def post_asset(
+        self,
+        session_id: str,
+        data: bytes,
+        *,
+        name: str,
+        mime: str,
+        kind: str = "upload",
+        meta: dict[str, str] | None = None,
+    ) -> SessionAssetOut:
+        """Post ``POST /internal/v1/sessions/{id}/assets`` (multipart); the api checks the file again.
+
+        Raises:
+            AssetRejectedError: The api refused the file or was unreachable (never logs the name).
+        """
+        form = {"kind": kind, "name": name, "meta": json.dumps(meta or {})}
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/sessions/{session_id}/assets"),
+                files={"file": ("file", data, mime)},
+                data=form,
+                timeout=_ASSET_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            raise AssetRejectedError(f"api unreachable: {type(exc).__name__}", status=0) from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise self._asset_error(response, "assets")
+        try:
+            return SessionAssetOut.model_validate_json(response.content)
+        except ValueError as exc:
+            raise AssetRejectedError("assets returned an unparseable payload", status=502) from exc
+
+    async def asset_from_document(self, session_id: str, document_id: str) -> SessionAssetOut:
+        """Post ``POST /internal/v1/sessions/{id}/assets/from-document`` (R-V5-5).
+
+        Raises:
+            AssetRejectedError: 404 outside the agent's knowledge bases, 415 ``no_preview``.
+        """
+        body = SessionAssetFromDocumentIn(document_id=document_id)
+        try:
+            response = await self._client.post(
+                self._url(f"/internal/v1/sessions/{session_id}/assets/from-document"),
+                content=body.model_dump_json(),
+                headers={"content-type": "application/json"},
+                timeout=_ASSET_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            raise AssetRejectedError(f"api unreachable: {type(exc).__name__}", status=0) from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise self._asset_error(response, "assets/from-document")
+        try:
+            return SessionAssetOut.model_validate_json(response.content)
+        except ValueError as exc:
+            raise AssetRejectedError("from-document returned an unparseable payload", status=502) from exc
+
+    async def asset_content(self, session_id: str, asset_id: str) -> bytes:
+        """Get ``GET /internal/v1/sessions/{id}/assets/{asset_id}/content``.
+
+        Raises:
+            AssetRejectedError: The file is unknown, gone, or the api was unreachable.
+        """
+        try:
+            response = await self._client.get(
+                self._url(f"/internal/v1/sessions/{session_id}/assets/{asset_id}/content"),
+                timeout=_ASSET_TIMEOUT_S,
+            )
+        except httpx.HTTPError as exc:
+            raise AssetRejectedError(f"api unreachable: {type(exc).__name__}", status=0) from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise self._asset_error(response, "assets/content")
+        return response.content
 
 
 class ApiKbClient:

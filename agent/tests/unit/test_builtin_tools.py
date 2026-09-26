@@ -591,7 +591,8 @@ class TestBuildBuiltinTools:
         tools = build_builtin_tools(ctx, disabled=[], http_enabled=True)
 
         names = {t.info.name for t in tools}
-        assert names == set(BUILTIN_TOOL_NAMES) - {"describe_current_frame", "pin_frame"}
+        # V5-19: `describe_asset` needs a vision LLM and a picture source; the fake session has neither.
+        assert names == set(BUILTIN_TOOL_NAMES) - {"describe_current_frame", "pin_frame", "describe_asset"}
 
     def test_includes_vision_tools_when_camera_enabled(self) -> None:
         ctx = FakePackSessionContext(

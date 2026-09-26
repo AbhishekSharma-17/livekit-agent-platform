@@ -157,7 +157,7 @@ services:
 
   # --- optional: --profile postgres ---------------------------------------
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16  # V5-13: v5_003 needs the vector extension
     profiles: ["postgres"]
     environment:
       POSTGRES_USER: lkap

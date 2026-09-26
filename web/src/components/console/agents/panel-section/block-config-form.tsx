@@ -12,7 +12,9 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +50,10 @@ function isColumns(value: unknown): value is TableColumn[] {
 
 function isRecordArray(value: unknown): value is Record<string, unknown>[] {
   return Array.isArray(value) && value.every((v) => typeof v === "object" && v !== null && !Array.isArray(v));
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
 /**
@@ -212,6 +218,55 @@ function ColumnsEditor({
   );
 }
 
+/**
+ * Several values ticked from a fixed option list (`upload.accept`, V5-19;
+ * the editor itself is V5-23's job, `docs/v5/_asks.md` #131). Unlike
+ * `ColumnsEditor`/`ListEditor` this never grows past `options.length` rows,
+ * so it is a plain checkbox list, not an "Add row" editor. Unticking the
+ * last checked option is refused rather than left silently unchecked in the
+ * UI — `UploadBlockConfig.accept` requires at least one type
+ * (`validate_accept`, "accept at least one file type").
+ */
+function MultiselectEditor({
+  idBase,
+  options,
+  value,
+  onChange,
+}: {
+  idBase: string;
+  options: readonly { value: string; label: string }[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2" data-slot="multiselect-editor">
+      {options.map((option) => {
+        const checked = value.includes(option.value);
+        const inputId = `${idBase}-${option.value.replace(/[^a-z0-9]+/gi, "-")}`;
+        return (
+          <div key={option.value} className="flex items-center gap-2">
+            <Checkbox
+              id={inputId}
+              checked={checked}
+              onCheckedChange={(next) => {
+                if (next === true) {
+                  if (!checked) onChange([...value, option.value]);
+                  return;
+                }
+                // Refuse unticking the last option: the schema requires at least one.
+                if (checked && value.length > 1) onChange(value.filter((v) => v !== option.value));
+              }}
+            />
+            <Label htmlFor={inputId} className="cursor-pointer text-sm font-normal">
+              {option.label}
+            </Label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ConfigFieldControl({
   field,
   id,
@@ -279,6 +334,7 @@ function ConfigFieldControl({
         />
       );
     case "columns":
+    case "multiselect":
       return null; // rendered as a fieldset by `BlockConfigForm`
   }
 }
@@ -364,6 +420,24 @@ export function BlockConfigForm({
                 idBase={id}
                 itemKeys={field.itemKeys}
                 value={isRecordArray(value) ? value : []}
+                onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+              />
+              {field.hint ? (
+                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                  {field.hint}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        }
+        if (field.kind === "multiselect") {
+          return (
+            <fieldset key={field.key} className="flex flex-col gap-1.5" aria-describedby={`${id}-hint`}>
+              <legend className="mb-1.5 text-sm leading-5 font-medium">{field.label}</legend>
+              <MultiselectEditor
+                idBase={id}
+                options={field.options}
+                value={isStringArray(value) ? value : [...field.default]}
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (

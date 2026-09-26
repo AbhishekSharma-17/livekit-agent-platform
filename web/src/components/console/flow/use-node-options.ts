@@ -97,7 +97,7 @@ export function useNodeOptions(agent: AgentOut): {
       httpRequestEnabled: tools?.http_request_enabled ?? false,
       camera: capabilities?.camera ?? false,
       screenShare: capabilities?.screen_share ?? false,
-      blockTypes: (panel?.blocks ?? []).map((block) => block.type),
+      blocks: panel?.blocks ?? [],
       packToolNames: pack?.manifest.tool_names ?? [],
       toolIds: tools?.tool_ids ?? [],
       toolNamesById: names,

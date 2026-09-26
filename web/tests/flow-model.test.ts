@@ -136,7 +136,7 @@ describe("node tool pickers (R-V2-10)", () => {
       httpRequestEnabled: false,
       camera: false,
       screenShare: false,
-      blockTypes: ["document"],
+      blocks: [{ type: "document" }],
       packToolNames: ["lookup_policy"],
       toolIds: ["t1"],
       toolNamesById: { t1: "crm", t2: "not_selected" },

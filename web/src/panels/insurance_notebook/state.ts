@@ -9,6 +9,8 @@
  */
 import { z } from "zod";
 
+import type { DetailsItem } from "@/contracts/lkap-contracts";
+
 /** One "claim details" row (`custom.fields.*`). */
 const fieldSchema = z.object({
   label: z.string().catch(""),
@@ -92,4 +94,25 @@ export function headerLine(custom: NotebookCustom): string {
     (part): part is string => Boolean(part),
   );
   return parts.length > 0 ? parts.join(" · ") : "New claim";
+}
+
+/**
+ * `custom.fields` as the platform's `details` block would carry them
+ * (V5-12: the "Claim details" summary is the `details` block itself, in
+ * object-entry order — the pack composes `fields` in the order it wants
+ * shown). `status` maps onto `DetailsItem.tone` (`urgent` → `danger`,
+ * `missing` → `warning`, `complete` → no tone); the pack's `source`
+ * attribution has no `DetailsItem` slot and is dropped, same as it always
+ * was for the generalised block (research-v4 panels-and-capabilities.md B2).
+ */
+export function detailsItemsFromFields(
+  fields: NotebookCustom["fields"],
+): DetailsItem[] {
+  return Object.entries(fields).map(([key, field]) => ({
+    key,
+    label: field.label,
+    value: field.value,
+    type: "string",
+    tone: field.status === "urgent" ? "danger" : field.status === "missing" ? "warning" : null,
+  }));
 }

@@ -328,53 +328,10 @@ export const NOTEBOOK_CSS = `
 }
 
 /*
- * The side stripe is a banned pattern (UI_UX_SPEC §2.1): a field's status is
- * a small ink dot before its label instead.
+ * The claim details themselves are the platform's details block now (V5-12)
+ * — its own tokens apply inside .sections, not the paper's ink palette; no
+ * .field / .f-* rules are needed here any more.
  */
-.lkap-notebook .field {
-  padding: 5px 8px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-
-.lkap-notebook .field .f-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-
-.lkap-notebook .field .f-label::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ink-soft) 45%, transparent);
-}
-
-.lkap-notebook .field .f-value {
-  display: block;
-  font-size: 14px;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.lkap-notebook .field .f-source {
-  display: block;
-  font-size: 10px;
-  color: var(--ink-soft);
-  opacity: 0.8;
-  margin-top: 1px;
-}
-
-.lkap-notebook .field[data-status="missing"] .f-value { color: var(--ink-soft); font-style: italic; }
-.lkap-notebook .field[data-status="complete"] .f-label::before { background: var(--ink-ok); }
-.lkap-notebook .field[data-status="urgent"] .f-label::before { background: var(--ink-urgent); }
-.lkap-notebook .field[data-status="urgent"] .f-value { color: var(--ink-urgent); font-weight: 600; }
 
 /* the % ready ring */
 .lkap-notebook .ring {

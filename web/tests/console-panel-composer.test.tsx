@@ -211,6 +211,21 @@ describe("composer model", () => {
     expect(panelChoices("generic")).toContain("generic");
     expect(panelChoices("some_pack_panel")).toContain("some_pack_panel");
   });
+
+  it("set_steps is available only for a manual (non-flow) steps block (ask #43)", () => {
+    const manual = addBlock(panel([]), "steps");
+    const manualStatus = blockToolStatus(manual, []);
+    expect(manualStatus.find((s) => s.name === "set_steps")).toMatchObject({ available: true, reason: null });
+
+    const flowBlocks = manual.blocks.map((b) => (b.type === "steps" ? { ...b, config: { ...b.config, source: "flow" } } : b));
+    const flowStatus = blockToolStatus({ ...manual, blocks: flowBlocks }, []);
+    const setSteps = flowStatus.find((s) => s.name === "set_steps");
+    expect(setSteps?.available).toBe(false);
+    expect(setSteps?.reason).toMatch(/follows the flow/);
+
+    // Every other tool's availability is unaffected by a steps block's source.
+    expect(flowStatus.find((s) => s.name === "update_block")?.available).toBe(true);
+  });
 });
 
 describe("form contract", () => {
@@ -353,6 +368,47 @@ describe("PanelComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add column" }));
     fireEvent.change(screen.getByLabelText("Column 1 label"), { target: { value: "Item" } });
     expect(latest?.config.panel.blocks[0].config).toEqual({ columns: [{ key: "col_1", label: "Item", type: "string" }] });
+  });
+
+  it("edits a details block's starting rows (the list config field, V5-12)", async () => {
+    stubFetch();
+    const a = agent({
+      config: {
+        instructions: "Hi",
+        pipeline: { mode: "cascaded" },
+        panel: { panel_id: "composite", layout: "side", blocks: [{ id: "claim", type: "details", config: {}, order: 0 }] },
+      },
+    });
+    render(<Harness agent={a} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Details/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    fireEvent.change(screen.getByLabelText("Row 1 Key"), { target: { value: "policy no" } });
+    fireEvent.change(screen.getByLabelText("Row 1 Label"), { target: { value: "Policy" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Row 1 Type" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Money" }));
+    expect(latest?.config.panel.blocks[0].config).toEqual({
+      fields: [{ key: "policy_no", label: "Policy", type: "money" }],
+    });
+  });
+
+  it("edits a steps block's starting steps (the list config field, V5-12)", () => {
+    stubFetch();
+    const a = agent({
+      config: {
+        instructions: "Hi",
+        pipeline: { mode: "cascaded" },
+        panel: { panel_id: "composite", layout: "side", blocks: [{ id: "progress", type: "steps", config: {}, order: 0 }] },
+      },
+    });
+    render(<Harness agent={a} />);
+    // The row's heading is the block's default title ("Progress"), not its type label.
+    fireEvent.click(screen.getByRole("button", { name: /^Progress/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    fireEvent.change(screen.getByLabelText("Row 1 ID"), { target: { value: "greeting" } });
+    fireEvent.change(screen.getByLabelText("Row 1 Label"), { target: { value: "Welcome" } });
+    expect(latest?.config.panel.blocks[0].config).toEqual({
+      steps: [{ id: "greeting", label: "Welcome" }],
+    });
   });
 
   it("switches the layout and the panel, keeping ui_panel_id in step", () => {

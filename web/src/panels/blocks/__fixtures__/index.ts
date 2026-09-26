@@ -46,6 +46,10 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   transcript: transcriptState,
   video: videoState,
   kb_citations: kbCitationsState,
+  choices: choicesState,
+  details: detailsState,
+  markdown: markdownState,
+  steps: stepsState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */

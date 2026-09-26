@@ -170,6 +170,28 @@ describe("golden UiState fixtures", () => {
   });
 });
 
+describe("the claim details (V5-12: the platform's details block, not a hand-rolled section)", () => {
+  it("renders custom.fields through the details block, in order, with a tone dot instead of a side stripe", () => {
+    render(<InsuranceNotebookPanel {...props({ state: FLOOD })} />);
+    expect(screen.getByText(/Claim details \(\d+\)/)).toBeTruthy();
+    const block = screen.getByTestId("block-details");
+    expect(block).toBeTruthy();
+
+    // A "complete" field: label, value, no tone dot.
+    const claimant = block.querySelector('[data-slot="block-details-item"][data-key="claimant"]');
+    expect(claimant?.textContent).toContain("Maya Singh");
+    expect(claimant?.querySelector('[data-slot="details-tone-dot"]')).toBeNull();
+
+    // A "missing" field: the pack's own text plus a warning dot, not italic
+    // "Not yet" (the value is non-empty text, just one that says it's missing).
+    const contact = block.querySelector('[data-slot="block-details-item"][data-key="contact"]');
+    expect(contact?.textContent).toContain("Missing: contact method");
+    expect(contact?.querySelector('[data-slot="details-tone-dot"]')?.getAttribute("data-tone")).toBe("warning");
+
+    expect(NOTEBOOK_CSS).not.toContain("border-left");
+  });
+});
+
 describe("the handwriting", () => {
   it("draws each note kind, marking danger notes urgent", () => {
     const { container } = render(
@@ -542,12 +564,8 @@ describe("the paper's stylesheet", () => {
     expect(NOTEBOOK_CSS).toContain('--hand-label: var(--font-hand-label, "Patrick Hand")');
   });
 
-  it("marks a field's status with a dot, never a side stripe", () => {
+  it("never draws a side stripe (the notebook's own CSS)", () => {
     expect(NOTEBOOK_CSS).not.toContain("border-left");
-    expect(NOTEBOOK_CSS).toContain(".lkap-notebook .field .f-label::before");
-    expect(NOTEBOOK_CSS).toContain(
-      '.lkap-notebook .field[data-status="urgent"] .f-label::before',
-    );
   });
 
   it("keeps the paper's character: tape, stamp, pen and the ink-in animation", () => {

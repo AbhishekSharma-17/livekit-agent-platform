@@ -75,6 +75,7 @@ from lkap_contracts.ui_protocol import UiState
 
 from lkap_agent.config_client import ConfigClientProtocol
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.mcp_auth import MCP_REAUTH_MESSAGE
 from lkap_agent.tools.provider import REAUTH_MESSAGE
 
 __all__ = [
@@ -407,9 +408,11 @@ class SessionObserver:
                     "result_preview": preview,
                 },
             )
-            if update.status == "error" and REAUTH_MESSAGE in (update.message or ""):
+            message = update.message or ""
+            if update.status == "error" and (REAUTH_MESSAGE in message or MCP_REAUTH_MESSAGE in message):
                 # V5-47 (COMPOSIO.md D-V5-C9): a connected app's action failed because its
-                # connection needs a person; the console shows "Needs reconnect".
+                # connection needs a person; the console shows "Needs reconnect". V5-16: the
+                # same for an MCP server whose sign-in an admin must renew.
                 self.record("tool_needs_reauth", {"call_id": update.call_id, "tool": tool_name})
             logger.debug(
                 "tool call ended",

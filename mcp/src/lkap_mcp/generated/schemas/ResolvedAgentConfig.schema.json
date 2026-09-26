@@ -1317,6 +1317,55 @@
       "title": "McpNoAuth",
       "type": "object"
     },
+    "McpOAuthAccess": {
+      "description": "V5-16: one signed-in MCP server's short-lived access, as the worker receives it.\n\nThe api is the OAuth client (research-v4 tools §4.3.6): it keeps the refresh token,\nthe client secret and the token endpoint, and hands the worker only an access token\nthat expires minutes from now. ``name`` and ``url`` match the server's entry in\n:attr:`ResolvedAgentConfig.tools`; ``tool_id`` is what the worker names when it asks\n``POST /internal/v1/tools/{tool_id}/oauth/token`` for a fresh token. ``access_token``\nis ``None`` when the api could not refresh it at session start (the worker fetches one\nbefore its first request). **Contains a secret.**",
+      "properties": {
+        "access_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Access Token"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tool_id": {
+          "title": "Tool Id",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_id",
+        "name",
+        "url"
+      ],
+      "title": "McpOAuthAccess",
+      "type": "object"
+    },
     "McpOAuthAuth": {
       "description": "Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
       "properties": {
@@ -3143,6 +3192,14 @@
       "default": {
         "caller_timezone": "detect"
       }
+    },
+    "mcp_oauth": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/McpOAuthAccess"
+      },
+      "title": "Mcp Oauth",
+      "type": "array"
     },
     "pack_id": {
       "title": "Pack Id",

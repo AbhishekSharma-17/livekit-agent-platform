@@ -679,21 +679,31 @@ async def test_an_oauth_url_may_not_carry_secret_placeholders(admin_client: http
     assert response.json()["error"]["details"]["reason"] == "oauth_url_placeholder"
 
 
+async def _forged_sign_in(database: Database, settings: Settings, bag: dict[str, str]) -> str:
+    """An ``mcp-oauth`` row written straight to the database (the route refuses one, S5-15)."""
+    async with database.session() as session:
+        row = Credential(
+            provider_id="mcp-oauth",
+            label="forged",
+            ciphertext=Vault(settings.master_key).encrypt(bag),
+            fingerprint="forged",
+        )
+        session.add(row)
+        await session.flush()
+        return row.id
+
+
 async def test_a_sign_in_credential_cannot_be_bound_by_hand(
-    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld, database: Database
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    settings: Settings,
 ) -> None:
     tool_id = await _tool(admin_client)
     await _connect(admin_client, client, world, tool_id)
     credential_id = (await _definition(database, tool_id)).auth.credential_id
-    forged = await admin_client.post(
-        "/v1/credentials",
-        json={
-            "provider_id": "mcp-oauth",
-            "label": "forged",
-            "secrets": {"tool_id": "x", "resource": MCP_URL},
-        },
-    )
-    forged_id = forged.json()["id"]
+    forged_id = await _forged_sign_in(database, settings, {"tool_id": "x", "resource": MCP_URL})
 
     def payload(url: str, cid: str | None, auth_kind: str = "oauth") -> dict[str, Any]:
         auth: dict[str, Any] = {"kind": auth_kind, "credential_id": cid}

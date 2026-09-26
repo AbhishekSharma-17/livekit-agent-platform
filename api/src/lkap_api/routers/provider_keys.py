@@ -24,7 +24,9 @@ from lkap_contracts.api_models import (
     CredentialTestResult,
     CredentialUpdate,
 )
-from lkap_contracts.providers import ProviderSpec, credential_home, get
+from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID, ProviderSpec, credential_home, get
+from lkap_contracts.tool_providers import TOOL_PROVIDER_ACCOUNT
+from lkap_contracts.tools import McpOAuthAuth
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,9 +34,12 @@ from lkap_api import credential_tests
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.models import Agent, Credential, Tool, utcnow
-from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, VaultDep
+from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
+from lkap_api.mcp_oauth import revoke as mcp_oauth_revoke
+from lkap_api.mcp_oauth.tokens import oauth_definition
+from lkap_api.settings import Settings
 from lkap_api.vault import Vault, fingerprint
 
 log = get_logger(__name__)
@@ -88,6 +93,29 @@ def _primary_field(spec: ProviderSpec) -> str | None:
     return spec.secret_fields[0].name if spec.secret_fields else None
 
 
+#: The message for a hand-made sign-in bag (S5-15): only the OAuth callback writes one.
+_SIGN_IN_ONLY = (
+    "an MCP sign-in credential is created by signing in to the tool "
+    "(POST /v1/tools/{id}/oauth/start), never by hand"
+)
+
+
+def _refuse_hand_made_sign_in(provider_id: str) -> None:
+    """S5-15: an ``mcp-oauth`` bag carries token and endpoint urls only the callback may write."""
+    if provider_id == MCP_OAUTH_PROVIDER_ID:
+        raise UnprocessableEntityError(_SIGN_IN_ONLY)
+
+
+def _refuse_connection_row(row: Credential) -> None:
+    """S5-7: a connected app is managed (and disconnected) through the Apps routes only."""
+    if row.provider_id == TOOL_PROVIDER_ACCOUNT:
+        raise ConflictError(
+            "a connected app is removed through its connection, not as a key: "
+            f"DELETE /v1/tool-providers/composio/connections/{row.id}",
+            details={"connection_id": row.id},
+        )
+
+
 async def _load(db: AsyncSession, ctx: WorkspaceContext, credential_id: str) -> Credential:
     """Load a credential of the caller's workspace (404 for any other workspace)."""
     row = await db.scalar(
@@ -116,6 +144,7 @@ async def create_credential(
     `openrouter-llm` key every OpenRouter provider shares.
     """
     spec = _spec_for(payload.provider_id)
+    _refuse_hand_made_sign_in(spec.id)
     _check_secrets(spec, payload.secrets)
     row = Credential(
         workspace_id=ctx.workspace_id,
@@ -145,11 +174,14 @@ async def list_credentials(
         "OpenRouter entry) lists the rows stored under that credential home",
     ),
 ) -> CredentialPage:
-    """Return the workspace's credentials, newest first."""
-    stmt = select(Credential).where(Credential.workspace_id == ctx.workspace_id)
-    count_stmt = (
-        select(func.count()).select_from(Credential).where(Credential.workspace_id == ctx.workspace_id)
-    )
+    """Return the workspace's credentials, newest first.
+
+    Connected apps (``tool-provider-account`` rows) are not keys and are never listed
+    here (S5-7); ``GET /v1/tool-providers/composio/connections`` lists them.
+    """
+    visible = (Credential.workspace_id == ctx.workspace_id, Credential.provider_id != TOOL_PROVIDER_ACCOUNT)
+    stmt = select(Credential).where(*visible)
+    count_stmt = select(func.count()).select_from(Credential).where(*visible)
     if provider_id:
         home = credential_home(provider_id)
         stmt = stmt.where(Credential.provider_id == home)
@@ -166,8 +198,11 @@ async def list_credentials(
     description="Metadata and fingerprint for one credential; never the secret values.",
 )
 async def get_credential(credential_id: str, db: DbDep, ctx: AdminCtxDep) -> CredentialOut:
-    """Return one credential's metadata."""
-    return _to_out(await _load(db, ctx, credential_id))
+    """Return one credential's metadata (a connected app is a 404 here, S5-7)."""
+    row = await _load(db, ctx, credential_id)
+    if row.provider_id == TOOL_PROVIDER_ACCOUNT:
+        raise NotFoundError(f"unknown credential '{credential_id}'")
+    return _to_out(row)
 
 
 @router.put(
@@ -185,8 +220,11 @@ async def update_credential(
 ) -> CredentialOut:
     """Update label and/or secrets; omitting `secrets` keeps the stored values."""
     row = await _load(db, ctx, credential_id)
+    _refuse_connection_row(row)
     if payload.provider_id and credential_home(payload.provider_id) != row.provider_id:
         raise UnprocessableEntityError("a credential's provider cannot be changed; create a new one")
+    if payload.secrets is not None:
+        _refuse_hand_made_sign_in(row.provider_id)
     spec = _spec_for(row.provider_id)
     if payload.label is not None:
         row.label = payload.label
@@ -212,7 +250,14 @@ async def _references(db: AsyncSession, workspace_id: str, credential_id: str) -
     tools = (await db.execute(select(Tool).where(Tool.workspace_id == workspace_id))).scalars().all()
     for tool in tools:
         definition = tool.definition if isinstance(tool.definition, dict) else {}
-        if definition.get("credential_id") == credential_id:
+        raw_auth = definition.get("auth")
+        auth: dict[str, Any] = raw_auth if isinstance(raw_auth, dict) else {}
+        # S5-7: a provider tool references its connected app as `connection_id`.
+        if credential_id in (
+            definition.get("credential_id"),
+            definition.get("connection_id"),
+            auth.get("credential_id"),
+        ):
             found.append(f"tool '{tool.name}'")
     return found
 
@@ -221,17 +266,78 @@ async def _references(db: AsyncSession, workspace_id: str, credential_id: str) -
     "/{credential_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a credential",
-    description="Fails with 409 while an agent pipeline slot or a tool still references it.",
+    description=(
+        "Fails with 409 while an agent pipeline slot or a tool still references it, and for a "
+        "connected app (remove that through `DELETE /v1/tool-providers/composio/connections/{id}`). "
+        "Deleting an MCP sign-in revokes it at the provider first, like the tool's Disconnect."
+    ),
 )
-async def delete_credential(credential_id: str, db: DbDep, ctx: AdminCtxDep) -> Response:
+async def delete_credential(
+    credential_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    client: HttpClientDep,
+    settings: SettingsDep,
+    ctx: AdminCtxDep,
+) -> Response:
     """Delete a credential that nothing references."""
     row = await _load(db, ctx, credential_id)
+    _refuse_connection_row(row)
     refs = await _references(db, ctx.workspace_id, credential_id)
+    if row.provider_id == MCP_OAUTH_PROVIDER_ID:
+        await _delete_sign_in(db, vault, client, settings, ctx, row, refs)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     if refs:
         raise ConflictError("credential is still referenced", details={"references": refs})
     await db.delete(row)
     log.info("credential_deleted", credential_id=credential_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _delete_sign_in(
+    db: AsyncSession,
+    vault: Vault,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    ctx: WorkspaceContext,
+    row: Credential,
+    refs: list[str],
+) -> None:
+    """Delete an ``mcp-oauth`` credential the way the tool's Disconnect does (ask #139).
+
+    The sign-in's own tool (named by the bag's ``tool_id`` and referencing this row) is
+    disconnected: revoked at the provider (RFC 7009), its dynamic client deleted when
+    unused, the credential deleted, the reference cleared, ``mcp_oauth.revoked`` audited.
+    Any other reference still blocks the delete (409). A credential whose tool is gone
+    is revoked and deleted on its own.
+    """
+    bag = vault.decrypt(row.ciphertext)
+    tool = await db.scalar(
+        select(Tool).where(Tool.id == str(bag.get("tool_id", "")), Tool.workspace_id == ctx.workspace_id)
+    )
+    definition = oauth_definition(tool) if tool is not None else None
+    owned = (
+        tool is not None
+        and definition is not None
+        and isinstance(definition.auth, McpOAuthAuth)
+        and definition.auth.credential_id == row.id
+    )
+    others = [ref for ref in refs if not (owned and tool is not None and ref == f"tool '{tool.name}'")]
+    if others:
+        raise ConflictError("credential is still referenced", details={"references": others})
+    if owned and tool is not None:
+        await mcp_oauth_revoke.disconnect_tool(db, vault, client, settings, ctx, tool, trigger="revoke")
+    still_there = await db.scalar(
+        select(Credential.id).where(Credential.id == row.id, Credential.workspace_id == ctx.workspace_id)
+    )
+    if still_there is not None:
+        outcome = await mcp_oauth_revoke.revoke_credential(
+            db, vault, client, settings, workspace_id=ctx.workspace_id, credential=row, bag=bag
+        )
+        mcp_oauth_revoke.record_revoked(
+            db, ctx, str(bag.get("tool_id", "")), credential_id=row.id, bag=bag, outcome=outcome
+        )
+    log.info("credential_deleted", credential_id=row.id, provider_id=MCP_OAUTH_PROVIDER_ID)
 
 
 def _auth_request(style: str, secrets: dict[str, str]) -> dict[str, Any]:

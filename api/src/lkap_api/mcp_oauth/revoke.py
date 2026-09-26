@@ -49,7 +49,7 @@ log = get_logger(__name__)
 REVOKE_TIMEOUT_S: Final[float] = 20.0
 
 RevocationOutcome = Literal["ok", "failed", "unsupported", "no_token"]
-Trigger = Literal["revoke", "tool_delete"]
+Trigger = Literal["revoke", "tool_delete", "credential_delete"]
 
 _TOOL: TypeAdapter[ToolDefinition] = TypeAdapter(ToolDefinition)
 
@@ -262,6 +262,21 @@ def _audit(
     )
 
 
+def record_revoked(
+    db: AsyncSession,
+    ctx: WorkspaceContext,
+    tool_id: str,
+    *,
+    credential_id: str,
+    bag: dict[str, str],
+    outcome: RevokeOutcome,
+) -> None:
+    """Audit a sign-in revoked through the credentials route (ask #139): ``mcp_oauth.revoked``."""
+    _audit(
+        db, ctx, tool_id, credential_id=credential_id, bag=bag, outcome=outcome, trigger="credential_delete"
+    )
+
+
 def _clear_reference(row: Tool, definition: McpServerDefinition) -> None:
     stored = definition.model_dump(mode="json")
     stored["auth"]["credential_id"] = None
@@ -328,6 +343,7 @@ __all__ = [
     "REVOKE_TIMEOUT_S",
     "RevokeOutcome",
     "disconnect_tool",
+    "record_revoked",
     "revoke_credential",
     "revoke_tool_sign_in",
 ]

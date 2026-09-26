@@ -1160,24 +1160,46 @@ async def test_a_connection_row_cannot_be_bound_as_a_tool_credential(
     assert response.status_code == 422
 
 
-async def test_provider_keys_still_list_and_delete_connection_rows_pending_an_ask(
+async def test_a_connection_row_cannot_be_deleted_or_listed_through_provider_keys(
     admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
 ) -> None:
-    """Pins current behaviour for the provider-keys ask (V5-18 report).
+    """S5-7 (ask #2): connected apps are managed through the Apps routes only.
 
-    ``GET /v1/credentials`` lists connected-app rows and ``DELETE /v1/credentials/{id}``
-    removes one without the Composio delete or pausing its tools. The ask is for
-    ``provider_keys.py`` to hide ``tool-provider-account`` rows and refuse
-    update/test/delete on them with a pointer to the Apps routes; flip this test then.
+    ``GET /v1/credentials`` hides ``tool-provider-account`` rows and every by-id route
+    refuses them, so a Keys-page Delete can no longer skip the Composio delete and the
+    pause of the app's tools.
     """
     out = await _connect(admin_client, toolkit="publicholidays", method="none")
+    connection_id = out["connection_id"]
 
-    listed = (await admin_client.get("/v1/credentials")).json()["items"]
-    deleted = await admin_client.delete(f"/v1/credentials/{out['connection_id']}")
+    listed = (await admin_client.get("/v1/credentials")).json()
+    deleted = await admin_client.delete(f"/v1/credentials/{connection_id}")
+    updated = await admin_client.put(f"/v1/credentials/{connection_id}", json={"label": "renamed"})
+    fetched = await admin_client.get(f"/v1/credentials/{connection_id}")
 
-    assert out["connection_id"] in {item["id"] for item in listed}
-    assert deleted.status_code == 204
-    assert await _connection_rows(database) == []
+    assert connection_id not in {item["id"] for item in listed["items"]}
+    assert listed["total"] == len(listed["items"])
+    assert deleted.status_code == 409
+    assert f"/v1/tool-providers/composio/connections/{connection_id}" in deleted.json()["error"]["message"]
+    assert updated.status_code == 409
+    assert fetched.status_code == 404
+    assert len(await _connection_rows(database)) == 1
+
+
+async def test_credential_references_include_a_provider_tools_connection_id(database: Database) -> None:
+    # `_references` also reads a provider tool's `connection_id` and an MCP tool's
+    # `auth.credential_id` (S5-7), not only the top-level `credential_id`.
+    from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
+    from lkap_api.db.models import Tool
+    from lkap_api.routers.provider_keys import _references
+
+    async with database.session() as session:
+        session.add(Tool(kind="provider", name="by_connection", definition={"connection_id": "conn1"}))
+        session.add(Tool(kind="mcp", name="by_auth", definition={"auth": {"credential_id": "cred2"}}))
+        await session.flush()
+        assert await _references(session, DEFAULT_WORKSPACE_ID, "conn1") == ["tool 'by_connection'"]
+        assert await _references(session, DEFAULT_WORKSPACE_ID, "cred2") == ["tool 'by_auth'"]
+        assert await _references(session, DEFAULT_WORKSPACE_ID, "other") == []
 
 
 async def test_a_connection_row_cannot_be_created_through_provider_keys(

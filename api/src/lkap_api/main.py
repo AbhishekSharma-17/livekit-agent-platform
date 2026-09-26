@@ -33,6 +33,7 @@ from lkap_api.errors import ApiError
 from lkap_api.jobs.handlers import load_all_handlers
 from lkap_api.kb.embed import warm_default_embedder
 from lkap_api.logging import configure_logging, get_logger
+from lkap_api.mcp_oauth.router import router as mcp_oauth_router
 from lkap_api.packs import router as packs_router
 from lkap_api.routers import (
     agents,
@@ -181,6 +182,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(calls.router)
     app.include_router(text_sessions.router)
     app.include_router(tool_providers_router)  # V5-18: connected apps (Composio)
+    app.include_router(mcp_oauth_router)  # V5-14: MCP server sign-in (OAuth)
     app.include_router(costs.router)
     _include_knowledge_router(app)
 

@@ -298,6 +298,16 @@ Where knowledge-base vectors live follows the database. With a Postgres `LKAP_DA
 - **Backups.** `pg_dump` now covers the vectors along with everything else, and a restore never leaves vectors without their chunks (they commit in one transaction). Only the LanceDB case still needs `LKAP_DATA_DIR` in the backup for vectors.
 - **One HNSW index per knowledge base.** Each knowledge base gets a partial index named `kbv_hnsw_<kb id>_<dimension>`, created on its first write and replaced on a width change. Above 2,000 dimensions it uses `halfvec` (pgvector 0.7 or later). Above 4,000 there is no index, and search is exact.
 
+### 9.3 MCP server sign-in (V5-14)
+
+Migration `v5_004_mcp_oauth` adds `mcp_oauth_flows` (sign-ins in progress: ten minutes, single use, removed by the sessions sweep) and `mcp_oauth_clients` (the OAuth clients LKAP registered or was given, per workspace and provider). Apply it like the others (§9): back up, then `alembic upgrade head`.
+
+- **Return address.** The provider sends the browser back to `{LKAP_PUBLIC_BASE_URL}/v1/oauth/mcp/callback`, falling back to the api's own url (`LKAP_API_BASE_URL`, then `http://127.0.0.1:<PORT>`). It must be `https`, or `http` on `localhost`/`127.0.0.1` (the only plain-http form providers accept). With neither, **Start sign-in** answers `422 redirect_uri_not_https`. In local dev the loopback address works as it is; register exactly that address when a provider needs a pre-registered app.
+- **Public origin and the client metadata document.** When `LKAP_PUBLIC_BASE_URL` is a public `https` origin, `GET /v1/oauth/mcp/client-metadata.json` serves LKAP's client metadata document and providers that support it sign in with no registration at all. Behind a private network (or with no public origin) the document is `404` and LKAP falls back to dynamic registration or a pre-registered app. If the console is private but the api must be reachable by providers, expose only `/v1/oauth/mcp/*` through the proxy.
+- **Pre-registered apps.** For providers without automatic registration, **Start sign-in** answers "needs client registration" with the return address to paste into the vendor's app settings. Save the server with `auth.registration = "preregistered"` and the app's client id, then start again, sending the client secret (if the vendor issued one) in the start request. The secret is stored encrypted and never shown again.
+- **Where the tokens live.** A finished sign-in writes an `mcp-oauth` credential (the Fernet vault, like every key) and points the tool's `auth.credential_id` at it. `GET /v1/tools/{id}/oauth/status` shows whether it is connected and when the access token expires. Until V5-16 sessions do not use these servers yet (the status says `worker_supported: false`) and an expired token needs a new sign-in; **Test** reports `needs_auth` then.
+- **Logs.** The callback's query (the one-time code and `state`) is removed from uvicorn's access log; no api log line carries a token, code or `state`.
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:

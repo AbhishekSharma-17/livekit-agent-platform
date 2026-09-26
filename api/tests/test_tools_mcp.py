@@ -232,11 +232,12 @@ async def test_header_auth_with_an_unknown_secret_name_is_refused(admin_client: 
     assert "OTHER" in response.json()["error"]["message"]
 
 
-async def test_oauth_auth_is_refused_until_sign_in_ships(admin_client: httpx.AsyncClient) -> None:
+async def test_oauth_auth_is_saved_now_that_sign_in_ships(admin_client: httpx.AsyncClient) -> None:
+    """V5-14 lifted V5-09's ``oauth_not_available``; the sign-in itself is tested in test_mcp_oauth.py."""
     response = await _create(admin_client, {"auth": {"kind": "oauth"}})
 
-    assert response.status_code == 422
-    assert response.json()["error"]["details"]["reason"] == "oauth_not_available"
+    assert response.status_code == 201, response.text
+    assert response.json()["definition"]["auth"]["kind"] == "oauth"
 
 
 async def test_legacy_and_auth_fields_that_disagree_are_refused(admin_client: httpx.AsyncClient) -> None:
@@ -495,9 +496,10 @@ async def test_the_test_route_refuses_a_stored_private_url_before_connecting(
     assert server.requests == []
 
 
-async def test_the_test_route_refuses_a_stored_oauth_row(
+async def test_the_test_route_asks_an_unsigned_oauth_row_to_sign_in(
     admin_client: httpx.AsyncClient, database: Database, mcp_server: Callable[..., FakeMcpServer]
 ) -> None:
+    """V5-14: no sign-in yet → ``needs_auth`` without any request (was ``oauth_not_available``)."""
     server = mcp_server()
     tool_id = await _insert_row(
         database, {"kind": "mcp", "name": "old", "url": MCP_URL, "auth": {"kind": "oauth"}}
@@ -505,8 +507,9 @@ async def test_the_test_route_refuses_a_stored_oauth_row(
 
     response = await admin_client.post(f"/v1/tools/{tool_id}/test")
 
-    assert response.status_code == 422
-    assert response.json()["error"]["details"]["reason"] == "oauth_not_available"
+    assert response.status_code == 200, response.text
+    assert response.json()["ok"] is False
+    assert response.json()["reason"] == "needs_auth"
     assert server.requests == []
 
 

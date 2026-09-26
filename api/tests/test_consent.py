@@ -22,7 +22,7 @@ from lkap_contracts.ui_protocol import BlockSpec
 from sqlalchemy import select
 
 from lkap_api.config_service import CONSENT_BLOCK_MISSING_MESSAGE, ValidationContext, consent_issues, validate
-from lkap_api.db.models import Agent, AgentConfigVersion, SessionEvent, StorageConfig
+from lkap_api.db.models import Agent, AgentConfigVersion, AuditLog, SessionEvent, StorageConfig
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.recordings.consent import NOT_RECORDED_DECLINED, NOT_RECORDED_NO_ANSWER
@@ -377,6 +377,30 @@ def test_terms_and_custom_consent_blocks_need_their_own_wording() -> None:
     assert _issues(panel=PanelLayout(blocks=blocks)) == [
         ("panel.blocks[0].config.text", "error", "a terms or custom consent block needs its own wording")
     ]
+
+
+async def test_workspace_update_compliance_audit_names_keys_and_text_hash(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    """S5-43: a wording change is told apart from any other settings change, by its hash."""
+    response = await admin_client.put(
+        "/v1/workspaces/default",
+        json={"settings": {"compliance": {"jurisdiction": "eu", "recording_text": "May we record?"}}},
+    )
+    assert response.status_code == 200, response.text
+
+    async with database.session() as session:
+        rows = (
+            (await session.execute(select(AuditLog).where(AuditLog.action == "workspace.update")))
+            .scalars()
+            .all()
+        )
+    [row] = rows
+    assert row.payload["fields"] == ["settings.compliance"]
+    compliance = row.payload["compliance"]
+    assert compliance["jurisdiction"] == "eu"
+    assert compliance["recording_text_sha256"] == hashlib.sha256(b"May we record?").hexdigest()
+    assert "May we record?" not in json.dumps(row.payload)
 
 
 def test_validate_runs_the_consent_checks() -> None:

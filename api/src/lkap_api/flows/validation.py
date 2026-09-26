@@ -158,9 +158,13 @@ def allowed_tool_names(
 #: The block a block tool needs, in the author's terms.
 _BLOCK_TOOL_NEEDS: Final[dict[str, str]] = {
     "update_block": "a table, document, gallery, sources, transcript, video or pack block",
-    "show_document": "a document block",
-    "table_append": "a table block",
-    "request_form": "a form block",
+    # S5-31 (ask #129(2)): every other block tool, from BLOCK_TOOL_TYPES, so a new block tool
+    # can never make flow validation raise.
+    **{
+        name: " or ".join(f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} block" for kind in sorted(kinds))
+        for name, kinds in BLOCK_TOOL_TYPES.items()
+        if name != "update_block"
+    },
 }
 
 
@@ -169,7 +173,7 @@ def _tool_issue(config: AgentConfig, name: str) -> str:
     if name in BLOCK_TOOL_TYPES:
         if name in config.tools.builtin_disabled:
             return f"tool '{name}' is switched off for this agent (Panel section)"
-        return f"tool '{name}' needs {_BLOCK_TOOL_NEEDS[name]} in the panel"
+        return f"tool '{name}' needs {_BLOCK_TOOL_NEEDS.get(name, 'its block')} in the panel"
     if name in BUILTIN_TOOL_NAMES:
         if name in config.tools.builtin_disabled or name == "http_request":
             return f"built-in tool '{name}' is off for this agent (Tools section)"

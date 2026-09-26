@@ -25,6 +25,7 @@ from lkap_contracts.compliance import (
     ComplianceOut,
     ComplianceSettings,
     ResolvedCompliance,
+    consent_text_hash,
     resolve_compliance,
 )
 from pydantic import ValidationError
@@ -241,6 +242,12 @@ def _merge_compliance(current: Any, incoming: Any) -> dict[str, Any]:
         ) from exc
 
 
+#: The ``settings`` keys this route writes (S5-26): anything else is refused, not stored.
+SETTINGS_KEYS: frozenset[str] = frozenset({LOCALE_KEY, COMPLIANCE_KEY, "cost", "telephony"})
+#: The ``settings.cost`` keys this route writes; ``prices`` has its own validated route.
+COST_KEYS: frozenset[str] = frozenset({RECONCILE_KEY})
+
+
 def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
     """Merge top-level keys, except ``cost``, ``locale`` and ``compliance`` (merged one level down).
 
@@ -256,6 +263,13 @@ def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
             names an unknown vendor or one whose client is not built yet, or
             ``locale.timezone`` is not an IANA timezone name.
     """
+    unknown = sorted(set(incoming) - SETTINGS_KEYS)
+    if unknown:
+        # S5-26: no mass assignment past the validated keys.
+        raise UnprocessableEntityError(
+            f"unknown workspace setting(s): {', '.join(unknown)}",
+            details={"allowed": sorted(SETTINGS_KEYS)},
+        )
     merged = {**current, **incoming}
     if LOCALE_KEY in incoming:
         merged[LOCALE_KEY] = _merge_locale(current.get(LOCALE_KEY), incoming[LOCALE_KEY])
@@ -265,6 +279,14 @@ def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
         cost_in = incoming["cost"]
         if not isinstance(cost_in, dict):
             raise UnprocessableEntityError("settings.cost must be an object")
+        unknown_cost = sorted(set(cost_in) - COST_KEYS)
+        if unknown_cost:
+            # S5-26: `cost.prices` goes through PUT /v1/workspace/prices (validated and audited).
+            raise UnprocessableEntityError(
+                f"settings.cost.{unknown_cost[0]} cannot be set here"
+                + ("; use PUT /v1/workspace/prices" if "prices" in unknown_cost else ""),
+                details={"allowed": sorted(COST_KEYS)},
+            )
         cost = dict(current.get("cost") or {}) if isinstance(current.get("cost"), dict) else {}
         cost.update(cost_in)
         if RECONCILE_KEY in cost_in:
@@ -297,12 +319,31 @@ async def update_workspace(payload: WorkspaceUpdate, ctx: PathWorkspaceDep, db: 
     if payload.name is not None:
         workspace.name = payload.name
         changed.append("name")
+    audit_extra: dict[str, Any] = {}
     if payload.settings is not None:
-        workspace.settings = _merge_settings(workspace.settings or {}, payload.settings)
-        changed.append("settings")
+        before = workspace.settings or {}
+        workspace.settings = _merge_settings(before, payload.settings)
+        # S5-43: name the settings that changed, and the compliance wording by its hash.
+        changed.extend(
+            f"settings.{key}"
+            for key in sorted(payload.settings)
+            if before.get(key) != workspace.settings.get(key)
+        )
+        if COMPLIANCE_KEY in payload.settings:
+            audit_extra["compliance"] = _compliance_audit(workspace.settings)
     await db.flush()
-    _audit(db, ctx, "workspace.update", workspace.id, fields=changed)
+    _audit(db, ctx, "workspace.update", workspace.id, fields=changed, **audit_extra)
     return _workspace_out(workspace, ctx.role)
+
+
+def _compliance_audit(settings: Mapping[str, Any]) -> dict[str, Any]:
+    """The audit form of the compliance settings: the jurisdiction and each wording's SHA-256."""
+    effective = resolve_compliance(compliance_settings_of(settings))
+    return {
+        "jurisdiction": effective.jurisdiction,
+        "disclosure_text_sha256": consent_text_hash(effective.disclosure_text),
+        "recording_text_sha256": consent_text_hash(effective.recording_text),
+    }
 
 
 @router.get(

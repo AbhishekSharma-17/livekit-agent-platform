@@ -62,7 +62,16 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
  * the app card (one account) and once per row inside its accounts dialog
  * (several).
  */
-export function ConnectionRow({ connectionId, toolkit }: { connectionId: string; toolkit: Pick<ToolkitOut, "slug" | "name" | "auth_fields"> }) {
+export function ConnectionRow({
+  connectionId,
+  toolkit,
+  showAccountLabel = false,
+}: {
+  connectionId: string;
+  toolkit: Pick<ToolkitOut, "slug" | "name" | "auth_fields">;
+  /** True once the app has more than one account (`AppAccountsDialog` sets this) — labels the Actions dialog by account so a builder can tell which inbox they just changed. */
+  showAccountLabel?: boolean;
+}) {
   const connectionQuery = useToolProviderConnection(connectionId, { poll: true });
   const reconnectMutation = useReconnectApp();
   const disconnectMutation = useDisconnectApp();
@@ -227,6 +236,7 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
         pickedActions={connection.picked_actions ?? []}
         open={actionsOpen}
         onOpenChange={setActionsOpen}
+        accountLabel={showAccountLabel ? label : undefined}
       />
     </div>
   );

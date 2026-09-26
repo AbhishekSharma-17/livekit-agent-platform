@@ -422,6 +422,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
           onOpenChange={closeActionsDialog}
           presetAgentId={agentId}
           onAdded={handleActionsAdded}
+          accountLabel={accountCountFor(actionsFor.toolkit) > 1 ? actionsFor.label : undefined}
         />
       ) : null}
     </Section>

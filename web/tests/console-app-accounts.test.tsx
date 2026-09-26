@@ -6,8 +6,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { AppCard } from "@/components/console/tools/apps/app-card";
+import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
 import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
 import {
+  actionFixture,
+  actionPage,
   connectionFixture,
   connectionFixtureAccounts,
   connectionPage,
@@ -229,5 +232,43 @@ describe("ConnectionRow — Rename and Make default (R-V5-13)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't rename — Another account of this app already uses that name"));
+  });
+});
+
+describe("ActionsDialog — accountLabel names which account just changed (R-V5-13)", () => {
+  it('titles the dialog "<App> actions — <label>" and the success toast names the account, when accountLabel is set', async () => {
+    const calls = stubApi((call) => {
+      if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture()]) };
+      return undefined;
+    });
+    renderWithClient(
+      <ActionsDialog
+        connectionId="conn_work"
+        toolkitSlug="github"
+        toolkitName="GitHub"
+        pickedActions={[]}
+        open
+        onOpenChange={() => {}}
+        accountLabel="Work"
+      />,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "GitHub actions — Work" });
+    await within(dialog).findByText("List repositories");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /List repositories/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add as tools" }));
+
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/tool-providers/composio/materialise"))).toBe(true));
+    expect(toast.success).toHaveBeenCalledWith("Added 1 action(s) from GitHub (Work)");
+  });
+
+  it("omits the account suffix entirely when accountLabel is not given (a single-account app)", async () => {
+    stubApi((call) => {
+      if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture()]) };
+      return undefined;
+    });
+    renderWithClient(
+      <ActionsDialog connectionId="conn_github" toolkitSlug="github" toolkitName="GitHub" pickedActions={[]} open onOpenChange={() => {}} />,
+    );
+    expect(await screen.findByRole("dialog", { name: "GitHub actions" })).toBeTruthy();
   });
 });

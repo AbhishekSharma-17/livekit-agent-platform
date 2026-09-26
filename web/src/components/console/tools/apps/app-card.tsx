@@ -146,7 +146,7 @@ function AppAccountsDialog({
         </DialogHeader>
         <DialogBody className="flex flex-col gap-2">
           {accounts.map((account) => (
-            <ConnectionRow key={account.id} connectionId={account.id} toolkit={toolkit} />
+            <ConnectionRow key={account.id} connectionId={account.id} toolkit={toolkit} showAccountLabel />
           ))}
         </DialogBody>
       </DialogContent>

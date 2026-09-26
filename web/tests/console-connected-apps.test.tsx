@@ -505,6 +505,11 @@ describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_
             // `z.custom` with no predicate never strips nested keys, so no
             // `lib/schemas.ts` edit was needed; this pins that.
             reviewed_actions: ["GITHUB_DELETE_REPO"],
+            // R-V5-13 (V5-54): the per-app account chooser's value. Same
+            // passthrough guarantee — pinned explicitly since the card calls
+            // out "`lib/schemas.ts` must carry `accounts`... so it isn't
+            // stripped on save" as an acceptance bullet of its own.
+            accounts: { github: ["conn_work", "conn_personal"] },
             router: { search: true, execute: true, manage_connections: false },
           },
         },
@@ -522,6 +527,7 @@ describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_
     expect((result.values as AgentEditorForm).config.tools.apps?.mode).toBe("server");
     expect((result.values as AgentEditorForm).config.tools.apps?.allowed_toolkits).toEqual(["github"]);
     expect((result.values as AgentEditorForm).config.tools.apps?.reviewed_actions).toEqual(["GITHUB_DELETE_REPO"]);
+    expect((result.values as AgentEditorForm).config.tools.apps?.accounts).toEqual({ github: ["conn_work", "conn_personal"] });
   });
 });
 

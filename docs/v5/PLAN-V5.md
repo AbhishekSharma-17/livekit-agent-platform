@@ -599,7 +599,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-02 | Opus | 1 | merged | 753d0c9 (+ d128e20 exports) | | |
 | V5-03 | Sonnet | 1 | merged | 5f3c540 (+ aa6c81f) | | |
 | V5-04 | Opus | 1 | merged | | | |
-| V5-05 | Opus | 1 | planned | | | |
+| V5-05 | Opus | 1 | merged | | | |
 | V5-18 | Opus | 1 | merged | bd5f198 | needs the Composio key (present) | |
 | V5-06 | Opus | 2 | merged | | | |
 | V5-07 | Opus | 2 | merged | | | |

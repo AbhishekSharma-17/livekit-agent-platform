@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from lkap_contracts.agent_config import (
     CapabilitiesConfig,
@@ -19,6 +19,16 @@ class KbSeed(BaseModel):
 
     kb_name: str
     files: list[str]
+
+    @field_validator("files")
+    @classmethod
+    def _relative_paths(cls, value: list[str]) -> list[str]:
+        # Pack-relative paths only (S5-38): never absolute, never climbing out of the pack.
+        for name in value:
+            parts = name.replace("\\", "/").split("/")
+            if not name or name.startswith(("/", "\\")) or ":" in parts[0] or ".." in parts:
+                raise ValueError(f"seed file {name!r} must be a relative path inside the pack")
+        return value
 
 
 class ToolMeta(BaseModel):

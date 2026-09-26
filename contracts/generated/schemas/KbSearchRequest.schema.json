@@ -36,6 +36,8 @@
       "type": "string"
     },
     "query": {
+      "maxLength": 2000,
+      "minLength": 1,
       "title": "Query",
       "type": "string"
     },

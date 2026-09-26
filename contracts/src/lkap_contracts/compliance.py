@@ -220,6 +220,12 @@ class ConsentEvent(BaseModel):
     method: ConsentMethod
     text_hash: str = Field(pattern=TEXT_HASH_PATTERN, description="SHA-256 of the exact text, lowercase hex.")
     block_id: str | None = Field(default=None, description="The consent block answered, if there is one.")
+    turn_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="A voice answer's user turn (the transcript row it was heard in); "
+        "null for a tap and for events written before V5-27.",
+    )
 
 
 class ConsentRecord(ConsentEvent):

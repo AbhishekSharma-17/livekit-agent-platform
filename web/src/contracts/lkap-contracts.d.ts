@@ -2041,6 +2041,10 @@ export interface ConsentEvent {
    * SHA-256 of the exact text, lowercase hex.
    */
   text_hash: string;
+  /**
+   * A voice answer's user turn (the transcript row it was heard in); null for a tap and for events written before V5-27.
+   */
+  turn_id?: string | null;
 }
 /**
  * ``sessions.consent_state``: the latest answer per consent kind (a later answer replaces it).
@@ -2072,6 +2076,10 @@ export interface ConsentRecord {
    * SHA-256 of the exact text, lowercase hex.
    */
   text_hash: string;
+  /**
+   * A voice answer's user turn (the transcript row it was heard in); null for a tap and for events written before V5-27.
+   */
+  turn_id?: string | null;
 }
 /**
  * ``GET /v1/cost-estimates/assumptions``: the workspace's effective assumptions.
@@ -2307,7 +2315,7 @@ export interface MoneyRange {
 export interface CostEstimateRequest {
   agent_id?: string | null;
   /**
-   * Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`).
+   * Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`); at most 50.
    */
   assumptions?: {
     [k: string]: number | string;
@@ -2768,6 +2776,10 @@ export interface InternalKbSearchRequest {
    * `local` rescores the top candidates with the local cross-encoder.
    */
   rerank?: "none" | "local";
+  /**
+   * The session searching; when set, only knowledge bases of that session's workspace are searched (S5-29). Null from a pre-V5-27 worker.
+   */
+  session_id?: string | null;
 }
 /**
  * ``POST /internal/v1/telephony/sessions/{id}/transfer`` (the ``transfer_call`` tool).

@@ -43,6 +43,8 @@
       "type": "string"
     },
     "query": {
+      "maxLength": 2000,
+      "minLength": 1,
       "title": "Query",
       "type": "string"
     },
@@ -55,6 +57,20 @@
       ],
       "title": "Rerank",
       "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The session searching; when set, only knowledge bases of that session's workspace are searched (S5-29). Null from a pre-V5-27 worker.",
+      "title": "Session Id"
     }
   },
   "required": [

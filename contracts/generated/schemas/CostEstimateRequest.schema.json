@@ -2313,6 +2313,7 @@
               }
             ]
           },
+          "maxProperties": 50,
           "type": "object"
         },
         {
@@ -2320,7 +2321,7 @@
         }
       ],
       "default": null,
-      "description": "Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`).",
+      "description": "Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`); at most 50.",
       "title": "Assumptions"
     },
     "channel": {

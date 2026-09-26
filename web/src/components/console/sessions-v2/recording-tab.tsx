@@ -47,15 +47,21 @@ export function RecordingTab({ session }: SessionTabProps) {
   }
 
   if (status !== "ready" || !recording.url) {
+    // V5-15/V5-17: a consent-gated recording that never started carries a
+    // plain reason here (`api/src/lkap_api/recordings/consent.py`:
+    // "Not recorded: consent declined" / "…the caller did not agree to be
+    // recorded"), with `recording_status` staying "none" (no new status) —
+    // shown as the title in place of the generic "No recording" one.
+    const notRecordedReason = status === "none" ? recording.error : null;
     return (
       <EmptyState
         icon={AudioLinesIcon}
-        title={STATUS_LABEL[status] ?? status}
+        title={notRecordedReason || (STATUS_LABEL[status] ?? status)}
         description={
           status === "failed"
             ? (recording.error ?? "The recording could not be produced for this session.")
             : status === "none"
-              ? "This session's agent doesn't have recording turned on, or the call hasn't ended yet."
+              ? (notRecordedReason ? undefined : "This session's agent doesn't have recording turned on, or the call hasn't ended yet.")
               : "The recording is still being processed — check back in a moment."
         }
         action={

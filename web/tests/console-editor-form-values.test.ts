@@ -156,7 +156,17 @@ describe("buildAgentUpdate", () => {
       a,
       submitted(a, (v) => (v.config.recording = { ...v.config.recording, enabled: true, retention_days: 30 })),
     );
-    expect(body.config?.recording).toEqual({ enabled: true, audio_only: true, storage_config_id: null, retention_days: 30 });
+    // V5-17: `require_consent`/`consent_text` now round-trip too (they were
+    // silently stripped by `recordingConfigSchema` before this package added
+    // them, `docs/v5/_asks.md`).
+    expect(body.config?.recording).toEqual({
+      enabled: true,
+      audio_only: true,
+      storage_config_id: null,
+      retention_days: 30,
+      require_consent: false,
+      consent_text: null,
+    });
   });
 });
 

@@ -516,7 +516,15 @@ describe("agentEditorFormSchema — tools.apps survives the zod parse (docs/v5/_
         knowledge: { kb_ids: [], auto_inject: true, top_k: 4 },
         pack_settings: {},
         timezone: "UTC",
-        recording: { enabled: false, audio_only: true, storage_config_id: null, retention_days: null },
+        // V5-17: `require_consent`/`consent_text` joined the schema so a save no longer strips them.
+        recording: {
+          enabled: false,
+          audio_only: true,
+          storage_config_id: null,
+          retention_days: null,
+          require_consent: false,
+          consent_text: null,
+        },
         panel: { panel_id: "composite", layout: "side", blocks: [] },
         telephony: { transfer_targets: [] },
       },

@@ -270,14 +270,37 @@ export const localeConfigSchema = z.object({
 
 const wholeNumber = (message: string) => z.number({ error: "Enter a number" }).int(message);
 
-/** `RecordingConfig` (CONTRACTS-V2 §4.3). Audio-only is fixed on in Phase 1. */
+/**
+ * `RecordingConfig` (CONTRACTS-V2 §4.3). Audio-only is fixed on in Phase 1.
+ * `require_consent`/`consent_text` (V5-15, `docs/v5/_asks.md`, V5-17's edit
+ * outside its exclusive files): without them here `z.object`'s resolver
+ * parse would strip both from every save (this file's header warning) — the
+ * Recording section's "Ask for consent before recording" switch would never
+ * persist.
+ */
 export const recordingConfigSchema = z.object({
   enabled: z.boolean(),
   audio_only: z.boolean(),
   storage_config_id: z.string().nullable(),
   retention_days: wholeNumber("Whole days only").min(1, "At least 1 day").nullable(),
+  require_consent: z.boolean(),
+  consent_text: z.string().max(2000, "2000 characters max").nullable(),
 });
 export type RecordingConfigForm = z.infer<typeof recordingConfigSchema>;
+
+/**
+ * `DisclosureConfig` (V5-15, D-V5-22; V5-17's edit outside its exclusive
+ * files, same rationale as `recordingConfigSchema` above). Optional on
+ * `agentConfigFormSchema` like `localeConfigSchema` — a hand-built fixture
+ * built before this field existed doesn't need to supply it, and
+ * `toFormValues` always fills a concrete value from `DEFAULT_DISCLOSURE`.
+ */
+export const disclosureConfigSchema = z.object({
+  enabled: z.boolean(),
+  position: z.enum(["greeting", "banner", "both"]),
+  text: z.string().max(2000, "2000 characters max").nullable(),
+});
+export type DisclosureConfigForm = z.infer<typeof disclosureConfigSchema>;
 
 /** `AgentLimits` (CONTRACTS-V2 §3.3) — top-level on the agent, not in `config`. */
 export const agentLimitsSchema = z.object({
@@ -394,6 +417,13 @@ export const agentConfigFormSchema = z
     /** R-V5-10: whose clock the agent talks in at session start (see `localeConfigSchema`). */
     locale: localeConfigSchema.optional(),
     recording: recordingConfigSchema,
+    /**
+     * V5-15's AI disclosure (D-V5-22); optional like `locale` above — the
+     * Conversation section's "Disclosure" card (V5-17) is the only editor,
+     * and `toFormValues` always supplies a concrete value from
+     * `DEFAULT_DISCLOSURE`.
+     */
+    disclosure: disclosureConfigSchema.optional(),
     panel: panelLayoutSchema,
     /**
      * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the

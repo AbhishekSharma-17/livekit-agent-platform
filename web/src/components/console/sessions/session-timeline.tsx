@@ -11,9 +11,10 @@ import { StateMeter } from "@/components/shared/state-meter";
 import { StatusChip } from "@/components/shared/status-chip";
 import type { MeterState } from "@/components/shared/agent-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import type { SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
+import type { ConsentEvent, SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CONSENT_KINDS } from "@/panels/blocks/catalog";
 
 import { formatMs } from "./detail/builtin-event-kinds";
 import { sessionEventKinds } from "./detail/resolved";
@@ -201,8 +202,44 @@ function TimelineRowView({ row, origin, agentName }: { row: TimelineRow; origin:
     case "state":
       return <StateTrack entry={row} origin={origin} />;
     case "event":
-      return <EventRow entry={row} origin={origin} />;
+      // V5-17: `consent` answers get a plain-language row of their own,
+      // never the generic "Other" one — a reviewer needs to read who agreed
+      // or declined at a glance, not open a Details disclosure for it.
+      return row.type === "consent" ? <ConsentRow entry={row} origin={origin} /> : <EventRow entry={row} origin={origin} />;
   }
+}
+
+/** `ConsentKind` → its plain label (`panels/blocks/catalog.ts::CONSENT_KINDS`). */
+const CONSENT_KIND_LABEL: Record<string, string> = Object.fromEntries(CONSENT_KINDS.map((k) => [k.value, k.label]));
+
+/**
+ * One `consent` session event (`lkap_contracts.compliance.ConsentEvent`,
+ * V5-15): who answered what, how, and — behind "Details", never in the
+ * open — the SHA-256 of the exact wording they were shown (README's
+ * "no raw JSON outside a disclosure" rule).
+ */
+function ConsentRow({ entry, origin }: { entry: EventEntry; origin: number }) {
+  const latest = entry.events[entry.events.length - 1];
+  const payload = (latest.payload ?? {}) as Partial<ConsentEvent>;
+  const kindLabel = (payload.kind && CONSENT_KIND_LABEL[payload.kind]) || "Consent";
+  const method = payload.method === "voice" ? "by voice" : "by tap";
+  const hash = typeof payload.text_hash === "string" ? payload.text_hash : null;
+
+  return (
+    <RowFrame at={entry.at} origin={origin} testId="consent">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+        <StatusChip tone={payload.accepted ? "success" : "neutral"} size="sm" dot>
+          {payload.accepted ? "Agreed" : "Declined"} — {kindLabel}
+        </StatusChip>
+        <span className="text-muted-foreground">{method}</span>
+      </div>
+      {hash ? (
+        <DetailsDisclosure>
+          <CodeBlock label={`Text hash: ${hash.slice(0, 8)}…`} value={prettyJson(latest.payload)} />
+        </DetailsDisclosure>
+      ) : null}
+    </RowFrame>
+  );
 }
 
 function RowFrame({

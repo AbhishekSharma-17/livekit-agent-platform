@@ -287,4 +287,45 @@ describe("ConversationSection", () => {
 
     await waitFor(() => expect(latest?.config.tools.execution_default).toBe("auto"));
   });
+
+  describe("Disclosure (V5-15, D-V5-22, V5-17)", () => {
+    it("defaults to on, both, and the workspace's wording", async () => {
+      stubFetch();
+      render(<Harness agent={agent()} />);
+      expect((screen.getByRole("switch", { name: "Tell callers they're talking to an AI" }) as HTMLButtonElement).getAttribute("aria-checked")).toBe(
+        "true",
+      );
+      expect((screen.getByRole("radio", { name: "Both" }) as HTMLButtonElement).getAttribute("aria-checked")).toBe("true");
+      expect((screen.getByLabelText("Wording") as HTMLTextAreaElement).value).toBe("");
+    });
+
+    it("turning it off disables where-it-appears and the wording", async () => {
+      stubFetch();
+      render(<Harness agent={agent()} />);
+      fireEvent.click(screen.getByRole("switch", { name: "Tell callers they're talking to an AI" }));
+      await waitFor(() => expect(latest?.config.disclosure?.enabled).toBe(false));
+      expect((screen.getByRole("radio", { name: "Both" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByLabelText("Wording") as HTMLTextAreaElement).disabled).toBe(true);
+    });
+
+    it("edits the position and the wording, an empty wording saving as null (the workspace default)", async () => {
+      stubFetch();
+      const withDisclosure = agent({
+        config: {
+          instructions: "Hi there",
+          pipeline: { mode: "cascaded" },
+          disclosure: { enabled: true, position: "both", text: "Custom line." },
+        } as AgentOut["config"],
+      });
+      render(<Harness agent={withDisclosure} />);
+      const wording = screen.getByLabelText("Wording") as HTMLTextAreaElement;
+      expect(wording.value).toBe("Custom line.");
+
+      fireEvent.click(screen.getByRole("radio", { name: "As an on-screen banner" }));
+      await waitFor(() => expect(latest?.config.disclosure?.position).toBe("banner"));
+
+      fireEvent.change(wording, { target: { value: "" } });
+      await waitFor(() => expect(latest?.config.disclosure?.text).toBeNull());
+    });
+  });
 });

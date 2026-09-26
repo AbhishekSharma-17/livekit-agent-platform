@@ -138,6 +138,9 @@ export interface LkapContracts {
   McpHeaderAuth?: McpHeaderAuth;
   McpNoAuth?: McpNoAuth;
   McpOAuthAuth?: McpOAuthAuth;
+  McpOauthStartIn?: McpOauthStartIn;
+  McpOauthStartOut?: McpOauthStartOut;
+  McpOauthStatusOut?: McpOauthStatusOut;
   McpServerDefinition?: McpServerDefinition;
   McpServerOrigin?: McpServerOrigin;
   McpTestResult?: McpTestResult;
@@ -3204,6 +3207,58 @@ export interface McpOAuthAuth {
   registration?: "auto" | "preregistered";
   scopes?: string[] | null;
   subject?: "workspace" | "agent";
+}
+/**
+ * ``POST /v1/tools/{id}/oauth/start``: begin signing in to an MCP server's OAuth provider.
+ *
+ * ``client_secret`` is for a pre-registered confidential client only. It is write-only:
+ * stored in the vault, sent to the provider's token endpoint, never returned or logged.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOauthStartIn".
+ */
+export interface McpOauthStartIn {
+  authorization_server?: string | null;
+  client_secret?: string | null;
+}
+/**
+ * ``POST /v1/tools/{id}/oauth/start``: where to send the admin's browser, or what is missing.
+ *
+ * ``status="redirect"``: open ``authorization_url``; the sign-in must finish before
+ * ``expires_at``. ``status="needs_client_registration"``: the provider offers no automatic
+ * registration, so an admin registers an app with it (``redirect_uri`` is the address to
+ * paste), then saves the server with ``auth.registration="preregistered"`` and the client id.
+ * Never carries a token or a client secret.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOauthStartOut".
+ */
+export interface McpOauthStartOut {
+  authorization_url?: string | null;
+  expires_at?: string | null;
+  issuer?: string | null;
+  redirect_uri: string;
+  registration?: ("preregistered" | "cimd" | "dcr") | null;
+  status: "redirect" | "needs_client_registration";
+}
+/**
+ * ``GET /v1/tools/{id}/oauth/status``: the tool's sign-in, without any token material.
+ *
+ * ``worker_supported`` stays ``False`` until the worker can use the token (V5-16): a
+ * connected server is saved but not yet usable in a session.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOauthStatusOut".
+ */
+export interface McpOauthStatusOut {
+  connected_at?: string | null;
+  expires_at?: string | null;
+  issuer?: string | null;
+  last_refresh_at?: string | null;
+  registration?: ("preregistered" | "cimd" | "dcr") | null;
+  scopes?: string[];
+  status: "not_connected" | "connected" | "needs_reauth" | "revoked";
+  worker_supported?: boolean;
 }
 /**
  * A streamable-HTTP MCP server attached to the agent.

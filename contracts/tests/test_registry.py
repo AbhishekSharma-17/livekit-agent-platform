@@ -576,3 +576,24 @@ def test_metered_noise_cancellation_entries_show_a_price_note() -> None:
         assert note is not None
         assert "minute" in note
     assert all(spec.price_note is None for spec in REGISTRY if spec.kind != "noise_cancellation")
+
+
+# ------------------------------------------------------------------ V5-14: mcp-oauth
+def test_mcp_oauth_entry_is_a_callback_written_secret_bag() -> None:
+    """The sign-in credential has no fields an admin types and needs no key of its own."""
+    from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID
+
+    spec = get(MCP_OAUTH_PROVIDER_ID)
+    assert spec.id == "mcp-oauth"
+    assert spec.kind == "secret_bag"
+    assert spec.requires_credential is False
+    assert spec.secret_fields == []
+    assert spec.python_class == "" and spec.package == ""
+    assert credential_home(spec) == "mcp-oauth"
+
+
+def test_http_tool_secret_stays_the_first_secret_bag() -> None:
+    """The console picks "the" tool-secret bag as the first ``secret_bag`` entry."""
+    bags = [spec.id for spec in REGISTRY if spec.kind == "secret_bag"]
+    assert bags[0] == "http-tool-secret"
+    assert "mcp-oauth" in bags

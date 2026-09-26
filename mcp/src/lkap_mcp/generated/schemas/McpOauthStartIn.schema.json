@@ -1,0 +1,36 @@
+{
+  "$id": "lkap-contracts/McpOauthStartIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tools/{id}/oauth/start``: begin signing in to an MCP server's OAuth provider.\n\n``client_secret`` is for a pre-registered confidential client only. It is write-only:\nstored in the vault, sent to the provider's token endpoint, never returned or logged.",
+  "properties": {
+    "authorization_server": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Authorization Server"
+    },
+    "client_secret": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Client Secret"
+    }
+  },
+  "title": "McpOauthStartIn",
+  "type": "object"
+}

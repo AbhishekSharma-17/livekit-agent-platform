@@ -534,6 +534,20 @@ Section "Instructions & voice", two `Section`s:
 
 Copy table (old → new): "Greeting mode" → "How to greet"; "Say (TTS reads it verbatim)" → "Say it exactly"; "Generate (model paraphrases it)" → "Let the model paraphrase"; "User-away timeout (seconds)" → "End the call when the caller is silent for … seconds"; "Allow interruptions" → "Let callers interrupt".
 
+### 4.6a Conversation (V5-11)
+
+Its own section (`editor/sections/conversation-section.tsx`, order 25 — between Instructions & voice and Flow); the Instructions tab keeps a one-line link where its old "Conversation" card (V4-13) used to live, instead of duplicating the content. Five `Section`s:
+
+**Conversation** (the preset): five radio cards — Balanced, Patient, Snappy, Phone call, Custom — each with a one-line, plain-language description ("Waits longer before replying…", "Replies quickly, and can start before the caller finishes talking…"); no numeric values are shown on the cards themselves (`lkap_contracts.turn_handling.CONVERSATION_PRESETS` isn't exposed to the web yet — `docs/v5/_asks.md` #76). Choosing a card posts `pipeline.conversation_preset` only; the stored `pipeline.turn_handling` is untouched (the api expands the preset at session start).
+
+**Turn taking**: "Wait at least" / "Wait at most" (`turn_handling.endpointing.{min_delay,max_delay}`, seconds); "Let the caller interrupt after" (`interruption.min_duration`, seconds of speech) and "Minimum words to interrupt" (`interruption.min_words`); "Reply while the caller is still finishing" switch (`preemptive_generation.enabled`). Editing any of these switches the preset above to Custom — the section's description says so, naming the active preset when it isn't already Custom.
+
+**Turn detector**: "Where it runs" — Hosted / On this worker (`turn_detector.mode`) — and "Sensitivity" (`turn_detector.unlikely_threshold`, 0–1; higher waits longer before deciding the caller is done).
+
+**Sounds**: "Thinking sound" (moved from the old Conversation card, unchanged) and "Background sound" (`voice.ambient_sound`: None or a built-in clip; an uploaded clip isn't playable yet). A read-only "Noise cancellation" line shows the provider picked in the Providers section's Advanced slot (unchanged — this section never edits it) and, when metered, its price note verbatim from the registry (`ProviderSpec.price_note`), with a "Change in Providers" link.
+
+**Advanced**: the same "Read tools run" picker as before (moved, unchanged wording), plus a collapsed "Advanced" disclosure with the raw `turn_handling` as JSON, for keys the form above doesn't show; editing it also switches the preset to Custom. This is now the *only* place the raw JSON appears — it no longer sits in the open on the Instructions tab.
+
 ### 4.7 Panel, tools and knowledge
 
 **Panel & capabilities**: two panel cards (radio) from `PANEL_META` — "Session panel" (generic: "Status, notes, checklist, attachments and activity. Works with every pack.") and "Claim notebook" (insurance: "The adjuster's notebook: handwritten notes, taped photos, sketch and stamp. Needs the insurance pack's tools.") with the side/wide thumbnails; a "Custom panel id" collapsible for ids not in `KNOWN_PANEL_IDS`. Capabilities as a list (`divide-y`) with switch, title and consequence: "Camera — callers can turn on their camera; the agent sees frames when the model supports vision"; "Screen share — callers can share a window or tab"; "Typing — callers can type instead of speaking"; "Look at the latest frame every turn — sends the newest camera/screen frame with each reply (costs vision tokens)". The vision hint uses tokens and links to Providers.

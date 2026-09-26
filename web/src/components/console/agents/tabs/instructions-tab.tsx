@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Controller, useFormContext } from "react-hook-form";
 
 import { Field } from "@/components/shared/field";
@@ -67,25 +68,12 @@ function supportedTimezones(): string[] {
  * "User-away timeout (seconds)" → "End the call when the caller is silent
  * for … seconds"; "Allow interruptions" → "Let callers interrupt".
  */
-/** Below this, a chain of background announcements can exhaust the tool-steps budget (api's `MIN_TOOL_STEPS_FOR_BACKGROUND`, R-V4-35). */
-const MIN_TOOL_STEPS_FOR_BACKGROUND = 4;
-
-const THINKING_SOUNDS = [
-  { value: "none", label: "None" },
-  { value: "keyboard_typing", label: "Keyboard typing" },
-  { value: "keyboard_typing2", label: "Keyboard typing (alternate)" },
-  { value: "office_ambience", label: "Office ambience" },
-] as const;
-
 export function InstructionsTab({ agent }: { agent: AgentOut }) {
   const timezoneListId = React.useId();
   const { register, control, watch, setValue, formState } = useFormContext<AgentEditorForm>();
   const instructions = watch("config.instructions");
   const mode = watch("config.pipeline.mode");
-  const executionDefault = watch("config.tools.execution_default");
-  const maxToolSteps = watch("config.tools.max_tool_steps");
   const instructionsError = formState.errors.config?.instructions?.message;
-  const stepsWarning = executionDefault !== "blocking" && maxToolSteps < MIN_TOOL_STEPS_FOR_BACKGROUND;
 
   const packsQuery = usePacks();
   const pack = packsQuery.data?.items.find((p) => p.manifest.id === agent.pack_id)?.manifest;
@@ -145,7 +133,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
         </SectionRow>
       </Section>
 
-      <Section id="voice" title="Voice" description="How the agent greets callers and handles turn-taking.">
+      <Section id="voice" title="Voice" description="How the agent greets callers and whether they can interrupt it.">
         <SectionRow>
           <Field label="Greeting" htmlFor="greeting" hint="The first thing the agent says.">
             <Textarea id="greeting" rows={2} {...register("config.voice.greeting")} />
@@ -304,79 +292,19 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
         </SectionRow>
       </Section>
 
-      <Section
-        id="conversation"
-        title="Conversation"
-        description="How the agent behaves while a tool is still running."
-      >
-        <SectionRow>
-          <Controller
-            control={control}
-            name="config.tools.execution_default"
-            render={({ field }) => (
-              <Field
-                label="Read tools run"
-                htmlFor="tools-execution-default"
-                hint="Applies to GET web requests, search knowledge and describe current frame — anything that changes something always waits for the agent to reply."
-              >
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="tools-execution-default" className="w-full sm:w-72" data-issue-path="tools.execution_default">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="blocking">Blocking — wait for the result</SelectItem>
-                    <SelectItem value="auto">Automatic — background only if slow</SelectItem>
-                    <SelectItem value="background">In the background — always</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          />
-          {stepsWarning ? (
-            // A server-issued `tools.max_tool_steps` issue routes to the Tools
-            // section (`builtin-sections.tsx`'s `issuePaths`), whose own field
-            // carries the same `data-issue-path` and is what actually receives
-            // focus; `tabIndex` here only makes this local hint focusable too,
-            // in case it is ever reached directly.
-            <p
-              data-issue-path="tools.max_tool_steps"
-              tabIndex={-1}
-              className="text-[0.8125rem] text-warning-text"
-            >
-              Read tools run &quot;{executionDefault}&quot; and each announcement spends a tool step; with{" "}
-              {maxToolSteps} tool steps a chain of lookups can run out of steps — use {MIN_TOOL_STEPS_FOR_BACKGROUND}{" "}
-              or more (Tools tab → Advanced → Tool steps per turn).
-            </p>
-          ) : null}
-        </SectionRow>
-
-        <SectionRow>
-          <Controller
-            control={control}
-            name="config.voice.thinking_sound"
-            render={({ field }) => (
-              <Field
-                label="Thinking sound"
-                htmlFor="voice-thinking-sound"
-                hint="Plays while the agent is working things out, e.g. on a blocking tool call."
-              >
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="voice-thinking-sound" className="w-full sm:w-72" data-issue-path="voice.thinking_sound">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {THINKING_SOUNDS.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          />
-        </SectionRow>
-      </Section>
+      {/*
+       * V5-11: the old "Conversation" card (read tools run, thinking sound,
+       * plus presets/turn-taking/turn detector/background sound/noise
+       * cancellation it never showed) moved to its own Conversation section;
+       * this tab keeps a link there instead of duplicating it.
+       */}
+      <p className="text-[0.8125rem] text-muted-foreground">
+        Turn taking, presets, sounds and noise cancellation moved to{" "}
+        <Link href={`/console/agents/${agent.id}?section=conversation`} className="underline underline-offset-2">
+          Conversation
+        </Link>
+        .
+      </p>
     </div>
   );
 }

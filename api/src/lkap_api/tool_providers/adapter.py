@@ -97,6 +97,10 @@ class ToolProviderAdapter(Protocol):
         """One toolkit, with its auth schemes."""
         ...
 
+    async def list_toolkit_categories(self, *, cursor: str | None = None, limit: int = 100) -> dict[str, Any]:
+        """A page of every toolkit category the vendor knows (for the gallery's category filter)."""
+        ...
+
     async def list_tools(
         self,
         *,

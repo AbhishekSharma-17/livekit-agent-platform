@@ -1,0 +1,12 @@
+{
+  "items": [
+    {"id": "scheduling", "name": "Scheduling"},
+    {"id": "crm", "name": "CRM"},
+    {"id": "developer-tools", "name": "Developer tools"},
+    {"id": "data", "name": "Data"}
+  ],
+  "next_cursor": "Y2F0LWN1cnNvci0y",
+  "total_pages": 2,
+  "current_page": 1,
+  "total_items": 5
+}

@@ -424,6 +424,41 @@ async def test_connected_only_lists_the_workspace_apps(
     assert body["items"][0]["connected"] is True
 
 
+async def test_categories_are_aggregated_across_pages_and_cached(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    first = (await admin_client.get(f"{BASE}/categories")).json()
+    await admin_client.get(f"{BASE}/categories")
+
+    reason = "one page followed for the next_cursor, then a cache hit"
+    assert len(world.calls_of("list_toolkit_categories")) == 2, reason
+    assert first["items"] == [
+        {"id": "scheduling", "name": "Scheduling"},
+        {"id": "crm", "name": "CRM"},
+        {"id": "developer-tools", "name": "Developer tools"},
+        {"id": "data", "name": "Data"},
+    ]
+
+
+async def test_categories_refresh_bypasses_the_cache(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await admin_client.get(f"{BASE}/categories")
+    await admin_client.get(f"{BASE}/categories", params={"refresh": "true"})
+
+    # Two vendor pages (first page + its `next_cursor`) per call, twice — the
+    # second call's `refresh=true` bypasses the one-entry cache entirely.
+    assert len(world.calls_of("list_toolkit_categories")) == 4
+
+
+async def test_toolkits_filter_by_category_id(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    body = (await admin_client.get(f"{BASE}/toolkits", params={"category": "scheduling"})).json()
+
+    assert [item["slug"] for item in body["items"]] == ["googlecalendar"]
+
+
 async def test_one_toolkit_lists_what_each_connect_method_asks_for(
     admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
 ) -> None:

@@ -1,6 +1,13 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 import { ApiError, api } from "@/lib/api";
 import { isSendableModelId, modelIdPath } from "@/lib/model-ids";
@@ -81,6 +88,7 @@ const keys = {
   providerModel: (providerId: string, modelId: string) => ["provider-models", providerId, "one", modelId] as const,
   /** Tools -> Apps (Composio, docs/v5/COMPOSIO.md §6). */
   appsStatus: ["apps", "status"] as const,
+  appsCategories: ["apps", "categories"] as const,
   appsToolkits: (params: ToolkitListParams) => ["apps", "toolkits", params] as const,
   appsToolkit: (slug: string) => ["apps", "toolkit", slug] as const,
   appsActions: (slug: string, params: AppActionListParams) => ["apps", "actions", slug, params] as const,
@@ -543,6 +551,8 @@ export interface ToolkitListParams {
  * §4: "page with `cursor`"). `useInfiniteQuery` so "Load more" appends to the
  * same list rather than the caller juggling a manual accumulator; a search,
  * category or "Connected only" change is a new `queryKey` and starts over.
+ * `placeholderData: keepPreviousData` keeps the last page's apps on screen
+ * while the new query settles, instead of a loading flash between keystrokes.
  */
 export function useToolProviderToolkits(params: ToolkitListParams, options?: { enabled?: boolean }) {
   return useInfiniteQuery({
@@ -557,6 +567,33 @@ export function useToolProviderToolkits(params: ToolkitListParams, options?: { e
         connected_only: params.connectedOnly || undefined,
       }),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: options?.enabled ?? true,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** One toolkit category, as `GET /v1/tool-providers/composio/categories` returns it — kept
+ * local to the web hook rather than added to `@/contracts/lkap-contracts` (the api response
+ * model is api-local too; see `lkap_api.tool_providers.service.ToolProviderCategoryOut`). */
+export interface ToolProviderCategoryOut {
+  id: string;
+  name: string;
+}
+
+export interface ToolProviderCategoryPage {
+  items: ToolProviderCategoryOut[];
+}
+
+/**
+ * `GET .../categories` — every category Composio's apps are grouped under
+ * (docs/v5/COMPOSIO.md §6), for the gallery's category filter. Unlike
+ * `useToolProviderToolkits`'s categories (only the ones seen among the apps
+ * loaded so far), this is the complete list.
+ */
+export function useToolProviderCategories(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: keys.appsCategories,
+    queryFn: () => api.get<ToolProviderCategoryPage>(`${APPS_BASE}/categories`),
     enabled: options?.enabled ?? true,
   });
 }

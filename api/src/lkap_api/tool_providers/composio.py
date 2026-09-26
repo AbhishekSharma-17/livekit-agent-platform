@@ -180,6 +180,10 @@ class ComposioAdapter:
         """``GET /toolkits/{slug}``."""
         return await self._object("GET", f"/toolkits/{_seg(slug)}")
 
+    async def list_toolkit_categories(self, *, cursor: str | None = None, limit: int = 100) -> dict[str, Any]:
+        """``GET /toolkits/categories``: every category, paged (``id``/``name`` per item)."""
+        return await self._object("GET", "/toolkits/categories", params={"cursor": cursor, "limit": limit})
+
     async def list_tools(
         self,
         *,

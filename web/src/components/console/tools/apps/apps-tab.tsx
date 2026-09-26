@@ -13,7 +13,7 @@ import { RelativeTime } from "@/components/shared/relative-time";
 import { StatusChip } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
-import { useDisableApps, useEnableApps } from "@/components/console/lib/api-hooks";
+import { useDisableApps, useEnableApps, useToolProviderCategories, useToolProviderToolkits } from "@/components/console/lib/api-hooks";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { AppGallery } from "@/components/console/tools/apps/app-gallery";
 import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
@@ -30,6 +30,22 @@ import type { AppsStatusOut } from "@/contracts/lkap-contracts";
  */
 export function AppsTab() {
   const { status, isLoading, isError, error, refetch, validate, validating } = useComposioStatus();
+  // `AppGallery` used to mount only once `status` resolved to "enabled" — a
+  // strict waterfall (the status round-trip, then the toolkits one, one
+  // after another) that is exactly what a builder feels as "the first load
+  // takes a bit". Firing `AppGallery`'s own default-view queries here, at
+  // the top of the tab, starts them alongside `status` instead: they share
+  // the exact query key `AppGallery` uses for its initial render (no
+  // search, no category, not connected-only), so by the time the branch
+  // below actually mounts the gallery the data is already in cache, or
+  // close to it — the query is deduplicated, not doubled. `enabled` reads
+  // `true` while `status` is still loading (a guess that pays off whenever
+  // Apps *are* already on, the common repeat visit) and stops guessing once
+  // `status` confirms there is no key or it's off, so a workspace that has
+  // never turned Apps on doesn't get a doomed request on every visit.
+  const speculative = status ? status.enabled && status.credential_id != null : true;
+  useToolProviderToolkits({ limit: 24 }, { enabled: speculative });
+  useToolProviderCategories({ enabled: speculative });
   // The dialog is mounted unconditionally, outside the state branches below:
   // completing Save calls `enable` (D-V5-C13), whose result flips
   // `status.credential_id`/`.enabled` and swaps the branch that renders — if

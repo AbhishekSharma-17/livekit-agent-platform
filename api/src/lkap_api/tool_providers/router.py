@@ -188,6 +188,28 @@ async def get_toolkits(
 
 
 @router.get(
+    "/categories",
+    response_model=service.ToolProviderCategoryPage,
+    summary="Every toolkit category",
+    description=(
+        "The complete list of categories Composio's apps are grouped under (id and display name), "
+        "for the gallery's category filter — not just the categories seen among the apps loaded so "
+        "far. Cached for 10 minutes per key; `refresh=true` reads again."
+    ),
+)
+async def get_categories(
+    db: DbDep,
+    vault: VaultDep,
+    ctx: ReadCtx,
+    factory: FactoryDep,
+    cache: CacheDep,
+    refresh: bool = False,
+) -> service.ToolProviderCategoryPage:
+    """Every category, aggregated across the vendor's own pages."""
+    return await service.list_categories(db, vault, factory, cache, ctx, refresh=refresh)
+
+
+@router.get(
     "/toolkits/{slug}",
     response_model=ToolkitOut,
     summary="One app",

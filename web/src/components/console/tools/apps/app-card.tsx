@@ -19,6 +19,9 @@ function AppLogo({ toolkit }: { toolkit: ToolkitOut }) {
     <img
       src={toolkit.logo}
       alt=""
+      width={32}
+      height={32}
+      loading="lazy"
       referrerPolicy="no-referrer"
       className="size-8 shrink-0 rounded-sm border border-border object-contain bg-card"
       onError={() => setFailed(true)}

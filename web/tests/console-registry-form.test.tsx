@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { defaultFieldValues, RegistryForm } from "@/components/console/registry/registry-form";
 import type { ProviderSpec } from "@/contracts/lkap-contracts";
@@ -16,6 +16,36 @@ import providersJson from "../../contracts/generated/providers.json";
  * here).
  */
 const providers = (providersJson as { providers: ProviderSpec[] }).providers;
+
+// The voice/language fields render a `SearchableSelect` (Popover + cmdk
+// `Command`, same combination `console-model-combobox.test.tsx` exercises) —
+// jsdom needs the same shims once a test actually opens one.
+const nativeMatches = Element.prototype.matches;
+const nativeScrollIntoView = Element.prototype.scrollIntoView;
+beforeAll(() => {
+  Element.prototype.matches = function matches(this: Element, selector: string) {
+    if (selector === ":popover-open" || selector === ":modal") return false;
+    return nativeMatches.call(this, selector);
+  };
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+});
+afterAll(() => {
+  Element.prototype.matches = nativeMatches;
+  Element.prototype.scrollIntoView = nativeScrollIntoView;
+});
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("RegistryForm", () => {
   it("has at least the 18 MVP providers from the registry fixture", () => {
@@ -111,6 +141,35 @@ describe("RegistryForm", () => {
     const trigger = container.querySelector("#l-language");
     expect(trigger?.getAttribute("role")).toBe("combobox");
     expect(trigger?.textContent).toContain("English · en");
+  });
+
+  it("the language picker's search narrows the (long) BCP-47 list and picking one calls onChange with its code", async () => {
+    const fields: ProviderSpec["fields"] = [{ name: "language", label: "Language", type: "string", default: "en" }];
+    const onChange = vi.fn();
+    const { container } = render(
+      <RegistryForm fields={fields ?? []} values={{ language: "en" }} onChange={onChange} idPrefix="sl" />,
+    );
+    fireEvent.click(container.querySelector("#sl-language")!);
+    const input = await screen.findByPlaceholderText("Search…");
+    fireEvent.change(input, { target: { value: "japan" } });
+    const listbox = within(await screen.findByRole("dialog"));
+    expect(await listbox.findByText("Japanese · ja")).toBeTruthy();
+    expect(listbox.queryByText(/^Spanish/)).toBeNull();
+    fireEvent.click(listbox.getByText("Japanese · ja"));
+    expect(onChange).toHaveBeenCalledWith("language", "ja");
+  });
+
+  it("the voice picker's 'Custom voice…' escape switches to free text", async () => {
+    const fields: ProviderSpec["fields"] = [{ name: "voice", label: "Voice", type: "string", required: false }];
+    const onChange = vi.fn();
+    const { container } = render(
+      <RegistryForm fields={fields ?? []} values={{ voice: "" }} onChange={onChange} idPrefix="cvp" voices={["Ashley", "Brooke"]} />,
+    );
+    fireEvent.click(container.querySelector("#cvp-voice")!);
+    const listbox = within(await screen.findByRole("dialog"));
+    fireEvent.click(await listbox.findByText("Custom voice…"));
+    expect(container.querySelector("#cvp-voice")?.tagName).toBe("INPUT");
+    expect(screen.getByRole("button", { name: "Pick from list" })).toBeTruthy();
   });
 
   it("gives number fields a decimal keypad", () => {

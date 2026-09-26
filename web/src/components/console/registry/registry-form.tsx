@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Field } from "@/components/shared/field";
 import { ModelCombobox } from "@/components/console/registry/model-combobox";
 import { CATALOG_FULL_LIMIT, useCatalog, type CatalogKind } from "@/hooks/useCatalog";
@@ -493,7 +494,7 @@ function RegistryFieldControl({
   }
 }
 
-/** A `Select` over known values with a "Custom…" escape to free text. */
+/** A searchable select over known values with a "Custom…" escape to free text (voice and language fields: both lists are long enough that typing beats scrolling). */
 function ListWithCustom({
   id,
   value,
@@ -539,8 +540,9 @@ function ListWithCustom({
   }
 
   return (
-    <Select
-      value={value || undefined}
+    <SearchableSelect
+      id={id}
+      value={value || null}
       onValueChange={(next) => {
         if (next === CUSTOM) {
           setCustom(true);
@@ -549,19 +551,10 @@ function ListWithCustom({
         }
         onChange(next);
       }}
-    >
-      <SelectTrigger id={id} className="w-full" {...aria}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-        <SelectItem value={CUSTOM}>{customLabel}</SelectItem>
-      </SelectContent>
-    </Select>
+      groups={[{ options }, { options: [{ value: CUSTOM, label: customLabel }] }]}
+      placeholder={placeholder}
+      {...aria}
+    />
   );
 }
 

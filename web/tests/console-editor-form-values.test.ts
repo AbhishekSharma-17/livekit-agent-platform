@@ -198,6 +198,12 @@ describe("config.telephony (R-V2-21)", () => {
     expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({ transfer_targets: [] });
   });
 
+  it("keeps stored SMS numbers on a save that does not edit them (V5-25)", () => {
+    const sms = { transfer_targets: [], sms_targets: [{ label: "Claims desk", to: "+15550002222" }] };
+    const a = agent({ config: { ...agent().config, telephony: sms } });
+    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual(sms);
+  });
+
   it("sends edited destinations", () => {
     const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
     const body = buildAgentUpdate(

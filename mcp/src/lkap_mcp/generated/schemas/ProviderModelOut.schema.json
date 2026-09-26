@@ -172,7 +172,9 @@
         "image_gen",
         "embedding",
         "secret_bag",
-        "tool_provider"
+        "tool_provider",
+        "web_search",
+        "sms"
       ],
       "title": "Kind",
       "type": "string"

@@ -287,8 +287,19 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
 
   const attachedIds = new Set(config?.tools?.tool_ids ?? []);
   const ownTools = toolsQuery.data?.items ?? [];
+  // V5-25: the network built-ins count only once their service or sites are set (read from the
+  // saved config: the editor form does not carry those settings until V5-28's slots).
+  const savedTools = agent.config.tools;
+  const configured: Record<string, boolean> = {
+    web_search: Boolean(savedTools?.web_search),
+    fetch_url: (savedTools?.fetch_url_allowed_hosts ?? []).length > 0,
+    send_sms: Boolean(savedTools?.sms),
+    notify_team: Boolean(savedTools?.notify_team),
+  };
   const toolCounts = {
-    builtin: BUILTIN_TOOLS.filter((tool) => !(config?.tools?.builtin_disabled ?? []).includes(tool.name)).length,
+    builtin: BUILTIN_TOOLS.filter(
+      (tool) => !(config?.tools?.builtin_disabled ?? []).includes(tool.name) && configured[tool.name] !== false,
+    ).length,
     http: ownTools.filter((tool) => tool.kind === "http" && attachedIds.has(tool.id)).length,
     mcp: ownTools.filter((tool) => tool.kind === "mcp" && attachedIds.has(tool.id)).length,
     pack: pack?.tool_names.length ?? 0,

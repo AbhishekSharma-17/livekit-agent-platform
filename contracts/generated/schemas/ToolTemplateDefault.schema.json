@@ -1,0 +1,40 @@
+{
+  "$id": "lkap-contracts/ToolTemplateDefault.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An argument of a template the admin may fix when adding the tool (``event_type_id``).",
+  "properties": {
+    "help": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Help"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "name": {
+      "description": "The argument name in the tool's parameters",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "required": {
+      "default": false,
+      "title": "Required",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "label"
+  ],
+  "title": "ToolTemplateDefault",
+  "type": "object"
+}

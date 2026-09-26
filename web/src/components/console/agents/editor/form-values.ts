@@ -5,7 +5,6 @@ import {
   DEFAULT_LIMITS,
   DEFAULT_LOCALE,
   DEFAULT_RECORDING,
-  DEFAULT_TELEPHONY,
   DEFAULT_TOOLS,
   DEFAULT_VOICE,
 } from "@/components/console/agents/defaults";
@@ -76,7 +75,10 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       recording: { ...DEFAULT_RECORDING, ...config.recording },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
-      telephony: { ...DEFAULT_TELEPHONY, transfer_targets: [...(config.telephony?.transfer_targets ?? [])] },
+      // V5-25: only the fields this editor shows. `DEFAULT_TELEPHONY` (defaults.ts) also carries
+      // `sms_targets`, and an empty list here would replace the stored numbers on save
+      // (`buildAgentUpdate` merges the form over the stored telephony).
+      telephony: { transfer_targets: [...(config.telephony?.transfer_targets ?? [])] },
     },
   };
 }

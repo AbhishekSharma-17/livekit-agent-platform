@@ -56,6 +56,12 @@
       "video"
     ]
   },
+  "builtin_default_modes": {
+    "fetch_url": "background",
+    "notify_team": "background",
+    "send_sms": "background",
+    "web_search": "auto"
+  },
   "builtin_tool_names": [
     "end_call",
     "search_knowledge",
@@ -66,10 +72,26 @@
     "set_status",
     "escalate_to_human",
     "current_time",
-    "convert_time"
+    "convert_time",
+    "calculate",
+    "spell_back",
+    "web_search",
+    "fetch_url",
+    "send_sms",
+    "notify_team"
+  ],
+  "configured_builtins": [
+    "fetch_url",
+    "notify_team",
+    "send_sms",
+    "web_search"
   ],
   "vision_tool_names": [
     "describe_current_frame",
     "pin_frame"
+  ],
+  "write_builtins": [
+    "notify_team",
+    "send_sms"
   ]
 }

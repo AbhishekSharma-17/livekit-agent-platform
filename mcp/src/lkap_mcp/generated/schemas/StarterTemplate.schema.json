@@ -1450,6 +1450,31 @@
       "title": "RequiredKey",
       "type": "object"
     },
+    "SmsTarget": {
+      "description": "One number ``send_sms`` may text, named by its label (V5-25).",
+      "properties": {
+        "label": {
+          "description": "What the model and the caller call it",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "to": {
+          "description": "E.164 mobile number",
+          "maxLength": 16,
+          "pattern": "^\\+[1-9]\\d{6,14}$",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "to"
+      ],
+      "title": "SmsTarget",
+      "type": "object"
+    },
     "StartNode": {
       "description": "Entry point: greets the caller and hands off along its first matching edge.",
       "properties": {
@@ -1518,6 +1543,15 @@
     "TelephonyConfig": {
       "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
       "properties": {
+        "sms_targets": {
+          "description": "Numbers the agent may text by label, besides the caller of a phone call (send_sms).",
+          "items": {
+            "$ref": "#/$defs/SmsTarget"
+          },
+          "maxItems": 50,
+          "title": "Sms Targets",
+          "type": "array"
+        },
         "transfer_targets": {
           "items": {
             "$ref": "#/$defs/TransferTarget"

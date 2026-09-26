@@ -30,7 +30,26 @@ BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "escalate_to_human",
     "current_time",
     "convert_time",
+    # V5-25 (curated P0): two local helpers, registered by default like the time tools,
+    "calculate",
+    "spell_back",
+    # and four network tools, each registered only when the agent configures it
+    # (:data:`CONFIGURED_BUILTINS`).
+    "web_search",
+    "fetch_url",
+    "send_sms",
+    "notify_team",
 )
+
+#: Built-ins that reach a vendor or the internet and are registered only when the agent
+#: configures them (V5-25): ``web_search`` with ``tools.web_search``, ``fetch_url`` with a
+#: non-empty ``tools.fetch_url_allowed_hosts``, ``send_sms`` with ``tools.sms``,
+#: ``notify_team`` with ``tools.notify_team``. ``builtin_disabled`` still switches them off.
+CONFIGURED_BUILTINS: Final[frozenset[str]] = frozenset({"web_search", "fetch_url", "send_sms", "notify_team"})
+
+#: Built-ins that change the world (V5-25): run with ``is_read=False``, so a non-blocking run
+#: asks before running twice (``on_duplicate="confirm"``) and is not cancellable by default.
+WRITE_BUILTINS: Final[frozenset[str]] = frozenset({"send_sms", "notify_team"})
 
 #: Built-ins registered only when the agent has camera or screen share on.
 VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", "pin_frame"})
@@ -93,14 +112,18 @@ def builtin_tools_document() -> dict[str, Any]:
     """The built-in tool names as plain JSON (``generated/builtin_tools.json``).
 
     Returns:
-        ``{builtin_tool_names, vision_tool_names, block_tool_names, block_tool_types}``;
-        sets are sorted so the export is deterministic.
+        ``{builtin_tool_names, vision_tool_names, block_tool_names, block_tool_types,
+        configured_builtins, write_builtins, builtin_default_modes}``; sets are sorted so the
+        export is deterministic.
     """
     return {
         "builtin_tool_names": list(BUILTIN_TOOL_NAMES),
         "vision_tool_names": sorted(VISION_TOOL_NAMES),
         "block_tool_names": list(BLOCK_TOOL_NAMES),
         "block_tool_types": {name: sorted(types) for name, types in BLOCK_TOOL_TYPES.items()},
+        "configured_builtins": sorted(CONFIGURED_BUILTINS),
+        "write_builtins": sorted(WRITE_BUILTINS),
+        "builtin_default_modes": dict(sorted(BUILTIN_DEFAULT_MODES.items())),
     }
 
 
@@ -151,10 +174,30 @@ class ToolExecution(BaseModel):
     """MCP tools only: forward the server's progress notifications as updates (ignored elsewhere)."""
 
 
-#: Built-ins the agent-level default may background.
+#: Built-ins whose execution an admin may set (``ToolsConfig.builtin_execution``). The
+#: agent-level default reaches only the read ones among them (not :data:`WRITE_BUILTINS`),
+#: and only when the tool has no default of its own (:data:`BUILTIN_DEFAULT_MODES`).
 BACKGROUNDABLE_BUILTINS: Final[frozenset[str]] = frozenset(
-    {"search_knowledge", "http_request", "describe_current_frame"}
+    {
+        "search_knowledge",
+        "http_request",
+        "describe_current_frame",
+        # V5-25: two reads and two fire-and-forget writes.
+        "web_search",
+        "fetch_url",
+        "send_sms",
+        "notify_team",
+    }
 )
+#: A built-in's own mode when ``builtin_execution`` sets none (V5-25). It wins over the
+#: agent's ``execution_default``: a search answers inline when it is quick (``auto``); a page
+#: fetch, a text message and a team notification never hold the conversation up.
+BUILTIN_DEFAULT_MODES: Final[dict[str, ToolExecutionMode]] = {
+    "web_search": "auto",
+    "fetch_url": "background",
+    "send_sms": "background",
+    "notify_team": "background",
+}
 #: Tools that are never non-blocking (validator error; the worker ignores it with a warning).
 #: ``transfer_call`` and ``send_dtmf`` are the telephony tools (``lkap_agent.telephony``).
 #: Every flow edge tool (``go_to_*``) is never non-blocking either: see :func:`never_background`.
@@ -184,6 +227,9 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "pin_frame",
         "current_time",
         "convert_time",
+        # V5-25: local and instant.
+        "calculate",
+        "spell_back",
         # Composio Tool Router meta tools (docs/v5/COMPOSIO.md D-V5-C7): running an action,
         # opening a connection or waiting on one always waits for the result.
         "COMPOSIO_MULTI_EXECUTE_TOOL",
@@ -445,3 +491,78 @@ class ProviderToolDefinition(BaseModel):
 ToolDefinition = Annotated[
     HttpToolDefinition | McpServerDefinition | ProviderToolDefinition, Field(discriminator="kind")
 ]
+
+
+# --------------------------------------------------------------- tool templates (V5-25)
+#: Tool template ids: ``<group>.<name>`` (``cal_com.booking_create``).
+TOOL_TEMPLATE_ID_PATTERN = r"^[a-z][a-z0-9_]{0,40}\.[a-z][a-z0-9_]{0,63}$"
+
+
+class ToolTemplateDefault(BaseModel):
+    """An argument of a template the admin may fix when adding the tool (``event_type_id``)."""
+
+    name: str = Field(pattern=TOOL_NAME_PATTERN, description="The argument name in the tool's parameters")
+    label: str
+    help: str | None = None
+    required: bool = False
+    """The template cannot be added without a value for it."""
+
+
+class ToolTemplate(BaseModel):
+    """A ready-made HTTP tool (D-V5-36): the definition plus what an admin supplies to add it.
+
+    ``definition`` references its key as ``{{ secret.NAME }}`` (``secret_names``) and is stored
+    as a normal HTTP tool when instantiated; ``defaults`` become the JSON Schema ``default`` of
+    those arguments (an argument the model leaves out takes it).
+    """
+
+    id: str = Field(pattern=TOOL_TEMPLATE_ID_PATTERN)
+    group: str = Field(description="The set the template belongs to (`cal_com`)")
+    group_label: str
+    label: str
+    summary: str = Field(description="One plain-language line for the console")
+    secret_names: list[str] = Field(description="The `http-tool-secret` names the key must hold")
+    defaults: list[ToolTemplateDefault] = []
+    risk: Literal["read", "write"] = "read"
+    docs_url: str | None = None
+    definition: HttpToolDefinition
+
+
+class ToolTemplatesResponse(BaseModel):
+    """``GET /v1/tool-templates``: every template, grouped by ``group`` in catalogue order."""
+
+    items: list[ToolTemplate]
+
+
+class ToolTemplateInstantiate(BaseModel):
+    """``POST /v1/tool-templates/{id}/instantiate``: add one template, or every template of a group.
+
+    ``credential_id`` is an ``http-tool-secret`` key holding the template's ``secret_names``;
+    ``defaults`` fixes template arguments (``{"event_type_id": 123456}``).
+    """
+
+    credential_id: str
+    defaults: dict[str, str | int | float | bool] = {}
+    agent_id: str | None = None
+    enabled: bool = True
+    names: list[str] | None = Field(
+        default=None, description="Group instantiation only: the template names to add (default: all)"
+    )
+
+
+class ToolTemplateInstantiated(BaseModel):
+    """What ``POST /v1/tool-templates/{id}/instantiate`` created (tool rows, in template order)."""
+
+    tool_ids: list[str]
+    names: list[str]
+    template_ids: list[str]
+
+
+#: The tool-template models, registered in ``export.py`` with one line (``**TOOL_TEMPLATE_MODELS``).
+TOOL_TEMPLATE_MODELS: dict[str, type[BaseModel]] = {
+    "ToolTemplateDefault": ToolTemplateDefault,
+    "ToolTemplate": ToolTemplate,
+    "ToolTemplatesResponse": ToolTemplatesResponse,
+    "ToolTemplateInstantiate": ToolTemplateInstantiate,
+    "ToolTemplateInstantiated": ToolTemplateInstantiated,
+}

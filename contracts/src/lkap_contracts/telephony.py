@@ -10,6 +10,10 @@
   the database and lives in the api (``lkap_api.telephony.validation``), as does
   the case-insensitive uniqueness of labels (reported per entry).
 
+* :class:`SmsTarget` — ``TelephonyConfig.sms_targets`` (V5-25): the only numbers
+  ``send_sms`` may text besides the caller of a phone call; the model names them
+  by label, never by number.
+
 Imports nothing from the other contract modules (``agent_config`` imports this one).
 """
 
@@ -19,6 +23,7 @@ __all__ = [
     "DTMF_PATTERN",
     "E164_PATTERN",
     "TRANSFER_TARGET_PATTERN",
+    "SmsTarget",
     "TelephonyConfig",
     "TransferTarget",
 ]
@@ -44,7 +49,19 @@ class TransferTarget(BaseModel):
     )
 
 
+class SmsTarget(BaseModel):
+    """One number ``send_sms`` may text, named by its label (V5-25)."""
+
+    label: str = Field(min_length=1, max_length=64, description="What the model and the caller call it")
+    to: str = Field(max_length=16, pattern=E164_PATTERN, description="E.164 mobile number")
+
+
 class TelephonyConfig(BaseModel):
     """Phone-call settings of an agent (``AgentConfig.telephony``)."""
 
     transfer_targets: list[TransferTarget] = Field(default_factory=list, max_length=50)
+    sms_targets: list[SmsTarget] = Field(
+        default_factory=list,
+        max_length=50,
+        description="Numbers the agent may text by label, besides the caller of a phone call (send_sms).",
+    )

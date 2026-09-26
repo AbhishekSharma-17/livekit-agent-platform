@@ -575,7 +575,9 @@ def test_metered_noise_cancellation_entries_show_a_price_note() -> None:
         note = get(provider_id).price_note
         assert note is not None
         assert "minute" in note
-    assert all(spec.price_note is None for spec in REGISTRY if spec.kind != "noise_cancellation")
+    # V5-25: the built-in tool vendors are metered outside the price table too.
+    metered_kinds = {"noise_cancellation", "web_search", "sms"}
+    assert all(spec.price_note is None for spec in REGISTRY if spec.kind not in metered_kinds)
 
 
 # ------------------------------------------------------------------ V5-14: mcp-oauth

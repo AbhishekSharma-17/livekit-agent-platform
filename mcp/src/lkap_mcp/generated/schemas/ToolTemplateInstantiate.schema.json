@@ -1,0 +1,70 @@
+{
+  "$id": "lkap-contracts/ToolTemplateInstantiate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tool-templates/{id}/instantiate``: add one template, or every template of a group.\n\n``credential_id`` is an ``http-tool-secret`` key holding the template's ``secret_names``;\n``defaults`` fixes template arguments (``{\"event_type_id\": 123456}``).",
+  "properties": {
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Id"
+    },
+    "credential_id": {
+      "title": "Credential Id",
+      "type": "string"
+    },
+    "defaults": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "default": {},
+      "title": "Defaults",
+      "type": "object"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "names": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Group instantiation only: the template names to add (default: all)",
+      "title": "Names"
+    }
+  },
+  "required": [
+    "credential_id"
+  ],
+  "title": "ToolTemplateInstantiate",
+  "type": "object"
+}

@@ -39,6 +39,9 @@ const TAB_GROUPS: { id: string; label: string; kinds: ProviderKind[] }[] = [
   // read-only (see there) since its "Enable" is a different flow — Tools ->
   // Apps' Enable/Disable, not the generic per-connection install toggle.
   { id: "tool_provider", label: KIND_LABEL.tool_provider, kinds: ["tool_provider"] },
+  // V5-25 (D-V5-7): the vendors the `web_search` and `send_sms` built-ins call.
+  { id: "web_search", label: KIND_LABEL.web_search, kinds: ["web_search"] },
+  { id: "sms", label: KIND_LABEL.sms, kinds: ["sms"] },
 ];
 const TAB_IDS = new Set(TAB_GROUPS.map((t) => t.id));
 const DEFAULT_TAB = TAB_GROUPS[0]!.id;

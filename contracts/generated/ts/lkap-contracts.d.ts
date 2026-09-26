@@ -166,6 +166,7 @@ export interface LkapContracts {
   MoneyRange?: MoneyRange;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
+  NotifyTeamConfig?: NotifyTeamConfig;
   NumbersRefreshIn?: NumbersRefreshIn;
   NumbersRefreshOut?: NumbersRefreshOut;
   PackManifest?: PackManifest;
@@ -218,6 +219,7 @@ export interface LkapContracts {
   SessionRecordingIn?: SessionRecordingIn;
   SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
+  SmsTarget?: SmsTarget;
   StartNode?: StartNode;
   StarterTemplate?: StarterTemplate;
   StepsBlockState?: StepsBlockState;
@@ -235,6 +237,11 @@ export interface LkapContracts {
   ToolMeta?: ToolMeta;
   ToolOut?: ToolOut;
   ToolPage?: ToolPage;
+  ToolTemplate?: ToolTemplate;
+  ToolTemplateDefault?: ToolTemplateDefault;
+  ToolTemplateInstantiate?: ToolTemplateInstantiate;
+  ToolTemplateInstantiated?: ToolTemplateInstantiated;
+  ToolTemplatesResponse?: ToolTemplatesResponse;
   ToolkitOut?: ToolkitOut;
   ToolkitPage?: ToolkitPage;
   TranscriptBlockState?: TranscriptBlockState;
@@ -840,9 +847,31 @@ export interface RecordingConfig {
  */
 export interface TelephonyConfig {
   /**
+   * Numbers the agent may text by label, besides the caller of a phone call (send_sms).
+   *
+   * @maxItems 50
+   */
+  sms_targets?: SmsTarget[];
+  /**
    * @maxItems 50
    */
   transfer_targets?: TransferTarget[];
+}
+/**
+ * One number ``send_sms`` may text, named by its label (V5-25).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SmsTarget".
+ */
+export interface SmsTarget {
+  /**
+   * What the model and the caller call it
+   */
+  label: string;
+  /**
+   * E.164 mobile number
+   */
+  to: string;
 }
 /**
  * One destination the agent may transfer a caller to.
@@ -873,9 +902,27 @@ export interface ToolsConfig {
     [k: string]: ToolExecution;
   };
   execution_default?: "blocking" | "background" | "auto";
+  /**
+   * Web sites the agent may read pages from with `fetch_url`; empty, it has no `fetch_url` tool.
+   *
+   * @maxItems 50
+   */
+  fetch_url_allowed_hosts?: string[];
   http_request_enabled?: boolean;
   max_tool_steps?: number;
+  /**
+   * A webhook the agent posts a short summary to (`notify_team`, and escalations).
+   */
+  notify_team?: NotifyTeamConfig | null;
+  /**
+   * The text-message service (an `sms` provider such as Twilio or Telnyx) and its sending number; set, the agent gets the `send_sms` tool.
+   */
+  sms?: ProviderRef | null;
   tool_ids?: string[];
+  /**
+   * The web search service (a `web_search` provider such as Tavily or Brave); set, the agent gets the `web_search` tool.
+   */
+  web_search?: ProviderRef | null;
 }
 /**
  * ``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).
@@ -964,6 +1011,37 @@ export interface ToolExecution {
   mode?: ("blocking" | "background" | "auto") | null;
   on_duplicate?: ("allow" | "reject" | "replace" | "confirm") | null;
   report_progress?: boolean;
+}
+/**
+ * Where ``notify_team`` (and ``escalate_to_human``) posts a summary for the team (V5-25).
+ *
+ * The webhook URL is a secret: it is kept in an ``http-tool-secret`` key under
+ * ``secret_name`` and reaches the worker resolved, never in the stored config.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotifyTeamConfig".
+ */
+export interface NotifyTeamConfig {
+  /**
+   * An `http-tool-secret` key holding the webhook URL
+   */
+  credential_id: string;
+  /**
+   * Add the recent conversation to the message. Off by default: a transcript may hold personal details.
+   */
+  include_transcript?: boolean;
+  /**
+   * Also post when the agent escalates the call to a person
+   */
+  on_escalation?: boolean;
+  /**
+   * The name the webhook URL is stored under in that key
+   */
+  secret_name?: string;
+  /**
+   * `slack` posts a Slack message; `generic` posts JSON fields
+   */
+  style?: "slack" | "generic";
 }
 /**
  * Greeting and conversational behaviour.
@@ -3772,7 +3850,9 @@ export interface ModelTestResult {
     | "image_gen"
     | "embedding"
     | "secret_bag"
-    | "tool_provider";
+    | "tool_provider"
+    | "web_search"
+    | "sms";
   latency_ms?: number | null;
   message?: string | null;
   model: string;
@@ -4054,6 +4134,8 @@ export interface PriceQuoteItem {
         | "embedding"
         | "secret_bag"
         | "tool_provider"
+        | "web_search"
+        | "sms"
       )
     | null;
   model?: string | null;
@@ -4139,7 +4221,9 @@ export interface ProviderModelOut {
     | "image_gen"
     | "embedding"
     | "secret_bag"
-    | "tool_provider";
+    | "tool_provider"
+    | "web_search"
+    | "sms";
   last_test_at?: string | null;
   last_test_cost_usd?: number | string | null;
   last_test_credential_id?: string | null;
@@ -4194,7 +4278,9 @@ export interface ProviderOut {
     | "image_gen"
     | "embedding"
     | "secret_bag"
-    | "tool_provider";
+    | "tool_provider"
+    | "web_search"
+    | "sms";
   label: string;
   models?: ModelSpec[];
   notes?: string | null;
@@ -4345,7 +4431,9 @@ export interface ProviderSpec {
     | "image_gen"
     | "embedding"
     | "secret_bag"
-    | "tool_provider";
+    | "tool_provider"
+    | "web_search"
+    | "sms";
   label: string;
   models?: ModelSpec[];
   notes?: string | null;
@@ -4534,6 +4622,9 @@ export interface RequestableState {
 export interface ResolvedAgentConfig {
   agent_id: string;
   agent_slug: string;
+  builtin_providers?: {
+    [k: string]: ResolvedProvider;
+  };
   business_timezone?: string | null;
   channel?: "web" | "test" | "text" | "sip_in" | "sip_out" | "widget" | "api";
   compliance?: ResolvedCompliance | null;
@@ -5228,6 +5319,93 @@ export interface ToolOut {
 export interface ToolPage {
   items: ToolOut[];
   total: number;
+}
+/**
+ * A ready-made HTTP tool (D-V5-36): the definition plus what an admin supplies to add it.
+ *
+ * ``definition`` references its key as ``{{ secret.NAME }}`` (``secret_names``) and is stored
+ * as a normal HTTP tool when instantiated; ``defaults`` become the JSON Schema ``default`` of
+ * those arguments (an argument the model leaves out takes it).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolTemplate".
+ */
+export interface ToolTemplate {
+  defaults?: ToolTemplateDefault[];
+  definition: HttpToolDefinition;
+  docs_url?: string | null;
+  /**
+   * The set the template belongs to (`cal_com`)
+   */
+  group: string;
+  group_label: string;
+  id: string;
+  label: string;
+  risk?: "read" | "write";
+  /**
+   * The `http-tool-secret` names the key must hold
+   */
+  secret_names: string[];
+  /**
+   * One plain-language line for the console
+   */
+  summary: string;
+}
+/**
+ * An argument of a template the admin may fix when adding the tool (``event_type_id``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolTemplateDefault".
+ */
+export interface ToolTemplateDefault {
+  help?: string | null;
+  label: string;
+  /**
+   * The argument name in the tool's parameters
+   */
+  name: string;
+  required?: boolean;
+}
+/**
+ * ``POST /v1/tool-templates/{id}/instantiate``: add one template, or every template of a group.
+ *
+ * ``credential_id`` is an ``http-tool-secret`` key holding the template's ``secret_names``;
+ * ``defaults`` fixes template arguments (``{"event_type_id": 123456}``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolTemplateInstantiate".
+ */
+export interface ToolTemplateInstantiate {
+  agent_id?: string | null;
+  credential_id: string;
+  defaults?: {
+    [k: string]: string | number | boolean;
+  };
+  enabled?: boolean;
+  /**
+   * Group instantiation only: the template names to add (default: all)
+   */
+  names?: string[] | null;
+}
+/**
+ * What ``POST /v1/tool-templates/{id}/instantiate`` created (tool rows, in template order).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolTemplateInstantiated".
+ */
+export interface ToolTemplateInstantiated {
+  names: string[];
+  template_ids: string[];
+  tool_ids: string[];
+}
+/**
+ * ``GET /v1/tool-templates``: every template, grouped by ``group`` in catalogue order.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolTemplatesResponse".
+ */
+export interface ToolTemplatesResponse {
+  items: ToolTemplate[];
 }
 /**
  * One Composio toolkit (an app), trimmed for the console gallery.

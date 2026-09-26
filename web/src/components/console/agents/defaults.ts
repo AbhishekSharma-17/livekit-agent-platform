@@ -50,6 +50,11 @@ export const DEFAULT_TOOLS: Required<ToolsConfig> = {
     denied_actions: [],
     router: { search: true, execute: true, manage_connections: false },
   },
+  // V5-25: the network built-ins are off until their service is set (V5-28's slots edit these).
+  web_search: null,
+  sms: null,
+  fetch_url_allowed_hosts: [],
+  notify_team: null,
 };
 
 export const DEFAULT_KNOWLEDGE: Required<KnowledgeConfig> = {
@@ -93,6 +98,8 @@ export const DEFAULT_AVATAR_OPTIONS: Required<AvatarOptions> = {
 /** `TelephonyConfig` defaults (R-V2-21): no transfer destinations. */
 export const DEFAULT_TELEPHONY: Required<TelephonyConfig> = {
   transfer_targets: [],
+  // V5-25: numbers `send_sms` may text by label (V5-28's telephony editor).
+  sms_targets: [],
 };
 
 /** `AgentLimits` defaults (CONTRACTS-V2 §3.3). */

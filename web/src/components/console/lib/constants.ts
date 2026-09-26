@@ -41,6 +41,22 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
     help: "Returns the current date and time in the caller's timezone, and in the business timezone.",
   },
   { name: "convert_time", label: "Convert time", help: "Converts a time from one timezone to another." },
+  // V5-25: rows only; the settings each network tool needs (search service, SMS service,
+  // allowed sites, team webhook) are V5-28's Tools-tab slots.
+  { name: "calculate", label: "Calculate", help: "Works out sums, percentages and instalments exactly." },
+  {
+    name: "spell_back",
+    label: "Spell back",
+    help: "Reads back emails, numbers and reference codes clearly, letter by letter.",
+  },
+  { name: "web_search", label: "Web search", help: "Searches the web. Needs a web search service." },
+  { name: "fetch_url", label: "Read a web page", help: "Reads a page from the web sites you allow." },
+  {
+    name: "send_sms",
+    label: "Send a text message",
+    help: "Texts the caller or a saved number. Needs a text message service.",
+  },
+  { name: "notify_team", label: "Notify the team", help: "Posts a short summary to your team's webhook." },
 ];
 
 export const PROVIDER_KIND_LABELS: Record<string, string> = {

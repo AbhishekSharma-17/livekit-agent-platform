@@ -350,6 +350,36 @@ refresh, revoke, the internal token route and the worker bearer are V5-16.
   identifiers only. **Sweep**: the sessions sweep deletes consumed or expired flows and
   dynamically registered clients whose secret expired.
 
+### Curated built-in tools (V5-25)
+
+No environment variable, no table, no migration. Vendor keys live in the vault like every other key.
+
+- **Names.** `BUILTIN_TOOL_NAMES` gains `calculate`, `spell_back` (local, registered by default,
+  `NEVER_BACKGROUND_TOOLS`) and `web_search`, `fetch_url`, `send_sms`, `notify_team`
+  (`CONFIGURED_BUILTINS`: registered only when configured, and `builtin_disabled` still removes them).
+  The four join `BACKGROUNDABLE_BUILTINS`; `WRITE_BUILTINS = {send_sms, notify_team}` run as writes
+  (a repeat while one runs asks first, not cancellable). `BUILTIN_DEFAULT_MODES` is each tool's own mode
+  when `builtin_execution` sets none, and wins over `execution_default`: `web_search` `auto`, the other
+  three `background`. `generated/builtin_tools.json` carries `configured_builtins`, `write_builtins`,
+  `builtin_default_modes`.
+- **Config.** `ToolsConfig.web_search: ProviderRef | None` (kind `web_search`: `tavily-search` — the
+  suggested one — or `brave-search`, D-V5-7), `ToolsConfig.sms: ProviderRef | None` (kind `sms`:
+  `twilio-sms` with secrets `account_sid`/`auth_token`, or `telnyx-sms` with `api_key`; both take the
+  non-secret field `from_number`, E.164), `ToolsConfig.fetch_url_allowed_hosts: list[str]`,
+  `ToolsConfig.notify_team: NotifyTeamConfig | None` (`credential_id` of an `http-tool-secret` key,
+  `secret_name` = `TEAM_WEBHOOK_URL`, `style: slack|generic`, `on_escalation = true`,
+  `include_transcript = false`), `TelephonyConfig.sms_targets: list[SmsTarget{label, to (E.164)}]`.
+  The four registry entries have no package, class, `test` or `catalog` (a key test is an open ask).
+- **Resolution.** `ResolvedAgentConfig.builtin_providers: dict["web_search"|"sms"|"notify_team",
+  ResolvedProvider]` (**contains secrets**), kept out of `resolved` (whose every slot the provider factory
+  builds). `notify_team` resolves to `kwargs={"webhook_url": …}` from the named secret.
+- **Tool templates** (D-V5-36). `GET /v1/tool-templates` (`viewer` / `agents:read`) →
+  `ToolTemplatesResponse`; `POST /v1/tool-templates/{id}/instantiate` (`admin` / `agents:write`)
+  with `ToolTemplateInstantiate{credential_id, defaults, agent_id, enabled, names}` →
+  `ToolTemplateInstantiated{tool_ids, names, template_ids}`. `{id}` is one template
+  (`cal_com.booking_create`) or a group (`cal_com`, all six). The rows are ordinary `http` tools checked
+  like `POST /v1/tools`; `defaults` become the JSON Schema `default` of those arguments.
+
 ---
 
 ## 4. Provider registry (`lkap_contracts.providers`)

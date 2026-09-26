@@ -675,6 +675,7 @@
               "telephony": {
                 "$ref": "#/$defs/TelephonyConfig",
                 "default": {
+                  "sms_targets": [],
                   "transfer_targets": []
                 }
               },
@@ -702,9 +703,13 @@
                   "builtin_disabled": [],
                   "builtin_execution": {},
                   "execution_default": "blocking",
+                  "fetch_url_allowed_hosts": [],
                   "http_request_enabled": false,
                   "max_tool_steps": 3,
-                  "tool_ids": []
+                  "notify_team": null,
+                  "sms": null,
+                  "tool_ids": [],
+                  "web_search": null
                 }
               },
               "v": {
@@ -1640,6 +1645,50 @@
             "title": "LocaleConfig",
             "type": "object"
           },
+          "NotifyTeamConfig": {
+            "description": "Where ``notify_team`` (and ``escalate_to_human``) posts a summary for the team (V5-25).\n\nThe webhook URL is a secret: it is kept in an ``http-tool-secret`` key under\n``secret_name`` and reaches the worker resolved, never in the stored config.",
+            "properties": {
+              "credential_id": {
+                "description": "An `http-tool-secret` key holding the webhook URL",
+                "title": "Credential Id",
+                "type": "string"
+              },
+              "include_transcript": {
+                "default": false,
+                "description": "Add the recent conversation to the message. Off by default: a transcript may hold personal details.",
+                "title": "Include Transcript",
+                "type": "boolean"
+              },
+              "on_escalation": {
+                "default": true,
+                "description": "Also post when the agent escalates the call to a person",
+                "title": "On Escalation",
+                "type": "boolean"
+              },
+              "secret_name": {
+                "default": "TEAM_WEBHOOK_URL",
+                "description": "The name the webhook URL is stored under in that key",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                "title": "Secret Name",
+                "type": "string"
+              },
+              "style": {
+                "default": "slack",
+                "description": "`slack` posts a Slack message; `generic` posts JSON fields",
+                "enum": [
+                  "slack",
+                  "generic"
+                ],
+                "title": "Style",
+                "type": "string"
+              }
+            },
+            "required": [
+              "credential_id"
+            ],
+            "title": "NotifyTeamConfig",
+            "type": "object"
+          },
           "PanelLayout": {
             "description": "Which panel renders the session, and (for ``composite``) its blocks.",
             "properties": {
@@ -2110,6 +2159,31 @@
             "title": "RecordingConfig",
             "type": "object"
           },
+          "SmsTarget": {
+            "description": "One number ``send_sms`` may text, named by its label (V5-25).",
+            "properties": {
+              "label": {
+                "description": "What the model and the caller call it",
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Label",
+                "type": "string"
+              },
+              "to": {
+                "description": "E.164 mobile number",
+                "maxLength": 16,
+                "pattern": "^\\+[1-9]\\d{6,14}$",
+                "title": "To",
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "to"
+            ],
+            "title": "SmsTarget",
+            "type": "object"
+          },
           "StartNode": {
             "description": "Entry point: greets the caller and hands off along its first matching edge.",
             "properties": {
@@ -2178,6 +2252,15 @@
           "TelephonyConfig": {
             "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
             "properties": {
+              "sms_targets": {
+                "description": "Numbers the agent may text by label, besides the caller of a phone call (send_sms).",
+                "items": {
+                  "$ref": "#/$defs/SmsTarget"
+                },
+                "maxItems": 50,
+                "title": "Sms Targets",
+                "type": "array"
+              },
               "transfer_targets": {
                 "items": {
                   "$ref": "#/$defs/TransferTarget"
@@ -2351,6 +2434,16 @@
                 "title": "Execution Default",
                 "type": "string"
               },
+              "fetch_url_allowed_hosts": {
+                "default": [],
+                "description": "Web sites the agent may read pages from with `fetch_url`; empty, it has no `fetch_url` tool.",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "title": "Fetch Url Allowed Hosts",
+                "type": "array"
+              },
               "http_request_enabled": {
                 "default": false,
                 "title": "Http Request Enabled",
@@ -2361,6 +2454,30 @@
                 "title": "Max Tool Steps",
                 "type": "integer"
               },
+              "notify_team": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NotifyTeamConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A webhook the agent posts a short summary to (`notify_team`, and escalations)."
+              },
+              "sms": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The text-message service (an `sms` provider such as Twilio or Telnyx) and its sending number; set, the agent gets the `send_sms` tool."
+              },
               "tool_ids": {
                 "default": [],
                 "items": {
@@ -2368,6 +2485,18 @@
                 },
                 "title": "Tool Ids",
                 "type": "array"
+              },
+              "web_search": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The web search service (a `web_search` provider such as Tavily or Brave); set, the agent gets the `web_search` tool."
               }
             },
             "title": "ToolsConfig",
@@ -3954,6 +4083,7 @@
               "telephony": {
                 "$ref": "#/$defs/TelephonyConfig",
                 "default": {
+                  "sms_targets": [],
                   "transfer_targets": []
                 }
               },
@@ -3981,9 +4111,13 @@
                   "builtin_disabled": [],
                   "builtin_execution": {},
                   "execution_default": "blocking",
+                  "fetch_url_allowed_hosts": [],
                   "http_request_enabled": false,
                   "max_tool_steps": 3,
-                  "tool_ids": []
+                  "notify_team": null,
+                  "sms": null,
+                  "tool_ids": [],
+                  "web_search": null
                 }
               },
               "v": {
@@ -4919,6 +5053,50 @@
             "title": "LocaleConfig",
             "type": "object"
           },
+          "NotifyTeamConfig": {
+            "description": "Where ``notify_team`` (and ``escalate_to_human``) posts a summary for the team (V5-25).\n\nThe webhook URL is a secret: it is kept in an ``http-tool-secret`` key under\n``secret_name`` and reaches the worker resolved, never in the stored config.",
+            "properties": {
+              "credential_id": {
+                "description": "An `http-tool-secret` key holding the webhook URL",
+                "title": "Credential Id",
+                "type": "string"
+              },
+              "include_transcript": {
+                "default": false,
+                "description": "Add the recent conversation to the message. Off by default: a transcript may hold personal details.",
+                "title": "Include Transcript",
+                "type": "boolean"
+              },
+              "on_escalation": {
+                "default": true,
+                "description": "Also post when the agent escalates the call to a person",
+                "title": "On Escalation",
+                "type": "boolean"
+              },
+              "secret_name": {
+                "default": "TEAM_WEBHOOK_URL",
+                "description": "The name the webhook URL is stored under in that key",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                "title": "Secret Name",
+                "type": "string"
+              },
+              "style": {
+                "default": "slack",
+                "description": "`slack` posts a Slack message; `generic` posts JSON fields",
+                "enum": [
+                  "slack",
+                  "generic"
+                ],
+                "title": "Style",
+                "type": "string"
+              }
+            },
+            "required": [
+              "credential_id"
+            ],
+            "title": "NotifyTeamConfig",
+            "type": "object"
+          },
           "PanelLayout": {
             "description": "Which panel renders the session, and (for ``composite``) its blocks.",
             "properties": {
@@ -5389,6 +5567,31 @@
             "title": "RecordingConfig",
             "type": "object"
           },
+          "SmsTarget": {
+            "description": "One number ``send_sms`` may text, named by its label (V5-25).",
+            "properties": {
+              "label": {
+                "description": "What the model and the caller call it",
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Label",
+                "type": "string"
+              },
+              "to": {
+                "description": "E.164 mobile number",
+                "maxLength": 16,
+                "pattern": "^\\+[1-9]\\d{6,14}$",
+                "title": "To",
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "to"
+            ],
+            "title": "SmsTarget",
+            "type": "object"
+          },
           "StartNode": {
             "description": "Entry point: greets the caller and hands off along its first matching edge.",
             "properties": {
@@ -5457,6 +5660,15 @@
           "TelephonyConfig": {
             "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
             "properties": {
+              "sms_targets": {
+                "description": "Numbers the agent may text by label, besides the caller of a phone call (send_sms).",
+                "items": {
+                  "$ref": "#/$defs/SmsTarget"
+                },
+                "maxItems": 50,
+                "title": "Sms Targets",
+                "type": "array"
+              },
               "transfer_targets": {
                 "items": {
                   "$ref": "#/$defs/TransferTarget"
@@ -5630,6 +5842,16 @@
                 "title": "Execution Default",
                 "type": "string"
               },
+              "fetch_url_allowed_hosts": {
+                "default": [],
+                "description": "Web sites the agent may read pages from with `fetch_url`; empty, it has no `fetch_url` tool.",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "title": "Fetch Url Allowed Hosts",
+                "type": "array"
+              },
               "http_request_enabled": {
                 "default": false,
                 "title": "Http Request Enabled",
@@ -5640,6 +5862,30 @@
                 "title": "Max Tool Steps",
                 "type": "integer"
               },
+              "notify_team": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NotifyTeamConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A webhook the agent posts a short summary to (`notify_team`, and escalations)."
+              },
+              "sms": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The text-message service (an `sms` provider such as Twilio or Telnyx) and its sending number; set, the agent gets the `send_sms` tool."
+              },
               "tool_ids": {
                 "default": [],
                 "items": {
@@ -5647,6 +5893,18 @@
                 },
                 "title": "Tool Ids",
                 "type": "array"
+              },
+              "web_search": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The web search service (a `web_search` provider such as Tavily or Brave); set, the agent gets the `web_search` tool."
               }
             },
             "title": "ToolsConfig",
@@ -7890,6 +8148,7 @@
               "telephony": {
                 "$ref": "#/$defs/TelephonyConfig",
                 "default": {
+                  "sms_targets": [],
                   "transfer_targets": []
                 }
               },
@@ -7917,9 +8176,13 @@
                   "builtin_disabled": [],
                   "builtin_execution": {},
                   "execution_default": "blocking",
+                  "fetch_url_allowed_hosts": [],
                   "http_request_enabled": false,
                   "max_tool_steps": 3,
-                  "tool_ids": []
+                  "notify_team": null,
+                  "sms": null,
+                  "tool_ids": [],
+                  "web_search": null
                 }
               },
               "v": {
@@ -8855,6 +9118,50 @@
             "title": "LocaleConfig",
             "type": "object"
           },
+          "NotifyTeamConfig": {
+            "description": "Where ``notify_team`` (and ``escalate_to_human``) posts a summary for the team (V5-25).\n\nThe webhook URL is a secret: it is kept in an ``http-tool-secret`` key under\n``secret_name`` and reaches the worker resolved, never in the stored config.",
+            "properties": {
+              "credential_id": {
+                "description": "An `http-tool-secret` key holding the webhook URL",
+                "title": "Credential Id",
+                "type": "string"
+              },
+              "include_transcript": {
+                "default": false,
+                "description": "Add the recent conversation to the message. Off by default: a transcript may hold personal details.",
+                "title": "Include Transcript",
+                "type": "boolean"
+              },
+              "on_escalation": {
+                "default": true,
+                "description": "Also post when the agent escalates the call to a person",
+                "title": "On Escalation",
+                "type": "boolean"
+              },
+              "secret_name": {
+                "default": "TEAM_WEBHOOK_URL",
+                "description": "The name the webhook URL is stored under in that key",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                "title": "Secret Name",
+                "type": "string"
+              },
+              "style": {
+                "default": "slack",
+                "description": "`slack` posts a Slack message; `generic` posts JSON fields",
+                "enum": [
+                  "slack",
+                  "generic"
+                ],
+                "title": "Style",
+                "type": "string"
+              }
+            },
+            "required": [
+              "credential_id"
+            ],
+            "title": "NotifyTeamConfig",
+            "type": "object"
+          },
           "PanelLayout": {
             "description": "Which panel renders the session, and (for ``composite``) its blocks.",
             "properties": {
@@ -9325,6 +9632,31 @@
             "title": "RecordingConfig",
             "type": "object"
           },
+          "SmsTarget": {
+            "description": "One number ``send_sms`` may text, named by its label (V5-25).",
+            "properties": {
+              "label": {
+                "description": "What the model and the caller call it",
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Label",
+                "type": "string"
+              },
+              "to": {
+                "description": "E.164 mobile number",
+                "maxLength": 16,
+                "pattern": "^\\+[1-9]\\d{6,14}$",
+                "title": "To",
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "to"
+            ],
+            "title": "SmsTarget",
+            "type": "object"
+          },
           "StartNode": {
             "description": "Entry point: greets the caller and hands off along its first matching edge.",
             "properties": {
@@ -9393,6 +9725,15 @@
           "TelephonyConfig": {
             "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
             "properties": {
+              "sms_targets": {
+                "description": "Numbers the agent may text by label, besides the caller of a phone call (send_sms).",
+                "items": {
+                  "$ref": "#/$defs/SmsTarget"
+                },
+                "maxItems": 50,
+                "title": "Sms Targets",
+                "type": "array"
+              },
               "transfer_targets": {
                 "items": {
                   "$ref": "#/$defs/TransferTarget"
@@ -9566,6 +9907,16 @@
                 "title": "Execution Default",
                 "type": "string"
               },
+              "fetch_url_allowed_hosts": {
+                "default": [],
+                "description": "Web sites the agent may read pages from with `fetch_url`; empty, it has no `fetch_url` tool.",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "title": "Fetch Url Allowed Hosts",
+                "type": "array"
+              },
               "http_request_enabled": {
                 "default": false,
                 "title": "Http Request Enabled",
@@ -9576,6 +9927,30 @@
                 "title": "Max Tool Steps",
                 "type": "integer"
               },
+              "notify_team": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NotifyTeamConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A webhook the agent posts a short summary to (`notify_team`, and escalations)."
+              },
+              "sms": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The text-message service (an `sms` provider such as Twilio or Telnyx) and its sending number; set, the agent gets the `send_sms` tool."
+              },
               "tool_ids": {
                 "default": [],
                 "items": {
@@ -9583,6 +9958,18 @@
                 },
                 "title": "Tool Ids",
                 "type": "array"
+              },
+              "web_search": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The web search service (a `web_search` provider such as Tavily or Brave); set, the agent gets the `web_search` tool."
               }
             },
             "title": "ToolsConfig",
@@ -11278,7 +11665,9 @@
                   "image_gen",
                   "embedding",
                   "secret_bag",
-                  "tool_provider"
+                  "tool_provider",
+                  "web_search",
+                  "sms"
                 ],
                 "type": "string"
               },

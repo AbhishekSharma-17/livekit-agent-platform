@@ -18,16 +18,20 @@ import type { AgentEditorForm } from "@/components/console/lib/schemas";
 /**
  * The agent editor's Tools section (V2-19, rulings R-V2-21 / R-V2-25): WP-5's
  * `ToolsTab`, followed by a "Phone calls" card with the two phone-only tool
- * toggles and the transfer-destinations list (`config.telephony.transfer_targets`).
- * `transfer_call` never dials free text: the model may only pick one of these,
- * and the api refuses any destination outside the workspace's dialing policy
- * when the agent is saved.
+ * toggles and the transfer-destinations list (`config.telephony.transfer_targets`),
+ * then (V5-28) the "Send a text message" contacts list
+ * (`config.telephony.sms_targets`) — usable beyond phone calls, so it is its
+ * own card rather than nested under "Phone calls". `transfer_call` never
+ * dials free text: the model may only pick one of these, and the api refuses
+ * any destination outside the workspace's dialing policy when the agent is
+ * saved.
  */
 export function ToolsSection({ agent }: EditorSectionProps) {
   return (
     <div className="flex flex-col gap-6">
       <ToolsTab agent={agent} />
       <PhoneCallsCard />
+      <SmsContactsCard />
     </div>
   );
 }
@@ -148,6 +152,100 @@ export function PhoneCallsCard() {
             >
               <Icon as={PlusIcon} size="sm" />
               Add destination
+            </Button>
+          </div>
+        </div>
+      </SectionRow>
+    </Section>
+  );
+}
+
+/**
+ * V5-25/V5-28 (`docs/v5/_asks.md` #154): the numbers `send_sms` may text
+ * besides the caller of the current phone call. The destination policy is
+ * fixed (`agent/src/lkap_agent/tools/builtin/send_sms.py`): the model never
+ * types a number — on a phone call it may text the caller automatically, and
+ * anyone else (on a phone call, a browser chat or a text chat) must already
+ * be a saved contact here, picked by name.
+ */
+export function SmsContactsCard() {
+  const { control, register, formState } = useFormContext<AgentEditorForm>();
+  const { fields, append, remove } = useFieldArray({ control, name: "config.telephony.sms_targets" });
+  const { issueFor } = useSectionIssues("tools");
+  const targetErrors = formState.errors.config?.telephony?.sms_targets;
+  const listId = React.useId();
+
+  return (
+    <Section
+      id="tools-sms-contacts"
+      title="Send a text message — saved contacts"
+      description="On a phone call, the agent can text the caller automatically. To let it text anyone else — on a phone call, a browser chat or a text chat — save their number here with a name; the agent can only pick from this list, never a number typed on the spot."
+    >
+      <SectionRow>
+        <div className="flex flex-col gap-3">
+          <h3 id={listId} className="sr-only">
+            Saved SMS contacts
+          </h3>
+          {fields.length > 0 ? (
+            <ul aria-labelledby={listId} className="flex flex-col gap-3">
+              {fields.map((field, index) => {
+                const labelId = `sms-target-${index}-label`;
+                const toId = `sms-target-${index}-to`;
+                const labelError =
+                  targetErrors?.[index]?.label?.message ?? issueFor(`telephony.sms_targets.${index}.label`)?.message;
+                const toError = targetErrors?.[index]?.to?.message ?? issueFor(`telephony.sms_targets.${index}.to`)?.message;
+                return (
+                  <li key={field.id} className="flex flex-wrap items-start gap-2">
+                    <Field label="Name" htmlFor={labelId} error={labelError} className="min-w-40 flex-1">
+                      <Input
+                        id={labelId}
+                        placeholder="Claims desk"
+                        autoComplete="off"
+                        data-issue-path={`telephony.sms_targets[${index}].label`}
+                        {...register(`config.telephony.sms_targets.${index}.label`)}
+                      />
+                    </Field>
+                    <Field label="Mobile number" htmlFor={toId} error={toError} className="min-w-56 flex-[2]">
+                      <Input
+                        id={toId}
+                        placeholder="+15551234567"
+                        inputMode="tel"
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="font-mono text-[0.8125rem]"
+                        data-issue-path={`telephony.sms_targets[${index}].to`}
+                        {...register(`config.telephony.sms_targets.${index}.to`)}
+                      />
+                    </Field>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="mt-6"
+                      aria-label={`Remove contact ${index + 1}`}
+                      onClick={() => remove(index)}
+                    >
+                      <Icon as={Trash2Icon} size="sm" />
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[0.8125rem] text-muted-foreground">
+              No saved contacts: off a phone call, the agent has no one to text.
+            </p>
+          )}
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={fields.length >= 50}
+              onClick={() => append({ label: "", to: "" }, { shouldFocus: true })}
+            >
+              <Icon as={PlusIcon} size="sm" />
+              Add contact
             </Button>
           </div>
         </div>

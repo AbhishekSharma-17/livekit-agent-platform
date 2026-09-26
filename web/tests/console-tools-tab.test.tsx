@@ -186,9 +186,12 @@ describe("ToolsTab", () => {
       render(<Harness agent={agentInServerMode} />);
       await screen.findByText("custom_pack_tool");
 
-      expect(await screen.findByText("Which accounts")).toBeTruthy();
-      expect(screen.getByText(/Work/)).toBeTruthy();
-      expect(screen.getByText(/Personal/)).toBeTruthy();
+      const accountsHeading = await screen.findByText("Which accounts");
+      // Scoped to the accounts chooser itself: V5-28's "Calculate" built-in row
+      // ("Works out sums…") also matches a loose /Work/ query on the whole page.
+      const accountsSection = accountsHeading.closest("section") ?? accountsHeading.parentElement!;
+      expect(within(accountsSection).getByText(/Work/)).toBeTruthy();
+      expect(within(accountsSection).getByText(/Personal/)).toBeTruthy();
     });
 
     it("keeps a Composio app server / tool finder row out of the MCP servers section (it's managed from the card above)", async () => {
@@ -290,6 +293,121 @@ describe("ToolsTab", () => {
 
       await waitFor(() => expect(latest?.config.tools.builtin_execution.search_knowledge?.mode).toBe("auto"));
       expect(latest?.config.tools.builtin_execution.search_knowledge?.auto_threshold_ms).toBe(700);
+    });
+  });
+
+  describe("Network built-ins (V5-25, V5-28)", () => {
+    const NETWORK_PROVIDERS: ProvidersResponse = {
+      providers: [
+        { id: "tavily-search", kind: "web_search", label: "Tavily", vendor: "Tavily", package: "", python_class: "" },
+        {
+          id: "twilio-sms",
+          kind: "sms",
+          label: "Twilio",
+          vendor: "Twilio",
+          package: "",
+          python_class: "",
+          fields: [{ name: "from_number", label: "Sending number", type: "string", required: true }],
+        },
+        { id: "http-tool-secret", kind: "secret_bag", label: "Tool secrets", vendor: "LKAP", package: "", python_class: "" },
+      ],
+    } as unknown as ProvidersResponse;
+
+    function stubNetworkFetch() {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.includes("/providers")) return jsonResponse(NETWORK_PROVIDERS);
+          if (url.includes("/packs")) return jsonResponse({ items: [{ manifest: { id: "generic", tool_names: ["custom_pack_tool"] } }] });
+          if (url.includes("/tool-templates")) return jsonResponse({ items: [] });
+          if (url.includes("/credentials")) return jsonResponse({ items: [] });
+          if (url.includes("/tool-providers/composio/status")) return jsonResponse({ enabled: false, credential_id: null, connections: 0 });
+          if (url.includes("/tools")) return jsonResponse(EMPTY_TOOLS);
+          return jsonResponse({});
+        }),
+      );
+    }
+
+    it("shows a switch for the plain utility built-ins (calculate, spell_back)", async () => {
+      stubNetworkFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect((screen.getByRole("switch", { name: "Calculate" }) as HTMLButtonElement).getAttribute("data-state")).toBe(
+        "checked",
+      );
+      expect((screen.getByRole("switch", { name: "Spell back" }) as HTMLButtonElement).getAttribute("data-state")).toBe(
+        "checked",
+      );
+    });
+
+    it("picking a Web search vendor writes config.tools.web_search", async () => {
+      stubNetworkFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(screen.getAllByText("Not set", { selector: "p" }).length).toBeGreaterThan(0);
+      fireEvent.click(screen.getByRole("button", { name: "Edit web search" }));
+      fireEvent.click(await screen.findByText("Tavily"));
+
+      await waitFor(() => expect(latest?.config.tools.web_search?.provider_id).toBe("tavily-search"));
+    });
+
+    it("picking an SMS vendor writes config.tools.sms and points to the Telephony section for saved contacts", async () => {
+      stubNetworkFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit send a text message" }));
+      fireEvent.click(await screen.findByText("Twilio"));
+
+      await waitFor(() => expect(latest?.config.tools.sms?.provider_id).toBe("twilio-sms"));
+      expect(screen.getByText(/saved numbers.*live in the Telephony section/)).toBeTruthy();
+    });
+
+    it("Read a web page: adds a site name, rejects a URL, and removes a chip", async () => {
+      stubNetworkFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      const input = screen.getByPlaceholderText("docs.example.com");
+      fireEvent.change(input, { target: { value: "https://docs.example.com" } });
+      fireEvent.click(screen.getByText("Add"));
+      expect(await screen.findByText(/Use the site name only/)).toBeTruthy();
+      expect(latest?.config.tools.fetch_url_allowed_hosts ?? []).toEqual([]);
+
+      fireEvent.change(input, { target: { value: "Docs.Example.com" } });
+      fireEvent.click(screen.getByText("Add"));
+      await waitFor(() => expect(latest?.config.tools.fetch_url_allowed_hosts).toEqual(["docs.example.com"]));
+
+      fireEvent.click(screen.getByRole("button", { name: "Remove docs.example.com" }));
+      await waitFor(() => expect(latest?.config.tools.fetch_url_allowed_hosts).toEqual([]));
+    });
+
+    it("Notify your team: turning it on fills in a default secret name and reveals the fields", async () => {
+      stubNetworkFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      expect(screen.queryByLabelText("Secret name")).toBeNull();
+      fireEvent.click(screen.getByRole("switch", { name: "Notify your team" }));
+
+      expect((await screen.findByLabelText("Secret name")).getAttribute("value")).toBe("TEAM_WEBHOOK_URL");
+      expect(screen.getByRole("switch", { name: "Also notify on escalation" })).toBeTruthy();
+      expect(screen.getByRole("switch", { name: "Include the recent conversation" })).toBeTruthy();
+      await waitFor(() => expect(latest?.config.tools.notify_team?.secret_name).toBe("TEAM_WEBHOOK_URL"));
+
+      fireEvent.click(screen.getByRole("switch", { name: "Notify your team" }));
+      await waitFor(() => expect(latest?.config.tools.notify_team).toBeNull());
+    });
+
+    it('the HTTP tools "Add" row offers a template dialog ("From a template")', async () => {
+      stubNetworkFetch();
+      render(<Harness />);
+      await screen.findByText("custom_pack_tool");
+
+      fireEvent.click(screen.getByRole("button", { name: /From a template/ }));
+      expect(await screen.findByText("Add tools from a template")).toBeTruthy();
     });
   });
 

@@ -62,6 +62,9 @@ import type {
   ToolkitPage,
   ToolOut,
   ToolPage,
+  ToolTemplateInstantiate,
+  ToolTemplateInstantiated,
+  ToolTemplatesResponse,
   ValidationResult,
 } from "@/contracts/lkap-contracts";
 
@@ -80,6 +83,8 @@ const keys = {
   agent: (id: string) => ["agents", id] as const,
   credentials: (providerId?: string) => ["credentials", providerId ?? "all"] as const,
   tools: (agentId?: string) => ["tools", agentId ?? "all"] as const,
+  /** V5-25/V5-28: `GET /v1/tool-templates` (the Cal.com booking set). */
+  toolTemplates: ["tool-templates"] as const,
   kbs: ["knowledge-bases"] as const,
   kb: (id: string) => ["knowledge-bases", id] as const,
   kbDocuments: (id: string) => ["knowledge-bases", id, "documents"] as const,
@@ -394,6 +399,27 @@ export function useDryRunTool() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ToolDryRunRequest }) =>
       api.post<ToolDryRunResult>(`tools/${id}/dry-run`, body),
+  });
+}
+
+// ---- tool templates (V5-25/V5-28: `GET /v1/tool-templates`, "Add a tool" → "From a template") ----
+
+export function useToolTemplates() {
+  return useQuery({
+    queryKey: keys.toolTemplates,
+    queryFn: () => api.get<ToolTemplatesResponse>("tool-templates"),
+  });
+}
+
+export function useInstantiateToolTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ templateId, body }: { templateId: string; body: ToolTemplateInstantiate }) =>
+      api.post<ToolTemplateInstantiated>(`tool-templates/${templateId}/instantiate`, body),
+    onSuccess: (_result, { body }) => {
+      void queryClient.invalidateQueries({ queryKey: keys.tools(body.agent_id ?? undefined) });
+      void queryClient.invalidateQueries({ queryKey: keys.tools(undefined) });
+    },
   });
 }
 

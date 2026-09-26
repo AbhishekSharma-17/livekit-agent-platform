@@ -21,6 +21,7 @@ from fakes.fake_tts import FakeTTS
 from livekit import rtc
 from livekit.agents import AgentServer, AgentSession, inference, llm
 from lkap_contracts.api_models import KbHit
+from lkap_contracts.compliance import COMPLIANCE_PRESETS
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.telephony import TelephonyConfig, TransferTarget
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
@@ -240,7 +241,7 @@ async def test_run_session_speaks_the_greeting_via_say_when_a_tts_exists() -> No
     await run_session(ctx, _deps(api, factory=factory, session_starter=starter))
     await asyncio.sleep(0.1)
 
-    assert "Hello there!" in starter.assistant_turns()
+    assert f"{COMPLIANCE_PRESETS['in'].disclosure_text} Hello there!" in starter.assistant_turns()
     assert not factory.llm.calls, "say() must not consult the LLM"
 
 
@@ -1398,7 +1399,7 @@ async def test_an_assistant_turn_reaches_the_pack_agent_turn_hook() -> None:
     )
     await asyncio.sleep(0.1)
 
-    assert ("Hello there!", False) in turns
+    assert (f"{COMPLIANCE_PRESETS['in'].disclosure_text} Hello there!", False) in turns
 
 
 # ------------------------------------------------------------ telephony (R-V2-20)

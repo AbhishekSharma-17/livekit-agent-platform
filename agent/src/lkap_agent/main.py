@@ -109,7 +109,7 @@ from lkap_agent.config_client import (
 from lkap_agent.flow import FlowServices, build_flow_agent, is_flow, prepare_flow_resolved
 from lkap_agent.knowledge import prefetch_listener, search_options
 from lkap_agent.logging import configure_logging, get_logger
-from lkap_agent.observability import SessionObserver, bind_session_context
+from lkap_agent.observability import CONSENT_EVENT, SessionObserver, bind_session_context
 from lkap_agent.packs.loader import PackLoader
 from lkap_agent.platform_agent import (
     PlatformAgent,
@@ -123,6 +123,7 @@ from lkap_agent.registration import FleetClient, WorkerRegistration
 from lkap_agent.session_builder import (
     SessionBuilder,
     SessionPlan,
+    apply_compliance,
     factory_view,
     is_text_channel,
     prepare_resolved,
@@ -687,6 +688,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         # V4-17 (D-V4-45): the workspace's reconciliation opt-in; empty collects no ids.
         cost_reconcile=resolved.cost_reconcile,
     )
+    # V5-15: sees every `consent` event the session records; starts a consent-gated recording.
+    consent_gate = RecordingConsentGate()
     eager: _EagerShutdownContext | None = None
     if is_text_channel(resolved):
         # asks #33: post a typed chat's summary as soon as it ends, not after the SDK's teardown.
@@ -696,7 +699,9 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         resolved = prepare_flow_resolved(prepare_resolved(resolved))
         # R-V2-22: a prompt agent hears an outbound call's variables (flows seed `FlowState`).
         resolved = apply_call_variables(resolved)
-        plan, agent = _assemble(ctx, deps, resolved, record_event=observer.record)
+        # V5-15: the disclosure and consent wording, after the flow's start greeting is in place.
+        resolved = apply_compliance(resolved)
+        plan, agent = _assemble(ctx, deps, resolved, record_event=consent_gate.wrap(observer.record))
     except Exception as exc:
         logger.error("could not build the session", error=str(exc), exc_info=True)
         await observer.shutdown(reason="build failed", status="failed", error=str(exc))
@@ -778,7 +783,13 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         },
     )
     if resolved.recording.enabled and not plan.text_only:
-        recording.start()
+        if resolved.recording.require_consent:
+            # V5-15: Egress starts only once the caller agrees, after the `consent` event reached the
+            # api (which refuses the start without it); a decline never starts it.
+            logger.info("session recording waits for the caller's consent")
+            consent_gate.when_accepted(lambda: recording.start(after=observer.flush))
+        else:
+            recording.start()
     logger.info(
         "session started",
         pack_id=resolved.pack_id,
@@ -1073,6 +1084,60 @@ class _ReconnectGrace:
         self._cancel()
 
 
+class RecordingConsentGate:
+    """Holds a consent-gated recording back until the caller agrees (V5-15, `recording.require_consent`).
+
+    :meth:`wrap` puts the gate between the session's event sink and the
+    observer: every `consent` event the session records (`settle_consent`)
+    passes through it. The first accepted `recording` consent runs the
+    callback given to :meth:`when_accepted` (once, whenever it is given); a
+    decline runs nothing, and a later acceptance still starts the recording.
+    A decline after an acceptance does not stop it (pausing an Egress is not
+    something the platform does).
+    """
+
+    def __init__(self) -> None:
+        self.accepted = False
+        self.declined = False
+        self._on_accept: Callable[[], None] | None = None
+        self._fired = False
+
+    def wrap(self, record: Callable[[str, dict[str, Any]], None]) -> Callable[[str, dict[str, Any]], None]:
+        """A `record_event` that records through `record`, then lets the gate see consent events."""
+
+        def _record(event_type: str, payload: dict[str, Any] | None = None) -> None:
+            record(event_type, payload or {})
+            if event_type == CONSENT_EVENT:
+                try:
+                    self.on_consent(payload or {})
+                except Exception:
+                    logger.warning("recording consent gate failed", exc_info=True)
+
+        return _record
+
+    def on_consent(self, payload: dict[str, Any]) -> None:
+        """Take one `consent` event's payload into account."""
+        if payload.get("kind") != "recording":
+            return
+        if payload.get("accepted") is True:
+            self.accepted = True
+            self._maybe_fire()
+        elif payload.get("accepted") is False and not self.accepted:
+            self.declined = True
+            logger.info("the caller declined the recording; the session is not recorded")
+
+    def when_accepted(self, start: Callable[[], None]) -> None:
+        """Run `start` once the caller accepted the recording (at once when they already have)."""
+        self._on_accept = start
+        self._maybe_fire()
+
+    def _maybe_fire(self) -> None:
+        if self.accepted and self._on_accept is not None and not self._fired:
+            self._fired = True
+            logger.info("the caller agreed to the recording; starting it")
+            self._on_accept()
+
+
 class _Recording:
     """Starts the session's Egress through the api and reports its end (D-V2-16).
 
@@ -1091,11 +1156,26 @@ class _Recording:
         self._task: asyncio.Task[None] | None = None
         self.egress_id: str | None = None
 
-    def start(self) -> None:
-        """Ask the api for the recording without blocking the caller."""
-        self._task = asyncio.create_task(self._start())
+    def start(self, *, after: Callable[[], Awaitable[None]] | None = None) -> None:
+        """Ask the api for the recording without blocking the caller.
 
-    async def _start(self) -> None:
+        Args:
+            after: Awaited first (V5-15: the observer's flush, so the api has the
+                `consent` event before a consent-gated start); a failure there is
+                logged and the start goes ahead.
+        """
+        if self._task is not None:
+            return
+        self._task = asyncio.create_task(self._start(after))
+
+    async def _start(self, after: Callable[[], Awaitable[None]] | None = None) -> None:
+        if after is not None:
+            try:
+                await after()
+            except Exception:
+                logger.warning(
+                    "could not deliver the session events before the recording start", exc_info=True
+                )
         try:
             egress_id = await self._deps.config_client.start_recording(self._session_id)
         except RecordingUnavailableError as exc:

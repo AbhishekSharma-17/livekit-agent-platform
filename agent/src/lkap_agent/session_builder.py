@@ -84,6 +84,7 @@ from lkap_contracts.agent_config import (
     AvatarOptions,
     PipelineMode,
     ResolvedAgentConfig,
+    ResolvedCompliance,
     ResolvedProvider,
     ThinkingSound,
 )
@@ -100,13 +101,16 @@ __all__ = [
     "ASYNC_TOOL_OPTIONS",
     "AVATAR_OPTION_KWARGS",
     "SessionBuilder",
+    "DISCLOSURE_PLACEHOLDER",
     "SessionPlan",
+    "apply_compliance",
     "auto_inject_active",
     "build_turn_handling",
     "factory_view",
     "is_text_channel",
     "llm_capabilities_of",
     "prepare_resolved",
+    "recording_needs_consent",
     "start_background_audio",
     "start_thinking_sound",
 ]
@@ -721,3 +725,136 @@ async def start_background_audio(
 
 #: The V4-12 name, kept for callers and tests written before the ambient clip (V5-07).
 start_thinking_sound = start_background_audio
+
+
+# ------------------------------------------------------------ consent and disclosure (V5-15)
+
+#: The greeting placeholder that marks where the AI disclosure is spoken.
+DISCLOSURE_PLACEHOLDER: Final[str] = "{disclosure}"
+
+#: Consent block kinds whose empty `text` is filled from the workspace's wording.
+_PRESET_CONSENT_KINDS: Final[frozenset[str]] = frozenset({"recording", "ai_disclosure"})
+
+
+def recording_needs_consent(config: AgentConfig) -> bool:
+    """Whether the recording waits for the caller's agreement (`recording.enabled` and `require_consent`)."""
+    return bool(config.recording.enabled and config.recording.require_consent)
+
+
+def _speaks_disclosure(config: AgentConfig, channel: str) -> bool:
+    """Whether the disclosure is spoken: `greeting`/`both`, or `banner` on a phone call (no screen)."""
+    disclosure = config.disclosure
+    if not disclosure.enabled:
+        return False
+    return disclosure.position in ("greeting", "both") or is_sip_channel(channel)
+
+
+def _with_disclosure(greeting: str, disclosure: str) -> str:
+    """`greeting` with `disclosure` at its `{disclosure}` placeholder, else in front (once)."""
+    if DISCLOSURE_PLACEHOLDER in greeting:
+        return " ".join(greeting.replace(DISCLOSURE_PLACEHOLDER, disclosure).split())
+    if disclosure in greeting:
+        return greeting
+    return f"{disclosure} {greeting.strip()}".strip()
+
+
+def _without_placeholder(greeting: str) -> str:
+    return " ".join(greeting.replace(DISCLOSURE_PLACEHOLDER, "").split())
+
+
+def apply_compliance(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
+    """Bake the AI disclosure and the consent wording into the session's config (V5-15, D-V5-22).
+
+    Runs after the flow preparation (a flow's start node replaces the
+    greeting), so the greeting and every tool read one config:
+
+    * **Wording.** `disclosure.text` and `recording.consent_text` are filled
+      from the workspace's effective wording (`resolved.compliance`; the
+      default jurisdiction's preset from an api before V5-15) when the agent
+      leaves them empty, and so is the empty `text` of every `recording` or
+      `ai_disclosure` consent block (`terms`/`custom` blocks need their own).
+      The worker hashes exactly these strings on the `consent` event.
+    * **Greeting.** When the disclosure is spoken (`position` `greeting` or
+      `both`; `banner` too on a phone call, which has no screen), it replaces
+      a `{disclosure}` placeholder in the greeting or goes in front of it,
+      once. Without a greeting to carry it (`first_speaker="user"` or an
+      empty greeting) the line becomes an instruction for the agent's first
+      reply instead. A placeholder is removed when nothing is spoken.
+    * **Recording consent.** With `recording.require_consent` (and recording
+      on), an instruction tells the agent to ask before the recording starts:
+      with `request_consent` when a `recording` consent block is on screen,
+      else out loud with the exact question, then `record_consent`.
+
+    Args:
+        resolved: The prepared config (after `prepare_flow_resolved`).
+
+    Returns:
+        A copy; `resolved` itself is not modified.
+    """
+    config = resolved.config
+    compliance = resolved.compliance or ResolvedCompliance()
+    disclosure_text = (config.disclosure.text or "").strip() or compliance.disclosure_text
+    consent_text = (config.recording.consent_text or "").strip() or compliance.recording_text
+    disclosure = config.disclosure.model_copy(update={"text": disclosure_text})
+    recording = config.recording.model_copy(update={"consent_text": consent_text})
+
+    blocks = []
+    for spec in config.panel.blocks:
+        if spec.type == "consent" and not str(spec.config.get("text") or "").strip():
+            kind = spec.config.get("kind", "recording")
+            if kind in _PRESET_CONSENT_KINDS:
+                text = consent_text if kind == "recording" else disclosure_text
+                spec = spec.model_copy(update={"config": {**spec.config, "text": text}})
+        blocks.append(spec)
+    panel = config.panel.model_copy(update={"blocks": blocks})
+
+    voice = config.voice
+    notes: list[str] = []
+    speaks = _speaks_disclosure(config, resolved.channel)
+    if speaks and voice.greeting.strip() and voice.first_speaker == "agent":
+        voice = voice.model_copy(update={"greeting": _with_disclosure(voice.greeting, disclosure_text)})
+    else:
+        if DISCLOSURE_PLACEHOLDER in voice.greeting:
+            voice = voice.model_copy(update={"greeting": _without_placeholder(voice.greeting)})
+        if speaks:
+            notes.append(f'AI disclosure: begin your first reply by saying exactly: "{disclosure_text}"')
+
+    if recording_needs_consent(config) and resolved.channel != "text":
+        on_screen = not is_sip_channel(resolved.channel) and any(
+            spec.type == "consent" and spec.config.get("kind", "recording") == "recording"
+            for spec in config.panel.blocks
+        )
+        if on_screen:
+            notes.append(
+                "Recording consent: this call is recorded only after the caller agrees. Early in the "
+                "call, ask with request_consent (it shows the question on their screen); if they "
+                "answer out loud, call record_consent with their answer."
+            )
+        else:
+            notes.append(
+                "Recording consent: this call is recorded only after the caller agrees. Early in the "
+                f'call, ask exactly: "{consent_text}" Then call record_consent with accepted true or '
+                "false. Never say the call is being recorded before they agree."
+            )
+
+    instructions = config.instructions
+    if notes:
+        parts = [instructions.rstrip(), *notes] if instructions.strip() else notes
+        instructions = "\n\n".join(parts)
+    updated = config.model_copy(
+        update={
+            "disclosure": disclosure,
+            "recording": recording,
+            "panel": panel,
+            "voice": voice,
+            "instructions": instructions,
+        }
+    )
+    logger.debug(
+        "compliance applied",
+        jurisdiction=compliance.jurisdiction,
+        disclosure_spoken=speaks,
+        recording_consent=recording_needs_consent(config),
+    )
+    resolved_recording = resolved.recording.model_copy(update={"consent_text": consent_text})
+    return resolved.model_copy(update={"config": updated, "recording": resolved_recording})

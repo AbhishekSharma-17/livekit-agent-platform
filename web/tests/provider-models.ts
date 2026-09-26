@@ -14,7 +14,7 @@ import type {
   ProviderModelOut,
   ProviderSpec,
 } from "@/contracts/lkap-contracts";
-import providersJson from "../../../contracts/generated/providers.json";
+import providersJson from "../../contracts/generated/providers.json";
 
 export const REGISTRY = (providersJson as unknown as { providers: ProviderSpec[] }).providers;
 

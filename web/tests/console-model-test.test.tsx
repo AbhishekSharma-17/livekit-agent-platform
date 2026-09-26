@@ -23,7 +23,7 @@ import {
   testResult,
   type Handler,
   type Role,
-} from "./fixtures/provider-models";
+} from "./provider-models";
 
 /**
  * V4-09's slot editor half (docs/v4/CUSTOM-MODELS.md D-V4-26 "Shown as"):

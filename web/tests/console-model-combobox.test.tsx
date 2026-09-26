@@ -17,7 +17,7 @@ import {
   REGISTRY,
   routeFetch,
   spec,
-} from "./fixtures/provider-models";
+} from "./provider-models";
 
 /**
  * V4-09's model combobox (docs/v4/CUSTOM-MODELS.md D-V4-23, §3): the four

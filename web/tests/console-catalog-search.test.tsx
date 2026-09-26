@@ -8,7 +8,7 @@ import { CatalogDialog } from "@/components/console/providers/catalog-dialog";
 import { ProviderSlotEditor } from "@/components/console/registry/provider-slot-editor";
 import { RegistryForm } from "@/components/console/registry/registry-form";
 import type { CatalogItem, ProviderOut, ProviderRef } from "@/contracts/lkap-contracts";
-import { catalogResponse, CREDENTIAL, record, REGISTRY, routeFetch, spec, testResult, type Handler, type Role } from "./fixtures/provider-models";
+import { catalogResponse, CREDENTIAL, record, REGISTRY, routeFetch, spec, testResult, type Handler, type Role } from "./provider-models";
 
 /**
  * V4-09's catalog half: the Providers page's Catalog dialog (search, 200 per

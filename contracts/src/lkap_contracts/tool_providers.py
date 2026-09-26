@@ -11,8 +11,9 @@ Two kinds of ``credentials`` row back it, so no new table exists (D-V5-C3):
   ``tool_provider``);
 * one row per connected app, ``provider_id == TOOL_PROVIDER_ACCOUNT``, whose
   encrypted bag holds only references (toolkit, auth config id, connected
-  account id, subject, status). Composio holds every third-party token;
-  LKAP never stores one.
+  account id, subject, status, and — R-V5-13 — the account's label and
+  whether it is the app's default). Composio holds every third-party
+  token; LKAP never stores one. One app may have several accounts.
 
 The model names carry an ``App`` prefix where §3's short names would clash
 with existing exports (``ConnectionOut`` is the LiveKit connection).
@@ -20,11 +21,12 @@ with existing exports (``ConnectionOut`` is the LiveKit connection).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 #: Tool providers LKAP can talk to (``arcade`` joins by ruling, D-V5-1).
 ToolProviderId = Literal["composio"]
@@ -54,6 +56,36 @@ ActionRisk = Literal["read", "write", "destructive"]
 
 #: Who a connection belongs to (D-V5-C2): the workspace, or one agent.
 SubjectKind = Literal["workspace", "agent"]
+
+
+#: The longest account label (R-V5-13): "Work", "Personal", an address.
+MAX_ACCOUNT_LABEL: Final = 40
+
+#: Most accounts of one app an agent's session may use (R-V5-13; Composio allows 2 to 10).
+MAX_ACCOUNTS_PER_APP: Final = 5
+
+#: Most apps ``AppsMode.accounts`` may name.
+MAX_ACCOUNT_APPS: Final = 20
+
+_LABEL_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def label_slug(label: str, *, fallback: str = "account") -> str:
+    """The lower snake slug of an account label (R-V5-13): ``"Work Inbox"`` → ``work_inbox``.
+
+    Used for the Composio ``alias`` of the account and for the ``__<slug>`` suffix of
+    the tool names of an app's non-default accounts. Characters outside ``a-z0-9`` fold
+    to ``_``; an empty result is ``fallback``.
+
+    Args:
+        label: The account's label.
+        fallback: What an all-symbol label becomes.
+
+    Returns:
+        A slug of ``[a-z0-9_]``, at most :data:`MAX_ACCOUNT_LABEL` characters.
+    """
+    slug = _LABEL_SLUG_RE.sub("_", label.strip().lower()).strip("_")[:MAX_ACCOUNT_LABEL].strip("_")
+    return slug or fallback
 
 
 def workspace_subject(workspace_id: str) -> str:
@@ -141,6 +173,13 @@ class AppConnectIn(BaseModel):
     agent_id: str | None = Field(None, description="Required when subject is 'agent'")
     method: ConnectMethod = "managed"
     fields: dict[str, str] = Field(default_factory=dict, description="Write-only; never stored or returned")
+    label: str | None = Field(
+        None,
+        min_length=1,
+        max_length=MAX_ACCOUNT_LABEL,
+        description="A name for this account (R-V5-13), e.g. 'Work'. Default: the name the app reports "
+        "once signed in (an address or user name), else '<App> account <n>'",
+    )
 
 
 class AppConnectOut(BaseModel):
@@ -167,6 +206,39 @@ class AppConnectionOut(BaseModel):
     needs_reconnect: bool = False
     picked_actions: list[str] = Field(default_factory=list, description="Actions chosen for agents")
     agents_using: int = 0
+    label: str = Field(
+        "",
+        max_length=MAX_ACCOUNT_LABEL,
+        description="The account's name (R-V5-13); the app's name for a connection made before labels",
+    )
+    is_default: bool = Field(
+        True,
+        description="The app's default account for this workspace (or agent): its tools keep the plain "
+        "names and a session with no account choice uses it. Exactly one per app",
+    )
+
+
+class ConnectionRenameIn(BaseModel):
+    """``PATCH /v1/tool-providers/composio/connections/{id}``: rename an account or make it the default.
+
+    ``is_default=true`` moves the app's Default to this account (the previous default loses
+    it in the same save); ``false`` is refused — make another account the default instead.
+    Renaming renames the account at Composio too (its ``alias``); tool names already made
+    keep theirs.
+    """
+
+    label: str | None = Field(None, min_length=1, max_length=MAX_ACCOUNT_LABEL)
+    is_default: bool | None = None
+
+    @model_validator(mode="after")
+    def _one_change(self) -> Self:
+        if self.label is None and self.is_default is None:
+            raise ValueError("give a new label, is_default=true, or both")
+        if self.is_default is False:
+            raise ValueError("is_default=false is not a change: make another account the default instead")
+        if self.label is not None and not self.label.strip():
+            raise ValueError("label must not be blank")
+        return self
 
 
 class AppConnectionPage(BaseModel):
@@ -302,6 +374,28 @@ class AppsMode(BaseModel):
         "denied_actions says which way. An unreviewed destructive action is blocked",
     )
     router: AppsRouterOptions = Field(default_factory=AppsRouterOptions)
+    accounts: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Per app (toolkit slug), the accounts (connection ids) the app server or tool "
+        "finder may use (R-V5-13); an app not named, or named with an empty list, uses its default "
+        f"account. At most {MAX_ACCOUNT_APPS} apps and {MAX_ACCOUNTS_PER_APP} accounts per app",
+    )
+
+    @field_validator("accounts")
+    @classmethod
+    def _accounts_shape(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
+        if len(value) > MAX_ACCOUNT_APPS:
+            raise ValueError(f"at most {MAX_ACCOUNT_APPS} apps may name accounts")
+        out: dict[str, list[str]] = {}
+        for raw_toolkit, ids in value.items():
+            toolkit = raw_toolkit.strip().lower()
+            if not toolkit:
+                raise ValueError("an app slug in accounts is empty")
+            merged = list(dict.fromkeys([*out.get(toolkit, []), *(i.strip() for i in ids if i.strip())]))
+            if len(merged) > MAX_ACCOUNTS_PER_APP:
+                raise ValueError(f"'{toolkit}': at most {MAX_ACCOUNTS_PER_APP} accounts per app")
+            out[toolkit] = merged
+        return out
 
 
 def effective_denied_actions(apps: AppsMode, destructive_in_scope: Iterable[str]) -> list[str]:
@@ -351,6 +445,7 @@ TOOL_PROVIDER_MODELS: dict[str, type[BaseModel]] = {
     "AppConnectOut": AppConnectOut,
     "AppConnectionOut": AppConnectionOut,
     "AppConnectionPage": AppConnectionPage,
+    "ConnectionRenameIn": ConnectionRenameIn,
     "AppReconnectIn": AppReconnectIn,
     "AppKeyTestIn": AppKeyTestIn,
     "AppKeyTestOut": AppKeyTestOut,
@@ -398,6 +493,9 @@ __all__ = [
     "COMPOSIO_HOST",
     "COMPOSIO_PROVIDER_ID",
     "DESTRUCTIVE_MARKERS",
+    "MAX_ACCOUNTS_PER_APP",
+    "MAX_ACCOUNT_APPS",
+    "MAX_ACCOUNT_LABEL",
     "READ_MARKERS",
     "ROUTER_CONNECTION_TOOLS",
     "ROUTER_EXCLUDED_TOOLS",
@@ -424,6 +522,7 @@ __all__ = [
     "AppsStatusOut",
     "AuthOption",
     "ConnectMethod",
+    "ConnectionRenameIn",
     "ConnectionStatus",
     "SubjectKind",
     "ToolProviderId",
@@ -432,6 +531,7 @@ __all__ = [
     "action_risk",
     "agent_subject",
     "effective_denied_actions",
+    "label_slug",
     "router_allowed_tools",
     "workspace_subject",
 ]

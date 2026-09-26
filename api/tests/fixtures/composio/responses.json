@@ -25,6 +25,18 @@
     "auth_config": {"id": "ac_managed1"},
     "is_disabled": false
   },
+  "connection_active_second_account": {
+    "id": "ca_fake2",
+    "user_id": "SUBJECT",
+    "alias": "work",
+    "status": "ACTIVE",
+    "status_reason": null,
+    "toolkit": {"slug": "googlecalendar"},
+    "auth_config": {"id": "ac_managed1"},
+    "state": {"authScheme": "OAUTH2", "val": {"status": "ACTIVE", "displayName": "sam@work.example.com"}},
+    "experimental": {"account_type": "PRIVATE"},
+    "is_disabled": false
+  },
   "key_account_created": {
     "id": "ca_key1",
     "connectionData": {"authScheme": "API_KEY", "val": {"status": "ACTIVE"}},

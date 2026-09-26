@@ -5,7 +5,9 @@ The workspace's Composio key is an ordinary provider key
 (``provider_key_create(provider_id="composio", …)``); these tools browse the
 apps, connect one (the result carries a sign-in link *for the human* to open
 in a browser — an agent never opens it), check and remove connections, and
-pick actions for agents. App names and descriptions are vendor text and come
+pick actions for agents. An app may have several accounts (R-V5-13): each has a
+label and exactly one is the app's default (``apps_connection_rename``,
+``apps_connection_set_default``). App names and descriptions are vendor text and come
 back as ``Untrusted``. ``fields`` (an app's own key, or an OAuth client
 secret) follow the secret rules: ``env:``/``file:`` references or the value,
 forwarded once and never echoed.
@@ -17,7 +19,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from lkap_mcp.registry import DESTRUCTIVE, READ, WRITE, Registry
+from lkap_mcp.registry import DESTRUCTIVE, IDEMPOTENT_WRITE, READ, WRITE, Registry
 from lkap_mcp.results import ToolResult, untrusted
 from lkap_mcp.tools._common import parse, placeholders, planned, request, resolve_all, seg
 
@@ -119,15 +121,30 @@ def register(registry: Registry) -> None:
                 )
             ),
         ] = None,
+        alias: Annotated[
+            str | None,
+            Field(
+                min_length=1,
+                max_length=40,
+                description=(
+                    "A name for this account, e.g. 'Work' or 'Personal' (its label; also its Composio "
+                    "alias). Default: the name the app reports after sign-in. Connecting an app that "
+                    "is already connected adds another account of it"
+                ),
+            ),
+        ] = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Connect an app for the workspace (or one agent). A sign-in returns a link for the human to
-        open in a browser; never open it yourself, then check apps_connection_status.
+        """Connect an app, or another account of an app already connected, for the workspace (or one
+        agent). A sign-in returns a link for the human to open in a browser; never open it yourself,
+        then check apps_connection_status. The first account of an app is its default.
         """
         parsed = {name: parse(ctx, raw, f"fields.{name}") for name, raw in (fields or {}).items()}
         body: dict[str, Any] = {"toolkit": toolkit, "method": method, "subject": subject}
         if agent_id is not None:
             body["agent_id"] = agent_id
+        if alias is not None:
+            body["label"] = alias
         if plan:
             return planned(
                 request(
@@ -149,14 +166,54 @@ def register(registry: Registry) -> None:
                 "10 minutes); do not open it yourself.",
                 f"Then call apps_connection_status(id={result.get('connection_id')!r}) until it is active.",
             ]
+            if alias is not None:
+                steps.append(
+                    "For another account of the same app: if the app's sign-in page preselects the wrong "
+                    "account, the user should sign out of the app in that browser or use a private window."
+                )
         elif result.get("status") == "active":
             steps = ["Pick actions for agents with apps_actions and apps_add_tools."]
         return ToolResult.success(result, warnings=warnings, next_steps=steps)
 
     @registry.tool(scopes={"providers:read"}, annotations=READ, data="AppConnectionPage")
     async def apps_connections() -> ToolResult:
-        """Every connected app of the workspace with its last known status (no vendor call)."""
+        """Every connected app account of the workspace with its last known status (no vendor call).
+
+        An app may have several accounts: each item has its ``label`` (e.g. Work, Personal) and
+        ``is_default`` (exactly one per app; its tools keep the plain names).
+        """
         return ToolResult.success(await client.get(f"{BASE}/connections"))
+
+    @registry.tool(scopes={"providers:write"}, annotations=IDEMPOTENT_WRITE, data="AppConnectionOut")
+    async def apps_connection_rename(
+        id: Annotated[str, Field(description="An account's connection id from apps_connections")],  # noqa: A002
+        label: Annotated[
+            str, Field(min_length=1, max_length=40, description="The new name, e.g. 'Work' or 'Personal'")
+        ],
+        plan: bool = False,
+    ) -> ToolResult:
+        """Rename one account of a connected app (also renames it at Composio). Another account of the
+        same app may not have the same name; tool names already made keep theirs.
+        """
+        path = f"{BASE}/connections/{seg(id)}"
+        body = {"label": label}
+        if plan:
+            return planned(request("PATCH", path, body))
+        return ToolResult.success(await client.patch(path, body))
+
+    @registry.tool(scopes={"providers:write"}, annotations=IDEMPOTENT_WRITE, data="AppConnectionOut")
+    async def apps_connection_set_default(
+        id: Annotated[str, Field(description="An account's connection id from apps_connections")],  # noqa: A002
+        plan: bool = False,
+    ) -> ToolResult:
+        """Make one account its app's default: an agent that names no account uses it, and its
+        tools keep the plain names. The previous default loses the flag.
+        """
+        path = f"{BASE}/connections/{seg(id)}"
+        body = {"is_default": True}
+        if plan:
+            return planned(request("PATCH", path, body))
+        return ToolResult.success(await client.patch(path, body))
 
     @registry.tool(scopes={"providers:read"}, annotations=READ, data="AppConnectionOut")
     async def apps_connection_status(

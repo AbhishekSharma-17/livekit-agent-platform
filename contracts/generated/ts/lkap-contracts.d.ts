@@ -70,6 +70,7 @@ export interface LkapContracts {
   ConnectionInfo?: ConnectionInfo;
   ConnectionOut?: ConnectionOut;
   ConnectionPage?: ConnectionPage;
+  ConnectionRenameIn?: ConnectionRenameIn;
   ConnectionRotateIn?: ConnectionRotateIn;
   ConnectionTestResult?: ConnectionTestResult;
   ConnectionUpdate?: ConnectionUpdate;
@@ -839,6 +840,12 @@ export interface ToolsConfig {
  */
 export interface AppsMode {
   /**
+   * Per app (toolkit slug), the accounts (connection ids) the app server or tool finder may use (R-V5-13); an app not named, or named with an empty list, uses its default account. At most 20 apps and 5 accounts per app
+   */
+  accounts?: {
+    [k: string]: string[];
+  };
+  /**
    * Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent
    *
    * @maxItems 50
@@ -1227,6 +1234,10 @@ export interface AppConnectIn {
   fields?: {
     [k: string]: string;
   };
+  /**
+   * A name for this account (R-V5-13), e.g. 'Work'. Default: the name the app reports once signed in (an address or user name), else '<App> account <n>'
+   */
+  label?: string | null;
   method?: "managed" | "custom_oauth" | "api_key" | "none";
   subject?: "workspace" | "agent";
   toolkit: string;
@@ -1259,6 +1270,14 @@ export interface AppConnectionOut {
   agents_using?: number;
   connected_at?: string | null;
   id: string;
+  /**
+   * The app's default account for this workspace (or agent): its tools keep the plain names and a session with no account choice uses it. Exactly one per app
+   */
+  is_default?: boolean;
+  /**
+   * The account's name (R-V5-13); the app's name for a connection made before labels
+   */
+  label?: string;
   last_checked_at?: string | null;
   method: "managed" | "custom_oauth" | "api_key" | "none";
   needs_reconnect?: boolean;
@@ -1734,6 +1753,21 @@ export interface ConnectionOut {
 export interface ConnectionPage {
   items: ConnectionOut[];
   total: number;
+}
+/**
+ * ``PATCH /v1/tool-providers/composio/connections/{id}``: rename an account or make it the default.
+ *
+ * ``is_default=true`` moves the app's Default to this account (the previous default loses
+ * it in the same save); ``false`` is refused — make another account the default instead.
+ * Renaming renames the account at Composio too (its ``alias``); tool names already made
+ * keep theirs.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ConnectionRenameIn".
+ */
+export interface ConnectionRenameIn {
+  is_default?: boolean | null;
+  label?: string | null;
 }
 /**
  * ``POST /v1/connections/{id}/rotate`` — bumps ``credentials_version``.

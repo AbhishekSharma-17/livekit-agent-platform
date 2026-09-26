@@ -30,6 +30,7 @@ from lkap_contracts.tool_providers import (
     AppKeyTestOut,
     AppReconnectIn,
     AppsStatusOut,
+    ConnectionRenameIn,
     ToolkitOut,
     ToolkitPage,
 )
@@ -258,7 +259,9 @@ async def get_actions(
         "the browser comes back to the console. `custom_oauth` does the same with your own OAuth app "
         "(`fields`: `client_id`, `client_secret`). `api_key` connects at once with the app's key "
         "fields. `none` is for apps that need no sign-in. `fields` are passed to Composio once and "
-        "never stored or returned. `subject='agent'` makes the connection usable by one agent only."
+        "never stored or returned. `subject='agent'` makes the connection usable by one agent only. "
+        "Connecting an app that is already connected adds another account of it (`label` names it, "
+        "e.g. 'Work'); the first account stays the app's default."
     ),
 )
 async def post_connection(
@@ -298,6 +301,29 @@ async def get_connection(
 ) -> AppConnectionOut:
     """Refresh and return one connection."""
     return await service.refresh_connection(db, vault, factory, ctx, connection_id)
+
+
+@router.patch(
+    "/connections/{connection_id}",
+    response_model=AppConnectionOut,
+    summary="Rename an account or make it the app's default",
+    description=(
+        "`label` renames the account (also at Composio); another account of the same app may not "
+        "have the same name. `is_default=true` makes it the app's default account: its tools keep "
+        "the plain names and an agent that names no account uses it; the previous default loses "
+        "the flag. Tool names already made keep theirs."
+    ),
+)
+async def patch_connection(
+    connection_id: str,
+    payload: ConnectionRenameIn,
+    db: DbDep,
+    vault: VaultDep,
+    ctx: WriteCtx,
+    factory: FactoryDep,
+) -> AppConnectionOut:
+    """Rename an account and/or make it the default (R-V5-13)."""
+    return await service.update_connection(db, vault, factory, ctx, connection_id, payload)
 
 
 @router.post(
@@ -406,7 +432,8 @@ async def post_materialise(
     description=(
         "Reads the action's current inputs from Composio and lists the fields added, removed or changed "
         "since the tool was created. Nothing changes unless `apply=true`, which writes the new inputs "
-        "and version to the tool."
+        "and version to the tool and, when its app has several accounts, puts the account's name in "
+        "front of the description."
     ),
 )
 async def post_refresh_schema(
@@ -431,7 +458,11 @@ async def post_refresh_schema(
     action = next((item for item in items if item.slug.upper() == slug.upper()), None)
     if action is None:
         raise NotFoundError(f"Composio no longer lists the action '{slug}'")
-    result = materialise.refresh_result(tool, action, apply=apply)
+    # R-V5-13: a tool of an app that has gained another account learns its label here.
+    records = await service.list_connection_records(db, vault, ctx.workspace_id)
+    conn = next((c for c in records if c.id == definition.get("connection_id")), None)
+    account = service.account_naming(records, conn) if conn is not None else None
+    result = materialise.refresh_result(tool, action, apply=apply, account=account)
     await db.flush()
     log.info("apps_schema_refreshed", tool_id=tool_id, changed=result.changed, applied=result.applied)
     return result

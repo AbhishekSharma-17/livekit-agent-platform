@@ -19,6 +19,20 @@ Nothing from the query string is trusted on its own.
 Secrets: the key reaches an adapter and nothing else; ``fields`` typed in a
 Connect dialog are forwarded to Composio and dropped. No log line, audit
 payload or error carries either, nor a vendor sign-in URL.
+
+Several accounts of one app (R-V5-13): a subject may hold several rows of one
+toolkit. Each carries a ``label`` (the user's, else the name Composio reports
+once active — ``state.val.displayName`` — else the app's name for the first
+account and "<App> account <n>" after it) and ``is_default`` (exactly one per
+subject and app: the first account that became active wins, settled by
+:func:`settle_defaults`). A bag written before labels existed reads as the
+default account labelled with the app's name (lazy backfill, no migration).
+The account's Composio ``alias`` is the slug of its label, with a counter on a
+collision among its siblings; it is sent on connect and ``PATCH``-ed on rename.
+Every ``provider`` tool of a connection carries the connection's connected
+account id (:func:`pin_tools`), because an unpinned execute runs on "the most
+recently connected active account" of the subject — the wrong inbox once an
+app has two.
 """
 
 from __future__ import annotations
@@ -37,6 +51,7 @@ from urllib.parse import urlencode
 
 from lkap_contracts.tool_providers import (
     COMPOSIO_PROVIDER_ID,
+    MAX_ACCOUNT_LABEL,
     TOOL_PROVIDER_ACCOUNT,
     AppActionOut,
     AppActionPage,
@@ -50,12 +65,14 @@ from lkap_contracts.tool_providers import (
     AppKeyTestOut,
     AppsStatusOut,
     AuthOption,
+    ConnectionRenameIn,
     ConnectionStatus,
     ConnectMethod,
     ToolkitOut,
     ToolkitPage,
     action_risk,
     agent_subject,
+    label_slug,
     workspace_subject,
 )
 from sqlalchemy import select, update
@@ -254,6 +271,16 @@ class AppConnection:
     connected_at: dt.datetime | None = None
     needs_reconnect: bool = False
     picked_actions: list[str] = field(default_factory=list)
+    #: R-V5-13: the account's name, and whether the user chose it (``user``) or LKAP did
+    #: (``auto``: replaced by the vendor's display name once the account is active).
+    account_label: str = ""
+    label_source: str = "auto"
+    is_default: bool = False
+    #: The alias LKAP set on the current connected account at Composio (``None``: none yet).
+    alias: str | None = None
+    #: ``PRIVATE`` or ``SHARED`` (Composio's ``experimental.account_type``; LKAP never sets it).
+    account_type: str = "PRIVATE"
+    display_name: str | None = None
 
     @property
     def id(self) -> str:
@@ -277,10 +304,14 @@ class AppConnection:
             picked = json.loads(bag.get("picked_actions") or "[]")
         except ValueError:
             picked = []
+        toolkit_name = bag.get("toolkit_name") or None
+        # R-V5-13 lazy backfill: a bag from before labels is the default account named after its app.
+        has_label = "label" in bag
+        label = bag.get("label") or toolkit_name or bag.get("toolkit", "")
         return cls(
             row=row,
             toolkit=bag.get("toolkit", ""),
-            toolkit_name=bag.get("toolkit_name") or None,
+            toolkit_name=toolkit_name,
             method=method if method in ("managed", "custom_oauth", "api_key", "none") else "managed",  # type: ignore[arg-type]
             subject=bag.get("subject", ""),
             status=vendor_status(bag.get("status")) if bag else "unknown",
@@ -294,6 +325,13 @@ class AppConnection:
             connected_at=_parse_dt(bag.get("connected_at")),
             needs_reconnect=bag.get("needs_reconnect") == "true",
             picked_actions=[str(a) for a in picked if isinstance(a, str)],
+            account_label=label[:MAX_ACCOUNT_LABEL],
+            label_source="user" if bag.get("label_source") == "user" else "auto",
+            # A bag without the flag is settled on read (settle_defaults): alone, it is the default.
+            is_default=bag.get("is_default") == "true" if has_label else True,
+            alias=bag.get("alias") or None,
+            account_type="SHARED" if bag.get("account_type") == "SHARED" else "PRIVATE",
+            display_name=bag.get("display_name") or None,
         )
 
     def bag(self) -> dict[str, str]:
@@ -315,6 +353,12 @@ class AppConnection:
             "connected_at": _iso(self.connected_at),
             "needs_reconnect": "true" if self.needs_reconnect else "false",
             "picked_actions": json.dumps(self.picked_actions),
+            "label": self.account_label,
+            "label_source": self.label_source,
+            "is_default": "true" if self.is_default else "false",
+            "alias": self.alias or "",
+            "account_type": self.account_type,
+            "display_name": self.display_name or "",
         }
 
     def save(self, vault: Vault, *, checked_at: dt.datetime | None = None) -> None:
@@ -349,7 +393,171 @@ class AppConnection:
             needs_reconnect=self.needs_reconnect or self.status in _BROKEN,
             picked_actions=list(self.picked_actions),
             agents_using=agents_using,
+            label=self.account_label,
+            is_default=self.is_default,
         )
+
+    @property
+    def ever_active(self) -> bool:
+        """Whether the account ever finished connecting (a pending first sign-in has not)."""
+        return self.status == "active" or self.connected_at is not None
+
+    def same_app(self, other: AppConnection) -> bool:
+        """Whether ``other`` is another account of this one's app for the same subject."""
+        return other.id != self.id and other.subject == self.subject and other.toolkit == self.toolkit
+
+
+# ============================================================================ accounts (R-V5-13)
+def app_accounts(records: Iterable[AppConnection], conn: AppConnection) -> list[AppConnection]:
+    """Every account of ``conn``'s app for its subject, ``conn`` included, oldest first."""
+    return [c for c in records if c.id == conn.id or conn.same_app(c)]
+
+
+def settle_defaults(records: list[AppConnection]) -> list[AppConnection]:
+    """Make exactly one account the default per (subject, app); returns the rows it changed.
+
+    The rule (R-V5-13, "the first connection is the default"): a flagged account that
+    ever became active keeps the flag (the oldest such, when a legacy read flagged
+    several); else the oldest account that ever became active; else, while nothing is
+    active yet, the oldest flagged or oldest account. ``records`` are oldest first.
+    """
+    groups: dict[tuple[str, str], list[AppConnection]] = {}
+    for conn in records:
+        groups.setdefault((conn.subject, conn.toolkit), []).append(conn)
+    changed: list[AppConnection] = []
+    for group in groups.values():
+        live = [c for c in group if c.ever_active]
+        flagged = [c for c in group if c.is_default]
+        keep = next((c for c in flagged if c.ever_active), None)
+        if keep is None:
+            keep = live[0] if live else (flagged[0] if flagged else group[0])
+        for conn in group:
+            wanted = conn is keep
+            if conn.is_default != wanted:
+                conn.is_default = wanted
+                changed.append(conn)
+    return changed
+
+
+def default_label(conn: AppConnection, siblings: list[AppConnection]) -> str:
+    """The label of a new account nobody named: the app's name, then "<App> account <n>"."""
+    name = (conn.toolkit_name or conn.toolkit).strip() or "App"
+    if not siblings:
+        return name[:MAX_ACCOUNT_LABEL]
+    suffix = f" account {len(siblings) + 1}"
+    return f"{name[: MAX_ACCOUNT_LABEL - len(suffix)].rstrip()}{suffix}"
+
+
+def unique_alias(label: str, taken: Iterable[str | None], *, fallback: str) -> str:
+    """The Composio alias of a label: its slug, with ``_2``, ``_3``… on a collision among siblings."""
+    used = {alias for alias in taken if alias}
+    base = label_slug(label, fallback=label_slug(fallback, fallback="account"))
+    if base not in used:
+        return base
+    for index in range(2, 100):
+        suffix = f"_{index}"
+        candidate = f"{base[: MAX_ACCOUNT_LABEL - len(suffix)]}{suffix}"
+        if candidate not in used:
+            return candidate
+    raise ConflictError("too many accounts of this app share a name; rename one")
+
+
+def _account_display_name(account: dict[str, Any]) -> str | None:
+    """The identity Composio reports once active (``state.val.displayName``), scrubbed."""
+    for key in ("state", "connectionData", "data"):
+        section = _dict(account.get(key))
+        value = _dict(section.get("val")) or section
+        name = value.get("displayName") or value.get("display_name")
+        if isinstance(name, str) and name.strip():
+            return scrub_vendor_text(name, limit=MAX_ACCOUNT_LABEL) or None
+    return None
+
+
+def _account_type(account: dict[str, Any]) -> str | None:
+    """``PRIVATE``/``SHARED`` from ``experimental.account_type`` (``None`` when not reported)."""
+    experimental = _dict(account.get("experimental"))
+    value = _str(experimental.get("account_type") or experimental.get("accountType")).upper()
+    return value if value in ("PRIVATE", "SHARED") else None
+
+
+def _refuse_duplicate_label(label: str, siblings: list[AppConnection]) -> None:
+    taken = {s.account_label.strip().casefold() for s in siblings}
+    if label.strip().casefold() in taken:
+        raise ConflictError(
+            f"another account of this app is already called '{label}'; pick another name",
+            details={"path": "label"},
+        )
+
+
+async def pin_tools(db: AsyncSession, workspace_id: str, connections: Iterable[AppConnection]) -> int:
+    """Write each connection's connected account id onto its ``provider`` tools (R-V5-13).
+
+    An execute without ``connected_account_id`` runs on the subject's most recently
+    connected active account, which is the wrong one once an app has two accounts; so
+    every tool names its own. Returns how many tools changed.
+    """
+    wanted = {conn.id: conn.connected_account_id for conn in connections}
+    if not wanted:
+        return 0
+    rows = (
+        await db.execute(select(Tool).where(Tool.workspace_id == workspace_id, Tool.kind == "provider"))
+    ).scalars()
+    changed = 0
+    for tool in rows.all():
+        definition = _definition(tool)
+        connection_id = definition.get("connection_id")
+        if connection_id not in wanted:
+            continue
+        account_id = wanted[connection_id]
+        if definition.get("connected_account_id") != account_id:
+            tool.definition = {**definition, "connected_account_id": account_id}
+            tool.updated_at = utcnow()
+            changed += 1
+    return changed
+
+
+async def _sync_alias(
+    adapter: ToolProviderAdapter, conn: AppConnection, siblings: list[AppConnection]
+) -> None:
+    """Give the current connected account the alias of its label, best effort (never fails a flow)."""
+    if not conn.connected_account_id or conn.method == "none":
+        return
+    wanted = unique_alias(conn.account_label, (s.alias for s in siblings), fallback=conn.toolkit)
+    if wanted == conn.alias:
+        return
+    try:
+        await adapter.update_connection(conn.connected_account_id, alias=wanted)
+    except ToolProviderError as exc:
+        log.info("apps_alias_update_failed", connection_id=conn.id, reason=exc.reason)
+        return
+    conn.alias = wanted
+
+
+async def _after_activation(
+    db: AsyncSession,
+    vault: Vault,
+    adapter: ToolProviderAdapter,
+    workspace_id: str,
+    conn: AppConnection,
+    account: dict[str, Any],
+) -> None:
+    """An account just became active: its name, its default flag, its alias and its tools' pin."""
+    conn.display_name = _account_display_name(account) or conn.display_name
+    conn.account_type = _account_type(account) or conn.account_type
+    records = await list_connection_records(db, vault, workspace_id)
+    records = [conn if c.id == conn.id else c for c in records]
+    siblings = [c for c in records if conn.same_app(c)]
+    if conn.label_source != "user" and conn.display_name:
+        taken = {s.account_label.strip().casefold() for s in siblings}
+        if conn.display_name.casefold() not in taken:
+            conn.account_label = conn.display_name
+    await _sync_alias(adapter, conn, siblings)
+    for other in settle_defaults(app_accounts(records, conn)):
+        if other is not conn:
+            other.save(vault)
+    accounts = [c for c in app_accounts(records, conn) if c.status == "active" or c is conn]
+    # A second active account: the first one's tools (made unpinned before R-V5-13) get pinned too.
+    await pin_tools(db, workspace_id, accounts if len(accounts) > 1 else [conn])
 
 
 # ============================================================================ key
@@ -698,7 +906,11 @@ def _toolkit_fetch(adapter: ToolProviderAdapter, slug: str) -> Callable[[], Any]
 
 
 def _mark_connected(items: list[ToolkitOut], connections: list[AppConnection]) -> list[ToolkitOut]:
-    active = {c.toolkit: c.id for c in connections if c.status == "active"}
+    active: dict[str, str] = {}
+    # R-V5-13: the app's default account names it; else its first active one.
+    for conn in sorted(connections, key=lambda c: not c.is_default):
+        if conn.status == "active":
+            active.setdefault(conn.toolkit, conn.id)
     return [
         item.model_copy(update={"connected": item.slug in active, "connection_id": active.get(item.slug)})
         for item in items
@@ -814,8 +1026,10 @@ async def _connection_rows(db: AsyncSession, workspace_id: str) -> list[Credenti
 
 
 async def list_connection_records(db: AsyncSession, vault: Vault, workspace_id: str) -> list[AppConnection]:
-    """Every connected-app row of a workspace, decrypted."""
-    return [AppConnection.from_row(row, vault) for row in await _connection_rows(db, workspace_id)]
+    """Every connected-app row of a workspace, decrypted, oldest first, one default per app (R-V5-13)."""
+    records = [AppConnection.from_row(row, vault) for row in await _connection_rows(db, workspace_id)]
+    settle_defaults(records)
+    return records
 
 
 async def load_connection(
@@ -831,7 +1045,14 @@ async def load_connection(
     )
     if row is None:
         raise NotFoundError(f"unknown app connection '{connection_id}'")
-    return AppConnection.from_row(row, vault)
+    conn = AppConnection.from_row(row, vault)
+    if conn.is_default:
+        # R-V5-13: whether it really is the default depends on the app's other accounts.
+        records = await list_connection_records(db, vault, workspace_id)
+        settled = next((c for c in records if c.id == conn.id), None)
+        if settled is not None:
+            conn.is_default = settled.is_default
+    return conn
 
 
 def _definition(tool: Tool) -> dict[str, Any]:
@@ -976,18 +1197,39 @@ def _key_scheme(toolkit: dict[str, Any]) -> str | None:
 
 
 async def _start_link(
-    adapter: ToolProviderAdapter, settings: Settings, conn: AppConnection, now: dt.datetime
+    adapter: ToolProviderAdapter,
+    settings: Settings,
+    conn: AppConnection,
+    now: dt.datetime,
+    *,
+    alias: str | None = None,
 ) -> AppConnectOut:
-    """Start a hosted sign-in for ``conn`` (a fresh single-use nonce each time)."""
+    """Start a hosted sign-in for ``conn`` (a fresh single-use nonce each time).
+
+    ``alias`` (R-V5-13) names the new account at Composio. A reconnect passes none: the
+    account it replaces still holds the alias until the callback deletes it, and the alias
+    is moved over then. Should Composio refuse the alias (an account LKAP does not track
+    holds it), the link is asked for again without one and the alias is set after sign-in.
+    """
     assert conn.auth_config_id is not None
     nonce = secrets.token_urlsafe(32)
     flow = f"{conn.id}.{nonce}"
     callback_url = (
         f"{callback_base(settings)}/v1/tool-providers/composio/callback?{urlencode({'flow': flow})}"
     )
-    link = await adapter.start_link(
-        auth_config_id=conn.auth_config_id, subject=conn.subject, callback_url=callback_url
-    )
+    try:
+        link = await adapter.start_link(
+            auth_config_id=conn.auth_config_id, subject=conn.subject, callback_url=callback_url, alias=alias
+        )
+    except ToolProviderRequestError as exc:
+        if not alias:
+            raise
+        log.info("apps_link_alias_refused", connection_id=conn.id, reason=exc.reason)
+        alias = None
+        link = await adapter.start_link(
+            auth_config_id=conn.auth_config_id, subject=conn.subject, callback_url=callback_url
+        )
+    conn.alias = alias
     account_id = _str(link.get("connected_account_id"))
     redirect_url = _str(link.get("redirect_url"))
     if not account_id or not redirect_url.startswith("https://"):
@@ -1029,6 +1271,20 @@ async def connect(
             toolkit_name=scrub_vendor_text(toolkit.get("name") or toolkit_slug, limit=120),
             method=payload.method,
             subject=subject,
+        )
+        # R-V5-13: another account of an app already connected is allowed ("Add another
+        # account" reuses the auth config below); it is named, and the first one stays default.
+        siblings = [c for c in records if conn.same_app(c)]
+        if payload.label is not None:
+            _refuse_duplicate_label(payload.label.strip(), siblings)
+            conn.account_label, conn.label_source = payload.label.strip(), "user"
+        else:
+            conn.account_label = default_label(conn, siblings)
+        conn.is_default = not any(s.is_default for s in siblings)
+        wanted_alias = (
+            unique_alias(conn.account_label, (s.alias for s in siblings), fallback=toolkit_slug)
+            if payload.method != "none"
+            else None
         )
         match payload.method:
             case "none":
@@ -1096,21 +1352,36 @@ async def connect(
         db.add(conn.row)
         await db.flush()
         if payload.method in ("managed", "custom_oauth"):
-            result = await _start_link(adapter, settings, conn, now)
+            result = await _start_link(adapter, settings, conn, now, alias=wanted_alias)
         elif payload.method == "api_key":
             assert conn.auth_config_id is not None and conn.auth_scheme is not None
-            created_account = await adapter.create_with_key(
-                auth_config_id=conn.auth_config_id,
-                subject=subject,
-                auth_scheme=conn.auth_scheme,
-                fields=dict(payload.fields),
-            )
+            try:
+                created_account = await adapter.create_with_key(
+                    auth_config_id=conn.auth_config_id,
+                    subject=subject,
+                    auth_scheme=conn.auth_scheme,
+                    fields=dict(payload.fields),
+                    alias=wanted_alias,
+                )
+                conn.alias = wanted_alias
+            except ToolProviderRequestError as exc:
+                if not wanted_alias or exc.status != 409:
+                    raise
+                created_account = await adapter.create_with_key(
+                    auth_config_id=conn.auth_config_id,
+                    subject=subject,
+                    auth_scheme=conn.auth_scheme,
+                    fields=dict(payload.fields),
+                )
             conn.connected_account_id = _str(created_account.get("id")) or None
             conn.status = vendor_status(created_account.get("status"))
             if conn.status == "unknown" and conn.connected_account_id:
                 conn.status = "active"
             if conn.status == "active":
                 conn.connected_at = now
+                await _after_activation(db, vault, adapter, ctx.workspace_id, conn, created_account)
+        elif conn.status == "active":
+            await _after_activation(db, vault, adapter, ctx.workspace_id, conn, {})
     except ToolProviderError as exc:
         log.info("apps_connect_vendor_error", toolkit=toolkit_slug, method=payload.method, reason=exc.reason)
         raise api_error(redact(exc, payload.fields.values())) from None
@@ -1173,9 +1444,11 @@ async def reconnect(
                 conn.status = vendor_status(created.get("status"))
                 if conn.status == "unknown" and conn.connected_account_id:
                     conn.status = "active"
+                conn.alias = None  # the new account has none until the old one gives it up
                 if conn.status == "active":
                     conn.connected_at, conn.needs_reconnect = now, False
                     await _delete_quietly(adapter, old if old != conn.connected_account_id else None)
+                    await _after_activation(db, vault, adapter, ctx.workspace_id, conn, created)
     except ToolProviderError as exc:
         raise api_error(redact(exc, fields.values())) from None
     conn.save(vault, checked_at=now)
@@ -1289,6 +1562,9 @@ async def handle_callback(
     conn.save(vault, checked_at=now)
     await _set_tools_enabled(db, workspace_id, [conn.id], enabled=True)
     await _delete_quietly(adapter, old if old and old != conn.connected_account_id else None)
+    # R-V5-13: the account's name, default flag, alias and its tools' pin (best effort at the vendor).
+    await _after_activation(db, vault, adapter, workspace_id, conn, account)
+    conn.save(vault, checked_at=now)
     _audit(db, None, "apps.connect.ok", conn.id, workspace_id=workspace_id, toolkit=conn.toolkit)
     log.info("apps_connected", connection_id=conn.id, toolkit=conn.toolkit)
     return CallbackOutcome(True, "ok", conn.id)
@@ -1328,6 +1604,8 @@ async def refresh_connection(
         conn.needs_reconnect = conn.status in _BROKEN
         if conn.status == "active" and conn.connected_at is None:
             conn.connected_at = now
+        conn.display_name = _account_display_name(account) or conn.display_name
+        conn.account_type = _account_type(account) or conn.account_type
     conn.save(vault, checked_at=now)
     await db.flush()
     return await connection_out(db, ctx.workspace_id, conn)
@@ -1382,11 +1660,19 @@ async def disconnect(
     if purge:
         await db.delete(conn.row)
         await db.flush()
+        # R-V5-13: the default's removal hands the flag to the app's next account.
+        remaining = await list_connection_records(db, vault, ctx.workspace_id)
+        for other in app_accounts(remaining, conn):
+            if other.id != conn.id:
+                other.save(vault)
+        await db.flush()
         return None
     paused = await _set_tools_enabled(db, ctx.workspace_id, [conn.id], enabled=False)
     conn.status, conn.needs_reconnect = "inactive", True
     conn.connected_account_id, conn.previous_account_id, conn.nonce_hash = None, None, None
+    conn.alias = None
     conn.save(vault, checked_at=utcnow())
+    await pin_tools(db, ctx.workspace_id, [conn])
     await db.flush()
     log.info("apps_disconnected", connection_id=conn.id, tools_paused=len(paused))
     return conn.to_out(await _agents_using(db, ctx.workspace_id, tools))
@@ -1442,6 +1728,7 @@ async def pick_actions(
     conn.picked_actions = list(dict.fromkeys([*conn.picked_actions, *wanted]))
     conn.save(vault)
     await db.flush()
+    account = account_naming(await list_connection_records(db, vault, ctx.workspace_id), conn)
     made = await materialise.materialise_actions(
         db,
         ctx,
@@ -1451,6 +1738,8 @@ async def pick_actions(
         subject=conn.subject,
         connection_agent_id=conn.agent_id,
         key=key,
+        connected_account_id=conn.connected_account_id,
+        account=account,
     )
     if payload.agent_id is not None:
         await materialise.attach_tools(
@@ -1474,6 +1763,73 @@ async def pick_actions(
         tools_created=made.created,
         tools_existing=made.existing,
     )
+
+
+def account_naming(records: list[AppConnection], conn: AppConnection) -> materialise.AccountNaming:
+    """How ``conn``'s tools are named and described (R-V5-13 item 3).
+
+    The default account's tools keep ``<toolkit>_<action>``; another account's end in
+    ``__<label slug>``. While the app has more than one account (that ever connected),
+    every description starts with ``(<label>) ``.
+    """
+    settled = next((c for c in records if c.id == conn.id), conn)
+    accounts = [c for c in app_accounts(records, settled) if c.ever_active or c.id == settled.id]
+    return materialise.AccountNaming(
+        label=settled.account_label or settled.toolkit_name or settled.toolkit,
+        suffix=None if settled.is_default else label_slug(settled.account_label, fallback=settled.toolkit),
+        prefix=len(accounts) > 1,
+    )
+
+
+async def update_connection(
+    db: AsyncSession,
+    vault: Vault,
+    factory: AdapterFactory,
+    ctx: WorkspaceContext,
+    connection_id: str,
+    payload: ConnectionRenameIn,
+) -> AppConnectionOut:
+    """Rename an account (and its Composio alias) and/or make it its app's default (R-V5-13).
+
+    The alias follows the label (its slug, with a counter on a collision among the app's
+    other accounts) and is renamed at Composio first, so a refusal changes nothing here.
+    Making an account the default takes the flag from the previous default in the same
+    save. Tool names already made keep theirs; descriptions pick the label up on the next
+    schema refresh.
+    """
+    await load_connection(db, vault, ctx.workspace_id, connection_id)
+    records = await list_connection_records(db, vault, ctx.workspace_id)
+    conn = next(c for c in records if c.id == connection_id)
+    siblings = [c for c in records if conn.same_app(c)]
+    changes: dict[str, Any] = {}
+    if payload.label is not None and payload.label.strip() != conn.account_label:
+        label = payload.label.strip()
+        _refuse_duplicate_label(label, siblings)
+        alias = unique_alias(label, (s.alias for s in siblings), fallback=conn.toolkit)
+        if conn.connected_account_id and conn.method != "none" and alias != conn.alias:
+            adapter, _ = await workspace_adapter(db, vault, factory, ctx.workspace_id)
+            try:
+                await adapter.update_connection(conn.connected_account_id, alias=alias)
+            except ToolProviderError as exc:
+                raise api_error(exc) from exc
+            conn.alias = alias
+        conn.account_label, conn.label_source = label, "user"
+        changes["label"] = True
+    if payload.is_default and not conn.is_default:
+        if not conn.ever_active:
+            raise ConflictError("finish connecting this account before making it the default")
+        for other in siblings:
+            if other.is_default:
+                other.is_default = False
+                other.save(vault)
+        conn.is_default = True
+        changes["is_default"] = True
+    conn.save(vault)
+    await db.flush()
+    if changes:
+        _audit(db, ctx, "apps.connection.update", conn.id, toolkit=conn.toolkit, **changes)
+    log.info("apps_connection_updated", connection_id=conn.id, **changes)
+    return await connection_out(db, ctx.workspace_id, conn)
 
 
 # ============================================================================ enable / status
@@ -1608,6 +1964,13 @@ __all__ = [
     "KEY_TEST_PER_MIN",
     "AppConnection",
     "AppsNotEnabledError",
+    "account_naming",
+    "app_accounts",
+    "default_label",
+    "pin_tools",
+    "settle_defaults",
+    "unique_alias",
+    "update_connection",
     "CallbackOutcome",
     "CatalogCache",
     "KeyState",

@@ -21,7 +21,7 @@ import httpx
 import pytest
 from auth_helpers import key_client, make_api_key, make_workspace
 from conftest import create_agent
-from fakes.composio import VALID_KEY, ComposioWorld
+from fakes.composio import FIXTURES, VALID_KEY, ComposioWorld
 from fastapi import FastAPI
 from lkap_contracts.tool_providers import TOOL_PROVIDER_ACCOUNT, AppsMode, AppsRouterOptions, action_risk
 from lkap_contracts.tools import (
@@ -37,6 +37,7 @@ from sqlalchemy import select
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID as WS
 from lkap_api.db.models import Agent, AgentConfigVersion, AuditLog, Credential, Tool, WorkspaceProvider
 from lkap_api.db.session import Database
+from lkap_api.errors import UnprocessableEntityError
 from lkap_api.settings import Settings
 from lkap_api.tool_providers import materialise, provisioning, service
 from lkap_api.tool_providers.adapter import (
@@ -2152,3 +2153,568 @@ async def test_destructive_actions_walks_every_catalogue_page() -> None:
 
     assert found == ["X_DELETE_A", "X_REMOVE_B"]
     assert catalogue.cursors == [None, "p2"]
+
+
+# ============================================================================ R-V5-13: several accounts
+# Two accounts of one app: labels, one default, aliases, account-bound tools, multi-account sessions.
+async def _calendar_account(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    *,
+    label: str | None = None,
+    display_name: str | None = None,
+    account_type: str | None = None,
+) -> str:
+    """Connect one more Google Calendar account and finish its sign-in."""
+    out = await _connect(admin_client, **({"label": label} if label else {}))
+    account = list(world.accounts)[-1]
+    world.complete(account, display_name=display_name, account_type=account_type)
+    response = await _callback(
+        client, **{**_flow_query(world), "status": "success", "connected_account_id": account}
+    )
+    assert response.headers["location"] == CONSOLE_OK
+    return str(out["connection_id"])
+
+
+async def _connections_by_id(admin_client: httpx.AsyncClient) -> dict[str, dict[str, Any]]:
+    items = (await admin_client.get(f"{BASE}/connections")).json()["items"]
+    return {item["id"]: item for item in items}
+
+
+async def _account_of(database: Database, settings: Settings, connection_id: str) -> str:
+    vault = Vault(settings.master_key)
+    async with database.session() as session:
+        row = await session.get(Credential, connection_id)
+        assert row is not None
+        return vault.decrypt(row.ciphertext)["connected_account_id"]
+
+
+async def test_two_connects_of_one_app_are_two_active_accounts_the_first_default_with_distinct_aliases(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+
+    items = await _connections_by_id(admin_client)
+    assert {items[work]["status"], items[personal]["status"]} == {"active"}
+    assert (items[work]["label"], items[work]["is_default"]) == ("Work", True)
+    assert (items[personal]["label"], items[personal]["is_default"]) == ("Personal", False)
+    links = world.calls_of("start_link")
+    assert [call.kwargs["alias"] for call in links] == ["work", "personal"]
+    assert links[0].kwargs["auth_config_id"] == links[1].kwargs["auth_config_id"], "same auth config"
+    assert len(world.calls_of("create_auth_config")) == 1
+    assert {account["alias"] for account in world.accounts.values()} == {"work", "personal"}
+    toolkit = (await admin_client.get(f"{BASE}/toolkits/googlecalendar")).json()
+    assert toolkit["connection_id"] == work, "the app card points at the default account"
+
+
+async def test_an_unnamed_account_takes_the_vendor_display_name_else_a_numbered_name(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    fixture = world.responses["connection_active_second_account"]
+    display = fixture["state"]["val"]["displayName"]
+    first = await _calendar_account(admin_client, client, world)
+    second = await _calendar_account(admin_client, client, world, display_name=display)
+    third_out = await _connect(admin_client)
+
+    items = await _connections_by_id(admin_client)
+    assert items[first]["label"] == "Google Calendar"
+    assert items[second]["label"] == display
+    assert items[third_out["connection_id"]]["label"] == "Google Calendar account 3"
+    assert items[third_out["connection_id"]]["is_default"] is False
+    second_alias = world.calls_of("update_connection")[-1].kwargs
+    assert second_alias["alias"] == "sam_work_example_com", "the alias follows the display name"
+
+
+async def test_a_label_already_used_by_another_account_of_the_app_is_refused(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_account(admin_client, client, world, label="Work")
+
+    response = await admin_client.post(
+        f"{BASE}/connections", json={"toolkit": "googlecalendar", "label": "work"}
+    )
+
+    assert response.status_code == 409
+    assert "already called" in response.json()["error"]["message"]
+
+
+async def test_an_alias_collision_among_siblings_appends_a_counter(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_account(admin_client, client, world, label="Work")
+    await _calendar_account(admin_client, client, world, label="Work!")
+
+    assert [call.kwargs["alias"] for call in world.calls_of("start_link")] == ["work", "work_2"]
+
+
+async def test_a_link_whose_alias_composio_refuses_is_asked_for_again_without_one(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    world.failures["start_link"] = ToolProviderRequestError("Alias already in use", status=409)
+
+    out = await _connect(admin_client, label="Work")
+
+    links = world.calls_of("start_link")
+    assert [call.kwargs["alias"] for call in links] == ["work", None]
+    assert out["status"] == "initiated" and out["redirect_url"]
+
+
+async def test_rename_updates_the_alias_at_composio_and_a_collision_appends_a_counter(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+
+    renamed = await admin_client.patch(f"{BASE}/connections/{personal}", json={"label": "Home"})
+    clash = await admin_client.patch(f"{BASE}/connections/{personal}", json={"label": "Work."})
+    duplicate = await admin_client.patch(f"{BASE}/connections/{work}", json={"label": "work."})
+
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["label"] == "Home"
+    assert clash.status_code == 200, clash.text
+    assert clash.json()["label"] == "Work."
+    assert duplicate.status_code == 409
+    updates = [call.kwargs["alias"] for call in world.calls_of("update_connection")]
+    assert updates == ["home", "work_2"]
+    assert {a["alias"] for a in world.accounts.values()} == {"work", "work_2"}
+
+
+async def test_rename_refused_by_composio_changes_nothing(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    world.failures["update_connection"] = ToolProviderRequestError("Alias already in use", status=409)
+
+    response = await admin_client.patch(f"{BASE}/connections/{work}", json={"label": "Office"})
+
+    assert response.status_code == 422
+    assert (await _connections_by_id(admin_client))[work]["label"] == "Work"
+
+
+async def test_set_default_moves_the_flag_atomically(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+
+    response = await admin_client.patch(f"{BASE}/connections/{personal}", json={"is_default": True})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["is_default"] is True
+    items = await _connections_by_id(admin_client)
+    assert (items[work]["is_default"], items[personal]["is_default"]) == (False, True)
+    stored = {bag.get("label"): bag.get("is_default") for bag in await _bags(database, settings)}
+    assert stored["Work"] == "false" and stored["Personal"] == "true"
+    assert len(await _audit_rows(database, "apps.connection.update")) == 1
+    refused = await admin_client.patch(f"{BASE}/connections/{personal}", json={"is_default": False})
+    assert refused.status_code == 422
+
+
+async def test_a_pending_account_cannot_be_made_the_default(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _calendar_account(admin_client, client, world, label="Work")
+    pending = (await _connect(admin_client, label="Personal"))["connection_id"]
+
+    response = await admin_client.patch(f"{BASE}/connections/{pending}", json={"is_default": True})
+
+    assert response.status_code == 409
+
+
+async def test_the_first_account_to_finish_signing_in_becomes_the_default(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    abandoned = (await _connect(admin_client, label="Never finished"))["connection_id"]
+    finished = await _calendar_account(admin_client, client, world, label="Work")
+
+    items = await _connections_by_id(admin_client)
+    assert items[abandoned]["is_default"] is False
+    assert items[finished]["is_default"] is True
+
+
+async def test_purging_the_default_hands_the_flag_to_the_next_account(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+
+    response = await admin_client.delete(f"{BASE}/connections/{work}", params={"purge": "true"})
+
+    assert response.status_code == 204
+    assert (await _connections_by_id(admin_client))[personal]["is_default"] is True
+
+
+async def test_the_same_action_on_both_accounts_is_two_named_pinned_tools(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+
+    first = await _pick(admin_client, work, FREE_SLOTS)
+    second = await _pick(admin_client, personal, FREE_SLOTS)
+
+    default_tool = await _tool(database, first["tools_created"][0])
+    other_tool = await _tool(database, second["tools_created"][0])
+    assert default_tool.name == "googlecalendar_find_free_slots"
+    assert other_tool.name == "googlecalendar_find_free_slots__personal"
+    default_def = ProviderToolDefinition.model_validate(default_tool.definition)
+    other_def = ProviderToolDefinition.model_validate(other_tool.definition)
+    assert default_def.description == "(Work) Finds free time slots in a calendar."
+    assert other_def.description == "(Personal) Finds free time slots in a calendar."
+    assert default_def.connected_account_id == await _account_of(database, settings, work)
+    assert other_def.connected_account_id == await _account_of(database, settings, personal)
+    assert default_def.connected_account_id != other_def.connected_account_id
+
+
+async def test_a_lone_accounts_tool_is_unchanged_and_learns_its_account_on_refresh(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    made = await _pick(admin_client, work, FREE_SLOTS)
+    tool_id = made["tools_created"][0]
+    lone = ProviderToolDefinition.model_validate((await _tool(database, tool_id)).definition)
+    assert lone.description == "Finds free time slots in a calendar.", "one account: no prefix"
+    async with database.session() as session:  # a tool made before R-V5-13: unpinned
+        row = await session.get(Tool, tool_id)
+        assert row is not None
+        row.definition = {**row.definition, "connected_account_id": None}
+
+    await _calendar_account(admin_client, client, world, label="Personal")
+
+    pinned = await _tool(database, tool_id)
+    assert pinned.name == "googlecalendar_find_free_slots", "not renamed when a second account arrives"
+    assert pinned.definition["connected_account_id"] == await _account_of(database, settings, work)
+    assert pinned.definition["description"] == lone.description
+    dry = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema")
+    assert dry.json()["description_prefixed"] is False
+    applied = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema", params={"apply": "true"})
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["description_prefixed"] is True
+    refreshed = await _tool(database, tool_id)
+    assert refreshed.definition["description"] == "(Work) Finds free time slots in a calendar."
+
+
+async def test_reconnecting_one_account_repins_only_its_tools(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+    work_tool = (await _pick(admin_client, work, FREE_SLOTS))["tools_created"][0]
+    personal_tool = (await _pick(admin_client, personal, FREE_SLOTS))["tools_created"][0]
+    personal_before = (await _tool(database, personal_tool)).definition["connected_account_id"]
+
+    reconnect = await admin_client.post(f"{BASE}/connections/{work}/reconnect")
+    assert reconnect.status_code == 200, reconnect.text
+    assert world.calls_of("start_link")[-1].kwargs["alias"] is None, "the old account still holds it"
+    fresh = list(world.accounts)[-1]
+    world.complete(fresh)
+    await _callback(client, **{**_flow_query(world), "status": "success", "connected_account_id": fresh})
+
+    assert (await _tool(database, work_tool)).definition["connected_account_id"] == fresh
+    assert (await _tool(database, personal_tool)).definition["connected_account_id"] == personal_before
+    assert world.accounts[fresh]["alias"] == "work", "the alias moved to the new account"
+    assert await _account_of(database, settings, work) == fresh
+
+
+async def test_a_pre_label_connection_reads_as_the_default_named_after_its_app(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    """Compatibility: a bag written before R-V5-13 (no label/is_default/alias) needs no migration."""
+    connection_id = await _calendar_account(admin_client, client, world)
+    tool_id = (await _pick(admin_client, connection_id, FREE_SLOTS))["tools_created"][0]
+    vault = Vault(settings.master_key)
+    async with database.session() as session:
+        row = await session.get(Credential, connection_id)
+        assert row is not None
+        bag = vault.decrypt(row.ciphertext)
+        for key in ("label", "label_source", "is_default", "alias", "account_type", "display_name"):
+            bag.pop(key)
+        row.ciphertext = vault.encrypt(bag)
+
+    item = (await _connections_by_id(admin_client))[connection_id]
+    refreshed = (await admin_client.get(f"{BASE}/connections/{connection_id}")).json()
+
+    assert (item["label"], item["is_default"]) == ("Google Calendar", True)
+    assert (refreshed["label"], refreshed["is_default"]) == ("Google Calendar", True)
+    assert (await _tool(database, tool_id)).name == "googlecalendar_find_free_slots"
+
+
+def test_two_legacy_rows_of_one_app_settle_on_the_oldest_as_default() -> None:
+    def conn(row_id: str) -> service.AppConnection:
+        return service.AppConnection(
+            row=Credential(id=row_id),
+            toolkit="gmail",
+            method="managed",
+            subject="ws:w1",
+            status="active",
+            is_default=True,
+        )
+
+    records = [conn("c1"), conn("c2"), conn("c3")]
+
+    changed = service.settle_defaults(records)
+
+    assert [c.is_default for c in records] == [True, False, False]
+    assert [c.id for c in changed] == ["c2", "c3"]
+
+
+def test_tool_name_for_an_account_keeps_the_default_name_and_suffixes_the_others() -> None:
+    long_slug = "SALESFORCE_" + "VERY_LONG_ACTION_NAME_" * 4 + "A"
+
+    assert materialise.tool_name_for("gmail", "GMAIL_SEND_EMAIL") == "gmail_send_email"
+    assert materialise.tool_name_for("gmail", "GMAIL_SEND_EMAIL", None) == "gmail_send_email"
+    assert materialise.tool_name_for("gmail", "GMAIL_SEND_EMAIL", "work") == "gmail_send_email__work"
+    capped = materialise.tool_name_for("salesforce", long_slug, "sales_team")
+    assert len(capped) <= materialise.MAX_TOOL_NAME
+    assert re.fullmatch(TOOL_NAME_PATTERN, capped)
+    assert capped.endswith("__sales_team")
+    assert capped != materialise.tool_name_for("salesforce", long_slug, "support")
+    assert capped == materialise.tool_name_for("salesforce", long_slug, "sales_team"), "stable"
+
+
+def _account(
+    row_id: str,
+    *,
+    label: str,
+    toolkit: str = "gmail",
+    subject: str = "ws:w1",
+    is_default: bool = False,
+    account_type: str = "PRIVATE",
+    status: str = "active",
+) -> service.AppConnection:
+    return service.AppConnection(
+        row=Credential(id=row_id),
+        toolkit=toolkit,
+        toolkit_name="Gmail" if toolkit == "gmail" else toolkit.title(),
+        method="managed",
+        subject=subject,
+        status=status,  # type: ignore[arg-type]
+        connected_account_id=f"ca-{row_id}",
+        picked_actions=[f"{toolkit.upper()}_FETCH_EMAILS"],
+        account_label=label,
+        alias=label.lower(),
+        is_default=is_default,
+        account_type=account_type,
+    )
+
+
+def test_plan_session_with_one_account_per_app_has_no_multi_account() -> None:
+    accounts = [_account("c1", label="Work", is_default=True), _account("c2", label="Personal")]
+
+    plan = provisioning.plan_session(AppsMode(mode="router"), accounts, workspace_id="w1", agent_id="a1")
+
+    assert plan.options["connected_accounts"] == {"gmail": ["ca-c1"]}, "the default account only"
+    assert "multi_account" not in plan.options
+    assert plan.account_line is None
+
+
+def test_plan_session_with_two_chosen_accounts_turns_multi_account_on() -> None:
+    accounts = [_account("c1", label="Work", is_default=True), _account("c2", label="Personal")]
+    apps = AppsMode(mode="router", accounts={"gmail": ["c1", "c2"]})
+
+    plan = provisioning.plan_session(apps, accounts, workspace_id="w1", agent_id="a1")
+
+    assert plan.options["connected_accounts"] == {"gmail": ["ca-c1", "ca-c2"]}
+    assert plan.options["multi_account"] == {
+        "enable": True,
+        "max_accounts_per_toolkit": 2,
+        "require_explicit_selection": True,
+    }
+    assert plan.account_line == (
+        'Gmail accounts: Work (default; account "work"), Personal (account "personal") '
+        "— say which one to use when it matters."
+    )
+
+
+def test_plan_session_one_chosen_non_default_account_replaces_the_default() -> None:
+    accounts = [_account("c1", label="Work", is_default=True), _account("c2", label="Personal")]
+    apps = AppsMode(mode="server", accounts={"gmail": ["c2"]})
+
+    plan = provisioning.plan_session(apps, accounts, workspace_id="w1", agent_id="a1")
+
+    assert plan.options["connected_accounts"] == {"gmail": ["ca-c2"]}
+    assert "multi_account" not in plan.options
+
+
+@pytest.mark.parametrize(
+    ("accounts", "chosen", "message"),
+    [
+        pytest.param(
+            [
+                _account("c1", label="Work", is_default=True, account_type="SHARED"),
+                _account("c2", label="Team", account_type="SHARED"),
+            ],
+            ["c1", "c2"],
+            "only one shared Gmail account",
+            id="two-shared",
+        ),
+        pytest.param([_account("c1", label="Work")], ["nope"], "has no account 'nope'", id="unknown"),
+        pytest.param(
+            [_account("c1", label="Work"), _account("c2", label="Old", status="expired")],
+            ["c1", "c2"],
+            "cannot be used by this agent",
+            id="expired",
+        ),
+        pytest.param(
+            [_account("c1", label="Work"), _account("c2", label="Cal", toolkit="googlecalendar")],
+            ["c1", "c2"],
+            "belongs to 'googlecalendar'",
+            id="other-app",
+        ),
+        pytest.param(
+            [_account("c1", label="Work"), _account("c2", label="Mine", subject="agent:a1")],
+            ["c1", "c2"],
+            "all be the workspace's or all this agent's",
+            id="mixed-owners",
+        ),
+    ],
+)
+def test_plan_session_refuses_bad_account_choices(
+    accounts: list[service.AppConnection], chosen: list[str], message: str
+) -> None:
+    apps = AppsMode(mode="router", accounts={"gmail": chosen})
+
+    with pytest.raises(UnprocessableEntityError, match=re.escape(message)) as caught:
+        provisioning.plan_session(apps, accounts, workspace_id="w1", agent_id="a1")
+
+    assert str((caught.value.details or {}).get("path", "")).startswith("tools.apps.accounts")
+
+
+def test_plan_session_one_shared_account_among_private_ones_is_fine() -> None:
+    accounts = [
+        _account("c1", label="Work", is_default=True, account_type="SHARED"),
+        _account("c2", label="Personal"),
+    ]
+    apps = AppsMode(mode="router", accounts={"gmail": ["c1", "c2"]})
+
+    plan = provisioning.plan_session(apps, accounts, workspace_id="w1", agent_id="a1")
+
+    assert plan.options["multi_account"]["enable"] is True
+
+
+async def test_router_session_with_both_accounts_pins_both_and_selects_explicitly(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+    agent_id = await _new_agent(admin_client)
+
+    single = await _set_apps(admin_client, agent_id, mode="router")
+    both = await _set_apps(admin_client, agent_id, accounts={"googlecalendar": [work, personal]})
+
+    assert single.status_code == 200, single.text
+    assert both.status_code == 200, both.text
+    first, second = (call.kwargs["options"] for call in world.calls_of("create_router_session"))
+    assert len(first["connected_accounts"]["googlecalendar"]) == 1
+    assert "multi_account" not in first
+    assert len(second["connected_accounts"]["googlecalendar"]) == 2
+    assert second["multi_account"] == {
+        "enable": True,
+        "max_accounts_per_toolkit": 2,
+        "require_explicit_selection": True,
+    }
+    assert len(world.sessions) == 1, "the replaced session was deleted"
+
+
+async def test_a_chosen_account_that_is_gone_is_a_validation_error(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+    agent_id = await _new_agent(admin_client)
+    saved = await _set_apps(
+        admin_client, agent_id, mode="router", accounts={"googlecalendar": [work, personal]}
+    )
+    assert saved.status_code == 200, saved.text
+    await admin_client.delete(f"{BASE}/connections/{personal}")
+
+    report = (await admin_client.post(f"/v1/agents/{agent_id}/validate")).json()
+
+    flagged = [i for i in report["issues"] if i["path"] == "tools.apps.accounts.googlecalendar"]
+    assert len(flagged) == 1 and flagged[0]["severity"] == "error"
+    assert "reconnected" in flagged[0]["message"]
+
+
+async def test_adapter_alias_bodies_and_the_rename_path() -> None:
+    build, seen = _recording({})
+    adapter = build(VALID_KEY)
+
+    await adapter.start_link(
+        auth_config_id="ac_1", subject="ws:w1", callback_url="https://x/cb", alias="work"
+    )
+    await adapter.create_with_key(
+        auth_config_id="ac_2", subject="ws:w1", auth_scheme="API_KEY", fields={"api_key": "k"}, alias="ops"
+    )
+    await adapter.update_connection("ca_1", alias="home")
+
+    assert [(r.method, r.url.path) for r in seen] == [
+        ("POST", "/api/v3.1/connected_accounts/link"),
+        ("POST", "/api/v3.1/connected_accounts"),
+        ("PATCH", "/api/v3.1/connected_accounts/ca_1"),
+    ]
+    bodies = [json.loads(request.content) for request in seen]
+    assert bodies[0]["alias"] == "work"
+    assert bodies[1]["connection"]["alias"] == "ops" and "alias" not in bodies[1]
+    assert bodies[2] == {"alias": "home"}
+
+
+def test_display_name_and_account_type_are_read_from_the_documented_places() -> None:
+    fixture = json.loads((FIXTURES / "responses.json").read_text())["connection_active_second_account"]
+
+    assert service._account_display_name(fixture) == "sam@work.example.com"
+    assert service._account_type(fixture) == "PRIVATE"
+    assert service._account_type({"experimental": {"accountType": "shared"}}) == "SHARED"
+    assert service._account_display_name({"state": {"val": {}}}) is None
+
+
+async def test_the_resolved_config_carries_each_tools_own_account(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    settings: Settings,
+) -> None:
+    """The pin reaches the worker: each account-bound tool resolves with its own account id."""
+    work = await _calendar_account(admin_client, client, world, label="Work")
+    personal = await _calendar_account(admin_client, client, world, label="Personal")
+    agent_id = str((await create_agent(admin_client, name="Demo — Apps accounts"))["id"])
+    await _pick(admin_client, work, FREE_SLOTS, agent_id=agent_id)
+    await _pick(admin_client, personal, FREE_SLOTS, agent_id=agent_id)
+    session_id = (await admin_client.post(f"/v1/agents/{agent_id}/connect", json={})).json()["sessionId"]
+
+    resolved = (await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")).json()
+
+    by_name = {tool["name"]: tool for tool in resolved["tools"] if tool["kind"] == "provider"}
+    work_account = await _account_of(database, settings, work)
+    personal_account = await _account_of(database, settings, personal)
+    assert by_name["googlecalendar_find_free_slots"]["connected_account_id"] == work_account
+    assert by_name["googlecalendar_find_free_slots__personal"]["connected_account_id"] == personal_account

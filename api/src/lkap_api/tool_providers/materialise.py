@@ -13,7 +13,16 @@ Materialisation turns each picked action of a connected app into one
 * the execution policy follows the action's risk: reads run ``auto`` with
   a short announcement, writes and destructive actions block and are never
   cancellable; every action is bounded to 20 seconds;
-* ``max_result_chars=1500``, ``result_path="data"``, ``silent_reply=False``.
+* ``max_result_chars=1500``, ``result_path="data"``, ``silent_reply=False``;
+* the tool carries its connection's connected account id, so it runs on that
+  account and not on whichever account of the app Composio would pick (R-V5-13).
+
+Several accounts of one app (R-V5-13 item 3): the default account's tools keep
+``<toolkit>_<action>``; another account's are ``<toolkit>_<action>__<label
+slug>`` (``gmail_send_email__work``); while the app has more than one account,
+every description starts with ``(<label>) ``. Tools made before an app gained
+its second account keep their names; their descriptions gain the prefix on the
+next schema refresh.
 
 One tool per ``(connection, action)``: picking an action again reuses its
 tool. Attaching to an agent appends the tool ids to ``tools.tool_ids``,
@@ -58,7 +67,26 @@ _NON_NAME = re.compile(r"[^a-z0-9_]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 
 
-def tool_name_for(toolkit: str, slug: str) -> str:
+@dataclass(frozen=True)
+class AccountNaming:
+    """How one account's tools are named and described (R-V5-13 item 3)."""
+
+    label: str
+    """The account's label, e.g. ``Work``."""
+    suffix: str | None = None
+    """``None`` for the app's default account; else the label's slug (``work``)."""
+    prefix: bool = False
+    """Whether descriptions start with ``(<label>) `` (the app has more than one account)."""
+
+    def describe(self, description: str) -> str:
+        """``description`` with the account prefix when the app has several accounts."""
+        head = f"({self.label}) "
+        if not self.prefix or description.startswith(head):
+            return description
+        return f"{head}{description}"
+
+
+def tool_name_for(toolkit: str, slug: str, account: str | None = None) -> str:
     """The model-facing name of an action: ``<toolkit>_<action>`` lower snake, ≤ 64 characters.
 
     Composio slugs already start with the toolkit (``GOOGLECALENDAR_FIND_FREE_SLOTS``);
@@ -66,9 +94,14 @@ def tool_name_for(toolkit: str, slug: str) -> str:
     its first 55 and ends with ``_`` plus 8 hex characters of the slug's SHA-1, so two
     long slugs never collide and the name is the same on every import.
 
+    An account other than the app's default (R-V5-13) adds ``__<account>`` (its label's
+    slug). A long name then keeps the suffix and shortens the head instead, with the
+    SHA-1 taken over slug and account.
+
     Args:
         toolkit: The app's slug, e.g. ``googlecalendar``.
         slug: The action's slug.
+        account: The label slug of a non-default account; ``None`` for the default.
 
     Returns:
         A name matching ``TOOL_NAME_PATTERN``.
@@ -79,10 +112,14 @@ def tool_name_for(toolkit: str, slug: str) -> str:
         base = f"{prefix}_{base}" if base else prefix
     if not base or not (base[0].isalpha() or base[0] == "_"):
         base = f"app_{base}"
-    if len(base) > MAX_TOOL_NAME:
-        digest = hashlib.sha1(slug.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
-        base = f"{base[: MAX_TOOL_NAME - 9].rstrip('_')}_{digest}"
-    return base
+    suffix = ""
+    if account:
+        suffix = "__" + _NON_NAME.sub("_", account.strip().lower()).strip("_")[:40]
+    if len(base) + len(suffix) > MAX_TOOL_NAME:
+        seed = f"{slug}__{account}" if account else slug
+        digest = hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
+        base = f"{base[: MAX_TOOL_NAME - 9 - len(suffix)].rstrip('_')}_{digest}"
+    return f"{base}{suffix}"
 
 
 def first_sentence(text: str, *, fallback: str) -> str:
@@ -116,17 +153,21 @@ def definition_for(
     connection_id: str,
     credential_id: str,
     subject: str,
+    connected_account_id: str | None = None,
+    account: AccountNaming | None = None,
 ) -> ProviderToolDefinition:
-    """The ``provider`` definition of one picked action (D-V5-C8)."""
+    """The ``provider`` definition of one picked action (D-V5-C8, R-V5-13)."""
+    description = first_sentence(action.description, fallback=action.name or action.slug)
     return ProviderToolDefinition(
         name=name,
-        description=first_sentence(action.description, fallback=action.name or action.slug),
+        description=account.describe(description) if account is not None else description,
         parameters=pinned_parameters(action.parameters),
         tool_slug=action.slug,
         toolkit=toolkit,
         connection_id=connection_id,
         credential_id=credential_id,
         subject=subject,
+        connected_account_id=connected_account_id,
         execution=execution_for(action),
         schema_version=action.version,
         risk=action.risk,
@@ -179,6 +220,8 @@ async def materialise_actions(
     subject: str,
     connection_agent_id: str | None,
     key: Credential,
+    connected_account_id: str | None = None,
+    account: AccountNaming | None = None,
 ) -> MaterialiseResult:
     """Create (or reuse) one ``provider`` tool per action of a connection.
 
@@ -192,6 +235,8 @@ async def materialise_actions(
         connection_agent_id: The agent of an ``agent:<id>`` connection: its tools are owned
             by that agent; a workspace connection's tools are shared.
         key: The workspace's Composio key row (``credential_id`` of every tool).
+        connected_account_id: The connection's Composio account (pinned on every tool).
+        account: The account's naming (R-V5-13); ``None`` names tools as a lone account's.
 
     Returns:
         Ids created, ids that already existed, and every id in ``actions`` order.
@@ -210,7 +255,8 @@ async def materialise_actions(
             reused.append(row.id)
             ordered.append(row.id)
             continue
-        name = await _unique_name(db, ctx.workspace_id, tool_name_for(toolkit, action.slug), taken)
+        suffix = account.suffix if account is not None else None
+        name = await _unique_name(db, ctx.workspace_id, tool_name_for(toolkit, action.slug, suffix), taken)
         taken.add(name)
         definition = definition_for(
             action,
@@ -219,6 +265,8 @@ async def materialise_actions(
             connection_id=connection_id,
             credential_id=key.id,
             subject=subject,
+            connected_account_id=connected_account_id,
+            account=account,
         )
         tool = Tool(
             workspace_id=ctx.workspace_id,
@@ -291,6 +339,11 @@ class SchemaRefreshOut(BaseModel):
     modified: list[str] = Field(default_factory=list, description="Input fields whose definition changed")
     required_before: list[str] = Field(default_factory=list)
     required_after: list[str] = Field(default_factory=list)
+    description_prefixed: bool = Field(
+        False,
+        description="Whether the account's label was put in front of the description (the app has "
+        "several accounts; written only with apply)",
+    )
 
 
 def schema_diff(before: dict[str, Any], after: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
@@ -317,8 +370,15 @@ async def load_provider_tool(db: AsyncSession, ctx: WorkspaceContext, tool_id: s
     return row
 
 
-def refresh_result(tool: Tool, action: AppActionOut, *, apply: bool) -> SchemaRefreshOut:
-    """Compare a tool's pinned schema with the action's current one; with ``apply``, write it."""
+def refresh_result(
+    tool: Tool, action: AppActionOut, *, apply: bool, account: AccountNaming | None = None
+) -> SchemaRefreshOut:
+    """Compare a tool's pinned schema with the action's current one; with ``apply``, write it.
+
+    With ``apply`` and an app of several accounts (``account.prefix``), the description also
+    gains the ``(<label>) `` prefix when it lacks it (R-V5-13: tools made before the app's
+    second account are not renamed; they learn their account here).
+    """
     definition = ProviderToolDefinition.model_validate(tool.definition)
     fresh = pinned_parameters(action.parameters)
     added, removed, modified = schema_diff(definition.parameters, fresh)
@@ -329,17 +389,20 @@ def refresh_result(tool: Tool, action: AppActionOut, *, apply: bool) -> SchemaRe
         or _required(definition.parameters) != _required(fresh)
         or (action.version or None) != definition.schema_version
     )
-    applied = False
+    updates: dict[str, Any] = {}
     if apply and changed:
-        updated = definition.model_copy(update={"parameters": fresh, "schema_version": action.version})
-        tool.definition = updated.model_dump(mode="json")
+        updates.update(parameters=fresh, schema_version=action.version)
+    described = account.describe(definition.description) if account is not None else definition.description
+    if apply and described != definition.description:
+        updates["description"] = described
+    if updates:
+        tool.definition = definition.model_copy(update=updates).model_dump(mode="json")
         tool.updated_at = utcnow()
-        applied = True
     return SchemaRefreshOut(
         tool_id=tool.id,
         tool_slug=definition.tool_slug,
         changed=changed,
-        applied=applied,
+        applied="parameters" in updates,
         schema_version_before=definition.schema_version,
         schema_version_after=action.version,
         added=added,
@@ -347,11 +410,13 @@ def refresh_result(tool: Tool, action: AppActionOut, *, apply: bool) -> SchemaRe
         modified=modified,
         required_before=_required(definition.parameters),
         required_after=_required(fresh),
+        description_prefixed="description" in updates,
     )
 
 
 __all__ = [
     "ACTION_MAX_DURATION_S",
+    "AccountNaming",
     "MAX_TOOL_NAME",
     "READ_ANNOUNCE",
     "MaterialiseResult",

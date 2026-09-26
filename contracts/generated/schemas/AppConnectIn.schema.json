@@ -24,6 +24,21 @@
       "title": "Fields",
       "type": "object"
     },
+    "label": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A name for this account (R-V5-13), e.g. 'Work'. Default: the name the app reports once signed in (an address or user name), else '<App> account <n>'",
+      "title": "Label"
+    },
     "method": {
       "default": "managed",
       "enum": [

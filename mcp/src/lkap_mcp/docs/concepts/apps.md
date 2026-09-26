@@ -63,6 +63,34 @@ again). With `agent_id` the tools are attached to that agent. A destructive
 action needs `allow_destructive=true`: ask the user first, and it always
 waits for its result.
 
+## More than one account
+
+An app can be connected more than once — two Gmail inboxes, a work and a
+personal calendar. `apps_connect(toolkit, alias="Work")` on an app that is
+already connected adds another account of it, reusing the same sign-in setup;
+`alias` becomes the account's label (default: the name the app reports after
+sign-in, such as the address). If the app's sign-in page preselects the wrong
+account, the user signs out of the app in that browser or uses a private
+window. `apps_connections` lists every account with its `label` and
+`is_default`: exactly one account per app is the default (the first one that
+finished signing in). `apps_connection_rename(id, label)` renames one (two
+accounts of one app cannot share a name) and `apps_connection_set_default(id)`
+moves the default.
+
+Picked actions are per account: `apps_add_tools(connection_id=...)` with the
+account's id. The default account's tools keep plain names
+(`gmail_send_email`); another account's end with its label
+(`gmail_send_email__work`). While an app has more than one account, every
+tool description starts with the account's label, e.g. `(Work)`, so the agent
+knows which inbox it touches. Tools made before an app gained its second
+account keep their names; refreshing their schema adds the label.
+
+In `server` and `router` modes an agent uses each app's default account
+unless `agent_apps_mode(accounts={"gmail": [id1, id2]})` names others. With
+two or more accounts of one app the agent must say which account each action
+uses. Only one account shared across users (a Composio SHARED account) of an
+app can be in one agent's server or finder; saving refuses two.
+
 ## How agents use apps
 
 An agent's `tools.apps.mode` (set with `agent_apps_mode`) chooses:
@@ -96,11 +124,13 @@ inputs can be compared with Composio's current ones with
 ## Related tools
 
 `apps_list`, `apps_actions`, `apps_connect`, `apps_connections`,
-`apps_connection_status`, `apps_disconnect`, `apps_add_tools`,
+`apps_connection_status`, `apps_connection_rename`,
+`apps_connection_set_default`, `apps_disconnect`, `apps_add_tools`,
 `agent_apps_mode`, `provider_key_create`, `provider_key_test`.
 
 ## Related schemas
 
 `ToolkitPage`, `ToolkitOut`, `AppActionPage`, `AppConnectIn`, `AppConnectOut`,
-`AppConnectionPage`, `AppConnectionOut`, `AppActionsPickOut`, `AppsStatusOut`,
+`AppConnectionPage`, `AppConnectionOut`, `ConnectionRenameIn`,
+`AppActionsPickOut`, `AppsStatusOut`,
 `AppsMode`, `ProviderToolDefinition`.

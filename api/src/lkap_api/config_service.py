@@ -1116,6 +1116,8 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
       picked actions of the agent's apps (what an app server offers); a tool finder can also
       reach destructive actions nobody picked, which only provisioning sees (it reads the
       catalogue) and blocks all the same.
+    * The app server or tool finder with a chosen account (``tools.apps.accounts``, R-V5-13)
+      that is gone, expired, failed or disconnected → error at ``tools.apps.accounts.<app>``.
 
     Args:
         ctx: The validation context.
@@ -1155,6 +1157,7 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
     if definitions is None:
         return issues
     if apps.mode in ("server", "router"):
+        issues.extend(_chosen_account_issues(ctx))
         issues.extend(_unreviewed_destructive_issues(ctx, definitions))
     for index, tool_id in enumerate(tools.tool_ids):
         definition = definitions.get(tool_id)
@@ -1186,6 +1189,37 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
                     path=f"{base}.credential_id", message=f"'{app}' actions need the workspace's Composio key"
                 )
             )
+    return issues
+
+
+def _chosen_account_issues(ctx: ValidationContext) -> list[Issue]:
+    """The accounts an app server or tool finder may use (``tools.apps.accounts``, R-V5-13).
+
+    Each chosen account must be a connected app of the workspace that is not expired,
+    failed or disconnected → error at ``tools.apps.accounts.<app>``. Which app an account
+    belongs to, whose it is and whether two chosen accounts are SHARED (Composio allows
+    one per app per session) live in the encrypted connection rows, so provisioning checks
+    those on save (``provisioning.plan_session``) and refuses the save the same way.
+    """
+    issues: list[Issue] = []
+    for toolkit, ids in ctx.config.tools.apps.accounts.items():
+        for connection_id in ids:
+            status = ctx.connection_statuses.get(connection_id)
+            if status is None:
+                issues.append(
+                    Issue(
+                        path=f"tools.apps.accounts.{toolkit}",
+                        message=f"the chosen '{toolkit}' account is no longer connected; choose another",
+                    )
+                )
+            elif status in BROKEN_CONNECTION_STATUSES:
+                issues.append(
+                    Issue(
+                        path=f"tools.apps.accounts.{toolkit}",
+                        message=f"a chosen '{toolkit}' account needs to be reconnected (status {status}); "
+                        "reconnect it under Tools, Apps or choose another",
+                    )
+                )
     return issues
 
 

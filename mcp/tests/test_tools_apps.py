@@ -24,6 +24,8 @@ APPS_TOOLS = {
     "apps_connect",
     "apps_connections",
     "apps_connection_status",
+    "apps_connection_rename",
+    "apps_connection_set_default",
     "apps_disconnect",
     "apps_add_tools",
 }
@@ -296,3 +298,97 @@ async def test_agent_apps_mode_needs_agents_write(key: Any, mcp_session: Any) ->
         names = set(await mcp.tool_names())
 
     assert "agent_apps_mode" not in names
+
+
+# ------------------------------------------------------------------ R-V5-13: several accounts
+async def _two_crm_accounts(mcp: Any) -> tuple[str, str]:
+    first = await mcp.call(
+        "apps_connect", toolkit="acmecrm", method="api_key", fields={"api_key": APP_KEY}, alias="Sales"
+    )
+    second = await mcp.call(
+        "apps_connect", toolkit="acmecrm", method="api_key", fields={"api_key": APP_KEY}, alias="Support"
+    )
+    assert first["ok"] is True, first
+    assert second["ok"] is True, second
+    return str(first["data"]["connection_id"]), str(second["data"]["connection_id"])
+
+
+async def test_apps_connect_alias_adds_a_second_named_account(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str
+) -> None:
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        planned = await mcp.call("apps_connect", toolkit="googlecalendar", alias="Work", plan=True)
+        sales, support = await _two_crm_accounts(mcp)
+        listed = await mcp.call("apps_connections")
+
+    assert planned["plan"][0]["body"]["label"] == "Work"
+    items = {item["id"]: item for item in listed["data"]["items"]}
+    assert (items[sales]["label"], items[sales]["is_default"]) == ("Sales", True)
+    assert (items[support]["label"], items[support]["is_default"]) == ("Support", False)
+    assert [call.kwargs["alias"] for call in world.calls_of("create_with_key")] == ["sales", "support"]
+
+
+async def test_apps_connection_rename_and_set_default(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str
+) -> None:
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        sales, support = await _two_crm_accounts(mcp)
+        planned = await mcp.call("apps_connection_rename", id=support, label="Help desk", plan=True)
+        assert world.calls_of("update_connection") == [], "a plan sends nothing"
+        renamed = await mcp.call("apps_connection_rename", id=support, label="Help desk")
+        made_default = await mcp.call("apps_connection_set_default", id=support)
+        listed = await mcp.call("apps_connections")
+
+    assert planned["plan"][0] == {
+        "method": "PATCH",
+        "path": f"{APPS}/connections/{support}",
+        "query": None,
+        "body": {"label": "Help desk"},
+        "note": None,
+    }
+    assert renamed["ok"] is True, renamed
+    assert renamed["data"]["label"] == "Help desk"
+    assert world.calls_of("update_connection")[-1].kwargs["alias"] == "help_desk"
+    assert made_default["ok"] is True, made_default
+    assert made_default["data"]["is_default"] is True
+    items = {item["id"]: item for item in listed["data"]["items"]}
+    assert items[sales]["is_default"] is False
+
+
+async def test_the_account_tools_need_providers_write(key: Any, mcp_session: Any) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        names = set(await mcp.tool_names())
+
+    assert not names & {"apps_connection_rename", "apps_connection_set_default"}
+
+
+async def test_agent_apps_mode_sends_the_chosen_accounts_and_provisions_both(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str
+) -> None:
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        agent = await _agent(mcp, "Demo — Apps scratch")
+        sales, support = await _two_crm_accounts(mcp)
+        planned = await mcp.call(
+            "agent_apps_mode",
+            id_or_slug=agent["id"],
+            mode="router",
+            accounts={" AcmeCRM ": [sales, " ", support]},
+            plan=True,
+        )
+        saved = await mcp.call(
+            "agent_apps_mode", id_or_slug=agent["id"], mode="router", accounts={"acmecrm": [sales, support]}
+        )
+
+    assert planned["plan"][0]["body"]["config"]["tools"]["apps"]["accounts"] == {"acmecrm": [sales, support]}
+    assert saved["ok"] is True, saved
+    options = world.calls_of("create_router_session")[-1].kwargs["options"]
+    assert len(options["connected_accounts"]["acmecrm"]) == 2
+    assert options["multi_account"]["require_explicit_selection"] is True

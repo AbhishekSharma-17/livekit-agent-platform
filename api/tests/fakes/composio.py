@@ -79,12 +79,52 @@ class ComposioWorld:
         """A fresh fake vendor id."""
         return f"{prefix}_{next(self._ids)}"
 
-    def complete(self, account_id: str, *, status: str = "ACTIVE", user_id: str | None = None) -> None:
-        """Pretend the human finished the vendor's consent page."""
+    def complete(
+        self,
+        account_id: str,
+        *,
+        status: str = "ACTIVE",
+        user_id: str | None = None,
+        display_name: str | None = None,
+        account_type: str | None = None,
+    ) -> None:
+        """Pretend the human finished the vendor's consent page.
+
+        ``display_name`` is what Composio reports at ``state.val.displayName`` once active
+        (the inbox address, the user name); ``account_type`` sets ``experimental.account_type``.
+        """
         account = self.accounts[account_id]
         account["status"] = status
         if user_id is not None:
             account["user_id"] = user_id
+        if display_name is not None:
+            account["state"] = {
+                "authScheme": "OAUTH2",
+                "val": {"status": status, "displayName": display_name},
+            }
+        if account_type is not None:
+            account["experimental"] = {"account_type": account_type}
+
+    def _toolkit_of(self, account: dict[str, Any]) -> str:
+        auth_config_id = account.get("auth_config", {}).get("id")
+        config = next((c for c in self.auth_configs if c["id"] == auth_config_id), None)
+        return str(config["toolkit"]["slug"]) if config else ""
+
+    def claim_alias(self, account_id: str, alias: str | None) -> None:
+        """Composio's rule: an alias is unique per ``user_id`` and toolkit (409 otherwise)."""
+        account = self.accounts[account_id]
+        if alias:
+            for other_id, other in self.accounts.items():
+                if (
+                    other_id != account_id
+                    and other.get("alias") == alias
+                    and other.get("user_id") == account.get("user_id")
+                    and self._toolkit_of(other) == self._toolkit_of(account)
+                ):
+                    raise ToolProviderRequestError(
+                        "Alias already in use for this user and toolkit", status=409
+                    )
+        account["alias"] = alias or None
 
     def calls_of(self, method: str) -> list[Call]:
         """Every recorded call of one adapter method."""
@@ -210,8 +250,16 @@ class FakeComposio:
         self.world.auth_configs.append(config)
         return {"toolkit": {"slug": toolkit}, "auth_config": {k: config[k] for k in ("id", "auth_scheme")}}
 
-    async def start_link(self, *, auth_config_id: str, subject: str, callback_url: str) -> dict[str, Any]:
-        self._enter("start_link", auth_config_id=auth_config_id, subject=subject, callback_url=callback_url)
+    async def start_link(
+        self, *, auth_config_id: str, subject: str, callback_url: str, alias: str | None = None
+    ) -> dict[str, Any]:
+        self._enter(
+            "start_link",
+            auth_config_id=auth_config_id,
+            subject=subject,
+            callback_url=callback_url,
+            alias=alias,
+        )
         if not any(config["id"] == auth_config_id for config in self.world.auth_configs):
             raise ToolProviderNotFoundError("Auth config not found", status=404)
         account_id = self.world.next_id("ca")
@@ -221,13 +269,24 @@ class FakeComposio:
             "status": "INITIATED",
             "auth_config": {"id": auth_config_id},
         }
+        try:
+            self.world.claim_alias(account_id, alias)
+        except ToolProviderError:
+            del self.world.accounts[account_id]
+            raise
         link = copy.deepcopy(self.world.responses["link"])
         link["connected_account_id"] = account_id
         link["redirect_url"] = f"https://connect.example.com/link/{account_id}"
         return dict(link)
 
     async def create_with_key(
-        self, *, auth_config_id: str, subject: str, auth_scheme: str, fields: dict[str, str]
+        self,
+        *,
+        auth_config_id: str,
+        subject: str,
+        auth_scheme: str,
+        fields: dict[str, str],
+        alias: str | None = None,
     ) -> dict[str, Any]:
         self._enter(
             "create_with_key",
@@ -235,12 +294,31 @@ class FakeComposio:
             subject=subject,
             auth_scheme=auth_scheme,
             fields=fields,
+            alias=alias,
         )
         if not fields.get("api_key") and auth_scheme == "API_KEY":
             raise ToolProviderRequestError("api_key is required", status=400)
         account_id = self.world.next_id("ca")
-        self.world.accounts[account_id] = {"id": account_id, "user_id": subject, "status": "ACTIVE"}
+        self.world.accounts[account_id] = {
+            "id": account_id,
+            "user_id": subject,
+            "status": "ACTIVE",
+            "auth_config": {"id": auth_config_id},
+        }
+        try:
+            self.world.claim_alias(account_id, alias)
+        except ToolProviderError:
+            del self.world.accounts[account_id]
+            raise
         return {"id": account_id, "status": "ACTIVE", "redirect_url": None}
+
+    async def update_connection(self, connected_account_id: str, *, alias: str) -> dict[str, Any]:
+        self._enter("update_connection", connected_account_id=connected_account_id, alias=alias)
+        account = self.world.accounts.get(connected_account_id)
+        if account is None:
+            raise ToolProviderNotFoundError("Connected account not found", status=404)
+        self.world.claim_alias(connected_account_id, alias)
+        return {"success": True, "id": connected_account_id, "status": account["status"]}
 
     async def get_connection(self, connected_account_id: str) -> dict[str, Any]:
         self._enter("get_connection", connected_account_id=connected_account_id)

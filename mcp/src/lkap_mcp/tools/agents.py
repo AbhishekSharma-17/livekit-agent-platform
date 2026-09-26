@@ -415,6 +415,14 @@ def register(registry: Registry) -> None:
             AppsRouterOptions | None,
             Field(description="Tool finder flags: search, execute, manage_connections (off by default)"),
         ] = None,
+        accounts: Annotated[
+            dict[str, list[str]] | None,
+            Field(
+                description="Per app (toolkit slug), the accounts (connection ids from apps_connections) "
+                "the server or finder may use; an app left out uses its default account. With two or "
+                "more accounts of one app the agent must say which account each action uses"
+            ),
+        ] = None,
         plan: bool = False,
     ) -> ToolResult:
         """Choose how an agent uses connected apps; saving provisions the app server or tool finder.
@@ -437,6 +445,12 @@ def register(registry: Registry) -> None:
             apps["reviewed_actions"] = [slug.strip().upper() for slug in reviewed_actions if slug.strip()]
         if router is not None:
             apps["router"] = router.model_dump(mode="json")
+        if accounts is not None:
+            apps["accounts"] = {
+                toolkit.strip().lower(): [i.strip() for i in ids if i.strip()]
+                for toolkit, ids in accounts.items()
+                if toolkit.strip()
+            }
         try:
             tools["apps"] = AppsMode.model_validate(apps).model_dump(mode="json")
         except ValidationError as error:

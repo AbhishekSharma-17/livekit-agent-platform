@@ -34,6 +34,16 @@ destructive actions (an app server) and, for a tool finder, every destructive
 action in the catalogue of the agent's apps. The resolve step applies the same
 rule to an app server row provisioned before that rule existed
 (:func:`apply_denied_actions`).
+
+Several accounts of one app (R-V5-13): ``tools.apps.accounts`` names, per app,
+the accounts (connection ids) the session may use; an app it does not name uses
+its default account only. Composio caps a session at one pinned account per
+app unless ``multi_account`` is on, so the session sets ``multi_account =
+{enable, max_accounts_per_toolkit: n, require_explicit_selection: true}`` when
+an app has more than one chosen account (and never otherwise), and refuses two
+SHARED accounts of one app (Composio rejects that at session create).
+:attr:`SessionPlan.account_line` is the line that tells the model which
+accounts it has, by label and alias.
 """
 
 from __future__ import annotations
@@ -132,6 +142,8 @@ class SessionPlan:
     allowed_tools: list[str]
     tool_options: dict[str, ToolExecution]
     toolkits: list[str]
+    account_line: str | None = None
+    """For an app with several chosen accounts, the line naming them for the model (R-V5-13)."""
 
     @property
     def config_hash(self) -> str:
@@ -150,6 +162,70 @@ def _destructive(slugs: Iterable[str]) -> set[str]:
     return {slug.upper() for slug in slugs if action_risk(slug) == "destructive"}
 
 
+def _account_error(message: str, toolkit: str) -> UnprocessableEntityError:
+    return UnprocessableEntityError(message, details={"path": f"tools.apps.accounts.{toolkit}"})
+
+
+def _named_accounts(
+    apps: AppsMode, connections: list[service.AppConnection], agent_id: str
+) -> dict[str, list[service.AppConnection]]:
+    """The accounts ``tools.apps.accounts`` names, checked (R-V5-13).
+
+    Raises:
+        UnprocessableEntityError: An id is unknown, of another app, not connected, made for
+            another agent, or outside ``allowed_toolkits``.
+    """
+    by_id = {conn.id: conn for conn in connections}
+    allowed = {slug.lower() for slug in apps.allowed_toolkits}
+    named: dict[str, list[service.AppConnection]] = {}
+    for toolkit, ids in apps.accounts.items():
+        if not ids:
+            continue
+        if allowed and toolkit not in allowed:
+            raise _account_error(
+                f"accounts are chosen for '{toolkit}', which is not among tools.apps.allowed_toolkits",
+                toolkit,
+            )
+        for connection_id in ids:
+            conn = by_id.get(connection_id)
+            if conn is None:
+                raise _account_error(f"'{toolkit}' has no account '{connection_id}'", toolkit)
+            label = conn.account_label or conn.toolkit
+            if conn.toolkit != toolkit:
+                raise _account_error(
+                    f"the account '{label}' belongs to '{conn.toolkit}', not '{toolkit}'", toolkit
+                )
+            if not _usable(conn, agent_id):
+                raise _account_error(
+                    f"the {conn.toolkit_name or toolkit} account '{label}' cannot be used by this agent "
+                    f"(status {conn.status}, or connected for another agent); reconnect it or choose another",
+                    toolkit,
+                )
+            named.setdefault(toolkit, []).append(conn)
+    return named
+
+
+def account_line(selected: dict[str, list[service.AppConnection]]) -> str | None:
+    """The line telling the model which accounts it has (R-V5-13), or ``None`` for one per app.
+
+    ``Gmail accounts: Work (default; account "work"), Personal (account "personal") — say
+    which one to use when it matters.`` The ``account`` value is what the tool finder's
+    ``account`` argument takes (Composio accepts an alias or a connected account id).
+    """
+    lines: list[str] = []
+    for toolkit, accounts in sorted(selected.items()):
+        if len(accounts) < 2:
+            continue
+        name = accounts[0].toolkit_name or toolkit
+        parts = []
+        for conn in accounts:
+            handle = conn.alias or conn.connected_account_id or conn.id
+            flags = "default; " if conn.is_default else ""
+            parts.append(f'{conn.account_label or toolkit} ({flags}account "{handle}")')
+        lines.append(f"{name} accounts: {', '.join(parts)} — say which one to use when it matters.")
+    return "\n".join(lines) or None
+
+
 def plan_session(
     apps: AppsMode,
     connections: list[service.AppConnection],
@@ -161,8 +237,10 @@ def plan_session(
     """The Tool Router session an agent's ``tools.apps`` asks for (D-V5-C6, C7).
 
     The subject is the workspace's (``ws:<id>``) unless every usable connection was
-    made for this agent alone. Only connections of that subject count; their
-    connected accounts are pinned per app.
+    made for this agent alone, or the accounts ``tools.apps.accounts`` names are this
+    agent's. Only connections of that subject count. Per app, the accounts named in
+    ``tools.apps.accounts`` are pinned, else the app's default account (R-V5-13); an app
+    with several pinned accounts turns ``multi_account`` on with explicit selection.
 
     The session never runs an action of ``effective_denied_actions`` (R-V5-9): the picked
     destructive actions of the chosen apps are always in scope; a tool finder's caller adds
@@ -170,7 +248,8 @@ def plan_session(
 
     Raises:
         UnprocessableEntityError: The mode is not ``server``/``router``, no connected app
-            is usable, or an app server would expose no action.
+            is usable, an app server would expose no action, a chosen account is not
+            usable, chosen accounts mix owners, or two chosen accounts of one app are SHARED.
     """
     kind: McpOriginKind
     if apps.mode == "server":
@@ -188,28 +267,56 @@ def plan_session(
             + "; connect one under Tools, Apps",
             details={"path": "tools.apps.allowed_toolkits"},
         )
+    named = _named_accounts(apps, connections, agent_id)
+    owners = {conn.subject for accounts in named.values() for conn in accounts}
+    if len(owners) > 1:
+        raise UnprocessableEntityError(
+            "the chosen accounts must all be the workspace's or all this agent's own",
+            details={"path": "tools.apps.accounts"},
+        )
     workspace_wide = [c for c in usable if c.subject == workspace_subject(workspace_id)]
-    chosen = workspace_wide or usable
-    subject = chosen[0].subject
-    chosen = [c for c in chosen if c.subject == subject]
-    toolkits = sorted({c.toolkit for c in chosen})
+    subject = owners.pop() if owners else (workspace_wide or usable)[0].subject
+    candidates = [c for c in usable if c.subject == subject]
+    toolkits = sorted({c.toolkit for c in candidates})
+    selected: dict[str, list[service.AppConnection]] = {}
+    for toolkit in toolkits:
+        if named.get(toolkit):
+            selected[toolkit] = named[toolkit]
+            continue
+        group = [c for c in candidates if c.toolkit == toolkit]
+        selected[toolkit] = [next((c for c in group if c.is_default), group[0])]
+    chosen = [conn for accounts in selected.values() for conn in accounts]
+    for toolkit, accounts in selected.items():
+        shared = [c for c in accounts if c.account_type == "SHARED"]
+        if len(shared) > 1:
+            raise _account_error(
+                f"a session can use only one shared {accounts[0].toolkit_name or toolkit} account; "
+                "choose one of: " + ", ".join(c.account_label or c.id for c in shared),
+                toolkit,
+            )
     scope = _destructive(slug for conn in chosen for slug in conn.picked_actions)
     scope |= {slug.upper() for slug in destructive_in_scope}
     denied = set(effective_denied_actions(apps, scope))
-    accounts = {
-        toolkit: sorted(
-            {c.connected_account_id for c in chosen if c.toolkit == toolkit and c.connected_account_id}
-        )
-        for toolkit in toolkits
-    }
     options: dict[str, Any] = {
         "toolkits": {"enable": toolkits},
         "manage_connections": {"enable": False},
         "workbench": {"enable": False},
     }
-    pinned = {toolkit: ids for toolkit, ids in accounts.items() if ids}
+    pinned: dict[str, list[str]] = {}
+    for toolkit, accounts in selected.items():
+        ids = list(dict.fromkeys(c.connected_account_id for c in accounts if c.connected_account_id))
+        if ids:
+            pinned[toolkit] = ids
     if pinned:
         options["connected_accounts"] = pinned
+    most = max((len(ids) for ids in pinned.values()), default=0)
+    if most > 1:
+        # Composio caps a session's pins at one per app unless multi-account is on (R-V5-13).
+        options["multi_account"] = {
+            "enable": True,
+            "max_accounts_per_toolkit": most,
+            "require_explicit_selection": True,
+        }
     tool_options: dict[str, ToolExecution] = {}
     if kind == "server":
         picked: dict[str, list[str]] = {}
@@ -252,9 +359,9 @@ def plan_session(
         if denied:
             by_toolkit: dict[str, list[str]] = {}
             for slug in sorted(denied):
-                toolkit = next((t for t in toolkits if slug.startswith(f"{t.upper()}_")), None)
-                if toolkit is not None:
-                    by_toolkit.setdefault(toolkit, []).append(slug)
+                owner = next((t for t in toolkits if slug.startswith(f"{t.upper()}_")), None)
+                if owner is not None:
+                    by_toolkit.setdefault(owner, []).append(slug)
             if by_toolkit:
                 options["tools"] = {toolkit: {"disable": slugs} for toolkit, slugs in by_toolkit.items()}
         allowed_tools = router_allowed_tools(flags)
@@ -270,6 +377,7 @@ def plan_session(
         allowed_tools=allowed_tools,
         tool_options=tool_options,
         toolkits=toolkits,
+        account_line=account_line(selected),
     )
 
 
@@ -567,6 +675,7 @@ __all__ = [
     "AppsProvisioner",
     "AppsProvisionerDep",
     "SessionPlan",
+    "account_line",
     "apply_denied_actions",
     "get_apps_provisioner",
     "origin_of",

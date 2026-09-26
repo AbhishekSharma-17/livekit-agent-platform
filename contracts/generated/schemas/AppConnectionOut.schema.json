@@ -25,6 +25,19 @@
       "title": "Id",
       "type": "string"
     },
+    "is_default": {
+      "default": true,
+      "description": "The app's default account for this workspace (or agent): its tools keep the plain names and a session with no account choice uses it. Exactly one per app",
+      "title": "Is Default",
+      "type": "boolean"
+    },
+    "label": {
+      "default": "",
+      "description": "The account's name (R-V5-13); the app's name for a connection made before labels",
+      "maxLength": 40,
+      "title": "Label",
+      "type": "string"
+    },
     "last_checked_at": {
       "anyOf": [
         {

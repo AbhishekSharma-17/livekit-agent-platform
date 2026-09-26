@@ -227,28 +227,48 @@ class ComposioAdapter:
             "POST", "/auth_configs", json={"toolkit": {"slug": toolkit}, "auth_config": config}
         )
 
-    async def start_link(self, *, auth_config_id: str, subject: str, callback_url: str) -> dict[str, Any]:
-        """``POST /connected_accounts/link``."""
-        return await self._object(
-            "POST",
-            "/connected_accounts/link",
-            json={"auth_config_id": auth_config_id, "user_id": subject, "callback_url": callback_url},
-        )
+    async def start_link(
+        self, *, auth_config_id: str, subject: str, callback_url: str, alias: str | None = None
+    ) -> dict[str, Any]:
+        """``POST /connected_accounts/link`` (``alias`` is a top-level field, R-V5-13)."""
+        body: dict[str, Any] = {
+            "auth_config_id": auth_config_id,
+            "user_id": subject,
+            "callback_url": callback_url,
+        }
+        if alias:
+            body["alias"] = alias
+        return await self._object("POST", "/connected_accounts/link", json=body)
 
     async def create_with_key(
-        self, *, auth_config_id: str, subject: str, auth_scheme: str, fields: dict[str, str]
+        self,
+        *,
+        auth_config_id: str,
+        subject: str,
+        auth_scheme: str,
+        fields: dict[str, str],
+        alias: str | None = None,
     ) -> dict[str, Any]:
-        """``POST /connected_accounts`` with the key fields (forwarded once, never kept)."""
+        """``POST /connected_accounts`` with the key fields (forwarded once, never kept).
+
+        ``alias`` goes inside ``connection`` on this endpoint (R-V5-13).
+        """
+        connection: dict[str, Any] = {
+            "user_id": subject,
+            "state": {"authScheme": auth_scheme, "val": {**fields, "status": "ACTIVE"}},
+        }
+        if alias:
+            connection["alias"] = alias
         return await self._object(
             "POST",
             "/connected_accounts",
-            json={
-                "auth_config": {"id": auth_config_id},
-                "connection": {
-                    "user_id": subject,
-                    "state": {"authScheme": auth_scheme, "val": {**fields, "status": "ACTIVE"}},
-                },
-            },
+            json={"auth_config": {"id": auth_config_id}, "connection": connection},
+        )
+
+    async def update_connection(self, connected_account_id: str, *, alias: str) -> dict[str, Any]:
+        """``PATCH /connected_accounts/{id}`` with ``{alias}`` (an empty string clears it)."""
+        return await self._object(
+            "PATCH", f"/connected_accounts/{_seg(connected_account_id)}", json={"alias": alias}
         )
 
     async def get_connection(self, connected_account_id: str) -> dict[str, Any]:

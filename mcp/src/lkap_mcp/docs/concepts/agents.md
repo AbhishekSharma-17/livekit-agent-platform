@@ -5,7 +5,7 @@ a `mode` (`prompt` or `flow`, derived from whether `config.flow` is set — you
 never send `mode` yourself), and a `config` (`AgentConfig`) holding
 everything else: `instructions`, `pipeline`, `voice`, `capabilities`,
 `tools`, `knowledge`, `panel`, `recording`, `qa`, `flow`, `telephony`,
-`pack_settings` and `timezone`. `published` gates whether `/s/{slug}` is
+`pack_settings`, `timezone` and `locale`. `published` gates whether `/s/{slug}` is
 live; a draft agent can still be tested with `chat_start`.
 
 `agent_list(query=, mode=, published=, archived=false)` lists every agent in
@@ -100,6 +100,23 @@ the price line). A realtime model decides turn-taking itself, so
 `config.voice`: `thinking_sound` plays while a tool runs, `ambient_sound`
 (`office_ambience`, `city_ambience`, `crowded_room`, ...) plays under the
 whole call; neither plays on a typed chat.
+
+## Date, time and timezones
+
+An agent knows the current date and time where the caller is. Two zones are
+kept apart: `config.timezone` is the **business** timezone (an IANA name such
+as `Europe/London`; opening hours and bookings are written in it), and the
+**caller's** timezone is chosen per session. With `config.locale.caller_timezone`
+set to `detect` (the default) the caller's zone comes from their browser, else
+from their phone number when it maps to one zone, else it is the business
+timezone; `business` always uses the business timezone. The agent gets one
+line with the date and time at the start of the call, a short time update in
+long calls, and the built-ins `current_time` (the caller's time and the
+business's) and `convert_time` (between zones; `caller` and `business` name the
+two). A new agent created from a starter or a pack takes the workspace's
+default timezone (`settings.locale.timezone`, set with the workspace settings)
+when the starter sets none. `session_get` shows the zone a session used as
+`caller_timezone`.
 
 ## Prompt vs. flow
 

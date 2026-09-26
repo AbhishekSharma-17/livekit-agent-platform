@@ -229,6 +229,10 @@ def register(registry: Registry) -> None:
         telephony, forms and flow edges never follow it. ``tools.builtin_execution[name]`` sets
         one read built-in; ``voice.thinking_sound`` plays a clip during blocking waits. Keep
         ``tools.max_tool_steps`` at 4 or more with a background default.
+
+        Timezones (docs ``concepts/agents``): ``timezone`` is the business timezone (IANA name);
+        ``patch={"locale": {"caller_timezone": "business"}}`` makes the agent use it for the
+        caller too instead of detecting the caller's own zone (``detect``, the default).
         """
         if patch is not None and config is not None:
             return ToolResult.fail("invalid_input", "pass either patch or config, not both")

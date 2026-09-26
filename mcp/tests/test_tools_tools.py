@@ -316,3 +316,19 @@ async def test_tool_create_from_template_creates_the_tools(key: Any, mcp_session
     assert result["data"]["names"] == CAL_NAMES
     assert len(result["data"]["tool_ids"]) == 6
     assert any("agent_attach" in step for step in result["next_steps"])
+
+
+async def test_the_tools_concept_and_the_booking_recipe_are_served(key: Any, mcp_session: Any) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        concept = await mcp.call("lkap_explain", topic="tools")
+        recipe = await mcp.call("lkap_describe", kind="recipe", id="add-booking-tool")
+        found = await mcp.call("lkap_search_docs", query="spell_back")
+
+    assert concept["ok"] is True, concept
+    assert concept["data"]["markdown"].startswith("# Tools: built-ins and templates")
+    assert recipe["ok"] is True, recipe
+    assert "tool_create_from_template" in recipe["data"]["markdown"]
+    assert found["ok"] is True, found
+    assert "lkap://concepts/tools" in str(found["data"])

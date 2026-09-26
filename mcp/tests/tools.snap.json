@@ -11174,7 +11174,9 @@
               "recordings-and-cost",
               "webhooks",
               "sessions-and-test-chat",
-              "roles-and-scopes"
+              "roles-and-scopes",
+              "apps",
+              "tools"
             ],
             "title": "Topic",
             "type": "string"

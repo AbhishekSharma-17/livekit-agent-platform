@@ -45,6 +45,8 @@ ConceptTopic = Literal[
     "webhooks",
     "sessions-and-test-chat",
     "roles-and-scopes",
+    "apps",  # V5-18 (added to this list by V5-25, docs/v5/_asks.md)
+    "tools",  # V5-25: built-ins and tool templates
 ]
 CONCEPT_TOPICS: tuple[str, ...] = get_args(ConceptTopic)
 

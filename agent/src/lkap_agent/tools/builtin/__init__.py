@@ -36,7 +36,7 @@ from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
 from .fetch_url import build_fetch_url_tool
 from .http_request import build_http_request_tool
-from .notify_team import build_notify_team_tool, post_team_notification
+from .notify_team import ESCALATION_TIMEOUT_S, build_notify_team_tool, post_team_notification
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
 from .record_consent import build_record_consent_tool
@@ -314,7 +314,13 @@ def _escalation_notifier(
 
     async def _notify(reason: str, urgency: Urgency) -> None:
         await post_team_notification(
-            ctx, provider, settings, summary=reason, urgency=urgency, source="escalation"
+            ctx,
+            provider,
+            settings,
+            summary=reason,
+            urgency=urgency,
+            source="escalation",
+            timeout_s=ESCALATION_TIMEOUT_S,
         )
 
     return _notify

@@ -35,6 +35,7 @@ from lkap_agent.tools.execution import (
 from lkap_agent.tools.vendors import VendorError, vendor_call
 
 __all__ = [
+    "ESCALATION_TIMEOUT_S",
     "MAX_SUMMARY_CHARS",
     "NotifySource",
     "build_notify_team_tool",
@@ -53,6 +54,9 @@ MAX_SUMMARY_CHARS: Final[int] = 500
 MAX_TRANSCRIPT_MESSAGES: Final[int] = 12
 MAX_TRANSCRIPT_CHARS: Final[int] = 2000
 TIMEOUT_S: Final[float] = 5.0
+#: The post an escalation makes waits at most this long: `escalate_to_human` always blocks, so a slow
+#: webhook would be silence on the call.
+ESCALATION_TIMEOUT_S: Final[float] = 3.0
 VENDOR: Final[str] = "The team webhook"
 
 #: `userdata` key of the summaries already posted in this session.
@@ -130,6 +134,7 @@ async def post_team_notification(
     summary: str,
     urgency: Urgency = "normal",
     source: NotifySource = "notify_team",
+    timeout_s: float = TIMEOUT_S,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> None:
     """Post one notification to the team's webhook.
@@ -141,7 +146,7 @@ async def post_team_notification(
     if not webhook_url:
         raise VendorError(f"{VENDOR} is not set up")
     payload = build_payload(ctx, settings, summary=summary, urgency=urgency, source=source)
-    await vendor_call(VENDOR, "POST", webhook_url, json=payload, timeout_s=TIMEOUT_S, transport=transport)
+    await vendor_call(VENDOR, "POST", webhook_url, json=payload, timeout_s=timeout_s, transport=transport)
     try:
         ctx.record_event("team_notified", {"source": source, "urgency": urgency, "style": settings.style})
     except Exception:

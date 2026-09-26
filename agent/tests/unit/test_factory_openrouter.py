@@ -19,6 +19,7 @@ from lkap_contracts.providers import get as get_spec
 
 from lkap_agent.providers.factory import ProviderBuildError, ProviderFactory
 from lkap_agent.providers.image_gen import OpenRouterImageGen
+from lkap_agent.providers.openrouter import OpenRouterTTS
 
 API_KEY = "sk-or-v1-test-not-real"
 
@@ -100,20 +101,57 @@ def test_stt_is_the_batch_openai_transcriber_pointed_at_openrouter() -> None:
     assert stt.model == "openai/gpt-4o-mini-transcribe"
 
 
-def test_tts_uses_mp3_and_the_configured_voice() -> None:
+def test_tts_is_the_openrouter_adapter_with_pcm_and_the_configured_voice() -> None:
     tts = _build("tts", _resolved("openrouter-tts", voice="Puck"))
 
-    assert isinstance(tts, openai.TTS)
-    assert tts._opts.response_format == "mp3"
+    assert isinstance(tts, OpenRouterTTS)
+    assert tts.capabilities.streaming is False
+    # Gemini TTS on OpenRouter rejects mp3 (the stock plugin's default) with a 400.
+    assert tts._opts.response_format == "pcm"
     assert tts._opts.voice == "Puck"
     assert tts._opts.model == "google/gemini-3.8-flash-tts"
     assert tts._client.base_url.host == "openrouter.ai"
+
+
+def test_tts_voxtral_is_asked_for_mp3() -> None:
+    tts = _build("tts", _resolved("openrouter-tts", model="mistralai/voxtral-mini-tts-2603", voice="x"))
+
+    assert tts._opts.response_format == "mp3"
 
 
 def test_tts_default_voice_is_kore() -> None:
     tts = _build("tts", _resolved("openrouter-tts"))
 
     assert tts._opts.voice == "Kore"
+
+
+def test_tts_uses_the_worker_adapter_when_the_api_resolved_the_old_plugin_class() -> None:
+    """Version skew: an api on the previous registry still names `livekit.plugins.openai.TTS`."""
+    stale = _resolved("openrouter-tts").model_copy(update={"python_class": "livekit.plugins.openai.TTS"})
+
+    assert isinstance(_build("tts", stale), OpenRouterTTS)
+
+
+@pytest.mark.parametrize(
+    ("language", "expected_languages", "detects"),
+    [
+        ("multi", [], True),
+        ("auto", [], True),
+        ("", [], True),
+        ("en", ["en"], False),
+        ("en-US", ["en"], False),
+        ("pt_BR", ["pt"], False),
+        ("HI", ["hi"], False),
+    ],
+)
+def test_stt_language_becomes_an_iso_639_1_code_or_auto_detect(
+    language: str, expected_languages: list[str], detects: bool
+) -> None:
+    """`multi` (Deepgram's code) made every OpenRouter transcription a 400 in real sessions."""
+    stt = _build("stt", _resolved("openrouter-stt", model="microsoft/mai-transcribe-2", language=language))
+
+    assert stt._opts.detect_language is detects
+    assert stt._opts.languages == expected_languages
 
 
 # ------------------------------------------------------------------------------- image_gen

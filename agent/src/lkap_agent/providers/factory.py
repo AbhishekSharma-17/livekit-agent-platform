@@ -63,6 +63,9 @@ __all__ = [
     "ProviderBuildError",
     "ProviderFactory",
     "SLOT_KINDS",
+    "AUTO_DETECT_LANGUAGE_CODES",
+    "OPENAI_TRANSCRIPTION_STT_CLASS",
+    "openai_transcription_language_kwargs",
     "TELEPHONY_VARIANT_DROPPED_KWARGS",
     "telephony_noise_cancellation",
     "turn_detector_kwargs",
@@ -105,6 +108,9 @@ DEFAULT_OPTIONAL_SLOTS: Final[frozenset[str]] = frozenset(
 )
 
 _INFERENCE_PREFIX: Final[str] = "livekit-inference-"
+
+#: Registry classes the worker itself implements (``lkap_agent.providers.*``).
+_WORKER_CLASS_PREFIX: Final[str] = "lkap_agent."
 
 #: Secret kwargs an Inference provider must never receive (it authenticates with
 #: the worker's own LiveKit credentials from env).
@@ -254,7 +260,18 @@ class ProviderFactory:
                 constructor that rejects the resolved kwargs.
         """
         spec = self._spec_for(slot, provider)
-        target = import_target(provider.python_class)
+        python_class = provider.python_class
+        if spec.python_class.startswith(_WORKER_CLASS_PREFIX) and python_class != spec.python_class:
+            # An api still running an older registry resolves a vendor class the worker has
+            # since replaced with its own adapter (e.g. openrouter-tts); the worker's wins.
+            logger.info(
+                "using the worker registry's class for this provider",
+                provider_id=spec.id,
+                resolved_class=python_class,
+                python_class=spec.python_class,
+            )
+            python_class = spec.python_class
+        target = import_target(python_class)
         kwargs = self._constructor_kwargs(spec, provider, mode)
         positional, kwargs = extract_positional_arg(spec, kwargs)
         args = (positional,) if positional is not None else ()
@@ -262,7 +279,7 @@ class ProviderFactory:
             "building provider",
             slot=slot,
             provider_id=provider.provider_id,
-            python_class=provider.python_class,
+            python_class=python_class,
             kwarg_names=sorted(kwargs),  # names only: values may be secrets
             positional=positional is not None,
         )
@@ -366,7 +383,49 @@ class ProviderFactory:
             kwargs["extra_kwargs"] = extra
         if spec.id == "openrouter-llm":
             kwargs = _openrouter_llm_kwargs(kwargs)
+        if spec.python_class == OPENAI_TRANSCRIPTION_STT_CLASS:
+            kwargs = openai_transcription_language_kwargs(kwargs)
         return kwargs
+
+
+#: The STT class behind ``openai-stt`` and ``openrouter-stt``; both endpoints take one ISO-639-1 code.
+OPENAI_TRANSCRIPTION_STT_CLASS: Final[str] = "livekit.plugins.openai.STT"
+
+#: Language values that mean "let the model detect it" rather than a language. ``multi`` is
+#: Deepgram's code, offered by the console's shared language picker; OpenAI's and OpenRouter's
+#: ``/audio/transcriptions`` reject it with a 400 on every utterance.
+AUTO_DETECT_LANGUAGE_CODES: Final[frozenset[str]] = frozenset({"", "multi", "auto", "detect"})
+
+
+def openai_transcription_language_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Make ``language`` an ISO-639-1 code the OpenAI transcriptions API accepts.
+
+    ``/audio/transcriptions`` (OpenAI, and OpenRouter's copy of it) takes a bare
+    two-letter code and auto-detects when it is omitted. A BCP-47 tag (``en-US``,
+    ``pt_BR``) becomes its primary subtag; ``multi``/``auto``/empty drop the code and
+    set ``detect_language=True``, which makes livekit-plugins-openai 1.8.3 omit it
+    (``stt.py``: ``languages = [] if detect_language else ...``).
+
+    Args:
+        kwargs: The resolved constructor kwargs of a ``livekit.plugins.openai.STT``.
+
+    Returns:
+        A copy with ``language`` normalised (or removed in favour of ``detect_language``).
+    """
+    language = kwargs.get("language")
+    if not isinstance(language, str):
+        return kwargs
+    converted = dict(kwargs)
+    code = language.strip()
+    if code.lower() in AUTO_DETECT_LANGUAGE_CODES:
+        converted.pop("language")
+        converted["detect_language"] = True
+        return converted
+    primary = code.replace("_", "-").split("-", 1)[0].lower()
+    if primary != language:
+        logger.debug("normalised stt language to its ISO-639-1 code", language=language, code=primary)
+    converted["language"] = primary
+    return converted
 
 
 def _json_field(kwargs: dict[str, Any], name: str, expected: type) -> Any:

@@ -14,6 +14,7 @@ import {
   actionPage,
   categoryPage,
   connectionFixture,
+  connectionPage,
   toolkitFixture,
   toolkitPage,
   TOOLKIT_GITHUB_CONNECTED,
@@ -491,6 +492,28 @@ describe("ActionsDialog", () => {
     const checkbox = await within(dialog).findByRole("checkbox", { name: /List repositories/ });
     expect(isDisabled(checkbox)).toBe(true);
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("AppCard — a single account still shows the plain row (R-V5-13 backward compatibility)", () => {
+  it('shows the app\'s Default chip on its lone account, "Add another account" underneath, and never "Manage accounts"', async () => {
+    stubApi((call) => {
+      if (call.url.includes("/tool-providers/composio/toolkits") && !/\/toolkits\/[^/?]+/.test(call.url)) {
+        return { status: 200, body: toolkitPage([TOOLKIT_GITHUB_CONNECTED]) };
+      }
+      if (call.url.endsWith("/connections/conn_github")) return { status: 200, body: connectionFixture() };
+      if (call.url.endsWith("/tool-providers/composio/connections") && call.method === "GET") {
+        return { status: 200, body: connectionPage([connectionFixture()]) };
+      }
+      return undefined;
+    });
+    renderWithClient(<AppGallery />);
+    await screen.findByText("GitHub");
+
+    expect(await screen.findByText("Default")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Add another account" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Manage \d+ accounts/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Make default" })).toBeNull();
   });
 });
 

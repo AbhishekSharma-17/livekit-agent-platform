@@ -23,10 +23,12 @@ import {
   useReconnectApp,
   useToolProviderConnection,
   useToolProviderToolkit,
+  useUpdateConnection,
 } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
 import { fieldsFor } from "@/components/console/tools/apps/connect-app-dialog";
 import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
+import { RenameAccountDialog } from "@/components/console/tools/apps/rename-account-dialog";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { pluralize } from "@/lib/format";
 import type { ConnectionStatus } from "@/components/console/tools/apps/types";
@@ -51,15 +53,29 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
 };
 
 /**
- * One connected app's status row (docs/v5/COMPOSIO.md §6): a live status
- * chip (`useToolProviderConnection` polls while `initiated`), Reconnect
- * (a new sign-in link for OAuth methods, a small key form for `api_key`),
- * Disconnect (confirm, naming the picked actions that pause) and Actions.
+ * One connected account's status row (docs/v5/COMPOSIO.md §6, R-V5-13): its
+ * label, a Default chip when it is the app's default account, a live status
+ * chip (`useToolProviderConnection` polls while `initiated`), Rename, Make
+ * default (hidden once it already is), Reconnect (a new sign-in link for
+ * OAuth methods, a small key form for `api_key`), Disconnect (confirm,
+ * naming the picked actions that pause) and Actions. Used both directly on
+ * the app card (one account) and once per row inside its accounts dialog
+ * (several).
  */
-export function ConnectionRow({ connectionId, toolkit }: { connectionId: string; toolkit: Pick<ToolkitOut, "slug" | "name" | "auth_fields"> }) {
+export function ConnectionRow({
+  connectionId,
+  toolkit,
+  showAccountLabel = false,
+}: {
+  connectionId: string;
+  toolkit: Pick<ToolkitOut, "slug" | "name" | "auth_fields">;
+  /** True once the app has more than one account (`AppAccountsDialog` sets this) — labels the Actions dialog by account so a builder can tell which inbox they just changed. */
+  showAccountLabel?: boolean;
+}) {
   const connectionQuery = useToolProviderConnection(connectionId, { poll: true });
   const reconnectMutation = useReconnectApp();
   const disconnectMutation = useDisconnectApp();
+  const updateMutation = useUpdateConnection();
   const [keyDialogOpen, setKeyDialogOpen] = React.useState(false);
   const [actionsOpen, setActionsOpen] = React.useState(false);
   const [redirectUrl, setRedirectUrl] = React.useState<string | null>(null);
@@ -78,6 +94,19 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
 
   const needsReconnect = connection.needs_reconnect || connection.status !== "active";
   const status: ConnectionStatus = connection.status;
+  // Backfilled to the app's name for a connection made before labels existed
+  // (R-V5-13's lazy backfill happens server-side; this mirrors it here for
+  // the rare cache moment where `label` hasn't landed yet).
+  const label = connection.label || toolkit.name;
+
+  async function makeDefault() {
+    try {
+      await updateMutation.mutateAsync({ id: connectionId, body: { is_default: true } });
+      toast.success(`${label} is now ${toolkit.name}'s default account`);
+    } catch (error) {
+      toast.error(`Couldn't set the default — ${appsErrorMessage(error)}`);
+    }
+  }
 
   async function startReconnect() {
     if (connection!.method === "api_key") {
@@ -113,7 +142,13 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-foreground">{label}</span>
+          {connection.is_default ? (
+            <StatusChip tone="neutral" size="sm">
+              Default
+            </StatusChip>
+          ) : null}
           <StatusChip tone={STATUS_TONE[status]} dot size="sm">
             {STATUS_LABEL[status]}
           </StatusChip>
@@ -123,7 +158,29 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <RenameAccountDialog
+            connectionId={connectionId}
+            currentLabel={label}
+            toolkitName={toolkit.name}
+            trigger={
+              <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+                Rename
+              </Button>
+            }
+          />
+          {!connection.is_default ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!canWrite || updateMutation.isPending}
+              title={canWrite ? undefined : writeReason}
+              onClick={() => void makeDefault()}
+            >
+              Make default
+            </Button>
+          ) : null}
           {needsReconnect ? (
             <Button
               type="button"
@@ -179,6 +236,7 @@ export function ConnectionRow({ connectionId, toolkit }: { connectionId: string;
         pickedActions={connection.picked_actions ?? []}
         open={actionsOpen}
         onOpenChange={setActionsOpen}
+        accountLabel={showAccountLabel ? label : undefined}
       />
     </div>
   );

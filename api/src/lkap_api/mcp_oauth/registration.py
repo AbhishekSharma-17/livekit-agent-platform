@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lkap_api import net_guard
 from lkap_api.db.models import McpOauthClient, utcnow
 from lkap_api.mcp_oauth.discovery import AuthServer
-from lkap_api.mcp_oauth.http import McpOauthError, UrlPolicy, fetch, loopback_host, require_url
+from lkap_api.mcp_oauth.http import McpOauthError, UrlPolicy, fetch, loopback_host, require_url, url_problem
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 
@@ -206,6 +206,23 @@ async def _stored_dcr(
     return None
 
 
+def _management_uri(uri: object, endpoint: str, policy: UrlPolicy) -> str | None:
+    """The DCR answer's ``registration_client_uri`` when it is safe to keep (S5-16).
+
+    It must pass the sign-in URL check and share the registration endpoint's origin; any
+    other value is dropped (the client then cannot be deleted by RFC 7592, only revoked).
+    """
+    if not isinstance(uri, str) or url_problem(uri, policy) is not None:
+        return None
+    given, expected = urlsplit(uri), urlsplit(endpoint)
+    same_origin = (given.scheme.lower(), given.hostname, given.port) == (
+        expected.scheme.lower(),
+        expected.hostname,
+        expected.port,
+    )
+    return uri if same_origin else None
+
+
 async def _register(
     db: AsyncSession,
     vault: Vault,
@@ -251,7 +268,7 @@ async def _register(
     method = body.get("token_endpoint_auth_method")
     if not isinstance(method, str) or method not in ("none", "client_secret_basic", "client_secret_post"):
         method = "none" if "client_secret" not in secrets else "client_secret_basic"
-    uri = body.get("registration_client_uri")
+    uri = _management_uri(body.get("registration_client_uri"), endpoint, policy)
     expires = body.get("client_secret_expires_at")
     row = McpOauthClient(
         workspace_id=workspace_id,
@@ -262,7 +279,7 @@ async def _register(
         token_endpoint_auth_method=method,
         ciphertext=vault.encrypt(secrets) if secrets else None,
         # Kept for V5-16's client deletion; checked against the guard again before any use.
-        registration_client_uri=uri if isinstance(uri, str) and len(uri) <= 2000 else None,
+        registration_client_uri=uri,
         client_secret_expires_at=(
             dt.datetime.fromtimestamp(expires, dt.UTC) if isinstance(expires, int) and expires > 0 else None
         ),

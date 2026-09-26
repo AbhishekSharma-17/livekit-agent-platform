@@ -76,10 +76,30 @@ async def _tool(client: httpx.AsyncClient, auth: dict[str, Any] | None = None, u
     return str(response.json()["id"])
 
 
+#: The binder cookie each started flow set, by its ``state`` (R-V5-14): the admin's browser
+#: holds it, so `_callback` sends it along unless a test says otherwise.
+BINDERS: dict[str, str] = {}
+
+
+def binder_of(response: httpx.Response) -> str | None:
+    """The ``lkap_mcp_oauth`` value a start response sets (parsed from ``Set-Cookie``)."""
+    for header in response.headers.get_list("set-cookie"):
+        name, _, rest = header.partition("=")
+        if name.strip() == "lkap_mcp_oauth":
+            return rest.split(";", 1)[0]
+    return None
+
+
 async def _start(
     client: httpx.AsyncClient, tool_id: str, body: dict[str, Any] | None = None
 ) -> httpx.Response:
-    return await client.post(f"/v1/tools/{tool_id}/oauth/start", json=body or {})
+    response = await client.post(f"/v1/tools/{tool_id}/oauth/start", json=body or {})
+    binder = binder_of(response)
+    if response.status_code == 200 and binder is not None:
+        state = _query(response.json()["authorization_url"]).get("state")
+        if state:
+            BINDERS[state] = binder
+    return response
 
 
 async def _started(
@@ -96,8 +116,13 @@ def _query(url: str) -> dict[str, str]:
     return {key: values[0] for key, values in parse_qs(urlsplit(url).query).items()}
 
 
-async def _callback(client: httpx.AsyncClient, params: dict[str, str]) -> httpx.Response:
-    return await client.get(CALLBACK, params=params, follow_redirects=False)
+async def _callback(
+    client: httpx.AsyncClient, params: dict[str, str], *, binder: str | None | bool = True
+) -> httpx.Response:
+    """The provider's redirect; ``binder=True`` sends the starting browser's cookie."""
+    cookie = BINDERS.get(params.get("state", "")) if binder is True else binder or None
+    headers = {"Cookie": f"lkap_mcp_oauth={cookie}"} if cookie else {}
+    return await client.get(CALLBACK, params=params, headers=headers, follow_redirects=False)
 
 
 async def _connect(
@@ -831,6 +856,227 @@ async def test_audit_rows_name_the_steps_and_carry_no_secret(
     text = " ".join(str(row.payload) for row in rows)
     for secret in (world.access_token, world.refresh_token, params["code"], params["state"], "rat-fake"):
         assert secret not in text
+
+
+# ----------------------------------------------------------- V5-27: the browser binder (S5-11)
+async def _rejections(database: Database) -> list[str]:
+    return [str(row.payload.get("reason")) for row in await _audits(database, "mcp_oauth.callback_rejected")]
+
+
+async def test_the_start_sets_the_binder_cookie(admin_client: httpx.AsyncClient, world: OAuthWorld) -> None:
+    tool_id = await _tool(admin_client)
+    response = await _start(admin_client, tool_id)
+    [header] = [h for h in response.headers.get_list("set-cookie") if h.startswith("lkap_mcp_oauth=")]
+    attributes = {part.strip().split("=", 1)[0].lower() for part in header.split(";")[1:]}
+    assert {"httponly", "max-age", "path", "samesite"} <= attributes
+    assert "Path=/v1/oauth/mcp/" in header and "Max-Age=600" in header and "SameSite=lax" in header
+    assert len(binder_of(response) or "") >= 40
+
+
+async def test_callback_without_the_start_cookie_is_rejected(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    tool_id = await _tool(admin_client)
+    started = await _started(admin_client, tool_id)
+    params = world.authorize(started["authorization_url"])
+
+    response = await _callback(client, params, binder=None)
+    retry = await _callback(client, params)  # the state is used up by the refusal
+
+    assert response.status_code == 302 and response.headers["location"].endswith("oauth=error")
+    assert world.token_calls == []
+    assert retry.status_code == 400
+    assert "browser_mismatch" in await _rejections(database)
+    assert [r for r in await _rows(database, Credential) if r.provider_id == "mcp-oauth"] == []
+
+
+async def test_callback_with_another_browsers_cookie_is_rejected(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    # Two admins start sign-ins; the second one's browser completes the first one's url.
+    first_tool, second_tool = await _tool(admin_client), await _tool(admin_client)
+    first = await _started(admin_client, first_tool)
+    second = await _started(admin_client, second_tool)
+    other_browser = BINDERS[_query(second["authorization_url"])["state"]]
+
+    response = await _callback(client, world.authorize(first["authorization_url"]), binder=other_browser)
+
+    assert response.headers["location"].endswith("oauth=error")
+    assert world.token_calls == []
+    assert "browser_mismatch" in await _rejections(database)
+
+
+async def test_an_api_key_flow_needs_no_cookie_and_is_audited_as_unbound(
+    app: FastAPI,
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+) -> None:
+    tool_id = await _tool(admin_client)
+    _, raw = await make_api_key(
+        database, ["agents:read", "agents:write", "providers:read", "providers:write"]
+    )
+    async with key_client(app, raw) as operator:
+        started = await _started(operator, tool_id)
+
+    response = await _callback(client, world.authorize(started["authorization_url"]), binder=None)
+
+    assert response.headers["location"].endswith("oauth=ok")
+    [ok] = await _audits(database, "mcp_oauth.callback_ok")
+    assert ok.actor_type == "api_key" and ok.payload["browser_bound"] is False
+
+
+async def test_a_bound_sign_in_is_audited_as_browser_bound(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    await _connect(admin_client, client, world, await _tool(admin_client))
+    [ok] = await _audits(database, "mcp_oauth.callback_ok")
+    assert ok.payload["browser_bound"] is True
+
+
+async def test_allow_unbound_turns_the_binder_check_off(
+    app: FastAPI,
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    settings: Settings,
+) -> None:
+    _use_settings(app, settings, mcp_oauth_allow_unbound=True)
+    try:
+        started = await _started(admin_client, await _tool(admin_client))
+        response = await _callback(client, world.authorize(started["authorization_url"]), binder=None)
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+    assert response.headers["location"].endswith("oauth=ok")
+
+
+async def test_the_binder_cookie_is_cleared_on_the_redirect(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld
+) -> None:
+    _, _, response = await _connect(admin_client, client, world, await _tool(admin_client))
+    [cleared] = [h for h in response.headers.get_list("set-cookie") if h.startswith("lkap_mcp_oauth=")]
+    assert "Max-Age=0" in cleared and "Path=/v1/oauth/mcp/" in cleared
+
+
+# ----------------------------------------------------- V5-27: S5-16, S5-18, S5-21
+async def test_dcr_registration_client_uri_to_a_private_host_is_not_stored(
+    admin_client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    world.registration_client_uri = "https://169.254.169.254/register/x"
+    await _started(admin_client, await _tool(admin_client))
+    [row] = await _rows(database, McpOauthClient)
+    assert row.registration_client_uri is None
+
+
+async def test_dcr_registration_client_uri_on_another_origin_is_not_stored(
+    admin_client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    world.registration_client_uri = "https://elsewhere.example.net/register/x"
+    await _started(admin_client, await _tool(admin_client))
+    [row] = await _rows(database, McpOauthClient)
+    assert row.registration_client_uri is None
+
+
+async def test_dcr_registration_client_uri_on_the_registration_origin_is_kept(
+    admin_client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    await _started(admin_client, await _tool(admin_client))
+    [row] = await _rows(database, McpOauthClient)
+    assert row.registration_client_uri == f"{AS_ROOT}/register/dcr-client-1"
+
+
+def _token_answer(world: OAuthWorld, monkeypatch: pytest.MonkeyPatch, answer: httpx.Response) -> None:
+    original = world._token
+
+    def token(request: httpx.Request) -> httpx.Response:
+        original(request)  # the grant checks still run and record the call
+        return answer
+
+    monkeypatch.setattr(world, "_token", token)
+
+
+async def test_callback_deeply_nested_token_answer_is_rejected_and_audited(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _token_answer(world, monkeypatch, httpx.Response(200, content=b"[" * 60_000))
+    _, _, response = await _connect(admin_client, client, world, await _tool(admin_client))
+    assert response.status_code == 302 and response.headers["location"].endswith("oauth=error")
+    assert await _rejections(database) == ["token_exchange_failed"]
+
+
+@pytest.mark.parametrize("expires_in", [10**12, 10**30])
+async def test_callback_huge_expires_in_is_clamped(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    settings: Settings,
+    expires_in: int,
+) -> None:
+    world.expires_in = expires_in
+    tool_id = await _tool(admin_client)
+    _, _, response = await _connect(admin_client, client, world, tool_id)
+    assert response.headers["location"].endswith("oauth=ok")
+    credential_id = (await _definition(database, tool_id)).auth.credential_id
+    assert credential_id is not None
+    expires_at = dt.datetime.fromisoformat((await _bag(database, settings, credential_id))["expires_at"])
+    assert expires_at - utcnow() <= dt.timedelta(days=3651)
+
+
+@pytest.mark.parametrize("expires_in", [0, -5])
+async def test_callback_nonpositive_expires_in_is_rejected(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    expires_in: int,
+) -> None:
+    world.expires_in = expires_in
+    _, _, response = await _connect(admin_client, client, world, await _tool(admin_client))
+    assert response.headers["location"].endswith("oauth=error")
+    assert await _rejections(database) == ["invalid_token_answer"]
+    assert [r for r in await _rows(database, Credential) if r.provider_id == "mcp-oauth"] == []
+
+
+async def test_callback_an_unexpected_failure_is_an_audited_refusal_not_a_500(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lkap_api.mcp_oauth import callback as callback_module
+
+    async def broken(*_: Any, **__: Any) -> Any:
+        raise RuntimeError("store exploded")
+
+    monkeypatch.setattr(callback_module, "_store", broken)
+    _, _, response = await _connect(admin_client, client, world, await _tool(admin_client))
+    assert response.status_code == 302 and response.headers["location"].endswith("oauth=error")
+    assert await _rejections(database) == ["internal"]
+
+
+async def test_an_unknown_flow_leaves_no_audit_row(client: httpx.AsyncClient, database: Database) -> None:
+    for params in ({"state": "no-such-state", "code": "c"}, {"code": "c"}, {"state": "x" * 300}):
+        response = await _callback(client, params, binder=None)
+        assert response.status_code == 400
+    assert await _audits(database, "mcp_oauth.callback_rejected") == []
+
+
+async def test_callback_is_rate_limited_per_client(client: httpx.AsyncClient) -> None:
+    from lkap_api.mcp_oauth.router import CALLBACK_PER_MIN
+
+    statuses = [
+        (await _callback(client, {"state": f"s{i}"}, binder=None)).status_code
+        for i in range(CALLBACK_PER_MIN + 1)
+    ]
+    assert statuses[:CALLBACK_PER_MIN] == [400] * CALLBACK_PER_MIN
+    assert statuses[-1] == 429
 
 
 async def test_no_token_code_or_state_reaches_a_log_line(

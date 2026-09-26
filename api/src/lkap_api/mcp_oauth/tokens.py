@@ -59,7 +59,7 @@ from lkap_api.errors import ApiError, ConflictError, NotFoundError
 from lkap_api.jobs.service import JobsService
 from lkap_api.logging import get_logger
 from lkap_api.mcp_oauth.credential import STATUS_ACTIVE, binds_tool, parse_time
-from lkap_api.mcp_oauth.http import McpOauthError, UrlPolicy, fetch, host_of, require_url
+from lkap_api.mcp_oauth.http import McpOauthError, UrlPolicy, fetch, host_of, require_url, token_lifetime
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 from lkap_api.webhooks import events as webhook_events
@@ -280,6 +280,8 @@ async def _refresh(client: httpx.AsyncClient, policy: UrlPolicy, bag: dict[str, 
         raise McpOauthError("refresh_failed", "the sign-in provider sent no usable access token")
     if token.refresh_token is not None and len(token.refresh_token) > MAX_TOKEN_CHARS:
         raise McpOauthError("refresh_failed", "the sign-in provider's refresh token is too long")
+    if token.expires_in is not None and token.expires_in <= 0:
+        raise McpOauthError("refresh_failed", "the sign-in provider sent an expired token")
     return token
 
 
@@ -288,8 +290,9 @@ def _refreshed_bag(bag: dict[str, str], token: OAuthToken, now: dt.datetime) -> 
     updated["access_token"] = token.access_token
     if token.refresh_token:
         updated["refresh_token"] = token.refresh_token  # rotation: the old one is spent
-    if token.expires_in is not None and token.expires_in > 0:
-        updated["expires_at"] = (now + dt.timedelta(seconds=int(token.expires_in))).isoformat()
+    lifetime = token_lifetime(token.expires_in)  # clamped to 10 years (S5-18)
+    if lifetime is not None:
+        updated["expires_at"] = (now + dt.timedelta(seconds=lifetime)).isoformat()
     else:
         updated.pop("expires_at", None)
     if token.scope:

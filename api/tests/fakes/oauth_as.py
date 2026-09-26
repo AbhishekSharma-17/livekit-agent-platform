@@ -86,6 +86,8 @@ class OAuthWorld:
     refresh_status: int = 400
     revoke_status: int = 200
     delete_client_status: int = 204
+    registration_client_uri: str | None = None
+    """Overrides the DCR answer's ``registration_client_uri`` (V5-27, S5-16)."""
     preregistered: dict[str, str | None] = field(default_factory=dict)
     """client_id → secret (``None``: a public pre-registered client)."""
 
@@ -244,7 +246,7 @@ class OAuthWorld:
             answer = {
                 **body,
                 "client_id": client_id,
-                "registration_client_uri": f"{AS_ROOT}/register/{client_id}",
+                "registration_client_uri": self.registration_client_uri or f"{AS_ROOT}/register/{client_id}",
             }
             answer["registration_access_token"] = "rat-fake-Pq8Lm2"
             if self.registered_secret:

@@ -133,6 +133,10 @@ class Settings(BaseSettings):
     #: server may leave; ``@http`` = reuse ``LKAP_HTTP_TOOL_ALLOWED_HOSTS`` (empty then allows
     #: nothing, as for HTTP tools). The worker reads the same variable at connect time.
     mcp_allowed_hosts: str = ""
+    #: ``LKAP_MCP_OAUTH_ALLOW_UNBOUND`` (R-V5-14): accept an MCP sign-in callback from a
+    #: browser that does not hold the start's binder cookie. Only for a deployment whose
+    #: console and ``/v1/oauth/mcp/`` are on different sites (neither shipped layout is).
+    mcp_oauth_allow_unbound: bool = False
     #: ``LKAP_HTTP_TOOL_ALLOWED_HOSTS``: the worker's HTTP-tool ceiling, read here only for
     #: ``LKAP_MCP_ALLOWED_HOSTS=@http``.
     http_tool_allowed_hosts: str = ""

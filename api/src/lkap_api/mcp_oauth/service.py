@@ -9,6 +9,7 @@ token, a code, a ``state`` other than inside the authorization url, or a secret.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Final
 
 import httpx
@@ -43,6 +44,14 @@ STATUS_REQUIREMENT: Final = Requirement("admin", "providers:read")
 START_TIMEOUT_S: Final[float] = 30.0
 
 _TOOL: TypeAdapter[ToolDefinition] = TypeAdapter(ToolDefinition)
+
+
+@dataclass(frozen=True)
+class StartResult:
+    """``oauth/start``'s answer and, for a redirect, the binder cookie to set (R-V5-14)."""
+
+    out: McpOauthStartOut
+    binder: str | None = None
 
 
 def as_http_error(exc: McpOauthError) -> UnprocessableEntityError:
@@ -89,8 +98,12 @@ async def start_sign_in(
     ctx: WorkspaceContext,
     tool_id: str,
     payload: McpOauthStartIn,
-) -> McpOauthStartOut:
-    """Discover, register, write the flow row and return where to send the browser."""
+) -> StartResult:
+    """Discover, register, write the flow row and return where to send the browser.
+
+    A redirect also carries the binder cookie value the route sets on the admin's browser
+    (R-V5-14); the callback requires it for a flow a person started.
+    """
     ctx.check(START_REQUIREMENT)
     row, definition, auth = await oauth_tool(db, ctx, tool_id)
     if definition.origin is not None:
@@ -136,8 +149,12 @@ async def start_sign_in(
                     outcome="needs_client_registration",
                     issuer_host=host_of(found.auth_server.issuer),
                 )
-                return McpOauthStartOut(
-                    status="needs_client_registration", redirect_uri=redirect, issuer=found.auth_server.issuer
+                return StartResult(
+                    McpOauthStartOut(
+                        status="needs_client_registration",
+                        redirect_uri=redirect,
+                        issuer=found.auth_server.issuer,
+                    )
                 )
     except TimeoutError as exc:
         raise as_http_error(
@@ -167,13 +184,16 @@ async def start_sign_in(
         registration=choice.registration,
     )
     log.info("mcp_oauth_started", tool_id=row.id, registration=choice.registration)
-    return McpOauthStartOut(
-        status="redirect",
-        authorization_url=started.authorization_url,
-        expires_at=started.expires_at,
-        redirect_uri=redirect,
-        issuer=found.auth_server.issuer,
-        registration=choice.registration,
+    return StartResult(
+        McpOauthStartOut(
+            status="redirect",
+            authorization_url=started.authorization_url,
+            expires_at=started.expires_at,
+            redirect_uri=redirect,
+            issuer=found.auth_server.issuer,
+            registration=choice.registration,
+        ),
+        binder=started.binder,
     )
 
 
@@ -213,6 +233,7 @@ async def sign_in_status(
 __all__ = [
     "START_REQUIREMENT",
     "STATUS_REQUIREMENT",
+    "StartResult",
     "as_http_error",
     "oauth_tool",
     "sign_in_status",

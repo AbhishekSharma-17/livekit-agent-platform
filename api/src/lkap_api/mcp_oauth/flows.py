@@ -29,11 +29,22 @@ from lkap_api.vault import Vault
 FLOW_TTL: Final[dt.timedelta] = dt.timedelta(minutes=10)
 #: The longest ``state`` the callback accepts (``token_urlsafe(32)`` is 43 characters).
 MAX_STATE_CHARS: Final[int] = 256
+#: The browser-binder cookie (R-V5-14): set by ``oauth/start``, required by the callback.
+BINDER_COOKIE: Final[str] = "lkap_mcp_oauth"
+#: The cookie's path: only the sign-in routes ever receive it.
+BINDER_COOKIE_PATH: Final[str] = "/v1/oauth/mcp/"
+#: The longest binder cookie value the callback reads.
+MAX_BINDER_CHARS: Final[int] = 256
 
 
 def hash_state(state: str) -> str:
     """The stored form of a ``state`` value (hex SHA-256)."""
     return hashlib.sha256(state.encode("utf-8")).hexdigest()
+
+
+def hash_binder(binder: str) -> str:
+    """The stored form of a binder cookie value (hex SHA-256)."""
+    return hashlib.sha256(binder.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -42,6 +53,8 @@ class StartedFlow:
 
     authorization_url: str
     expires_at: dt.datetime
+    binder: str
+    """The binder cookie's value (R-V5-14): the browser gets it, the flow keeps its hash."""
 
 
 def authorization_url(
@@ -108,6 +121,7 @@ async def create_flow(
         )
     )
     state = secrets.token_urlsafe(32)
+    binder = secrets.token_urlsafe(32)
     pkce = PKCEParameters.generate()
     server = discovery.auth_server
     expires_at = ts + FLOW_TTL
@@ -118,7 +132,10 @@ async def create_flow(
             tool_id=tool_id,
             actor_type=actor_type,
             actor_id=actor_id,
-            verifier_ciphertext=vault.encrypt({"code_verifier": pkce.code_verifier}),
+            # The binder's hash sits beside the verifier in the encrypted bag (no column).
+            verifier_ciphertext=vault.encrypt(
+                {"code_verifier": pkce.code_verifier, "binder_sha256": hash_binder(binder)}
+            ),
             issuer=server.issuer,
             iss_parameter_supported=server.iss_parameter_supported,
             resource=discovery.resource,
@@ -144,14 +161,18 @@ async def create_flow(
         resource=discovery.resource,
         scopes=discovery.scopes,
     )
-    return StartedFlow(authorization_url=url, expires_at=expires_at)
+    return StartedFlow(authorization_url=url, expires_at=expires_at, binder=binder)
 
 
 __all__ = [
+    "BINDER_COOKIE",
+    "BINDER_COOKIE_PATH",
     "FLOW_TTL",
+    "MAX_BINDER_CHARS",
     "MAX_STATE_CHARS",
     "StartedFlow",
     "authorization_url",
     "create_flow",
+    "hash_binder",
     "hash_state",
 ]

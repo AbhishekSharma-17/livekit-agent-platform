@@ -326,6 +326,8 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     # V4-01: the starter templates (`lkap_api/templates/router.py`).
     "/v1/templates",
     "/v1/templates/{template_id}",
+    "/v1/tool-templates",  # V5-25
+    "/v1/tool-templates/{template_id}/instantiate",  # V5-25
     # V5-18: connected apps (`lkap_api/tool_providers/router.py`).
     "/v1/tool-providers/composio/callback",
     "/v1/tool-providers/composio/connections",
@@ -386,6 +388,7 @@ ENV_VAR_ALLOWLIST: Final[frozenset[str]] = frozenset(
         "LKAP_MCP_PUBLIC_URL",
         "LKAP_NET_ALLOW_PRIVATE_HOSTS",
         "LKAP_HTTP_TOOL_USER_AGENT",
+        "LKAP_HTTP_TOOL_ALLOWED_HOSTS",  # V5-25: fetch_url's ceiling
         "LIVEKIT_URL",
         "LIVEKIT_API_KEY",
         "LIVEKIT_API_SECRET",
@@ -539,6 +542,10 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "tool_update": frozenset({"tool_id", "patch", "execution", "plan"}),
     "tool_test": frozenset({"tool_id"}),
     "tool_dry_run": frozenset({"tool_id", "arguments"}),
+    "tool_templates": frozenset(),  # V5-25
+    "tool_create_from_template": frozenset(
+        {"template_id", "secret_key_id", "defaults", "agent_id", "names", "plan"}
+    ),
     # 4.7 test chat
     "chat_start": frozenset({"agent_id_or_slug", "participant_name", "wait_for_greeting", "timeout_s"}),
     "chat_send": frozenset({"chat_id", "text", "timeout_s"}),
@@ -738,6 +745,11 @@ async def test_every_template_id_in_the_docs_resolves_against_the_scratch_api(sc
     response = await scratch_admin.get("/v1/templates")
     assert response.status_code == 200, response.text
     live = {item["template"]["id"] for item in response.json()["items"]}
+    # V5-25: `tool_create_from_template(template_id=...)` names a tool template or its group.
+    tool_templates = await scratch_admin.get("/v1/tool-templates")
+    assert tool_templates.status_code == 200, tool_templates.text
+    for item in tool_templates.json()["items"]:
+        live |= {item["id"], item["group"]}
 
     unknown = _template_ids_mentioned() - live
     assert not unknown, f"docs name template id(s) the api does not serve: {sorted(unknown)}"

@@ -190,7 +190,8 @@ async def list_tool_templates(_ctx: TemplateReaderDep) -> ToolTemplatesResponse:
         "Creates HTTP tools from one template (`cal_com.booking_create`) or every template of a group "
         "(`cal_com`, or the subset in `names`). `credential_id` is an `http-tool-secret` key holding the "
         "template's secret names; `defaults` fix arguments such as `event_type_id`. The tools are checked "
-        "like `POST /v1/tools` and are not attached to an agent (use the agent's `tools.tool_ids`)."
+        "like `POST /v1/tools` (binding the key needs `providers:write`, R-V2-33) and are not attached to an "
+        "agent (use the agent's `tools.tool_ids`)."
     ),
 )
 async def instantiate_tool_template(

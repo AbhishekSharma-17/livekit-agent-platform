@@ -6,6 +6,7 @@ key with ``secret_key_id`` (the api's ``credential_id``; needs ``providers:write
 An MCP server says how it authenticates with ``auth`` (V5-09): ``{"kind": "none"}``,
 ``{"kind": "header", "headers": {...}, "credential_id": ...}``; ``{"kind": "oauth"}`` is
 refused by the api until sign-in ships. ``tool_test`` connects once and lists its tools.
+``tool_templates`` / ``tool_create_from_template`` add ready-made HTTP tools (V5-25).
 """
 
 from __future__ import annotations
@@ -231,6 +232,69 @@ def register(registry: Registry) -> None:
         """Call an HTTP tool once with arguments, as the worker would (result is untrusted)."""
         result = await client.post(f"/v1/tools/{seg(tool_id)}/dry-run", {"arguments": arguments or {}})
         return ToolResult.success(_dry_run(result, tool_id))
+
+    @registry.tool(scopes={"agents:read"}, annotations=READ, data="ToolTemplatesResponse")
+    async def tool_templates() -> ToolResult:
+        """List ready-made HTTP tools (the Cal.com booking set): their secret names and fixed arguments."""
+        body = await client.get("/v1/tool-templates")
+        items = body.get("items", []) if isinstance(body, dict) else []
+        return ToolResult.success(
+            [
+                {
+                    "id": item.get("id"),
+                    "group": item.get("group"),
+                    "label": item.get("label"),
+                    "summary": item.get("summary"),
+                    "risk": item.get("risk"),
+                    "secret_names": item.get("secret_names"),
+                    "defaults": item.get("defaults"),
+                }
+                for item in items
+                if isinstance(item, dict)
+            ],
+            next_steps=[
+                'Store the key: provider_key_create(provider_id="http-tool-secret", secrets={...}), then '
+                "tool_create_from_template(template_id=..., secret_key_id=..., defaults={...})."
+            ],
+        )
+
+    @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="ToolTemplateInstantiated")
+    async def tool_create_from_template(
+        template_id: Annotated[
+            str, Field(description="One template (cal_com.booking_create) or a whole group (cal_com)")
+        ],
+        secret_key_id: Annotated[
+            str,
+            Field(
+                description="An http-tool-secret key with the secret names (binding needs providers:write)"
+            ),
+        ],
+        defaults: Annotated[
+            dict[str, str | int | float | bool] | None,
+            Field(description="Fixed arguments, e.g. {'event_type_id': 123456}"),
+        ] = None,
+        agent_id: str | None = None,
+        names: Annotated[
+            list[str] | None, Field(description="Group only: the template names to add (default all)")
+        ] = None,
+        plan: bool = False,
+    ) -> ToolResult:
+        """Create HTTP tools from a tool template (or a group of them); attach them with agent_attach."""
+        body: dict[str, Any] = {
+            "credential_id": secret_key_id,
+            "defaults": defaults or {},
+            "agent_id": agent_id,
+        }
+        if names is not None:
+            body["names"] = names
+        path = f"/v1/tool-templates/{seg(template_id)}/instantiate"
+        if plan:
+            return planned(request("POST", path, body))
+        created = await client.post(path, body)
+        tool_ids = created.get("tool_ids", []) if isinstance(created, dict) else []
+        return ToolResult.success(
+            created, next_steps=[f"Attach them: agent_attach(id_or_slug=..., tool_ids={tool_ids!r})."]
+        )
 
 
 def _mcp_patch_base(definition: dict[str, Any], patch: object) -> dict[str, Any]:

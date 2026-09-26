@@ -374,7 +374,8 @@ No environment variable, no table, no migration. Vendor keys live in the vault l
   ResolvedProvider]` (**contains secrets**), kept out of `resolved` (whose every slot the provider factory
   builds). `notify_team` resolves to `kwargs={"webhook_url": …}` from the named secret.
 - **Tool templates** (D-V5-36). `GET /v1/tool-templates` (`viewer` / `agents:read`) →
-  `ToolTemplatesResponse`; `POST /v1/tool-templates/{id}/instantiate` (`admin` / `agents:write`)
+  `ToolTemplatesResponse`; `POST /v1/tool-templates/{id}/instantiate` (`builder` / `agents:write`, plus
+  `providers:write` to bind the key, R-V2-33)
   with `ToolTemplateInstantiate{credential_id, defaults, agent_id, enabled, names}` →
   `ToolTemplateInstantiated{tool_ids, names, template_ids}`. `{id}` is one template
   (`cal_com.booking_create`) or a group (`cal_com`, all six). The rows are ordinary `http` tools checked

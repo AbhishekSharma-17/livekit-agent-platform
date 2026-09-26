@@ -238,3 +238,81 @@ async def test_tool_test_reports_a_failed_listing_as_a_warning(key: Any, mcp_ses
 
     assert result["data"]["reason"] == "needs_auth"
     assert any("401" in warning for warning in result["warnings"])
+
+
+# ------------------------------------------------------------------ V5-25 tool templates
+CAL_NAMES = [
+    "booking_check_availability",
+    "booking_create",
+    "booking_list",
+    "booking_get",
+    "booking_reschedule",
+    "booking_cancel",
+]
+
+
+async def test_tool_templates_lists_the_cal_com_set(key: Any, mcp_session: Any) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call("tool_templates")
+
+    assert result["ok"] is True, result
+    ids = [item["id"] for item in result["data"]]
+    assert ids[:6] == [f"cal_com.{name}" for name in CAL_NAMES]
+    assert result["data"][1]["secret_names"] == ["CAL_API_KEY"]
+    assert result["data"][1]["defaults"][0]["name"] == "event_type_id"
+
+
+async def test_tool_create_from_template_plans_the_instantiate_request(key: Any, mcp_session: Any) -> None:
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call(
+            "tool_create_from_template",
+            template_id="cal_com",
+            secret_key_id="cred_1",
+            defaults={"event_type_id": 42},
+            names=["booking_create"],
+            plan=True,
+        )
+        posts = mcp.transport.calls("POST", "/v1/tool-templates/cal_com/instantiate")
+
+    assert result["ok"] is True, result
+    [step] = result["plan"]
+    assert step["method"] == "POST"
+    assert step["path"] == "/v1/tool-templates/cal_com/instantiate"
+    assert step["body"] == {
+        "credential_id": "cred_1",
+        "defaults": {"event_type_id": 42},
+        "agent_id": None,
+        "names": ["booking_create"],
+    }
+    assert posts == []
+
+
+async def test_tool_create_from_template_creates_the_tools(key: Any, mcp_session: Any, admin: Any) -> None:
+    response = await admin.post(
+        "/v1/credentials",
+        json={
+            "provider_id": "http-tool-secret",
+            "label": "Cal.com",
+            "secrets": {"CAL_API_KEY": "cal_not_real"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    # Binding a key to a tool needs `providers:write` as well (R-V2-33), as for tool_create_http.
+    raw = await key([*BUILDER_SCOPES, "providers:write"])
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call(
+            "tool_create_from_template",
+            template_id="cal_com",
+            secret_key_id=response.json()["id"],
+            defaults={"event_type_id": 42},
+        )
+
+    assert result["ok"] is True, result
+    assert result["data"]["names"] == CAL_NAMES
+    assert len(result["data"]["tool_ids"]) == 6
+    assert any("agent_attach" in step for step in result["next_steps"])

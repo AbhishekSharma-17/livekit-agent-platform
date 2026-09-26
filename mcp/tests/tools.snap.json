@@ -12371,6 +12371,113 @@
       ],
       "write_scopes": []
     },
+    "tool_create_from_template": {
+      "_meta": {
+        "lkap/data": [
+          "ToolTemplateInstantiated"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "ToolTemplateInstantiated",
+      "description": "Create HTTP tools from a tool template (or a group of them); attach them with agent_attach.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Agent Id"
+          },
+          "defaults": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Fixed arguments, e.g. {'event_type_id': 123456}",
+            "title": "Defaults"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Group only: the template names to add (default all)",
+            "title": "Names"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "secret_key_id": {
+            "description": "An http-tool-secret key with the secret names (binding needs providers:write)",
+            "title": "Secret Key Id",
+            "type": "string"
+          },
+          "template_id": {
+            "description": "One template (cal_com.booking_create) or a whole group (cal_com)",
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id",
+          "secret_key_id"
+        ],
+        "title": "tool_create_from_templateArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
     "tool_create_http": {
       "_meta": {
         "lkap/data": [
@@ -13235,6 +13342,36 @@
       ],
       "write_scopes": []
     },
+    "tool_templates": {
+      "_meta": {
+        "lkap/data": [
+          "ToolTemplatesResponse"
+        ],
+        "lkap/scopes": [
+          "agents:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "ToolTemplatesResponse",
+      "description": "List ready-made HTTP tools (the Cal.com booking set): their secret names and fixed arguments.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {},
+        "title": "tool_templatesArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "agents:read"
+      ],
+      "write_scopes": []
+    },
     "tool_test": {
       "_meta": {
         "lkap/data": [
@@ -13726,11 +13863,13 @@
       "session_list",
       "session_rescore",
       "telephony_overview",
+      "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_templates",
       "tool_test",
       "tool_update",
       "workspace_get"
@@ -13801,11 +13940,13 @@
       "session_list",
       "session_rescore",
       "telephony_overview",
+      "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_templates",
       "tool_test",
       "tool_update",
       "webhook_create",
@@ -13850,6 +13991,7 @@
       "telephony_overview",
       "tool_get",
       "tool_list",
+      "tool_templates",
       "workspace_get"
     ],
     "full_scope_with_dial": [
@@ -13920,11 +14062,13 @@
       "session_list",
       "session_rescore",
       "telephony_overview",
+      "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_templates",
       "tool_test",
       "tool_update",
       "webhook_create",
@@ -13999,11 +14143,13 @@
       "session_list",
       "session_rescore",
       "telephony_overview",
+      "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
       "tool_dry_run",
       "tool_get",
       "tool_list",
+      "tool_templates",
       "tool_test",
       "tool_update",
       "webhook_create",
@@ -14048,6 +14194,7 @@
       "telephony_overview",
       "tool_get",
       "tool_list",
+      "tool_templates",
       "workspace_get"
     ]
   }

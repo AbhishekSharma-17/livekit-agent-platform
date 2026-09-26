@@ -18,6 +18,17 @@ Rules:
   exempts named destinations from the private-range rule. It defaults to
   ``localhost,127.0.0.1,::1`` in ``LKAP_ENV=dev`` (a self-hosted LiveKit on
   ``ws://localhost:7880``, live stage L14) and to nothing in ``prod``.
+* **Self-hosted LiveKit connections** are admin-configured destinations and use
+  :meth:`NetPolicy.for_self_hosted` (``NetPolicy.for_connection``): loopback,
+  RFC 1918 private, IPv6 ULA (``fc00::/7``) and CGNAT (``100.64.0.0/10``, a
+  Tailscale tailnet) addresses, and the ``localhost`` / ``*.localhost`` names,
+  are reachable. Metadata addresses and host names, link-local, multicast,
+  unspecified and reserved addresses, and numeric-looking names stay refused;
+  DNS-rebinding protection and no-redirects apply unchanged. A **Cloud**
+  connection keeps the strict rule above, and a refusal of an address the
+  self-hosted rule would allow says to mark the connection self-hosted.
+  Webhooks, tools, QA judges, MCP servers and vendor calls never get the
+  self-hosted variant.
 * **DNS rebinding.** Names are resolved at connect time and the connection is
   made to the checked address itself: :class:`GuardedTransport` (httpx) and
   :class:`GuardedResolver` (aiohttp, the LiveKit server SDK) never hand a name
@@ -45,7 +56,7 @@ import ipaddress
 import socket
 import warnings
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Final
 from urllib.parse import urlsplit
 
@@ -69,6 +80,8 @@ __all__ = [
     "McpPolicy",
     "NoRedirectClientSession",
     "NetPolicy",
+    "SELF_HOSTED_HINT",
+    "SELF_HOSTED_NETWORKS",
     "address_problem",
     "blocked_reason_of",
     "check_url",
@@ -112,6 +125,24 @@ METADATA_ADDRESSES: Final[frozenset[IpAddress]] = frozenset(
 #: Shared address space (RFC 6598); ``ipaddress`` does not count it as private.
 _CGNAT: Final[ipaddress.IPv4Network] = ipaddress.IPv4Network("100.64.0.0/10")
 
+#: What a self-hosted LiveKit connection may reach (metadata addresses excepted):
+#: loopback, RFC 1918, IPv6 ULA and CGNAT (Tailscale). Explicit, not ``is_private``,
+#: which also covers TEST-NETs, ``0.0.0.0/8``, ``198.18.0.0/15`` and ``240.0.0.0/4``.
+SELF_HOSTED_NETWORKS: Final[tuple[IpNetwork, ...]] = (
+    ipaddress.IPv4Network("127.0.0.0/8"),
+    ipaddress.IPv6Network("::1/128"),
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+    ipaddress.IPv6Network("fc00::/7"),
+    _CGNAT,
+)
+
+#: The hint a Cloud connection's refusal carries when self-hosted would have allowed it.
+SELF_HOSTED_HINT: Final[str] = (
+    "if this LiveKit server runs on your own private network or tailnet, mark the connection self-hosted"
+)
+
 #: Schemes a caller may name, per surface.
 HTTP_SCHEMES: Final[frozenset[str]] = frozenset({"http", "https"})
 LIVEKIT_SCHEMES: Final[frozenset[str]] = frozenset({"ws", "wss", "http", "https"})
@@ -131,6 +162,24 @@ class NetPolicy:
 
     allow_hosts: frozenset[str] = frozenset()
     allow_networks: tuple[IpNetwork, ...] = field(default=())
+    trusted_private: bool = False
+    """A self-hosted LiveKit connection: :data:`SELF_HOSTED_NETWORKS` and ``localhost`` are reachable."""
+    private_hint: str = ""
+    """Appended to a refusal of an address or name :attr:`trusted_private` would allow."""
+
+    def for_self_hosted(self) -> NetPolicy:
+        """This policy, widened for a self-hosted LiveKit connection (metadata stays refused)."""
+        return replace(self, trusted_private=True, private_hint="")
+
+    def for_connection(self, deployment_type: str) -> NetPolicy:
+        """The policy for a LiveKit connection of ``deployment_type`` (``cloud`` or ``self_hosted``).
+
+        A self-hosted connection gets :meth:`for_self_hosted`; anything else keeps
+        this strict policy, with :data:`SELF_HOSTED_HINT` on refusals it would lift.
+        """
+        if deployment_type == "self_hosted":
+            return self.for_self_hosted()
+        return replace(self, trusted_private=False, private_hint=SELF_HOSTED_HINT)
 
     @classmethod
     def from_entries(cls, entries: Iterable[str]) -> NetPolicy:
@@ -152,10 +201,20 @@ class NetPolicy:
         return _normalise_host(host) in self.allow_hosts
 
     def address_exempt(self, address: IpAddress) -> bool:
-        """Whether an address falls in an allowlisted network (metadata never does)."""
+        """Whether an address falls in an allowlisted or trusted network (metadata never does)."""
         if address in METADATA_ADDRESSES:
             return False
+        if self.trusted_private and _self_hosted_address(address):
+            return True
         return any(address in network for network in self.allow_networks)
+
+
+def _self_hosted_address(address: IpAddress) -> bool:
+    return any(address in network for network in SELF_HOSTED_NETWORKS)
+
+
+def _local_name(name: str) -> bool:
+    return name == "localhost" or name.endswith(".localhost")
 
 
 def policy_from_settings(settings: Settings) -> NetPolicy:
@@ -221,6 +280,8 @@ def address_problem(address: IpAddress, policy: NetPolicy, *, host_exempt: bool 
         return f"{address} is {reason}"
     if host_exempt or policy.address_exempt(address):
         return None
+    if policy.private_hint and _self_hosted_address(address):
+        return f"{address} is {reason} ({policy.private_hint})"
     return f"{address} is {reason}"
 
 
@@ -250,8 +311,12 @@ def host_problem(host: str, policy: NetPolicy) -> str | None:
         return f"{name} is a numeric address in a non-canonical form"
     if policy.host_exempt(name):
         return None
-    if name in BLOCKED_HOST_NAMES or name.endswith(".localhost"):
-        return f"{name} names the platform's own network"
+    if policy.trusted_private and _local_name(name):
+        # Still resolved and checked: `localhost` must answer with a loopback address.
+        return None
+    if name in BLOCKED_HOST_NAMES or _local_name(name):
+        hint = f" ({policy.private_hint})" if policy.private_hint and _local_name(name) else ""
+        return f"{name} names the platform's own network{hint}"
     return None
 
 
@@ -271,6 +336,11 @@ def check_url(url: str, policy: NetPolicy, *, schemes: frozenset[str] = HTTP_SCH
     problem = host_problem(parsed.hostname, policy)
     if problem is None:
         return None
+    if policy.trusted_private:
+        return (
+            f"{problem}; a self-hosted connection may reach loopback, private (RFC 1918 / ULA) "
+            "and carrier-grade NAT addresses, never cloud metadata, link-local or reserved ones"
+        )
     return (
         f"{problem}; outbound requests to private or local networks are refused "
         "(an operator can allow a host with LKAP_NET_ALLOW_PRIVATE_HOSTS)"

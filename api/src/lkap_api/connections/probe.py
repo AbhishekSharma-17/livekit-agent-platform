@@ -171,7 +171,7 @@ async def probe_connection(
                 _secondary(client.ingress.list_ingress(ListIngressRequest()), timeout_s),
             )
     except net_guard.BlockedDestinationError as exc:
-        # A private, loopback or metadata address (V2-21 / S1): nothing was sent.
+        # An address the guard refuses for this deployment type (V2-21 / S1): nothing was sent.
         return ConnectionTestResult(
             ok=False,
             message=str(exc),

@@ -49,7 +49,7 @@ class ErrorInfo(BaseModel):
 class PlannedRequest(BaseModel):
     """One request a write tool would send (``plan=true``); secrets appear as placeholders."""
 
-    method: Literal["GET", "POST", "PUT", "DELETE"]
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
     path: str
     query: dict[str, Any] | None = None
     body: Any = None

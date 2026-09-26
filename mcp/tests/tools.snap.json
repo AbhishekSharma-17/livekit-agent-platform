@@ -90,6 +90,7 @@
               "GET",
               "POST",
               "PUT",
+              "PATCH",
               "DELETE"
             ],
             "title": "Method",
@@ -318,6 +319,25 @@
           }
         },
         "properties": {
+          "accounts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Per app (toolkit slug), the accounts (connection ids from apps_connections) the server or finder may use; an app left out uses its default account. With two or more accounts of one app the agent must say which account each action uses",
+            "title": "Accounts"
+          },
           "allowed_toolkits": {
             "anyOf": [
               {
@@ -658,6 +678,7 @@
                 "$ref": "#/$defs/ToolsConfig",
                 "default": {
                   "apps": {
+                    "accounts": {},
                     "allowed_toolkits": [],
                     "denied_actions": [],
                     "mode": "off",
@@ -820,6 +841,17 @@
           "AppsMode": {
             "description": "``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).\n\nThe default ``off`` changes nothing for an agent saved before this field existed.",
             "properties": {
+              "accounts": {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "description": "Per app (toolkit slug), the accounts (connection ids) the app server or tool finder may use (R-V5-13); an app not named, or named with an empty list, uses its default account. At most 20 apps and 5 accounts per app",
+                "title": "Accounts",
+                "type": "object"
+              },
               "allowed_toolkits": {
                 "description": "Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent",
                 "items": {
@@ -2214,6 +2246,7 @@
               "apps": {
                 "$ref": "#/$defs/AppsMode",
                 "default": {
+                  "accounts": {},
                   "allowed_toolkits": [],
                   "denied_actions": [],
                   "mode": "off",
@@ -3857,6 +3890,7 @@
                 "$ref": "#/$defs/ToolsConfig",
                 "default": {
                   "apps": {
+                    "accounts": {},
                     "allowed_toolkits": [],
                     "denied_actions": [],
                     "mode": "off",
@@ -4019,6 +4053,17 @@
           "AppsMode": {
             "description": "``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).\n\nThe default ``off`` changes nothing for an agent saved before this field existed.",
             "properties": {
+              "accounts": {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "description": "Per app (toolkit slug), the accounts (connection ids) the app server or tool finder may use (R-V5-13); an app not named, or named with an empty list, uses its default account. At most 20 apps and 5 accounts per app",
+                "title": "Accounts",
+                "type": "object"
+              },
               "allowed_toolkits": {
                 "description": "Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent",
                 "items": {
@@ -5413,6 +5458,7 @@
               "apps": {
                 "$ref": "#/$defs/AppsMode",
                 "default": {
+                  "accounts": {},
                   "allowed_toolkits": [],
                   "denied_actions": [],
                   "mode": "off",
@@ -6293,7 +6339,7 @@
         "readOnlyHint": false
       },
       "data": "AppConnectOut",
-      "description": "Connect an app for the workspace (or one agent). A sign-in returns a link for the human to open in a browser; never open it yourself, then check apps_connection_status.",
+      "description": "Connect an app, or another account of an app already connected, for the workspace (or one agent). A sign-in returns a link for the human to open in a browser; never open it yourself, then check apps_connection_status. The first account of an app is its default.",
       "gate": null,
       "inputSchema": {
         "properties": {
@@ -6308,6 +6354,21 @@
             ],
             "default": null,
             "title": "Agent Id"
+          },
+          "alias": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A name for this account, e.g. 'Work' or 'Personal' (its label; also its Composio alias). Default: the name the app reports after sign-in. Connecting an app that is already connected adds another account of it",
+            "title": "Alias"
           },
           "fields": {
             "anyOf": [
@@ -6371,6 +6432,102 @@
       ],
       "write_scopes": []
     },
+    "apps_connection_rename": {
+      "_meta": {
+        "lkap/data": [
+          "AppConnectionOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AppConnectionOut",
+      "description": "Rename one account of a connected app (also renames it at Composio). Another account of the same app may not have the same name; tool names already made keep theirs.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "An account's connection id from apps_connections",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "description": "The new name, e.g. 'Work' or 'Personal'",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "apps_connection_renameArguments",
+        "type": "object"
+      },
+      "kind": "idempotent_write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
+    "apps_connection_set_default": {
+      "_meta": {
+        "lkap/data": [
+          "AppConnectionOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AppConnectionOut",
+      "description": "Make one account its app's default: an agent that names no account uses it, and its tools keep the plain names. The previous default loses the flag.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "An account's connection id from apps_connections",
+            "title": "Id",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "apps_connection_set_defaultArguments",
+        "type": "object"
+      },
+      "kind": "idempotent_write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
     "apps_connection_status": {
       "_meta": {
         "lkap/data": [
@@ -6426,7 +6583,7 @@
         "readOnlyHint": true
       },
       "data": "AppConnectionPage",
-      "description": "Every connected app of the workspace with its last known status (no vendor call).",
+      "description": "Every connected app account of the workspace with its last known status (no vendor call).",
       "gate": null,
       "inputSchema": {
         "properties": {},
@@ -7602,6 +7759,7 @@
                 "$ref": "#/$defs/ToolsConfig",
                 "default": {
                   "apps": {
+                    "accounts": {},
                     "allowed_toolkits": [],
                     "denied_actions": [],
                     "mode": "off",
@@ -7764,6 +7922,17 @@
           "AppsMode": {
             "description": "``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).\n\nThe default ``off`` changes nothing for an agent saved before this field existed.",
             "properties": {
+              "accounts": {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "description": "Per app (toolkit slug), the accounts (connection ids) the app server or tool finder may use (R-V5-13); an app not named, or named with an empty list, uses its default account. At most 20 apps and 5 accounts per app",
+                "title": "Accounts",
+                "type": "object"
+              },
               "allowed_toolkits": {
                 "description": "Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent",
                 "items": {
@@ -9158,6 +9327,7 @@
               "apps": {
                 "$ref": "#/$defs/AppsMode",
                 "default": {
+                  "accounts": {},
                   "allowed_toolkits": [],
                   "denied_actions": [],
                   "mode": "off",
@@ -12736,6 +12906,8 @@
       "apps_actions",
       "apps_add_tools",
       "apps_connect",
+      "apps_connection_rename",
+      "apps_connection_set_default",
       "apps_connection_status",
       "apps_connections",
       "apps_disconnect",
@@ -12847,6 +13019,8 @@
       "apps_actions",
       "apps_add_tools",
       "apps_connect",
+      "apps_connection_rename",
+      "apps_connection_set_default",
       "apps_connection_status",
       "apps_connections",
       "apps_disconnect",
@@ -12923,6 +13097,8 @@
       "apps_actions",
       "apps_add_tools",
       "apps_connect",
+      "apps_connection_rename",
+      "apps_connection_set_default",
       "apps_connection_status",
       "apps_connections",
       "apps_disconnect",

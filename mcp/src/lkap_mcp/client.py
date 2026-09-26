@@ -30,7 +30,7 @@ from lkap_mcp.settings import McpSettings
 
 log = logging.getLogger(__name__)
 
-Method = Literal["GET", "POST", "PUT", "DELETE"]
+Method = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 PRODUCT = "lkap-mcp"
@@ -226,7 +226,7 @@ class LkapClient:
 
         Raises:
             ApiFailure: A ``4xx``/``5xx`` answer (after one ``429`` retry), a ``3xx``
-                answer to a write (``POST``/``PUT``/``DELETE``), or an unreachable api.
+                answer to a write (``POST``/``PUT``/``PATCH``/``DELETE``), or an unreachable api.
         """
         clean_params = {k: v for k, v in (params or {}).items() if v is not None} or None
         response = await self._send(method, path, clean_params, json, files, data)
@@ -301,6 +301,10 @@ class LkapClient:
     async def put(self, path: str, json: Any = None) -> Any:
         """``PUT`` a JSON body."""
         return await self.request("PUT", path, json=json)
+
+    async def patch(self, path: str, json: Any = None) -> Any:
+        """``PATCH`` a JSON body."""
+        return await self.request("PATCH", path, json=json)
 
     async def delete(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """``DELETE`` a path."""

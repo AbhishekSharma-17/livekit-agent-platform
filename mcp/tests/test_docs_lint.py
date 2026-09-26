@@ -474,7 +474,16 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "agent_versions": frozenset({"id_or_slug", "get", "restore", "confirm", "plan"}),
     "agent_attach": frozenset({"id_or_slug", "kb_ids", "tool_ids", "remove", "plan"}),
     "agent_apps_mode": frozenset(
-        {"id_or_slug", "mode", "allowed_toolkits", "denied_actions", "reviewed_actions", "router", "plan"}
+        {
+            "id_or_slug",
+            "mode",
+            "allowed_toolkits",
+            "denied_actions",
+            "reviewed_actions",
+            "router",
+            "accounts",
+            "plan",
+        }
     ),
     "agent_limits": frozenset({"id_or_slug", "limits", "allowed_origins", "plan"}),
     "agent_flow_validate": frozenset({"id_or_slug", "flow"}),
@@ -568,9 +577,11 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     # V5-18: connected apps (Composio)
     "apps_list": frozenset({"query", "category", "connected_only", "cursor", "limit"}),
     "apps_actions": frozenset({"toolkit", "query", "important", "cursor"}),
-    "apps_connect": frozenset({"toolkit", "method", "subject", "agent_id", "fields", "plan"}),
+    "apps_connect": frozenset({"toolkit", "method", "subject", "agent_id", "fields", "alias", "plan"}),
     "apps_connections": frozenset(),
     "apps_connection_status": frozenset({"id"}),
+    "apps_connection_rename": frozenset({"id", "label", "plan"}),
+    "apps_connection_set_default": frozenset({"id", "plan"}),
     "apps_disconnect": frozenset({"id", "purge", "confirm", "plan"}),
     "apps_add_tools": frozenset({"connection_id", "actions", "agent_id", "allow_destructive", "plan"}),
 }

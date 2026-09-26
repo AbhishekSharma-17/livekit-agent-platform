@@ -658,7 +658,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-25 | Opus | 5 | merged | | partly deferred (search, SMS, Cal.com keys) | |
 | V5-26 | Opus + Fable | 6 | done (review) | | | |
 | V5-27 | Opus | 6 | planned | | | |
-| V5-28 | Sonnet | 6 | planned | | | |
+| V5-28 | Sonnet | 6 | planned | | with V5-25's deferred keys (dev-stack walk not run in this session) | |
 | V5-29 | Opus | 7 | planned | | | |
 | V5-30 | Opus | 7 | planned | | STT redaction deferred | |
 | V5-31 | Opus | 7 | planned | | Inference `multi` to confirm | |

@@ -113,8 +113,16 @@ function Harness({
 }
 
 describe("registry gate (R-V2-1 fallback, no ProviderOut in view)", () => {
-  it("offers exactly the status=mvp entries when the fixture carries no `installed_on` (bare ProviderSpec)", () => {
+  it("offers exactly the status=mvp entries when the fixture carries no `installed_on` (bare ProviderSpec) — except web_search/sms, which have no connection/worker-image concept (V5-28)", () => {
     for (const spec of REGISTRY) {
+      if (spec.kind === "web_search" || spec.kind === "sms") {
+        // Every entry of these two kinds is built with the V2-05 `_full()` helper
+        // (status: "deferred" is that helper's blanket default, not a real "not
+        // offered" signal for a kind it predates) and runs as a plain HTTP call
+        // from the worker — no LiveKit connection or worker image to gate on.
+        expect(slotAvailability(spec)).toBe("selectable");
+        continue;
+      }
       expect(slotAvailability(spec) === "selectable").toBe(spec.status === "mvp");
     }
     const base = REGISTRY.find((p) => p.id === "deepgram-stt")!;

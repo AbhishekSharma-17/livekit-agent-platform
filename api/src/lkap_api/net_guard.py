@@ -68,7 +68,10 @@ from aiohttp.resolver import DefaultResolver
 from aiohttp.tracing import Trace
 
 from lkap_api.errors import UnprocessableEntityError
+from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
+
+_log = get_logger(__name__)
 
 __all__ = [
     "DEV_DEFAULT_ALLOW",
@@ -464,7 +467,11 @@ async def checked_addresses(
     for address in addresses:
         problem = address_problem(address, policy, host_exempt=exempt)
         if problem is not None:
-            raise BlockedDestinationError(f"blocked destination: {host} resolves to {problem}")
+            # S5-19: the caller-facing text names the kind of address, never the address
+            # (a Builder's test route would otherwise read internal DNS); the log keeps it.
+            _log.info("blocked_destination_resolved", host=host, detail=problem)
+            kind = problem.split(" is ", 1)[1] if " is " in problem else "a blocked address"
+            raise BlockedDestinationError(f"blocked destination: {host} resolves to {kind}")
     return addresses
 
 

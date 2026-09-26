@@ -16,6 +16,7 @@ import httpx
 from fastapi import APIRouter, Query, Request, Response, status
 from lkap_contracts.api_models import ToolCreate, ToolDryRunRequest, ToolDryRunResult, ToolOut, ToolPage
 from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID
+from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID
 from lkap_contracts.tools import (
     HttpToolDefinition,
     McpOAuthAuth,
@@ -59,6 +60,8 @@ _TOOL_ADAPTER: TypeAdapter[ToolDefinition] = TypeAdapter(ToolDefinition)
 
 #: Dry-run responses are truncated to keep the console payload small.
 DRY_RUN_MAX_CHARS = 8000
+#: The dry run reads at most this many response bytes (S5-10); a larger answer is refused.
+DRY_RUN_MAX_BYTES = 1_000_000
 
 #: Matches `{{ secret.NAME }}` placeholders (F-15); mirrors
 #: `lkap_api.config_service._SECRET_RE`, kept local so this file's one
@@ -78,6 +81,24 @@ def _referenced_secret_names(definition: ToolDefinition) -> set[str]:
     for text in texts:
         names.update(_SECRET_RE.findall(text))
     return names
+
+
+def _authority_secret_problem(url: str) -> str | None:
+    """S5-17: a ``{{ secret.* }}`` in a url's scheme or authority, which could move the host.
+
+    The ceilings (``LKAP_MCP_ALLOWED_HOSTS``, the tool's ``allowed_hosts``) are checked on the
+    saved url; a secret substituted into the authority (``443@evil.example``) would change
+    the host after that check. Secrets belong in the path, query, headers or body.
+    """
+    scheme, sep, rest = url.partition("://")
+    authority = rest if sep else scheme
+    for stop in "/?#":
+        authority = authority.split(stop, 1)[0]
+    if _SECRET_RE.search(scheme if sep else "") or _SECRET_RE.search(authority):
+        return (
+            "a secret may not be placed in the url's scheme, host or port; use the path, a header or the body"
+        )
+    return None
 
 
 def _definition_of(row: Tool) -> ToolDefinition:
@@ -175,6 +196,12 @@ async def _check_payload(
         )
     if isinstance(payload.definition, McpServerDefinition):
         _check_mcp_definition(payload.definition, settings)
+    if isinstance(payload.definition, (McpServerDefinition, HttpToolDefinition)):
+        authority_problem = _authority_secret_problem(payload.definition.url)
+        if authority_problem is not None:
+            raise UnprocessableEntityError(
+                authority_problem, details={"field": "definition.url", "reason": "secret_in_authority"}
+            )
     if (
         payload.agent_id is not None
         and await db.scalar(
@@ -270,6 +297,13 @@ async def _check_provider_binding(
     assert isinstance(definition, ProviderToolDefinition)  # noqa: S101 - narrowed by the caller
     if definition.credential_id is None:
         raise UnprocessableEntityError("an app action tool needs the Composio key as credential_id")
+    key = await _workspace_credential(db, ctx.workspace_id, definition.credential_id)
+    if key is None or key.provider_id != COMPOSIO_PROVIDER_ID:
+        # S5-34: the action's key rides to the provider's host; only the provider's own key.
+        raise UnprocessableEntityError(
+            "an app action tool takes the Composio key as its credential, not another key",
+            details={"credential_id": definition.credential_id},
+        )
     row = await _workspace_credential(db, ctx.workspace_id, definition.connection_id)
     if row is None:
         raise UnprocessableEntityError(f"unknown app connection '{definition.connection_id}'")
@@ -281,6 +315,14 @@ async def _check_provider_binding(
             connection_subject=conn.subject,
             tool_agent_id=payload.agent_id,
         )
+        if (
+            problem is None
+            and definition.connected_account_id is not None
+            and conn.connected_account_id is not None
+            and definition.connected_account_id != conn.connected_account_id
+        ):
+            # S5-34: the pinned account must be the connection's own account.
+            problem = "the tool's pinned account is not this connection's account"
     if problem is not None:
         raise UnprocessableEntityError(problem, details={"connection_id": definition.connection_id})
 
@@ -538,14 +580,25 @@ async def dry_run_tool(
         headers["User-Agent"] = settings.http_tool_user_agent
 
     started = time.perf_counter()
+    too_large = False
     try:
-        response = await client.request(
+        async with client.stream(
             definition.method,
             url,
             headers=headers or None,
             json=body,
             timeout=definition.timeout_s,
-        )
+        ) as response:
+            # S5-10: read at most DRY_RUN_MAX_BYTES; a larger answer is refused, not buffered.
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > DRY_RUN_MAX_BYTES:
+                    too_large = True
+                    break
+                chunks.append(chunk)
+            raw = b"".join(chunks)
     except httpx.HTTPError as exc:
         duration_ms = int((time.perf_counter() - started) * 1000)
         log.warning("tool_dry_run_failed", tool_id=tool_id, error_type=type(exc).__name__)
@@ -557,12 +610,21 @@ async def dry_run_tool(
             duration_ms=duration_ms,
         )
     duration_ms = int((time.perf_counter() - started) * 1000)
+    if too_large:
+        log.info("tool_dry_run_too_large", tool_id=tool_id, status_code=response.status_code)
+        return ToolDryRunResult(
+            ok=False,
+            result=f"the response is larger than {DRY_RUN_MAX_BYTES // 1_000_000} MB; "
+            "the dry run stopped reading",
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
 
-    text = response.text
+    text = raw.decode(response.encoding or "utf-8", errors="replace")
     if definition.result_path:
         try:
-            extracted = extract_pointer(response.json(), definition.result_path)
-        except ValueError:
+            extracted = extract_pointer(json.loads(raw), definition.result_path)
+        except (ValueError, RecursionError):
             extracted = None
         text = (
             ""
@@ -586,10 +648,10 @@ async def dry_run_tool(
 MCP_TEST_MAX_TIMEOUT_S = 15.0
 
 
-async def _mcp_request_headers(
+async def _mcp_resolved(
     db: AsyncSession, vault: Vault, row: Tool, definition: McpServerDefinition
-) -> dict[str, str]:
-    """The definition's headers with secrets substituted, as the worker would send them."""
+) -> McpServerDefinition:
+    """The definition with secrets substituted (url and headers), as the worker would use it."""
     secrets: dict[str, str] = {}
     if definition.credential_id:
         credential = await _workspace_credential(db, row.workspace_id, definition.credential_id)
@@ -598,7 +660,7 @@ async def _mcp_request_headers(
         secrets = vault.decrypt(credential.ciphertext)
     resolved = resolve_tool_definition(definition, secrets)
     assert isinstance(resolved, McpServerDefinition)  # noqa: S101 - narrowed by kind
-    return dict(resolved.headers)
+    return resolved
 
 
 async def _oauth_request_headers(
@@ -675,6 +737,7 @@ async def test_mcp_tool(
             "an app server may only connect to its provider's https host",
             details={"field": "definition.url", "reason": "blocked_destination"},
         )
+    url = definition.url
     if isinstance(definition.auth, McpOAuthAuth):
         database: Database = request.app.state.db
         headers_or_result = await _oauth_request_headers(
@@ -684,12 +747,17 @@ async def test_mcp_tool(
             return headers_or_result
         headers = headers_or_result
     else:
-        headers = await _mcp_request_headers(db, vault, row, definition)
+        resolved = await _mcp_resolved(db, vault, row, definition)
+        headers, url = dict(resolved.headers), resolved.url
+        # S5-17: the connection goes to the url the worker would use, so it is the one checked.
+        problem = net_guard.mcp_policy(settings).problem(url)
+        if problem is not None:
+            return McpTestResult(ok=False, reason="blocked_destination", error=problem)
 
     started = time.perf_counter()
     try:
         tools = await list_mcp_tools(
-            definition.url,
+            url,
             headers,
             client=client,
             timeout_s=min(max(definition.timeout_s, 1.0), MCP_TEST_MAX_TIMEOUT_S),

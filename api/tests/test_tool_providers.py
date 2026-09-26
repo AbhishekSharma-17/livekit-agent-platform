@@ -1711,6 +1711,43 @@ async def test_a_provider_tool_binds_the_key_and_a_connection_of_its_own_subject
     assert connection_as_key.status_code == 422
 
 
+async def test_a_provider_tool_pin_must_match_its_connection(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database, settings: Settings
+) -> None:
+    """S5-34: the pinned account is the connection's own, and the key is the Composio key."""
+    from lkap_api.tool_providers.service import AppConnection
+    from lkap_api.vault import Vault
+
+    connection_id = await _crm(admin_client)
+    async with database.session() as session:
+        row = (await session.execute(select(Credential).where(Credential.id == connection_id))).scalar_one()
+        account = AppConnection.from_row(row, Vault(settings.master_key)).connected_account_id
+    assert account is not None
+    other_key = (
+        await admin_client.post(
+            "/v1/credentials",
+            json={"provider_id": "http-tool-secret", "label": "not composio", "secrets": {"api_key": "x"}},
+        )
+    ).json()["id"]
+
+    pinned = await admin_client.post(
+        "/v1/tools", json=_provider_body(connection_id, key_id, connected_account_id=account)
+    )
+    wrong_pin = await admin_client.post(
+        "/v1/tools",
+        json=_provider_body(
+            connection_id, key_id, name="acmecrm_other", connected_account_id="ca_someone_else"
+        ),
+    )
+    other_secret = await admin_client.post(
+        "/v1/tools", json=_provider_body(connection_id, other_key, name="acmecrm_third")
+    )
+
+    assert pinned.status_code == 201, pinned.text
+    assert wrong_pin.status_code == 422
+    assert other_secret.status_code == 422
+
+
 async def test_an_app_connected_for_one_agent_serves_only_that_agents_tools(
     admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
 ) -> None:

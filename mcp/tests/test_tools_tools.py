@@ -170,7 +170,8 @@ async def test_tool_create_mcp_older_headers_still_create_header_auth(key: Any, 
     assert any("tool_test" in step for step in result["next_steps"])
 
 
-async def test_tool_create_mcp_oauth_is_refused_by_the_api(key: Any, mcp_session: Any) -> None:
+async def test_tool_create_mcp_oauth_is_accepted_pending_sign_in(key: Any, mcp_session: Any) -> None:
+    # V5-14: an oauth MCP server is saved; the admin then signs in from the console.
     raw = await key(BUILDER_SCOPES)
 
     async with mcp_session(raw) as mcp:
@@ -178,8 +179,8 @@ async def test_tool_create_mcp_oauth_is_refused_by_the_api(key: Any, mcp_session
             "tool_create_mcp", name="crm", url="https://mcp.example.com/mcp", auth={"kind": "oauth"}
         )
 
-    assert result["ok"] is False
-    assert result["error"]["status"] == 422
+    assert result["ok"] is True
+    assert result["data"]["definition"]["auth"]["kind"] == "oauth"
 
 
 @pytest.mark.parametrize(

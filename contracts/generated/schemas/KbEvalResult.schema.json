@@ -1,0 +1,370 @@
+{
+  "$defs": {
+    "KbEvalHitRef": {
+      "description": "One of a question's top hits, by reference (no chunk text is stored).",
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "filename",
+        "score"
+      ],
+      "title": "KbEvalHitRef",
+      "type": "object"
+    },
+    "KbEvalItemResult": {
+      "description": "How one golden question scored.",
+      "properties": {
+        "eval_id": {
+          "title": "Eval Id",
+          "type": "string"
+        },
+        "expected_document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Document Id"
+        },
+        "expected_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Text"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "question": {
+          "title": "Question",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "1-based position of the first matching hit.",
+          "title": "Rank"
+        },
+        "reciprocal_rank": {
+          "default": 0.0,
+          "title": "Reciprocal Rank",
+          "type": "number"
+        },
+        "skip_reason": {
+          "anyOf": [
+            {
+              "const": "expected_document_deleted",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skip Reason"
+        },
+        "status": {
+          "enum": [
+            "found",
+            "missed",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "top_hits": {
+          "items": {
+            "$ref": "#/$defs/KbEvalHitRef"
+          },
+          "title": "Top Hits",
+          "type": "array"
+        }
+      },
+      "required": [
+        "eval_id",
+        "question",
+        "status"
+      ],
+      "title": "KbEvalItemResult",
+      "type": "object"
+    },
+    "KbEvalTagScore": {
+      "description": "The scores of the questions carrying one tag.",
+      "properties": {
+        "found": {
+          "title": "Found",
+          "type": "integer"
+        },
+        "mrr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mrr"
+        },
+        "recall_at_1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recall At 1"
+        },
+        "recall_at_k": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recall At K"
+        },
+        "scored": {
+          "title": "Scored",
+          "type": "integer"
+        },
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tag",
+        "scored",
+        "found",
+        "recall_at_k",
+        "recall_at_1",
+        "mrr"
+      ],
+      "title": "KbEvalTagScore",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbEvalResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One evaluation run: the options, the totals, the scores and every question's outcome.",
+  "properties": {
+    "by_tag": {
+      "items": {
+        "$ref": "#/$defs/KbEvalTagScore"
+      },
+      "title": "By Tag",
+      "type": "array"
+    },
+    "embedder_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedder Model"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "title": "Finished At",
+      "type": "string"
+    },
+    "found": {
+      "title": "Found",
+      "type": "integer"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/KbEvalItemResult"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "k": {
+      "title": "K",
+      "type": "integer"
+    },
+    "kb_id": {
+      "title": "Kb Id",
+      "type": "string"
+    },
+    "latency_ms_p50": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms P50"
+    },
+    "min_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Min Score"
+    },
+    "mode": {
+      "enum": [
+        "vector",
+        "hybrid"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "mrr": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Mean reciprocal rank over the scored questions.",
+      "title": "Mrr"
+    },
+    "recall_at_1": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Share of scored questions whose first hit matched.",
+      "title": "Recall At 1"
+    },
+    "recall_at_k": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "found / scored; null when nothing could be scored.",
+      "title": "Recall At K"
+    },
+    "rerank": {
+      "enum": [
+        "none",
+        "local"
+      ],
+      "title": "Rerank",
+      "type": "string"
+    },
+    "scored": {
+      "description": "Questions that were run (total minus skipped).",
+      "title": "Scored",
+      "type": "integer"
+    },
+    "skipped": {
+      "title": "Skipped",
+      "type": "integer"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    },
+    "warnings": {
+      "description": "Distinct search warnings seen in the run.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "kb_id",
+    "mode",
+    "rerank",
+    "min_score",
+    "k",
+    "total",
+    "scored",
+    "found",
+    "skipped",
+    "recall_at_k",
+    "recall_at_1",
+    "mrr",
+    "started_at",
+    "finished_at"
+  ],
+  "title": "KbEvalResult",
+  "type": "object"
+}

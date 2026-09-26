@@ -1,0 +1,62 @@
+{
+  "$id": "lkap-contracts/KbEvalTagScore.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The scores of the questions carrying one tag.",
+  "properties": {
+    "found": {
+      "title": "Found",
+      "type": "integer"
+    },
+    "mrr": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mrr"
+    },
+    "recall_at_1": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Recall At 1"
+    },
+    "recall_at_k": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Recall At K"
+    },
+    "scored": {
+      "title": "Scored",
+      "type": "integer"
+    },
+    "tag": {
+      "title": "Tag",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tag",
+    "scored",
+    "found",
+    "recall_at_k",
+    "recall_at_1",
+    "mrr"
+  ],
+  "title": "KbEvalTagScore",
+  "type": "object"
+}

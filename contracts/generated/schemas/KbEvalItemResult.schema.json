@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "KbEvalHitRef": {
+      "description": "One of a question's top hits, by reference (no chunk text is stored).",
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "filename",
+        "score"
+      ],
+      "title": "KbEvalHitRef",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KbEvalItemResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "How one golden question scored.",
+  "properties": {
+    "eval_id": {
+      "title": "Eval Id",
+      "type": "string"
+    },
+    "expected_document_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Document Id"
+    },
+    "expected_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Text"
+    },
+    "latency_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms"
+    },
+    "question": {
+      "title": "Question",
+      "type": "string"
+    },
+    "rank": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "1-based position of the first matching hit.",
+      "title": "Rank"
+    },
+    "reciprocal_rank": {
+      "default": 0.0,
+      "title": "Reciprocal Rank",
+      "type": "number"
+    },
+    "skip_reason": {
+      "anyOf": [
+        {
+          "const": "expected_document_deleted",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skip Reason"
+    },
+    "status": {
+      "enum": [
+        "found",
+        "missed",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "top_hits": {
+      "items": {
+        "$ref": "#/$defs/KbEvalHitRef"
+      },
+      "title": "Top Hits",
+      "type": "array"
+    }
+  },
+  "required": [
+    "eval_id",
+    "question",
+    "status"
+  ],
+  "title": "KbEvalItemResult",
+  "type": "object"
+}

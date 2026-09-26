@@ -540,9 +540,34 @@ export const httpToolFormSchema = z.object({
 });
 export type HttpToolForm = z.infer<typeof httpToolFormSchema>;
 
+/**
+ * `McpAuth` (`lkap_contracts.tools`, V5-09): a discriminated union mirror, not a flat form
+ * field — `mcp-tool-editor-dialog.tsx` builds one of these three shapes from its own radio
+ * state before posting `definition.auth` (docs/v5/_asks.md #66: `auth` only, never the
+ * deprecated `headers`/`credential_id` top-level mirrors).
+ */
+export const mcpNoAuthSchema = z.object({ kind: z.literal("none") });
+export const mcpHeaderAuthSchema = z.object({
+  kind: z.literal("header"),
+  headers: z.record(z.string(), z.string()),
+  credential_id: z.string().nullable().optional(),
+});
+export const mcpOAuthAuthSchema = z.object({
+  kind: z.literal("oauth"),
+  credential_id: z.string().nullable().optional(),
+  registration: z.enum(["auto", "preregistered"]),
+  client_id: z.string().nullable().optional(),
+  client_secret_ref: z.string().nullable().optional(),
+  scopes: z.array(z.string()).nullable().optional(),
+  subject: z.enum(["workspace", "agent"]),
+});
+export const mcpAuthSchema = z.discriminatedUnion("kind", [mcpNoAuthSchema, mcpHeaderAuthSchema, mcpOAuthAuthSchema]);
+export type McpAuthForm = z.infer<typeof mcpAuthSchema>;
+
 export const mcpToolFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   url: z.string().min(1, "URL is required"),
+  auth: mcpAuthSchema.optional(),
   headersJson: z.string().refine((value) => {
     if (value.trim() === "") return true;
     try {

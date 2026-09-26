@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
+import { mcpOauthStatus, mcpOauthTool, mcpTestResultOk } from "./fixtures/mcp-presets";
 
 /**
  * The per-tool execution options table (V4-13, BACKGROUND-TOOLS.md §7): rows
@@ -159,5 +160,134 @@ describe("McpToolEditorDialog", () => {
 
     fireEvent.click(screen.getByLabelText("Remove lookup_policy"));
     await waitFor(() => expect(screen.queryByText("lookup_policy")).toBeNull());
+  });
+});
+
+/**
+ * docs/v5/_asks.md #66 (V5-09 → V5-21): the dialog reads and posts
+ * `definition.auth`, never the deprecated `headers`/`credential_id` mirrors,
+ * and never echoes `cached_tools` back.
+ */
+describe("McpToolEditorDialog — auth (docs/v5/_asks.md #66)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts auth: {kind: 'header', ...} and no top-level headers/credential_id/cached_tools", async () => {
+    const fetchMock = stubFetch();
+    const { getByText, getByLabelText } = renderWithClient(
+      <McpToolEditorDialog agentId="agent_1" secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>New MCP server</button>} />,
+    );
+    fireEvent.click(getByText("New MCP server"));
+
+    fireEvent.change(getByLabelText("Name"), { target: { value: "billing" } });
+    fireEvent.change(getByLabelText("URL"), { target: { value: "https://mcp.example.com/stream" } });
+    // Default auth mode with no preset chosen is "No authentication"; switch to Header.
+    // Radix's `RadioGroupItem` is a `button[role=radio]`, not a native input — `getByLabelText`
+    // resolves it through the wrapping `<Label htmlFor>`, same as `console-instructions-tab.test.tsx`.
+    fireEvent.click(getByLabelText("Header (API key)"));
+    fireEvent.change(getByLabelText("Headers"), { target: { value: '{"X-Api-Key": "{{ secret.KEY }}"}' } });
+
+    fireEvent.click(getByText("Save server"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const [, init] = calls.find(([url]) => !url.includes("auth/me")) as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      definition: {
+        auth?: { kind: string; headers?: Record<string, string> };
+        headers?: Record<string, string>;
+        credential_id?: string | null;
+        cached_tools?: unknown;
+        cached_at?: unknown;
+      };
+    };
+    expect(body.definition.auth).toEqual({ kind: "header", headers: { "X-Api-Key": "{{ secret.KEY }}" }, credential_id: null });
+    expect(body.definition.headers).toBeUndefined();
+    expect(body.definition.credential_id).toBeUndefined();
+    expect(body.definition.cached_tools).toBeUndefined();
+    expect(body.definition.cached_at).toBeUndefined();
+  });
+
+  it("reading an oauth server preselects 'Sign in with the vendor' and shows the sign-in panel", async () => {
+    stubFetch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth/status")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStatus({ status: "not_connected" }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    const tool = mcpOauthTool();
+    renderWithClient(
+      <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+
+    const radio = await screen.findByLabelText("Sign in with the vendor");
+    expect(radio.getAttribute("aria-checked")).toBe("true");
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("gates Test connection and Sign in behind a save once the draft has unsaved edits", async () => {
+    stubFetch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("oauth/status")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStatus({ status: "not_connected" }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    const tool = mcpOauthTool();
+    renderWithClient(
+      <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+    await screen.findByRole("button", { name: "Sign in" });
+
+    fireEvent.change(screen.getByLabelText("URL"), { target: { value: "https://mcp.linear.app/mcp/readonly" } });
+
+    expect(await screen.findByText("Save your changes first.")).toBeTruthy();
+    const testButton = screen.getByRole("button", { name: "Test connection" }) as HTMLButtonElement;
+    expect(testButton.disabled).toBe(true);
+  });
+
+  it("Test connection lists the server's tools as checkboxes that narrow Allowed tools", async () => {
+    const tool = mcpOauthTool();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (url.includes("oauth/status")) {
+          return { ok: true, status: 200, json: async () => mcpOauthStatus({ status: "not_connected" }) } as Response;
+        }
+        if (url.includes("/test") && method === "POST") {
+          return { ok: true, status: 200, json: async () => mcpTestResultOk() } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    renderWithClient(
+      <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Test connection" }));
+    expect(await screen.findByText("list_issues")).toBeTruthy();
+
+    // Unchecking a discovered tool narrows "Allowed tools" to the rest.
+    fireEvent.click(screen.getByLabelText("list_issues"));
+    await waitFor(() => {
+      const allowed = screen.getByLabelText("Allowed tools") as HTMLInputElement;
+      expect(allowed.value.includes("list_issues")).toBe(false);
+      expect(allowed.value.includes("create_issue")).toBe(true);
+    });
   });
 });

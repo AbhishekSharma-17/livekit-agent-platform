@@ -1,0 +1,46 @@
+{
+  "$id": "lkap-contracts/NotifyTeamConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Where ``notify_team`` (and ``escalate_to_human``) posts a summary for the team (V5-25).\n\nThe webhook URL is a secret: it is kept in an ``http-tool-secret`` key under\n``secret_name`` and reaches the worker resolved, never in the stored config.",
+  "properties": {
+    "credential_id": {
+      "description": "An `http-tool-secret` key holding the webhook URL",
+      "title": "Credential Id",
+      "type": "string"
+    },
+    "include_transcript": {
+      "default": false,
+      "description": "Add the recent conversation to the message. Off by default: a transcript may hold personal details.",
+      "title": "Include Transcript",
+      "type": "boolean"
+    },
+    "on_escalation": {
+      "default": true,
+      "description": "Also post when the agent escalates the call to a person",
+      "title": "On Escalation",
+      "type": "boolean"
+    },
+    "secret_name": {
+      "default": "TEAM_WEBHOOK_URL",
+      "description": "The name the webhook URL is stored under in that key",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+      "title": "Secret Name",
+      "type": "string"
+    },
+    "style": {
+      "default": "slack",
+      "description": "`slack` posts a Slack message; `generic` posts JSON fields",
+      "enum": [
+        "slack",
+        "generic"
+      ],
+      "title": "Style",
+      "type": "string"
+    }
+  },
+  "required": [
+    "credential_id"
+  ],
+  "title": "NotifyTeamConfig",
+  "type": "object"
+}

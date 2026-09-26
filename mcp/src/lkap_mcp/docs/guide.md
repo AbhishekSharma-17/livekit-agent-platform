@@ -92,7 +92,8 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `connect-livekit`, `start-from-template`, `insurance-intake-agent`, `generic-assistant`,
 `add-http-tool`, `attach-mcp-server`, `knowledge-from-text`,
 `switch-to-flow`, `composite-panel`, `test-and-publish`,
-`test-a-custom-model`, `diagnose-a-session`, `connect-an-app` — each is a numbered, copy-pasteable tool sequence
+`test-a-custom-model`, `diagnose-a-session`, `connect-an-app`, `add-booking-tool` — each is a numbered,
+copy-pasteable tool sequence
 (`lkap_describe("recipe", name)`).
 
 ## Concepts
@@ -100,4 +101,4 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `agents`, `pipeline-modes`, `providers-and-keys`, `connections-and-pools`,
 `knowledge`, `tools-http`, `tools-mcp`, `panels-and-blocks`, `flows`,
 `telephony`, `qa-and-evals`, `recordings-and-cost`, `webhooks`,
-`sessions-and-test-chat`, `roles-and-scopes`, `apps` (`lkap_explain(topic)`).
+`sessions-and-test-chat`, `roles-and-scopes`, `apps`, `tools` (`lkap_explain(topic)`).

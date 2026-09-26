@@ -107,6 +107,23 @@ def _resolve_json_pointer(data: Any, pointer: str) -> Any:
     return current
 
 
+def _with_schema_defaults(parameters: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Fill each argument the model left out with its JSON Schema ``default`` (V5-25).
+
+    Tool templates fix values such as a booking's ``event_type_id`` this way; the
+    model may still pass its own. Only top-level ``properties`` with a non-null
+    ``default`` are filled.
+    """
+    properties = parameters.get("properties")
+    if not isinstance(properties, dict):
+        return arguments
+    filled = dict(arguments)
+    for name, schema in properties.items():
+        if name not in filled and isinstance(schema, dict) and schema.get("default") is not None:
+            filled[name] = schema["default"]
+    return filled
+
+
 def _reject_unresolved(rendered: str, *, where: str) -> None:
     """Raise if `rendered` still contains a `{{ ... }}` placeholder.
 
@@ -146,7 +163,7 @@ def _request_for(
     definition: HttpToolDefinition, *, platform_allowed_hosts: list[str] | None, user_agent: str | None = None
 ) -> Handler:
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        arguments: dict[str, Any] = dict(raw_arguments)
+        arguments: dict[str, Any] = _with_schema_defaults(definition.parameters, dict(raw_arguments))
         url = _render_url(definition.url, arguments)
         _reject_unresolved(url, where="url")
 

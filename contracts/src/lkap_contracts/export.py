@@ -28,6 +28,7 @@ from lkap_contracts.agent_config import (
     AvatarOptions,
     DisclosureConfig,
     LocaleConfig,
+    NotifyTeamConfig,
     PanelLayout,
     QaConfig,
     RecordingConfig,
@@ -70,10 +71,11 @@ from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
 from lkap_contracts.qa import QaVerdict, SessionQaIn
-from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from lkap_contracts.telephony import SmsTarget, TelephonyConfig, TransferTarget
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
+    TOOL_TEMPLATE_MODELS,
     HttpToolDefinition,
     McpHeaderAuth,
     McpNoAuth,
@@ -131,6 +133,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "AgentConfig": AgentConfig,
     "AgentLimits": AgentLimits,
     "LocaleConfig": LocaleConfig,
+    "NotifyTeamConfig": NotifyTeamConfig,  # V5-25
     "AvatarOptions": AvatarOptions,
     "PanelLayout": PanelLayout,
     "RecordingConfig": RecordingConfig,
@@ -348,6 +351,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "CallOut": api_models.CallOut,
     # telephony, promoted from the api by R-V2-25 (V2-19T); patterns + transfer targets R-V2-21
     "TransferTarget": TransferTarget,
+    "SmsTarget": SmsTarget,  # V5-25
     "TelephonyConfig": TelephonyConfig,
     "TrunkCreate": api_models.TrunkCreate,
     "TrunkUpdate": api_models.TrunkUpdate,
@@ -383,6 +387,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "WebhookDeliveryPage": api_models.WebhookDeliveryPage,
     "ProviderModelPage": api_models.ProviderModelPage,
     **TOOL_PROVIDER_MODELS,  # V5-18: connected apps (docs/v5/COMPOSIO.md §3)
+    **TOOL_TEMPLATE_MODELS,  # V5-25: tool templates (the Cal.com set)
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.

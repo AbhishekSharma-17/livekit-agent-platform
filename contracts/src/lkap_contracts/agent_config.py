@@ -45,12 +45,18 @@ ProviderSlot = Literal[
 #: default, present in ``resolved`` only when ``AgentConfig.qa.enabled``. The worker builds
 #: its judge from this slot and never walks the chain itself.
 
+#: Keys of :attr:`ResolvedAgentConfig.builtin_providers` (V5-25): the vendor a built-in tool
+#: calls, resolved with its key. Kept out of ``resolved``, whose every slot the worker's
+#: provider factory constructs.
+BuiltinProviderSlot = Literal["web_search", "sms", "notify_team"]
+
 __all__ = [
     "KNOWLEDGE_RERANK_VALUES",
     "AgentConfig",
     "AgentLimits",
     "AppsMode",
     "AvatarOptions",
+    "BuiltinProviderSlot",
     "CallerTimezoneMode",
     "CapabilitiesConfig",
     "ConnectionInfo",
@@ -64,6 +70,8 @@ __all__ = [
     "McpOAuthAccess",
     "McpOAuthTokenIn",
     "McpOAuthTokenOut",
+    "NotifyTeamConfig",
+    "NotifyTeamStyle",
     "PanelLayout",
     "PipelineConfig",
     "PipelineMode",
@@ -160,6 +168,37 @@ class CapabilitiesConfig(BaseModel):
     dtmf: bool = False
 
 
+#: ``NotifyTeamConfig.style``: a Slack incoming webhook (``{"text": ...}``) or any other
+#: webhook (a JSON object with the fields).
+NotifyTeamStyle = Literal["slack", "generic"]
+
+
+class NotifyTeamConfig(BaseModel):
+    """Where ``notify_team`` (and ``escalate_to_human``) posts a summary for the team (V5-25).
+
+    The webhook URL is a secret: it is kept in an ``http-tool-secret`` key under
+    ``secret_name`` and reaches the worker resolved, never in the stored config.
+    """
+
+    credential_id: str = Field(description="An `http-tool-secret` key holding the webhook URL")
+    secret_name: str = Field(
+        default="TEAM_WEBHOOK_URL",
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+        description="The name the webhook URL is stored under in that key",
+    )
+    style: NotifyTeamStyle = Field(
+        default="slack", description="`slack` posts a Slack message; `generic` posts JSON fields"
+    )
+    on_escalation: bool = Field(
+        default=True, description="Also post when the agent escalates the call to a person"
+    )
+    include_transcript: bool = Field(
+        default=False,
+        description="Add the recent conversation to the message. Off by default: a transcript may "
+        "hold personal details.",
+    )
+
+
 class ToolsConfig(BaseModel):
     """Built-in tool gating plus references to admin-authored tool rows."""
 
@@ -175,6 +214,26 @@ class ToolsConfig(BaseModel):
     apps: AppsMode = AppsMode()
     """Connected apps (docs/v5/COMPOSIO.md D-V5-C6): ``off`` by default. The api provisions the
     app server or tool finder on save and attaches it through ``tool_ids``."""
+    web_search: ProviderRef | None = Field(
+        default=None,
+        description="The web search service (a `web_search` provider such as Tavily or Brave); "
+        "set, the agent gets the `web_search` tool.",
+    )
+    sms: ProviderRef | None = Field(
+        default=None,
+        description="The text-message service (an `sms` provider such as Twilio or Telnyx) and its "
+        "sending number; set, the agent gets the `send_sms` tool.",
+    )
+    fetch_url_allowed_hosts: list[str] = Field(
+        default=[],
+        max_length=50,
+        description="Web sites the agent may read pages from with `fetch_url`; empty, it has no "
+        "`fetch_url` tool.",
+    )
+    notify_team: NotifyTeamConfig | None = Field(
+        default=None,
+        description="A webhook the agent posts a short summary to (`notify_team`, and escalations).",
+    )
 
 
 #: ``KnowledgeConfig.mode``: how a knowledge search ranks chunks (V5-04's ``KnowledgeService``).
@@ -454,6 +513,11 @@ class ResolvedAgentConfig(BaseModel):
     #: its ``tools`` entry by ``name`` and ``url``. Never a refresh token, a client secret or a
     #: token endpoint. A server with no entry here has no usable sign-in; the worker skips it.
     mcp_oauth: list[McpOAuthAccess] = []
+    #: V5-25: the vendor each configured network built-in calls, with its key (``web_search``
+    #: from ``config.tools.web_search``, ``sms`` from ``config.tools.sms``, ``notify_team`` with
+    #: ``kwargs={"webhook_url": ...}``). **Contains secrets.** Empty (an api before V5-25) = those
+    #: tools are not registered.
+    builtin_providers: dict[BuiltinProviderSlot, ResolvedProvider] = {}
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

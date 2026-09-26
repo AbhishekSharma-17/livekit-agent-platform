@@ -19,24 +19,46 @@ from fakes.fake_ctx import FakePackSessionContext, default_agent_config
 from livekit import rtc
 from livekit.agents import ChatContext, RunContext, ToolError
 from livekit.agents.llm.utils import build_legacy_openai_schema
-from lkap_contracts.agent_config import CapabilitiesConfig, KnowledgeConfig, PipelineMode, ToolsConfig
+from lkap_contracts.agent_config import (
+    CapabilitiesConfig,
+    KnowledgeConfig,
+    NotifyTeamConfig,
+    PipelineMode,
+    ResolvedProvider,
+    ToolsConfig,
+)
 from lkap_contracts.api_models import KbHit
-from lkap_contracts.tools import never_background
+from lkap_contracts.common import ProviderRef
+from lkap_contracts.tools import (
+    BACKGROUNDABLE_BUILTINS,
+    BUILTIN_DEFAULT_MODES,
+    CONFIGURED_BUILTINS,
+    NEVER_BACKGROUND_TOOLS,
+    WRITE_BUILTINS,
+    HttpToolDefinition,
+    never_background,
+)
 from packs.base import FrameSnapshot
 
 from lkap_agent.locale import LOCALE_USERDATA_KEY, SessionLocale
 from lkap_agent.settings import DEFAULT_HTTP_TOOL_USER_AGENT
-from lkap_agent.tools.builtin import BUILTIN_TOOL_NAMES, build_builtin_tools
+from lkap_agent.tools.builtin import BUILTIN_PROVIDERS_USERDATA_KEY, BUILTIN_TOOL_NAMES, build_builtin_tools
 from lkap_agent.tools.builtin.convert_time import build_convert_time_tool
 from lkap_agent.tools.builtin.current_time import build_current_time_tool
 from lkap_agent.tools.builtin.describe_current_frame import build_describe_current_frame_tool
 from lkap_agent.tools.builtin.end_call import build_end_call_tool
 from lkap_agent.tools.builtin.escalate_to_human import build_escalate_to_human_tool
+from lkap_agent.tools.builtin.fetch_url import MAX_BYTES, build_fetch_url_tool, extract_text
 from lkap_agent.tools.builtin.http_request import build_http_request_tool
+from lkap_agent.tools.builtin.notify_team import build_notify_team_tool, post_team_notification
 from lkap_agent.tools.builtin.pin_frame import build_pin_frame_tool
 from lkap_agent.tools.builtin.push_note import build_push_note_tool
 from lkap_agent.tools.builtin.search_knowledge import build_search_knowledge_tool
 from lkap_agent.tools.builtin.set_status import build_set_status_tool
+from lkap_agent.tools.builtin.spell_back import build_spell_back_tool, spell
+from lkap_agent.tools.declarative import build_http_tool
+from lkap_agent.tools.execution import policy_of
+from lkap_agent.tools.vendors import VendorError
 
 
 @dataclass
@@ -592,7 +614,9 @@ class TestBuildBuiltinTools:
 
         names = {t.info.name for t in tools}
         # V5-19: `describe_asset` needs a vision LLM and a picture source; the fake session has neither.
-        assert names == set(BUILTIN_TOOL_NAMES) - {"describe_current_frame", "pin_frame", "describe_asset"}
+        # V5-25: the network built-ins need their own settings (`CONFIGURED_BUILTINS`).
+        unregistered = {"describe_current_frame", "pin_frame", "describe_asset"} | CONFIGURED_BUILTINS
+        assert names == set(BUILTIN_TOOL_NAMES) - unregistered
 
     def test_includes_vision_tools_when_camera_enabled(self) -> None:
         ctx = FakePackSessionContext(
@@ -620,3 +644,449 @@ class TestBuildBuiltinTools:
 
         names = {t.info.name for t in tools}
         assert "http_request" not in names
+
+
+# ====================================================================== V5-25 curated built-ins
+WEBHOOK = "https://hooks.example.com/services/T000/B000/not-a-real-secret"
+
+
+def _webhook(url: str = WEBHOOK) -> ResolvedProvider:
+    return ResolvedProvider(
+        provider_id="http-tool-secret", python_class="", model=None, kwargs={"webhook_url": url}
+    )
+
+
+class TestSpellBack:
+    """The read-backs are pinned: a change here changes what callers hear."""
+
+    def test_an_email_is_spelt_with_words_and_a_common_domain_said(self) -> None:
+        assert spell("jo.smith@gmail.com") == (
+            "email",
+            "J as in juliet, O as in oscar, dot, S as in sierra, M as in mike, I as in india, "
+            "T as in tango, H as in hotel, at gmail dot com",
+        )
+
+    def test_a_policy_id_is_read_part_by_part(self) -> None:
+        assert spell("POL-2024-0017") == (
+            "code",
+            "P as in papa, O as in oscar, L as in lima; dash; two zero two four; dash; zero zero one seven",
+        )
+
+    def test_an_amount_is_said_as_money(self) -> None:
+        assert spell("$1,234.50") == (
+            "amount",
+            "one thousand two hundred and thirty-four dollars and fifty cents",
+        )
+        assert spell("£1.01") == ("amount", "one pound and one penny")
+
+    def test_a_phone_number_is_read_in_digit_groups(self) -> None:
+        assert spell("+1 555 0100 123") == (
+            "phone",
+            "plus, one; five five five; zero one zero zero; one two three",
+        )
+        assert spell("5550100123", "phone")[1] == "five five five; zero one zero; zero one two three"
+
+    def test_a_postcode_is_a_code(self) -> None:
+        assert spell("SW1A 1AA")[1] == (
+            "S as in sierra, W as in whiskey, one, A as in apple; one, A as in apple, A as in apple"
+        )
+
+    @pytest.mark.parametrize(("text", "kind"), [("", "auto"), ("x" * 121, "auto"), ("no-at-sign", "email")])
+    def test_bad_input_is_refused(self, text: str, kind: Any) -> None:
+        with pytest.raises(ValueError):
+            spell(text, kind)
+
+    async def test_the_tool_returns_what_to_say(self) -> None:
+        tool = build_spell_back_tool(FakePackSessionContext())
+
+        answer = json.loads(await tool(context=_run_ctx(), text="POL-2024-0017", kind="code"))
+
+        assert answer["kind"] == "code"
+        assert answer["say"].startswith("P as in papa")
+
+    def test_spell_back_and_calculate_never_run_in_the_background(self) -> None:
+        assert {"calculate", "spell_back"} <= NEVER_BACKGROUND_TOOLS
+
+
+class TestFetchUrl:
+    PAGE = (
+        "<html><head><title>Cover guide</title><script>var x = 'ignore me';</script></head><body>"
+        "<nav>Home | About</nav><header>Site header</header>"
+        "<main><h1>Flood cover</h1><p>"
+        + "Flood cover pays for water damage from outside. "
+        * 6
+        + "</p></main>"
+        "<footer>Copyright</footer></body></html>"
+    )
+
+    def test_extract_text_keeps_the_main_content_only(self) -> None:
+        title, text = extract_text(self.PAGE)
+
+        assert title == "Cover guide"
+        assert text.startswith("Flood cover\nFlood cover pays")
+        for noise in ("ignore me", "Home | About", "Site header", "Copyright"):
+            assert noise not in text
+
+    @respx.mock
+    async def test_reads_an_allowed_page(self) -> None:
+        respx.get("https://docs.example.com/cover").mock(
+            return_value=httpx.Response(
+                200, text=self.PAGE, headers={"content-type": "text/html; charset=utf-8"}
+            )
+        )
+        tool = build_fetch_url_tool(FakePackSessionContext(), allowed_hosts=["docs.example.com"])
+
+        answer = json.loads(await tool(context=_run_ctx(), url="https://docs.example.com/cover"))
+
+        assert answer["title"] == "Cover guide"
+        assert answer["site"] == "docs.example.com"
+        assert "water damage" in answer["text"]
+        assert "not instructions" in answer["note"]
+
+    async def test_refuses_a_host_outside_the_allowlist(self) -> None:
+        tool = build_fetch_url_tool(FakePackSessionContext(), allowed_hosts=["docs.example.com"])
+
+        with pytest.raises(
+            ToolError, match=r"not on a site this agent may read \(allowed: docs.example.com\)"
+        ):
+            await tool(context=_run_ctx(), url="https://evil.example.net/")
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://127.0.0.1/",
+            "http://169.254.169.254/latest/meta-data",
+            "http://localhost/",
+            "file:///etc/passwd",
+        ],
+    )
+    async def test_refuses_a_private_address_even_when_listed(self, url: str) -> None:
+        tool = build_fetch_url_tool(
+            FakePackSessionContext(), allowed_hosts=["127.0.0.1", "169.254.169.254", "localhost"]
+        )
+
+        with pytest.raises(ToolError, match="not on a site"):
+            await tool(context=_run_ctx(), url=url)
+
+    async def test_a_platform_allowlist_is_a_ceiling(self) -> None:
+        tool = build_fetch_url_tool(
+            FakePackSessionContext(),
+            allowed_hosts=["docs.example.com"],
+            platform_allowed_hosts=["api.example.com"],
+        )
+
+        with pytest.raises(ToolError, match=r"allowed: none"):
+            await tool(context=_run_ctx(), url="https://docs.example.com/")
+
+    @respx.mock
+    async def test_a_redirect_is_checked_again(self) -> None:
+        respx.get("https://docs.example.com/old").mock(
+            return_value=httpx.Response(301, headers={"location": "https://evil.example.net/"})
+        )
+        tool = build_fetch_url_tool(FakePackSessionContext(), allowed_hosts=["docs.example.com"])
+
+        with pytest.raises(ToolError, match="not on a site"):
+            await tool(context=_run_ctx(), url="https://docs.example.com/old")
+
+    @respx.mock
+    async def test_a_same_site_redirect_is_followed(self) -> None:
+        respx.get("https://docs.example.com/old").mock(
+            return_value=httpx.Response(302, headers={"location": "/new"})
+        )
+        respx.get("https://docs.example.com/new").mock(
+            return_value=httpx.Response(200, text="plain words", headers={"content-type": "text/plain"})
+        )
+        tool = build_fetch_url_tool(FakePackSessionContext(), allowed_hosts=["docs.example.com"])
+
+        answer = json.loads(await tool(context=_run_ctx(), url="https://docs.example.com/old"))
+
+        assert answer["text"] == "plain words"
+
+    @respx.mock
+    async def test_refuses_a_non_page(self) -> None:
+        respx.get("https://docs.example.com/file.pdf").mock(
+            return_value=httpx.Response(200, content=b"%PDF", headers={"content-type": "application/pdf"})
+        )
+        tool = build_fetch_url_tool(FakePackSessionContext(), allowed_hosts=["docs.example.com"])
+
+        with pytest.raises(ToolError, match="not a web page"):
+            await tool(context=_run_ctx(), url="https://docs.example.com/file.pdf")
+
+    @respx.mock
+    async def test_reads_at_most_max_bytes_and_cuts_the_text(self) -> None:
+        respx.get("https://docs.example.com/big").mock(
+            return_value=httpx.Response(
+                200, text="word " * (MAX_BYTES // 2), headers={"content-type": "text/plain"}
+            )
+        )
+        tool = build_fetch_url_tool(FakePackSessionContext(), allowed_hosts=["docs.example.com"])
+
+        answer = json.loads(await tool(context=_run_ctx(), url="https://docs.example.com/big"))
+
+        assert len(answer["text"]) <= 2002
+
+    def test_registered_only_with_allowed_hosts_and_runs_in_the_background(self) -> None:
+        plain = {
+            t.info.name
+            for t in build_builtin_tools(FakePackSessionContext(), disabled=[], http_enabled=False)
+        }
+        assert "fetch_url" not in plain
+        ctx = FakePackSessionContext(
+            config=default_agent_config(tools=ToolsConfig(fetch_url_allowed_hosts=["docs.example.com"]))
+        )
+        [tool] = [
+            t for t in build_builtin_tools(ctx, disabled=[], http_enabled=False) if t.info.name == "fetch_url"
+        ]
+        assert policy_of(tool).resolved.mode == "background"  # type: ignore[union-attr]
+        assert "docs.example.com" in tool.info.description
+
+
+def _notify_ctx(**settings: Any) -> FakePackSessionContext:
+    config = NotifyTeamConfig(credential_id="c", **settings)
+    return FakePackSessionContext(config=default_agent_config(tools=ToolsConfig(notify_team=config)))
+
+
+class _Message(SimpleNamespace):
+    pass
+
+
+class TestNotifyTeam:
+    @respx.mock
+    async def test_posts_a_slack_summary_without_the_transcript(self) -> None:
+        route = respx.post(WEBHOOK).mock(return_value=httpx.Response(200, text="ok"))
+        ctx = _notify_ctx()
+        cast(Any, ctx.session).history = SimpleNamespace(
+            items=[_Message(type="message", role="user", text_content="my card is 4111 1111")]
+        )
+        settings = ctx.config.tools.notify_team
+        assert settings is not None
+        tool = build_notify_team_tool(ctx, _webhook(), settings)
+
+        result = await tool(context=_run_ctx(), summary="Caller wants a manager", urgency="high")
+
+        body = json.loads(route.calls.last.request.content)
+        assert set(body) == {"text"}
+        assert "Caller wants a manager" in body["text"] and "(urgent)" in body["text"]
+        assert "4111" not in body["text"]
+        assert result == "The team has been notified."
+        assert ("team_notified", {"source": "notify_team", "urgency": "high", "style": "slack"}) in ctx.events
+
+    @respx.mock
+    async def test_a_generic_webhook_gets_the_fields_and_the_transcript_only_when_asked(self) -> None:
+        route = respx.post(WEBHOOK).mock(return_value=httpx.Response(204))
+        ctx = _notify_ctx(style="generic", include_transcript=True)
+        cast(Any, ctx.session).history = SimpleNamespace(
+            items=[
+                _Message(type="message", role="system", text_content="hidden prompt"),
+                _Message(type="message", role="user", text_content="I need help"),
+                _Message(type="message", role="assistant", text_content="I will get someone"),
+            ]
+        )
+        settings = ctx.config.tools.notify_team
+        assert settings is not None
+
+        await post_team_notification(ctx, _webhook(), settings, summary="Needs help", urgency="normal")
+
+        body = json.loads(route.calls.last.request.content)
+        assert body["summary"] == "Needs help" and body["source"] == "notify_team"
+        assert body["session_id"] == ctx.session_id
+        assert body["transcript"] == [
+            {"role": "user", "text": "I need help"},
+            {"role": "assistant", "text": "I will get someone"},
+        ]
+
+    @respx.mock
+    async def test_the_same_note_is_not_posted_twice(self) -> None:
+        route = respx.post(WEBHOOK).mock(return_value=httpx.Response(200))
+        ctx = _notify_ctx()
+        settings = ctx.config.tools.notify_team
+        assert settings is not None
+        tool = build_notify_team_tool(ctx, _webhook(), settings)
+
+        await tool(context=_run_ctx(), summary="Same  note")
+        again = await tool(context=_run_ctx(), summary="same note")
+
+        assert route.call_count == 1 and "already has this note" in again
+
+    async def test_a_private_or_plain_http_webhook_is_refused(self) -> None:
+        ctx = _notify_ctx()
+        settings = ctx.config.tools.notify_team
+        assert settings is not None
+        for url in (
+            "http://hooks.example.com/x",
+            "https://127.0.0.1/hook",
+            "https://metadata.google.internal/",
+        ):
+            with pytest.raises(VendorError):
+                await post_team_notification(ctx, _webhook(url), settings, summary="s")
+
+    async def test_without_a_resolved_webhook_the_tool_says_it_is_not_set_up(self) -> None:
+        ctx = _notify_ctx()
+        settings = ctx.config.tools.notify_team
+        assert settings is not None
+        tool = build_notify_team_tool(ctx, None, settings)
+
+        with pytest.raises(ToolError, match="not set up"):
+            await tool(context=_run_ctx(), summary="x")
+
+    @respx.mock
+    async def test_a_failed_post_names_the_status_never_the_url(self) -> None:
+        respx.post(WEBHOOK).mock(return_value=httpx.Response(404))
+        ctx = _notify_ctx()
+        settings = ctx.config.tools.notify_team
+        assert settings is not None
+        tool = build_notify_team_tool(ctx, _webhook(), settings)
+
+        with pytest.raises(ToolError) as info:
+            await tool(context=_run_ctx(), summary="x")
+
+        assert "HTTP 404" in str(info.value) and "not-a-real-secret" not in str(info.value)
+
+
+class TestEscalationNotifiesTheTeam:
+    @respx.mock
+    async def test_escalate_posts_the_reason_when_notify_team_is_on(self) -> None:
+        route = respx.post(WEBHOOK).mock(return_value=httpx.Response(200))
+        ctx = _notify_ctx()
+        tools = build_builtin_tools(
+            ctx, disabled=[], http_enabled=False, providers={"notify_team": _webhook()}
+        )
+        [escalate] = [t for t in tools if t.info.name == "escalate_to_human"]
+
+        result = await escalate(context=_run_ctx(), reason="caller is upset", urgency="high")
+
+        assert "team has been notified" in result
+        body = json.loads(route.calls.last.request.content)
+        assert body["text"].startswith("*Escalation* (urgent): caller is upset")
+        assert [e for e, _ in ctx.events] == ["escalation", "team_notified"]
+
+    @respx.mock
+    async def test_a_failed_post_never_fails_the_escalation(self) -> None:
+        respx.post(WEBHOOK).mock(side_effect=httpx.ConnectError("down"))
+        ctx = _notify_ctx()
+        tools = build_builtin_tools(
+            ctx, disabled=[], http_enabled=False, providers={"notify_team": _webhook()}
+        )
+        [escalate] = [t for t in tools if t.info.name == "escalate_to_human"]
+
+        result = await escalate(context=_run_ctx(), reason="caller is upset")
+
+        assert result.startswith("Escalation logged.") and "notified" not in result
+
+    @respx.mock
+    async def test_on_escalation_off_posts_nothing(self) -> None:
+        route = respx.post(WEBHOOK).mock(return_value=httpx.Response(200))
+        ctx = _notify_ctx(on_escalation=False)
+        tools = build_builtin_tools(
+            ctx, disabled=[], http_enabled=False, providers={"notify_team": _webhook()}
+        )
+        [escalate] = [t for t in tools if t.info.name == "escalate_to_human"]
+
+        await escalate(context=_run_ctx(), reason="x")
+
+        assert not route.called
+
+
+class TestCuratedRegistration:
+    def test_an_agent_without_the_new_fields_gains_only_the_local_tools(self) -> None:
+        """Compatibility (V5-25 acceptance): no network tool appears unless configured."""
+        names = {
+            t.info.name
+            for t in build_builtin_tools(FakePackSessionContext(), disabled=[], http_enabled=False)
+        }
+        assert {"calculate", "spell_back", "convert_time"} <= names
+        assert not names & CONFIGURED_BUILTINS
+
+    def test_builtin_disabled_turns_the_local_tools_off(self) -> None:
+        names = {
+            t.info.name
+            for t in build_builtin_tools(
+                FakePackSessionContext(),
+                disabled=["calculate", "spell_back", "convert_time"],
+                http_enabled=False,
+            )
+        }
+        assert not names & {"calculate", "spell_back", "convert_time"}
+
+    def test_every_configured_tool_registers_with_its_settings(self) -> None:
+        ctx = FakePackSessionContext(
+            config=default_agent_config(
+                tools=ToolsConfig(
+                    web_search=ProviderRef(provider_id="brave-search"),
+                    sms=ProviderRef(provider_id="telnyx-sms"),
+                    fetch_url_allowed_hosts=["docs.example.com"],
+                    notify_team=NotifyTeamConfig(credential_id="c"),
+                )
+            )
+        )
+        names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
+        assert CONFIGURED_BUILTINS <= names
+
+    def test_the_providers_come_from_userdata_when_not_passed(self) -> None:
+        ctx = _notify_ctx()
+        ctx.userdata[BUILTIN_PROVIDERS_USERDATA_KEY] = {"notify_team": _webhook()}
+        tools = build_builtin_tools(ctx, disabled=[], http_enabled=False)
+        assert "notify_team" in {t.info.name for t in tools}
+
+    def test_the_worker_stores_the_providers_under_the_same_key(self) -> None:
+        import inspect
+
+        from lkap_agent import main
+
+        assert f'userdata["{BUILTIN_PROVIDERS_USERDATA_KEY}"] = dict(resolved.builtin_providers)' in (
+            inspect.getsource(main)
+        )
+
+    @pytest.mark.parametrize("name", sorted(BUILTIN_DEFAULT_MODES))
+    def test_each_network_tool_has_its_own_default_mode_and_write_semantics(self, name: str) -> None:
+        ctx = FakePackSessionContext(
+            config=default_agent_config(
+                tools=ToolsConfig(
+                    execution_default="blocking",
+                    web_search=ProviderRef(provider_id="tavily-search"),
+                    sms=ProviderRef(provider_id="twilio-sms"),
+                    fetch_url_allowed_hosts=["docs.example.com"],
+                    notify_team=NotifyTeamConfig(credential_id="c"),
+                )
+            )
+        )
+        [tool] = [t for t in build_builtin_tools(ctx, disabled=[], http_enabled=False) if t.info.name == name]
+        resolved = policy_of(tool).resolved  # type: ignore[union-attr]
+        assert name in BACKGROUNDABLE_BUILTINS
+        assert resolved.mode == BUILTIN_DEFAULT_MODES[name]
+        if name in WRITE_BUILTINS:
+            assert resolved.on_duplicate == "confirm" and resolved.cancellable is False
+        else:
+            assert resolved.on_duplicate == "reject" and resolved.cancellable is True
+
+
+class TestHttpToolSchemaDefaults:
+    """V5-25: a tool template's argument default reaches the request when the model leaves it out."""
+
+    @respx.mock
+    async def test_an_omitted_argument_takes_its_schema_default(self) -> None:
+        route = respx.get("https://api.cal.com/v2/slots").mock(
+            return_value=httpx.Response(200, json={"ok": 1})
+        )
+        definition = HttpToolDefinition(
+            name="booking_check_availability",
+            description="d",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "event_type_id": {"type": "integer", "default": 123456},
+                    "start": {"type": "string"},
+                },
+                "required": ["start"],
+            },
+            method="GET",
+            url="https://api.cal.com/v2/slots?eventTypeId={{ event_type_id }}&start={{ start }}",
+            allowed_hosts=["api.cal.com"],
+        )
+        tool = build_http_tool(definition)
+
+        await tool(raw_arguments={"start": "2026-10-01"}, context=_run_ctx())
+        assert route.calls.last.request.url.params["eventTypeId"] == "123456"
+
+        await tool(raw_arguments={"start": "2026-10-01", "event_type_id": 7}, context=_run_ctx())
+        assert route.calls.last.request.url.params["eventTypeId"] == "7"

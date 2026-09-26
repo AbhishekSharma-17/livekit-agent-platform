@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/ToolTemplateInstantiated.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What ``POST /v1/tool-templates/{id}/instantiate`` created (tool rows, in template order).",
+  "properties": {
+    "names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Names",
+      "type": "array"
+    },
+    "template_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Template Ids",
+      "type": "array"
+    },
+    "tool_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tool Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tool_ids",
+    "names",
+    "template_ids"
+  ],
+  "title": "ToolTemplateInstantiated",
+  "type": "object"
+}

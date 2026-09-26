@@ -1,0 +1,48 @@
+{
+  "id": "cal_com.booking_cancel",
+  "group": "cal_com",
+  "group_label": "Cal.com bookings",
+  "secret_names": [
+    "CAL_API_KEY"
+  ],
+  "docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+  "label": "Cancel a booking",
+  "summary": "Cancels a booking after the caller confirms.",
+  "risk": "write",
+  "defaults": [],
+  "definition": {
+    "kind": "http",
+    "name": "booking_cancel",
+    "description": "Cancel a booking. Confirm which booking and get a clear yes from the caller first.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "booking_uid": {
+          "type": "string",
+          "description": "The booking's uid, from booking_list or booking_create."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why it is cancelled, in a few words."
+        }
+      },
+      "required": [
+        "booking_uid",
+        "reason"
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.cal.com/v2/bookings/{{ booking_uid }}/cancel",
+    "headers": {
+      "Authorization": "Bearer {{ secret.CAL_API_KEY }}",
+      "cal-api-version": "2024-08-13"
+    },
+    "allowed_hosts": [
+      "api.cal.com"
+    ],
+    "timeout_s": 10,
+    "max_result_chars": 1500,
+    "result_path": "/data",
+    "body_template": "{\"cancellationReason\": \"{{ reason }}\"}"
+  }
+}

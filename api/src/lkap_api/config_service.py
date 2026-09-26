@@ -57,6 +57,7 @@ from lkap_contracts.agent_config import (
     KNOWLEDGE_RERANK_VALUES,
     REQUIRED_SLOTS,
     AgentConfig,
+    BuiltinProviderSlot,
     PipelineConfig,
     ProviderRef,
     ProviderSlot,
@@ -498,6 +499,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(speech_latency_issues(ctx))
     findings.extend(choices_on_phone_issues(ctx))
     findings.extend(consent_issues(ctx))
+    findings.extend(curated_tool_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1186,6 +1188,176 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
                     )
                 )
     return issues
+
+
+# ------------------------------------------------------------ curated built-ins (V5-25)
+#: The `ToolsConfig` field of each network built-in's vendor, the registry kind it takes and
+#: the built-in it switches on.
+CURATED_PROVIDER_SLOTS: Final[dict[BuiltinProviderSlot, tuple[str, ProviderKind, str]]] = {
+    "web_search": ("tools.web_search", "web_search", "web_search"),
+    "sms": ("tools.sms", "sms", "send_sms"),
+}
+
+#: The credential kind `tools.notify_team.credential_id` must be (the webhook URL is a named secret).
+NOTIFY_TEAM_CREDENTIAL_PROVIDER: Final[str] = "http-tool-secret"
+
+_E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+_SITE_RE = re.compile(
+    r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
+_LOCAL_SUFFIXES: Final[tuple[str, ...]] = (".localhost", ".local", ".internal", ".lan", ".home.arpa")
+
+#: The warning for `send_sms` on an agent that looks web-only and has no saved contacts.
+SMS_NOWHERE_MESSAGE: Final[str] = (
+    "text messages go to the caller only on phone calls, and this agent has no saved contacts to "
+    "text; add one under Telephony, or the tool will only work on phone calls"
+)
+
+
+def _fetch_host_problem(host: str) -> str | None:
+    """Why ``host`` cannot be a `fetch_url` site, or ``None`` (offline; the worker guards again)."""
+    name = host.strip().lower()
+    if "://" in name or "/" in name or ":" in name:
+        return "use the site name only (docs.example.com), without https:// or a path"
+    if not _SITE_RE.match(name) or name.rsplit(".", 1)[-1].isdigit():
+        return "is not a site name (an address or a malformed name)"
+    if name == "localhost" or name.endswith(_LOCAL_SUFFIXES):
+        return "names a private network, which the agent never reads"
+    return None
+
+
+def curated_tool_issues(ctx: ValidationContext) -> list[Issue]:
+    """The checks of the curated built-ins (V5-25). A built-in check called from :func:`validate`.
+
+    * ``tools.web_search`` / ``tools.sms``: an unknown provider, one of another kind, one not
+      offered, no key or a key of another provider → error (the tool would only ever say it is
+      not set up); an unknown or badly formed field → as for pipeline slots; the SMS sending
+      number not in international format → error.
+    * ``tools.sms`` on an agent with no phone-only setting (keypad input or transfer
+      destinations) and no ``telephony.sms_targets`` → warning (nobody to text off a phone call).
+    * ``tools.notify_team`` whose key is unknown or not a tool-secret key → error.
+    * ``tools.fetch_url_allowed_hosts``: an entry that is not a public site name → error.
+    * A configured tool switched off in ``builtin_disabled`` → warning (the setting does nothing).
+
+    Returns:
+        Issues at ``tools.web_search``, ``tools.sms``, ``tools.notify_team.credential_id``,
+        ``tools.fetch_url_allowed_hosts[i]`` and ``tools.builtin_disabled``.
+    """
+    tools = ctx.config.tools
+    findings = _Findings()
+    disabled = set(tools.builtin_disabled)
+    for slot, (path, kind, tool_name) in CURATED_PROVIDER_SLOTS.items():
+        ref = cast(ProviderRef | None, getattr(tools, slot))
+        if ref is None:
+            continue
+        spec = _spec_or_none(ref.provider_id)
+        if spec is None:
+            findings.add("error", path, f"unknown provider '{ref.provider_id}'")
+            continue
+        if spec.kind != kind:
+            findings.add("error", path, f"provider '{spec.id}' is a {spec.kind} provider, expected {kind}")
+            continue
+        if spec.availability != "available":
+            findings.add(
+                "error", path, f"provider '{spec.id}' is not offered (availability={spec.availability})"
+            )
+        if spec.id in ctx.disabled_provider_ids:
+            findings.add("error", path, f"provider '{spec.id}' is switched off for this workspace")
+        _validate_credential(path, ref, spec, ctx.credential_providers, findings)
+        _validate_fields(path, ref, spec, findings)
+        sender = ref.fields.get("from_number")
+        if kind == "sms" and sender is not None and not _E164_RE.match(str(sender).strip()):
+            findings.add(
+                "error", path, "the sending number must be in international format, e.g. +15550100000"
+            )
+        if tool_name in disabled:
+            findings.add(
+                "warning", "tools.builtin_disabled", f"'{tool_name}' is switched off, so {path} is unused"
+            )
+    if tools.sms is not None and "send_sms" not in disabled:
+        config = ctx.config
+        phone_ready = config.capabilities.dtmf or bool(config.telephony.transfer_targets)
+        if not phone_ready and not config.telephony.sms_targets:
+            findings.add("warning", "tools.sms", SMS_NOWHERE_MESSAGE)
+    notify = tools.notify_team
+    if notify is not None:
+        owner = ctx.credential_providers.get(notify.credential_id)
+        if owner is None:
+            findings.add(
+                "error", "tools.notify_team.credential_id", f"unknown credential '{notify.credential_id}'"
+            )
+        elif owner != NOTIFY_TEAM_CREDENTIAL_PROVIDER:
+            findings.add(
+                "error",
+                "tools.notify_team.credential_id",
+                f"the team webhook must be kept in a tool-secret key ('{NOTIFY_TEAM_CREDENTIAL_PROVIDER}'), "
+                f"not a '{owner}' key",
+            )
+        if "notify_team" in disabled and not notify.on_escalation:
+            findings.add(
+                "warning",
+                "tools.builtin_disabled",
+                "'notify_team' is switched off, so tools.notify_team is unused",
+            )
+    for index, host in enumerate(tools.fetch_url_allowed_hosts):
+        problem = _fetch_host_problem(host)
+        if problem is not None:
+            findings.add(
+                "error",
+                f"tools.fetch_url_allowed_hosts[{index}]",
+                f"'{host[:80]}' {problem}" if not problem.startswith("use") else problem,
+            )
+    if tools.fetch_url_allowed_hosts and "fetch_url" in disabled:
+        findings.add(
+            "warning",
+            "tools.builtin_disabled",
+            "'fetch_url' is switched off, so tools.fetch_url_allowed_hosts is unused",
+        )
+    return findings.issues
+
+
+def builtin_credential_ids(config: AgentConfig) -> set[str]:
+    """The credential ids the curated built-ins reference (V5-25), for session resolution."""
+    ids: set[str] = set()
+    for slot in CURATED_PROVIDER_SLOTS:
+        ref = cast(ProviderRef | None, getattr(config.tools, slot))
+        if ref is not None and ref.credential_id:
+            ids.add(ref.credential_id)
+    if config.tools.notify_team is not None:
+        ids.add(config.tools.notify_team.credential_id)
+    return ids
+
+
+def resolve_builtin_providers(
+    config: AgentConfig, secrets_by_credential: Mapping[str, dict[str, str]]
+) -> dict[BuiltinProviderSlot, ResolvedProvider]:
+    """``ResolvedAgentConfig.builtin_providers`` (V5-25). **Contains secrets.**
+
+    ``web_search`` and ``sms`` resolve like a pipeline slot (defaults, fields, then the key's
+    secret fields). ``notify_team`` resolves to ``{"webhook_url": <the named secret>}`` from its
+    tool-secret key. A tool whose key is missing or does not hold the secret is left out; the
+    worker's tool then says it is not set up.
+    """
+    resolved: dict[BuiltinProviderSlot, ResolvedProvider] = {}
+    for slot in CURATED_PROVIDER_SLOTS:
+        ref = cast(ProviderRef | None, getattr(config.tools, slot))
+        if ref is None or _spec_or_none(ref.provider_id) is None:
+            continue
+        secrets = secrets_by_credential.get(ref.credential_id or "")
+        if not secrets:
+            continue
+        resolved[slot] = resolve_provider_ref(ref, secrets)
+    notify = config.tools.notify_team
+    if notify is not None:
+        webhook_url = secrets_by_credential.get(notify.credential_id, {}).get(notify.secret_name, "")
+        if webhook_url:
+            resolved["notify_team"] = ResolvedProvider(
+                provider_id=NOTIFY_TEAM_CREDENTIAL_PROVIDER,
+                python_class="",
+                model=None,
+                kwargs={"webhook_url": webhook_url},
+            )
+    return resolved
 
 
 #: Connection statuses that stop an app's actions (D-V5-C9).

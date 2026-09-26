@@ -8,14 +8,17 @@ declarative (`tools/declarative.py`) and pack tools to `Agent(tools=...)`.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from livekit.agents import FunctionTool
+from lkap_contracts.agent_config import ResolvedProvider
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     BLOCK_TOOL_NAMES,
+    BUILTIN_DEFAULT_MODES,
     BUILTIN_TOOL_NAMES,
+    WRITE_BUILTINS,
     ToolExecution,
     ToolExecutionMode,
 )
@@ -25,13 +28,16 @@ from lkap_agent.logging import get_logger
 from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
 from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_execution
 
+from .calculate import build_calculate_tool
 from .convert_time import build_convert_time_tool
 from .current_time import build_current_time_tool
 from .describe_asset import build_describe_asset_tool, vision_llm
 from .describe_current_frame import build_describe_current_frame_tool
 from .end_call import build_end_call_tool
-from .escalate_to_human import build_escalate_to_human_tool
+from .escalate_to_human import Urgency, build_escalate_to_human_tool
+from .fetch_url import build_fetch_url_tool
 from .http_request import build_http_request_tool
+from .notify_team import ESCALATION_TIMEOUT_S, build_notify_team_tool, post_team_notification
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
 from .record_consent import build_record_consent_tool
@@ -41,26 +47,33 @@ from .request_form import build_request_form_tool
 from .request_upload import build_request_upload_tool
 from .resolve_choice import build_resolve_choice_tool
 from .search_knowledge import build_search_knowledge_tool
+from .send_sms import build_send_sms_tool
 from .set_details import build_set_details_tool
 from .set_status import build_set_status_tool
 from .set_steps import build_set_steps_tool, manual_steps_blocks
 from .show_document import build_show_document_tool
 from .show_text import build_show_text_tool
+from .spell_back import build_spell_back_tool
 from .table_append import build_table_append_tool
 from .update_block import UPDATABLE_BLOCK_TYPES, build_update_block_tool
+from .web_search import build_web_search_tool
 
 __all__ = [
     "BLOCK_TOOL_NAMES",
+    "BUILTIN_PROVIDERS_USERDATA_KEY",
     "BUILTIN_TOOL_NAMES",
     "TELEPHONY_TOOL_NAMES",
     "build_builtin_tools",
+    "build_calculate_tool",
     "build_convert_time_tool",
     "build_current_time_tool",
     "build_describe_asset_tool",
     "build_describe_current_frame_tool",
     "build_end_call_tool",
     "build_escalate_to_human_tool",
+    "build_fetch_url_tool",
     "build_http_request_tool",
+    "build_notify_team_tool",
     "build_pin_frame_tool",
     "build_push_note_tool",
     "build_record_consent_tool",
@@ -70,16 +83,24 @@ __all__ = [
     "build_request_upload_tool",
     "build_resolve_choice_tool",
     "build_search_knowledge_tool",
+    "build_send_sms_tool",
     "build_set_details_tool",
     "build_set_status_tool",
     "build_set_steps_tool",
     "build_show_document_tool",
     "build_show_text_tool",
+    "build_spell_back_tool",
     "build_table_append_tool",
     "build_update_block_tool",
+    "build_web_search_tool",
 ]
 
 logger = get_logger(__name__)
+
+#: `SessionContext.userdata` key of the session's `ResolvedAgentConfig.builtin_providers` (V5-25):
+#: the worker stores them there before building the tools, so `build_builtin_tools` needs no
+#: new argument from its callers (an explicit `providers=` wins).
+BUILTIN_PROVIDERS_USERDATA_KEY = "lkap.builtin_providers"
 
 # `BUILTIN_TOOL_NAMES` (the order `build_builtin_tools` considers them — the names
 # `AgentConfig.tools.builtin_disabled` and the console's toggles refer to) and
@@ -106,6 +127,7 @@ def build_builtin_tools(
     execution: Mapping[str, ToolExecution] | None = None,
     execution_default: ToolExecutionMode | None = None,
     flow_node: bool | None = None,
+    providers: Mapping[str, ResolvedProvider] | None = None,
 ) -> list[FunctionTool[..., Any]]:
     """Build every enabled built-in tool for one session.
 
@@ -129,6 +151,9 @@ def build_builtin_tools(
             `ctx.config.tools.execution_default`.
         flow_node: Whether these tools run on flow nodes (the 1.8.3 gate);
             defaults to whether `ctx.config` is a flow.
+        providers: The vendors of the network built-ins, resolved with their keys
+            (`ResolvedAgentConfig.builtin_providers`); defaults to
+            `ctx.userdata[BUILTIN_PROVIDERS_USERDATA_KEY]`.
 
     Returns:
         The enabled tools. `describe_current_frame` and `pin_frame` are
@@ -147,6 +172,11 @@ def build_builtin_tools(
         (V5-19) is registered on a cascaded pipeline whose LLM is not known to
         be text-only, when the session can hold a picture: an `upload` or
         `form` block, or camera / screen share (pinned frames are stored).
+        V5-25: `calculate` and `spell_back` are registered like the time tools;
+        `web_search` only with `tools.web_search`, `fetch_url` only with a
+        non-empty `tools.fetch_url_allowed_hosts`, `send_sms` only with
+        `tools.sms`, `notify_team` only with `tools.notify_team` (a configured
+        tool whose key did not resolve answers "not set up" when called).
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -170,14 +200,24 @@ def build_builtin_tools(
         )
 
     def _policy(name: str) -> ResolvedExecution:
+        spec = declared.get(name)
+        # V5-25: a tool's own default mode wins over the agent's read-tool default.
+        own_mode = BUILTIN_DEFAULT_MODES.get(name)
+        if own_mode is not None and (spec is None or spec.mode is None):
+            spec = (spec or ToolExecution()).model_copy(update={"mode": own_mode})
         return resolve_execution(
             name=name,
             kind="builtin",
-            is_read=True,
-            declared=declared.get(name),
+            is_read=name not in WRITE_BUILTINS,
+            declared=spec,
             agent_default=default,
             flow_node=on_flow,
         )
+
+    resolved_providers: Mapping[str, ResolvedProvider] = (
+        providers if providers is not None else _userdata_providers(ctx)
+    )
+    notify_settings = getattr(tools_config, "notify_team", None)
 
     tools: list[FunctionTool[..., Any]] = []
     if _want("end_call"):
@@ -202,11 +242,41 @@ def build_builtin_tools(
     if _want("set_status"):
         tools.append(build_set_status_tool(ctx))
     if _want("escalate_to_human"):
-        tools.append(build_escalate_to_human_tool(ctx))
+        notify = None
+        if notify_settings is not None and notify_settings.on_escalation:
+            notify = _escalation_notifier(ctx, resolved_providers.get("notify_team"), notify_settings)
+        tools.append(build_escalate_to_human_tool(ctx, notify=notify))
     if _want("current_time"):
         tools.append(build_current_time_tool(ctx))
     if _want("convert_time"):
         tools.append(build_convert_time_tool(ctx))
+    if _want("calculate"):
+        tools.append(build_calculate_tool(ctx))
+    if _want("spell_back"):
+        tools.append(build_spell_back_tool(ctx))
+    if getattr(tools_config, "web_search", None) is not None and _want("web_search"):
+        tools.append(
+            build_web_search_tool(ctx, resolved_providers.get("web_search"), execution=_policy("web_search"))
+        )
+    fetch_hosts = list(getattr(tools_config, "fetch_url_allowed_hosts", None) or [])
+    if fetch_hosts and _want("fetch_url"):
+        tools.append(
+            build_fetch_url_tool(
+                ctx,
+                allowed_hosts=fetch_hosts,
+                platform_allowed_hosts=platform_allowed_hosts,
+                user_agent=http_user_agent,
+                execution=_policy("fetch_url"),
+            )
+        )
+    if getattr(tools_config, "sms", None) is not None and _want("send_sms"):
+        tools.append(build_send_sms_tool(ctx, resolved_providers.get("sms"), execution=_policy("send_sms")))
+    if notify_settings is not None and _want("notify_team"):
+        tools.append(
+            build_notify_team_tool(
+                ctx, resolved_providers.get("notify_team"), notify_settings, execution=_policy("notify_team")
+            )
+        )
 
     block_types = {spec.type for spec in ctx.config.panel.blocks}
     if block_types & UPDATABLE_BLOCK_TYPES and _want("update_block"):
@@ -242,3 +312,29 @@ def build_builtin_tools(
         tools.append(build_describe_asset_tool(ctx))
 
     return tools
+
+
+def _userdata_providers(ctx: PackSessionContext) -> Mapping[str, ResolvedProvider]:
+    """`ctx.userdata[BUILTIN_PROVIDERS_USERDATA_KEY]`, or nothing."""
+    userdata = getattr(ctx, "userdata", None)
+    value = userdata.get(BUILTIN_PROVIDERS_USERDATA_KEY) if isinstance(userdata, dict) else None
+    return value if isinstance(value, Mapping) else {}
+
+
+def _escalation_notifier(
+    ctx: PackSessionContext, provider: ResolvedProvider | None, settings: Any
+) -> Callable[[str, Urgency], Awaitable[None]]:
+    """Post an escalation's reason to the team's webhook (`notify_team.on_escalation`)."""
+
+    async def _notify(reason: str, urgency: Urgency) -> None:
+        await post_team_notification(
+            ctx,
+            provider,
+            settings,
+            summary=reason,
+            urgency=urgency,
+            source="escalation",
+            timeout_s=ESCALATION_TIMEOUT_S,
+        )
+
+    return _notify

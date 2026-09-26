@@ -25,7 +25,12 @@ ProviderKind = Literal[
     "embedding",
     "secret_bag",
     "tool_provider",
+    "web_search",
+    "sms",
 ]
+#: ``web_search`` and ``sms`` (V5-25, D-V5-7): vendors a built-in tool calls (``ToolsConfig.web_search``,
+#: ``ToolsConfig.sms``). Nothing to construct, so no package or class; the worker's own adapters
+#: (``lkap_agent.tools.vendors``) speak each vendor's API.
 FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "model", "file", "catalog"]
 
 #: Whether the platform offers a provider at all (CONTRACTS-V2 §4.1).
@@ -3096,6 +3101,122 @@ _NEW: list[ProviderSpec] = [
         secret_fields=[],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
         notes="Created by signing in to an MCP server from its tool page; not added by hand.",
+    ),
+    # ------------------------------------------------ built-in tool vendors (V5-25, D-V5-7)
+    # Keys for the `web_search` and `send_sms` built-ins. The worker speaks each vendor's API
+    # through its own adapter (`lkap_agent.tools.vendors`), so there is no package or class, and
+    # no catalog adapter tests the key yet (`test` unset; docs/v5/_asks.md, V5-25).
+    _full(
+        "tavily-search",
+        "web_search",
+        "Tavily",
+        "Tavily",
+        "",
+        "",
+        secret_fields=[_api_key("Tavily API key", help_text="From app.tavily.com (starts with tvly-).")],
+        fields=[
+            FieldSpec(
+                name="search_depth",
+                label="Search depth",
+                type="enum",
+                options=["basic", "advanced"],
+                default="basic",
+                help="`advanced` finds better passages and costs two credits a search.",
+            )
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="The suggested web search service: a free tier with no card.",
+        price_note="1,000 free searches a month, then about $0.008 a search (Tavily's pricing page).",
+        docs_url="https://docs.tavily.com/documentation/api-reference/endpoint/search",
+        get_key_url="https://app.tavily.com",
+    ),
+    _full(
+        "brave-search",
+        "web_search",
+        "Brave Search",
+        "Brave",
+        "",
+        "",
+        secret_fields=[
+            _api_key("Brave Search API key", help_text="The subscription token of a Brave Search API plan.")
+        ],
+        fields=[
+            FieldSpec(
+                name="country",
+                label="Country",
+                type="string",
+                placeholder="us",
+                help="Two-letter country code the results favour; empty lets Brave decide.",
+            )
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="A fast web search index of its own.",
+        price_note="About $5 per 1,000 searches, with $5 of free credit a month (Brave's pricing page).",
+        docs_url="https://api-dashboard.search.brave.com/app/documentation/web-search/get-started",
+        get_key_url="https://api-dashboard.search.brave.com",
+    ),
+    _full(
+        "twilio-sms",
+        "sms",
+        "Twilio",
+        "Twilio",
+        "",
+        "",
+        secret_fields=[
+            FieldSpec(
+                name="account_sid",
+                label="Account SID",
+                type="secret",
+                required=True,
+                help="From the Twilio console (starts with AC).",
+            ),
+            FieldSpec(name="auth_token", label="Auth token", type="secret", required=True),
+        ],
+        fields=[
+            FieldSpec(
+                name="from_number",
+                label="Sending number",
+                type="string",
+                required=True,
+                placeholder="+15550100000",
+                help="A Twilio number that can send text messages, in international format.",
+            )
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Texts a caller during or after a call (the `send_sms` tool).",
+        price_note="Charged per message by Twilio, by destination country.",
+        docs_url="https://www.twilio.com/docs/messaging/api/message-resource",
+        get_key_url="https://console.twilio.com",
+    ),
+    _full(
+        "telnyx-sms",
+        "sms",
+        "Telnyx",
+        "Telnyx",
+        "",
+        "",
+        secret_fields=[_api_key("Telnyx API key", help_text="From the Telnyx portal (starts with KEY).")],
+        fields=[
+            FieldSpec(
+                name="from_number",
+                label="Sending number",
+                type="string",
+                required=True,
+                placeholder="+15550100000",
+                help="A Telnyx number with a messaging profile, in international format.",
+            ),
+            FieldSpec(
+                name="messaging_profile_id",
+                label="Messaging profile id",
+                type="string",
+                help="Only when the number belongs to several profiles.",
+            ),
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Texts a caller during or after a call (the `send_sms` tool).",
+        price_note="Charged per message by Telnyx, by destination country.",
+        docs_url="https://developers.telnyx.com/api/messaging/send-message",
+        get_key_url="https://portal.telnyx.com",
     ),
 ]
 

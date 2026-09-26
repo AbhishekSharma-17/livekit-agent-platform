@@ -1,0 +1,68 @@
+{
+  "id": "cal_com.booking_check_availability",
+  "group": "cal_com",
+  "group_label": "Cal.com bookings",
+  "secret_names": [
+    "CAL_API_KEY"
+  ],
+  "docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+  "label": "Check availability",
+  "summary": "Finds free times for the booking type on the days the caller asks about.",
+  "risk": "read",
+  "defaults": [
+    {
+      "name": "event_type_id",
+      "label": "Event type id",
+      "help": "The number in the event type's link in Cal.com (Event Types → the event → its id).",
+      "required": true
+    }
+  ],
+  "definition": {
+    "kind": "http",
+    "name": "booking_check_availability",
+    "description": "List free booking times between two dates. Offer the caller two or three of them, in their own time zone.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "event_type_id": {
+          "type": "integer",
+          "description": "The Cal.com event type to book (leave out to use the agent's default)."
+        },
+        "start": {
+          "type": "string",
+          "description": "First day to search, YYYY-MM-DD."
+        },
+        "end": {
+          "type": "string",
+          "description": "Last day to search, YYYY-MM-DD."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "The caller's IANA time zone, from the time note in your instructions (e.g. Europe/London)."
+        }
+      },
+      "required": [
+        "event_type_id",
+        "start",
+        "end",
+        "time_zone"
+      ]
+    },
+    "method": "GET",
+    "url": "https://api.cal.com/v2/slots?eventTypeId={{ event_type_id }}&start={{ start }}&end={{ end }}&timeZone={{ time_zone }}",
+    "headers": {
+      "Authorization": "Bearer {{ secret.CAL_API_KEY }}",
+      "cal-api-version": "2024-09-04"
+    },
+    "allowed_hosts": [
+      "api.cal.com"
+    ],
+    "timeout_s": 10,
+    "max_result_chars": 1500,
+    "result_path": "/data",
+    "execution": {
+      "mode": "auto",
+      "announce": "Checking the calendar."
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/SmsTarget.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One number ``send_sms`` may text, named by its label (V5-25).",
+  "properties": {
+    "label": {
+      "description": "What the model and the caller call it",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "to": {
+      "description": "E.164 mobile number",
+      "maxLength": 16,
+      "pattern": "^\\+[1-9]\\d{6,14}$",
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "label",
+    "to"
+  ],
+  "title": "SmsTarget",
+  "type": "object"
+}

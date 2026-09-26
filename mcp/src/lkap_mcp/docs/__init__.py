@@ -73,6 +73,7 @@ CONCEPT_TOPICS: Final[tuple[str, ...]] = (
     "sessions-and-test-chat",
     "roles-and-scopes",
     "apps",  # V5-18
+    "tools",  # V5-25: built-ins and tool templates
 )
 
 #: The 10 recipes of AGENT-ACCESS.md §3.1.
@@ -91,6 +92,7 @@ RECIPE_NAMES: Final[tuple[str, ...]] = (
     "diagnose-a-session",
     "connect-an-app",  # V5-18
     "estimate-agent-cost",  # V4-15
+    "add-booking-tool",  # V5-25
 )
 
 #: The 7 prompts of AGENT-ACCESS.md §3.2.

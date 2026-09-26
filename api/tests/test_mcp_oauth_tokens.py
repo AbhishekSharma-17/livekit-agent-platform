@@ -440,6 +440,36 @@ async def test_the_resolved_config_carries_minutes_lived_access_and_no_refresh_t
         assert secret not in response.text
 
 
+async def test_sessions_start_on_sqlite_defers_a_stale_token_to_the_worker(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    service_client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    settings: Settings,
+) -> None:
+    """The request holds SQLite's write lock (the new session row): no refresh, no wait."""
+    assert database.engine.dialect.name == "sqlite"
+    tool_id, credential_id = await _signed_in(admin_client, client, world)
+    config = json.loads(inference_config().model_dump_json())
+    config["tools"]["tool_ids"] = [tool_id]
+    agent = await create_agent(admin_client, name="Inbound agent", config=config)
+    await _expire_soon(database, settings, credential_id, seconds=-5)  # expired: needs a refresh
+    started = asyncio.get_running_loop().time()
+
+    response = await service_client.post(
+        "/internal/v1/sessions/start",
+        json={"agent_id": agent["id"], "room_name": "oauth-room-1", "channel": "web"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert asyncio.get_running_loop().time() - started < 3.0, "no wait on the write lock"
+    resolved = ResolvedAgentConfig.model_validate(response.json())
+    (access,) = resolved.mcp_oauth
+    assert (access.tool_id, access.access_token, access.expires_at) == (tool_id, None, None)
+    assert world.refresh_calls == []
+
+
 async def test_a_sign_in_that_needs_reauth_is_left_out_of_the_session(
     admin_client: httpx.AsyncClient,
     client: httpx.AsyncClient,

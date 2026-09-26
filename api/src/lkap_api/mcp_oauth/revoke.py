@@ -138,17 +138,19 @@ async def _client_shared(
     return live_flow is not None
 
 
-async def _delete_client(
-    db: AsyncSession,
-    vault: Vault,
-    client: httpx.AsyncClient,
-    policy: UrlPolicy,
-    *,
-    workspace_id: str,
-    credential_id: str,
-    bag: dict[str, str],
-) -> bool | None:
-    """RFC 7592 deletion of a dynamic client nobody else uses; ``None`` when not attempted."""
+@dataclass(frozen=True)
+class _ClientDeletion:
+    """A dynamic client LKAP may delete at the provider (read from the database first)."""
+
+    rows: list[McpOauthClient]
+    uri: str
+    access: str
+
+
+async def _client_to_delete(
+    db: AsyncSession, vault: Vault, *, workspace_id: str, credential_id: str, bag: dict[str, str]
+) -> _ClientDeletion | None:
+    """The dynamic client of ``bag`` when nobody else uses it and LKAP can delete it; else ``None``."""
     issuer, client_id = bag.get("issuer", ""), bag.get("client_id", "")
     if bag.get("registration") != "dcr" or not issuer or not client_id:
         return None
@@ -174,18 +176,23 @@ async def _delete_client(
     access = stored_secrets.get("registration_access_token") or bag.get("registration_access_token")
     if not uri or not access:
         return None
+    return _ClientDeletion(rows=rows, uri=uri, access=access)
+
+
+async def _delete_registration(
+    client: httpx.AsyncClient, policy: UrlPolicy, deletion: _ClientDeletion
+) -> bool:
+    """RFC 7592 ``DELETE`` of the client registration (network only)."""
     try:
         # asks #114 a: the DCR answer's uri is server-supplied, so it is checked before any use.
-        url = require_url(uri, policy, field="registration_client_uri")
-        fetched = await fetch(client, "DELETE", url, headers={"Authorization": f"Bearer {access}"})
+        url = require_url(deletion.uri, policy, field="registration_client_uri")
+        fetched = await fetch(client, "DELETE", url, headers={"Authorization": f"Bearer {deletion.access}"})
     except McpOauthError as exc:
         log.warning("mcp_oauth_client_delete_failed", reason=exc.reason)
         return False
     if fetched.status not in (200, 204):
         log.warning("mcp_oauth_client_delete_failed", status=fetched.status)
         return False
-    for row in rows:
-        await db.delete(row)
     return True
 
 
@@ -201,20 +208,27 @@ async def revoke_credential(
 ) -> RevokeOutcome:
     """Revoke at the provider (best effort, bounded), then delete the credential row.
 
-    The caller has checked that ``credential`` is an ``mcp-oauth`` credential of
-    ``workspace_id``; it writes the audit row.
+    The database reads happen before the provider calls and the writes after them, so
+    the timeout that bounds the provider calls never interrupts a query. The caller has
+    checked that ``credential`` is an ``mcp-oauth`` credential of ``workspace_id``; it
+    writes the audit row.
     """
     policy = UrlPolicy.from_settings(settings)
+    deletion = await _client_to_delete(
+        db, vault, workspace_id=workspace_id, credential_id=credential.id, bag=bag
+    )
     revocation: RevocationOutcome = "failed"
-    client_deleted: bool | None = None
+    client_deleted: bool | None = None if deletion is None else False
     try:
         async with asyncio.timeout(REVOKE_TIMEOUT_S):
             revocation = await _revoke_tokens(client, policy, bag)
-            client_deleted = await _delete_client(
-                db, vault, client, policy, workspace_id=workspace_id, credential_id=credential.id, bag=bag
-            )
+            if deletion is not None:
+                client_deleted = await _delete_registration(client, policy, deletion)
     except TimeoutError:
         log.warning("mcp_oauth_revoke_timed_out", credential_id=credential.id)
+    if deletion is not None and client_deleted:
+        for row in deletion.rows:
+            await db.delete(row)
     await db.delete(credential)
     await db.flush()
     return RevokeOutcome(revocation=revocation, client_deleted=client_deleted)

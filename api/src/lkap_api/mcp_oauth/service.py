@@ -185,7 +185,7 @@ async def sign_in_status(
     row, definition, auth = await oauth_tool(db, ctx, tool_id)
     loaded = await load_sign_in(db, vault, workspace_id=ctx.workspace_id, credential_id=auth.credential_id)
     if loaded is None or not binds_tool(loaded[1], tool_id=row.id, url=definition.url):
-        return McpOauthStatusOut(status="not_connected")
+        return McpOauthStatusOut(status="not_connected", worker_supported=True)
     bag = loaded[1]
     match bag.get("status"):
         case "needs_reauth":

@@ -78,12 +78,14 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api import net_guard
 from lkap_api.auth import audit
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.db.models import Agent, Tool, utcnow
-from lkap_api.deps import VaultDep
+from lkap_api.deps import SettingsDep, VaultDep
 from lkap_api.errors import UnprocessableEntityError
 from lkap_api.logging import get_logger
+from lkap_api.settings import Settings
 from lkap_api.tool_providers import service
 from lkap_api.tool_providers.adapter import AdapterFactory, ToolProviderError, ToolProviderNotFoundError
 from lkap_api.tool_providers.bindings import is_composio_url
@@ -352,10 +354,12 @@ def plan_session(
                 tool_options[slug] = ToolExecution(mode="blocking", cancellable=False, max_duration_s=20)
         allowed_tools = exposed
     else:
-        flags = apps.router
+        # S5-41: a caller-initiated sign-in is never offered, whatever the stored flag
+        # (fail closed until the Composio live check, v5-47-live.md step 8).
+        flags = apps.router.model_copy(update={"manage_connections": False})
         options["search"] = {"enable": flags.search}
         options["execute"] = {"enable_multi_execute": flags.execute}
-        options["manage_connections"] = {"enable": flags.manage_connections}
+        options["manage_connections"] = {"enable": False}
         if denied:
             by_toolkit: dict[str, list[str]] = {}
             for slug in sorted(denied):
@@ -395,11 +399,28 @@ def apply_denied_actions(definition: ToolDefinition, apps: AppsMode) -> ToolDefi
     the builder never reviewed. Dropping ``effective_denied_actions`` here keeps such an
     action away from the session until the agent is saved again. Any other definition
     (a tool finder offers meta tools only; its deny list lives in the Composio session)
-    is returned unchanged.
+    is returned unchanged, except that a tool finder never keeps the connection meta tools
+    (S5-41).
     """
     if not isinstance(definition, McpServerDefinition):
         return definition
     origin = definition.origin
+    if origin is not None and origin.kind == "router" and definition.allowed_tools is not None:
+        # S5-41: a tool finder provisioned before V5-27 may have the connection meta tools;
+        # the session never offers them (fail closed without waiting for the next save).
+        blocked = set(ROUTER_CONNECTION_TOOLS)
+        if blocked & set(definition.allowed_tools):
+            return definition.model_copy(
+                update={
+                    "allowed_tools": [name for name in definition.allowed_tools if name not in blocked],
+                    "tool_options": {
+                        name: options
+                        for name, options in definition.tool_options.items()
+                        if name not in blocked
+                    },
+                }
+            )
+        return definition
     if origin is None or origin.kind != "server" or definition.allowed_tools is None:
         return definition
     denied = set(effective_denied_actions(apps, _destructive(definition.allowed_tools)))
@@ -424,6 +445,8 @@ class AppsProvisioner:
     vault: Vault
     factory: AdapterFactory
     cache: service.CatalogCache = field(default_factory=service.CatalogCache)
+    settings: Settings | None = None
+    """S5-33: the process settings, for the ``LKAP_MCP_ALLOWED_HOSTS`` ceiling (``None`` in tests)."""
 
     async def on_save(
         self, db: AsyncSession, ctx: WorkspaceContext, agent: Agent, config: AgentConfig
@@ -433,7 +456,16 @@ class AppsProvisioner:
         Idempotent: a save that changes nothing Composio sees makes no vendor call.
         Called after validation and before the config is stored.
         """
-        return await sync_agent_apps(db, self.vault, self.factory, ctx, agent, config, cache=self.cache)
+        return await sync_agent_apps(
+            db,
+            self.vault,
+            self.factory,
+            ctx,
+            agent,
+            config,
+            cache=self.cache,
+            mcp_policy=net_guard.mcp_policy(self.settings) if self.settings is not None else None,
+        )
 
     async def before_delete(
         self, db: AsyncSession, ctx: WorkspaceContext, agent: Agent
@@ -466,11 +498,12 @@ class AppsProvisioner:
 
 def get_apps_provisioner(
     vault: VaultDep,
+    settings: SettingsDep,
     factory: Annotated[AdapterFactory, Depends(get_adapter_factory)],
     cache: Annotated[service.CatalogCache, Depends(get_catalog_cache)],
 ) -> AppsProvisioner:
     """The hook ``routers/agents.py`` calls on create, update and delete."""
-    return AppsProvisioner(vault=vault, factory=factory, cache=cache)
+    return AppsProvisioner(vault=vault, factory=factory, cache=cache, settings=settings)
 
 
 AppsProvisionerDep = Annotated[AppsProvisioner, Depends(get_apps_provisioner)]
@@ -550,6 +583,7 @@ async def sync_agent_apps(
     config: AgentConfig,
     *,
     cache: service.CatalogCache | None = None,
+    mcp_policy: net_guard.McpPolicy | None = None,
 ) -> AgentConfig:
     """Provision, update or remove the agent's app server / tool finder (D-V5-C11).
 
@@ -561,6 +595,8 @@ async def sync_agent_apps(
         agent: The agent row (flushed, so it has an id).
         config: The validated configuration about to be stored.
         cache: The catalogue cache a tool finder's destructive-action scan reads (R-V5-9).
+        mcp_policy: The MCP host policy; an app server outside ``LKAP_MCP_ALLOWED_HOSTS`` is
+            refused here, where the builder sees it, not skipped silently by the worker (S5-33).
 
     Returns:
         ``config`` with ``tools.tool_ids`` holding the provisioned row (and no stale one).
@@ -624,6 +660,14 @@ async def sync_agent_apps(
             "Composio answered with an app server address LKAP does not allow "
             "(only https on Composio's own host is accepted)",
             details={"path": "tools.apps.mode"},
+        )
+    ceiling_problem = mcp_policy.problem(url) if mcp_policy is not None else None
+    if ceiling_problem is not None:
+        await _delete_session(adapter, session_id)
+        raise UnprocessableEntityError(
+            "the app server's host is outside LKAP_MCP_ALLOWED_HOSTS, so sessions could not use it: "
+            "add Composio's host to that list or turn Apps off for this agent",
+            details={"path": "tools.apps.mode", "reason": "blocked_destination"},
         )
     definition = McpServerDefinition(
         name=SERVER_TOOL_NAME if plan.kind == "server" else ROUTER_TOOL_NAME,

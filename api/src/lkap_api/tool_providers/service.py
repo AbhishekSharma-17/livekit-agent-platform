@@ -124,7 +124,7 @@ KEY_TEST_PER_MIN: Final = 10
 #: Page size and page cap of the destructive-action scan (R-V5-9). The page size is the
 #: console picker's, so the scan shares its cache entries; 20 pages cover 1000 actions per app.
 DESTRUCTIVE_SCAN_LIMIT: Final = 50
-DESTRUCTIVE_SCAN_PAGES: Final = 20
+DESTRUCTIVE_SCAN_PAGES: Final = 40
 
 #: Where the console shows Apps (the callback's redirect target).
 CONSOLE_APPS_PATH: Final = "/console/tools"
@@ -1063,6 +1063,8 @@ async def destructive_actions(
     Raises:
         ApiError: Composio refused or failed a page (the caller must not provision a tool
             finder whose destructive actions it could not list).
+        UnprocessableEntityError: The app has more actions than the scan reads (S5-8,
+            R-V5-16): an incomplete deny list is never used, the save is refused instead.
     """
     found: set[str] = set()
     cursor: str | None = None
@@ -1080,6 +1082,13 @@ async def destructive_actions(
             break
     else:
         log.warning("apps_destructive_scan_truncated", toolkit=toolkit, pages=DESTRUCTIVE_SCAN_PAGES)
+        # S5-8 (R-V5-16): fail closed. A tool finder can run any action of its apps, so it
+        # is never provisioned with a deny list that may be missing destructive actions.
+        raise UnprocessableEntityError(
+            f"the app '{toolkit}' has too many actions to review automatically; pick its actions "
+            "and use the app server, or leave it out of tools.apps.allowed_toolkits",
+            details={"path": "tools.apps.mode", "toolkit": toolkit, "reason": "too_many_actions"},
+        )
     return sorted(found)
 
 
@@ -1230,6 +1239,13 @@ def _audit(
         target_id=target_id,
         payload=payload,
     )
+
+
+def record(
+    db: AsyncSession, ctx: WorkspaceContext, action: str, target_id: str | None, **payload: Any
+) -> None:
+    """Write an Apps audit row for the caller (ids, counts and outcomes only; never a key)."""
+    _audit(db, ctx, action, target_id, **payload)
 
 
 async def _reusable_auth_config(
@@ -1574,7 +1590,8 @@ async def handle_callback(
     """Finish a hosted sign-in (D-V5-C5). Every failure is audited; nothing is trusted alone."""
     parts = _split_flow(flow)
     if parts is None:
-        _audit(db, None, "apps.connect.failed", None, reason="malformed_flow")
+        # S5-21: nothing identified, so no audit row (an unauthenticated client could grow the table).
+        log.info("apps_connect_failed", reason="malformed_flow")
         return CallbackOutcome(False, "malformed_flow")
     row_id, nonce = parts
     row = await db.scalar(
@@ -1584,7 +1601,7 @@ async def handle_callback(
         .execution_options(**{CROSS_WORKSPACE_OPTION: True})
     )
     if row is None:
-        _audit(db, None, "apps.connect.failed", None, reason="unknown_flow")
+        log.info("apps_connect_failed", reason="unknown_flow")
         return CallbackOutcome(False, "unknown_flow")
     workspace_id = row.workspace_id
     conn = AppConnection.from_row(row, vault)
@@ -1665,6 +1682,7 @@ async def refresh_connection(
         # Nothing at the vendor to ask about (keyless), or a sign-in still in flight.
         return await connection_out(db, ctx.workspace_id, conn)
     adapter, _ = await workspace_adapter(db, vault, factory, ctx.workspace_id)
+    was_broken = conn.status in _BROKEN
     try:
         account = await adapter.get_connection(conn.connected_account_id)
     except ToolProviderNotFoundError:
@@ -1681,6 +1699,15 @@ async def refresh_connection(
             conn.connected_at = now
         conn.display_name = _account_display_name(account) or conn.display_name
         conn.account_type = _account_type(account) or conn.account_type
+    # S5-22: a connection Composio reports broken pauses its tools; one that comes back
+    # active resumes the tools this pause stopped (a tool an admin turned off stays off
+    # unless the connection had been broken).
+    if conn.status in _BROKEN and not was_broken:
+        paused = await _set_tools_enabled(db, ctx.workspace_id, [conn.id], enabled=False)
+        if paused:
+            _audit(db, ctx, "apps.connection.paused", conn.id, status=conn.status, tools_paused=len(paused))
+    elif conn.status == "active" and was_broken:
+        await _set_tools_enabled(db, ctx.workspace_id, [conn.id], enabled=True)
     conn.save(vault, checked_at=now)
     await db.flush()
     return await connection_out(db, ctx.workspace_id, conn)
@@ -2035,6 +2062,7 @@ __all__ = [
     "CATALOG_TTL_S",
     "DESTRUCTIVE_SCAN_LIMIT",
     "DESTRUCTIVE_SCAN_PAGES",
+    "record",
     "FLOW_TTL",
     "KEY_TEST_PER_MIN",
     "CATEGORY_PAGE_CAP",

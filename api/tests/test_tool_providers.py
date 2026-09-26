@@ -651,8 +651,6 @@ async def _connection_status(admin_client: httpx.AsyncClient) -> str:
         ("account_mismatch", "account_mismatch"),
         ("other_subject", "subject_mismatch"),
         ("still_initiated", "not_active"),
-        ("malformed", "malformed_flow"),
-        ("unknown_row", "unknown_flow"),
         ("non_ascii_account", "account_mismatch"),
     ],
 )
@@ -681,10 +679,6 @@ async def test_callback_failures_redirect_with_error_and_audit(
             world.complete(account, user_id="ws:another-workspace")
         case "still_initiated":
             world.complete(account, status="INITIATED")
-        case "malformed":
-            params["flow"] = "no-dot-here"
-        case "unknown_row":
-            params["flow"] = "0" * 32 + "." + flow.split(".", 1)[1]
         case "non_ascii_account":
             params["connected_account_id"] = "ca_\u00e9\u00e9"
 
@@ -694,6 +688,33 @@ async def test_callback_failures_redirect_with_error_and_audit(
     assert await _failed_reason(database) == reason
     assert await _connection_status(admin_client) != "active"
     assert not await _audit_rows(database, "apps.connect.ok")
+
+
+async def test_an_unknown_flow_leaves_no_audit_row(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    """S5-21: a callback that names no connection writes a log line, never an audit row."""
+    await _connect(admin_client)
+    nonce = _flow_query(world)["flow"].split(".", 1)[1]
+    for flow in ("no-dot-here", "0" * 32 + "." + nonce):
+        response = await _callback(client, flow=flow, status="success", connected_account_id="ca_x")
+        assert response.status_code == 302 and response.headers["location"] == CONSOLE_ERROR
+    assert await _audit_rows(database, "apps.connect.failed") == []
+
+
+async def test_callback_is_rate_limited_per_client(client: httpx.AsyncClient, world: ComposioWorld) -> None:
+    from lkap_api.tool_providers.router import CALLBACK_PER_MIN
+
+    statuses = [
+        (await _callback(client, flow=f"bad{i}", status="success")).status_code
+        for i in range(CALLBACK_PER_MIN + 1)
+    ]
+    assert statuses[:CALLBACK_PER_MIN] == [302] * CALLBACK_PER_MIN
+    assert statuses[-1] == 429
 
 
 async def test_callback_after_expiry_is_refused(
@@ -1825,14 +1846,14 @@ async def test_changing_the_router_flags_replaces_the_session_and_off_deletes_it
     first = next(iter(world.sessions))
 
     flagged = await _set_apps(
-        admin_client, agent_id, router={"search": True, "execute": True, "manage_connections": True}
+        admin_client, agent_id, router={"search": True, "execute": False, "manage_connections": False}
     )
 
     assert flagged.status_code == 200, flagged.text
     assert first not in world.sessions, "the old session is deleted at Composio"
     assert len(world.sessions) == 1
     row = (await _origin_rows(database, agent_id))[0]
-    assert "COMPOSIO_MANAGE_CONNECTIONS" in row.definition["allowed_tools"]
+    assert "COMPOSIO_MULTI_EXECUTE_TOOL" not in row.definition["allowed_tools"]
     tool_id = row.id
 
     off = await _set_apps(admin_client, agent_id, mode="off")
@@ -2825,3 +2846,281 @@ async def test_the_resolved_config_carries_each_tools_own_account(
     personal_account = await _account_of(database, settings, personal)
     assert by_name["googlecalendar_find_free_slots"]["connected_account_id"] == work_account
     assert by_name["googlecalendar_find_free_slots__personal"]["connected_account_id"] == personal_account
+
+
+# ============================================================================ V5-27
+BUILDER_SCOPES = ["agents:read", "agents:write", "providers:read"]
+
+
+async def _as_builder(
+    app: FastAPI, database: Database, agent_id: str, admin_client: httpx.AsyncClient, **apps: Any
+) -> httpx.Response:
+    config = await _agent_config(admin_client, agent_id)
+    config["tools"]["apps"] = {**config["tools"].get("apps", {}), **apps}
+    _, raw = await make_api_key(database, BUILDER_SCOPES)
+    async with key_client(app, raw) as builder:
+        return await builder.put(f"/v1/agents/{agent_id}", json={"config": config})
+
+
+async def test_update_agent_reviewing_destructive_app_action_as_builder_is_403(
+    app: FastAPI, admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    """S5-40: a Builder key cannot un-deny a destructive action through the agent config."""
+    agent_id = await _new_agent(admin_client)
+
+    response = await _as_builder(app, database, agent_id, admin_client, reviewed_actions=[DELETE_EVENT])
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"]["details"]["fields"] == ["tools.apps.reviewed_actions"]
+
+
+async def test_update_agent_enabling_manage_connections_with_builder_key_is_403(
+    app: FastAPI, admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    agent_id = await _new_agent(admin_client)
+
+    response = await _as_builder(
+        app, database, agent_id, admin_client, mode="router", router={"manage_connections": True}
+    )
+
+    assert response.status_code == 403, response.text
+    assert set(response.json()["error"]["details"]["fields"]) == {
+        "tools.apps.mode",
+        "tools.apps.router.manage_connections",
+    }
+    assert world.calls_of("create_router_session") == []
+
+
+@pytest.mark.parametrize(
+    "apps",
+    [
+        {"mode": "server"},
+        {"mode": "router"},
+        {"accounts": {"acmecrm": ["conn-1"]}},
+    ],
+)
+async def test_update_agent_apps_admin_decisions_as_builder_are_403(
+    app: FastAPI,
+    admin_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+    apps: dict[str, Any],
+) -> None:
+    agent_id = await _new_agent(admin_client)
+    response = await _as_builder(app, database, agent_id, admin_client, **apps)
+    assert response.status_code == 403, response.text
+
+
+async def test_a_builder_may_still_narrow_apps(
+    app: FastAPI, admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    """R-V5-16 (5): picking, allowed_toolkits, denied_actions and mode off/actions stay a Builder's."""
+    agent_id = await _new_agent(admin_client)
+
+    narrowed = await _as_builder(
+        app,
+        database,
+        agent_id,
+        admin_client,
+        mode="actions",
+        allowed_toolkits=["acmecrm"],
+        denied_actions=[DELETE_EVENT],
+    )
+
+    assert narrowed.status_code == 200, narrowed.text
+
+
+async def test_update_agent_apps_router_mode_as_admin_is_200(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+
+    response = await _set_apps(admin_client, agent_id, mode="router")
+
+    assert response.status_code == 200, response.text
+    assert len(world.calls_of("create_router_session")) == 1
+
+
+async def test_plan_session_never_enables_manage_connections(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database, settings: Settings
+) -> None:
+    """S5-41: whatever the stored flag says, the session never offers caller sign-ins."""
+    await _crm(admin_client)
+    vault = Vault(settings.master_key)
+    async with database.session() as session:
+        rows = (
+            (await session.execute(select(Credential).where(Credential.provider_id == TOOL_PROVIDER_ACCOUNT)))
+            .scalars()
+            .all()
+        )
+        connections = [service.AppConnection.from_row(row, vault) for row in rows]
+    apps = AppsMode(mode="router", router=AppsRouterOptions(manage_connections=True))
+
+    plan = provisioning.plan_session(apps, connections, workspace_id=WS, agent_id="a" * 32)
+
+    assert plan.options["manage_connections"] == {"enable": False}
+    assert not set(plan.allowed_tools) & {"COMPOSIO_MANAGE_CONNECTIONS", "COMPOSIO_WAIT_FOR_CONNECTIONS"}
+
+
+def test_a_tool_finder_provisioned_before_v5_27_loses_its_connection_tools_at_resolve() -> None:
+    """S5-41: rows already provisioned with manage_connections fail closed at session start."""
+    definition = McpServerDefinition(
+        name="apps",
+        url="https://backend.composio.dev/tool_router/s1/mcp",
+        allowed_tools=[
+            "COMPOSIO_SEARCH_TOOLS",
+            "COMPOSIO_MANAGE_CONNECTIONS",
+            "COMPOSIO_WAIT_FOR_CONNECTIONS",
+        ],
+        origin=McpServerOrigin(kind="router", remote_id="s1"),
+    )
+
+    resolved = provisioning.apply_denied_actions(definition, AppsMode(mode="router"))
+
+    assert isinstance(resolved, McpServerDefinition)
+    assert resolved.allowed_tools == ["COMPOSIO_SEARCH_TOOLS"]
+
+
+async def test_a_truncated_destructive_scan_refuses_to_provision_a_tool_finder(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S5-8 (R-V5-16): past the page cap the save is refused, never provisioned with a partial list."""
+    from fakes.composio import FakeComposio
+
+    original = FakeComposio.list_tools
+
+    async def endless(self: FakeComposio, **kwargs: Any) -> dict[str, Any]:
+        page = await original(self, **kwargs)
+        page["next_cursor"] = f"page-{kwargs.get('cursor') or 0}-next"
+        return page
+
+    monkeypatch.setattr(FakeComposio, "list_tools", endless)
+    monkeypatch.setattr(service, "DESTRUCTIVE_SCAN_PAGES", 3)
+    await _active_calendar(admin_client, client, world)
+    agent_id = await _new_agent(admin_client)
+
+    response = await _set_apps(admin_client, agent_id, mode="router")
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["details"]["path"] == "tools.apps.mode"
+    assert "too many actions" in response.json()["error"]["message"]
+    assert world.calls_of("create_router_session") == []
+
+
+async def test_refresh_pauses_the_tools_of_a_connection_composio_reports_broken(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    """S5-22: a broken connection pauses its tools; back to active, they resume."""
+    connection_id = await _crm(admin_client)
+    created = await admin_client.post("/v1/tools", json=_provider_body(connection_id, key_id))
+    assert created.status_code == 201, created.text
+    tool_id = created.json()["id"]
+    account = next(iter(world.accounts))
+
+    world.complete(account, status="EXPIRED")
+    broken = await admin_client.get(f"{BASE}/connections/{connection_id}")
+    paused = (await admin_client.get(f"/v1/tools/{tool_id}")).json()["enabled"]
+    world.complete(account, status="ACTIVE")
+    fixed = await admin_client.get(f"{BASE}/connections/{connection_id}")
+    resumed = (await admin_client.get(f"/v1/tools/{tool_id}")).json()["enabled"]
+
+    assert broken.json()["status"] == "expired" and paused is False
+    assert fixed.json()["status"] == "active" and resumed is True
+    assert len(await _audit_rows(database, "apps.connection.paused")) == 1
+
+
+async def test_apps_mode_is_refused_when_the_ceiling_omits_the_composio_host(
+    app: FastAPI, admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, settings: Settings
+) -> None:
+    """S5-33 (ask #68): the save fails where the builder sees it, not silently in the worker."""
+    from lkap_api.settings import get_settings
+
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+    ceiling = settings.model_copy(update={"mcp_allowed_hosts": "mcp.example.com"})
+    app.dependency_overrides[get_settings] = lambda: ceiling
+    try:
+        response = await _set_apps(admin_client, agent_id, mode="router")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["details"]["path"] == "tools.apps.mode"
+    assert world.sessions == {}, "the session Composio created is deleted again"
+
+
+async def test_restore_version_reprovisions_apps(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    """S5-39 (ask #21): restoring a version with another tools.apps.mode provisions it."""
+    await _crm(admin_client)
+    agent_id = await _new_agent(admin_client)
+    await _set_apps(admin_client, agent_id, mode="router")
+    router_version = (await admin_client.get(f"/v1/agents/{agent_id}")).json()["config_version"]
+    await _set_apps(admin_client, agent_id, mode="off")
+    assert world.sessions == {}
+
+    restored = await admin_client.post(f"/v1/agents/{agent_id}/versions/{router_version}/restore")
+
+    assert restored.status_code == 200, restored.text
+    assert len(world.sessions) == 1
+
+
+async def test_refresh_schema_apply_writes_audit_row(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    """S5-43: rewriting a tool's inputs is audited; a dry comparison is not."""
+    connection_id = await _crm(admin_client)
+    tool_id = (await admin_client.post("/v1/tools", json=_provider_body(connection_id, key_id))).json()["id"]
+    if not any(item["slug"] == "ACMECRM_LIST_CONTACTS" for item in world.tools.get("acmecrm", [])):
+        world.tools.setdefault("acmecrm", []).append(
+            {
+                "slug": "ACMECRM_LIST_CONTACTS",
+                "name": "List contacts",
+                "description": "d",
+                "input_parameters": {},
+            }
+        )
+
+    await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema")
+    applied = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema", params={"apply": "true"})
+
+    assert applied.status_code == 200, applied.text
+    [row] = await _audit_rows(database, "apps.tool.schema_refresh")
+    assert row.target_id == tool_id and set(row.payload) >= {"changed", "applied"}
+
+
+async def test_key_test_writes_an_audit_row_without_the_key(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, database: Database
+) -> None:
+    response = await admin_client.post(f"{BASE}/key/test", json={"api_key": VALID_KEY})
+    assert response.status_code == 200
+    [row] = await _audit_rows(database, "apps.key_test")
+    assert row.payload["ok"] is True and VALID_KEY not in json.dumps(row.payload)
+
+
+async def test_toolkits_refresh_is_rate_limited_per_workspace(
+    app: FastAPI, admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
+) -> None:
+    """S5-44: forced re-reads are rate limited; a Viewer's refresh=true reads the cache."""
+    from lkap_api.tool_providers.router import VENDOR_REFRESH_PER_MIN
+
+    statuses = [
+        (await admin_client.get(f"{BASE}/toolkits", params={"refresh": "true"})).status_code
+        for _ in range(VENDOR_REFRESH_PER_MIN + 1)
+    ]
+    assert statuses[:VENDOR_REFRESH_PER_MIN] == [200] * VENDOR_REFRESH_PER_MIN
+    assert statuses[-1] == 429
+
+    _, raw = await make_api_key(database, ["agents:read", "providers:read"])
+    async with key_client(app, raw) as viewer:
+        before = len(world.calls_of("list_toolkits"))
+        cached = await viewer.get(f"{BASE}/toolkits", params={"refresh": "true"})
+    assert cached.status_code == 200
+    assert len(world.calls_of("list_toolkits")) == before, "a Viewer's refresh reads the cache"

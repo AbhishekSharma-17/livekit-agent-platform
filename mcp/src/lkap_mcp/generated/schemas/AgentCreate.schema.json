@@ -455,7 +455,8 @@
             "details",
             "markdown",
             "steps",
-            "consent"
+            "consent",
+            "upload"
           ],
           "title": "Type",
           "type": "string"

@@ -12,7 +12,7 @@ code, not the block system).
 
 Every `BlockSpec.config` is validated against its type's own strict schema
 (unknown keys are rejected) — `lkap_describe("block", type)` returns that
-schema. The seventeen block types:
+schema. The eighteen block types:
 
 | Type | Config | What it shows |
 |---|---|---|
@@ -33,10 +33,23 @@ schema. The seventeen block types:
 | `markdown` | `max_chars` (200–50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
 | `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
 | `consent` | `kind` (`recording`/`ai_disclosure`/`terms`/`custom`), `text` (empty = the workspace's wording for `recording` and `ai_disclosure`), `required`, `decline_action` (`continue`/`end_call`), `show_banner` | A question the caller accepts or declines, such as agreeing to be recorded, plus the "you're talking to an AI assistant" banner. The text is public by design. |
+| `upload` | `accept` (`image/*` or exact types: JPEG, PNG, WebP, GIF, HEIC/HEIF, PDF; default photos and PDFs), `max_files` (1–10, default 3), `max_bytes` (up to 25 MB, default 10 MB), `camera_capture` | A file picker (and the phone camera) for the caller to send photos or documents, such as a damage photo or a driving licence. HTML, SVG and other types are never accepted. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
-session holds that document and the panel has a `document` block, the page
-opens there with the section highlighted.
+panel has a `document` block, the agent copies that knowledge-base document
+into the session on first use (PDFs, images and Markdown or plain text) and
+opens the page there with the section highlighted; otherwise the passage is
+shown in a dialog.
+
+## Files callers send
+
+A caller's file is checked twice: by the agent before anything is stored
+(size, count, and the real file type read from its first bytes, never the
+name or the type the browser claims) and again by the platform when it is
+stored. Stored files belong to the session: the session page lists them with
+a time-limited download link, and they are deleted with the session's
+recording retention (`recording.retention_days`). The agent keeps extracted
+details in the conversation only; they are not written to logs.
 
 ## The tools blocks give the agent
 
@@ -66,6 +79,20 @@ Attaching a block registers matching worker tools automatically (on top of
   consent before recording). Every answer is stored as a `consent` session
   event with the SHA-256 of the exact wording. A declined required consent
   with `decline_action: "end_call"` ends the call after a goodbye.
+- `request_upload` (an `upload` block) — asks the caller to send files and
+  waits; it returns the stored files (`asset_id`, name, type, size). On a
+  phone call nothing is shown and the agent explains that files need the web
+  page. `request_form` fields may be `string`, `number`, `integer`,
+  `boolean`, `date`, `phone`, `email`, `select`, `textarea` or `file` (a
+  `file` field sends through the same checks as an upload block).
+- `describe_asset` (built in) — describes a stored image, extracts named
+  fields from it, or reads an identity document (`extract_id`: name, date of
+  birth, document number, dates, issuing authority, address) with the
+  agent's own language model; only on a cascaded pipeline (not a realtime
+  speech model) whose language model can see images, and only when the
+  session can hold a picture (an `upload` or
+  `form` block, or camera or screen share). Text inside the image is treated
+  as data, never as instructions.
 
 `agent_validate` warns when a `choices` block sits on an agent set up for
 phone calls (keypad input or transfer destinations: phone callers see no
@@ -91,4 +118,5 @@ without its own `text` is an error.
 `PanelLayout`, `BlockSpec`, `FormBlockState`, `DocumentBlockState`,
 `GalleryBlockState`, `TableBlockState`, `TranscriptBlockState`,
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
-`DetailsBlockState`, `MarkdownBlockState`, `StepsBlockState`.
+`DetailsBlockState`, `MarkdownBlockState`, `StepsBlockState`,
+`UploadBlockState`, `SessionAssetOut`.

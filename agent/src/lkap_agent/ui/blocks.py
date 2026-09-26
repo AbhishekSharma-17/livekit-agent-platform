@@ -34,6 +34,7 @@ from lkap_contracts.ui_protocol import (
     StepsBlockState,
     TableBlockState,
     TranscriptBlockState,
+    UploadBlockState,
     VideoBlockState,
 )
 from pydantic import BaseModel, ValidationError
@@ -94,6 +95,7 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "markdown": MarkdownBlockState,
     "steps": StepsBlockState,
     "consent": ConsentBlockState,
+    "upload": UploadBlockState,
 }
 
 #: Session channels with no screen: panel blocks are invisible there (V5-08).
@@ -398,10 +400,12 @@ async def open_citation(ui: UiChannel, block_id: str, data: Mapping[str, Any]) -
 
     Opens the cited page in the panel's first `document` block when the
     session holds the source document as an asset (an `AssetRef` whose
-    `meta.document_id` is the citation's `document_id`; V5-19 delivers KB
-    documents that way), highlighting the page with the heading path. Without
-    a document block or a source the citation comes back, so the browser can
-    preview the passage itself.
+    `meta.document_id` is the citation's `document_id`), highlighting the page
+    with the heading path. A document the session does not hold yet is copied
+    in on first use (R-V5-5: `UiChannel.asset_from_document`, which asks the
+    api to copy it from the agent's knowledge bases and streams it to the
+    browser); nothing is pre-loaded. Without a document block or a source the
+    citation comes back, so the browser can preview the passage itself.
 
     Args:
         ui: The session's channel.
@@ -412,7 +416,7 @@ async def open_citation(ui: UiChannel, block_id: str, data: Mapping[str, Any]) -
         `{"opened": "document", "block_id", "page"}` when the document block
         now shows the page; otherwise `{"opened": False, "reason", "citation"?}`
         with `reason` one of `unknown_citation`, `no_document_block`,
-        `no_source`.
+        `no_source`, `no_preview` (a document type the panel cannot show).
     """
     citation = find_citation(ui.state.blocks.get(block_id) or {}, data)
     if citation is None:
@@ -429,6 +433,12 @@ async def open_citation(ui: UiChannel, block_id: str, data: Mapping[str, Any]) -
         ),
         None,
     )
+    if asset_id is None and citation.document_id:
+        fetch = getattr(ui, "asset_from_document", None)
+        if callable(fetch):
+            asset_id, reason = await fetch(citation.document_id)
+            if asset_id is None:
+                return {"opened": False, "reason": reason or "no_source", "citation": preview}
     if asset_id is None:
         return {"opened": False, "reason": "no_source", "citation": preview}
     page = max(1, citation.page or 1)

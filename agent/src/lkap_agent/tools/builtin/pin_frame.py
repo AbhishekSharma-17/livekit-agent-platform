@@ -3,6 +3,10 @@
 Capability-gated: `build_builtin_tools` only registers this when the agent
 has `capabilities.camera` or `capabilities.screen_share` (ARCHITECTURE §8),
 since it has nothing to encode otherwise.
+
+V5-19: a pinned frame is also stored as a session file (`UiChannel.store_asset`,
+kind `frame`), so the console keeps it after the call and `describe_asset` can
+read it; when storing fails the frame is shown exactly as before.
 """
 
 from __future__ import annotations
@@ -36,13 +40,14 @@ def build_pin_frame_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             return "No fresh camera or screen frame is available to pin right now."
 
         jpeg_bytes, snapshot = result
-        asset_id = await ctx.ui.push_asset(
-            jpeg_bytes,
-            "image/jpeg",
-            kind,
-            caption=caption,
-            meta={"source": snapshot.source, "confirmed": str(confirmed).lower()},
-        )
+        meta = {"source": snapshot.source, "confirmed": str(confirmed).lower()}
+        # V5-19: the frame is also stored as a session file (best effort); the panel still
+        # renders it from the bytes on `lkap.ui.asset`, stored or not.
+        store = getattr(ctx.ui, "store_asset", None)
+        if callable(store):
+            asset_id = await store(jpeg_bytes, "image/jpeg", kind, caption=caption, meta=meta)
+        else:
+            asset_id = await ctx.ui.push_asset(jpeg_bytes, "image/jpeg", kind, caption=caption, meta=meta)
         ctx.log.debug(
             "builtin_tool.pin_frame",
             call_id=context.function_call.call_id,

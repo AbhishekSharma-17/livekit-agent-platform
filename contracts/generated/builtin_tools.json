@@ -10,7 +10,8 @@
     "show_text",
     "set_steps",
     "request_consent",
-    "record_consent"
+    "record_consent",
+    "request_upload"
   ],
   "block_tool_types": {
     "record_consent": [
@@ -24,6 +25,9 @@
     ],
     "request_form": [
       "form"
+    ],
+    "request_upload": [
+      "upload"
     ],
     "resolve_choice": [
       "choices"
@@ -66,7 +70,8 @@
     "set_status",
     "escalate_to_human",
     "current_time",
-    "convert_time"
+    "convert_time",
+    "describe_asset"
   ],
   "vision_tool_names": [
     "describe_current_frame",

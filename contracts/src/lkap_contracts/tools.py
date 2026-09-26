@@ -30,10 +30,17 @@ BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "escalate_to_human",
     "current_time",
     "convert_time",
+    "describe_asset",
 )
 
 #: Built-ins registered only when the agent has camera or screen share on.
 VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", "pin_frame"})
+
+#: Built-ins that read the session's stored files (V5-19). ``describe_asset`` is registered
+#: only on a cascaded pipeline whose LLM is not known to be text-only, and only when the
+#: session can hold a picture: an ``upload`` or ``form`` block, or camera / screen share
+#: (a pinned frame is stored).
+ASSET_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_asset"})
 
 #: Panel-block tools (CONTRACTS-V2 §4.4). Not in :data:`BUILTIN_TOOL_NAMES`: each is
 #: registered only when the panel has a block it can write (``builtin_disabled``
@@ -50,6 +57,7 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     "set_steps",
     "request_consent",
     "record_consent",
+    "request_upload",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
@@ -86,6 +94,7 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "set_steps": frozenset({"steps"}),
     "request_consent": frozenset({"consent"}),
     "record_consent": frozenset({"consent"}),
+    "request_upload": frozenset({"upload"}),
 }
 
 
@@ -175,6 +184,10 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         # the recording or end the call.
         "request_consent",
         "record_consent",
+        # V5-19: an upload request waits for the caller's files; describing a file is
+        # what the model needs for its next sentence (and reads a caller's document).
+        "request_upload",
+        "describe_asset",
         "escalate_to_human",
         "update_block",
         "show_document",

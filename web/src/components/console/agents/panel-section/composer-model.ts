@@ -138,6 +138,7 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
   set_steps: "Add a steps block first",
   request_consent: "Add a consent block first",
   record_consent: "Add a consent block, or ask for consent before recording",
+  request_upload: "Add an upload block first",
 };
 
 /**

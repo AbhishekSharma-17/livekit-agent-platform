@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "SessionAssetOut": {
+      "description": "One stored file of a session (``session_assets``, V5-19): an upload, a pinned frame, a copied document.\n\n``url`` is a signed, time-limited download link (``expires_at``), present on\nthe console's ``GET /v1/sessions/{id}/assets`` and absent on the worker's\nroutes. ``meta`` carries ``block_id`` for an upload and ``document_id`` for\na copied knowledge-base document.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "upload",
+            "frame",
+            "signature",
+            "document"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "meta": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Meta",
+          "type": "object"
+        },
+        "mime": {
+          "title": "Mime",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "id",
+        "session_id",
+        "kind",
+        "name",
+        "mime",
+        "size",
+        "sha256",
+        "created_at"
+      ],
+      "title": "SessionAssetOut",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/SessionAssetPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/sessions/{id}/assets``: every stored file of the session, oldest first.",
+  "properties": {
+    "items": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SessionAssetOut"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "title": "SessionAssetPage",
+  "type": "object"
+}

@@ -1,0 +1,22 @@
+{
+  "prompt": "Please send a photo of the damage.",
+  "files": [
+    {
+      "asset_id": "frame-stove",
+      "name": "stove.jpg",
+      "mime": "image/jpeg",
+      "size": 482113,
+      "sha256": "9f2c4a1e6b0d8c3f5a7e9b1d2c4f6a8e0b3d5f7a9c1e3b5d7f9a2c4e6b8d0f1a"
+    }
+  ],
+  "rejected": [
+    {
+      "name": "notes.html",
+      "reason": "type_not_allowed",
+      "message": "That type of file can't be sent here. Send a photo or a PDF."
+    }
+  ],
+  "progress": null,
+  "status": "requested",
+  "submitted_at": null
+}

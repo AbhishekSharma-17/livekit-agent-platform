@@ -12,6 +12,7 @@ from fakes.fake_api import FakeApi, resolved_config
 from livekit import rtc
 from livekit.agents import NOT_GIVEN
 from lkap_contracts.agent_config import RecordingConfig, ResolvedAgentConfig
+from lkap_contracts.compliance import COMPLIANCE_PRESETS
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 from lkap_contracts.dispatch import DispatchMetadata
 from test_main import (
@@ -392,7 +393,8 @@ async def test_first_speaker_user_skips_the_greeting(first_speaker: str, greets:
     await run_session(ctx, _deps(api, session_starter=starter))
     await asyncio.sleep(0.1)
 
-    assert ("Hello there!" in starter.assistant_turns()) is greets
+    greeting = f"{COMPLIANCE_PRESETS['in'].disclosure_text} Hello there!"
+    assert (greeting in starter.assistant_turns()) is greets
 
 
 # ------------------------------------------------------- turn detection defaults

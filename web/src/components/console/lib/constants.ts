@@ -89,6 +89,8 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "set_details", label: "Fill in details", help: "Lets the agent add facts to the details card as the caller confirms them." },
   { name: "show_text", label: "Show text", help: "Lets the agent show longer text, such as a recap, on the caller's screen." },
   { name: "set_steps", label: "Update steps", help: "Lets the agent mark steps as done when the block is not following the flow." },
+  { name: "request_consent", label: "Ask for consent", help: "Lets the agent ask the caller to agree, for example before recording, and wait for the answer." },
+  { name: "record_consent", label: "Record spoken consent", help: "Lets the agent record a yes or no the caller said out loud." },
 ];
 
 /**

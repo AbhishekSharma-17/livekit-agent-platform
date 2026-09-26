@@ -22,6 +22,7 @@ from lkap_contracts.ui_protocol import (
     BlockSpec,
     BlockType,
     ChoicesBlockState,
+    ConsentBlockState,
     DetailsBlockState,
     DocumentBlockState,
     DocumentHighlight,
@@ -92,6 +93,7 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "details": DetailsBlockState,
     "markdown": MarkdownBlockState,
     "steps": StepsBlockState,
+    "consent": ConsentBlockState,
 }
 
 #: Session channels with no screen: panel blocks are invisible there (V5-08).

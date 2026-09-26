@@ -1,0 +1,107 @@
+{
+  "$id": "lkap-contracts/ConsentBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A consent question or disclosure the caller accepts or declines (``request_consent``, V5-15).\n\n``status`` is the request lifecycle every requestable block shares\n(:class:`RequestableState`); the caller's decision is ``accepted``\n(``None`` until they answer). A tap answers with ``block_submit {values:\n{accepted: true | false}}``; a spoken answer is recorded by\n``record_consent`` (``method=\"voice\"``). ``text`` is the exact wording\nshown (the block's ``config.text``, else the workspace's preset for its\n``kind``) and ``text_hash`` its SHA-256 once answered, so the answer is\ntied to the wording (``lkap_contracts.compliance.consent_text_hash``).",
+  "properties": {
+    "accepted": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Accepted"
+    },
+    "at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "At"
+    },
+    "kind": {
+      "default": "recording",
+      "enum": [
+        "recording",
+        "ai_disclosure",
+        "terms",
+        "custom"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "method": {
+      "anyOf": [
+        {
+          "enum": [
+            "tap",
+            "voice"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Method"
+    },
+    "required": {
+      "default": true,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    },
+    "text": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Text",
+      "type": "string"
+    },
+    "text_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text Hash"
+    }
+  },
+  "title": "ConsentBlockState",
+  "type": "object"
+}

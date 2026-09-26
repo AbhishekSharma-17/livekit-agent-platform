@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/DisclosureConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Telling callers they are talking to an AI (V5-15, D-V5-22): on by default.\n\n``greeting`` puts the line at the start of the spoken greeting (a\n``{disclosure}`` placeholder in the greeting marks where, otherwise it goes\nfirst); ``banner`` leaves it to the on-screen banner of a ``consent`` block;\n``both`` does both. On a phone call there is no screen, so ``banner`` is\nspoken in the greeting too.",
+  "properties": {
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "position": {
+      "default": "both",
+      "enum": [
+        "greeting",
+        "banner",
+        "both"
+      ],
+      "title": "Position",
+      "type": "string"
+    },
+    "text": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The disclosure line; empty uses the workspace's (Settings → Compliance).",
+      "title": "Text"
+    }
+  },
+  "title": "DisclosureConfig",
+  "type": "object"
+}

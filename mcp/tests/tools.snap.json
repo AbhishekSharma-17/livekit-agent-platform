@@ -592,6 +592,14 @@
                   "vision_inject_per_turn": true
                 }
               },
+              "disclosure": {
+                "$ref": "#/$defs/DisclosureConfig",
+                "default": {
+                  "enabled": true,
+                  "position": "both",
+                  "text": null
+                }
+              },
               "flow": {
                 "anyOf": [
                   {
@@ -657,7 +665,9 @@
                 "$ref": "#/$defs/RecordingConfig",
                 "default": {
                   "audio_only": true,
+                  "consent_text": null,
                   "enabled": false,
+                  "require_consent": false,
                   "retention_days": null,
                   "storage_config_id": null
                 }
@@ -1023,7 +1033,8 @@
                   "choices",
                   "details",
                   "markdown",
-                  "steps"
+                  "steps",
+                  "consent"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -1066,6 +1077,42 @@
               }
             },
             "title": "CapabilitiesConfig",
+            "type": "object"
+          },
+          "DisclosureConfig": {
+            "description": "Telling callers they are talking to an AI (V5-15, D-V5-22): on by default.\n\n``greeting`` puts the line at the start of the spoken greeting (a\n``{disclosure}`` placeholder in the greeting marks where, otherwise it goes\nfirst); ``banner`` leaves it to the on-screen banner of a ``consent`` block;\n``both`` does both. On a phone call there is no screen, so ``banner`` is\nspoken in the greeting too.",
+            "properties": {
+              "enabled": {
+                "default": true,
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "position": {
+                "default": "both",
+                "enum": [
+                  "greeting",
+                  "banner",
+                  "both"
+                ],
+                "title": "Position",
+                "type": "string"
+              },
+              "text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The disclosure line; empty uses the workspace's (Settings → Compliance).",
+                "title": "Text"
+              }
+            },
+            "title": "DisclosureConfig",
             "type": "object"
           },
           "EndNode": {
@@ -2010,9 +2057,29 @@
                 "title": "Audio Only",
                 "type": "boolean"
               },
+              "consent_text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The question asked before recording when no consent block supplies one; empty uses the workspace's recording question (Settings → Compliance).",
+                "title": "Consent Text"
+              },
               "enabled": {
                 "default": false,
                 "title": "Enabled",
+                "type": "boolean"
+              },
+              "require_consent": {
+                "default": false,
+                "description": "Start the recording only after the caller agrees (a tap on a consent block, or out loud); a caller who declines is never recorded.",
+                "title": "Require Consent",
                 "type": "boolean"
               },
               "retention_days": {
@@ -3804,6 +3871,14 @@
                   "vision_inject_per_turn": true
                 }
               },
+              "disclosure": {
+                "$ref": "#/$defs/DisclosureConfig",
+                "default": {
+                  "enabled": true,
+                  "position": "both",
+                  "text": null
+                }
+              },
               "flow": {
                 "anyOf": [
                   {
@@ -3869,7 +3944,9 @@
                 "$ref": "#/$defs/RecordingConfig",
                 "default": {
                   "audio_only": true,
+                  "consent_text": null,
                   "enabled": false,
+                  "require_consent": false,
                   "retention_days": null,
                   "storage_config_id": null
                 }
@@ -4235,7 +4312,8 @@
                   "choices",
                   "details",
                   "markdown",
-                  "steps"
+                  "steps",
+                  "consent"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -4278,6 +4356,42 @@
               }
             },
             "title": "CapabilitiesConfig",
+            "type": "object"
+          },
+          "DisclosureConfig": {
+            "description": "Telling callers they are talking to an AI (V5-15, D-V5-22): on by default.\n\n``greeting`` puts the line at the start of the spoken greeting (a\n``{disclosure}`` placeholder in the greeting marks where, otherwise it goes\nfirst); ``banner`` leaves it to the on-screen banner of a ``consent`` block;\n``both`` does both. On a phone call there is no screen, so ``banner`` is\nspoken in the greeting too.",
+            "properties": {
+              "enabled": {
+                "default": true,
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "position": {
+                "default": "both",
+                "enum": [
+                  "greeting",
+                  "banner",
+                  "both"
+                ],
+                "title": "Position",
+                "type": "string"
+              },
+              "text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The disclosure line; empty uses the workspace's (Settings → Compliance).",
+                "title": "Text"
+              }
+            },
+            "title": "DisclosureConfig",
             "type": "object"
           },
           "EndNode": {
@@ -5222,9 +5336,29 @@
                 "title": "Audio Only",
                 "type": "boolean"
               },
+              "consent_text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The question asked before recording when no consent block supplies one; empty uses the workspace's recording question (Settings → Compliance).",
+                "title": "Consent Text"
+              },
               "enabled": {
                 "default": false,
                 "title": "Enabled",
+                "type": "boolean"
+              },
+              "require_consent": {
+                "default": false,
+                "description": "Start the recording only after the caller agrees (a tap on a consent block, or out loud); a caller who declines is never recorded.",
+                "title": "Require Consent",
                 "type": "boolean"
               },
               "retention_days": {
@@ -7673,6 +7807,14 @@
                   "vision_inject_per_turn": true
                 }
               },
+              "disclosure": {
+                "$ref": "#/$defs/DisclosureConfig",
+                "default": {
+                  "enabled": true,
+                  "position": "both",
+                  "text": null
+                }
+              },
               "flow": {
                 "anyOf": [
                   {
@@ -7738,7 +7880,9 @@
                 "$ref": "#/$defs/RecordingConfig",
                 "default": {
                   "audio_only": true,
+                  "consent_text": null,
                   "enabled": false,
+                  "require_consent": false,
                   "retention_days": null,
                   "storage_config_id": null
                 }
@@ -8104,7 +8248,8 @@
                   "choices",
                   "details",
                   "markdown",
-                  "steps"
+                  "steps",
+                  "consent"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -8147,6 +8292,42 @@
               }
             },
             "title": "CapabilitiesConfig",
+            "type": "object"
+          },
+          "DisclosureConfig": {
+            "description": "Telling callers they are talking to an AI (V5-15, D-V5-22): on by default.\n\n``greeting`` puts the line at the start of the spoken greeting (a\n``{disclosure}`` placeholder in the greeting marks where, otherwise it goes\nfirst); ``banner`` leaves it to the on-screen banner of a ``consent`` block;\n``both`` does both. On a phone call there is no screen, so ``banner`` is\nspoken in the greeting too.",
+            "properties": {
+              "enabled": {
+                "default": true,
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "position": {
+                "default": "both",
+                "enum": [
+                  "greeting",
+                  "banner",
+                  "both"
+                ],
+                "title": "Position",
+                "type": "string"
+              },
+              "text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The disclosure line; empty uses the workspace's (Settings → Compliance).",
+                "title": "Text"
+              }
+            },
+            "title": "DisclosureConfig",
             "type": "object"
           },
           "EndNode": {
@@ -9091,9 +9272,29 @@
                 "title": "Audio Only",
                 "type": "boolean"
               },
+              "consent_text": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The question asked before recording when no consent block supplies one; empty uses the workspace's recording question (Settings → Compliance).",
+                "title": "Consent Text"
+              },
               "enabled": {
                 "default": false,
                 "title": "Enabled",
+                "type": "boolean"
+              },
+              "require_consent": {
+                "default": false,
+                "description": "Start the recording only after the caller agrees (a tap on a consent block, or out loud); a caller who declines is never recorded.",
+                "title": "Require Consent",
                 "type": "boolean"
               },
               "retention_days": {

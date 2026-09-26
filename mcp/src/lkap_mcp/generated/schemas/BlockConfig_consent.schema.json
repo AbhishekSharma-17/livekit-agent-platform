@@ -1,0 +1,46 @@
+{
+  "$id": "lkap-contracts/BlockConfig_consent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``consent``: what the caller is asked to accept, and what a decline does (V5-15).\n\nThe text is public by design (it must be auditable). Left empty, a\n``recording`` block asks the workspace's recording question and an\n``ai_disclosure`` block shows its disclosure line (Settings → Compliance);\na ``terms`` or ``custom`` block needs its own text (the api validator says\nso). ``decline_action=\"end_call\"`` ends the call after a polite goodbye\nwhen a ``required`` consent is declined. ``show_banner`` keeps the \"you're\ntalking to an AI assistant\" banner on screen for the whole session.",
+  "properties": {
+    "decline_action": {
+      "default": "continue",
+      "enum": [
+        "continue",
+        "end_call"
+      ],
+      "title": "Decline Action",
+      "type": "string"
+    },
+    "kind": {
+      "default": "recording",
+      "enum": [
+        "recording",
+        "ai_disclosure",
+        "terms",
+        "custom"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "required": {
+      "default": true,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "show_banner": {
+      "default": true,
+      "title": "Show Banner",
+      "type": "boolean"
+    },
+    "text": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "title": "BlockConfig_consent",
+  "type": "object"
+}

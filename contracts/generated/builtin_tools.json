@@ -8,11 +8,19 @@
     "resolve_choice",
     "set_details",
     "show_text",
-    "set_steps"
+    "set_steps",
+    "request_consent",
+    "record_consent"
   ],
   "block_tool_types": {
+    "record_consent": [
+      "consent"
+    ],
     "request_choice": [
       "choices"
+    ],
+    "request_consent": [
+      "consent"
     ],
     "request_form": [
       "form"

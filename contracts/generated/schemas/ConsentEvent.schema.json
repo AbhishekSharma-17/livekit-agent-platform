@@ -1,0 +1,56 @@
+{
+  "$id": "lkap-contracts/ConsentEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``consent`` session event: one answer to one consent question.",
+  "properties": {
+    "accepted": {
+      "title": "Accepted",
+      "type": "boolean"
+    },
+    "block_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The consent block answered, if there is one.",
+      "title": "Block Id"
+    },
+    "kind": {
+      "enum": [
+        "recording",
+        "ai_disclosure",
+        "terms",
+        "custom"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "method": {
+      "enum": [
+        "tap",
+        "voice"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "text_hash": {
+      "description": "SHA-256 of the exact text, lowercase hex.",
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Text Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "accepted",
+    "method",
+    "text_hash"
+  ],
+  "title": "ConsentEvent",
+  "type": "object"
+}

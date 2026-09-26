@@ -572,6 +572,30 @@ class ResolvedAgentConfig(BaseModel):
     participant_identity: str
 ```
 
+**Consent and disclosure (V5-15, D-V5-22; `lkap_contracts.compliance`).** Additive fields; an agent saved before them behaves as before except that the AI disclosure is now spoken first (intended):
+
+```python
+class DisclosureConfig(BaseModel):          # AgentConfig.disclosure
+    enabled: bool = True
+    text: str | None = None                 # None = the workspace's (Settings → Compliance)
+    position: Literal["greeting", "banner", "both"] = "both"
+
+class RecordingConfig(BaseModel):           # additions
+    require_consent: bool = False           # Egress starts only after an accepted `recording` consent
+    consent_text: str | None = None         # the question when no consent block supplies one; None = the workspace's
+
+class ResolvedAgentConfig(BaseModel):       # addition
+    compliance: ResolvedCompliance | None = None   # {jurisdiction, disclosure_text, recording_text}; None = older api
+
+class ComplianceSettings(BaseModel):        # workspaces.settings.compliance (extra keys forbidden)
+    jurisdiction: Literal["eu", "in", "us"] = "in"
+    disclosure_text: str | None = None      # None/blank = the preset's
+    recording_text: str | None = None
+    counsel_note_ack: bool = False
+```
+
+`COMPLIANCE_PRESETS` holds the three presets (plain wording, a counsel note each; `us` says "confirm with counsel for two-party-consent states"; no state list). The worker (`session_builder.apply_compliance`, after the flow preparation) fills `disclosure.text`, `recording.consent_text` and the empty `text` of `recording`/`ai_disclosure` consent blocks from `compliance`, then puts the disclosure in front of the greeting once (or at a `{disclosure}` placeholder) when `position` is `greeting`/`both`, or `banner` on a phone call; without a spoken greeting it becomes an instruction for the first reply. `consent_text_hash(text)` is the SHA-256 of the exact UTF-8 wording, carried by every `consent` event.
+
 Validation rules (api, at save): every `ProviderRef.provider_id` exists and matches the slot kind; `credential_id` present iff required and credential's `provider_id` matches; `model` in `spec.models` **or** free text (warn, not error — Inference lists churn); a realtime provider whose `spec.capabilities.video_input` is false combined with `capabilities.camera`/`screen_share` = warning (the model will not see frames; frames still reach the UI/pin path); avatar works with both modes.
 
 ---
@@ -674,7 +698,9 @@ POST /internal/v1/kb/search              InternalKbSearchRequest -> KbSearchResp
 GET  /v1/health                          -> { ok: bool; version: str; livekit_url: str; packs: list[str]; db: "ok"|"error" }
 ```
 
-Event `type` values posted by the worker: `session_started`, `agent_state` (`{state}`), `user_turn` (`{text}`), `agent_turn` (`{text, interrupted}`), `tool_call_started` (`{call_id, tool, args_redacted}`), `tool_call_ended` (`{call_id, tool, status, duration_ms, result_preview}`), `tool_call_updated` (`{call_id, tool, message_preview}`: a background tool reported progress; its first update is the announcement, docs/v4/BACKGROUND-TOOLS.md D-V4-38), `tool_reply` (`{call_ids, status, speech_id}`: the deferred reply that voices background results; `status` is `scheduled`, `completed`, `interrupted` or `skipped`, the last meaning the model had already said it), `workflow_run` (`{name, duration_ms, status}`), `ui_state` (`{seq}` only), `asset` (`{asset_id, kind, bytes}`), `escalation` (`{reason, urgency}`), `metrics` (`{kind, data}`), `error` (`{message}`), `info` (`{message}`), `session_ended` (`{reason}`), `locale` (`LocaleEvent {caller_timezone, source, business_timezone}`, once at session start, R-V5-10: `source` is `browser` (the `lkap.tz` attribute), `number` (the caller's E.164 number maps to exactly one zone), `business` (`AgentConfig.timezone`, also when `locale.caller_timezone == "business"`), `workspace` (`workspaces.settings.locale.timezone`) or `default` (UTC); the summary copies `caller_timezone` into `usage`).
+Event `type` values posted by the worker: `session_started`, `agent_state` (`{state}`), `user_turn` (`{text}`), `agent_turn` (`{text, interrupted}`), `tool_call_started` (`{call_id, tool, args_redacted}`), `tool_call_ended` (`{call_id, tool, status, duration_ms, result_preview}`), `tool_call_updated` (`{call_id, tool, message_preview}`: a background tool reported progress; its first update is the announcement, docs/v4/BACKGROUND-TOOLS.md D-V4-38), `tool_reply` (`{call_ids, status, speech_id}`: the deferred reply that voices background results; `status` is `scheduled`, `completed`, `interrupted` or `skipped`, the last meaning the model had already said it), `workflow_run` (`{name, duration_ms, status}`), `ui_state` (`{seq}` only), `asset` (`{asset_id, kind, bytes}`), `escalation` (`{reason, urgency}`), `metrics` (`{kind, data}`), `error` (`{message}`), `info` (`{message}`), `session_ended` (`{reason}`), `locale` (`LocaleEvent {caller_timezone, source, business_timezone}`, once at session start, R-V5-10: `source` is `browser` (the `lkap.tz` attribute), `number` (the caller's E.164 number maps to exactly one zone), `business` (`AgentConfig.timezone`, also when `locale.caller_timezone == "business"`), `workspace` (`workspaces.settings.locale.timezone`) or `default` (UTC); the summary copies `caller_timezone` into `usage`), `consent` (`ConsentEvent {kind, accepted, method, text_hash, block_id}`, one per answer, V5-15: `kind` is `recording`, `ai_disclosure`, `terms` or `custom`, `method` is `tap` or `voice`, `text_hash` the SHA-256 of the exact wording; the api folds the latest answer per kind into `sessions.consent_state` (`ConsentState {latest: {kind: ConsentRecord}}`, migration `v5_009_consent`)).
+
+Consent routes (V5-15): `POST /internal/v1/sessions/{id}/recording/start` answers 409 for an agent with `recording.require_consent` until the latest `recording` answer is an acceptance (the worker holds the start back and flushes its events first). At the summary, a consent-gated voice session that was never recorded keeps `recording_status = "none"` with `recording_error` "Not recorded: consent declined" (or "Not recorded: the caller did not agree to be recorded"), returned as `SessionDetailOut.recording.error`. `PUT /v1/workspaces/{id}` accepts `settings.compliance` (`ComplianceSettings`, merged one level down, 422 when invalid); `GET /v1/workspaces/{id}/compliance` → `ComplianceOut {settings, effective: ResolvedCompliance, presets: list[CompliancePreset]}`.
 
 `metrics` kinds: `session_usage` (`data` = the SDK's `AgentSessionUsage`, on every update) and, only when the workspace opted into cost reconciliation (`ResolvedAgentConfig.cost_reconcile` non-empty, docs/v4/COSTS.md D-V4-45), one `provider_requests` just before the summary: `data = {llm, stt, tts: [{request_id, provider, model}], dropped}` — per-request vendor ids only (≤ 2,000; `dropped` counts the rest), never a prompt, completion or secret; the api's `cost_reconcile` job looks them up.
 

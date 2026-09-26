@@ -1,0 +1,29 @@
+{
+  "$id": "lkap-contracts/ResolvedCompliance.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The effective wording for one workspace: its rewrites, else its jurisdiction's preset.",
+  "properties": {
+    "disclosure_text": {
+      "default": "Just so you know, you're talking to an AI assistant.",
+      "title": "Disclosure Text",
+      "type": "string"
+    },
+    "jurisdiction": {
+      "default": "in",
+      "enum": [
+        "eu",
+        "in",
+        "us"
+      ],
+      "title": "Jurisdiction",
+      "type": "string"
+    },
+    "recording_text": {
+      "default": "This call can be recorded so we have a record of it. Is it okay if we record it?",
+      "title": "Recording Text",
+      "type": "string"
+    }
+  },
+  "title": "ResolvedCompliance",
+  "type": "object"
+}

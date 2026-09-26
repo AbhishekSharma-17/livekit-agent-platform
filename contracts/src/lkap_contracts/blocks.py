@@ -24,6 +24,10 @@ schemas by a vitest parity test):
 * ``markdown`` → ``max_chars`` and ``allow_links``;
 * ``steps`` → ``steps: [{id, label}]`` (seeded as pending), ``source``
   (``flow`` / ``manual``) and ``show_notes``;
+* ``consent`` → ``kind`` (``recording`` / ``ai_disclosure`` / ``terms`` /
+  ``custom``), ``text`` (empty uses the workspace's preset for ``recording``
+  and ``ai_disclosure``), ``required``, ``decline_action`` (``continue`` /
+  ``end_call``) and ``show_banner`` (V5-15);
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -41,11 +45,13 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from lkap_contracts.common import Issue
+from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, ConsentDeclineAction, ConsentKind
 from lkap_contracts.ui_protocol import BlockSpec, BlockType, DetailsValueType
 
 __all__ = [
     "BLOCK_CONFIG_MODELS",
     "ChoicesBlockConfig",
+    "ConsentBlockConfig",
     "CustomBlockConfig",
     "DetailsBlockConfig",
     "DetailsFieldConfig",
@@ -184,6 +190,25 @@ class StepsBlockConfig(_StrictConfig):
         return value
 
 
+class ConsentBlockConfig(_StrictConfig):
+    """``consent``: what the caller is asked to accept, and what a decline does (V5-15).
+
+    The text is public by design (it must be auditable). Left empty, a
+    ``recording`` block asks the workspace's recording question and an
+    ``ai_disclosure`` block shows its disclosure line (Settings → Compliance);
+    a ``terms`` or ``custom`` block needs its own text (the api validator says
+    so). ``decline_action="end_call"`` ends the call after a polite goodbye
+    when a ``required`` consent is declined. ``show_banner`` keeps the "you're
+    talking to an AI assistant" banner on screen for the whole session.
+    """
+
+    kind: ConsentKind = "recording"
+    text: str = Field(default="", max_length=MAX_CONSENT_TEXT_CHARS)
+    required: bool = True
+    decline_action: ConsentDeclineAction = "continue"
+    show_banner: bool = True
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -215,6 +240,7 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "details": DetailsBlockConfig,
     "markdown": MarkdownBlockConfig,
     "steps": StepsBlockConfig,
+    "consent": ConsentBlockConfig,
 }
 
 

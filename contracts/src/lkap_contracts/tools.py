@@ -48,6 +48,8 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     "set_details",
     "show_text",
     "set_steps",
+    "request_consent",
+    "record_consent",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
@@ -69,7 +71,9 @@ UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
 
 #: Each block tool → the panel block types that make the worker register it.
 #: ``set_steps`` is further limited to a ``steps`` block whose ``config.source`` is
-#: not ``"flow"`` (the flow writes those itself, V5-08).
+#: not ``"flow"`` (the flow writes those itself, V5-08). ``record_consent`` (V5-15) is the
+#: one exception the other way: it is also registered without any ``consent`` block when
+#: ``recording.require_consent`` is on, so a caller can agree out loud on any channel.
 BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "update_block": UPDATABLE_BLOCK_TYPES,
     "show_document": frozenset({"document"}),
@@ -80,6 +84,8 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "set_details": frozenset({"details"}),
     "show_text": frozenset({"markdown"}),
     "set_steps": frozenset({"steps"}),
+    "request_consent": frozenset({"consent"}),
+    "record_consent": frozenset({"consent"}),
 }
 
 
@@ -165,6 +171,10 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "set_details",
         "show_text",
         "set_steps",
+        # V5-15: a consent request waits for the caller; recording an answer may start
+        # the recording or end the call.
+        "request_consent",
+        "record_consent",
         "escalate_to_human",
         "update_block",
         "show_document",

@@ -131,6 +131,23 @@ Run on a scratch PostgreSQL 16.2 server with pgvector 0.6.2 (the `pgserver` whee
 
 The CI job (`pgvector/pgvector:pg16`, pgvector 0.8.x) repeats the CI sequence in "Migrate up, down and up again on Postgres". It also runs `tests/test_kb_store_pgvector.py` and the Postgres test of `tests/test_kb_reindex.py`, where the `halfvec` and iterative-scan branches that 0.6.2 skips are exercised.
 
+## `v5_009_consent` (V5-15)
+
+### What the revision does
+
+Adds the nullable JSON column `sessions.consent_state` (`lkap_contracts.compliance.ConsentState`: the latest consent answer per kind, folded in by `POST /internal/v1/sessions/{id}/events` from the `consent` events). `upgrade()` is a plain `ADD COLUMN` on both dialects (no table rebuild); existing rows read `NULL`. `downgrade()` uses SQLite's native `ALTER TABLE sessions DROP COLUMN consent_state` (3.35+; the api venv has 3.47) instead of a batch rebuild, which would reflect the table and lose its CHECK constraints; Postgres uses `op.drop_column`. Chained after `v5_010_tool_provider_kind` (the head when V5-15 started; the ledger reserved the id `v5_009` before V5-47 took `v5_010`).
+
+### Rehearsal on a scratch database (V5-15, 2026-09-27)
+
+The worktree has no dev database and the package rules keep the live one out of reach, so the rehearsal ran on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session scratchpad: `upgrade head` ran every revision from the v1 head through `v5_010` to `v5_009_consent`; `downgrade v5_010_tool_provider_kind` ran `v5_009` down; `upgrade head` again; `alembic current` = `v5_009_consent (head)`.
+
+### Tests
+
+- `api/tests/test_migration_v5_009.py` (SQLite): upgrade adds the column and every existing row reads `NULL`; downgrade drops it and the `sessions` DDL still carries `status_valid`, `channel_valid` and `recording_status_valid`; the next upgrade reaches head again.
+- `api/tests/test_migrations.py` and `test_health.py` (existing): fresh `upgrade head` matches the models (`Session.consent_state`), no drift; the head id keeps the `v5_` prefix.
+
+**Postgres: not executed** (no Postgres here). The revision uses only `op.add_column` / `op.drop_column` with `sa.JSON()` on Postgres; the CI `test-postgres` job's up/down/up step runs it.
+
 ### To apply (coordinator)
 
 ```
@@ -139,3 +156,9 @@ cd api && uv run alembic upgrade head      # v5_010_tool_provider_kind -> v5_003
 ```
 
 On a Postgres deployment, back up first (`scripts/backup.sh`), switch the server image to `pgvector/pgvector:pg16`, upgrade, then run `python -m lkap_api.kb.jobs reindex --all` (docs/RUNBOOK.md §9.2).
+
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_009.db"
+cd api && uv run alembic upgrade head      # v5_010_tool_provider_kind -> v5_009_consent
+```
+
+Instant on the dev database. **Order matters:** backup → `upgrade head` → restart the api → restart the worker. `Session.consent_state` is a mapped column, so an api on the V5-15 code against an unmigrated database fails on every `sessions` read, not only on consent writes. In the window between the api and the worker restarts, an old worker never holds a consent-gated recording back, so the new api answers its start with 409 (recorded as a failed recording) for any agent that already has `recording.require_consent: true` (none do before V5-17 ships the switch).

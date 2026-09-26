@@ -21,6 +21,7 @@ import type { BlockType } from "@/panels/composite/layout";
 
 import genericUiState from "../../../../tests/fixtures/generic_ui_state.json";
 import choicesState from "./choices.json";
+import consentState from "./consent.json";
 import detailsState from "./details.json";
 import documentState from "./document.json";
 import formRequested from "./form.requested.json";
@@ -50,6 +51,7 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   details: detailsState,
   markdown: markdownState,
   steps: stepsState,
+  consent: consentState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */
@@ -67,6 +69,8 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   details: { type: "details", state: detailsState },
   markdown: { type: "markdown", state: markdownState },
   steps: { type: "steps", state: stepsState },
+  // V5-15: the consent block's state (renderer and scenes come with V5-17).
+  consent: { type: "consent", state: consentState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -127,6 +131,7 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     claim: detailsState,
     recap: markdownState,
     progress: stepsState,
+    recording_consent: consentState,
   };
 }
 

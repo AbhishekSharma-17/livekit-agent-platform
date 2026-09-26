@@ -35,13 +35,29 @@ function isBannerBlock(spec: BlockSpec): boolean {
   return config?.show_banner !== false;
 }
 
+/** The block's `kind` right now: its live state (the worker may fill it in), else its config, else the model default. */
+function kindOf(spec: BlockSpec, blocks: Record<string, unknown> | undefined): string {
+  const state = blocks?.[spec.id] as ConsentBlockState | undefined;
+  if (typeof state?.kind === "string") return state.kind;
+  const configKind = (spec.config as { kind?: unknown } | null | undefined)?.kind;
+  return typeof configKind === "string" ? configKind : "recording";
+}
+
 /**
- * The wording to show: the block's live state text (the worker fills an
- * empty config text from the workspace's wording, so the state is always
- * the exact text the caller was shown), else the block's config text, else
- * the plain fallback.
+ * The wording to show. `show_banner` is a property of *any* consent block
+ * (most agents only ever have the one asking about recording), but the
+ * banner itself is specifically the AI disclosure, never a repeat of
+ * whatever else that block is asking (`ConsentBlockConfig`'s own docstring:
+ * `show_banner` "keeps the 'you're talking to an AI assistant' banner on
+ * screen"). So only an `ai_disclosure`-kind block's own wording is ever
+ * shown here — its live state text (the worker fills an empty config text
+ * from the workspace's disclosure line, so the state is always the exact
+ * text the caller was shown), else its config text; a `recording` / `terms`
+ * / `custom` block that also opts into the banner gets the fixed fallback
+ * line instead of its own question.
  */
 function textOf(spec: BlockSpec, blocks: Record<string, unknown> | undefined): string {
+  if (kindOf(spec, blocks) !== "ai_disclosure") return FALLBACK_BANNER_TEXT;
   const state = blocks?.[spec.id] as ConsentBlockState | undefined;
   const stateText = typeof state?.text === "string" ? state.text.trim() : "";
   if (stateText) return stateText;
@@ -51,13 +67,17 @@ function textOf(spec: BlockSpec, blocks: Record<string, unknown> | undefined): s
 }
 
 /**
- * The banner text for a layout, or `null` when nothing in it opts in. Only
- * the first matching consent block wins — one banner, not a stack, even
- * with more than one consent block in the layout.
+ * The banner text for a layout, or `null` when nothing in it opts in. One
+ * banner, not a stack, even with more than one consent block in the layout —
+ * an `ai_disclosure`-kind block wins first (its own wording is what the
+ * banner shows), else the first block that opts in at all (the fixed
+ * fallback line, since its own text is about something else).
  */
 export function bannerTextOf(blocks: readonly BlockSpec[], state: Record<string, unknown> | undefined): string | null {
-  const spec = blocks.find(isBannerBlock);
-  return spec ? textOf(spec, state) : null;
+  const candidates = blocks.filter(isBannerBlock);
+  if (candidates.length === 0) return null;
+  const disclosure = candidates.find((spec) => kindOf(spec, state) === "ai_disclosure");
+  return textOf(disclosure ?? candidates[0], state);
 }
 
 /** The banner strip itself: sticky, low-key, an icon and one line. */

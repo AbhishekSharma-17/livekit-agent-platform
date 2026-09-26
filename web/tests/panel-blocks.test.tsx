@@ -574,10 +574,48 @@ describe("composite panel", () => {
   });
 
   describe("the consent banner (V5-15/V5-17)", () => {
-    it("shows the layout's consent block wording, panel-level, not tied to the block's own position", async () => {
+    it("shows the fixed disclosure line, panel-level, not the fixture's recording question", async () => {
+      // The fixture's consent block is `kind: "recording"` (its own text asks
+      // about recording, not disclosure) with `show_banner` at its default
+      // `true` — the banner is the AI disclosure, never a repeat of whatever
+      // else that block is asking (`ConsentBlockConfig`'s own docstring).
       render(<CompositePanel {...panelProps()} />);
       const banner = await screen.findByRole("note");
-      expect(banner.textContent).toMatch(/record/i);
+      expect(banner.textContent).toBe("You're talking to an AI assistant.");
+    });
+
+    it("shows an ai_disclosure block's own wording instead of the fixed line", () => {
+      const layout: PanelLayout = {
+        panel_id: "composite",
+        layout: "side",
+        blocks: [{ id: "disclosure", type: "consent", title: null, config: { kind: "ai_disclosure" }, order: 0 }],
+      };
+      const state = {
+        ...emptyUiState(),
+        blocks: { disclosure: { kind: "ai_disclosure", text: "Heads up — you're speaking with an AI today." } },
+      };
+      render(<CompositePanel {...panelProps({ agent: agent(layout), state: state as never })} />);
+      expect(screen.getByRole("note").textContent).toBe("Heads up — you're speaking with an AI today.");
+    });
+
+    it("prefers an ai_disclosure block over a recording one when a layout has both", () => {
+      const layout: PanelLayout = {
+        panel_id: "composite",
+        layout: "side",
+        blocks: [
+          { id: "recording_consent", type: "consent", title: null, config: { kind: "recording" }, order: 0 },
+          { id: "disclosure", type: "consent", title: null, config: { kind: "ai_disclosure" }, order: 1 },
+        ],
+      };
+      const state = {
+        ...emptyUiState(),
+        blocks: {
+          recording_consent: { kind: "recording", text: "Can we record this call?" },
+          disclosure: { kind: "ai_disclosure", text: "Just so you know, I'm an AI." },
+        },
+      };
+      render(<CompositePanel {...panelProps({ agent: agent(layout), state: state as never })} />);
+      expect(screen.getByRole("note").textContent).toBe("Just so you know, I'm an AI.");
     });
 
     it("shows nothing when the only consent block opts out with show_banner: false", () => {

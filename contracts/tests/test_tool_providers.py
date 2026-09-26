@@ -14,11 +14,13 @@ from lkap_contracts.tool_providers import (
     AppConnectionOut,
     AppKeyTestIn,
     AppsMode,
+    ConnectionRenameIn,
     ToolkitOut,
     ToolkitPage,
     action_risk,
     agent_subject,
     effective_denied_actions,
+    label_slug,
     workspace_subject,
 )
 
@@ -164,3 +166,79 @@ def test_registry_has_composio_as_a_tool_provider_with_one_secret() -> None:
 def test_connected_app_rows_are_not_a_registry_provider() -> None:
     """``POST /v1/credentials`` validates against the registry, so a connection row cannot be forged."""
     assert TOOL_PROVIDER_ACCOUNT not in {spec.id for spec in REGISTRY}
+
+
+# ------------------------------------------------------------ R-V5-13: several accounts
+def test_connection_out_reads_a_pre_label_payload_as_the_default_account() -> None:
+    """Compatibility: a payload without the new fields is the app's default account."""
+    out = AppConnectionOut.model_validate(
+        {"id": "c1", "toolkit": "gmail", "subject": "ws:w1", "status": "active", "method": "managed"}
+    )
+    assert out.is_default is True and out.label == ""
+
+
+def test_connect_label_is_optional_and_bounded() -> None:
+    assert AppConnectIn(toolkit="gmail").label is None
+    assert AppConnectIn(toolkit="gmail", label="Work").label == "Work"
+    with pytest.raises(ValidationError):
+        AppConnectIn(toolkit="gmail", label="x" * 41)
+    with pytest.raises(ValidationError):
+        AppConnectIn(toolkit="gmail", label="")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({}, id="nothing-to-change"),
+        pytest.param({"is_default": False}, id="un-defaulting-is-not-a-change"),
+        pytest.param({"label": "   "}, id="blank-label"),
+        pytest.param({"label": "x" * 41}, id="too-long"),
+    ],
+)
+def test_connection_rename_refuses(payload: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        ConnectionRenameIn.model_validate(payload)
+
+
+def test_connection_rename_accepts_a_label_a_default_or_both() -> None:
+    assert ConnectionRenameIn(label="Work").is_default is None
+    assert ConnectionRenameIn(is_default=True).label is None
+    both = ConnectionRenameIn(label="Work", is_default=True)
+    assert both.label == "Work" and both.is_default is True
+
+
+@pytest.mark.parametrize(
+    ("label", "slug"),
+    [
+        ("Work", "work"),
+        ("Work Inbox", "work_inbox"),
+        ("  me@example.com ", "me_example_com"),
+        ("Gmail account 2", "gmail_account_2"),
+        ("***", "account"),
+        ("Ünïcode", "n_code"),
+    ],
+)
+def test_label_slug(label: str, slug: str) -> None:
+    assert label_slug(label) == slug
+
+
+def test_apps_mode_accounts_default_is_empty_and_additive() -> None:
+    assert AppsMode.model_validate({"mode": "router"}).accounts == {}
+
+
+def test_apps_mode_accounts_normalises_slugs_and_dedupes_ids() -> None:
+    apps = AppsMode(accounts={" Gmail ": ["c1", "c1", " c2 ", ""], "gmail": ["c3"]})
+    assert apps.accounts == {"gmail": ["c1", "c2", "c3"]}
+
+
+@pytest.mark.parametrize(
+    "accounts",
+    [
+        pytest.param({f"app{i}": ["c"] for i in range(21)}, id="21-apps"),
+        pytest.param({"gmail": [f"c{i}" for i in range(6)]}, id="6-accounts"),
+        pytest.param({" ": ["c1"]}, id="blank-app"),
+    ],
+)
+def test_apps_mode_accounts_is_bounded(accounts: dict[str, list[str]]) -> None:
+    with pytest.raises(ValidationError):
+        AppsMode(accounts=accounts)

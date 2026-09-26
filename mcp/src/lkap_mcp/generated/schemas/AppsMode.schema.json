@@ -30,6 +30,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "``AgentConfig.tools.apps``: how the agent uses connected apps (docs/v5/COMPOSIO.md D-V5-C6).\n\nThe default ``off`` changes nothing for an agent saved before this field existed.",
   "properties": {
+    "accounts": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "Per app (toolkit slug), the accounts (connection ids) the app server or tool finder may use (R-V5-13); an app not named, or named with an empty list, uses its default account. At most 20 apps and 5 accounts per app",
+      "title": "Accounts",
+      "type": "object"
+    },
     "allowed_toolkits": {
       "description": "Apps the app server or tool finder may use (toolkit slugs); empty = every connected app of the agent",
       "items": {

@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/ConnectionRenameIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``PATCH /v1/tool-providers/composio/connections/{id}``: rename an account or make it the default.\n\n``is_default=true`` moves the app's Default to this account (the previous default loses\nit in the same save); ``false`` is refused — make another account the default instead.\nRenaming renames the account at Composio too (its ``alias``); tool names already made\nkeep theirs.",
+  "properties": {
+    "is_default": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Is Default"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    }
+  },
+  "title": "ConnectionRenameIn",
+  "type": "object"
+}

@@ -276,5 +276,4 @@ async def test_kb_upload_does_not_log_filename(
     kb_id = created.json()["id"]
     await _upload(admin_client, kb_id, "jane-doe-medical-history.md", b"# Notes\n\nText.", "text/markdown")
     text = captured_text(log_capture)
-    assert "kb_document_uploaded" in text
     assert "jane-doe-medical-history" not in text

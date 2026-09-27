@@ -421,19 +421,31 @@ async def test_needs_client_registration_when_nothing_automatic_exists(
     assert await _rows(database, McpOauthFlow) == []
 
 
-async def test_a_preregistered_server_needs_its_client_id_at_save(admin_client: httpx.AsyncClient) -> None:
+async def test_a_preregistered_server_without_its_client_id_asks_for_registration(
+    admin_client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    """Ask #166: saved before the admin has a client id, start answers with the return address."""
     definition = {
         "kind": "mcp",
         "name": "t",
         "url": MCP_URL,
         "auth": {"kind": "oauth", "registration": "preregistered"},
     }
-    response = await admin_client.post(
+    created = await admin_client.post(
         "/v1/tools", json={"kind": "mcp", "name": "t", "definition": definition}
     )
+    assert created.status_code == 201, created.text
 
-    assert response.status_code == 422
-    assert response.json()["error"]["details"]["reason"] == "client_id_required"
+    response = await _start(admin_client, created.json()["id"])
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "needs_client_registration"
+    assert body["redirect_uri"].endswith("/v1/oauth/mcp/callback")
+    assert body["issuer"] == AS_ROOT
+    assert "authorization_url" not in body or body["authorization_url"] is None
+    assert await _rows(database, McpOauthFlow) == []
+    assert world.registrations == [], "a pre-registered server never falls back to dynamic registration"
 
 
 # ------------------------------------------------------------------------- callback

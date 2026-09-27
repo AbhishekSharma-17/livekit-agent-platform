@@ -145,11 +145,9 @@ async def _preregistered(
     client_secret: str | None,
 ) -> ClientChoice:
     if not auth.client_id:
-        raise McpOauthError(
-            "client_id_required",
-            "a pre-registered sign-in needs the client id of the app registered with the provider",
-            field="definition.auth.client_id",
-        )
+        # Ask #166: no client id yet is the "register an app" answer (with the return address
+        # to register), not a refusal: it is the one place the admin learns that address.
+        raise NeedsClientRegistration()
     row = await db.scalar(
         select(McpOauthClient).where(
             McpOauthClient.workspace_id == workspace_id,

@@ -145,19 +145,15 @@ def _check_mcp_definition(definition: McpServerDefinition, settings: Settings) -
     The url must pass :meth:`net_guard.McpPolicy.problem`: the network guard, ``https``
     outside a dev loopback host, and ``LKAP_MCP_ALLOWED_HOSTS`` when set (D-V5-4).
     V5-14: an ``oauth`` server's url carries no ``{{ secret.* }}`` placeholder (its
-    credential is the sign-in, whose tokens must never be substituted into a url), and a
-    pre-registered client names its client id.
+    credential is the sign-in, whose tokens must never be substituted into a url). A
+    pre-registered server may be saved before its client id exists (ask #166): its
+    ``oauth/start`` then answers ``needs_client_registration`` with the return address.
     """
     if isinstance(definition.auth, McpOAuthAuth):
         if _SECRET_RE.search(definition.url):
             raise UnprocessableEntityError(
                 "an MCP server that signs in may not put secrets in its url",
                 details={"field": "definition.url", "reason": "oauth_url_placeholder"},
-            )
-        if definition.auth.registration == "preregistered" and not definition.auth.client_id:
-            raise UnprocessableEntityError(
-                "a pre-registered sign-in needs the client id of the app registered with the provider",
-                details={"field": "definition.auth.client_id", "reason": "client_id_required"},
             )
     problem = net_guard.mcp_policy(settings).problem(definition.url)
     if problem is not None:

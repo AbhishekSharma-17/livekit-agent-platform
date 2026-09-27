@@ -27,6 +27,12 @@
           "title": "Hybrid",
           "type": "boolean"
         },
+        "managed_search": {
+          "default": false,
+          "description": "A managed search service (V5-45): it holds and ranks its own documents; knowledge bases of kind `external` are searched there.",
+          "title": "Managed Search",
+          "type": "boolean"
+        },
         "namespaces": {
           "default": false,
           "description": "Each knowledge base is its own namespace or tenant.",
@@ -75,6 +81,7 @@
       "type": "string"
     },
     "collections": {
+      "description": "The collections or indexes the key can see; for a managed search service, its partitions (the first 100).",
       "items": {
         "type": "string"
       },

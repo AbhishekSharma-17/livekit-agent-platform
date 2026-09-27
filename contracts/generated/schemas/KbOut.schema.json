@@ -89,7 +89,7 @@
         }
       ],
       "default": null,
-      "description": "Where the vectors live in the connection (collection, index and namespace, or tenant).",
+      "description": "Where the vectors live in the connection (collection, index and namespace, or tenant); for `kind=external`, where the documents live in the service (the Ragie partition).",
       "title": "External Ref"
     },
     "id": {
@@ -98,7 +98,7 @@
     },
     "kind": {
       "default": "managed",
-      "description": "`managed`: the platform ingests it.",
+      "description": "`managed`: the platform ingests it. `external`: a managed search service holds and searches it (no uploads).",
       "enum": [
         "managed",
         "external"

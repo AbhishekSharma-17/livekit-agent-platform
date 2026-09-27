@@ -303,6 +303,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "KbReindexIn": api_models.KbReindexIn,
     "KbReindexSkipped": api_models.KbReindexSkipped,
     "KbReindexOut": api_models.KbReindexOut,
+    "KbSourceOut": api_models.KbSourceOut,  # V5-45
     "PackOut": api_models.PackOut,
     "PacksResponse": api_models.PacksResponse,
     "TemplateOut": api_models.TemplateOut,

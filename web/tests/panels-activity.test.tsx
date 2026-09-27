@@ -93,7 +93,7 @@ describe("ActivityRow — guardrail chip (V5-39/V5-41)", () => {
     expect(screen.getByText("Urgent")).toBeTruthy();
   });
 
-  it("reads a replaced tool result the same as a said safe reply", () => {
+  it("reads a replaced tool result differently from a spoken safe reply — the agent never says a tool's own result", () => {
     render(
       <ActivityRow
         event={event({
@@ -103,13 +103,15 @@ describe("ActivityRow — guardrail chip (V5-39/V5-41)", () => {
         })}
       />,
     );
-    expect(screen.getByText("Said the safe reply")).toBeTruthy();
+    expect(screen.getByText("Replaced the result")).toBeTruthy();
   });
 
   it("shows no guardrail mark or chip for an ordinary tool row", () => {
     render(<ActivityRow event={event()} />);
     expect(screen.queryByRole("img", { name: "Guardrail" })).toBeNull();
-    expect(screen.queryByText(/Said the safe reply|Ended the call|Handed to a person/)).toBeNull();
+    expect(
+      screen.queryByText(/Said the safe reply|Ended the call|Handed to a person|Replaced the result/),
+    ).toBeNull();
   });
 });
 

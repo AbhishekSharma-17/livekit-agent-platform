@@ -5,8 +5,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { FormProvider, useForm } from "react-hook-form";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { EditorContextProvider, type EditorContextValue } from "@/components/console/agents/editor/editor-context";
 import { buildAgentUpdate, toFormValues } from "@/components/console/agents/editor/form-values";
 import { GuardrailsSection } from "@/components/console/agents/editor/sections/guardrails-section";
+import type { EditorIssue } from "@/components/console/agents/editor/validation-map";
 import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
 import { zodResolver } from "@/components/console/lib/zod-resolver";
 import type { AgentOut, GuardrailsConfig, ProviderSpec } from "@/contracts/lkap-contracts";
@@ -115,6 +117,45 @@ function renderSection(theAgent: AgentOut = agent()) {
   return render(
     <QueryClientProvider client={client}>
       <SectionHarness agent={theAgent} />
+    </QueryClientProvider>,
+  );
+}
+
+/**
+ * Same harness, wrapped in a minimal `EditorContextProvider` so
+ * `useSectionIssues("guardrails")` (`rule-list.tsx`/`guardrails-section.tsx`)
+ * has server issues to read — the `console-provider-slot.test.tsx` precedent
+ * for testing a field that reads `issueFor` outside the real editor shell.
+ */
+function SectionHarnessWithIssues({ agent: theAgent, issues }: { agent: AgentOut; issues: EditorIssue[] }) {
+  const form = useForm<AgentEditorForm>({
+    resolver: zodResolver(agentEditorFormSchema),
+    defaultValues: toFormValues(theAgent),
+    mode: "onChange",
+  });
+  latest = form.watch();
+  const contextValue: EditorContextValue = {
+    agent: theAgent,
+    sections: [],
+    activeSection: "guardrails",
+    goToSection: () => {},
+    issues,
+    focusIssue: () => {},
+  };
+  return (
+    <EditorContextProvider value={contextValue}>
+      <FormProvider {...form}>
+        <GuardrailsSection />
+      </FormProvider>
+    </EditorContextProvider>
+  );
+}
+
+function renderSectionWithIssues(theAgent: AgentOut, issues: EditorIssue[]) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <SectionHarnessWithIssues agent={theAgent} issues={issues} />
     </QueryClientProvider>,
   );
 }
@@ -285,6 +326,45 @@ describe("GuardrailsSection", () => {
     expect(submitted?.config.guardrails?.safe_reply).toBe("I can't help with that.");
     expect(submitted?.config.guardrails?.on_trip).toBe("end_call");
     expect(submitted?.config.guardrails?.budget_ms).toBe(500);
+  });
+
+  it("shows the api's message on the row, and again on the field when the rule is reopened", async () => {
+    const theAgent = agent({
+      config: {
+        instructions: "Hi there",
+        pipeline: {
+          mode: "cascaded",
+          stt: { provider_id: "deepgram-stt" },
+          llm: { provider_id: "openai-llm" },
+          tts: { provider_id: "cartesia-tts" },
+        },
+        guardrails: {
+          input: [{ kind: "regex", name: "Card numbers", pattern: "[", ignore_case: true }],
+          output: [],
+          tool_output: [],
+          on_trip: "interrupt",
+          safe_reply: "I'm sorry, I can't help with that. Is there anything else I can help you with?",
+          model: null,
+          budget_ms: 300,
+        },
+      },
+    });
+    const issue: EditorIssue = {
+      key: "server-issue-0",
+      // As `issuesFromValidation` stores it: bracket indices already normalised to dots.
+      path: "guardrails.input.0.pattern",
+      message: "the pattern does not compile: unterminated character set",
+      severity: "error",
+      section: "guardrails",
+      source: "server",
+    };
+
+    renderSectionWithIssues(theAgent, [issue]);
+    expect(screen.getByText("the pattern does not compile: unterminated character set")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Card numbers" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit rule" });
+    expect(within(dialog).getByText("the pattern does not compile: unterminated character set")).toBeTruthy();
   });
 });
 

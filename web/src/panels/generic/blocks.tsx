@@ -328,16 +328,17 @@ function activityDetailMessage(event: ActivityEvent): string | null {
 
 /**
  * A guardrail trip's `action` (V5-39's `ActivityEvent.detail = {stage, rule,
- * action}`), as a plain verb phrase next to the headline. `interrupt` and
- * `replaced` read the same ("Said the safe reply") since a caller can't tell
- * the difference between "stopped and continued" and "replaced the result" —
- * both just mean the unsafe text never reached them.
+ * action}`), as a plain verb phrase next to the headline. `replaced` reads
+ * differently from `interrupt`: a tool result is swapped for the safe reply
+ * text before the agent ever reads it, but the agent doesn't necessarily
+ * *say* that text aloud the way an `interrupt` trip does — matches the
+ * timeline row's own wording (`session-timeline.tsx`'s `ACTION_LABEL`).
  */
 const GUARDRAIL_ACTION_LABEL: Record<string, string> = {
   interrupt: "Said the safe reply",
   end_call: "Ended the call",
   escalate: "Handed to a person",
-  replaced: "Said the safe reply",
+  replaced: "Replaced the result",
 };
 
 function guardrailActionLabel(event: ActivityEvent): string | null {

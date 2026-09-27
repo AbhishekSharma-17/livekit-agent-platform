@@ -1,0 +1,12 @@
+{
+  "url": "https://example.com/pay?ref=CLM-20931",
+  "label": "Pay the excess",
+  "kind": "checkout",
+  "status": "pending",
+  "reference": "CLM-20931",
+  "channel": "panel",
+  "sent_at": 1790000000,
+  "opened_at": null,
+  "expires_at": 1790001800,
+  "completed_at": null
+}

@@ -404,7 +404,10 @@
             "consent",
             "upload",
             "captions",
-            "handoff"
+            "handoff",
+            "link",
+            "slots",
+            "cards"
           ],
           "title": "Type",
           "type": "string"

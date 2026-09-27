@@ -9,11 +9,12 @@ The built-in names are the single source the worker, the api and the web share
 
 import json
 from datetime import datetime
-from typing import Annotated, Any, Final, Literal, Self
+from typing import Annotated, Any, Final, Literal, Self, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from lkap_contracts.tool_providers import ToolProviderId
+from lkap_contracts.ui_protocol import BlockType
 
 #: Model-facing tool names must match this pattern.
 TOOL_NAME_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$"
@@ -93,6 +94,12 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     "request_consent",
     "record_consent",
     "request_upload",
+    # V5-43: reading the panel (any block), a link, a slot picker and cards.
+    "describe_panel",
+    "send_link",
+    "request_slot",
+    "resolve_slot",
+    "show_cards",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
@@ -109,8 +116,14 @@ UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
         "details",
         "markdown",
         "steps",
+        # V5-43: cards are display data (a tap arrives as a block action, never as state).
+        "cards",
     }
 )
+
+#: Every panel block type (V5-43): ``describe_panel`` is registered whenever the panel has
+#: any block at all.
+ALL_BLOCK_TYPES: Final[frozenset[str]] = frozenset(get_args(BlockType))
 
 #: Each block tool → the panel block types that make the worker register it.
 #: ``set_steps`` is further limited to a ``steps`` block whose ``config.source`` is
@@ -130,6 +143,11 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "request_consent": frozenset({"consent"}),
     "record_consent": frozenset({"consent"}),
     "request_upload": frozenset({"upload"}),
+    "describe_panel": ALL_BLOCK_TYPES,
+    "send_link": frozenset({"link"}),
+    "request_slot": frozenset({"slots"}),
+    "resolve_slot": frozenset({"slots"}),
+    "show_cards": frozenset({"cards"}),
 }
 
 
@@ -247,6 +265,13 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         # what the model needs for its next sentence (and reads a caller's document).
         "request_upload",
         "describe_asset",
+        # V5-43: reading the panel is instant; a slot request waits for the caller; the
+        # others write the panel (a link may also send a text, which the caller waits for).
+        "describe_panel",
+        "send_link",
+        "request_slot",
+        "resolve_slot",
+        "show_cards",
         "escalate_to_human",
         "update_block",
         "show_document",

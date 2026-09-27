@@ -12,7 +12,7 @@ code, not the block system).
 
 Every `BlockSpec.config` is validated against its type's own strict schema
 (unknown keys are rejected) — `lkap_describe("block", type)` returns that
-schema. The eighteen block types:
+schema. The block types:
 
 | Type | Config | What it shows |
 |---|---|---|
@@ -36,6 +36,9 @@ schema. The eighteen block types:
 | `upload` | `accept` (`image/*` or exact types: JPEG, PNG, WebP, GIF, HEIC/HEIF, PDF; default photos and PDFs), `max_files` (1–10, default 3), `max_bytes` (up to 25 MB, default 10 MB), `camera_capture` | A file picker (and the phone camera) for the caller to send photos or documents, such as a damage photo or a driving licence. HTML, SVG and other types are never accepted. |
 | `captions` | `show_user`, `show_agent` (default both on), `position` (`block`, or `bottom` to overlay the video on avatar layouts), `target_language` (kept for translated captions, not used yet) | Large live captions of what the caller and the agent are saying, with the language of each line. The words stream on their own channel while the call runs; nothing is stored in the block but the current language. |
 | `handoff` | `show_queue`, `show_agent_name` (default both on) | Where the hand-off of the caller to a person stands: asked for, connecting, connected, nobody answered, or handed over. The agent fills it while `transfer_call` runs; on a warm transfer it shows the person joining. |
+| `link` | `allowed_hosts` (required: the site names links may go to, a name or `*.` plus a name for its sub-domains), `open_in` (`new_tab`/`dialog`), `show_qr` (default on) | A payment, e-signature or portal link and where it stands: sent, opened, completed, failed or expired. Only https links on the listed sites are ever shown. Payments happen on the payment provider's page, never in the call. |
+| `slots` | `timezone_mode` (`caller`/`agent`), `days_visible` (1–31, default 7), `allow_custom` | Times the caller can book, grouped by day, to tap or say. The agent fetches the times with its own calendar tools. |
+| `cards` | `layout` (`carousel`/`grid`/`list`), `selectable` (default on), `max_cards` (1–20, default 10), `image_hosts` (the sites card pictures may come from; empty = only pictures from the call) | Options side by side, such as plans or repair shops, each with a title, a few facts, badges and up to three buttons. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
 panel has a `document` block, the agent copies that knowledge-base document
@@ -60,7 +63,7 @@ Attaching a block registers matching worker tools automatically (on top of
 
 - `update_block` — writes state into any of `document`, `gallery`, `table`,
   `transcript`, `video`, `kb_citations`, `custom`, `details`, `markdown`,
-  `steps`.
+  `steps`, `cards`.
   `show_document` — points a `document` block at a url. `table_append` —
   appends one row to a `table` block. `request_form` — asks the user to
   fill in a `form` block and returns their answers.
@@ -87,6 +90,19 @@ Attaching a block registers matching worker tools automatically (on top of
   page. `request_form` fields may be `string`, `number`, `integer`,
   `boolean`, `date`, `phone`, `email`, `select`, `textarea` or `file` (a
   `file` field sends through the same checks as an upload block).
+- `describe_panel` (any block) — returns what the panel shows right now:
+  each block's id, type, title and its status fields (never file bytes);
+  text that came from the caller or a tool is marked as data.
+- `send_link` (a `link` block) — shows a link whose site is in
+  `allowed_hosts` (https only). On a phone call it is sent as a text message
+  when the agent has `send_sms`; otherwise the agent reads the details out.
+  The business's own system reports the outcome to the platform's link hook,
+  signed like the platform's outgoing webhooks, and the agent is told.
+- `request_slot` (a `slots` block) — shows times and waits for the caller's
+  pick; it returns the slot's start and end with their UTC offset.
+  `resolve_slot` records a time the caller said out loud.
+- `show_cards` (a `cards` block) — shows or replaces the cards. A tap on a
+  card or a card button reaches the agent as a message.
 - `describe_asset` (built in) — describes a stored image, extracts named
   fields from it, or reads an identity document (`extract_id`: name, date of
   birth, document number, dates, issuing authority, address) with the
@@ -121,4 +137,5 @@ without its own `text` is an error.
 `GalleryBlockState`, `TableBlockState`, `TranscriptBlockState`,
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
 `DetailsBlockState`, `MarkdownBlockState`, `StepsBlockState`,
-`UploadBlockState`, `SessionAssetOut`.
+`UploadBlockState`, `LinkBlockState`, `SlotsBlockState`, `CardsBlockState`,
+`SessionAssetOut`.

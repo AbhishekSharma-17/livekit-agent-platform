@@ -1,0 +1,30 @@
+{
+  "$id": "lkap-contracts/UiSnapshotRequestPacket.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A server-sent request for a fresh ``lkap.ui.state`` snapshot (asks #252, V5-43).\n\nSent by the api with the server API on the supervisor topic\n(``lkap_contracts.api_models.SUPERVISOR_TOPIC``) when a hidden listener joins\nmid-call: a listener cannot call ``get_snapshot`` over RPC. The worker honours\nit only when the server sent it and it names the worker's session.",
+  "properties": {
+    "op": {
+      "const": "snapshot",
+      "default": "snapshot",
+      "title": "Op",
+      "type": "string"
+    },
+    "session_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id"
+  ],
+  "title": "UiSnapshotRequestPacket",
+  "type": "object"
+}

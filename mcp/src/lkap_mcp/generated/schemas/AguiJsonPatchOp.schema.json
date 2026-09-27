@@ -1,0 +1,45 @@
+{
+  "$id": "lkap-contracts/AguiJsonPatchOp.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One RFC 6902 operation, as AG-UI's ``STATE_DELTA.delta`` carries it.",
+  "properties": {
+    "from": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "From"
+    },
+    "op": {
+      "enum": [
+        "add",
+        "remove",
+        "replace",
+        "move",
+        "copy",
+        "test"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "path": {
+      "title": "Path",
+      "type": "string"
+    },
+    "value": {
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "required": [
+    "op",
+    "path"
+  ],
+  "title": "AguiJsonPatchOp",
+  "type": "object"
+}

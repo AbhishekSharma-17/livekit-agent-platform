@@ -1,0 +1,13 @@
+{
+  "prompt": "When can our inspector come round?",
+  "timezone": "Europe/London",
+  "slots": [
+    { "id": "mon_am", "start": "2026-10-05T09:00:00+01:00", "end": "2026-10-05T10:00:00+01:00", "label": null, "capacity": null },
+    { "id": "mon_pm", "start": "2026-10-05T14:00:00+01:00", "end": "2026-10-05T15:00:00+01:00", "label": null, "capacity": 2 },
+    { "id": "tue_am", "start": "2026-10-06T09:30:00+01:00", "end": "2026-10-06T10:30:00+01:00", "label": "First visit of the day", "capacity": null }
+  ],
+  "selected": null,
+  "grouped_by_day": true,
+  "status": "requested",
+  "submitted_at": null
+}

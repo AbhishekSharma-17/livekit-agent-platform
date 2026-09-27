@@ -107,7 +107,7 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   {
     name: "update_block",
     label: "Update blocks",
-    help: "Lets the agent change what a table, document, gallery, sources, transcript, video, details, text, steps or pack block shows.",
+    help: "Lets the agent change what a table, document, gallery, sources, transcript, video, details, text, steps, cards or pack block shows.",
   },
   { name: "show_document", label: "Show documents", help: "Lets the agent open a document on a page and highlight it." },
   { name: "table_append", label: "Add table rows", help: "Lets the agent add rows to a table as it collects them." },
@@ -120,6 +120,11 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "request_consent", label: "Ask for consent", help: "Lets the agent ask the caller to agree, for example before recording, and wait for the answer." },
   { name: "record_consent", label: "Record spoken consent", help: "Lets the agent record a yes or no the caller said out loud." },
   { name: "request_upload", label: "Ask for files", help: "Lets the agent ask the caller to send photos or documents and wait for them." },
+  { name: "describe_panel", label: "Read the panel", help: "Lets the agent check what the caller's side panel shows right now." },
+  { name: "send_link", label: "Send links", help: "Lets the agent show a payment, signing or portal link, or text it on a phone call." },
+  { name: "request_slot", label: "Offer times", help: "Lets the agent show times to book and wait for the caller to pick one." },
+  { name: "resolve_slot", label: "Record spoken times", help: "Lets the agent mark the time the caller said out loud." },
+  { name: "show_cards", label: "Show cards", help: "Lets the agent show options side by side as cards." },
 ];
 
 /**

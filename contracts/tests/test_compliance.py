@@ -150,7 +150,8 @@ def test_consent_block_state_is_requestable() -> None:
 
 
 def test_consent_tools_are_block_tools_that_never_run_in_the_background() -> None:
-    assert BLOCK_TOOL_NAMES[-3:-1] == ("request_consent", "record_consent")  # V5-19 appended request_upload
+    # V5-19 appended request_upload, V5-43 five more after it.
+    assert BLOCK_TOOL_NAMES[BLOCK_TOOL_NAMES.index("request_consent") + 1] == "record_consent"
     assert BLOCK_TOOL_TYPES["request_consent"] == frozenset({"consent"})
     assert BLOCK_TOOL_TYPES["record_consent"] == frozenset({"consent"})
     assert {"request_consent", "record_consent"} <= NEVER_BACKGROUND_TOOLS

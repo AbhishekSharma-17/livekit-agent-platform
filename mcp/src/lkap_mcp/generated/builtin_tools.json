@@ -11,9 +11,39 @@
     "set_steps",
     "request_consent",
     "record_consent",
-    "request_upload"
+    "request_upload",
+    "describe_panel",
+    "send_link",
+    "request_slot",
+    "resolve_slot",
+    "show_cards"
   ],
   "block_tool_types": {
+    "describe_panel": [
+      "activity",
+      "captions",
+      "cards",
+      "checklist",
+      "choices",
+      "consent",
+      "custom",
+      "details",
+      "document",
+      "form",
+      "gallery",
+      "handoff",
+      "kb_citations",
+      "link",
+      "markdown",
+      "notes",
+      "slots",
+      "status",
+      "steps",
+      "table",
+      "transcript",
+      "upload",
+      "video"
+    ],
     "record_consent": [
       "consent"
     ],
@@ -26,17 +56,29 @@
     "request_form": [
       "form"
     ],
+    "request_slot": [
+      "slots"
+    ],
     "request_upload": [
       "upload"
     ],
     "resolve_choice": [
       "choices"
     ],
+    "resolve_slot": [
+      "slots"
+    ],
+    "send_link": [
+      "link"
+    ],
     "set_details": [
       "details"
     ],
     "set_steps": [
       "steps"
+    ],
+    "show_cards": [
+      "cards"
     ],
     "show_document": [
       "document"
@@ -48,6 +90,7 @@
       "table"
     ],
     "update_block": [
+      "cards",
       "custom",
       "details",
       "document",

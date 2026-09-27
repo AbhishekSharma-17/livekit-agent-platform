@@ -1,0 +1,37 @@
+{
+  "$id": "lkap-contracts/LinkHookOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the link hook answers: the packet id and how many agents received it.",
+  "properties": {
+    "delivered_to": {
+      "minimum": 0,
+      "title": "Delivered To",
+      "type": "integer"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed",
+        "expired"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "session_id",
+    "status",
+    "delivered_to"
+  ],
+  "title": "LinkHookOut",
+  "type": "object"
+}

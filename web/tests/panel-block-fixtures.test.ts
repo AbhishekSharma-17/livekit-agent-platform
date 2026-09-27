@@ -31,6 +31,9 @@ const SCHEMA_FILE: Record<string, string> = {
   upload: "UploadBlockState",
   captions: "CaptionsBlockState",
   handoff: "HandoffBlockState",
+  link: "LinkBlockState",
+  slots: "SlotsBlockState",
+  cards: "CardsBlockState",
 };
 
 type JsonSchema = {

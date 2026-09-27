@@ -1,0 +1,41 @@
+{
+  "$id": "lkap-contracts/BlockConfig_cards.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``cards``: how the cards are laid out, whether one can be picked, how many (V5-43).\n\n``image_hosts`` lists the sites a card's ``image_url`` may come from (empty:\nonly pictures already delivered in the session, by ``image_asset_id``).",
+  "properties": {
+    "image_hosts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Image Hosts",
+      "type": "array"
+    },
+    "layout": {
+      "default": "carousel",
+      "enum": [
+        "carousel",
+        "grid",
+        "list"
+      ],
+      "title": "Layout",
+      "type": "string"
+    },
+    "max_cards": {
+      "default": 10,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Max Cards",
+      "type": "integer"
+    },
+    "selectable": {
+      "default": true,
+      "title": "Selectable",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_cards",
+  "type": "object"
+}

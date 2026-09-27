@@ -6,9 +6,12 @@ subsequent change. The browser applies patches strictly in ``seq`` order and ask
 for a fresh snapshot over RPC when it sees a gap.
 """
 
+import re
+from datetime import datetime
 from typing import Annotated, Any, Final, Literal, Self, get_args
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, TEXT_HASH_PATTERN, ConsentKind, ConsentMethod
 
@@ -25,6 +28,10 @@ TOPIC_UI_UPLOAD = "lkap.ui.upload"
 TOPIC_UI_CAPTIONS = "lkap.captions"
 RPC_UI_REQUEST = "lkap.ui.request"
 RPC_AGENT_ACTION = "lkap.agent.action"
+#: Server -> agent reliable data packet (V5-43): a ``link`` block's outcome, sent by the api
+#: when ``POST /v1/hooks/link/{session_id}`` verifies (:class:`LinkCompletedPacket`). The
+#: worker honours only packets the server sent (no participant) for its own session.
+TOPIC_UI_LINK = "lkap.ui.link"
 
 
 #: Canonical mapping of topic constant name to wire value (exported to JSON/TS).
@@ -36,6 +43,7 @@ TOPICS: dict[str, str] = {
     "TOPIC_UI_CAPTIONS": TOPIC_UI_CAPTIONS,
     "RPC_UI_REQUEST": RPC_UI_REQUEST,
     "RPC_AGENT_ACTION": RPC_AGENT_ACTION,
+    "TOPIC_UI_LINK": TOPIC_UI_LINK,
 }
 
 #: Number of patches after which the agent re-sends a full snapshot.
@@ -142,6 +150,9 @@ BlockType = Literal[
     "upload",
     "captions",
     "handoff",
+    "link",
+    "slots",
+    "cards",
 ]
 
 
@@ -496,6 +507,284 @@ class HandoffBlockState(BaseModel):
     reason: str | None = None
 
 
+# --------------------------------------------------------------------- links (V5-43)
+
+#: The longest link a ``link`` block or a card image may carry.
+MAX_URL_CHARS: Final[int] = 2048
+#: How many sites a ``link`` block's ``allowed_hosts`` (or a ``cards`` block's
+#: ``image_hosts``) may list.
+MAX_ALLOWED_HOSTS: Final[int] = 20
+#: A site name in an allowlist: a host name with at least one dot, lower case, optionally
+#: ``*.`` in front for "any sub-domain of" (the bare domain itself is not included then).
+HOST_PATTERN: Final[str] = (
+    r"^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+)
+_HOST_RE: Final[re.Pattern[str]] = re.compile(HOST_PATTERN)
+_URL_FORBIDDEN_RE: Final[re.Pattern[str]] = re.compile("[\\x00-\\x20\\x7f-\\x9f\\\\<>\"'`{}|^]")
+
+
+def _is_numeric_host(host: str) -> bool:
+    """An IPv4 literal (digits and dots only): links name sites, never addresses."""
+    return host.replace(".", "").replace("*", "").isdigit()
+
+
+def normalize_host(value: str) -> str:
+    """One allowlist entry as a lower-case site name (``example.com``, ``*.example.com``).
+
+    Raises:
+        ValueError: For anything that is not a site name: a scheme, a path, a port,
+            an IP address, spaces or a name without a dot.
+    """
+    host = value.strip().lower().rstrip(".")
+    if not _HOST_RE.match(host) or _is_numeric_host(host):
+        raise ValueError(f"{value!r} is not a site name; write it like example.com or *.example.com")
+    return host
+
+
+def normalize_hosts(values: list[str]) -> list[str]:
+    """Normalise an allowlist (:func:`normalize_host` each, duplicates dropped, order kept)."""
+    out: list[str] = []
+    for value in values:
+        host = normalize_host(value)
+        if host not in out:
+            out.append(host)
+    return out
+
+
+def host_allowed(host: str, allowed_hosts: list[str]) -> bool:
+    """Whether ``host`` is one of ``allowed_hosts`` (exact, or a sub-domain of a ``*.`` entry)."""
+    host = host.strip().lower().rstrip(".")
+    for entry in allowed_hosts:
+        entry = entry.strip().lower().rstrip(".")
+        if entry.startswith("*."):
+            if host.endswith(entry[1:]) and len(host) > len(entry) - 1:
+                return True
+        elif host == entry:
+            return True
+    return False
+
+
+def https_url_problem(url: str, *, allowed_hosts: list[str] | None = None) -> str | None:
+    """Why ``url`` may not be shown to a caller, or ``None`` when it may (V5-43).
+
+    Only ``https://`` links with a host name are accepted: never ``javascript:``,
+    ``data:``, ``http:`` or any other scheme, never user names or passwords in the
+    link, never spaces, quotes, angle brackets, backslashes or control characters,
+    never more than :data:`MAX_URL_CHARS` characters. With ``allowed_hosts`` the
+    host must also be one of them (:func:`host_allowed`).
+    """
+    if not url:
+        return "the link is empty"
+    if len(url) > MAX_URL_CHARS:
+        return f"the link is longer than {MAX_URL_CHARS} characters"
+    if _URL_FORBIDDEN_RE.search(url):
+        return "the link contains spaces or characters a link cannot have"
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+        _ = parts.port
+    except ValueError:
+        return "the link is not a valid web address"
+    if parts.scheme.lower() != "https":
+        return "only https:// links can be shown"
+    if "@" in parts.netloc:
+        return "a link cannot carry a user name or password"
+    if not host or not _HOST_RE.match(host.lower()) or _is_numeric_host(host):
+        return "the link has no valid site name"
+    if allowed_hosts is not None and not host_allowed(host, allowed_hosts):
+        return f"{host} is not one of the sites this panel may link to ({', '.join(allowed_hosts) or 'none'})"
+    return None
+
+
+def _checked_https_url(value: str | None) -> str | None:
+    if value is None or value == "":
+        return None
+    problem = https_url_problem(value)
+    if problem is not None:
+        raise ValueError(problem)
+    return value
+
+
+#: What a ``link`` block hands the caller to.
+LinkKind = Literal["checkout", "esign", "portal", "other"]
+#: Where a ``link`` block stands: ``idle`` (nothing sent yet), ``pending`` (shown or texted),
+#: ``opened`` (the caller opened it), then ``completed`` / ``failed`` / ``expired`` (the
+#: outcome the business's system reported through the link hook, or the expiry passing).
+LinkStatus = Literal["idle", "pending", "opened", "completed", "failed", "expired"]
+#: The outcomes the link hook may report.
+LinkOutcome = Literal["completed", "failed", "expired"]
+LINK_OUTCOMES: Final[tuple[str, ...]] = get_args(LinkOutcome)
+#: How a link reached the caller: on the panel, or by text message on a voice-only call.
+LinkChannel = Literal["panel", "sms"]
+#: Longest button label and reference of a link.
+MAX_LINK_LABEL_CHARS: Final[int] = 80
+MAX_LINK_REFERENCE_CHARS: Final[int] = 128
+#: A link reference: letters, digits and ``_.:-`` (an order id, an envelope id, a session id).
+LINK_REFERENCE_PATTERN: Final[str] = r"^[A-Za-z0-9_.:-]{1,128}$"
+
+
+class LinkBlockState(BaseModel):
+    """A checkout, e-sign or portal link and where it stands (``send_link``, V5-43).
+
+    Payments never happen in LKAP (D-V5-6): the block carries the link and the
+    outcome the business's own system reports through ``POST /v1/hooks/link/
+    {session_id}`` (signed), which the worker receives as a ``link_completed``
+    packet on :data:`TOPIC_UI_LINK`. ``url`` is always an ``https://`` link on
+    one of the block config's ``allowed_hosts`` (checked by the tool and here).
+    ``reference`` is the business's id for the flow (an order or envelope id)
+    that the hook may name instead of the block.
+    """
+
+    url: str | None = Field(default=None, max_length=MAX_URL_CHARS)
+    label: str = Field(default="", max_length=MAX_LINK_LABEL_CHARS)
+    kind: LinkKind = "other"
+    status: LinkStatus = "idle"
+    reference: str | None = Field(default=None, pattern=LINK_REFERENCE_PATTERN)
+    channel: LinkChannel | None = None
+    sent_at: float | None = None
+    opened_at: float | None = None
+    expires_at: float | None = None
+    completed_at: float | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _https(cls, value: str | None) -> str | None:
+        return _checked_https_url(value)
+
+
+# --------------------------------------------------------------------- slots (V5-43)
+
+#: The most slots one ``slots`` request may offer.
+MAX_SLOTS: Final[int] = 50
+
+
+def _aware_datetime(value: str) -> datetime:
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{value!r} is not an ISO 8601 date and time") from exc
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError(f"{value!r} needs a UTC offset, e.g. 2026-10-02T09:30:00+01:00")
+    return moment
+
+
+class TimeSlot(BaseModel):
+    """One bookable slot: ISO 8601 start and end, each with its UTC offset (V5-43)."""
+
+    id: str = Field(min_length=1, max_length=64)
+    start: str = Field(max_length=40)
+    end: str = Field(max_length=40)
+    label: str | None = Field(default=None, max_length=80)
+    capacity: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if _aware_datetime(self.end) <= _aware_datetime(self.start):
+            raise ValueError("a slot must end after it starts")
+        return self
+
+
+class SlotsBlockState(RequestableState):
+    """A calendar slot picker the caller taps or answers by voice (``request_slot``, V5-43).
+
+    The agent fetches availability with its own tools and offers ``slots``;
+    ``selected`` is the chosen slot's id once ``status`` is ``submitted``. A tap
+    answers ``block_submit {values: {selected: <slot id>}}``: the worker reads
+    only ``selected`` and takes the start and end from its own ``slots``, never
+    from the browser. ``timezone`` is the zone the slots are shown in (the
+    caller's, or the business's with ``timezone_mode="agent"``).
+    """
+
+    prompt: str = Field(default="", max_length=300)
+    timezone: str | None = Field(default=None, max_length=64)
+    slots: list[TimeSlot] = Field(default=[], max_length=MAX_SLOTS)
+    selected: str | None = None
+    grouped_by_day: bool = True
+
+    @field_validator("slots")
+    @classmethod
+    def _unique_ids(cls, value: list[TimeSlot]) -> list[TimeSlot]:
+        ids = [slot.id for slot in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("slot ids must be unique")
+        return value
+
+
+# --------------------------------------------------------------------- cards (V5-43)
+
+#: The most cards a ``cards`` block holds, whatever its config says.
+MAX_CARDS: Final[int] = 20
+#: A card action's name: what the worker and the pack see in ``block_action``.
+CARD_ACTION_NAME_PATTERN: Final[str] = r"^[a-z][a-z0-9_]{0,31}$"
+
+
+class CardFact(BaseModel):
+    """One label and value line on a card."""
+
+    label: str = Field(max_length=40)
+    value: str = Field(max_length=120)
+
+
+class CardAction(BaseModel):
+    """A button on a card; a tap sends ``block_action {name, data: {card_id}}``."""
+
+    name: str = Field(pattern=CARD_ACTION_NAME_PATTERN)
+    label: str = Field(min_length=1, max_length=40)
+    tone: Tone | None = None
+
+
+class Card(BaseModel):
+    """One card: a plan, a repair shop, an offer (V5-43).
+
+    ``image_asset_id`` names a picture already delivered on ``lkap.ui.asset``;
+    ``image_url`` is an ``https://`` picture on one of the block config's
+    ``image_hosts`` (the tool checks the host; this model checks the link).
+    """
+
+    id: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=120)
+    subtitle: str | None = Field(default=None, max_length=200)
+    image_asset_id: str | None = Field(default=None, max_length=128)
+    image_url: str | None = Field(default=None, max_length=MAX_URL_CHARS)
+    facts: list[CardFact] = Field(default=[], max_length=8)
+    badges: list[Annotated[str, Field(max_length=30)]] = Field(default=[], max_length=5)
+    actions: list[CardAction] = Field(default=[], max_length=3)
+
+    @field_validator("image_url")
+    @classmethod
+    def _https(cls, value: str | None) -> str | None:
+        return _checked_https_url(value)
+
+    @field_validator("actions")
+    @classmethod
+    def _unique_actions(cls, value: list[CardAction]) -> list[CardAction]:
+        names = [action.name for action in value]
+        if len(set(names)) != len(names):
+            raise ValueError("action names must be unique on a card")
+        return value
+
+
+class CardsBlockState(BaseModel):
+    """Rich cards, a carousel or a comparison (``show_cards``, V5-43).
+
+    Tapping a card (with ``selectable``) sends ``block_action {name: "select",
+    data: {card_id}}``; an action button sends ``block_action {name: <action>,
+    data: {card_id}}``. The worker records ``selected`` and tells the model in a
+    background message; a pack's ``on_block_action`` sees it too.
+    """
+
+    cards: list[Card] = Field(default=[], max_length=MAX_CARDS)
+    selected: str | None = None
+
+    @field_validator("cards")
+    @classmethod
+    def _unique_ids(cls, value: list[Card]) -> list[Card]:
+        ids = [card.id for card in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("card ids must be unique")
+        return value
+
+
 #: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).
 #: How each lands in the form's JSON schema (``FormBlockState.schema``):
 #:
@@ -662,6 +951,10 @@ class AgentAction(BaseModel):
     * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
     * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
       (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
+    * ``state_delta`` — ``{delta: [...]}`` (V5-43): an AG-UI ``STATE_DELTA`` (RFC 6902
+      operations, :mod:`lkap_contracts.ui_agui`) on ``/blocks/<id>/...`` paths of blocks
+      ``update_block`` may write (:data:`lkap_contracts.tools.UPDATABLE_BLOCK_TYPES`),
+      applied all or nothing through the block validators (:class:`StateDeltaPayload`)
     """
 
     v: Literal[1] = 1
@@ -674,6 +967,7 @@ class AgentAction(BaseModel):
         "rewind",
         "inject_user_text",
         "block_submit",
+        "state_delta",
     ]
     payload: dict[str, Any] = {}
 
@@ -684,3 +978,88 @@ class AgentActionResult(BaseModel):
     ok: bool
     payload: dict[str, Any] = {}
     error: str | None = None
+
+
+#: The most operations one ``state_delta`` action may carry.
+MAX_STATE_DELTA_OPS: Final[int] = 100
+
+
+class StateDeltaPayload(BaseModel):
+    """``AgentAction.payload`` for ``action == "state_delta"`` (V5-43).
+
+    ``delta`` is an AG-UI ``STATE_DELTA`` event's ``delta``: RFC 6902 operations
+    (``add``, ``remove``, ``replace``, ``move``, ``copy``, ``test``) whose paths
+    are JSON Pointers into :class:`UiState`. Only ``/blocks/<id>/...`` paths of
+    blocks whose type ``update_block`` may write are accepted; the whole delta is
+    refused when one operation is (a failed ``test`` included). ``type`` may be
+    sent as ``"STATE_DELTA"`` so a whole AG-UI event can be forwarded as is.
+    """
+
+    type: Literal["STATE_DELTA"] | None = None
+    delta: list[dict[str, Any]] = Field(min_length=1, max_length=MAX_STATE_DELTA_OPS)
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class LinkHookIn(BaseModel):
+    """Body of ``POST /v1/hooks/link/{session_id}`` (V5-43): a link's outcome.
+
+    The business's own system (the one that received the payment provider's or
+    the e-sign vendor's webhook) sends it, signed with ``X-LKAP-Signature`` like
+    LKAP's outbound webhooks (``t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">``)
+    using the signing secret of one of the workspace's webhook endpoints. It
+    names the block, or the ``reference`` the link was sent with.
+    """
+
+    block_id: str | None = Field(default=None, min_length=1, max_length=64)
+    reference: str | None = Field(default=None, pattern=LINK_REFERENCE_PATTERN)
+    status: LinkOutcome = "completed"
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _names_the_link(self) -> Self:
+        if self.block_id is None and self.reference is None:
+            raise ValueError("name the link with block_id or reference")
+        return self
+
+
+class LinkHookOut(BaseModel):
+    """What the link hook answers: the packet id and how many agents received it."""
+
+    id: str
+    session_id: str
+    status: LinkOutcome
+    delivered_to: int = Field(ge=0)
+
+
+class LinkCompletedPacket(BaseModel):
+    """The data packet the api sends the worker on :data:`TOPIC_UI_LINK` (V5-43).
+
+    The worker applies it to the ``link`` block it names (by ``block_id`` or
+    ``reference``) only while that block is ``pending`` or ``opened``, so a
+    repeated delivery changes nothing; it then tells the model in a background
+    message.
+    """
+
+    v: Literal[1] = 1
+    op: Literal["link_completed"] = "link_completed"
+    id: str = Field(min_length=1, max_length=64)
+    session_id: str = Field(min_length=1, max_length=64)
+    block_id: str | None = Field(default=None, max_length=64)
+    reference: str | None = Field(default=None, pattern=LINK_REFERENCE_PATTERN)
+    status: LinkOutcome = "completed"
+
+
+class UiSnapshotRequestPacket(BaseModel):
+    """A server-sent request for a fresh ``lkap.ui.state`` snapshot (asks #252, V5-43).
+
+    Sent by the api with the server API on the supervisor topic
+    (``lkap_contracts.api_models.SUPERVISOR_TOPIC``) when a hidden listener joins
+    mid-call: a listener cannot call ``get_snapshot`` over RPC. The worker honours
+    it only when the server sent it and it names the worker's session.
+    """
+
+    v: Literal[1] = 1
+    op: Literal["snapshot"] = "snapshot"
+    session_id: str = Field(min_length=1, max_length=64)

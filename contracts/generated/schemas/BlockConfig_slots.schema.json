@@ -1,0 +1,31 @@
+{
+  "$id": "lkap-contracts/BlockConfig_slots.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``slots``: which timezone the slots show in, how many days, and free times (V5-43).\n\n``timezone_mode=\"caller\"`` shows the slots in the caller's own timezone,\n``\"agent\"`` in the business timezone. ``allow_custom`` lets the caller ask\nfor a time that is not offered: the agent confirms it out loud with\n``resolve_slot``.",
+  "properties": {
+    "allow_custom": {
+      "default": false,
+      "title": "Allow Custom",
+      "type": "boolean"
+    },
+    "days_visible": {
+      "default": 7,
+      "maximum": 31,
+      "minimum": 1,
+      "title": "Days Visible",
+      "type": "integer"
+    },
+    "timezone_mode": {
+      "default": "caller",
+      "enum": [
+        "caller",
+        "agent"
+      ],
+      "title": "Timezone Mode",
+      "type": "string"
+    }
+  },
+  "title": "BlockConfig_slots",
+  "type": "object"
+}

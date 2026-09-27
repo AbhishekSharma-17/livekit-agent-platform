@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "TimeSlot": {
+      "description": "One bookable slot: ISO 8601 start and end, each with its UTC offset (V5-43).",
+      "properties": {
+        "capacity": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capacity"
+        },
+        "end": {
+          "maxLength": 40,
+          "title": "End",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "start": {
+          "maxLength": 40,
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end"
+      ],
+      "title": "TimeSlot",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/SlotsBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A calendar slot picker the caller taps or answers by voice (``request_slot``, V5-43).\n\nThe agent fetches availability with its own tools and offers ``slots``;\n``selected`` is the chosen slot's id once ``status`` is ``submitted``. A tap\nanswers ``block_submit {values: {selected: <slot id>}}``: the worker reads\nonly ``selected`` and takes the start and end from its own ``slots``, never\nfrom the browser. ``timezone`` is the zone the slots are shown in (the\ncaller's, or the business's with ``timezone_mode=\"agent\"``).",
+  "properties": {
+    "grouped_by_day": {
+      "default": true,
+      "title": "Grouped By Day",
+      "type": "boolean"
+    },
+    "prompt": {
+      "default": "",
+      "maxLength": 300,
+      "title": "Prompt",
+      "type": "string"
+    },
+    "selected": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected"
+    },
+    "slots": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TimeSlot"
+      },
+      "maxItems": 50,
+      "title": "Slots",
+      "type": "array"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    },
+    "timezone": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timezone"
+    }
+  },
+  "title": "SlotsBlockState",
+  "type": "object"
+}

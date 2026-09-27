@@ -1,0 +1,73 @@
+{
+  "$id": "lkap-contracts/LinkCompletedPacket.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The data packet the api sends the worker on :data:`TOPIC_UI_LINK` (V5-43).\n\nThe worker applies it to the ``link`` block it names (by ``block_id`` or\n``reference``) only while that block is ``pending`` or ``opened``, so a\nrepeated delivery changes nothing; it then tells the model in a background\nmessage.",
+  "properties": {
+    "block_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Block Id"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "op": {
+      "const": "link_completed",
+      "default": "link_completed",
+      "title": "Op",
+      "type": "string"
+    },
+    "reference": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference"
+    },
+    "session_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "default": "completed",
+      "enum": [
+        "completed",
+        "failed",
+        "expired"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "session_id"
+  ],
+  "title": "LinkCompletedPacket",
+  "type": "object"
+}

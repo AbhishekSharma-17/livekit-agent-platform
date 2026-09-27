@@ -1,0 +1,31 @@
+{
+  "cards": [
+    {
+      "id": "silver",
+      "title": "Silver cover",
+      "subtitle": "The essentials",
+      "image_asset_id": null,
+      "image_url": null,
+      "facts": [
+        { "label": "Excess", "value": "£250" },
+        { "label": "Courtesy car", "value": "No" }
+      ],
+      "badges": [],
+      "actions": [{ "name": "choose", "label": "Choose Silver", "tone": null }]
+    },
+    {
+      "id": "gold",
+      "title": "Gold cover",
+      "subtitle": "Most popular",
+      "image_asset_id": null,
+      "image_url": "https://example.com/img/gold.png",
+      "facts": [
+        { "label": "Excess", "value": "£100" },
+        { "label": "Courtesy car", "value": "Yes" }
+      ],
+      "badges": ["Recommended"],
+      "actions": [{ "name": "choose", "label": "Choose Gold", "tone": "success" }]
+    }
+  ],
+  "selected": "gold"
+}

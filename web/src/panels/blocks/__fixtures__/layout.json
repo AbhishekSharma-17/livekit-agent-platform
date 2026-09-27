@@ -21,6 +21,9 @@
     { "id": "recording_consent", "type": "consent", "title": null, "config": { "kind": "recording" }, "order": 16 },
     { "id": "documents", "type": "upload", "title": "Send a file", "config": { "camera_capture": true }, "order": 17 },
     { "id": "live_captions", "type": "captions", "title": "Captions", "config": { "position": "block" }, "order": 18 },
-    { "id": "handoff", "type": "handoff", "title": "Talking to a person", "config": { "show_queue": true }, "order": 19 }
+    { "id": "handoff", "type": "handoff", "title": "Talking to a person", "config": { "show_queue": true }, "order": 19 },
+    { "id": "payment", "type": "link", "title": "Payment", "config": { "allowed_hosts": ["example.com"] }, "order": 20 },
+    { "id": "inspection", "type": "slots", "title": "Book an inspection", "config": {}, "order": 21 },
+    { "id": "plans", "type": "cards", "title": "Your options", "config": { "image_hosts": ["example.com"] }, "order": 22 }
   ]
 }

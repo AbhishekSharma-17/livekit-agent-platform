@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "AguiJsonPatchOp": {
+      "description": "One RFC 6902 operation, as AG-UI's ``STATE_DELTA.delta`` carries it.",
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "op": {
+          "enum": [
+            "add",
+            "remove",
+            "replace",
+            "move",
+            "copy",
+            "test"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "op",
+        "path"
+      ],
+      "title": "AguiJsonPatchOp",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AguiStateDeltaEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "AG-UI ``STATE_DELTA``: RFC 6902 operations on the state.",
+  "properties": {
+    "delta": {
+      "items": {
+        "$ref": "#/$defs/AguiJsonPatchOp"
+      },
+      "title": "Delta",
+      "type": "array"
+    },
+    "timestamp": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timestamp"
+    },
+    "type": {
+      "const": "STATE_DELTA",
+      "default": "STATE_DELTA",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "delta"
+  ],
+  "title": "AguiStateDeltaEvent",
+  "type": "object"
+}

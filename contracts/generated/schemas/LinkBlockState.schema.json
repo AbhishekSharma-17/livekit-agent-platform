@@ -1,0 +1,129 @@
+{
+  "$id": "lkap-contracts/LinkBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A checkout, e-sign or portal link and where it stands (``send_link``, V5-43).\n\nPayments never happen in LKAP (D-V5-6): the block carries the link and the\noutcome the business's own system reports through ``POST /v1/hooks/link/\n{session_id}`` (signed), which the worker receives as a ``link_completed``\npacket on :data:`TOPIC_UI_LINK`. ``url`` is always an ``https://`` link on\none of the block config's ``allowed_hosts`` (checked by the tool and here).\n``reference`` is the business's id for the flow (an order or envelope id)\nthat the hook may name instead of the block.",
+  "properties": {
+    "channel": {
+      "anyOf": [
+        {
+          "enum": [
+            "panel",
+            "sms"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Channel"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "kind": {
+      "default": "other",
+      "enum": [
+        "checkout",
+        "esign",
+        "portal",
+        "other"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "maxLength": 80,
+      "title": "Label",
+      "type": "string"
+    },
+    "opened_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Opened At"
+    },
+    "reference": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference"
+    },
+    "sent_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sent At"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "pending",
+        "opened",
+        "completed",
+        "failed",
+        "expired"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    }
+  },
+  "title": "LinkBlockState",
+  "type": "object"
+}

@@ -127,7 +127,7 @@ export interface BlockToolStatus {
 }
 
 const TOOL_NEEDS: Record<BlockToolName, string> = {
-  update_block: "Add a table, document, gallery, sources, transcript, video, details, text, steps or pack block first",
+  update_block: "Add a table, document, gallery, sources, transcript, video, details, text, steps, cards or pack block first",
   show_document: "Add a document block first",
   table_append: "Add a table block first",
   request_form: "Add a form block first",
@@ -139,6 +139,11 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
   request_consent: "Add a consent block first",
   record_consent: "Add a consent block, or ask for consent before recording",
   request_upload: "Add an upload block first",
+  describe_panel: "Add any block first",
+  send_link: "Add a link block first",
+  request_slot: "Add a times block first",
+  resolve_slot: "Add a times block first",
+  show_cards: "Add a cards block first",
 };
 
 /**

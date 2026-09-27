@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/BlockConfig_link.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``link``: where links may go, how they open, and whether a QR code shows (V5-43).\n\n``allowed_hosts`` is required: ``send_link`` refuses any link whose site is not\nlisted (``example.com``, or ``*.example.com`` for its sub-domains), and only\n``https://`` links are ever shown. ``open_in=\"dialog\"`` opens the link in a\ndialog over the call instead of a new tab; ``show_qr`` shows a QR code so a\ncaller on a computer can finish on their phone.",
+  "properties": {
+    "allowed_hosts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Allowed Hosts",
+      "type": "array"
+    },
+    "open_in": {
+      "default": "new_tab",
+      "enum": [
+        "new_tab",
+        "dialog"
+      ],
+      "title": "Open In",
+      "type": "string"
+    },
+    "show_qr": {
+      "default": true,
+      "title": "Show Qr",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_link",
+  "type": "object"
+}

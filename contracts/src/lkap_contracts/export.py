@@ -100,6 +100,7 @@ from lkap_contracts.tools import (
     ToolExecution,
     builtin_tools_document,
 )
+from lkap_contracts.ui_agui import AguiJsonPatchOp, AguiStateDeltaEvent, AguiStateSnapshotEvent
 from lkap_contracts.ui_protocol import (
     ActivityEvent,
     AgentAction,
@@ -109,6 +110,7 @@ from lkap_contracts.ui_protocol import (
     BlockSubmitPayload,
     CaptionsBlockState,
     CaptionSegment,
+    CardsBlockState,
     ChoicesBlockState,
     ConsentBlockState,
     DetailsBlockState,
@@ -118,8 +120,14 @@ from lkap_contracts.ui_protocol import (
     GalleryBlockState,
     HandoffBlockState,
     KbCitationsBlockState,
+    LinkBlockState,
+    LinkCompletedPacket,
+    LinkHookIn,
+    LinkHookOut,
     MarkdownBlockState,
     RequestableState,
+    SlotsBlockState,
+    StateDeltaPayload,
     StepsBlockState,
     TableBlockState,
     TranscriptBlockState,
@@ -127,6 +135,7 @@ from lkap_contracts.ui_protocol import (
     UiRequest,
     UiRequestResult,
     UiSnapshot,
+    UiSnapshotRequestPacket,
     UiState,
     UploadBlockState,
     VideoBlockState,
@@ -211,6 +220,17 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "CaptionsBlockState": CaptionsBlockState,  # V5-31
     "HandoffBlockState": HandoffBlockState,  # V5-32
     "CaptionSegment": CaptionSegment,  # V5-31
+    "LinkBlockState": LinkBlockState,  # V5-43
+    "SlotsBlockState": SlotsBlockState,  # V5-43
+    "CardsBlockState": CardsBlockState,  # V5-43
+    "LinkHookIn": LinkHookIn,  # V5-43
+    "LinkHookOut": LinkHookOut,
+    "LinkCompletedPacket": LinkCompletedPacket,
+    "UiSnapshotRequestPacket": UiSnapshotRequestPacket,  # asks #252
+    "StateDeltaPayload": StateDeltaPayload,  # V5-43: the AG-UI adapter
+    "AguiJsonPatchOp": AguiJsonPatchOp,
+    "AguiStateSnapshotEvent": AguiStateSnapshotEvent,
+    "AguiStateDeltaEvent": AguiStateDeltaEvent,
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
     "RequestableState": RequestableState,

@@ -42,6 +42,9 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "upload",
   "captions",
   "handoff",
+  "link",
+  "slots",
+  "cards",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -66,7 +69,12 @@ export type BlockToolName =
   | "set_steps"
   | "request_consent"
   | "record_consent"
-  | "request_upload";
+  | "request_upload"
+  | "describe_panel"
+  | "send_link"
+  | "request_slot"
+  | "resolve_slot"
+  | "show_cards";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -80,6 +88,8 @@ export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(
   "details",
   "markdown",
   "steps",
+  // V5-43
+  "cards",
 ]);
 
 /**
@@ -104,6 +114,12 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   record_consent: new Set<BlockType>(["consent"]),
   // V5-19
   request_upload: new Set<BlockType>(["upload"]),
+  // V5-43: `describe_panel` is registered whenever the panel has any block.
+  describe_panel: new Set<BlockType>(BLOCK_TYPES),
+  send_link: new Set<BlockType>(["link"]),
+  request_slot: new Set<BlockType>(["slots"]),
+  resolve_slot: new Set<BlockType>(["slots"]),
+  show_cards: new Set<BlockType>(["cards"]),
 };
 
 /** One field of a block's config form. */
@@ -154,6 +170,17 @@ export type BlockConfigField =
       kind: "language";
       hint?: string;
       default: string | null;
+    }
+  | {
+      key: string;
+      label: string;
+      /**
+       * Site names such as `example.com` or `*.example.com` (`link.allowed_hosts`,
+       * `cards.image_hosts`, V5-43); the editor comes with V5-44.
+       */
+      kind: "hosts";
+      hint?: string;
+      default: string[];
     };
 
 export interface BlockCatalogEntry {
@@ -240,6 +267,25 @@ export const UPLOAD_ACCEPT_OPTIONS = [
   { value: "image/heic", label: "HEIC" },
   { value: "image/heif", label: "HEIF" },
   { value: "application/pdf", label: "PDF" },
+] as const;
+
+/** `link.open_in` values (V5-43). */
+export const LINK_OPEN_IN = [
+  { value: "new_tab", label: "In a new tab" },
+  { value: "dialog", label: "In a window over the call" },
+] as const;
+
+/** `slots.timezone_mode` values (V5-43). */
+export const SLOTS_TIMEZONE_MODES = [
+  { value: "caller", label: "The caller's time zone" },
+  { value: "agent", label: "The business time zone" },
+] as const;
+
+/** `cards.layout` values (V5-43). */
+export const CARDS_LAYOUTS = [
+  { value: "carousel", label: "Carousel" },
+  { value: "grid", label: "Grid" },
+  { value: "list", label: "List" },
 ] as const;
 
 /** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */
@@ -541,6 +587,60 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       { key: "show_agent_name", label: "Show the person's name", kind: "boolean", default: true },
     ],
     filledBy: "transfer_call",
+  },
+  // V5-43: minimal entries (PLAN-V5 §0.1, R-V5-7); the renderers, the `hosts` editor and
+  // previews come with V5-44.
+  link: {
+    type: "link",
+    label: "Link",
+    description: "A payment, signing or portal link the caller opens, and whether they finished.",
+    defaultTitle: "Link",
+    idStem: "link",
+    configFields: [
+      {
+        key: "allowed_hosts",
+        label: "Sites links may go to",
+        kind: "hosts",
+        hint: "At least one, like example.com or *.example.com. Only https links are shown.",
+        default: [],
+      },
+      { key: "open_in", label: "Open the link", kind: "select", default: "new_tab", options: LINK_OPEN_IN },
+      { key: "show_qr", label: "Show a QR code for phones", kind: "boolean", default: true },
+    ],
+    filledBy: "send_link",
+  },
+  slots: {
+    type: "slots",
+    label: "Times",
+    description: "Times the caller can book, to tap or say.",
+    defaultTitle: "Pick a time",
+    idStem: "slots",
+    configFields: [
+      { key: "timezone_mode", label: "Show times in", kind: "select", default: "caller", options: SLOTS_TIMEZONE_MODES },
+      { key: "days_visible", label: "Days shown", kind: "integer", default: 7, min: 1 },
+      { key: "allow_custom", label: "Let the caller ask for another time", kind: "boolean", default: false },
+    ],
+    filledBy: "request_slot",
+  },
+  cards: {
+    type: "cards",
+    label: "Cards",
+    description: "Options side by side, like plans or repair shops, with buttons.",
+    defaultTitle: null,
+    idStem: "cards",
+    configFields: [
+      { key: "layout", label: "Layout", kind: "select", default: "carousel", options: CARDS_LAYOUTS },
+      { key: "selectable", label: "Let the caller pick one", kind: "boolean", default: true },
+      { key: "max_cards", label: "Most cards", kind: "integer", default: 10, min: 1 },
+      {
+        key: "image_hosts",
+        label: "Sites pictures may come from",
+        kind: "hosts",
+        hint: "Leave empty to show only pictures from the call.",
+        default: [],
+      },
+    ],
+    filledBy: "show_cards",
   },
 };
 

@@ -19,6 +19,9 @@ import {
   ActivityIcon,
   ChevronDownIcon,
   CaptionsIcon,
+  CalendarClockIcon,
+  GalleryHorizontalIcon,
+  LinkIcon,
   ClipboardListIcon,
   FileTextIcon,
   GaugeIcon,
@@ -87,6 +90,9 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   upload: UploadIcon,
   captions: CaptionsIcon,
   handoff: HeadsetIcon,
+  link: LinkIcon,
+  slots: CalendarClockIcon,
+  cards: GalleryHorizontalIcon,
 };
 
 /**

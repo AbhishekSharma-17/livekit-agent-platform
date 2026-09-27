@@ -31,6 +31,9 @@ export interface LkapContracts {
   AgentTestRunIn?: AgentTestRunIn;
   AgentTestRunPage?: AgentTestRunPage;
   AgentUpdate?: AgentUpdate;
+  AguiJsonPatchOp?: AguiJsonPatchOp;
+  AguiStateDeltaEvent?: AguiStateDeltaEvent;
+  AguiStateSnapshotEvent?: AguiStateSnapshotEvent;
   AmdConfig?: AmdConfig;
   AnalyticsBucket?: AnalyticsBucket;
   AnalyticsDriver?: AnalyticsDriver;
@@ -64,6 +67,7 @@ export interface LkapContracts {
   CallTransferIn?: CallTransferIn;
   CaptionSegment?: CaptionSegment;
   CaptionsBlockState?: CaptionsBlockState;
+  CardsBlockState?: CardsBlockState;
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
@@ -167,6 +171,10 @@ export interface LkapContracts {
   KnowledgeConnectionTestOut?: KnowledgeConnectionTestOut;
   KnowledgeConnectionUpdate?: KnowledgeConnectionUpdate;
   LanguageSwitchedEvent?: LanguageSwitchedEvent;
+  LinkBlockState?: LinkBlockState;
+  LinkCompletedPacket?: LinkCompletedPacket;
+  LinkHookIn?: LinkHookIn;
+  LinkHookOut?: LinkHookOut;
   LocaleConfig?: LocaleConfig;
   LocaleEvent?: LocaleEvent;
   MarkdownBlockState?: MarkdownBlockState;
@@ -262,9 +270,11 @@ export interface LkapContracts {
   SessionSummaryIn?: SessionSummaryIn;
   SessionWhisperIn?: SessionWhisperIn;
   SessionWhisperOut?: SessionWhisperOut;
+  SlotsBlockState?: SlotsBlockState;
   SmsTarget?: SmsTarget;
   StartNode?: StartNode;
   StarterTemplate?: StarterTemplate;
+  StateDeltaPayload?: StateDeltaPayload;
   StepsBlockState?: StepsBlockState;
   SupervisorPresenceEvent?: SupervisorPresenceEvent;
   SupervisorWhisperEvent?: SupervisorWhisperEvent;
@@ -302,6 +312,7 @@ export interface LkapContracts {
   UiRequest?: UiRequest;
   UiRequestResult?: UiRequestResult;
   UiSnapshot?: UiSnapshot;
+  UiSnapshotRequestPacket?: UiSnapshotRequestPacket;
   UiState?: UiState;
   UploadBlockState?: UploadBlockState;
   UserOut?: UserOut;
@@ -361,6 +372,10 @@ export interface ActivityEvent {
  * * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
  * * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
  *   (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
+ * * ``state_delta`` — ``{delta: [...]}`` (V5-43): an AG-UI ``STATE_DELTA`` (RFC 6902
+ *   operations, :mod:`lkap_contracts.ui_agui`) on ``/blocks/<id>/...`` paths of blocks
+ *   ``update_block`` may write (:data:`lkap_contracts.tools.UPDATABLE_BLOCK_TYPES`),
+ *   applied all or nothing through the block validators (:class:`StateDeltaPayload`)
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AgentAction".
@@ -374,7 +389,8 @@ export interface AgentAction {
     | "block_action"
     | "rewind"
     | "inject_user_text"
-    | "block_submit";
+    | "block_submit"
+    | "state_delta";
   payload?: {
     [k: string]: unknown;
   };
@@ -1641,7 +1657,10 @@ export interface BlockSpec {
     | "consent"
     | "upload"
     | "captions"
-    | "handoff";
+    | "handoff"
+    | "link"
+    | "slots"
+    | "cards";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -2530,6 +2549,42 @@ export interface AgentUpdate {
   ui_panel_id?: string | null;
 }
 /**
+ * One RFC 6902 operation, as AG-UI's ``STATE_DELTA.delta`` carries it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AguiJsonPatchOp".
+ */
+export interface AguiJsonPatchOp {
+  from?: string | null;
+  op: "add" | "remove" | "replace" | "move" | "copy" | "test";
+  path: string;
+  value?: unknown;
+}
+/**
+ * AG-UI ``STATE_DELTA``: RFC 6902 operations on the state.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AguiStateDeltaEvent".
+ */
+export interface AguiStateDeltaEvent {
+  delta: AguiJsonPatchOp[];
+  timestamp?: number | null;
+  type?: "STATE_DELTA";
+}
+/**
+ * AG-UI ``STATE_SNAPSHOT``: the complete state.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AguiStateSnapshotEvent".
+ */
+export interface AguiStateSnapshotEvent {
+  snapshot: {
+    [k: string]: unknown;
+  };
+  timestamp?: number | null;
+  type?: "STATE_SNAPSHOT";
+}
+/**
  * One day or one agent in ``AnalyticsSummary``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -3042,6 +3097,131 @@ export interface CaptionSegment {
 export interface CaptionsBlockState {
   language?: string | null;
   target_language?: string | null;
+}
+/**
+ * Rich cards, a carousel or a comparison (``show_cards``, V5-43).
+ *
+ * Tapping a card (with ``selectable``) sends ``block_action {name: "select",
+ * data: {card_id}}``; an action button sends ``block_action {name: <action>,
+ * data: {card_id}}``. The worker records ``selected`` and tells the model in a
+ * background message; a pack's ``on_block_action`` sees it too.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CardsBlockState".
+ */
+export interface CardsBlockState {
+  /**
+   * @maxItems 20
+   */
+  cards?:
+    | []
+    | [Card]
+    | [Card, Card]
+    | [Card, Card, Card]
+    | [Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card, Card]
+    | [
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card,
+        Card
+      ];
+  selected?: string | null;
+}
+/**
+ * One card: a plan, a repair shop, an offer (V5-43).
+ *
+ * ``image_asset_id`` names a picture already delivered on ``lkap.ui.asset``;
+ * ``image_url`` is an ``https://`` picture on one of the block config's
+ * ``image_hosts`` (the tool checks the host; this model checks the link).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "Card".
+ */
+export interface Card {
+  /**
+   * @maxItems 3
+   */
+  actions?: [] | [CardAction] | [CardAction, CardAction] | [CardAction, CardAction, CardAction];
+  /**
+   * @maxItems 5
+   */
+  badges?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string];
+  /**
+   * @maxItems 8
+   */
+  facts?:
+    | []
+    | [CardFact]
+    | [CardFact, CardFact]
+    | [CardFact, CardFact, CardFact]
+    | [CardFact, CardFact, CardFact, CardFact]
+    | [CardFact, CardFact, CardFact, CardFact, CardFact]
+    | [CardFact, CardFact, CardFact, CardFact, CardFact, CardFact]
+    | [CardFact, CardFact, CardFact, CardFact, CardFact, CardFact, CardFact]
+    | [CardFact, CardFact, CardFact, CardFact, CardFact, CardFact, CardFact, CardFact];
+  id: string;
+  image_asset_id?: string | null;
+  image_url?: string | null;
+  subtitle?: string | null;
+  title: string;
+}
+/**
+ * A button on a card; a tap sends ``block_action {name, data: {card_id}}``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CardAction".
+ */
+export interface CardAction {
+  label: string;
+  name: string;
+  tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
+}
+/**
+ * One label and value line on a card.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CardFact".
+ */
+export interface CardFact {
+  label: string;
+  value: string;
 }
 /**
  * Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).
@@ -5314,6 +5494,81 @@ export interface LanguageSwitchedEvent {
   voice_switched?: boolean;
 }
 /**
+ * A checkout, e-sign or portal link and where it stands (``send_link``, V5-43).
+ *
+ * Payments never happen in LKAP (D-V5-6): the block carries the link and the
+ * outcome the business's own system reports through ``POST /v1/hooks/link/
+ * {session_id}`` (signed), which the worker receives as a ``link_completed``
+ * packet on :data:`TOPIC_UI_LINK`. ``url`` is always an ``https://`` link on
+ * one of the block config's ``allowed_hosts`` (checked by the tool and here).
+ * ``reference`` is the business's id for the flow (an order or envelope id)
+ * that the hook may name instead of the block.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LinkBlockState".
+ */
+export interface LinkBlockState {
+  channel?: ("panel" | "sms") | null;
+  completed_at?: number | null;
+  expires_at?: number | null;
+  kind?: "checkout" | "esign" | "portal" | "other";
+  label?: string;
+  opened_at?: number | null;
+  reference?: string | null;
+  sent_at?: number | null;
+  status?: "idle" | "pending" | "opened" | "completed" | "failed" | "expired";
+  url?: string | null;
+}
+/**
+ * The data packet the api sends the worker on :data:`TOPIC_UI_LINK` (V5-43).
+ *
+ * The worker applies it to the ``link`` block it names (by ``block_id`` or
+ * ``reference``) only while that block is ``pending`` or ``opened``, so a
+ * repeated delivery changes nothing; it then tells the model in a background
+ * message.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LinkCompletedPacket".
+ */
+export interface LinkCompletedPacket {
+  block_id?: string | null;
+  id: string;
+  op?: "link_completed";
+  reference?: string | null;
+  session_id: string;
+  status?: "completed" | "failed" | "expired";
+  v?: 1;
+}
+/**
+ * Body of ``POST /v1/hooks/link/{session_id}`` (V5-43): a link's outcome.
+ *
+ * The business's own system (the one that received the payment provider's or
+ * the e-sign vendor's webhook) sends it, signed with ``X-LKAP-Signature`` like
+ * LKAP's outbound webhooks (``t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">``)
+ * using the signing secret of one of the workspace's webhook endpoints. It
+ * names the block, or the ``reference`` the link was sent with.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LinkHookIn".
+ */
+export interface LinkHookIn {
+  block_id?: string | null;
+  reference?: string | null;
+  status?: "completed" | "failed" | "expired";
+}
+/**
+ * What the link hook answers: the packet id and how many agents received it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LinkHookOut".
+ */
+export interface LinkHookOut {
+  delivered_to: number;
+  id: string;
+  session_id: string;
+  status: "completed" | "failed" | "expired";
+}
+/**
  * Payload of the ``locale`` session event the worker records at session start (R-V5-10).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -7139,6 +7394,44 @@ export interface SessionWhisperOut {
   id: string;
 }
 /**
+ * A calendar slot picker the caller taps or answers by voice (``request_slot``, V5-43).
+ *
+ * The agent fetches availability with its own tools and offers ``slots``;
+ * ``selected`` is the chosen slot's id once ``status`` is ``submitted``. A tap
+ * answers ``block_submit {values: {selected: <slot id>}}``: the worker reads
+ * only ``selected`` and takes the start and end from its own ``slots``, never
+ * from the browser. ``timezone`` is the zone the slots are shown in (the
+ * caller's, or the business's with ``timezone_mode="agent"``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SlotsBlockState".
+ */
+export interface SlotsBlockState {
+  grouped_by_day?: boolean;
+  prompt?: string;
+  selected?: string | null;
+  /**
+   * @maxItems 50
+   */
+  slots?: TimeSlot[];
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
+  timezone?: string | null;
+}
+/**
+ * One bookable slot: ISO 8601 start and end, each with its UTC offset (V5-43).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TimeSlot".
+ */
+export interface TimeSlot {
+  capacity?: number | null;
+  end: string;
+  id: string;
+  label?: string | null;
+  start: string;
+}
+/**
  * One starter: gallery metadata, the overlay on the pack manifest, and extras on the seeded config.
  *
  * Overlay fields left ``None`` keep the pack manifest's value. ``voice`` and
@@ -7248,6 +7541,34 @@ export interface RequiredKey {
 export interface ToolSeed {
   definition: HttpToolDefinition;
   enabled?: boolean;
+}
+/**
+ * ``AgentAction.payload`` for ``action == "state_delta"`` (V5-43).
+ *
+ * ``delta`` is an AG-UI ``STATE_DELTA`` event's ``delta``: RFC 6902 operations
+ * (``add``, ``remove``, ``replace``, ``move``, ``copy``, ``test``) whose paths
+ * are JSON Pointers into :class:`UiState`. Only ``/blocks/<id>/...`` paths of
+ * blocks whose type ``update_block`` may write are accepted; the whole delta is
+ * refused when one operation is (a failed ``test`` included). ``type`` may be
+ * sent as ``"STATE_DELTA"`` so a whole AG-UI event can be forwarded as is.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StateDeltaPayload".
+ */
+export interface StateDeltaPayload {
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
+  delta: [
+    {
+      [k: string]: unknown;
+    },
+    ...{
+      [k: string]: unknown;
+    }[]
+  ];
+  type?: "STATE_DELTA" | null;
 }
 /**
  * A progress timeline: ``set_steps``, or the flow position with ``source="flow"`` (V5-08).
@@ -7788,6 +8109,22 @@ export interface UiSnapshot {
   session_id: string;
   state: UiState;
   type?: "snapshot";
+  v?: 1;
+}
+/**
+ * A server-sent request for a fresh ``lkap.ui.state`` snapshot (asks #252, V5-43).
+ *
+ * Sent by the api with the server API on the supervisor topic
+ * (``lkap_contracts.api_models.SUPERVISOR_TOPIC``) when a hidden listener joins
+ * mid-call: a listener cannot call ``get_snapshot`` over RPC. The worker honours
+ * it only when the server sent it and it names the worker's session.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "UiSnapshotRequestPacket".
+ */
+export interface UiSnapshotRequestPacket {
+  op?: "snapshot";
+  session_id: string;
   v?: 1;
 }
 /**

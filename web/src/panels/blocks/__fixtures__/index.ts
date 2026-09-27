@@ -22,6 +22,7 @@ import type { BlockType } from "@/panels/composite/layout";
 import genericUiState from "../../../../tests/fixtures/generic_ui_state.json";
 import choicesState from "./choices.json";
 import captionsState from "./captions.json";
+import cardsState from "./cards.json";
 import handoffState from "./handoff.json";
 import consentState from "./consent.json";
 import detailsState from "./details.json";
@@ -31,7 +32,9 @@ import formSubmitted from "./form.submitted.json";
 import galleryState from "./gallery.json";
 import kbCitationsState from "./kb_citations.json";
 import layout from "./layout.json";
+import linkState from "./link.json";
 import markdownState from "./markdown.json";
+import slotsState from "./slots.json";
 import stepsState from "./steps.json";
 import tableState from "./table.json";
 import transcriptState from "./transcript.json";
@@ -58,6 +61,9 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   upload: uploadState,
   captions: captionsState,
   handoff: handoffState,
+  link: linkState,
+  slots: slotsState,
+  cards: cardsState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */
@@ -83,6 +89,10 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   captions: { type: "captions", state: captionsState },
   // V5-32: the handoff block's state (renderer and scenes come with V5-36).
   handoff: { type: "handoff", state: handoffState },
+  // V5-43: the link, slots and cards states (renderers and scenes come with V5-44).
+  link: { type: "link", state: linkState },
+  slots: { type: "slots", state: slotsState },
+  cards: { type: "cards", state: cardsState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -147,6 +157,9 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     documents: uploadState,
     live_captions: captionsState,
     handoff: handoffState,
+    payment: linkState,
+    inspection: slotsState,
+    plans: cardsState,
   };
 }
 

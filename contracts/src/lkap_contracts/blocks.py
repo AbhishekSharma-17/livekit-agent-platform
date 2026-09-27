@@ -33,6 +33,12 @@ schemas by a vitest parity test):
 * ``captions`` → ``show_user``, ``show_agent``, ``target_language`` (reserved for
   translated captions) and ``position`` (``block`` / ``bottom``) (V5-31);
 * ``handoff`` → ``show_queue`` and ``show_agent_name`` (V5-32);
+* ``link`` → ``allowed_hosts`` (required: the sites links may go to, ``example.com`` or
+  ``*.example.com``), ``open_in`` (``new_tab`` / ``dialog``) and ``show_qr`` (V5-43);
+* ``slots`` → ``timezone_mode`` (``caller`` / ``agent``), ``days_visible`` and
+  ``allow_custom`` (V5-43);
+* ``cards`` → ``layout`` (``carousel`` / ``grid`` / ``list``), ``selectable``,
+  ``max_cards`` and ``image_hosts`` (the sites card pictures may come from) (V5-43);
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -56,12 +62,15 @@ from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, ConsentDeclineActi
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN
 from lkap_contracts.ui_protocol import (
     DEFAULT_UPLOAD_MAX_BYTES,
+    MAX_ALLOWED_HOSTS,
+    MAX_CARDS,
     MAX_UPLOAD_BYTES,
     MAX_UPLOAD_FILES,
     BlockSpec,
     BlockType,
     CaptionsPosition,
     DetailsValueType,
+    normalize_hosts,
 )
 
 __all__ = [
@@ -70,6 +79,7 @@ __all__ = [
     "UPLOAD_EXTENSIONS",
     "UPLOAD_MIME_TYPES",
     "CaptionsBlockConfig",
+    "CardsBlockConfig",
     "ChoicesBlockConfig",
     "ConsentBlockConfig",
     "CustomBlockConfig",
@@ -78,7 +88,9 @@ __all__ = [
     "DocumentBlockConfig",
     "EmptyBlockConfig",
     "HandoffBlockConfig",
+    "LinkBlockConfig",
     "MarkdownBlockConfig",
+    "SlotsBlockConfig",
     "StepConfig",
     "StepsBlockConfig",
     "TableBlockConfig",
@@ -400,6 +412,61 @@ class HandoffBlockConfig(_StrictConfig):
     show_agent_name: bool = True
 
 
+class LinkBlockConfig(_StrictConfig):
+    """``link``: where links may go, how they open, and whether a QR code shows (V5-43).
+
+    ``allowed_hosts`` is required: ``send_link`` refuses any link whose site is not
+    listed (``example.com``, or ``*.example.com`` for its sub-domains), and only
+    ``https://`` links are ever shown. ``open_in="dialog"`` opens the link in a
+    dialog over the call instead of a new tab; ``show_qr`` shows a QR code so a
+    caller on a computer can finish on their phone.
+    """
+
+    allowed_hosts: list[str] = Field(default=[], max_length=MAX_ALLOWED_HOSTS, validate_default=True)
+    open_in: Literal["new_tab", "dialog"] = "new_tab"
+    show_qr: bool = True
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def _sites(cls, value: list[str]) -> list[str]:
+        hosts = normalize_hosts(value)
+        if not hosts:
+            raise ValueError("add at least one site links may go to, e.g. example.com")
+        return hosts
+
+
+class SlotsBlockConfig(_StrictConfig):
+    """``slots``: which timezone the slots show in, how many days, and free times (V5-43).
+
+    ``timezone_mode="caller"`` shows the slots in the caller's own timezone,
+    ``"agent"`` in the business timezone. ``allow_custom`` lets the caller ask
+    for a time that is not offered: the agent confirms it out loud with
+    ``resolve_slot``.
+    """
+
+    timezone_mode: Literal["caller", "agent"] = "caller"
+    days_visible: int = Field(default=7, ge=1, le=31)
+    allow_custom: bool = False
+
+
+class CardsBlockConfig(_StrictConfig):
+    """``cards``: how the cards are laid out, whether one can be picked, how many (V5-43).
+
+    ``image_hosts`` lists the sites a card's ``image_url`` may come from (empty:
+    only pictures already delivered in the session, by ``image_asset_id``).
+    """
+
+    layout: Literal["carousel", "grid", "list"] = "carousel"
+    selectable: bool = True
+    max_cards: int = Field(default=10, ge=1, le=MAX_CARDS)
+    image_hosts: list[str] = Field(default=[], max_length=MAX_ALLOWED_HOSTS)
+
+    @field_validator("image_hosts")
+    @classmethod
+    def _sites(cls, value: list[str]) -> list[str]:
+        return normalize_hosts(value)
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -435,6 +502,9 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "upload": UploadBlockConfig,
     "captions": CaptionsBlockConfig,
     "handoff": HandoffBlockConfig,
+    "link": LinkBlockConfig,
+    "slots": SlotsBlockConfig,
+    "cards": CardsBlockConfig,
 }
 
 

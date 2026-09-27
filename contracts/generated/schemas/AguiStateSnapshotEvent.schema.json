@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/AguiStateSnapshotEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "AG-UI ``STATE_SNAPSHOT``: the complete state.",
+  "properties": {
+    "snapshot": {
+      "additionalProperties": true,
+      "title": "Snapshot",
+      "type": "object"
+    },
+    "timestamp": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timestamp"
+    },
+    "type": {
+      "const": "STATE_SNAPSHOT",
+      "default": "STATE_SNAPSHOT",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "snapshot"
+  ],
+  "title": "AguiStateSnapshotEvent",
+  "type": "object"
+}

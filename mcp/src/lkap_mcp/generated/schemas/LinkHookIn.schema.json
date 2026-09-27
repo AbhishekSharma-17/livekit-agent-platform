@@ -1,0 +1,47 @@
+{
+  "$id": "lkap-contracts/LinkHookIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Body of ``POST /v1/hooks/link/{session_id}`` (V5-43): a link's outcome.\n\nThe business's own system (the one that received the payment provider's or\nthe e-sign vendor's webhook) sends it, signed with ``X-LKAP-Signature`` like\nLKAP's outbound webhooks (``t=<unix>,v1=<hex HMAC-SHA256 of \"<t>.<body>\">``)\nusing the signing secret of one of the workspace's webhook endpoints. It\nnames the block, or the ``reference`` the link was sent with.",
+  "properties": {
+    "block_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Block Id"
+    },
+    "reference": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference"
+    },
+    "status": {
+      "default": "completed",
+      "enum": [
+        "completed",
+        "failed",
+        "expired"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "title": "LinkHookIn",
+  "type": "object"
+}

@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "Card": {
+      "description": "One card: a plan, a repair shop, an offer (V5-43).\n\n``image_asset_id`` names a picture already delivered on ``lkap.ui.asset``;\n``image_url`` is an ``https://`` picture on one of the block config's\n``image_hosts`` (the tool checks the host; this model checks the link).",
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CardAction"
+          },
+          "maxItems": 3,
+          "title": "Actions",
+          "type": "array"
+        },
+        "badges": {
+          "default": [],
+          "items": {
+            "maxLength": 30,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Badges",
+          "type": "array"
+        },
+        "facts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CardFact"
+          },
+          "maxItems": 8,
+          "title": "Facts",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "image_asset_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Asset Id"
+        },
+        "image_url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Url"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtitle"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "Card",
+      "type": "object"
+    },
+    "CardAction": {
+      "description": "A button on a card; a tap sends ``block_action {name, data: {card_id}}``.",
+      "properties": {
+        "label": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "title": "CardAction",
+      "type": "object"
+    },
+    "CardFact": {
+      "description": "One label and value line on a card.",
+      "properties": {
+        "label": {
+          "maxLength": 40,
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 120,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "CardFact",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/CardsBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Rich cards, a carousel or a comparison (``show_cards``, V5-43).\n\nTapping a card (with ``selectable``) sends ``block_action {name: \"select\",\ndata: {card_id}}``; an action button sends ``block_action {name: <action>,\ndata: {card_id}}``. The worker records ``selected`` and tells the model in a\nbackground message; a pack's ``on_block_action`` sees it too.",
+  "properties": {
+    "cards": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Card"
+      },
+      "maxItems": 20,
+      "title": "Cards",
+      "type": "array"
+    },
+    "selected": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected"
+    }
+  },
+  "title": "CardsBlockState",
+  "type": "object"
+}

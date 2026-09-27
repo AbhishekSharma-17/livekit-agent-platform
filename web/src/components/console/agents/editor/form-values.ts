@@ -2,6 +2,7 @@ import {
   DEFAULT_AVATAR_OPTIONS,
   DEFAULT_CAPABILITIES,
   DEFAULT_DISCLOSURE,
+  DEFAULT_GUARDRAILS,
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
   DEFAULT_LOCALE,
@@ -12,9 +13,28 @@ import {
   DEFAULT_TOOLS,
   DEFAULT_VOICE,
 } from "@/components/console/agents/defaults";
-import type { AgentEditorForm, AgentTestForm, PanelLayoutForm, QaFieldForm } from "@/components/console/lib/schemas";
+import type {
+  AgentEditorForm,
+  AgentTestForm,
+  GuardrailRuleForm,
+  GuardrailsConfigForm,
+  PanelLayoutForm,
+  QaFieldForm,
+} from "@/components/console/lib/schemas";
 import { panelMeta } from "@/components/shared/panel-meta";
-import type { AgentConfig, AgentLimits, AgentOut, AgentTest, AgentUpdate, PipelineConfig, QaField } from "@/contracts/lkap-contracts";
+import type {
+  AgentConfig,
+  AgentLimits,
+  AgentOut,
+  AgentTest,
+  AgentUpdate,
+  ClassifierRule,
+  GuardrailsConfig,
+  PipelineConfig,
+  ProviderRule,
+  QaField,
+  RegexRule,
+} from "@/contracts/lkap-contracts";
 
 /**
  * `AgentTest` <-> the form's plain-array shape (V5-33): the generated
@@ -38,6 +58,43 @@ function testFormValue(test: AgentTest): AgentTestForm {
 
 function testPayload(test: AgentTestForm): AgentTest {
   return { ...test, expectations: test.expectations as AgentTest["expectations"] };
+}
+
+/**
+ * `RegexRule | ClassifierRule | ProviderRule` <-> the form's shape (V5-41,
+ * `lkap_contracts.guardrails`): `kind` is a required literal in the form (the
+ * generated `lkap-contracts.d.ts` marks it optional) and every per-kind
+ * optional field (`ignore_case`, `categories`, `credential_id`, `provider`)
+ * is filled in so a controlled input always has a value. Narrows by
+ * structural key (`pattern` only exists on `RegexRule`, `prompt` only on
+ * `ClassifierRule`) rather than by `kind`, since `kind` itself is optional on
+ * every generated variant and so isn't a reliable discriminant here.
+ */
+function guardrailRuleFormValue(rule: RegexRule | ClassifierRule | ProviderRule): GuardrailRuleForm {
+  if ("pattern" in rule) {
+    return { kind: "regex", name: rule.name, pattern: rule.pattern, ignore_case: rule.ignore_case ?? true };
+  }
+  if ("prompt" in rule) {
+    return { kind: "classifier", name: rule.name, prompt: rule.prompt };
+  }
+  return {
+    kind: "provider",
+    name: rule.name,
+    provider: rule.provider ?? "openai_moderation",
+    categories: [...(rule.categories ?? [])],
+    credential_id: rule.credential_id ?? null,
+  };
+}
+
+/** `GuardrailsConfig` <-> the form's shape (V5-41): every stage's rule array normalised as above. */
+function guardrailsFormValue(guardrails: GuardrailsConfig | undefined): GuardrailsConfigForm {
+  return {
+    ...DEFAULT_GUARDRAILS,
+    ...guardrails,
+    input: (guardrails?.input ?? []).map(guardrailRuleFormValue),
+    output: (guardrails?.output ?? []).map(guardrailRuleFormValue),
+    tool_output: (guardrails?.tool_output ?? []).map(guardrailRuleFormValue),
+  };
 }
 
 /** `QaField` <-> the form's shape (V5-34): `type` is optional on the contract, always concrete in the form. */
@@ -124,6 +181,8 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       qa: { ...config.qa, fields: (config.qa?.fields ?? []).map(qaFieldFormValue) },
       // V5-42's Memory card: `config.memory`, the same optional-field pattern as `privacy` above.
       memory: { ...DEFAULT_MEMORY, ...config.memory },
+      // V5-41's Guardrails card: `config.guardrails`, the rule arrays normalised by `guardrailsFormValue`.
+      guardrails: guardrailsFormValue(config.guardrails),
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
       // R-V2-21 / V5-28: the Tools section's "Phone calls" card edits both lists —
@@ -222,6 +281,17 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
   if (edited.qa !== undefined) config.qa = { ...stored.qa, ...edited.qa };
   // V5-42: the Memory card owns `config.memory`.
   if (edited.memory !== undefined) config.memory = { ...stored.memory, ...edited.memory };
+  // V5-41: the Guardrails card owns `config.guardrails`. The rule arrays are cast back to the
+  // generated tuple-union type — the same quirk `testPayload`'s `expectations` cast works around.
+  if (edited.guardrails !== undefined) {
+    config.guardrails = {
+      ...stored.guardrails,
+      ...edited.guardrails,
+      input: edited.guardrails.input as GuardrailsConfig["input"],
+      output: edited.guardrails.output as GuardrailsConfig["output"],
+      tool_output: edited.guardrails.tool_output as GuardrailsConfig["tool_output"],
+    };
+  }
   // R-V2-21: the Tools section edits `config.telephony` (the transfer destinations).
   if (edited.telephony !== undefined) config.telephony = { ...stored.telephony, ...edited.telephony };
   // The flow builder (V2-16) owns `config.flow`; the api derives `mode` from it (R-V2-12).

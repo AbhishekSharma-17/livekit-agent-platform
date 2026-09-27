@@ -59,6 +59,60 @@ describe("ActivityRow — detail.message (E2)", () => {
   });
 });
 
+describe("ActivityRow — guardrail chip (V5-39/V5-41)", () => {
+  it("shows a shield mark and the trip's action as a chip beside the headline", () => {
+    render(
+      <ActivityRow
+        event={event({
+          kind: "guardrail",
+          source: "guardrail",
+          label: "Guardrail",
+          headline: "Caller's words: Card numbers",
+          phase: "done",
+          detail: { stage: "input", rule: "Card numbers", action: "interrupt" },
+        })}
+      />,
+    );
+    expect(screen.getByText("Caller's words: Card numbers")).toBeTruthy();
+    expect(screen.getByText("Said the safe reply")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Guardrail" })).toBeTruthy();
+  });
+
+  it("reads the stronger action word for end_call/escalate, alongside Urgent", () => {
+    render(
+      <ActivityRow
+        event={event({
+          kind: "guardrail",
+          urgent: true,
+          headline: "Agent's reply: No medical advice",
+          detail: { stage: "output", rule: "No medical advice", action: "end_call" },
+        })}
+      />,
+    );
+    expect(screen.getByText("Ended the call")).toBeTruthy();
+    expect(screen.getByText("Urgent")).toBeTruthy();
+  });
+
+  it("reads a replaced tool result the same as a said safe reply", () => {
+    render(
+      <ActivityRow
+        event={event({
+          kind: "guardrail",
+          headline: "Tool result: No hate speech",
+          detail: { stage: "tool_output", rule: "No hate speech", action: "replaced", tool: "search_policy" },
+        })}
+      />,
+    );
+    expect(screen.getByText("Said the safe reply")).toBeTruthy();
+  });
+
+  it("shows no guardrail mark or chip for an ordinary tool row", () => {
+    render(<ActivityRow event={event()} />);
+    expect(screen.queryByRole("img", { name: "Guardrail" })).toBeNull();
+    expect(screen.queryByText(/Said the safe reply|Ended the call|Handed to a person/)).toBeNull();
+  });
+});
+
 describe("ActivityBlock", () => {
   it("renders one row per event, newest first, each carrying its own detail", () => {
     render(

@@ -20,7 +20,7 @@
  */
 import * as React from "react";
 
-import { CheckIcon, ChevronRightIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, ShieldAlertIcon } from "lucide-react";
 
 import type {
   ActivityEvent,
@@ -326,12 +326,44 @@ function activityDetailMessage(event: ActivityEvent): string | null {
   return typeof message === "string" && message.trim().length > 0 ? message : null;
 }
 
-/** One activity row: a running item gets the meter, everything else a dot. */
+/**
+ * A guardrail trip's `action` (V5-39's `ActivityEvent.detail = {stage, rule,
+ * action}`), as a plain verb phrase next to the headline. `interrupt` and
+ * `replaced` read the same ("Said the safe reply") since a caller can't tell
+ * the difference between "stopped and continued" and "replaced the result" —
+ * both just mean the unsafe text never reached them.
+ */
+const GUARDRAIL_ACTION_LABEL: Record<string, string> = {
+  interrupt: "Said the safe reply",
+  end_call: "Ended the call",
+  escalate: "Handed to a person",
+  replaced: "Said the safe reply",
+};
+
+function guardrailActionLabel(event: ActivityEvent): string | null {
+  const action = event.detail?.action;
+  return typeof action === "string" ? (GUARDRAIL_ACTION_LABEL[action] ?? null) : null;
+}
+
+/**
+ * One activity row: a running item gets the meter, a guardrail trip (V5-39,
+ * V5-41: `kind === "guardrail"`) gets a shield mark and its action as a
+ * chip beside the headline, everything else a plain dot.
+ */
 export function ActivityRow({ event }: { event: ActivityEvent }) {
   const detailMessage = activityDetailMessage(event);
+  const isGuardrail = event.kind === "guardrail";
+  const guardrailAction = isGuardrail ? guardrailActionLabel(event) : null;
   return (
-    <li data-slot="panel-activity-item" data-phase={event.phase} className="flex gap-2.5">
-      {event.phase === "running" ? (
+    <li data-slot="panel-activity-item" data-phase={event.phase} data-kind={event.kind ?? undefined} className="flex gap-2.5">
+      {isGuardrail ? (
+        <Icon
+          as={ShieldAlertIcon}
+          size="sm"
+          label="Guardrail"
+          className={cn("mt-0.5 shrink-0", event.urgent ? "text-danger" : "text-warning")}
+        />
+      ) : event.phase === "running" ? (
         // The row text already says "Working"; the meter is decoration.
         <span aria-hidden="true" className="mt-1 inline-flex shrink-0">
           <StateMeter state="thinking" size="xs" />
@@ -345,6 +377,11 @@ export function ActivityRow({ event }: { event: ActivityEvent }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm leading-snug break-words">
           {event.headline}
+          {guardrailAction ? (
+            <StatusChip tone={event.urgent ? "danger" : "warning"} size="sm" className="ml-1.5 align-middle">
+              {guardrailAction}
+            </StatusChip>
+          ) : null}
           {event.urgent && (
             <StatusChip tone="danger" size="sm" className="ml-1.5 align-middle">
               Urgent

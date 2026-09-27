@@ -1,9 +1,10 @@
-import { BrainIcon, FlaskConicalIcon, MessageCircleIcon, ShieldIcon } from "lucide-react";
+import { BrainIcon, FlaskConicalIcon, MessageCircleIcon, ShieldAlertIcon, ShieldIcon } from "lucide-react";
 
 import { BUILTIN_SECTIONS } from "./builtin-sections";
 import { EDITOR_EXTENSIONS } from "./extensions";
 import { resolveEditorSections, resolveEditorSlots } from "./registry";
 import { ConversationSection } from "./sections/conversation-section";
+import { GuardrailsSection } from "./sections/guardrails-section";
 import { MemorySection } from "./sections/memory-section";
 import { PrivacySection } from "./sections/privacy-section";
 import { TestsSection } from "./sections/tests-section";
@@ -119,9 +120,34 @@ const memorySectionExtension: EditorExtension = {
 };
 
 /**
+ * V5-41: the Guardrails section (rules on what the caller says, what the
+ * agent says and what tools return; the safe reply, what happens on a trip,
+ * the judging model and its time budget). Same rationale as the extensions
+ * above — this package's exclusive files are `sections.ts` / `registry.ts`,
+ * not `extensions.ts`. `order: 76` sits right after "Memory" (74) — both are
+ * about protecting the call — and before "Limits" (80), so "Tests" (85)
+ * stays last (`console-editor-sections.test.tsx`).
+ */
+const guardrailsSectionExtension: EditorExtension = {
+  id: "V5-41",
+  sections: [
+    {
+      id: "guardrails",
+      label: "Guardrails",
+      icon: ShieldAlertIcon,
+      order: 76,
+      Component: GuardrailsSection,
+      issuePaths: ["guardrails"],
+      issueKeywords: /\b(guardrail|safe reply|moderation|pattern does not compile|repeats a group|trip)/i,
+      issueKeywordPriority: 23,
+    },
+  ],
+};
+
+/**
  * The editor's section registry (docs/UI_UX_SPEC.md §7.4 item 3): built-ins
- * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's, V5-34's and V5-42's own
- * extensions above, resolved once at module load.
+ * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's, V5-34's, V5-42's and
+ * V5-41's own extensions above, resolved once at module load.
  */
 export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   ...EDITOR_EXTENSIONS,
@@ -129,6 +155,7 @@ export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   testsSectionExtension,
   privacySectionExtension,
   memorySectionExtension,
+  guardrailsSectionExtension,
 ]);
 export const EDITOR_SLOTS = resolveEditorSlots(EDITOR_EXTENSIONS);
 

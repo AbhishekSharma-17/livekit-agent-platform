@@ -408,6 +408,87 @@ describe("<TimelineView />", () => {
       expect(row?.querySelector("pre")?.textContent).toContain(hash);
     });
   });
+
+  describe("guardrail events (V5-39/V5-41, ask #280)", () => {
+    it("reads an input trip as the missing caller turn — a 'You' chip, never the generic 'Other' row", () => {
+      const trip = ev("guardrail", 500, {
+        stage: "input",
+        rule: "Card numbers",
+        kind: "regex",
+        action: "interrupt",
+        excerpt_hash: "abc123",
+      });
+      render(<TimelineView session={detail()} events={[trip]} eventKinds={KINDS} />);
+      expect(screen.getByText("You")).toBeTruthy();
+      expect(screen.getByText("Stopped the caller's words")).toBeTruthy();
+      expect(screen.getByText(/Pattern · Card numbers/)).toBeTruthy();
+      expect(screen.getByText("Said the safe reply")).toBeTruthy();
+    });
+
+    it("reads an output trip without the 'You' chip, and names the tool for a tool_output trip", () => {
+      const outputTrip = ev("guardrail", 500, {
+        stage: "output",
+        rule: "No medical advice",
+        kind: "classifier",
+        action: "escalate",
+        excerpt_hash: "def456",
+      });
+      const { unmount } = render(<TimelineView session={detail()} events={[outputTrip]} eventKinds={KINDS} />);
+      expect(screen.getByText("Stopped the agent's reply")).toBeTruthy();
+      expect(screen.getByText(/Instruction · No medical advice/)).toBeTruthy();
+      expect(screen.getByText("Said the safe reply, then handed to a person")).toBeTruthy();
+      expect(screen.queryByText("You")).toBeNull();
+      unmount();
+
+      const toolTrip = ev("guardrail", 500, {
+        stage: "tool_output",
+        rule: "No hate speech",
+        kind: "provider",
+        action: "replaced",
+        tool: "search_policy",
+        categories: ["hate"],
+        excerpt_hash: "ghi789",
+      });
+      render(<TimelineView session={detail()} events={[toolTrip]} eventKinds={KINDS} />);
+      expect(screen.getByText("Withheld a tool result")).toBeTruthy();
+      expect(screen.getByText(/Tool: search_policy/)).toBeTruthy();
+      expect(screen.getByText("Replaced it with the safe reply")).toBeTruthy();
+    });
+
+    it("keeps the excerpt behind Details, closed by default (the consent-hash precedent above)", () => {
+      const trip = ev("guardrail", 500, {
+        stage: "input",
+        rule: "Card numbers",
+        kind: "regex",
+        action: "interrupt",
+        excerpt_hash: "abc123",
+        excerpt: "my card is 4111111111111111",
+      });
+      const { container } = render(<TimelineView session={detail()} events={[trip]} eventKinds={KINDS} />);
+      const row = container.querySelector("li[data-row=guardrail]");
+      expect(row).toBeTruthy();
+      const details = row?.querySelector("details");
+      expect(details?.open).toBe(false);
+      // The summary itself never carries the raw excerpt; only the (closed) code block does.
+      expect(row?.querySelector("summary")?.textContent).not.toContain("4111111111111111");
+      expect(row?.querySelector("pre")?.textContent).toContain("4111111111111111");
+    });
+
+    it("reads a guardrail_timeout as a fail-open note, distinct from a trip", () => {
+      const timeout = ev("guardrail_timeout", 500, {
+        stage: "output",
+        rule: "No medical advice",
+        kind: "classifier",
+        reason: "timeout",
+        budget_ms: 300,
+      });
+      const { container } = render(<TimelineView session={detail()} events={[timeout]} eventKinds={KINDS} />);
+      expect(screen.getByText(/didn't answer in time/)).toBeTruthy();
+      expect(screen.getByText(/over 300 ms/)).toBeTruthy();
+      expect(screen.getByText(/text went through unchecked/)).toBeTruthy();
+      expect(container.querySelector("li[data-row=guardrail-timeout]")).toBeTruthy();
+    });
+  });
 });
 
 describe("session detail tab registry (WP-7 → V2-14 contract)", () => {

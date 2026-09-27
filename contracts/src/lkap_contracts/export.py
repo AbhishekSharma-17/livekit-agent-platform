@@ -253,6 +253,13 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "McpOauthStartIn": api_models.McpOauthStartIn,
     "McpOauthStartOut": api_models.McpOauthStartOut,
     "McpOauthStatusOut": api_models.McpOauthStatusOut,
+    "KnowledgeConnectionCapabilities": api_models.KnowledgeConnectionCapabilities,  # V5-20
+    "KnowledgeConnectionCreate": api_models.KnowledgeConnectionCreate,
+    "KnowledgeConnectionUpdate": api_models.KnowledgeConnectionUpdate,
+    "KnowledgeConnectionOut": api_models.KnowledgeConnectionOut,
+    "KnowledgeConnectionPage": api_models.KnowledgeConnectionPage,
+    "KnowledgeConnectionTestOut": api_models.KnowledgeConnectionTestOut,
+    "KbRerankUsage": api_models.KbRerankUsage,
     "KbCreate": api_models.KbCreate,
     "KbOut": api_models.KbOut,
     "KbDocumentOut": api_models.KbDocumentOut,

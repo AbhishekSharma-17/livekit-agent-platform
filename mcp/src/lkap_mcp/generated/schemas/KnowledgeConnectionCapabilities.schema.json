@@ -1,0 +1,63 @@
+{
+  "$id": "lkap-contracts/KnowledgeConnectionCapabilities.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``).",
+  "properties": {
+    "dimension": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vector width the collection or index holds; null when not fixed.",
+      "title": "Dimension"
+    },
+    "filters": {
+      "default": false,
+      "title": "Filters",
+      "type": "boolean"
+    },
+    "hybrid": {
+      "default": false,
+      "description": "Keyword and vector matches are fused inside the store (else the platform fuses them).",
+      "title": "Hybrid",
+      "type": "boolean"
+    },
+    "namespaces": {
+      "default": false,
+      "description": "Each knowledge base is its own namespace or tenant.",
+      "title": "Namespaces",
+      "type": "boolean"
+    },
+    "rerank": {
+      "default": false,
+      "description": "A re-ranking service (not a vector store).",
+      "title": "Rerank",
+      "type": "boolean"
+    },
+    "stores_text": {
+      "default": false,
+      "title": "Stores Text",
+      "type": "boolean"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The service's version, when it reports one.",
+      "title": "Version"
+    }
+  },
+  "title": "KnowledgeConnectionCapabilities",
+  "type": "object"
+}

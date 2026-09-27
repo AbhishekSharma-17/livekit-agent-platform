@@ -141,11 +141,18 @@ export interface LkapContracts {
   KbReindexIn?: KbReindexIn;
   KbReindexOut?: KbReindexOut;
   KbReindexSkipped?: KbReindexSkipped;
+  KbRerankUsage?: KbRerankUsage;
   KbSearchOptions?: KbSearchOptions;
   KbSearchRequest?: KbSearchRequest;
   KbSearchResponse?: KbSearchResponse;
   KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
+  KnowledgeConnectionCapabilities?: KnowledgeConnectionCapabilities;
+  KnowledgeConnectionCreate?: KnowledgeConnectionCreate;
+  KnowledgeConnectionOut?: KnowledgeConnectionOut;
+  KnowledgeConnectionPage?: KnowledgeConnectionPage;
+  KnowledgeConnectionTestOut?: KnowledgeConnectionTestOut;
+  KnowledgeConnectionUpdate?: KnowledgeConnectionUpdate;
   LocaleConfig?: LocaleConfig;
   LocaleEvent?: LocaleEvent;
   MarkdownBlockState?: MarkdownBlockState;
@@ -2763,11 +2770,15 @@ export interface InternalKbSearchRequest {
    * `vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).
    */
   mode?: "vector" | "hybrid";
+  /**
+   * `auto_inject` never uses a hosted re-ranking service (D-V5-19): the api refuses it and searches without; `tool` (the search tool) may.
+   */
+  purpose?: ("tool" | "auto_inject") | null;
   query: string;
   /**
-   * `local` rescores the top candidates with the local cross-encoder.
+   * `local` rescores the top candidates with the local cross-encoder; `connection:<id>` with the hosted re-ranking service of that knowledge connection.
    */
-  rerank?: "none" | "local";
+  rerank?: string;
 }
 /**
  * ``POST /internal/v1/telephony/sessions/{id}/transfer`` (the ``transfer_call`` tool).
@@ -2844,6 +2855,10 @@ export interface KbCitation {
  * via the `definition` "KbCreate".
  */
 export interface KbCreate {
+  /**
+   * Store the vectors through this knowledge connection (a vector store of the same workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists.
+   */
+  connection_id?: string | null;
   description?: string;
   embedder_id?: string;
   name: string;
@@ -3236,7 +3251,7 @@ export interface KbEvalResult {
    * found / scored; null when nothing could be scored.
    */
   recall_at_k: number | null;
-  rerank: "none" | "local";
+  rerank: string;
   /**
    * Questions that were run (total minus skipped).
    */
@@ -3304,7 +3319,7 @@ export interface KbEvaluateIn {
   /**
    * `local` rescores the top candidates with the local cross-encoder.
    */
-  rerank?: "none" | "local";
+  rerank?: string;
 }
 /**
  * `PUT /v1/knowledge-bases/{id}/evals`: the complete set (replaces the stored one).
@@ -3408,6 +3423,10 @@ export interface KbOut {
   chunking?: {
     [k: string]: number;
   } | null;
+  /**
+   * The knowledge connection holding the vectors; null = the platform's store.
+   */
+  connection_id?: string | null;
   created_at: string;
   description: string;
   /**
@@ -3420,7 +3439,15 @@ export interface KbOut {
    * Embedding model recorded at creation; null for a KB created before V5-01.
    */
   embedder_model?: string | null;
+  /**
+   * Where the vectors live in the connection (collection, index and namespace, or tenant).
+   */
+  external_ref?: string | null;
   id: string;
+  /**
+   * `managed`: the platform ingests it.
+   */
+  kind?: "managed" | "external";
   name: string;
   updated_at: string;
 }
@@ -3463,6 +3490,43 @@ export interface KbReindexSkipped {
   reason: "source_not_stored" | "ingest_in_progress";
 }
 /**
+ * One hosted re-rank call and its cost line (D-V5-19; an unknown price is never zero).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbRerankUsage".
+ */
+export interface KbRerankUsage {
+  connection_id: string;
+  /**
+   * Null when the price table has no row.
+   */
+  cost_usd?: number | null;
+  model: string;
+  /**
+   * `no price` when the price is unknown.
+   */
+  note?: string | null;
+  provider_id: string;
+  /**
+   * Searches (Cohere) or tokens (Voyage) the vendor billed.
+   */
+  quantity: number;
+  unit:
+    | "tokens_in"
+    | "tokens_out"
+    | "audio_s_in"
+    | "audio_s_out"
+    | "chars"
+    | "minutes"
+    | "images"
+    | "text_tokens_in"
+    | "text_tokens_out"
+    | "audio_tokens_in"
+    | "audio_tokens_out"
+    | "cached_tokens_in"
+    | "requests";
+}
+/**
  * The V5-04 search options; every default is the pre-V5-04 behaviour.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -3478,9 +3542,9 @@ export interface KbSearchOptions {
    */
   mode?: "vector" | "hybrid";
   /**
-   * `local` rescores the top candidates with the local cross-encoder.
+   * `local` rescores the top candidates with the local cross-encoder; `connection:<id>` with the hosted re-ranking service of that knowledge connection.
    */
-  rerank?: "none" | "local";
+  rerank?: string;
 }
 /**
  * ``POST /v1/knowledge-bases/{id}/search``.
@@ -3500,9 +3564,9 @@ export interface KbSearchRequest {
   mode?: "vector" | "hybrid";
   query: string;
   /**
-   * `local` rescores the top candidates with the local cross-encoder.
+   * `local` rescores the top candidates with the local cross-encoder; `connection:<id>` with the hosted re-ranking service of that knowledge connection.
    */
-  rerank?: "none" | "local";
+  rerank?: string;
 }
 /**
  * Search results, best first, with what was dropped or skipped on the way.
@@ -3518,7 +3582,11 @@ export interface KbSearchResponse {
   hits: KbHit[];
   min_score?: number | null;
   mode?: "vector" | "hybrid";
-  rerank?: "none" | "local";
+  rerank?: string;
+  /**
+   * The hosted re-ranking call this search made, with its cost line.
+   */
+  rerank_usage?: KbRerankUsage | null;
   /**
    * `embed`, `retrieve`, `rerank` and `total`, in milliseconds.
    */
@@ -3534,7 +3602,14 @@ export interface KbSearchResponse {
  * via the `definition` "KbSearchWarning".
  */
 export interface KbSearchWarning {
-  code: "kb_not_found" | "kb_embedder_mismatch" | "kb_timeout" | "kb_error" | "lexical_unavailable" | "rerank_failed";
+  code:
+    | "kb_not_found"
+    | "kb_embedder_mismatch"
+    | "kb_timeout"
+    | "kb_error"
+    | "lexical_unavailable"
+    | "rerank_failed"
+    | "rerank_refused";
   kb_id?: string | null;
   message: string;
 }
@@ -3547,6 +3622,141 @@ export interface KbSearchWarning {
 export interface KbSeed {
   files: string[];
   kb_name: string;
+}
+/**
+ * What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConnectionCapabilities".
+ */
+export interface KnowledgeConnectionCapabilities {
+  /**
+   * The vector width the collection or index holds; null when not fixed.
+   */
+  dimension?: number | null;
+  filters?: boolean;
+  /**
+   * Keyword and vector matches are fused inside the store (else the platform fuses them).
+   */
+  hybrid?: boolean;
+  /**
+   * Each knowledge base is its own namespace or tenant.
+   */
+  namespaces?: boolean;
+  /**
+   * A re-ranking service (not a vector store).
+   */
+  rerank?: boolean;
+  stores_text?: boolean;
+  /**
+   * The service's version, when it reports one.
+   */
+  version?: string | null;
+}
+/**
+ * ``POST /v1/knowledge-connections``.
+ *
+ * ``settings`` holds the non-secret fields of the kind's registry entry
+ * (``fields``: url, collection or index name, cloud, region, model); the key
+ * is a vault credential of the kind's provider, referenced by id.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConnectionCreate".
+ */
+export interface KnowledgeConnectionCreate {
+  credential_id?: string | null;
+  kind: "qdrant" | "pinecone" | "weaviate" | "cohere_rerank" | "voyage_rerank";
+  name: string;
+  settings?: {
+    [k: string]: unknown;
+  };
+}
+/**
+ * A knowledge connection; the key is never returned, only its fingerprint.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConnectionOut".
+ */
+export interface KnowledgeConnectionOut {
+  capabilities: KnowledgeConnectionCapabilities;
+  created_at: string;
+  /**
+   * The fingerprint of the key in use; null without a key.
+   */
+  credential_fingerprint?: string | null;
+  credential_id?: string | null;
+  id: string;
+  kind: "qdrant" | "pinecone" | "weaviate" | "cohere_rerank" | "voyage_rerank";
+  /**
+   * Knowledge bases stored through this connection.
+   */
+  knowledge_base_count?: number;
+  last_checked_at?: string | null;
+  last_error?: string | null;
+  name: string;
+  provider_id: string;
+  settings: {
+    [k: string]: unknown;
+  };
+  status: "unverified" | "ok" | "error";
+  updated_at: string;
+}
+/**
+ * ``GET /v1/knowledge-connections``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConnectionPage".
+ */
+export interface KnowledgeConnectionPage {
+  items: KnowledgeConnectionOut[];
+  total: number;
+}
+/**
+ * ``POST /v1/knowledge-connections/{id}/test``: what the service answered.
+ *
+ * For a vector store, ``collections`` lists the collections or indexes the key
+ * can see and the dimension check compares the one the connection uses with
+ * the embedding width knowledge bases are built with; a mismatch is
+ * ``ok=false`` with a message naming the collection or index.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConnectionTestOut".
+ */
+export interface KnowledgeConnectionTestOut {
+  capabilities: KnowledgeConnectionCapabilities;
+  checked_at: string;
+  collections?: string[];
+  /**
+   * The embedding width new knowledge bases are built with.
+   */
+  dimension_expected?: number | null;
+  /**
+   * The width the collection or index holds.
+   */
+  dimension_found?: number | null;
+  message: string;
+  ok: boolean;
+  status: "unverified" | "ok" | "error";
+  /**
+   * The collection or index this connection uses.
+   */
+  target?: string | null;
+  target_exists?: boolean | null;
+}
+/**
+ * ``PUT /v1/knowledge-connections/{id}``: only the fields sent change (the kind never does).
+ *
+ * ``credential_id: null`` sent explicitly removes the key; leaving it out keeps it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KnowledgeConnectionUpdate".
+ */
+export interface KnowledgeConnectionUpdate {
+  credential_id?: string | null;
+  name?: string | null;
+  settings?: {
+    [k: string]: unknown;
+  } | null;
 }
 /**
  * Payload of the ``locale`` session event the worker records at session start (R-V5-10).
@@ -3869,7 +4079,8 @@ export interface ModelTestResult {
     | "secret_bag"
     | "tool_provider"
     | "web_search"
-    | "sms";
+    | "sms"
+    | "knowledge";
   latency_ms?: number | null;
   message?: string | null;
   model: string;
@@ -4153,6 +4364,7 @@ export interface PriceQuoteItem {
         | "tool_provider"
         | "web_search"
         | "sms"
+        | "knowledge"
       )
     | null;
   model?: string | null;
@@ -4240,7 +4452,8 @@ export interface ProviderModelOut {
     | "secret_bag"
     | "tool_provider"
     | "web_search"
-    | "sms";
+    | "sms"
+    | "knowledge";
   last_test_at?: string | null;
   last_test_cost_usd?: number | string | null;
   last_test_credential_id?: string | null;
@@ -4297,7 +4510,8 @@ export interface ProviderOut {
     | "secret_bag"
     | "tool_provider"
     | "web_search"
-    | "sms";
+    | "sms"
+    | "knowledge";
   label: string;
   models?: ModelSpec[];
   notes?: string | null;
@@ -4450,7 +4664,8 @@ export interface ProviderSpec {
     | "secret_bag"
     | "tool_provider"
     | "web_search"
-    | "sms";
+    | "sms"
+    | "knowledge";
   label: string;
   models?: ModelSpec[];
   notes?: string | null;

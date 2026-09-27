@@ -552,6 +552,23 @@ CREATE TABLE knowledge_bases (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
   embedder_id TEXT NOT NULL DEFAULT 'fastembed-embedding',
   chunk_count INTEGER NOT NULL DEFAULT 0,
+  connection_id TEXT NULL REFERENCES knowledge_connections(id),  -- V5-20: NULL = the platform's store
+  kind TEXT NOT NULL DEFAULT 'managed',                          -- V5-20: managed | external (V5-45)
+  external_ref TEXT NULL,                                        -- V5-20: collection, index/namespace or tenant
+  created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL
+);
+-- V5-20 (v5_005): bring-your-own vector stores and hosted re-rankers. `settings` holds only the
+-- non-secret fields of the kind's registry entry (provider kind `knowledge`: `qdrant`, `pinecone`,
+-- `weaviate`, `cohere-rerank`, `voyage-rerank`); the key is a vault credential by id, returned only as
+-- its fingerprint. A connection with knowledge bases cannot be deleted (409); its url/collection/index
+-- cannot change while they exist. The vendor stores carry `id, kb_id, document_id` (+ the text only
+-- when the store's own keyword search is on); chunk text stays in `kb_chunks` (D-V5-37).
+CREATE TABLE knowledge_connections (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, kind TEXT NOT NULL,           -- qdrant|pinecone|weaviate|cohere_rerank|voyage_rerank
+  settings JSON NOT NULL, credential_id TEXT NULL REFERENCES credentials(id) ON DELETE SET NULL,
+  status TEXT NOT NULL CHECK (status IN ('unverified','ok','error')),
+  last_checked_at TIMESTAMP NULL, last_error TEXT NULL, capabilities JSON NOT NULL,
   created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL
 );
 CREATE TABLE kb_documents (

@@ -1,0 +1,162 @@
+{
+  "$defs": {
+    "KnowledgeConnectionCapabilities": {
+      "description": "What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``).",
+      "properties": {
+        "dimension": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vector width the collection or index holds; null when not fixed.",
+          "title": "Dimension"
+        },
+        "filters": {
+          "default": false,
+          "title": "Filters",
+          "type": "boolean"
+        },
+        "hybrid": {
+          "default": false,
+          "description": "Keyword and vector matches are fused inside the store (else the platform fuses them).",
+          "title": "Hybrid",
+          "type": "boolean"
+        },
+        "namespaces": {
+          "default": false,
+          "description": "Each knowledge base is its own namespace or tenant.",
+          "title": "Namespaces",
+          "type": "boolean"
+        },
+        "rerank": {
+          "default": false,
+          "description": "A re-ranking service (not a vector store).",
+          "title": "Rerank",
+          "type": "boolean"
+        },
+        "stores_text": {
+          "default": false,
+          "title": "Stores Text",
+          "type": "boolean"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's version, when it reports one.",
+          "title": "Version"
+        }
+      },
+      "title": "KnowledgeConnectionCapabilities",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KnowledgeConnectionTestOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/knowledge-connections/{id}/test``: what the service answered.\n\nFor a vector store, ``collections`` lists the collections or indexes the key\ncan see and the dimension check compares the one the connection uses with\nthe embedding width knowledge bases are built with; a mismatch is\n``ok=false`` with a message naming the collection or index.",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/KnowledgeConnectionCapabilities"
+    },
+    "checked_at": {
+      "format": "date-time",
+      "title": "Checked At",
+      "type": "string"
+    },
+    "collections": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Collections",
+      "type": "array"
+    },
+    "dimension_expected": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The embedding width new knowledge bases are built with.",
+      "title": "Dimension Expected"
+    },
+    "dimension_found": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The width the collection or index holds.",
+      "title": "Dimension Found"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "unverified",
+        "ok",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The collection or index this connection uses.",
+      "title": "Target"
+    },
+    "target_exists": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Exists"
+    }
+  },
+  "required": [
+    "ok",
+    "status",
+    "message",
+    "capabilities",
+    "checked_at"
+  ],
+  "title": "KnowledgeConnectionTestOut",
+  "type": "object"
+}

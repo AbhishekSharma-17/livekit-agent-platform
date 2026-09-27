@@ -10,7 +10,8 @@
         "kb_timeout",
         "kb_error",
         "lexical_unavailable",
-        "rerank_failed"
+        "rerank_failed",
+        "rerank_refused"
       ],
       "title": "Code",
       "type": "string"

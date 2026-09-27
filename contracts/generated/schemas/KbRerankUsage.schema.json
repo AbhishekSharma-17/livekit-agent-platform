@@ -1,0 +1,78 @@
+{
+  "$id": "lkap-contracts/KbRerankUsage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One hosted re-rank call and its cost line (D-V5-19; an unknown price is never zero).",
+  "properties": {
+    "connection_id": {
+      "title": "Connection Id",
+      "type": "string"
+    },
+    "cost_usd": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Null when the price table has no row.",
+      "title": "Cost Usd"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`no price` when the price is unknown.",
+      "title": "Note"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "quantity": {
+      "description": "Searches (Cohere) or tokens (Voyage) the vendor billed.",
+      "title": "Quantity",
+      "type": "number"
+    },
+    "unit": {
+      "enum": [
+        "tokens_in",
+        "tokens_out",
+        "audio_s_in",
+        "audio_s_out",
+        "chars",
+        "minutes",
+        "images",
+        "text_tokens_in",
+        "text_tokens_out",
+        "audio_tokens_in",
+        "audio_tokens_out",
+        "cached_tokens_in",
+        "requests"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection_id",
+    "provider_id",
+    "model",
+    "unit",
+    "quantity"
+  ],
+  "title": "KbRerankUsage",
+  "type": "object"
+}

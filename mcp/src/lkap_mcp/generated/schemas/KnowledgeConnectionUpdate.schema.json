@@ -1,0 +1,50 @@
+{
+  "$id": "lkap-contracts/KnowledgeConnectionUpdate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``PUT /v1/knowledge-connections/{id}``: only the fields sent change (the kind never does).\n\n``credential_id: null`` sent explicitly removes the key; leaving it out keeps it.",
+  "properties": {
+    "credential_id": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "settings": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Settings"
+    }
+  },
+  "title": "KnowledgeConnectionUpdate",
+  "type": "object"
+}

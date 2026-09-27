@@ -64,6 +64,7 @@ from lkap_contracts.agent_config import (
     ResolvedProvider,
     ToolsConfig,
     VoiceConfig,
+    effective_languages,
     effective_qa,
 )
 from lkap_contracts.api_models import CatalogItem, Issue, ProviderModelOut, Severity, ValidationResult
@@ -80,9 +81,12 @@ from lkap_contracts.providers import (
     ProviderKind,
     ProviderSpec,
     WorkerImage,
+    base_language,
     by_kind,
     credential_home,
+    declares_language,
     get,
+    language_name,
     validate_model_id,
 )
 from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT, action_risk
@@ -448,6 +452,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
         _validate_slot(ctx, slot, ref, findings)
 
     _validate_modes(ctx, findings)
+    _validate_language_voices(ctx, findings)
 
     stored_turn_handling = turn_handling_dict(pipeline.turn_handling)
     for key in stored_turn_handling:
@@ -500,6 +505,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(choices_on_phone_issues(ctx))
     findings.extend(consent_issues(ctx))
     findings.extend(curated_tool_issues(ctx))
+    findings.extend(language_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1087,6 +1093,188 @@ def speech_latency_issues(ctx: ValidationContext) -> list[Issue]:
     return issues
 
 
+# --------------------------------------------------------------------- languages (V5-31)
+
+
+def _voice_path(code: str) -> str:
+    return f"voice.voices_by_language.{code}"
+
+
+def _validate_language_voices(ctx: ValidationContext, findings: _Findings) -> None:
+    """Check each per-language voice like a `tts` slot (V5-31): provider, key, fields."""
+    for code, ref in ctx.config.voice.voices_by_language.items():
+        label = _voice_path(code)
+        spec = _spec_or_none(ref.provider_id)
+        if spec is None:
+            findings.add("error", label, f"unknown provider '{ref.provider_id}'")
+            continue
+        if spec.kind != "tts":
+            findings.add("error", label, f"'{spec.label}' is not a text-to-speech provider")
+            continue
+        if spec.availability != "available":
+            findings.add("error", label, f"'{spec.label}' is not available yet")
+        elif not installed_on(spec, ctx.connection):
+            findings.add("error", label, _not_installed_message(spec, ctx.connection))
+        _validate_credential(label, ref, spec, ctx.credential_providers, findings)
+        _validate_fields(label, ref, spec, findings)
+
+
+def _names(codes: list[str]) -> str:
+    names = [language_name(code) for code in codes]
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def language_issues(ctx: ValidationContext) -> list[Issue]:
+    """What a multilingual agent's pipeline can and cannot do (V5-31).
+
+    Uses the registry's language capabilities; an entry that records none
+    (empty `languages`) is unknown and draws no error.
+
+    * An allowed language the transcriber does not list → error at ``voice.languages``.
+    * ``auto_detect`` on a transcriber that cannot detect → warning; a language its
+      detection does not cover → warning ("the STT can't detect it").
+    * More than one language without detection on a transcriber that cannot switch
+      mid-call → warning.
+    * An allowed language with no voice of its own that the agent's voice does not
+      list → warning; a voice for a language the agent does not speak → warning; voices
+      on a realtime model (it speaks with its own voice) → warning.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        The issues, in the order above. Empty for a one-language agent without detection.
+    """
+    config = ctx.config
+    voice = config.voice
+    languages = effective_languages(voice)
+    multilingual = len(languages) > 1 or voice.auto_detect
+    issues: list[Issue] = []
+    pipeline = config.pipeline
+    bases = {base_language(code) for code in languages}
+    for code in voice.voices_by_language:
+        if base_language(code) not in bases:
+            issues.append(
+                Issue(
+                    path=_voice_path(code),
+                    message=f"{language_name(code)} is not one of the agent's languages, so this voice is "
+                    "never used",
+                    severity="warning",
+                )
+            )
+    if not multilingual:
+        return issues
+    if pipeline.mode == "realtime":
+        if voice.voices_by_language:
+            issues.append(
+                Issue(
+                    path="voice.voices_by_language",
+                    message="A realtime model speaks with its own voice; voices per language are not used",
+                    severity="warning",
+                )
+            )
+        issues.append(
+            Issue(
+                path="voice.languages",
+                message="Tip: a realtime model hears the language itself; switching changes only the "
+                "language the agent answers in",
+                severity="warning",
+            )
+        )
+        return issues
+
+    stt_spec = (
+        _spec_or_none(pipeline.stt.provider_id) if pipeline.mode == "cascaded" and pipeline.stt else None
+    )
+    if stt_spec is not None and stt_spec.kind == "stt":
+        caps = stt_spec.capabilities
+        unsupported = [code for code in languages if declares_language(caps.languages, code) is False]
+        if unsupported:
+            issues.append(
+                Issue(
+                    path="voice.languages",
+                    message=f"{stt_spec.label} cannot transcribe {_names(unsupported)}; pick another "
+                    "speech-to-text provider or remove the language",
+                    severity="error",
+                )
+            )
+        if voice.auto_detect and caps.language_detection is None:
+            issues.append(
+                Issue(
+                    path="voice.auto_detect",
+                    message=f"{stt_spec.label} cannot detect the caller's language by itself; the agent "
+                    "switches only when the caller asks",
+                    severity="warning",
+                )
+            )
+        elif voice.auto_detect:
+            covered = caps.detect_languages or caps.languages
+            undetected = [
+                code
+                for code in languages
+                if code not in unsupported and declares_language(covered, code) is False
+            ]
+            if undetected:
+                issues.append(
+                    Issue(
+                        path="voice.auto_detect",
+                        message=f"{stt_spec.label} cannot detect {_names(undetected)} automatically; the "
+                        "agent switches to it only when the caller asks",
+                        severity="warning",
+                    )
+                )
+        elif len(languages) > 1 and not caps.language_switch:
+            hint = (
+                " Turn on automatic detection, or pick a provider that can switch"
+                if caps.language_detection is not None
+                else " Pick a provider that can switch"
+            )
+            issues.append(
+                Issue(
+                    path="voice.languages",
+                    message=f"{stt_spec.label} cannot change language during a call, so it keeps "
+                    f"transcribing the language it starts with.{hint}",
+                    severity="warning",
+                )
+            )
+
+    tts_ref = pipeline.tts if pipeline.mode in ("cascaded", "half_cascade") else None
+    tts_spec = _spec_or_none(tts_ref.provider_id) if tts_ref is not None else None
+    for code in languages[1:]:
+        if any(base_language(key) == base_language(code) for key in voice.voices_by_language):
+            continue
+        spoken = declares_language(tts_spec.capabilities.languages, code) if tts_spec is not None else None
+        if spoken is True:
+            continue
+        voice_label = tts_spec.label if tts_spec is not None else "the agent's voice"
+        issues.append(
+            Issue(
+                path="voice.voices_by_language",
+                message=(
+                    f"{language_name(code)} has no voice of its own"
+                    + (f" and {voice_label} does not list it" if spoken is False else "")
+                    + f"; {voice_label} speaks it, which may sound wrong. Add a {language_name(code)} voice"
+                ),
+                severity="warning",
+            )
+        )
+    for code, ref in voice.voices_by_language.items():
+        spec = _spec_or_none(ref.provider_id)
+        if (
+            spec is not None
+            and spec.kind == "tts"
+            and declares_language(spec.capabilities.languages, code) is False
+        ):
+            issues.append(
+                Issue(
+                    path=_voice_path(code),
+                    message=f"{spec.label} does not list {language_name(code)}",
+                    severity="warning",
+                )
+            )
+    return issues
+
+
 #: Below this many tool steps, a chain of background announcements can exhaust the budget
 #: (each first update spends one step; docs/v4/BACKGROUND-TOOLS.md §5, R-V4-35).
 MIN_TOOL_STEPS_FOR_BACKGROUND = 4
@@ -1357,6 +1545,29 @@ def resolve_builtin_providers(
                 model=None,
                 kwargs={"webhook_url": webhook_url},
             )
+    return resolved
+
+
+def resolve_language_voices(
+    config: AgentConfig, secrets_by_credential: Mapping[str, dict[str, str]]
+) -> dict[str, ResolvedProvider]:
+    """``ResolvedAgentConfig.voices_by_language`` (V5-31). **Contains secrets.**
+
+    Each voice resolves like the ``tts`` slot (defaults, fields, then its key's secret
+    fields), so a key the worker reads from its environment works the same way. A voice
+    of an unknown or non-TTS provider is left out (the validator reports it); a voice the
+    worker cannot build keeps the pipeline's voice for that language. Only in the modes
+    that speak through a TTS (cascaded, half-cascade).
+    """
+    if config.pipeline.mode not in ("cascaded", "half_cascade"):
+        return {}
+    resolved: dict[str, ResolvedProvider] = {}
+    for code, ref in config.voice.voices_by_language.items():
+        spec = _spec_or_none(ref.provider_id)
+        if spec is None or spec.kind != "tts":
+            continue
+        secrets = secrets_by_credential.get(ref.credential_id or "", {})
+        resolved[code] = resolve_provider_ref(ref, secrets)
     return resolved
 
 

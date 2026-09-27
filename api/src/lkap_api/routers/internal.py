@@ -59,6 +59,7 @@ from lkap_api.config_service import (
     builtin_credential_ids,
     installed_provider_ids,
     resolve_builtin_providers,
+    resolve_language_voices,
     resolve_providers,
     resolve_tool_definition,
 )
@@ -189,6 +190,8 @@ def _credential_ids(config: AgentConfig) -> set[str]:
         ids.add(qa.model.credential_id)
     # V5-25: the keys of the curated built-ins (web search, SMS, the team webhook).
     ids |= builtin_credential_ids(config)
+    # V5-31: the keys of the per-language voices.
+    ids |= {ref.credential_id for ref in config.voice.voices_by_language.values() if ref.credential_id}
     return ids
 
 
@@ -418,6 +421,8 @@ async def _build_resolved(
         mcp_oauth=mcp_oauth,
         # V5-25: the curated built-ins' vendors with their keys.
         builtin_providers=resolve_builtin_providers(config, secrets),
+        # V5-31: a voice per language, with its key.
+        voices_by_language=resolve_language_voices(config, secrets),
     )
 
 

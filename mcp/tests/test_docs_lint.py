@@ -130,7 +130,7 @@ NODE_KINDS: Final[tuple[str, ...]] = get_args(flow_module.NodeKind)
 BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = tools_module.BUILTIN_TOOL_NAMES
 BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = tools_module.BLOCK_TOOL_NAMES
 
-#: The 12 known api-key scopes (`Scope`, `auth/roles.py`). Hardcoded as a
+#: The 13 known api-key scopes (`Scope`, `auth/roles.py`). Hardcoded as a
 #: fallback so this test can run without the api venv; cross-checked against
 #: the live import whenever it is importable, see the test below.
 _FALLBACK_SCOPES: Final[frozenset[str]] = frozenset(
@@ -140,6 +140,7 @@ _FALLBACK_SCOPES: Final[frozenset[str]] = frozenset(
         "agents:write",
         "sessions:read",
         "sessions:write",
+        "sessions:listen",
         "calls:write",
         "connections:read",
         "connections:write",
@@ -566,6 +567,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "session_get": frozenset({"session_id", "include_transcript", "include_recording_url"}),
     "session_events": frozenset({"session_id", "after_id", "types", "limit"}),
     "session_rescore": frozenset({"session_id", "confirm"}),
+    "session_whisper": frozenset({"session_id", "text", "reply_now", "confirm", "plan"}),
     # V4-15 costs (docs/v4/COSTS.md §6)
     "cost_estimate": frozenset(
         {

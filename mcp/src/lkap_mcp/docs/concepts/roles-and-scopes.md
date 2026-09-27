@@ -9,10 +9,11 @@ call (least privilege by omission, not by a runtime 403 you have to catch).
 ## The scopes
 
 `agents:read`, `agents:write`, `sessions:read`, `sessions:write`,
-`calls:write`, `connections:read`, `connections:write`, `providers:read`,
-`providers:write`, `webhooks:write`, `audit:read`, and `*` (every scope at
-once — never offered by the console's key presets, and you should not ask a
-user to mint one for you). A `:write` scope implies its matching `:read`.
+`sessions:listen`, `calls:write`, `connections:read`, `connections:write`,
+`providers:read`, `providers:write`, `webhooks:write`, `audit:read`, and `*`
+(every scope at once — never offered by the console's key presets, and you
+should not ask a user to mint one for you). A `:write` scope implies its
+matching `:read`, and `sessions:write` also implies `sessions:listen`.
 
 ## Console presets
 
@@ -36,6 +37,9 @@ management itself (`POST /v1/api-keys`, revoking one) is never a tool;
   (write) test chat.
 - `sessions:read`/`sessions:write` — session and call history; re-scoring
   QA needs `sessions:write`.
+- `sessions:listen` — listen in to a live session and send its agent written
+  guidance the caller never hears: `session_whisper(session_id, text,
+  confirm=true)`. `sessions:write` implies it.
 - `connections:read`/`connections:write` — LiveKit connections and their
   fleet.
 - `providers:read`/`providers:write` — the registry, provider settings and

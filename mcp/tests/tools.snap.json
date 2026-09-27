@@ -13650,6 +13650,66 @@
       ],
       "write_scopes": []
     },
+    "session_whisper": {
+      "_meta": {
+        "lkap/data": [
+          "SessionWhisperOut"
+        ],
+        "lkap/scopes": [
+          "sessions:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "SessionWhisperOut",
+      "description": "Whisper guidance to a live session's agent (the caller never hears it; needs confirm).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "reply_now": {
+            "default": false,
+            "title": "Reply Now",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "text"
+        ],
+        "title": "session_whisperArguments",
+        "type": "object"
+      },
+      "kind": "destructive",
+      "mixed": false,
+      "scopes": [
+        "sessions:write"
+      ],
+      "write_scopes": []
+    },
     "telephony_overview": {
       "_meta": {
         "lkap/data": [
@@ -15174,6 +15234,7 @@
       "session_get",
       "session_list",
       "session_rescore",
+      "session_whisper",
       "telephony_overview",
       "tool_create_from_template",
       "tool_create_http",
@@ -15257,6 +15318,7 @@
       "session_get",
       "session_list",
       "session_rescore",
+      "session_whisper",
       "telephony_overview",
       "tool_create_from_template",
       "tool_create_http",
@@ -15387,6 +15449,7 @@
       "session_get",
       "session_list",
       "session_rescore",
+      "session_whisper",
       "telephony_overview",
       "tool_create_from_template",
       "tool_create_http",
@@ -15474,6 +15537,7 @@
       "session_get",
       "session_list",
       "session_rescore",
+      "session_whisper",
       "telephony_overview",
       "tool_create_from_template",
       "tool_create_http",

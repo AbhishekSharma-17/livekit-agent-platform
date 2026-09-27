@@ -55,6 +55,9 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     "lkap_agent.session_builder",
     # V5-39 (ask #278): a classifier guardrail sends caller, reply or tool text to a model.
     "lkap_agent.guardrails",
+    # V5-43: the panel's state (caller, page and tool text) and the card and link messages.
+    "lkap_agent.tools.builtin.describe_panel",
+    "lkap_agent.platform_agent",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

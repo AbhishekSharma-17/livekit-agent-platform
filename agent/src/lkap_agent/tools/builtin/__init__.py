@@ -33,6 +33,7 @@ from .convert_time import build_convert_time_tool
 from .current_time import build_current_time_tool
 from .describe_asset import build_describe_asset_tool, vision_llm
 from .describe_current_frame import build_describe_current_frame_tool
+from .describe_panel import build_describe_panel_tool
 from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
 from .fetch_url import build_fetch_url_tool
@@ -44,13 +45,17 @@ from .record_consent import build_record_consent_tool
 from .request_choice import build_request_choice_tool
 from .request_consent import build_request_consent_tool
 from .request_form import build_request_form_tool
+from .request_slot import build_request_slot_tool
 from .request_upload import build_request_upload_tool
 from .resolve_choice import build_resolve_choice_tool
+from .resolve_slot import build_resolve_slot_tool
 from .search_knowledge import build_search_knowledge_tool
+from .send_link import build_send_link_tool
 from .send_sms import build_send_sms_tool
 from .set_details import build_set_details_tool
 from .set_status import build_set_status_tool
 from .set_steps import build_set_steps_tool, manual_steps_blocks
+from .show_cards import build_show_cards_tool
 from .show_document import build_show_document_tool
 from .show_text import build_show_text_tool
 from .spell_back import build_spell_back_tool
@@ -70,6 +75,7 @@ __all__ = [
     "build_current_time_tool",
     "build_describe_asset_tool",
     "build_describe_current_frame_tool",
+    "build_describe_panel_tool",
     "build_end_call_tool",
     "build_escalate_to_human_tool",
     "build_fetch_url_tool",
@@ -81,13 +87,17 @@ __all__ = [
     "build_request_choice_tool",
     "build_request_consent_tool",
     "build_request_form_tool",
+    "build_request_slot_tool",
     "build_request_upload_tool",
     "build_resolve_choice_tool",
+    "build_resolve_slot_tool",
     "build_search_knowledge_tool",
+    "build_send_link_tool",
     "build_send_sms_tool",
     "build_set_details_tool",
     "build_set_status_tool",
     "build_set_steps_tool",
+    "build_show_cards_tool",
     "build_show_document_tool",
     "build_show_text_tool",
     "build_spell_back_tool",
@@ -170,7 +180,10 @@ def build_builtin_tools(
         `set_steps` for a `steps` block that does not follow the flow (V5-08),
         and `request_consent` / `record_consent` for a `consent` block (V5-15;
         `record_consent` also without one when `recording.require_consent`),
-        `request_upload` for an `upload` block (V5-19). `describe_asset`
+        `request_upload` for an `upload` block (V5-19); V5-43: `describe_panel` for any
+        block at all, `send_link` for a `link` block (texting the link on a phone call
+        when `tools.sms` is set), `request_slot` / `resolve_slot` for a `slots` block and
+        `show_cards` for a `cards` block. `describe_asset`
         (V5-19) is registered on a cascaded pipeline whose LLM is not known to
         be text-only, when the session can hold a picture: an `upload` or
         `form` block, or camera / screen share (pinned frames are stored).
@@ -313,6 +326,23 @@ def build_builtin_tools(
         tools.append(build_record_consent_tool(ctx))
     if "upload" in block_types and _want("request_upload"):
         tools.append(build_request_upload_tool(ctx))
+    # V5-43: reading the panel needs only a block; the three new blocks bring their tools.
+    if block_types and _want("describe_panel"):
+        tools.append(build_describe_panel_tool(ctx))
+    if "link" in block_types and _want("send_link"):
+        tools.append(
+            build_send_link_tool(
+                ctx,
+                resolved_providers.get("sms"),
+                sms_configured=getattr(tools_config, "sms", None) is not None,
+            )
+        )
+    if "slots" in block_types and _want("request_slot"):
+        tools.append(build_request_slot_tool(ctx))
+    if "slots" in block_types and _want("resolve_slot"):
+        tools.append(build_resolve_slot_tool(ctx))
+    if "cards" in block_types and _want("show_cards"):
+        tools.append(build_show_cards_tool(ctx))
     # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one.
     holds_pictures = bool(block_types & {"upload", "form"}) or has_vision
     if holds_pictures and _want("describe_asset") and vision_llm(ctx) is not None:

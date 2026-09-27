@@ -55,7 +55,15 @@
   :meth:`PlatformAgent.transcription_node` (sentence by sentence, the text
   passing through untouched; a trip interrupts with `interrupt(force=True)`);
   and a tool's result through `tools.execution.guard_tool_output`. An agent
-  without rules takes none of these paths.
+  without rules takes none of these paths,
+* V5-43: tells the model what happens on the panel's new blocks. A card tap or a
+  card button (checked by the channel) and a link's outcome (a `link_completed`
+  packet on :data:`~lkap_contracts.ui_protocol.TOPIC_UI_LINK`, honoured only when
+  the server sent it for this session, then applied by the channel only while the
+  link waits for one) each become a short user message whose caller- or
+  tool-written words are fenced (R-V5-15); a server-sent `snapshot` op on the
+  supervisor topic (asks #252) republishes the full panel state for a listener
+  who joined mid-call.
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -95,7 +103,13 @@ from lkap_contracts.api_models import (
 from lkap_contracts.common import SessionChannel
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import ModelCapabilities, vision_support
-from lkap_contracts.ui_protocol import ActivityEvent, UiPatchOp
+from lkap_contracts.ui_protocol import (
+    TOPIC_UI_LINK,
+    ActivityEvent,
+    LinkCompletedPacket,
+    UiPatchOp,
+    UiSnapshotRequestPacket,
+)
 from packs.base import (
     BackgroundRunner,
     FrameBufferProto,
@@ -144,7 +158,7 @@ from lkap_agent.tools.execution import (
     set_tool_output_guard,
     wrap_tool,
 )
-from lkap_agent.tools.untrusted import UNTRUSTED_RULE, strip_control
+from lkap_agent.tools.untrusted import UNTRUSTED_RULE, fence, strip_control
 from lkap_agent.ui.blocks import (
     VOICE_ONLY_CHANNELS,
     block_ids_of_type,
@@ -155,12 +169,15 @@ from lkap_agent.ui.channel import BARGE_IN, CaptionStream, caption_tap_for
 from lkap_agent.vision import encode_jpeg_data_url
 
 __all__ = [
+    "PANEL_SOURCE",
     "SUPERVISOR_NOTE_RULE",
     "SUPERVISOR_REPLY_NOW",
     "GreetingMode",
     "PlatformAgent",
     "SessionContext",
+    "card_message",
     "compose_instructions",
+    "link_message",
     "model_vision_support",
     "platform_text_input_cb",
     "resolve_greeting_mode",
@@ -219,7 +236,7 @@ _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
 #: `request_choice`, `request_consent` and `request_upload` (R-V5-1, ask #1) return
 #: `None` and their result arrives later as a background result.
 _REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset(
-    {"request_form", "request_choice", "request_consent", "request_upload"}
+    {"request_form", "request_choice", "request_consent", "request_upload", "request_slot"}
 )
 
 #: `SessionContext.userdata` key: the barge-in handler is registered (once per session, V5-08).
@@ -237,6 +254,38 @@ CAPTIONS_USERDATA_KEY: Final[str] = "lkap.captions"
 
 #: `SessionContext.userdata` key: the supervisor whisper handler is registered (once per session, V5-37).
 _SUPERVISOR_KEY: Final[str] = "_lkap_supervisor_wired"
+
+#: `SessionContext.userdata` key: the link outcome handler is registered (once per session, V5-43).
+_LINK_KEY: Final[str] = "_lkap_link_wired"
+#: The fence source of panel words (card titles, link labels) in the messages below (V5-43).
+PANEL_SOURCE: Final[str] = "panel"
+#: What each link outcome means for the caller (V5-43).
+_LINK_OUTCOME_WORDS: Final[dict[str, str]] = {
+    "completed": "was completed",
+    "failed": "did not go through",
+    "expired": "expired before it was used",
+}
+
+
+def card_message(name: str, card: Mapping[str, Any]) -> str:
+    """The user message a tap on a card (``select``) or a card button becomes (V5-43)."""
+    title = fence(str(card.get("title") or card.get("id") or ""), source=PANEL_SOURCE, max_chars=120)
+    card_id = str(card.get("id") or "")
+    if name == "select":
+        return f"[The caller picked the card {title} (id {card_id}) on screen.]"
+    return f"[The caller pressed the {name} button on the card {title} (id {card_id}) on screen.]"
+
+
+def link_message(state: Mapping[str, Any]) -> str:
+    """The user message a link's outcome becomes (V5-43); the label and reference are fenced."""
+    label = fence(str(state.get("label") or "link"), source=PANEL_SOURCE, max_chars=80)
+    words = _LINK_OUTCOME_WORDS.get(str(state.get("status")), "changed")
+    reference = state.get("reference")
+    ref = f" (reference {fence(str(reference), source=PANEL_SOURCE, max_chars=128)})" if reference else ""
+    kind = str(state.get("kind") or "other")
+    what = {"checkout": "payment", "esign": "signing", "portal": "portal"}.get(kind, "")
+    return f"[The {what + ' ' if what else ''}link {label}{ref} {words}.]"
+
 
 #: What the model is told about a supervisor's whisper (V5-37). The whisper comes from a
 #: signed-in builder, so it is guidance the model may act on, unlike `<untrusted>` data; it
@@ -459,6 +508,7 @@ class PlatformAgent(Agent):
         self._init_blocks()
         self._init_languages()
         self._wire_supervisor()
+        self._wire_links()
         self._guardrails = self._init_guardrails()
 
     # ------------------------------------------------------------- tool policy
@@ -785,6 +835,8 @@ class PlatformAgent(Agent):
                 identity=getattr(sender, "identity", None),
             )
             return
+        if self._snapshot_requested(bytes(packet.data)):
+            return
         try:
             message = SupervisorWhisperPacket.model_validate_json(bytes(packet.data))
         except Exception:  # noqa: BLE001 - a malformed packet is dropped
@@ -800,6 +852,113 @@ class PlatformAgent(Agent):
         task = asyncio.create_task(self._apply_whisper_quietly(message))
         self._hook_tasks.add(task)
         task.add_done_callback(self._hook_tasks.discard)
+
+    def _snapshot_requested(self, data: bytes) -> bool:
+        """A server-sent `{"op": "snapshot"}` for this session republishes the panel (asks #252).
+
+        Returns whether `data` was a snapshot request (handled or refused), so the
+        whisper path does not log it as malformed.
+        """
+        try:
+            op = json.loads(data).get("op")
+        except (ValueError, AttributeError):
+            return False
+        if op != "snapshot":
+            return False
+        try:
+            request = UiSnapshotRequestPacket.model_validate_json(data)
+        except Exception:  # noqa: BLE001 - a malformed packet is dropped
+            logger.warning("malformed snapshot request ignored", session_id=self._ctx.session_id)
+            return True
+        if request.session_id != self._ctx.session_id:
+            logger.warning("snapshot request for another session ignored", session_id=self._ctx.session_id)
+            return True
+        task = asyncio.create_task(self._send_snapshot())
+        self._hook_tasks.add(task)
+        task.add_done_callback(self._hook_tasks.discard)
+        return True
+
+    async def _send_snapshot(self) -> None:
+        try:
+            await self._ctx.ui.snapshot()
+        except Exception:
+            logger.warning("requested ui snapshot failed", session_id=self._ctx.session_id, exc_info=True)
+
+    # ---------------------------------------------------------- links and cards (V5-43)
+
+    def _wire_links(self) -> None:
+        """Listen for link outcomes on the room, once per session (flow nodes share it)."""
+        userdata = getattr(self._ctx, "userdata", None)
+        on = getattr(self._ctx.room, "on", None)
+        if not isinstance(userdata, dict) or userdata.get(_LINK_KEY) or not callable(on):
+            return
+        userdata[_LINK_KEY] = True
+        on("data_received", self.on_link_data)
+
+    def on_link_data(self, packet: rtc.DataPacket) -> None:
+        """A data packet: apply it when it is a link outcome the server sent for this session.
+
+        Synchronous (the room's event contract). Only the api, through the server API,
+        sends on :data:`TOPIC_UI_LINK`; a packet from any participant is refused.
+        Never raises.
+        """
+        if getattr(packet, "topic", None) != TOPIC_UI_LINK:
+            return
+        if getattr(packet, "participant", None) is not None:
+            logger.warning("link packet from a participant ignored", session_id=self._ctx.session_id)
+            return
+        try:
+            message = LinkCompletedPacket.model_validate_json(bytes(packet.data))
+        except Exception:  # noqa: BLE001 - a malformed packet is dropped
+            logger.warning("malformed link packet ignored", session_id=self._ctx.session_id)
+            return
+        if message.session_id != self._ctx.session_id:
+            logger.warning("link packet for another session ignored", session_id=self._ctx.session_id)
+            return
+        task = asyncio.create_task(self._apply_link_quietly(message))
+        self._hook_tasks.add(task)
+        task.add_done_callback(self._hook_tasks.discard)
+
+    async def _apply_link_quietly(self, message: LinkCompletedPacket) -> None:
+        await self.apply_link_outcome(message)
+
+    async def apply_link_outcome(self, message: LinkCompletedPacket) -> bool:
+        """Apply a link outcome to its block and tell the model; whether anything changed. Never raises."""
+        apply = getattr(self._ctx.ui, "apply_link_outcome", None)
+        if not callable(apply):
+            return False
+        try:
+            state = await apply(block_id=message.block_id, reference=message.reference, status=message.status)
+        except Exception:
+            logger.warning(
+                "link outcome could not be applied", session_id=self._ctx.session_id, exc_info=True
+            )
+            return False
+        if state is None:
+            logger.info(
+                "link outcome ignored: no link waiting",
+                session_id=self._ctx.session_id,
+                packet_id=message.id,
+                status=message.status,
+            )
+            return False
+        logger.info(
+            "link_outcome",
+            session_id=self._ctx.session_id,
+            block_id=state.get("block_id"),
+            status=message.status,
+        )
+        self._tell_model(link_message(state), what="a link outcome")
+        return True
+
+    def _tell_model(self, message: str, *, what: str) -> None:
+        """Hand the model a short user message about something on the panel (never raises)."""
+        try:
+            self._ctx.session.generate_reply(user_input=message)
+        except Exception:
+            logger.warning(
+                f"could not tell the model about {what}", session_id=self._ctx.session_id, exc_info=True
+            )
 
     async def _apply_whisper_quietly(self, message: SupervisorWhisperPacket) -> None:
         await self.apply_whisper(message)
@@ -1045,6 +1204,21 @@ class PlatformAgent(Agent):
         `on_block_action` is not part of the structural `Pack` Protocol (see
         `packs.base.BlockActionPack`), so it is looked up here.
         """
+        specs = getattr(self._ctx.ui, "block_specs", None)
+        spec = specs.get(block_id) if isinstance(specs, dict) else None
+        if spec is not None and spec.type == "cards":
+            # V5-43: the channel checked the card and the action; the model hears about it.
+            state = self._ctx.ui.state.blocks.get(block_id) or {}
+            card = next(
+                (
+                    c
+                    for c in state.get("cards") or []
+                    if isinstance(c, dict) and c.get("id") == data.get("card_id")
+                ),
+                None,
+            )
+            if card is not None:
+                self._tell_model(card_message(name, card), what="a card tap")
         handler = getattr(self._pack, "on_block_action", None)
         if not callable(handler):
             return {}

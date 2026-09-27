@@ -117,7 +117,13 @@ async def _until(predicate: Any) -> None:
 
 
 def test_block_tools_registered_only_for_blocks_that_need_them() -> None:
-    ctx, _ch, _room = _ctx()
+    # V5-43: the link, slots and cards blocks bring their own tools.
+    wave10 = [
+        BlockSpec(id="pay", type="link", config={"allowed_hosts": ["example.com"]}, order=12),
+        BlockSpec(id="times", type="slots", order=13),
+        BlockSpec(id="plans", type="cards", order=14),
+    ]
+    ctx, _ch, _room = _ctx([*BLOCKS, *wave10])
     names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
     assert set(BLOCK_TOOL_NAMES) <= names
     assert not set(BLOCK_TOOL_NAMES) & set(BUILTIN_TOOL_NAMES)
@@ -127,7 +133,8 @@ def test_default_composite_blocks_register_no_block_tools() -> None:
     envelope = [BlockSpec(id=t, type=t) for t in ("status", "notes", "checklist", "activity")]  # type: ignore[arg-type]
     ctx, _ch, _room = _ctx(envelope)
     names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
-    assert not names & set(BLOCK_TOOL_NAMES)
+    # V5-43: only `describe_panel`, which reads any block.
+    assert names & set(BLOCK_TOOL_NAMES) == {"describe_panel"}
 
 
 def test_insurance_style_custom_panel_registers_no_block_tools() -> None:
@@ -477,7 +484,8 @@ def _names(ctx: FakePackSessionContext) -> set[str]:
 )
 def test_quartet_tools_register_only_for_their_block(block: BlockSpec, expected: set[str]) -> None:
     ctx, _ch, _room = _ctx([block])
-    assert _names(ctx) & set(BLOCK_TOOL_NAMES) == expected
+    # V5-43: `describe_panel` comes with any block.
+    assert _names(ctx) & set(BLOCK_TOOL_NAMES) == expected | {"describe_panel"}
 
 
 def test_quartet_tools_honour_builtin_disabled() -> None:

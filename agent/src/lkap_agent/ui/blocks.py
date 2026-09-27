@@ -22,6 +22,7 @@ from lkap_contracts.ui_protocol import (
     BlockSpec,
     BlockType,
     CaptionsBlockState,
+    CardsBlockState,
     ChoicesBlockState,
     ConsentBlockState,
     DetailsBlockState,
@@ -33,7 +34,9 @@ from lkap_contracts.ui_protocol import (
     HandoffStatus,
     KbCitation,
     KbCitationsBlockState,
+    LinkBlockState,
     MarkdownBlockState,
+    SlotsBlockState,
     StepsBlockState,
     TableBlockState,
     TranscriptBlockState,
@@ -50,6 +53,12 @@ if TYPE_CHECKING:
 __all__ = [
     "ASSET_DOCUMENT_ID_KEY",
     "BLOCK_STATE_MODELS",
+    "CARD_SELECT",
+    "LINK_OPENED",
+    "card_action_error",
+    "find_card",
+    "find_slot",
+    "slot_selection_error",
     "COMPOSITE_PANEL_ID",
     "ENVELOPE_BLOCK_TYPES",
     "FULL_PAGE_BBOX",
@@ -103,7 +112,16 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     # asks #202 (V5-31): seeded from the config and validated on every patch.
     "captions": CaptionsBlockState,
     "handoff": HandoffBlockState,
+    # V5-43
+    "link": LinkBlockState,
+    "slots": SlotsBlockState,
+    "cards": CardsBlockState,
 }
+
+#: `block_action` name a `cards` block sends when the caller taps a card itself (V5-43).
+CARD_SELECT: Final[str] = "select"
+#: `block_action` name a `link` block sends when the caller opens the link (V5-43).
+LINK_OPENED: Final[str] = "opened"
 
 #: Session channels with no screen: panel blocks are invisible there (V5-08).
 VOICE_ONLY_CHANNELS: Final[frozenset[str]] = frozenset({"sip_in", "sip_out"})
@@ -307,6 +325,54 @@ def choice_selection_error(state: Mapping[str, Any], selected: Any) -> str | Non
     if len(selected) > 1 and not state.get("multi"):
         return "this question takes one answer"
     return None
+
+
+def slot_selection_error(state: Mapping[str, Any], selected: Any) -> str | None:
+    """Why `selected` is not a valid answer to a `slots` block, or `None` when it is (V5-43).
+
+    Valid: the id of one of the block's own slots (a browser's start and end are never read).
+    """
+    if not isinstance(selected, str) or not selected:
+        return "selected must be a slot id"
+    if find_slot(state, selected) is None:
+        slots = state.get("slots")
+        ids = [str(s.get("id")) for s in slots if isinstance(s, dict)] if isinstance(slots, list) else []
+        return f"unknown slot {selected}; the slots are {', '.join(ids) or 'none'}"
+    return None
+
+
+def find_slot(state: Mapping[str, Any], slot_id: str) -> dict[str, Any] | None:
+    """The slot `slot_id` of a `slots` block's state, or `None`."""
+    slots = state.get("slots")
+    if not isinstance(slots, list):
+        return None
+    return next((s for s in slots if isinstance(s, dict) and s.get("id") == slot_id), None)
+
+
+def find_card(state: Mapping[str, Any], card_id: Any) -> dict[str, Any] | None:
+    """The card `card_id` of a `cards` block's state, or `None`."""
+    cards = state.get("cards")
+    if not isinstance(card_id, str) or not isinstance(cards, list):
+        return None
+    return next((c for c in cards if isinstance(c, dict) and c.get("id") == card_id), None)
+
+
+def card_action_error(
+    state: Mapping[str, Any], config: Mapping[str, Any], name: str, data: Mapping[str, Any]
+) -> str | None:
+    """Why a `block_action` on a `cards` block is refused, or `None` when it names a real card and action.
+
+    `select` (a tap on the card) needs `selectable` (default on); any other name must be one
+    of the card's own action buttons.
+    """
+    card = find_card(state, data.get("card_id"))
+    if card is None:
+        return "unknown card"
+    if name == CARD_SELECT:
+        return None if config.get("selectable", True) is not False else "cards cannot be picked here"
+    actions = card.get("actions")
+    names = [a.get("name") for a in actions if isinstance(a, dict)] if isinstance(actions, list) else []
+    return None if name in names else f"the card has no {name!r} button"
 
 
 def flow_steps_specs(specs: Iterable[BlockSpec]) -> list[BlockSpec]:

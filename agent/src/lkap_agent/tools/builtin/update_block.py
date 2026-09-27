@@ -36,6 +36,8 @@ UPDATABLE_BLOCK_TYPES: Final[frozenset[BlockType]] = frozenset(
         "details",
         "markdown",
         "steps",
+        # V5-43: cards are display data (a tap arrives as a block action).
+        "cards",
     }
 )
 

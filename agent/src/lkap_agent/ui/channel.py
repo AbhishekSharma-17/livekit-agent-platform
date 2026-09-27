@@ -25,6 +25,18 @@ same machinery with `method="form"` and its v2 statuses. `submit_block`
 `block_action {name: "open_citation"}` on a `kb_citations` block is handled
 here (`ui.blocks.open_citation`) before any pack callback.
 
+V5-43: a `link` block's `block_action {name: "opened"}` marks the link opened;
+a `cards` block's `block_action` must name a card on the block and either
+`select` (with `selectable`) or one of that card's buttons: a tap on the card
+records `selected`, and the pack's and the platform's callbacks see only
+checked actions. A `slots` answer (`block_submit {values: {selected}}`) is
+checked against the block's own slots. `apply_link_outcome` applies the
+outcome the api reports for a `link` block (a `link_completed` packet), only
+while the link is `pending` or `opened`. `state_delta` (the AG-UI adapter,
+`lkap_contracts.ui_agui`) writes RFC 6902 operations to the blocks listed in
+:data:`STATE_DELTA_BLOCK_TYPES`, all or nothing, through the same validators
+as `patch_block`.
+
 Note on attribute naming: the byte-stream attribute and `AssetRef` field
 carrying the caption are named `caption` (docs/CONTRACTS.md §10 wins over
 docs/ARCHITECTURE.md §9's `caption_ref`, which is stale).
@@ -75,6 +87,8 @@ from livekit import rtc
 from livekit.agents.voice.io import TextOutput
 from lkap_contracts.api_models import KbHit, SessionAssetOut
 from lkap_contracts.blocks import UploadBlockConfig, accept_allows, safe_filename, sniff_mime
+from lkap_contracts.tools import UPDATABLE_BLOCK_TYPES
+from lkap_contracts.ui_agui import AguiPatchError, agui_delta_to_patch
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
     FORM_UPLOAD_KEY,
@@ -100,8 +114,10 @@ from lkap_contracts.ui_protocol import (
     FormBlockState,
     FormUploadSpec,
     KbCitation,
+    LinkOutcome,
     Note,
     RequestableState,
+    StateDeltaPayload,
     StatusStamp,
     Tone,
     UiPatch,
@@ -121,12 +137,17 @@ from lkap_agent.logging import get_logger
 from lkap_agent.ui.blocks import (
     ASSET_DOCUMENT_ID_KEY,
     BLOCK_STATE_MODELS,
+    CARD_SELECT,
+    LINK_OPENED,
     OPEN_CITATION,
     block_path,
+    card_action_error,
     choice_selection_error,
+    find_slot,
     initial_block_states,
     jsonable,
     open_citation,
+    slot_selection_error,
     validate_block_state,
 )
 
@@ -139,6 +160,7 @@ __all__ = [
     "caption_tap_for",
     "register_caption_tap",
     "REQUEST_ACK_TIMEOUT_S",
+    "STATE_DELTA_BLOCK_TYPES",
     "RequestMethod",
     "UiChannel",
     "rejection_message",
@@ -189,7 +211,14 @@ _MAX_REJECTIONS: Final[int] = 10
 ANSWER_KEYS: Final[dict[str, frozenset[str]]] = {
     "consent": frozenset({"accepted"}),
     "choices": frozenset({"selected"}),
+    # V5-43: the slot id only; its start and end come from the block's own slots.
+    "slots": frozenset({"selected"}),
 }
+#: The block types a caller's `state_delta` (AG-UI) may write (V5-43): what `update_block`
+#: may write, less `kb_citations` (a citation names a knowledge document the worker would
+#: fetch) and `custom` (pack state packs may act on). Requestable blocks, links, consent,
+#: uploads, captions and hand-offs are never written from the browser.
+STATE_DELTA_BLOCK_TYPES: Final[frozenset[str]] = UPDATABLE_BLOCK_TYPES - {"kb_citations", "custom"}
 #: Answer keys only the agent side (`submit_block`) may set: `via: "voice"` marks an answer
 #: heard out loud, `turn_id` the user turn it was heard in (S5-3, S5-4). A browser's copy
 #: is dropped.
@@ -1406,6 +1435,9 @@ class UiChannel:
         if action.action == "block_submit":
             return await self._handle_block_submit(action.payload)
 
+        if action.action == "state_delta":
+            return await self._handle_state_delta(action.payload)
+
         if action.action == "block_action":
             block_id = str(action.payload.get("block_id", ""))
             if not block_id:
@@ -1415,6 +1447,15 @@ class UiChannel:
             if name == OPEN_CITATION and self._block_type(block_id) == "kb_citations":
                 # E1 (V5-08): the platform opens the cited page; packs never see it.
                 return AgentActionResult(ok=True, payload=await open_citation(self, block_id, data))
+            if self._block_type(block_id) == "link":
+                # V5-43: the caller opened the link; packs never see it.
+                opened = await self._link_opened(block_id) if name == LINK_OPENED else False
+                return AgentActionResult(ok=True, payload={"opened": opened})
+            if self._block_type(block_id) == "cards":
+                refused = await self._card_action(block_id, name, data)
+                if refused is not None:
+                    return AgentActionResult(ok=False, error=refused)
+                data = {"card_id": data["card_id"]}
             if self._on_block_action is None:
                 # Default no-op (CONTRACTS-V2 §4.4): acknowledged, nothing to return.
                 return AgentActionResult(ok=True)
@@ -1459,6 +1500,116 @@ class UiChannel:
             return AgentActionResult(ok=False, error=f"block {block_id!r} cannot be submitted")
         await self._submit(block_id, None if submit.cancelled else submit.values)
         return AgentActionResult(ok=True)
+
+    async def _handle_state_delta(self, payload: dict[str, Any]) -> AgentActionResult:
+        """`state_delta` (V5-43): an AG-UI `STATE_DELTA` on the blocks a caller may write.
+
+        Every operation must address `/blocks/<id>/...` of a block whose type is in
+        :data:`STATE_DELTA_BLOCK_TYPES`; the delta is translated with
+        `lkap_contracts.ui_agui.agui_delta_to_patch` against the current state and every
+        touched block is validated against its state model before one patch is sent.
+        Anything wrong refuses the whole delta and changes nothing.
+        """
+        try:
+            parsed = StateDeltaPayload.model_validate(payload)
+        except ValidationError:
+            return AgentActionResult(
+                ok=False, error="state_delta needs a delta of 1 to 100 JSON Patch operations"
+            )
+        try:
+            ops = agui_delta_to_patch(parsed.delta, self.state)
+        except AguiPatchError as exc:
+            return AgentActionResult(ok=False, error=f"state_delta refused: {exc}")
+        grouped: dict[str, list[UiPatchOp]] = {}
+        for op in ops:
+            segments = _segments(op.path)
+            block_id = segments[1]
+            if self._block_type(block_id) not in STATE_DELTA_BLOCK_TYPES:
+                return AgentActionResult(
+                    ok=False, error=f"state_delta refused: block {block_id!r} cannot be changed from the page"
+                )
+            relative = "/" + "/".join(segments[2:])
+            grouped.setdefault(block_id, []).append(op.model_copy(update={"path": relative}))
+        try:
+            for block_id, block_ops in grouped.items():
+                self._validated_block_ops(block_id, block_ops)
+        except ValidationError as exc:
+            return AgentActionResult(
+                ok=False,
+                error=f"state_delta refused: the result does not fit the block ({exc.errors()[0]['msg']})",
+            )
+        if ops:
+            await self.patch(ops)
+        for block_id in grouped:
+            self._record(
+                "block_update",
+                {"block_id": block_id, "block_type": self._block_type(block_id), "op": "state_delta"},
+            )
+        return AgentActionResult(ok=True, payload={"applied": len(ops)})
+
+    async def _link_opened(self, block_id: str) -> bool:
+        """Mark a `pending` link `opened` (V5-43); any other status is left alone."""
+        state = self.state.blocks.get(block_id) or {}
+        if state.get("status") != "pending":
+            return False
+        await self.patch_block(
+            block_id,
+            [
+                UiPatchOp(op="set", path="status", value="opened"),
+                UiPatchOp(op="set", path="opened_at", value=time.time()),
+            ],
+        )
+        return True
+
+    async def _card_action(self, block_id: str, name: str, data: dict[str, Any]) -> str | None:
+        """Check a `cards` block action and record a card pick (V5-43); the refusal reason, or `None`."""
+        state = self.state.blocks.get(block_id) or {}
+        spec = self._block_specs.get(block_id)
+        error = card_action_error(state, spec.config if spec is not None else {}, name, data)
+        if error is not None:
+            return error
+        if name == CARD_SELECT and state.get("selected") != data["card_id"]:
+            await self.patch_block(block_id, [UiPatchOp(op="set", path="selected", value=data["card_id"])])
+        return None
+
+    async def apply_link_outcome(
+        self, *, block_id: str | None, reference: str | None, status: LinkOutcome
+    ) -> dict[str, Any] | None:
+        """Apply the outcome the api reported for a `link` block (V5-43).
+
+        The block is the one named `block_id` (a `link` block), else the `link` block
+        whose `reference` matches. It changes only while `pending` or `opened`, so a
+        repeated or late report does nothing.
+
+        Returns:
+            The block's state after the change (plus `block_id`), or `None` when no
+            link block matched or it was not waiting for an outcome.
+        """
+        links = [bid for bid, spec in self._block_specs.items() if spec.type == "link"]
+        target: str | None = None
+        if block_id is not None:
+            target = block_id if block_id in links else None
+        elif reference is not None:
+            target = next(
+                (bid for bid in links if (self.state.blocks.get(bid) or {}).get("reference") == reference),
+                None,
+            )
+        if target is None:
+            return None
+        state = self.state.blocks.get(target) or {}
+        if state.get("status") not in ("pending", "opened"):
+            return None
+        if reference is not None and block_id is not None and state.get("reference") not in (None, reference):
+            return None
+        await self.patch_block(
+            target,
+            [
+                UiPatchOp(op="set", path="status", value=status),
+                UiPatchOp(op="set", path="completed_at", value=time.time()),
+            ],
+        )
+        self._record("link_completed", {"block_id": target, "status": status, "kind": state.get("kind")})
+        return {"block_id": target, **(self.state.blocks.get(target) or {})}
 
     async def _submit(self, block_id: str, values: dict[str, Any] | None) -> None:
         """Route an answer (`None` = the user cancelled) by the pending request's method.
@@ -1517,6 +1668,8 @@ class UiChannel:
         values = jsonable(values)
         if self._block_type(block_id) == "form":
             values = self._verified_form_values(block_id, values)
+        if self._block_type(block_id) == "slots":
+            values = self._slot_values(block_id, values)
         ops: list[UiPatchOp] = []
         if self._stores_values(block_id):
             ops.append(UiPatchOp(op="set", path=block_path(block_id, "values"), value=values))
@@ -1538,6 +1691,18 @@ class UiChannel:
         )
         await self._deliver(block_id, values, notify=notify)
 
+    def _slot_values(self, block_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        """A `slots` answer as the worker trusts it (V5-43): the id, and the block's own start and end.
+
+        A browser's `start` and `end` (or anything else) are dropped, so neither the waiting
+        tool nor a late-answer reply can see a time the block never offered.
+        """
+        kept = {k: v for k, v in values.items() if k in ANSWER_KEYS["slots"] | AGENT_ONLY_ANSWER_KEYS}
+        slot = find_slot(self.state.blocks.get(block_id) or {}, str(kept.get("selected")))
+        if slot is not None:
+            kept.update({"start": slot.get("start"), "end": slot.get("end")})
+        return kept
+
     def _answer_field_ops(self, block_id: str, values: dict[str, Any]) -> list[UiPatchOp]:
         """`set` ops for the keys of `values` the block type lists as answer keys (:data:`ANSWER_KEYS`).
 
@@ -1557,6 +1722,11 @@ class UiChannel:
             error = choice_selection_error(self.state.blocks.get(block_id) or {}, values["selected"])
             if error is not None:
                 self._log.debug("choice answer not stored", block_id=block_id, error=error)
+                return []
+        if block_type == "slots" and "selected" in values:
+            error = slot_selection_error(self.state.blocks.get(block_id) or {}, values["selected"])
+            if error is not None:
+                self._log.debug("slot answer not stored", block_id=block_id, error=error)
                 return []
         protected = set(RequestableState.model_fields)
         ops = [

@@ -147,6 +147,29 @@ async def test_participant_left_appends_an_event(
     assert stored.payload["identity"] == "u"
 
 
+@pytest.mark.parametrize(
+    ("webhook", "expected"),
+    [("participant_joined", "supervisor_joined"), ("participant_left", "supervisor_left")],
+)
+async def test_a_hidden_supervisor_is_recorded_as_supervisor_presence(
+    client: httpx.AsyncClient, database: Database, settings: Settings, webhook: str, expected: str
+) -> None:
+    """V5-37 (ask #245): the worker cannot see a hidden listener, so the webhook names it."""
+    connection_id, session_id, room = await _seed(database, settings, status="active")
+    identity = "supervisor:usr_1"
+    event = WebhookEvent(event=webhook, room=Room(name=room), participant=ParticipantInfo(identity=identity))
+    body, headers = _signed(event)
+
+    response = await client.post(f"/hooks/livekit/{connection_id}", content=body, headers=headers)
+
+    assert response.status_code == 204
+    async with database.session() as session:
+        stored = (
+            await session.execute(select(SessionEvent).where(SessionEvent.session_id == session_id))
+        ).scalar_one()
+    assert (stored.type, stored.payload["identity"]) == (expected, identity)
+
+
 async def test_a_replayed_event_id_is_acknowledged_but_not_handled_twice(
     client: httpx.AsyncClient, database: Database, settings: Settings
 ) -> None:

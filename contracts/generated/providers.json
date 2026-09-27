@@ -38,6 +38,7 @@
           "it",
           "nl"
         ],
+        "end_of_turn": false,
         "language_detection": "multi",
         "language_switch": true,
         "languages": [
@@ -93,6 +94,9 @@
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -120,6 +124,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -131,32 +136,79 @@
       "label": "LiveKit Inference (STT)",
       "models": [
         {
+          "deprecated": false,
           "id": "deepgram/nova-3",
           "label": "Deepgram Nova 3",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "deepgram/flux-general-en",
           "label": "Deepgram Flux (general, en)",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
+          "id": "deepgram/flux-general-multi",
+          "label": "Deepgram Flux (multilingual)",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "deepgram/nova-3-medical",
+          "label": "Deepgram Nova 3 Medical",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "assemblyai/universal-streaming",
           "label": "AssemblyAI Universal Streaming",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
+          "id": "assemblyai/universal-3-6-pro",
+          "label": "AssemblyAI Universal-3.6 Pro Streaming",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "cartesia/ink-2",
+          "label": "Cartesia Ink 2",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "cartesia/ink-whisper",
           "label": "Cartesia Ink Whisper",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "google/gemini-3.5-transcribe-live",
           "label": "Gemini 3.5 Transcribe Live",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "speechmatics/linden-1",
+          "label": "Speechmatics Linden-1",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "xai/stt-2",
+          "label": "xAI Speech to Text 2",
           "note": null,
           "supports_video": false
         }
@@ -185,12 +237,16 @@
         "audio_input": true,
         "cloud_only": true,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -218,6 +274,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -229,32 +286,86 @@
       "label": "LiveKit Inference (LLM)",
       "models": [
         {
+          "deprecated": false,
           "id": "google/gemma-4-31b-it",
           "label": "Gemma 4 31B Instruct",
           "note": "text-only on LiveKit Inference: ignores image parts silently",
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "google/gemini-3.5-flash",
           "label": "Gemini 3.5 Flash",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
+          "id": "google/gemini-3.8-flash",
+          "label": "Gemini 3.8 Flash",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "google/gemini-3.1-flash-lite",
+          "label": "Gemini 3.1 Flash Lite",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "openai/gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "openai/gpt-4o-mini",
           "label": "GPT-4o mini",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
+          "id": "openai/gpt-5.5",
+          "label": "GPT-5.5",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "openai/gpt-5.4-mini",
+          "label": "GPT-5.4 mini",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "openai/gpt-5.6-luna",
+          "label": "GPT-5.6 Luna",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "openai/gpt-oss-120b",
           "label": "GPT-OSS 120B",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "xai/grok-4.7",
+          "label": "Grok 4.7",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "deepseek-ai/deepseek-v4.1-flash",
+          "label": "DeepSeek V4.1 Flash",
           "note": null,
           "supports_video": false
         }
@@ -283,12 +394,16 @@
         "audio_input": true,
         "cloud_only": true,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -321,6 +436,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -337,6 +453,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -348,26 +465,72 @@
       "label": "LiveKit Inference (TTS)",
       "models": [
         {
+          "deprecated": false,
           "id": "inworld/inworld-tts-2",
           "label": "Inworld TTS 2",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
+          "id": "cartesia/sonic-3.6",
+          "label": "Cartesia Sonic 3.6",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "cartesia/sonic-3",
           "label": "Cartesia Sonic 3",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "deepgram/aura-2",
           "label": "Deepgram Aura 2",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
+          "id": "deepgram/flux-tts",
+          "label": "Deepgram Flux TTS",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "fishaudio/s2.1-pro",
+          "label": "Fish Audio S2.1 Pro",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "gradium/default",
+          "label": "Gradium TTS",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "rime/coda",
+          "label": "Rime Coda",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "rime/mistv3",
           "label": "Rime Mist v3",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "xai/tts-1",
+          "label": "xAI Text to Speech",
           "note": null,
           "supports_video": false
         }
@@ -396,12 +559,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": true,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": true,
         "tool_calling": true,
         "video_input": true,
@@ -512,6 +679,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -528,6 +696,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         },
@@ -547,6 +716,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -567,6 +737,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -583,6 +754,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -594,30 +766,35 @@
       "label": "Gemini Live",
       "models": [
         {
+          "deprecated": false,
           "id": "gemini-3.8-live",
           "label": "Gemini 3.8 Live",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "gemini-3.8-live-extended-thinking",
           "label": "Gemini 3.8 Live (extended thinking)",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "gemini-3.1-flash-live-preview",
           "label": "Gemini 3.1 Flash Live (preview)",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "gemini-2.5-flash-native-audio-preview-12-2025",
           "label": "Gemini 2.5 Flash native audio (preview)",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "gemini-live-2.5-flash-native-audio",
           "label": "Gemini 2.5 Flash native audio (Vertex AI, GA)",
           "note": "Vertex AI only, not the Gemini API.",
@@ -645,6 +822,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -665,12 +843,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": true,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": true,
         "tool_calling": true,
         "video_input": false,
@@ -720,6 +902,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -736,6 +919,7 @@
           "options": null,
           "placeholder": "https://api.openai.com/v1",
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -747,6 +931,7 @@
       "label": "OpenAI Realtime",
       "models": [
         {
+          "deprecated": false,
           "id": "gpt-realtime",
           "label": "GPT Realtime",
           "note": null,
@@ -774,6 +959,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -805,6 +991,7 @@
           "it",
           "nl"
         ],
+        "end_of_turn": false,
         "language_detection": "multi",
         "language_switch": true,
         "languages": [
@@ -865,6 +1052,9 @@
           "numbers"
         ],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -900,6 +1090,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -911,20 +1102,16 @@
       "label": "Deepgram",
       "models": [
         {
+          "deprecated": false,
           "id": "nova-3",
           "label": "Nova 3",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "nova-2",
           "label": "Nova 2",
-          "note": null,
-          "supports_video": false
-        },
-        {
-          "id": "flux-general-en",
-          "label": "Flux (general, en)",
           "note": null,
           "supports_video": false
         }
@@ -950,6 +1137,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -970,12 +1158,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -1016,6 +1208,7 @@
           "options": null,
           "placeholder": "https://api.openai.com/v1",
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -1032,6 +1225,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -1043,18 +1237,21 @@
       "label": "OpenAI",
       "models": [
         {
+          "deprecated": false,
           "id": "gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "gpt-4o",
           "label": "GPT-4o",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "gpt-4.1-mini",
           "label": "GPT-4.1 mini",
           "note": null,
@@ -1082,6 +1279,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1102,12 +1300,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -1156,6 +1358,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -1167,12 +1370,14 @@
       "label": "Google Gemini",
       "models": [
         {
+          "deprecated": false,
           "id": "gemini-2.5-flash",
           "label": "Gemini 2.5 Flash",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "gemini-3.5-flash",
           "label": "Gemini 3.5 Flash",
           "note": null,
@@ -1200,6 +1405,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1220,12 +1426,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -1244,7 +1454,7 @@
       },
       "credential_provider": null,
       "default_credential_id": null,
-      "default_model": "sonic-3",
+      "default_model": "sonic-3.6",
       "docs_url": "https://docs.livekit.io/agents/models/tts/cartesia/",
       "enabled": true,
       "fields": [
@@ -1261,6 +1471,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -1277,6 +1488,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -1288,6 +1500,14 @@
       "label": "Cartesia",
       "models": [
         {
+          "deprecated": false,
+          "id": "sonic-3.6",
+          "label": "Sonic 3.6",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
           "id": "sonic-3",
           "label": "Sonic 3",
           "note": null,
@@ -1315,6 +1535,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1335,12 +1556,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -1367,7 +1592,7 @@
       },
       "credential_provider": null,
       "default_credential_id": null,
-      "default_model": "eleven_turbo_v2_5",
+      "default_model": "eleven_flash_v2_5",
       "docs_url": "https://docs.livekit.io/agents/models/tts/elevenlabs/",
       "enabled": true,
       "fields": [
@@ -1384,8 +1609,47 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Uncompressed audio (pcm_24000) starts playing sooner than MP3. Unset keeps MP3.",
+          "label": "Audio format",
+          "name": "encoding",
+          "nested_model": null,
+          "options": [
+            "mp3_22050_32",
+            "mp3_24000_48",
+            "mp3_44100",
+            "mp3_44100_32",
+            "mp3_44100_64",
+            "mp3_44100_96",
+            "mp3_44100_128",
+            "mp3_44100_192",
+            "opus_48000_32",
+            "opus_48000_64",
+            "opus_48000_96",
+            "opus_48000_128",
+            "opus_48000_192",
+            "pcm_8000",
+            "pcm_16000",
+            "pcm_22050",
+            "pcm_24000",
+            "pcm_32000",
+            "pcm_44100",
+            "pcm_48000"
+          ],
+          "placeholder": "mp3_22050_32",
+          "positional": false,
+          "recommended": "pcm_24000",
+          "required": false,
+          "type": "enum"
         }
       ],
       "get_key_url": "https://elevenlabs.io/app/settings/api-keys",
@@ -1395,14 +1659,16 @@
       "label": "ElevenLabs",
       "models": [
         {
-          "id": "eleven_turbo_v2_5",
-          "label": "Eleven Turbo v2.5",
+          "deprecated": false,
+          "id": "eleven_flash_v2_5",
+          "label": "Eleven Flash v2.5",
           "note": null,
           "supports_video": false
         },
         {
-          "id": "eleven_flash_v2_5",
-          "label": "Eleven Flash v2.5",
+          "deprecated": false,
+          "id": "eleven_turbo_v2_5",
+          "label": "Eleven Turbo v2.5",
           "note": null,
           "supports_video": false
         }
@@ -1428,6 +1694,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1448,12 +1715,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -1494,6 +1765,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -1505,6 +1777,7 @@
       "label": "OpenAI TTS",
       "models": [
         {
+          "deprecated": false,
           "id": "gpt-4o-mini-tts",
           "label": "GPT-4o mini TTS",
           "note": null,
@@ -1532,6 +1805,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1552,12 +1826,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -1593,6 +1871,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -1624,6 +1903,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1644,12 +1924,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -1686,6 +1970,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -1702,6 +1987,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -1733,6 +2019,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1753,12 +2040,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -1794,6 +2085,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -1810,6 +2102,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -1841,6 +2134,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1861,12 +2155,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -1909,6 +2207,7 @@
       "label": "Gemini image generation",
       "models": [
         {
+          "deprecated": false,
           "id": "gemini-3.1-flash-image",
           "label": "Gemini 3.1 Flash Image",
           "note": null,
@@ -1936,6 +2235,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -1956,12 +2256,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -2002,6 +2306,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -2013,6 +2318,7 @@
       "label": "OpenAI image generation",
       "models": [
         {
+          "deprecated": false,
           "id": "gpt-image-1",
           "label": "GPT Image 1",
           "note": null,
@@ -2040,6 +2346,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -2060,12 +2367,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -2087,6 +2398,7 @@
       "label": "FastEmbed (local)",
       "models": [
         {
+          "deprecated": false,
           "id": "BAAI/bge-small-en-v1.5",
           "label": "BGE small en v1.5",
           "note": null,
@@ -2117,12 +2429,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -2157,6 +2473,7 @@
       "label": "OpenAI embeddings",
       "models": [
         {
+          "deprecated": false,
           "id": "text-embedding-3-small",
           "label": "text-embedding-3-small",
           "note": null,
@@ -2184,6 +2501,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -2204,12 +2522,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -2254,12 +2576,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -2295,6 +2621,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         },
@@ -2311,6 +2638,7 @@
           "options": null,
           "placeholder": "[\"openai/gpt-4o-mini\"]",
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "json"
         },
@@ -2327,6 +2655,7 @@
           "options": null,
           "placeholder": "{\"sort\": \"latency\"}",
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "json"
         },
@@ -2343,6 +2672,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -2359,6 +2689,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -2370,30 +2701,35 @@
       "label": "OpenRouter",
       "models": [
         {
+          "deprecated": false,
           "id": "openai/gpt-4.1-mini",
           "label": "GPT-4.1 mini",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "openai/gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "openai/gpt-4o-mini",
           "label": "GPT-4o mini",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "google/gemini-3.5-flash",
           "label": "Gemini 3.5 Flash",
           "note": null,
           "supports_video": true
         },
         {
+          "deprecated": false,
           "id": "anthropic/claude-sonnet-4.6",
           "label": "Claude Sonnet 4.6",
           "note": null,
@@ -2421,6 +2757,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -2441,6 +2778,7 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": "multi",
         "language_switch": true,
         "languages": [
@@ -2505,6 +2843,9 @@
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": "OpenRouter transcribes each utterance as one whole file.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -2540,6 +2881,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -2556,6 +2898,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -2567,30 +2910,35 @@
       "label": "OpenRouter (STT)",
       "models": [
         {
+          "deprecated": false,
           "id": "openai/gpt-4o-mini-transcribe",
           "label": "GPT-4o mini Transcribe",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "openai/whisper-large-v3-turbo",
           "label": "Whisper large v3 turbo",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "openai/gpt-4o-transcribe",
           "label": "GPT-4o Transcribe",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "deepgram/nova-3",
           "label": "Deepgram Nova 3 (batch)",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "mistralai/voxtral-mini-transcribe",
           "label": "Voxtral Mini Transcribe",
           "note": null,
@@ -2618,6 +2966,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -2638,12 +2987,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": "One request per sentence.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -2680,6 +3033,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -2696,6 +3050,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "catalog"
         },
@@ -2712,6 +3067,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -2723,30 +3079,35 @@
       "label": "OpenRouter (TTS)",
       "models": [
         {
+          "deprecated": false,
           "id": "google/gemini-3.8-flash-tts",
           "label": "Gemini 3.8 Flash TTS",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "google/gemini-3.8-flash-lite-tts",
           "label": "Gemini 3.8 Flash Lite TTS",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "deepgram/aura-2",
           "label": "Deepgram Aura 2",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "mistralai/voxtral-mini-tts-2603",
           "label": "Voxtral Mini TTS",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "x-ai/grok-voice-tts-1.0",
           "label": "Grok Voice TTS 1.0",
           "note": null,
@@ -2774,6 +3135,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -2794,12 +3156,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -2835,6 +3201,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -2846,6 +3213,7 @@
       "label": "OpenRouter embeddings",
       "models": [
         {
+          "deprecated": false,
           "id": "openai/text-embedding-3-small",
           "label": "text-embedding-3-small",
           "note": null,
@@ -2873,6 +3241,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -2893,12 +3262,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -2939,6 +3312,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -2955,6 +3329,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -2966,18 +3341,21 @@
       "label": "OpenRouter image generation",
       "models": [
         {
+          "deprecated": false,
           "id": "openai/gpt-image-1",
           "label": "GPT Image 1",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "openai/gpt-image-1-mini",
           "label": "GPT Image 1 mini",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "google/gemini-3.1-flash-image",
           "label": "Gemini 3.1 Flash Image",
           "note": null,
@@ -3005,6 +3383,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3025,12 +3404,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": true,
         "tool_calling": true,
         "video_input": false,
@@ -3058,6 +3441,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -3074,6 +3458,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -3090,6 +3475,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -3106,6 +3492,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -3137,6 +3524,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3157,12 +3545,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3244,6 +3636,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -3260,6 +3653,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -3271,24 +3665,28 @@
       "label": "xAI Grok Voice",
       "models": [
         {
+          "deprecated": false,
           "id": "grok-voice-latest",
           "label": "Grok Voice (latest)",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "grok-voice-think-fast-2.0",
           "label": "Grok Voice Think Fast 2.0",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "grok-voice-think-fast-1.0",
           "label": "Grok Voice Think Fast 1.0",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "grok-voice-fast-1.0",
           "label": "Grok Voice Fast 1.0",
           "note": null,
@@ -3316,6 +3714,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3336,12 +3735,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3369,6 +3772,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -3385,6 +3789,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -3401,6 +3806,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -3432,6 +3838,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3452,12 +3859,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3485,6 +3896,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "file"
         },
@@ -3501,6 +3913,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -3517,6 +3930,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -3551,6 +3965,7 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": "multi",
         "language_switch": true,
         "languages": [
@@ -3615,6 +4030,9 @@
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": "use_realtime",
+        "streaming_note": "The realtime-only models (gpt-realtime-whisper, gpt-live-transcribe) stream without it.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3655,8 +4073,26 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Streams while the caller speaks; needed for live calls. Off sends one request after each utterance.",
+          "label": "Streams while the caller speaks",
+          "name": "use_realtime",
+          "nested_model": null,
+          "options": null,
+          "placeholder": null,
+          "positional": false,
+          "recommended": true,
+          "required": false,
+          "type": "boolean"
         }
       ],
       "get_key_url": null,
@@ -3686,6 +4122,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3706,12 +4143,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3739,6 +4180,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -3770,6 +4212,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3790,12 +4233,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": "Streams only with the scribe_v2_realtime model.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3823,6 +4270,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -3854,6 +4302,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3874,12 +4323,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -3907,6 +4360,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -3938,6 +4392,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -3958,12 +4413,155 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": true,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
+        "text_modality": false,
+        "tool_calling": true,
+        "video_input": false,
+        "vision": null,
+        "voices": [],
+        "voices_dynamic": false
+      },
+      "catalog": null,
+      "credential_provider": "deepgram-stt",
+      "default_credential_id": null,
+      "default_model": "flux-general-en",
+      "docs_url": "https://docs.livekit.io/agents/models/stt/deepgram/",
+      "enabled": true,
+      "fields": [
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How sure Flux must be that the caller finished (0.5-0.9). Higher waits longer.",
+          "label": "End-of-turn confidence",
+          "name": "eot_threshold",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.7",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Start preparing a reply before the turn is certainly over (0.3-0.9). Off by default.",
+          "label": "Early reply confidence",
+          "name": "eager_eot_threshold",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "off",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "End the turn after this much silence even if Flux is unsure.",
+          "label": "End-of-turn timeout (ms)",
+          "name": "eot_timeout_ms",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "3000",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        }
+      ],
+      "get_key_url": "https://console.deepgram.com/",
+      "id": "deepgram-flux-stt",
+      "installed_on": [],
+      "kind": "stt",
+      "label": "Deepgram Flux",
+      "models": [
+        {
+          "deprecated": false,
+          "id": "flux-general-en",
+          "label": "Flux (general, en)",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "flux-general-multi",
+          "label": "Flux (multilingual)",
+          "note": null,
+          "supports_video": false
+        }
+      ],
+      "notes": "Decides when the caller has finished speaking by itself, so the session uses it for turn-taking instead of the turn detector. flux-general-multi covers English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch.",
+      "package": "livekit-plugins-deepgram",
+      "price_note": null,
+      "price_ref": "deepgram-stt",
+      "probe": null,
+      "python_class": "livekit.plugins.deepgram.STTv2",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": "DEEPGRAM_API_KEY",
+          "help": null,
+          "label": "Deepgram API key",
+          "name": "api_key",
+          "nested_model": null,
+          "options": null,
+          "placeholder": null,
+          "positional": false,
+          "recommended": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "telephony_variant": null,
+      "test": null,
+      "v": 2,
+      "vendor": "Deepgram",
+      "verification": "unverified",
+      "verified_at": null,
+      "verified_note": null,
+      "worker_image": "full"
+    },
+    {
+      "availability": "available",
+      "capabilities": {
+        "audio_input": true,
+        "cloud_only": false,
+        "detect_languages": [],
+        "end_of_turn": false,
+        "language_detection": null,
+        "language_switch": false,
+        "languages": [],
+        "platforms": [],
+        "redaction": [],
+        "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4004,6 +4602,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -4035,6 +4634,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4055,12 +4655,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4088,6 +4692,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -4104,6 +4709,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -4135,6 +4741,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4155,12 +4762,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4204,6 +4815,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -4215,18 +4827,21 @@
       "label": "Anthropic Claude",
       "models": [
         {
+          "deprecated": false,
           "id": "claude-sonnet-4-6",
           "label": "Claude Sonnet 4.6",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "claude-opus-4-6",
           "label": "Claude Opus 4.6",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "claude-3-5-haiku-20241022",
           "label": "Claude 3.5 Haiku",
           "note": null,
@@ -4254,6 +4869,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4274,12 +4890,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4314,12 +4934,14 @@
       "label": "Groq",
       "models": [
         {
+          "deprecated": false,
           "id": "llama-3.3-70b-versatile",
           "label": "Llama 3.3 70B Versatile",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "openai/gpt-oss-120b",
           "label": "GPT-OSS 120B",
           "note": null,
@@ -4347,6 +4969,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4367,12 +4990,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4402,6 +5029,7 @@
       "label": "Cerebras",
       "models": [
         {
+          "deprecated": false,
           "id": "gpt-oss-120b",
           "label": "GPT-OSS 120B",
           "note": null,
@@ -4429,6 +5057,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4449,12 +5078,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4482,6 +5115,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         }
@@ -4513,6 +5147,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4533,12 +5168,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4566,6 +5205,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -4577,6 +5217,7 @@
       "label": "AWS Bedrock",
       "models": [
         {
+          "deprecated": false,
           "id": "amazon.nova-2-lite-v1:0",
           "label": "Nova 2 Lite",
           "note": null,
@@ -4604,6 +5245,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "secret"
         },
@@ -4620,6 +5262,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "secret"
         }
@@ -4640,12 +5283,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": "Streams with Chirp 3 HD voices; pick one of those for live calls.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4673,6 +5320,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "file"
         },
@@ -4689,6 +5337,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -4705,6 +5354,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -4739,12 +5389,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4774,6 +5428,7 @@
       "label": "Deepgram Aura",
       "models": [
         {
+          "deprecated": false,
           "id": "aura-2-andromeda-en",
           "label": "Aura 2 Andromeda (en)",
           "note": null,
@@ -4801,6 +5456,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4821,12 +5477,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": "use_websocket",
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4863,6 +5523,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -4879,8 +5540,26 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Starts speaking before the whole sentence is ready; needed for live calls. Off sends one request per sentence.",
+          "label": "Streams while it speaks",
+          "name": "use_websocket",
+          "nested_model": null,
+          "options": null,
+          "placeholder": null,
+          "positional": false,
+          "recommended": true,
+          "required": false,
+          "type": "boolean"
         }
       ],
       "get_key_url": null,
@@ -4890,6 +5569,7 @@
       "label": "Rime",
       "models": [
         {
+          "deprecated": false,
           "id": "mistv3",
           "label": "Mist v3",
           "note": null,
@@ -4917,6 +5597,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -4937,12 +5618,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -4969,7 +5654,7 @@
       },
       "credential_provider": null,
       "default_credential_id": null,
-      "default_model": "inworld-tts-1.5-max",
+      "default_model": "inworld-tts-2",
       "docs_url": "https://docs.livekit.io/agents/models/tts/inworld/",
       "enabled": true,
       "fields": [
@@ -4986,6 +5671,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -4997,9 +5683,24 @@
       "label": "Inworld",
       "models": [
         {
+          "deprecated": false,
+          "id": "inworld-tts-2",
+          "label": "Inworld TTS 2",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "inworld-tts-2-flash",
+          "label": "Inworld TTS 2 Flash",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": true,
           "id": "inworld-tts-1.5-max",
           "label": "Inworld TTS 1.5 Max",
-          "note": null,
+          "note": "deprecated by the vendor",
           "supports_video": false
         }
       ],
@@ -5024,6 +5725,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -5044,12 +5746,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5107,6 +5813,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -5127,12 +5834,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": "Azure itself can stream, but the LiveKit plugin does not.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5160,6 +5871,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -5176,6 +5888,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -5207,6 +5920,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -5227,12 +5941,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -5269,6 +5987,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -5285,6 +6004,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -5316,6 +6036,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -5336,6 +6057,7 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
@@ -5346,6 +6068,9 @@
         ],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -5373,6 +6098,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -5392,6 +6118,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -5408,6 +6135,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -5424,6 +6152,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "file"
         }
@@ -5455,6 +6184,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -5475,12 +6205,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -5516,6 +6250,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -5537,6 +6272,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         }
@@ -5568,6 +6304,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -5588,12 +6325,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5621,6 +6362,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -5632,6 +6374,7 @@
       "label": "Silero (local)",
       "models": [
         {
+          "deprecated": false,
           "id": "silero",
           "label": "Silero (local ONNX)",
           "note": null,
@@ -5662,12 +6405,16 @@
         "audio_input": true,
         "cloud_only": true,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5689,6 +6436,7 @@
       "label": "LiveKit Inference (VAD)",
       "models": [
         {
+          "deprecated": false,
           "id": "silero",
           "label": "Silero (LiveKit-hosted native inference)",
           "note": null,
@@ -5719,12 +6467,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5752,6 +6504,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -5786,12 +6539,16 @@
         "audio_input": true,
         "cloud_only": true,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5822,6 +6579,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -5838,6 +6596,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -5872,6 +6631,7 @@
         "audio_input": true,
         "cloud_only": true,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
@@ -5881,6 +6641,9 @@
         ],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -5908,6 +6671,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "json"
         },
@@ -5927,6 +6691,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -5943,6 +6708,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -5977,12 +6743,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6010,6 +6780,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         }
@@ -6041,6 +6812,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6061,6 +6833,7 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
@@ -6070,6 +6843,9 @@
         ],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6097,6 +6873,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -6113,6 +6890,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -6144,6 +6922,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6164,12 +6943,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6197,6 +6980,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         }
@@ -6228,6 +7012,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6248,12 +7033,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6281,6 +7070,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -6297,6 +7087,7 @@
           "options": null,
           "placeholder": "public:cosmo_persona-1.5-live",
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -6328,6 +7119,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6348,12 +7140,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6381,6 +7177,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -6397,6 +7194,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -6413,6 +7211,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "file"
         }
@@ -6444,6 +7243,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6464,12 +7264,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6497,6 +7301,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -6528,6 +7333,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6548,12 +7354,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6581,6 +7391,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -6597,6 +7408,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -6628,6 +7440,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6648,12 +7461,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6681,6 +7498,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -6697,6 +7515,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         }
@@ -6728,6 +7547,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6748,12 +7568,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6781,6 +7605,7 @@
           "options": null,
           "placeholder": null,
           "positional": true,
+          "recommended": null,
           "required": true,
           "type": "json"
         }
@@ -6812,6 +7637,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6832,12 +7658,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -6865,6 +7695,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -6896,6 +7727,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -6916,12 +7748,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -6964,6 +7800,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -6995,6 +7832,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -7015,6 +7853,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -7031,6 +7870,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         }
@@ -7042,12 +7882,14 @@
       "label": "AWS Nova Sonic",
       "models": [
         {
+          "deprecated": false,
           "id": "amazon.nova-2-sonic-v1:0",
           "label": "Nova 2 Sonic",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "amazon.nova-sonic-v1:0",
           "label": "Nova Sonic",
           "note": null,
@@ -7078,12 +7920,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7111,6 +7957,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -7127,6 +7974,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -7158,6 +8006,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7178,12 +8027,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": true,
         "tool_calling": true,
         "video_input": false,
@@ -7214,6 +8067,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -7233,6 +8087,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         }
@@ -7244,12 +8099,14 @@
       "label": "Ultravox",
       "models": [
         {
+          "deprecated": false,
           "id": "fixie-ai/ultravox",
           "label": "Ultravox (default)",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "fixie-ai/ultravox-llama3.3-70b",
           "label": "Ultravox Llama 3.3 70B",
           "note": null,
@@ -7277,6 +8134,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7297,12 +8155,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7330,6 +8192,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -7348,6 +8211,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         }
@@ -7379,6 +8243,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7399,12 +8264,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7426,12 +8295,14 @@
       "label": "Perplexity",
       "models": [
         {
+          "deprecated": false,
           "id": "sonar-pro",
           "label": "Sonar Pro",
           "note": null,
           "supports_video": false
         },
         {
+          "deprecated": false,
           "id": "sonar",
           "label": "Sonar",
           "note": null,
@@ -7459,6 +8330,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7479,12 +8351,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7519,6 +8395,7 @@
       "label": "Mistral",
       "models": [
         {
+          "deprecated": false,
           "id": "ministral-8b-latest",
           "label": "Ministral 8B",
           "note": null,
@@ -7546,6 +8423,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7566,12 +8444,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7599,6 +8481,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -7610,6 +8493,7 @@
       "label": "Baseten",
       "models": [
         {
+          "deprecated": false,
           "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
           "label": "Llama 4 Maverick 17B",
           "note": null,
@@ -7637,6 +8521,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7657,12 +8542,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7692,6 +8581,7 @@
       "label": "xAI Grok",
       "models": [
         {
+          "deprecated": false,
           "id": "grok-4-1-fast-non-reasoning",
           "label": "Grok 4.1 Fast (non-reasoning)",
           "note": null,
@@ -7719,6 +8609,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7739,12 +8630,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7785,6 +8680,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -7796,6 +8692,7 @@
       "label": "OpenAI (Responses API)",
       "models": [
         {
+          "deprecated": false,
           "id": "gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
@@ -7823,6 +8720,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7843,12 +8741,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7876,6 +8778,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -7895,6 +8798,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         }
@@ -7926,6 +8830,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -7946,12 +8851,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -7979,6 +8888,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8010,6 +8920,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8030,12 +8941,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8077,6 +8992,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8092,17 +9008,21 @@
       "worker_image": "full"
     },
     {
-      "availability": "available",
+      "availability": "removed",
       "capabilities": {
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": "Withdrawn: the vendor's speech service is gone.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8130,6 +9050,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8140,7 +9061,7 @@
       "kind": "stt",
       "label": "Fireworks AI",
       "models": [],
-      "notes": null,
+      "notes": "Fireworks stopped its speech service on 2026-06-10; pick another transcriber.",
       "package": "livekit-plugins-fireworksai",
       "price_note": null,
       "price_ref": null,
@@ -8161,6 +9082,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8181,12 +9103,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8214,6 +9140,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -8245,6 +9172,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8265,12 +9193,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": "Streams only with a realtime model (an id containing 'realtime').",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8298,6 +9230,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -8329,6 +9262,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8349,12 +9283,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8382,6 +9320,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -8413,6 +9352,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8433,6 +9373,7 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": "unknown",
         "language_switch": false,
         "languages": [
@@ -8463,6 +9404,9 @@
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8490,6 +9434,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -8506,6 +9451,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8537,6 +9483,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8557,12 +9504,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8590,6 +9541,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -8621,6 +9573,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8641,12 +9594,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8674,6 +9631,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8705,6 +9663,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8725,12 +9684,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8758,6 +9721,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8789,6 +9753,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8809,12 +9774,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8842,6 +9811,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -8858,6 +9828,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8889,6 +9860,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8909,12 +9881,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -8942,6 +9918,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -8973,6 +9950,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -8993,12 +9971,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": "Streams only with the pulse model (the default).",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9026,6 +10008,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -9057,6 +10040,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9077,12 +10061,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": "The plugin's streaming mode is off by default and not offered here.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9110,6 +10098,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -9141,6 +10130,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9161,12 +10151,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9194,6 +10188,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -9225,6 +10220,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9245,12 +10241,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9278,6 +10278,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -9309,6 +10310,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9329,12 +10331,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9362,6 +10368,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "json"
         },
@@ -9378,6 +10385,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -9394,6 +10402,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -9428,12 +10437,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": true,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9461,6 +10474,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -9492,6 +10506,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9512,12 +10527,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9545,6 +10564,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -9576,6 +10596,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9596,12 +10617,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9629,6 +10654,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -9649,6 +10675,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         }
@@ -9680,6 +10707,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "secret"
         },
@@ -9696,6 +10724,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "secret"
         }
@@ -9716,12 +10745,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": "Streams only when the deployment's endpoint is a WebSocket URL.",
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9749,6 +10782,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -9780,6 +10814,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9800,12 +10835,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9833,6 +10872,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -9864,6 +10904,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9884,12 +10925,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -9917,6 +10962,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "number"
         },
@@ -9933,6 +10979,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -9964,6 +11011,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -9984,12 +11032,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10017,6 +11069,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -10033,6 +11086,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10064,6 +11118,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10084,12 +11139,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10117,6 +11176,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10148,6 +11208,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10168,12 +11229,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10201,6 +11266,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10232,6 +11298,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10252,12 +11319,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10285,6 +11356,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -10301,6 +11373,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10311,7 +11384,7 @@
       "kind": "tts",
       "label": "Groq",
       "models": [],
-      "notes": null,
+      "notes": "Groq speech takes at most 200 characters per request, so a long sentence from the model can fail to speak; it also waits for the whole sentence before playing.",
       "package": "livekit-plugins-groq",
       "price_note": null,
       "price_ref": null,
@@ -10332,6 +11405,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10352,12 +11426,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10385,6 +11463,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -10401,6 +11480,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10432,6 +11512,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10452,12 +11533,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10485,6 +11570,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -10516,6 +11602,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10536,12 +11623,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10569,6 +11660,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10600,6 +11692,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10620,12 +11713,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10653,6 +11750,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10684,6 +11782,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10704,12 +11803,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10737,6 +11840,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -10753,6 +11857,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10784,6 +11889,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10804,12 +11910,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10837,6 +11947,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -10868,6 +11979,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10888,12 +12000,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -10921,6 +12037,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -10952,6 +12069,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -10972,6 +12090,7 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [
@@ -10990,6 +12109,9 @@
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11017,6 +12139,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -11033,6 +12156,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11064,6 +12188,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11084,12 +12209,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11117,6 +12246,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -11148,6 +12278,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11168,12 +12299,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11201,6 +12336,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         }
@@ -11232,6 +12368,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11252,12 +12389,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11285,6 +12426,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -11316,6 +12458,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11336,12 +12479,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11369,6 +12516,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -11385,6 +12533,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11416,6 +12565,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11436,12 +12586,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11477,6 +12631,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -11493,6 +12648,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -11524,6 +12680,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11544,12 +12701,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": false,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11577,6 +12738,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11608,6 +12770,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11628,12 +12791,133 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
+        "text_modality": false,
+        "tool_calling": true,
+        "video_input": false,
+        "vision": null,
+        "voices": [],
+        "voices_dynamic": false
+      },
+      "catalog": null,
+      "credential_provider": null,
+      "default_credential_id": null,
+      "default_model": "speech-2.8-turbo",
+      "docs_url": null,
+      "enabled": true,
+      "fields": [
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Uncompressed audio (pcm) starts playing sooner than MP3. Unset keeps MP3.",
+          "label": "Audio format",
+          "name": "audio_format",
+          "nested_model": null,
+          "options": [
+            "pcm",
+            "mp3",
+            "flac",
+            "wav"
+          ],
+          "placeholder": "mp3",
+          "positional": false,
+          "recommended": "pcm",
+          "required": false,
+          "type": "enum"
+        }
+      ],
+      "get_key_url": null,
+      "id": "minimax-tts",
+      "installed_on": [],
+      "kind": "tts",
+      "label": "MiniMax",
+      "models": [
+        {
+          "deprecated": false,
+          "id": "speech-2.8-turbo",
+          "label": "Speech 2.8 Turbo",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "id": "speech-2.8-hd",
+          "label": "Speech 2.8 HD",
+          "note": null,
+          "supports_video": false
+        },
+        {
+          "deprecated": true,
+          "id": "speech-02-turbo",
+          "label": "Speech 02 Turbo",
+          "note": "deprecated by the vendor",
+          "supports_video": false
+        }
+      ],
+      "notes": null,
+      "package": "livekit-plugins-minimax-ai",
+      "price_note": null,
+      "price_ref": null,
+      "probe": null,
+      "python_class": "livekit.plugins.minimax.TTS",
+      "requires_credential": true,
+      "secret_fields": [
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": "MINIMAX_API_KEY",
+          "help": null,
+          "label": "MiniMax API key",
+          "name": "api_key",
+          "nested_model": null,
+          "options": null,
+          "placeholder": null,
+          "positional": false,
+          "recommended": null,
+          "required": true,
+          "type": "secret"
+        }
+      ],
+      "status": "deferred",
+      "telephony_variant": null,
+      "test": null,
+      "v": 2,
+      "vendor": "MiniMax",
+      "verification": "unverified",
+      "verified_at": null,
+      "verified_note": null,
+      "worker_image": "full"
+    },
+    {
+      "availability": "available",
+      "capabilities": {
+        "audio_input": true,
+        "cloud_only": false,
+        "detect_languages": [],
+        "end_of_turn": false,
+        "language_detection": null,
+        "language_switch": false,
+        "languages": [],
+        "platforms": [],
+        "redaction": [],
+        "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11661,6 +12945,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11692,6 +12977,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11712,12 +12998,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11745,6 +13035,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11776,6 +13067,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11796,12 +13088,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11829,6 +13125,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -11845,6 +13142,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11876,6 +13174,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11896,12 +13195,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": true,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -11929,6 +13232,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -11945,6 +13249,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -11976,6 +13281,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -11996,12 +13302,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12043,6 +13353,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12063,12 +13374,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12113,12 +13428,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12149,6 +13468,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         }
@@ -12180,6 +13500,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12200,12 +13521,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12233,6 +13558,7 @@
           "options": null,
           "placeholder": "us",
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -12264,6 +13590,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12284,12 +13611,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12317,6 +13648,7 @@
           "options": null,
           "placeholder": "+15550100000",
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         }
@@ -12348,6 +13680,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         },
@@ -12364,6 +13697,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12384,12 +13718,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12417,6 +13755,7 @@
           "options": null,
           "placeholder": "+15550100000",
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -12433,6 +13772,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -12464,6 +13804,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12484,12 +13825,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12517,6 +13862,7 @@
           "options": null,
           "placeholder": "https://your-cluster.cloud.qdrant.io:6333",
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -12533,6 +13879,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -12549,6 +13896,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -12580,6 +13928,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12600,12 +13949,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12633,6 +13986,7 @@
           "options": null,
           "placeholder": "lkap-knowledge",
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -12653,6 +14007,7 @@
           ],
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "enum"
         },
@@ -12669,6 +14024,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -12700,6 +14056,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12720,12 +14077,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12753,6 +14114,7 @@
           "options": null,
           "placeholder": "https://your-cluster.weaviate.cloud",
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "string"
         },
@@ -12769,6 +14131,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -12785,6 +14148,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -12816,6 +14180,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12836,12 +14201,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12869,6 +14238,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -12900,6 +14270,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -12920,12 +14291,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -12953,6 +14328,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         }
@@ -12984,6 +14360,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -13004,12 +14381,16 @@
         "audio_input": false,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": false,
         "video_input": false,
@@ -13037,6 +14418,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         },
@@ -13053,6 +14435,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "boolean"
         }
@@ -13084,6 +14467,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -13104,12 +14488,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13137,6 +14525,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -13168,6 +14557,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         },
@@ -13184,6 +14574,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -13204,12 +14595,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13237,6 +14632,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -13271,12 +14667,16 @@
         "audio_input": true,
         "cloud_only": true,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13321,12 +14721,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13368,6 +14772,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": true,
           "type": "secret"
         }
@@ -13388,12 +14793,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13421,6 +14830,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "model"
         },
@@ -13437,6 +14847,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -13471,12 +14882,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13504,6 +14919,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -13538,12 +14954,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,
@@ -13571,6 +14991,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         },
@@ -13587,6 +15008,7 @@
           "options": null,
           "placeholder": null,
           "positional": false,
+          "recommended": null,
           "required": false,
           "type": "string"
         }
@@ -13610,90 +15032,6 @@
       "test": null,
       "v": 2,
       "vendor": "Spitch",
-      "verification": "unverified",
-      "verified_at": null,
-      "verified_note": null,
-      "worker_image": "full"
-    },
-    {
-      "availability": "incompatible",
-      "capabilities": {
-        "audio_input": true,
-        "cloud_only": false,
-        "detect_languages": [],
-        "language_detection": null,
-        "language_switch": false,
-        "languages": [],
-        "platforms": [],
-        "redaction": [],
-        "silent_tool_reply": false,
-        "text_modality": false,
-        "tool_calling": true,
-        "video_input": false,
-        "vision": null,
-        "voices": [],
-        "voices_dynamic": false
-      },
-      "catalog": null,
-      "credential_provider": null,
-      "default_credential_id": null,
-      "default_model": null,
-      "docs_url": null,
-      "enabled": true,
-      "fields": [
-        {
-          "accept": null,
-          "catalog_kind": null,
-          "condition": null,
-          "default": "speech-02-turbo",
-          "env_fallback": null,
-          "help": null,
-          "label": "Model",
-          "name": "model",
-          "nested_model": null,
-          "options": null,
-          "placeholder": null,
-          "positional": false,
-          "required": false,
-          "type": "model"
-        }
-      ],
-      "get_key_url": null,
-      "id": "minimax-tts",
-      "installed_on": [],
-      "kind": "tts",
-      "label": "MiniMax",
-      "models": [],
-      "notes": "livekit-plugins-minimax 1.3.0 pins livekit-agents==1.2.9 exactly, five releases behind this platform's 1.8.2 baseline; uv pip compile confirms the two cannot resolve together in one environment. Not installable until the vendor republishes against current core.",
-      "package": "livekit-plugins-minimax",
-      "price_note": null,
-      "price_ref": null,
-      "probe": null,
-      "python_class": "livekit.plugins.minimax.TTS",
-      "requires_credential": true,
-      "secret_fields": [
-        {
-          "accept": null,
-          "catalog_kind": null,
-          "condition": null,
-          "default": null,
-          "env_fallback": "MINIMAX_API_KEY",
-          "help": null,
-          "label": "MiniMax API key",
-          "name": "api_key",
-          "nested_model": null,
-          "options": null,
-          "placeholder": null,
-          "positional": false,
-          "required": true,
-          "type": "secret"
-        }
-      ],
-      "status": "deferred",
-      "telephony_variant": null,
-      "test": null,
-      "v": 2,
-      "vendor": "MiniMax",
       "verification": "unverified",
       "verified_at": null,
       "verified_note": null,

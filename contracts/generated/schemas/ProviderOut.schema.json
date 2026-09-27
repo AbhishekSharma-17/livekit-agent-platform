@@ -252,6 +252,28 @@
           "title": "Positional",
           "type": "boolean"
         },
+        "recommended": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The value the console pre-selects for a new agent (V6-02, D-V6-4c). `default` stays the value a stored reference without the field resolves to (the plugin's own behaviour), so an existing agent never changes; `recommended` is what a new one should use.",
+          "title": "Recommended"
+        },
         "required": {
           "default": false,
           "title": "Required",
@@ -284,6 +306,12 @@
     "ModelSpec": {
       "description": "A suggested model id for a provider (a suggestion list, never an allowlist).",
       "properties": {
+        "deprecated": {
+          "default": false,
+          "description": "The vendor deprecated this id (V6-02, D-V6-4a). It stays listed so a stored reference still resolves; the validator warns and the console offers the entry's `default_model`.",
+          "title": "Deprecated",
+          "type": "boolean"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -420,6 +448,12 @@
           "title": "Detect Languages",
           "type": "array"
         },
+        "end_of_turn": {
+          "default": false,
+          "description": "STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram Flux). The worker then runs the session with the SDK's `turn_detection=\"stt\"` instead of the platform's default turn detector.",
+          "title": "End Of Turn",
+          "type": "boolean"
+        },
         "language_detection": {
           "anyOf": [
             {
@@ -467,6 +501,45 @@
           "default": false,
           "title": "Silent Tool Reply",
           "type": "boolean"
+        },
+        "streaming": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STT and TTS only (V6-02, D-V6-2): whether the entry streams with its registry defaults, from the plugin's `STTCapabilities`/`TTSCapabilities(streaming=...)` at livekit-agents 1.8.3. A transcriber that streams gives live partial transcripts; a voice that streams starts speaking before the whole sentence is written. `false` = one whole request per utterance or sentence (the SDK wraps it in a `StreamAdapter`). `null` = not recorded; `streaming_note` then says why. See `speech_streams()` for a stored reference.",
+          "title": "Streaming"
+        },
+        "streaming_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STT and TTS only (V6-02): the boolean field that turns streaming on when it is off by default (`use_realtime` on `openai-stt`, `use_websocket` on `rime-tts`). A reference streams when it sets that field true.",
+          "title": "Streaming Field"
+        },
+        "streaming_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STT and TTS only (V6-02): when streaming depends on something else (a model, a voice, an endpoint), in plain words.",
+          "title": "Streaming Note"
         },
         "text_modality": {
           "default": false,
@@ -534,12 +607,16 @@
         "audio_input": true,
         "cloud_only": false,
         "detect_languages": [],
+        "end_of_turn": false,
         "language_detection": null,
         "language_switch": false,
         "languages": [],
         "platforms": [],
         "redaction": [],
         "silent_tool_reply": false,
+        "streaming": null,
+        "streaming_field": null,
+        "streaming_note": null,
         "text_modality": false,
         "tool_calling": true,
         "video_input": false,

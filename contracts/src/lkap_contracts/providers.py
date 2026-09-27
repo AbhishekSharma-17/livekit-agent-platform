@@ -395,6 +395,36 @@ NOVA_SONIC_VOICES: list[str] = [
     "leo",
 ]
 
+#: The note a vendor-deprecated model id carries (V6-02, D-V6-4a); ``ModelSpec.deprecated`` is the flag.
+DEPRECATED_BY_VENDOR = "deprecated by the vendor"
+
+#: ElevenLabs output formats (``TTSEncoding`` in livekit-plugins-elevenlabs 1.8.3 ``models.py``).
+ELEVENLABS_ENCODINGS: list[str] = [
+    "mp3_22050_32",
+    "mp3_24000_48",
+    "mp3_44100",
+    "mp3_44100_32",
+    "mp3_44100_64",
+    "mp3_44100_96",
+    "mp3_44100_128",
+    "mp3_44100_192",
+    "opus_48000_32",
+    "opus_48000_64",
+    "opus_48000_96",
+    "opus_48000_128",
+    "opus_48000_192",
+    "pcm_8000",
+    "pcm_16000",
+    "pcm_22050",
+    "pcm_24000",
+    "pcm_32000",
+    "pcm_44100",
+    "pcm_48000",
+]
+
+#: MiniMax output formats (``TTSAudioFormat`` in livekit-plugins-minimax-ai 1.8.3 ``tts.py``).
+MINIMAX_AUDIO_FORMATS: list[str] = ["pcm", "mp3", "flac", "wav"]
+
 
 class FieldSpec(BaseModel):
     """One configurable constructor argument of a provider."""
@@ -413,6 +443,14 @@ class FieldSpec(BaseModel):
     accept: str | None = None
     positional: bool = False
     nested_model: str | None = None
+    recommended: str | int | float | bool | None = Field(
+        None,
+        description=(
+            "The value the console pre-selects for a new agent (V6-02, D-V6-4c). `default` stays the "
+            "value a stored reference without the field resolves to (the plugin's own behaviour), so an "
+            "existing agent never changes; `recommended` is what a new one should use."
+        ),
+    )
 
 
 class ModelSpec(BaseModel):
@@ -428,6 +466,13 @@ class ModelSpec(BaseModel):
         ),
     )
     note: str | None = None
+    deprecated: bool = Field(
+        False,
+        description=(
+            "The vendor deprecated this id (V6-02, D-V6-4a). It stays listed so a stored reference "
+            "still resolves; the validator warns and the console offers the entry's `default_model`."
+        ),
+    )
 
 
 class CatalogSpec(BaseModel):
@@ -490,6 +535,40 @@ class ProviderCapabilities(BaseModel):
     """STT only (V5-30): the ``PrivacyConfig.stt_redact`` classes the plugin's ``redact`` argument
     accepts. Empty = the provider cannot mask while transcribing; the setting is then ignored
     with a validation warning."""
+    streaming: bool | None = Field(
+        None,
+        description=(
+            "STT and TTS only (V6-02, D-V6-2): whether the entry streams with its registry defaults, "
+            "from the plugin's `STTCapabilities`/`TTSCapabilities(streaming=...)` at livekit-agents "
+            "1.8.3. A transcriber that streams gives live partial transcripts; a voice that streams "
+            "starts speaking before the whole sentence is written. `false` = one whole request per "
+            "utterance or sentence (the SDK wraps it in a `StreamAdapter`). `null` = not recorded; "
+            "`streaming_note` then says why. See `speech_streams()` for a stored reference."
+        ),
+    )
+    streaming_field: str | None = Field(
+        None,
+        description=(
+            "STT and TTS only (V6-02): the boolean field that turns streaming on when it is off by "
+            "default (`use_realtime` on `openai-stt`, `use_websocket` on `rime-tts`). A reference "
+            "streams when it sets that field true."
+        ),
+    )
+    streaming_note: str | None = Field(
+        None,
+        description=(
+            "STT and TTS only (V6-02): when streaming depends on something else (a model, a voice, an "
+            "endpoint), in plain words."
+        ),
+    )
+    end_of_turn: bool = Field(
+        False,
+        description=(
+            "STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram "
+            'Flux). The worker then runs the session with the SDK\'s `turn_detection="stt"` instead of '
+            "the platform's default turn detector."
+        ),
+    )
 
 
 class ProviderSpec(BaseModel):
@@ -652,7 +731,8 @@ def _full(
     calls leave ``availability`` at its default ``"available"``; the explicit
     corrections from the catalog (PlayAI, NVIDIA PersonaPlex, the two
     out-of-tree noise-cancellation packages with an unread class path) pass
-    ``availability="deferred"``, and MiniMax passes ``"incompatible"``.
+    ``availability="deferred"``; Fireworks STT passes ``"removed"`` (V6-02). MiniMax passed
+    ``"incompatible"`` until V6-02 found its 1.8.x package (``livekit-plugins-minimax-ai``).
 
     Every ``secret_fields``/``fields`` name here was checked against the real
     1.8.2 source (either the installed venv or the AST snapshot in
@@ -753,11 +833,19 @@ _AVAILABLE: list[ProviderSpec] = [
             )
         ],
         models=[
+            # V6-02 (D-V6-8): every id checked against docs.livekit.io/agents/models/inference
+            # (rendered 2026-09-27T22:10Z, fetched 2026-09-28); none of these is deprecated there.
             ModelSpec(id="deepgram/nova-3", label="Deepgram Nova 3"),
             ModelSpec(id="deepgram/flux-general-en", label="Deepgram Flux (general, en)"),
+            ModelSpec(id="deepgram/flux-general-multi", label="Deepgram Flux (multilingual)"),
+            ModelSpec(id="deepgram/nova-3-medical", label="Deepgram Nova 3 Medical"),
             ModelSpec(id="assemblyai/universal-streaming", label="AssemblyAI Universal Streaming"),
+            ModelSpec(id="assemblyai/universal-3-6-pro", label="AssemblyAI Universal-3.6 Pro Streaming"),
+            ModelSpec(id="cartesia/ink-2", label="Cartesia Ink 2"),
             ModelSpec(id="cartesia/ink-whisper", label="Cartesia Ink Whisper"),
             ModelSpec(id="google/gemini-3.5-transcribe-live", label="Gemini 3.5 Transcribe Live"),
+            ModelSpec(id="speechmatics/linden-1", label="Speechmatics Linden-1"),
+            ModelSpec(id="xai/stt-2", label="xAI Speech to Text 2"),
         ],
         default_model="deepgram/nova-3",
         capabilities=ProviderCapabilities(cloud_only=True),
@@ -787,9 +875,18 @@ _AVAILABLE: list[ProviderSpec] = [
                 note="text-only on LiveKit Inference: ignores image parts silently",
             ),
             ModelSpec(id="google/gemini-3.5-flash", label="Gemini 3.5 Flash", supports_video=True),
+            # V6-02 (D-V6-8): a curated pick of the current ids on docs.livekit.io/agents/models/inference
+            # (rendered 2026-09-27T22:10Z). Vision is not flagged until the platform verifies it.
+            ModelSpec(id="google/gemini-3.8-flash", label="Gemini 3.8 Flash"),
+            ModelSpec(id="google/gemini-3.1-flash-lite", label="Gemini 3.1 Flash Lite"),
             ModelSpec(id="openai/gpt-4.1", label="GPT-4.1"),
             ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini"),
+            ModelSpec(id="openai/gpt-5.5", label="GPT-5.5"),
+            ModelSpec(id="openai/gpt-5.4-mini", label="GPT-5.4 mini"),
+            ModelSpec(id="openai/gpt-5.6-luna", label="GPT-5.6 Luna"),
             ModelSpec(id="openai/gpt-oss-120b", label="GPT-OSS 120B"),
+            ModelSpec(id="xai/grok-4.7", label="Grok 4.7"),
+            ModelSpec(id="deepseek-ai/deepseek-v4.1-flash", label="DeepSeek V4.1 Flash"),
         ],
         default_model="google/gemma-4-31b-it",
         capabilities=ProviderCapabilities(cloud_only=True),
@@ -809,10 +906,21 @@ _AVAILABLE: list[ProviderSpec] = [
             FieldSpec(name="language", label="Language", type="string", default="en"),
         ],
         models=[
+            # V6-02 (D-V6-8): checked against docs.livekit.io/agents/models/inference (rendered
+            # 2026-09-27T22:10Z). ElevenLabs is not in that table and is not offered here.
             ModelSpec(id="inworld/inworld-tts-2", label="Inworld TTS 2"),
+            # `inworld/inworld-tts-2-flash` is in the docs table too, but its price lookup would fall
+            # through to the `inworld/inworld-tts-2` row (a quality variant); it waits for its own
+            # price row (docs/v6/_asks.md).
+            ModelSpec(id="cartesia/sonic-3.6", label="Cartesia Sonic 3.6"),
             ModelSpec(id="cartesia/sonic-3", label="Cartesia Sonic 3"),
             ModelSpec(id="deepgram/aura-2", label="Deepgram Aura 2"),
+            ModelSpec(id="deepgram/flux-tts", label="Deepgram Flux TTS"),
+            ModelSpec(id="fishaudio/s2.1-pro", label="Fish Audio S2.1 Pro"),
+            ModelSpec(id="gradium/default", label="Gradium TTS"),
+            ModelSpec(id="rime/coda", label="Rime Coda"),
             ModelSpec(id="rime/mistv3", label="Rime Mist v3"),
+            ModelSpec(id="xai/tts-1", label="xAI Text to Speech"),
         ],
         default_model="inworld/inworld-tts-2",
         capabilities=ProviderCapabilities(voices=["Ashley", "Brooke", "Cole", "Hana"], cloud_only=True),
@@ -945,13 +1053,15 @@ _AVAILABLE: list[ProviderSpec] = [
         models=[
             ModelSpec(id="nova-3", label="Nova 3"),
             ModelSpec(id="nova-2", label="Nova 2"),
-            ModelSpec(id="flux-general-en", label="Flux (general, en)"),
         ],
         default_model="nova-3",
         # V5-30: `livekit.plugins.deepgram.STT(redact=[...])` (plugin signature snapshot).
         capabilities=ProviderCapabilities(redaction=["pci", "pii", "phi", "numbers"]),
         # Public list (R-V4-9): a catalog, never the credential test.
         catalog=CatalogSpec(adapter="deepgram_stt_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
+        # V6-02 (D-V6-5): Flux is a different class (`STTv2`) with its own end-of-turn detection,
+        # so it has its own entry, `deepgram-flux-stt`; a stored ref naming a Flux model here gets
+        # a validator error that points at it (api `config_service`).
         docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",
         get_key_url="https://console.deepgram.com/",
         probe="deepgram_listen",
@@ -1017,8 +1127,9 @@ _AVAILABLE: list[ProviderSpec] = [
             FieldSpec(name="voice", label="Voice id", type="string"),
             FieldSpec(name="language", label="Language", type="string", default="en"),
         ],
-        models=[ModelSpec(id="sonic-3", label="Sonic 3")],
-        default_model="sonic-3",
+        # V6-02 (D-V6-4b): `sonic-3.6` is the newer default; `sonic-3` still works.
+        models=[ModelSpec(id="sonic-3.6", label="Sonic 3.6"), ModelSpec(id="sonic-3", label="Sonic 3")],
+        default_model="sonic-3.6",
         catalog=CatalogSpec(adapter="cartesia_voices", kinds=["voices"]),
         test="cartesia_voices",
         docs_url="https://docs.livekit.io/agents/models/tts/cartesia/",
@@ -1033,12 +1144,26 @@ _AVAILABLE: list[ProviderSpec] = [
         package="livekit-plugins-elevenlabs",
         python_class="livekit.plugins.elevenlabs.TTS",
         secret_fields=[_api_key("ElevenLabs API key", env="ELEVEN_API_KEY")],
-        fields=[FieldSpec(name="voice_id", label="Voice id", type="string")],
-        models=[
-            ModelSpec(id="eleven_turbo_v2_5", label="Eleven Turbo v2.5"),
-            ModelSpec(id="eleven_flash_v2_5", label="Eleven Flash v2.5"),
+        fields=[
+            FieldSpec(name="voice_id", label="Voice id", type="string"),
+            # V6-02 (D-V6-4c): the plugin's kwarg is `encoding` (`TTSEncoding` in
+            # livekit-plugins-elevenlabs 1.8.3 `models.py`); unset keeps its `mp3_22050_32`.
+            FieldSpec(
+                name="encoding",
+                label="Audio format",
+                type="enum",
+                options=ELEVENLABS_ENCODINGS,
+                recommended="pcm_24000",
+                placeholder="mp3_22050_32",
+                help="Uncompressed audio (pcm_24000) starts playing sooner than MP3. Unset keeps MP3.",
+            ),
         ],
-        default_model="eleven_turbo_v2_5",
+        # V6-02 (D-V6-4b): Flash v2.5 is the low-latency default; Turbo v2.5 still works.
+        models=[
+            ModelSpec(id="eleven_flash_v2_5", label="Eleven Flash v2.5"),
+            ModelSpec(id="eleven_turbo_v2_5", label="Eleven Turbo v2.5"),
+        ],
+        default_model="eleven_flash_v2_5",
         catalog=CatalogSpec(
             adapter="elevenlabs_voices",
             kinds=["voices"],
@@ -1598,7 +1723,18 @@ _FULL: list[ProviderSpec] = [
         "livekit-plugins-openai",
         "livekit.plugins.openai.STT",
         secret_fields=[_api_key("OpenAI API key", env="OPENAI_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="model", default="gpt-4o-mini-transcribe")],
+        fields=[
+            FieldSpec(name="model", label="Model", type="model", default="gpt-4o-mini-transcribe"),
+            # V6-02 (D-V6-4c): unset keeps the batch transcriptions endpoint stored agents use.
+            FieldSpec(
+                name="use_realtime",
+                label="Streams while the caller speaks",
+                type="boolean",
+                recommended=True,
+                help="Streams while the caller speaks; needed for live calls. Off sends one request "
+                "after each utterance.",
+            ),
+        ],
         catalog=_openai_catalog(_OPENAI_STT_FILTER),
         test="openai_models",
         docs_url="https://docs.livekit.io/agents/models/stt/openai/",
@@ -1638,6 +1774,58 @@ _FULL: list[ProviderSpec] = [
         fields=[FieldSpec(name="language", label="Language", type="string", default="en")],
         docs_url="https://docs.livekit.io/agents/models/stt/cartesia/",
         probe="cartesia_stt",
+    ),
+    ProviderSpec(
+        id="deepgram-flux-stt",
+        kind="stt",
+        label="Deepgram Flux",
+        vendor="Deepgram",
+        package="livekit-plugins-deepgram",
+        # livekit-plugins-deepgram 1.8.3 `stt_v2.py`: `STTv2` speaks /v2/listen and reports the end
+        # of the caller's turn itself (`eot_threshold`, `eager_eot_threshold`, `eot_timeout_ms`).
+        python_class="livekit.plugins.deepgram.STTv2",
+        # The full image, like every V2-05 entry, so the v1 `mvp` set is untouched (R-V2-1); the
+        # dev venv carries livekit-plugins-deepgram, so a dev worker reports it installed anyway.
+        credential_provider="deepgram-stt",
+        secret_fields=[_api_key("Deepgram API key", env="DEEPGRAM_API_KEY")],
+        fields=[
+            FieldSpec(
+                name="eot_threshold",
+                label="End-of-turn confidence",
+                type="number",
+                placeholder="0.7",
+                help="How sure Flux must be that the caller finished (0.5-0.9). Higher waits longer.",
+            ),
+            FieldSpec(
+                name="eager_eot_threshold",
+                label="Early reply confidence",
+                type="number",
+                placeholder="off",
+                help="Start preparing a reply before the turn is certainly over (0.3-0.9). Off by default.",
+            ),
+            FieldSpec(
+                name="eot_timeout_ms",
+                label="End-of-turn timeout (ms)",
+                type="number",
+                placeholder="3000",
+                help="End the turn after this much silence even if Flux is unsure.",
+            ),
+        ],
+        models=[
+            ModelSpec(id="flux-general-en", label="Flux (general, en)"),
+            ModelSpec(id="flux-general-multi", label="Flux (multilingual)"),
+        ],
+        default_model="flux-general-en",
+        # No `redaction`: STTv2's `redact` takes one string ("numbers"/"aggressive_numbers"),
+        # not the list `stt_redact` becomes, and Flux has no pci/pii/phi masking.
+        capabilities=ProviderCapabilities(end_of_turn=True),
+        # Priced with deepgram-stt's rows, which carry the Flux rate (docs/v4/COSTS.md D-V4-39).
+        price_ref="deepgram-stt",
+        notes="Decides when the caller has finished speaking by itself, so the session uses it for "
+        "turn-taking instead of the turn detector. flux-general-multi covers English, Spanish, French, "
+        "German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch.",
+        docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",
+        get_key_url="https://console.deepgram.com/",
     ),
     _full(
         "groq-stt",
@@ -1814,6 +2002,15 @@ _FULL: list[ProviderSpec] = [
         fields=[
             FieldSpec(name="speaker", label="Speaker", type="string"),
             FieldSpec(name="lang", label="Language", type="string", default="eng"),
+            # V6-02 (D-V6-4c): livekit-plugins-rime 1.8.3 streams only over its WebSocket.
+            FieldSpec(
+                name="use_websocket",
+                label="Streams while it speaks",
+                type="boolean",
+                recommended=True,
+                help="Starts speaking before the whole sentence is ready; needed for live calls. Off "
+                "sends one request per sentence.",
+            ),
         ],
         models=[ModelSpec(id="mistv3", label="Mist v3")],
         default_model="mistv3",
@@ -1830,8 +2027,18 @@ _FULL: list[ProviderSpec] = [
         "livekit.plugins.inworld.TTS",
         secret_fields=[_api_key("Inworld API key", env="INWORLD_API_KEY")],
         fields=[FieldSpec(name="voice", label="Voice", type="string", default="Ashley")],
-        models=[ModelSpec(id="inworld-tts-1.5-max", label="Inworld TTS 1.5 Max")],
-        default_model="inworld-tts-1.5-max",
+        # V6-02 (D-V6-4a): Inworld deprecated TTS 1.5; the old id still resolves.
+        models=[
+            ModelSpec(id="inworld-tts-2", label="Inworld TTS 2"),
+            ModelSpec(id="inworld-tts-2-flash", label="Inworld TTS 2 Flash"),
+            ModelSpec(
+                id="inworld-tts-1.5-max",
+                label="Inworld TTS 1.5 Max",
+                note=DEPRECATED_BY_VENDOR,
+                deprecated=True,
+            ),
+        ],
+        default_model="inworld-tts-2",
         # No `test`: whether the voice list rejects a bad key is UNVERIFIED (asks).
         catalog=CatalogSpec(
             adapter="inworld_voices",
@@ -2521,8 +2728,12 @@ _NEW: list[ProviderSpec] = [
         "Fireworks",
         "livekit-plugins-fireworksai",
         "livekit.plugins.fireworksai.STT",
+        # V6-02 (D-V6-6): Fireworks' changelog of 2026-06-10 deprecated audio inference; the
+        # plugin's streaming endpoint is dead, so the entry is withdrawn and kept for stored refs.
+        availability="removed",
         secret_fields=[_api_key("Fireworks API key", env="FIREWORKS_API_KEY")],
         fields=[FieldSpec(name="language", label="Language", type="string")],
+        notes="Fireworks stopped its speech service on 2026-06-10; pick another transcriber.",
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -2864,6 +3075,8 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(name="model", label="Model", type="model", default="canopylabs/orpheus-v1-english"),
             FieldSpec(name="voice", label="Voice", type="string", default="autumn"),
         ],
+        notes="Groq speech takes at most 200 characters per request, so a long sentence from the "
+        "model can fail to speak; it also waits for the whole sentence before playing.",
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -3045,6 +3258,39 @@ _NEW: list[ProviderSpec] = [
         secret_fields=[_api_key("Speechmatics API key", env="SPEECHMATICS_API_KEY")],
         fields=[FieldSpec(name="voice", label="Voice", type="string", default="sarah")],
         docs_url="https://docs.livekit.io/agents/models/tts/",
+    ),
+    _full(
+        "minimax-tts",
+        "tts",
+        "MiniMax",
+        "MiniMax",
+        # V6-02: the 1.8.x plugin is published as `livekit-plugins-minimax-ai` (the monorepo's
+        # `livekit-plugins/livekit-plugins-minimax/pyproject.toml` at livekit-agents@1.8.3); PyPI's
+        # 1.8.3 wheel requires `livekit-agents[codecs]>=1.8.3` and resolves with 1.8.3 (uv pip
+        # compile, 2026-09-28). The stale `livekit-plugins-minimax` 1.3.0 pins 1.2.9 and is never used.
+        "livekit-plugins-minimax-ai",
+        "livekit.plugins.minimax.TTS",
+        secret_fields=[_api_key("MiniMax API key", env="MINIMAX_API_KEY")],
+        fields=[
+            FieldSpec(
+                name="audio_format",
+                label="Audio format",
+                type="enum",
+                options=MINIMAX_AUDIO_FORMATS,
+                recommended="pcm",
+                placeholder="mp3",
+                help="Uncompressed audio (pcm) starts playing sooner than MP3. Unset keeps MP3.",
+            ),
+        ],
+        # V6-02 (D-V6-4a): the plugin's default `speech-02-turbo` is deprecated by MiniMax.
+        models=[
+            ModelSpec(id="speech-2.8-turbo", label="Speech 2.8 Turbo"),
+            ModelSpec(id="speech-2.8-hd", label="Speech 2.8 HD"),
+            ModelSpec(
+                id="speech-02-turbo", label="Speech 02 Turbo", note=DEPRECATED_BY_VENDOR, deprecated=True
+            ),
+        ],
+        default_model="speech-2.8-turbo",
     ),
     _full(
         "telnyx-tts",
@@ -3615,20 +3861,6 @@ _DEFERRED: list[ProviderSpec] = [
         ],
         notes="Same gap as spitch-stt.",
     ),
-    _full(
-        "minimax-tts",
-        "tts",
-        "MiniMax",
-        "MiniMax",
-        "livekit-plugins-minimax",
-        "livekit.plugins.minimax.TTS",
-        availability="incompatible",
-        secret_fields=[_api_key("MiniMax API key", env="MINIMAX_API_KEY")],
-        fields=[FieldSpec(name="model", label="Model", type="model", default="speech-02-turbo")],
-        notes="livekit-plugins-minimax 1.3.0 pins livekit-agents==1.2.9 exactly, five releases behind this "
-        "platform's 1.8.2 baseline; uv pip compile confirms the two cannot resolve together in one "
-        "environment. Not installable until the vendor republishes against current core.",
-    ),
 ]
 
 #: Providers V2-20 saw serve a passing live session on LiveKit Cloud
@@ -3774,8 +4006,128 @@ def _with_language_capabilities(spec: ProviderSpec) -> ProviderSpec:
     return spec.model_copy(update={"capabilities": capabilities})
 
 
+# ------------------------------------------------------------------ streaming (V6-02, D-V6-2)
+#: Whether each STT/TTS entry streams with its registry defaults: ``(streaming, streaming_field,
+#: streaming_note)``. Read from each plugin's ``STTCapabilities``/``TTSCapabilities(streaming=...)``
+#: at the livekit-agents@1.8.3 tag (``livekit-plugins/<plugin>/livekit/plugins/<name>/{stt,tts}.py``;
+#: ``livekit-agents/livekit/agents/inference/{stt,tts}.py`` for LiveKit Inference) and, for
+#: ``openrouter-tts``, from ``lkap_agent.providers.openrouter.OpenRouterTTS``. Grows by reading the
+#: source, never by guess; a parity test keeps every available entry recorded.
+_STREAMING: dict[str, tuple[bool | None, str | None, str | None]] = {
+    # ---- speech-to-text
+    "livekit-inference-stt": (True, None, None),
+    "deepgram-stt": (True, None, None),
+    "deepgram-flux-stt": (True, None, None),
+    "openrouter-stt": (False, None, "OpenRouter transcribes each utterance as one whole file."),
+    "openai-stt": (
+        False,
+        "use_realtime",
+        "The realtime-only models (gpt-realtime-whisper, gpt-live-transcribe) stream without it.",
+    ),
+    "assemblyai-stt": (True, None, None),
+    "google-stt": (True, None, None),
+    "speechmatics-stt": (True, None, None),
+    "elevenlabs-stt": (False, None, "Streams only with the scribe_v2_realtime model."),
+    "cartesia-stt": (True, None, None),
+    "groq-stt": (False, None, None),
+    "azure-stt": (True, None, None),
+    "gladia-stt": (True, None, None),
+    "soniox-stt": (True, None, None),
+    "fal-wizper-stt": (False, None, None),
+    "fireworksai-stt": (True, None, "Withdrawn: the vendor's speech service is gone."),
+    "baseten-stt": (True, None, None),
+    "mistral-stt": (False, None, "Streams only with a realtime model (an id containing 'realtime')."),
+    "nvidia-stt": (True, None, None),
+    "sarvam-stt": (True, None, None),
+    "meta-stt": (True, None, None),
+    "gnani-stt": (True, None, None),
+    "gradium-stt": (True, None, None),
+    "clova-stt": (False, None, None),
+    "slng-stt": (True, None, None),
+    "smallestai-stt": (True, None, "Streams only with the pulse model (the default)."),
+    "simplismart-stt": (False, None, "The plugin's streaming mode is off by default and not offered here."),
+    "telnyx-stt": (True, None, None),
+    "palabra-stt": (True, None, None),
+    "aws-transcribe-stt": (True, None, None),
+    "xai-stt": (True, None, None),
+    # ---- text-to-speech
+    "livekit-inference-tts": (True, None, None),
+    "cartesia-tts": (True, None, None),
+    "elevenlabs-tts": (True, None, None),
+    "openai-tts": (False, None, None),
+    "openrouter-tts": (False, None, "One request per sentence."),
+    "google-tts": (True, None, "Streams with Chirp 3 HD voices; pick one of those for live calls."),
+    "deepgram-tts": (True, None, None),
+    "rime-tts": (False, "use_websocket", None),
+    "inworld-tts": (True, None, None),
+    "hume-tts": (False, None, None),
+    "azure-tts": (False, None, "Azure itself can stream, but the LiveKit plugin does not."),
+    "asyncai-tts": (True, None, None),
+    "aws-polly-tts": (False, None, None),
+    "baseten-tts": (None, None, "Streams only when the deployment's endpoint is a WebSocket URL."),
+    "bland-tts": (True, None, None),
+    "cambai-tts": (False, None, None),
+    "fishaudio-tts": (True, None, None),
+    "gnani-tts": (True, None, None),
+    "gradium-tts": (True, None, None),
+    "groq-tts": (False, None, None),
+    "lmnt-tts": (False, None, None),
+    "minimax-tts": (True, None, None),
+    "murf-tts": (True, None, None),
+    "neuphonic-tts": (True, None, None),
+    "nvidia-tts": (True, None, None),
+    "palabra-tts": (True, None, None),
+    "resemble-tts": (True, None, None),
+    "respeecher-tts": (True, None, None),
+    "sarvam-tts": (True, None, None),
+    "simplismart-tts": (False, None, None),
+    "slng-tts": (True, None, None),
+    "smallestai-tts": (True, None, None),
+    "soniox-tts": (True, None, None),
+    "speechify-tts": (True, None, None),
+    "speechmatics-tts": (False, None, None),
+    "telnyx-tts": (True, None, None),
+    "upliftai-tts": (True, None, None),
+    "vakyam-tts": (True, None, None),
+    "xai-tts": (True, None, None),
+}
+
+
+def _with_streaming(spec: ProviderSpec) -> ProviderSpec:
+    """Return ``spec`` with its recorded streaming capability (V6-02)."""
+    recorded = _STREAMING.get(spec.id)
+    if recorded is None or spec.kind not in ("stt", "tts"):
+        return spec
+    streaming, field, note = recorded
+    capabilities = spec.capabilities.model_copy(
+        update={"streaming": streaming, "streaming_field": field, "streaming_note": note}
+    )
+    return spec.model_copy(update={"capabilities": capabilities})
+
+
+def speech_streams(spec: ProviderSpec, fields: dict[str, Any] | None = None) -> bool | None:
+    """Whether a speech reference streams, given the fields it stores (V6-02, D-V6-2).
+
+    Args:
+        spec: An ``stt`` or ``tts`` registry entry.
+        fields: The reference's stored ``fields`` (``ProviderRef.fields``).
+
+    Returns:
+        ``True`` when the entry streams by default or the reference turns its
+        ``streaming_field`` on, ``False`` when it does not, ``None`` when the
+        registry has not recorded it (or the entry is not speech).
+    """
+    if spec.kind not in ("stt", "tts"):
+        return None
+    capabilities = spec.capabilities
+    field = capabilities.streaming_field
+    if field is not None and (fields or {}).get(field) is True:
+        return True
+    return capabilities.streaming
+
+
 REGISTRY: list[ProviderSpec] = [
-    _with_language_capabilities(_live_verified(spec))
+    _with_streaming(_with_language_capabilities(_live_verified(spec)))
     for spec in [*_MVP, *_OPENROUTER, *_FULL, *_NEW, *_DEFERRED]
 ]
 

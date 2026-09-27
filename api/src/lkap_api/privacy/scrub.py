@@ -3,13 +3,15 @@
 ``AgentConfig.privacy.storage_tier`` says what is kept once a session ends:
 
 * ``full`` — everything, as before V5-30; no job is enqueued.
-* ``redacted`` — the transcript, every session-event payload and the final UI
-  state are rewritten in place with emails, card numbers and long numbers
+* ``redacted`` — the transcript, every session-event payload, the final UI
+  state and a warm transfer's ``calls.transfer_summary`` (ask #209) are
+  rewritten in place with emails, card numbers and long numbers
   masked (:mod:`lkap_api.privacy.redact`), then, when ``scrub_model`` is set
   and callable from the api, the transcript turns also go through the LLM pass
   (:mod:`lkap_api.privacy.llm`) for names, addresses and other details.
-* ``basic`` — the same, and the tool payloads are dropped from the events
-  (``args_redacted``, ``result_preview``, ``message_preview``).
+* ``basic`` — the same, the tool payloads are dropped from the events
+  (``args_redacted``, ``result_preview``, ``message_preview``) and the transfer
+  summary is cleared.
 
 The job runs once per session: it records a ``privacy_scrubbed`` session event
 (its ``ts`` is the ``scrubbed_at`` the console shows, no column and no
@@ -39,8 +41,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.costs import config_for_session
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
+from lkap_api.db.models import Call, SessionEvent, SessionQa, utcnow
 from lkap_api.db.models import Session as SessionRow
-from lkap_api.db.models import SessionEvent, SessionQa, utcnow
 from lkap_api.jobs.context import JobContext
 from lkap_api.jobs.kinds import SESSION_SCRUB
 from lkap_api.jobs.registry import job
@@ -257,6 +259,17 @@ async def scrub_session(ctx: JobContext, session_id: str) -> ScrubResult:
         qa = await db.get(SessionQa, session_id)
         if qa is not None and qa.summary:
             qa.summary = redact_text(qa.summary, counts)
+        # Ask #209: a warm transfer's summary (V5-32) is model-written text about the caller.
+        calls = (
+            await db.execute(
+                select(Call)
+                .where(Call.session_id == session_id, Call.transfer_summary.is_not(None))
+                .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+            )
+        ).scalars()
+        for call in calls:
+            summary = call.transfer_summary or ""
+            call.transfer_summary = None if privacy.storage_tier == "basic" else redact_text(summary, counts)
         result = ScrubResult(
             status="scrubbed",
             tier=privacy.storage_tier,

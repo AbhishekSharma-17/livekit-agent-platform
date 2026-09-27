@@ -15,7 +15,7 @@ the transcript keeps its meaning. Names and addresses are the optional LLM
 pass's job (:mod:`lkap_api.privacy.llm`), not this module's.
 
 :func:`scrub_value` walks a JSON value (an event payload, a UI state) and
-masks every string except identifiers: a key named ``id``, ``ts`` or ``type``,
+masks every string except identifiers and links: a key named ``id``, ``ts``, ``type``, ``url`` or ``href``,
 or ending in ``_id`` / ``_ids``, is kept as it is.
 """
 
@@ -46,7 +46,8 @@ _CARD_RE: Final[re.Pattern[str]] = re.compile(r"(?<![\w+])\d(?:[ -]?\d){12,18}(?
 #: 6 or more digits, up to two separators between any two, an optional leading `+` or `(`.
 _NUMBER_RE: Final[re.Pattern[str]] = re.compile(r"(?<![\w])[+(]?\d(?:[\s().-]{0,2}\d){5,}(?![\w])")
 
-_KEPT_KEYS: Final[frozenset[str]] = frozenset({"id", "ts", "type"})
+#: `url`/`href` are kept too: a signed link carries a long `exp=` timestamp and would break.
+_KEPT_KEYS: Final[frozenset[str]] = frozenset({"id", "ts", "type", "url", "href"})
 
 
 def luhn_valid(digits: str) -> bool:

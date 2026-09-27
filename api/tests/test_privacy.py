@@ -577,3 +577,12 @@ def test_fields_without_qa_warn() -> None:
 def test_defaults_raise_no_privacy_finding() -> None:
     """Compatibility: an agent saved before V5-30 validates exactly as before."""
     assert _issues(inference_config()) == []
+
+
+def test_scrub_value_keeps_links() -> None:
+    """A signed download link's `exp=` timestamp must survive the scrub of the final panel state."""
+    state = {"document": {"url": "https://example.com/a?exp=1758000000&sig=abc", "note": "call 5550100199"}}
+
+    assert scrub_value(state) == {
+        "document": {"url": "https://example.com/a?exp=1758000000&sig=abc", "note": f"call {NUMBER_TOKEN}"}
+    }

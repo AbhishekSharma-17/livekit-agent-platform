@@ -40,15 +40,62 @@ one more turn to see how it follows up.
 The transcript and QA verdict land on `session_get` once the worker's
 summary arrives (usually within a few seconds).
 
-## 5. Publish
+## 5. Save repeatable test cases
 
-Only after `agent_validate` is clean and the test read the way you wanted:
+A chat is a one-off. To re-check the agent after every change, save test
+cases in its config: each is a simulated caller with a goal and the
+statements that must hold. Mock the tools whose real call you do not want
+during a test.
+
+`agent_update(...)`
+```json
+{
+  "id_or_slug": "<agent>",
+  "patch": {
+    "tests": [
+      {
+        "id": "booking",
+        "name": "Books a table",
+        "persona_instructions": "A polite caller who types short messages.",
+        "scenario": "Book a table for two on Friday at 19:00.",
+        "expectations": ["The agent confirms Friday at 19:00 back before booking."],
+        "mocks": { "check_slots": { "slots": ["19:00", "20:30"] } }
+      }
+    ],
+    "publish_gate": { "require_tests": true, "min_pass_ratio": 1.0 }
+  }
+}
+```
+The caller and the judges run in the api: the agent needs a `workflow_llm`
+(or `qa.model`) on an OpenAI-compatible provider with a key.
+
+## 6. Run them and read the verdicts
+
+`agent_tests_run(...)`
+```json
+{ "id_or_slug": "<agent>", "wait": true }
+```
+Each case gets five judge verdicts (task completion, tool use, safety,
+relevancy, accuracy). For a failed case, read the conversation:
+
+`agent_tests_result(...)`
+```json
+{ "id_or_slug": "<agent>", "include_transcripts": true }
+```
+A run whose `status` is `error` did not play its cases (no worker, no usable
+model): fix what `error` names and run again — it says nothing about the agent.
+
+## 7. Publish
+
+Only after `agent_validate` is clean and the tests read the way you wanted:
 
 `agent_publish(...)`
 ```json
 { "id_or_slug": "<agent>", "published": true }
 ```
+With `publish_gate.require_tests` on, this is refused (`tests_failing`) until
+the latest run on this version passes; `next_steps` says what to do.
 
 ## Related concepts
 
-`lkap_explain("sessions-and-test-chat")`.
+`lkap_explain("sessions-and-test-chat")`, `lkap_explain("testing")`.

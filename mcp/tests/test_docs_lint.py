@@ -263,6 +263,9 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/agents/{agent_id}/flow/validate",
     "/v1/agents/{agent_id}/limits",
     "/v1/agents/{agent_id}/unarchive",
+    "/v1/agents/{agent_id}/tests/run",  # V5-29
+    "/v1/agents/{agent_id}/tests/runs",  # V5-29
+    "/v1/agents/{agent_id}/tests/runs/{run_id}",  # V5-29
     "/v1/agents/{agent_id}/validate",
     "/v1/agents/{agent_id}/versions",
     "/v1/agents/{agent_id}/versions/{config_version}",
@@ -473,6 +476,8 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     ),
     "agent_validate": frozenset({"id_or_slug"}),
     "agent_publish": frozenset({"id_or_slug", "published", "plan"}),
+    "agent_tests_run": frozenset({"id_or_slug", "case_ids", "wait", "timeout_s", "plan"}),  # V5-29
+    "agent_tests_result": frozenset({"id_or_slug", "run_id", "include_transcripts"}),  # V5-29
     "agent_archive": frozenset({"id_or_slug", "archive", "confirm"}),
     "agent_versions": frozenset({"id_or_slug", "get", "restore", "confirm", "plan"}),
     "agent_attach": frozenset({"id_or_slug", "kb_ids", "tool_ids", "remove", "plan"}),

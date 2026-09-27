@@ -35,6 +35,11 @@ from dataclasses import dataclass
 from livekit.api import WebhookReceiver
 from livekit.protocol.egress import EgressStatus
 from livekit.protocol.webhook import WebhookEvent
+from lkap_contracts.api_models import (
+    SUPERVISOR_IDENTITY_PREFIX,
+    SUPERVISOR_JOINED_EVENT,
+    SUPERVISOR_LEFT_EVENT,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,12 +161,14 @@ async def _session_for_room(ctx: WebhookContext) -> SessionRow | None:
     return row
 
 
-def _add_event(ctx: WebhookContext, session: SessionRow, payload: dict[str, object]) -> None:
+def _add_event(
+    ctx: WebhookContext, session: SessionRow, payload: dict[str, object], *, event_type: str | None = None
+) -> None:
     ctx.db.add(
         SessionEvent(
             session_id=session.id,
             ts=_event_time(ctx.event),
-            type=ctx.event.event,
+            type=event_type or ctx.event.event,
             payload={"source": "livekit_webhook", "event_id": ctx.event.id, **payload},
         )
     )
@@ -186,7 +193,13 @@ async def _on_participant(ctx: WebhookContext) -> None:
     session = await _session_for_room(ctx)
     if session is None:
         return
-    _add_event(ctx, session, {"identity": ctx.event.participant.identity})
+    identity = ctx.event.participant.identity
+    event_type: str | None = None
+    if identity.startswith(SUPERVISOR_IDENTITY_PREFIX):
+        # V5-37 (ask #245): a hidden listener is invisible to the worker; only this webhook sees it.
+        joined = ctx.event.event == "participant_joined"
+        event_type = SUPERVISOR_JOINED_EVENT if joined else SUPERVISOR_LEFT_EVENT
+    _add_event(ctx, session, {"identity": identity}, event_type=event_type)
     await ctx.db.flush()
 
 

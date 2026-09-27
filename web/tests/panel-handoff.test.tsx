@@ -77,6 +77,33 @@ describe("handoff block", () => {
     expect(screen.getByRole("status").textContent).toBe("Handing you over to a person.");
   });
 
+  it("requested: shows escalate_to_human's plain reason when present (#254)", () => {
+    render(
+      <Block
+        spec={SPEC}
+        {...panelProps({
+          state: stateWith({
+            status: "requested",
+            mode: null,
+            target: null,
+            reason: "A member of the team may listen in to help.",
+          }),
+        })}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toBe("A member of the team may listen in to help.");
+  });
+
+  it("requested: falls back to the target line when reason is absent (transfer_call, #254)", () => {
+    render(
+      <Block
+        spec={SPEC}
+        {...panelProps({ state: stateWith({ status: "requested", target: "Front desk", reason: null }) })}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toBe("Handing you over to Front desk.");
+  });
+
   it("connecting/cold: says it is connecting directly, not calling first", () => {
     render(<Block spec={SPEC} {...panelProps({ state: stateWith({ status: "connecting", mode: "cold" }) })} />);
     expect(screen.getByRole("status").textContent).toBe("Connecting you to Claims desk…");

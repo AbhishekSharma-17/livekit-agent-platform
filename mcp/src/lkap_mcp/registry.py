@@ -53,10 +53,17 @@ DESTRUCTIVE = ToolAnnotations(
 )
 
 
+#: Mirrors ``api/src/lkap_api/auth/roles.py::IMPLIED_SCOPES`` (V5-37, ask #246).
+IMPLIED_SCOPES: dict[str, frozenset[str]] = {"sessions:listen": frozenset({"sessions:write"})}
+
+
 def scope_allows(scopes: Iterable[str], needed: str) -> bool:
-    """The api's rule (``auth/roles.py``): ``*`` covers all and ``x:write`` implies ``x:read``."""
+    """The api's rule (``auth/roles.py``): ``*`` covers all, ``x:write`` implies ``x:read``, and
+    :data:`IMPLIED_SCOPES` (``sessions:write`` implies ``sessions:listen``)."""
     held = set(scopes)
     if "*" in held or needed in held:
+        return True
+    if held & IMPLIED_SCOPES.get(needed, frozenset()):
         return True
     return needed.endswith(":read") and needed.removesuffix(":read") + ":write" in held
 

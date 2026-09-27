@@ -166,7 +166,7 @@ def register(registry: Registry) -> None:
             )
         return ToolResult.success(await client.post("/v1/memory/purge", json={"confirm": True}))
 
-    @registry.tool(scopes={"sessions:write"}, annotations=DESTRUCTIVE, data="SessionWhisperOut")
+    @registry.tool(scopes={"sessions:listen"}, annotations=DESTRUCTIVE, data="SessionWhisperOut")
     async def session_whisper(
         session_id: str,
         text: Annotated[str, Field(min_length=1, max_length=1000)],

@@ -6,9 +6,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { CredentialPicker, MultiHomeCredentialPicker, OPENAI_KEY_HOME_IDS } from "@/components/console/registry/credential-picker";
+import { CredentialPicker, MultiHomeCredentialPicker } from "@/components/console/registry/credential-picker";
 import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { ProviderRow } from "@/components/console/providers/provider-row";
+import { isOpenAiKeyHome } from "@/components/console/registry/provider-meta";
 import type { CredentialOut, CredentialPage, Me, ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
@@ -351,18 +352,23 @@ describe("ProviderRow — the key badge for an alias (V4-04)", () => {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `OPENAI_KEY_HOME_IDS` must keep pace with `api/src/lkap_api/config_service
- * .py::OPENAI_KEY_HOMES`, which the console cannot compute at runtime (it
- * has no access to `secret_fields`/`vendor` across the whole registry
- * outside a fetch). `tool-names-parity.test.ts` is the same pattern: pin a
- * hand-written constant against the generated registry export.
+ * `isOpenAiKeyHome` must mirror `api/src/lkap_api/config_service.py
+ * ::OPENAI_KEY_HOMES`'s own rule exactly, since nothing here re-derives it
+ * from a live import of that module — this pins the TS predicate against
+ * the generated registry export the same way `tool-names-parity.test.ts`
+ * pins a hand-written constant, except here a registry change can never
+ * cause silent drift: the predicate is applied live to whatever
+ * `useProviders()` returns, so this test is about the *rule* being right,
+ * not about a list staying in sync.
  */
-describe("OPENAI_KEY_HOME_IDS parity with the registry (ask #297)", () => {
+describe("isOpenAiKeyHome parity with OPENAI_KEY_HOMES (ask #297)", () => {
   const REGISTRY_EXPORT = path.resolve(__dirname, "../../contracts/generated/providers.json");
   const exported = JSON.parse(readFileSync(REGISTRY_EXPORT, "utf8")) as { providers: ProviderSpec[] };
 
-  it("is exactly the set of OpenAI-vendor providers that are their own credential home with an api_key field", () => {
-    const computed = exported.providers
+  it("names exactly the same ids OPENAI_KEY_HOMES computes (eight at today's registry contents)", () => {
+    // The same filter written out by hand, so this test fails the moment
+    // `isOpenAiKeyHome`'s own logic drifts from it — not a fixed list.
+    const expected = exported.providers
       .filter(
         (provider) =>
           provider.vendor === "OpenAI" &&
@@ -371,7 +377,18 @@ describe("OPENAI_KEY_HOME_IDS parity with the registry (ask #297)", () => {
       )
       .map((provider) => provider.id)
       .sort();
-    expect(computed).toEqual([...OPENAI_KEY_HOME_IDS].sort());
+    const actual = exported.providers.filter(isOpenAiKeyHome).map((provider) => provider.id).sort();
+    expect(actual).toEqual(expected);
+    // A concrete pin, so a future registry change that silently drops every
+    // OpenAI home still fails loudly here instead of passing vacuously.
+    expect(actual).toContain("openai-llm");
+    expect(actual.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("never matches a provider with no OpenAI vendor, or one sharing another entry's key", () => {
+    expect(isOpenAiKeyHome(deepgramStt)).toBe(false); // wrong vendor
+    expect(isOpenAiKeyHome(openrouterStt)).toBe(false); // OpenRouter vendor, and shares openrouter-llm's key
+    expect(isOpenAiKeyHome({ ...openaiLlmSpec, credential_provider: "openai-llm" })).toBe(false); // shares another home
   });
 });
 
@@ -399,6 +416,10 @@ const openaiTtsSpec: ProviderSpec = {
   python_class: "livekit.plugins.openai.TTS",
   default_model: "tts-1",
 };
+
+// `openai-llm` first, matching the real `rule-dialog.tsx` sort — proves
+// nothing here depends on a hand-written full-eight-home list (ask #297).
+const TWO_OPENAI_HOME_IDS = [openaiLlmSpec, openaiTtsSpec].filter(isOpenAiKeyHome).map((spec) => spec.id);
 
 const OPENAI_LLM_KEY: CredentialOut = {
   id: "cred_llm",
@@ -460,7 +481,7 @@ describe("MultiHomeCredentialPicker — every OpenAI home at once (ask #297)", (
     stubMultiHomeApi();
     renderWithClient(
       <MultiHomeCredentialPicker
-        providerIds={OPENAI_KEY_HOME_IDS}
+        providerIds={TWO_OPENAI_HOME_IDS}
         specs={[openaiLlmSpec, openaiTtsSpec]}
         value={OPENAI_TTS_KEY.id}
         onChange={vi.fn()}
@@ -477,7 +498,7 @@ describe("MultiHomeCredentialPicker — every OpenAI home at once (ask #297)", (
     stubMultiHomeApi({});
     renderWithClient(
       <MultiHomeCredentialPicker
-        providerIds={OPENAI_KEY_HOME_IDS}
+        providerIds={TWO_OPENAI_HOME_IDS}
         specs={[openaiLlmSpec, openaiTtsSpec]}
         value={null}
         onChange={vi.fn()}
@@ -491,7 +512,7 @@ describe("MultiHomeCredentialPicker — every OpenAI home at once (ask #297)", (
     stubMultiHomeApi();
     renderWithClient(
       <MultiHomeCredentialPicker
-        providerIds={OPENAI_KEY_HOME_IDS}
+        providerIds={TWO_OPENAI_HOME_IDS}
         specs={[openaiLlmSpec, openaiTtsSpec]}
         value={OPENAI_TTS_KEY.id}
         onChange={vi.fn()}

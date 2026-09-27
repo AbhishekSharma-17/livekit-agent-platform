@@ -47,6 +47,25 @@ function enabledFor(spec: ProviderSpec): boolean {
 }
 
 /**
+ * Whether `spec` is its own OpenAI credential home (ask #297): the same
+ * rule `api/src/lkap_api/config_service.py::OPENAI_KEY_HOMES` computes —
+ * `vendor === "OpenAI"`, no `credential_provider` (it doesn't share another
+ * entry's key, `price_ref` is a pricing grouping and irrelevant here), and
+ * an `api_key` secret field. Computed live off `useProviders()` rather than
+ * a hand-written id list, so a registry change (a new OpenAI entry, or one
+ * losing its own key) never needs a matching edit here —
+ * `tests/console-credential-picker.test.tsx` checks this predicate against
+ * the generated registry export directly.
+ */
+export function isOpenAiKeyHome(spec: ProviderSpec): boolean {
+  return (
+    spec.vendor === "OpenAI" &&
+    !spec.credential_provider &&
+    (spec.secret_fields ?? []).some((field) => field.name === "api_key")
+  );
+}
+
+/**
  * `undefined` (the field is absent, e.g. a bare `ProviderSpec` fixture with
  * no workspace context — tests, or `contracts/generated/providers.json`
  * itself) is distinct from `[]` (a real `ProviderOut` the api checked and

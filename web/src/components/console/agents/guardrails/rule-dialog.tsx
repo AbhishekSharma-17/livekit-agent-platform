@@ -32,7 +32,8 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useProviders } from "@/components/console/lib/api-hooks";
-import { MultiHomeCredentialPicker, OPENAI_KEY_HOME_IDS } from "@/components/console/registry/credential-picker";
+import { MultiHomeCredentialPicker } from "@/components/console/registry/credential-picker";
+import { isOpenAiKeyHome } from "@/components/console/registry/provider-meta";
 import { MODERATION_CATEGORY_VALUES, type GuardrailRuleForm } from "@/components/console/lib/schemas";
 
 import { CATEGORY_LABELS } from "./kinds";
@@ -97,10 +98,13 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
   // Ask #297: every OpenAI credential home, not just `openai-llm` — a key
   // saved while setting up STT, TTS, the realtime pipeline, image
   // generation or embeddings is just as acceptable here (the api's
-  // `_check_openai_key` on save takes a key from any of them).
-  const openaiKeySpecs = (providersQuery.data?.providers ?? []).filter((provider) =>
-    (OPENAI_KEY_HOME_IDS as readonly string[]).includes(provider.id),
-  );
+  // `_check_openai_key` on save takes a key from any of them). `openai-llm`
+  // first (when present) so "Add key" keeps saving under the same home it
+  // always did.
+  const openaiKeySpecs = (providersQuery.data?.providers ?? [])
+    .filter(isOpenAiKeyHome)
+    .sort((a, b) => (a.id === "openai-llm" ? -1 : b.id === "openai-llm" ? 1 : 0));
+  const openaiKeyIds = openaiKeySpecs.map((provider) => provider.id);
 
   function handleSave() {
     setAttempted(true);
@@ -242,7 +246,7 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
               </fieldset>
               {openaiKeySpecs.length > 0 ? (
                 <MultiHomeCredentialPicker
-                  providerIds={OPENAI_KEY_HOME_IDS}
+                  providerIds={openaiKeyIds}
                   specs={openaiKeySpecs}
                   value={draft.credential_id}
                   onChange={(credentialId) =>

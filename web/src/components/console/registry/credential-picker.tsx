@@ -15,31 +15,6 @@ import type { CredentialOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 const NONE = "__none__";
 
-/**
- * Every registry id that is its own OpenAI credential home (ask #297):
- * `api/src/lkap_api/config_service.py::OPENAI_KEY_HOMES`, computed there as
- * every registry entry whose `vendor == "OpenAI"`, `credential_provider is
- * None` and which declares an `api_key` secret field — eight entries at
- * `contracts/generated/providers.json`'s current contents (the ask itself
- * names six; `openai-responses-llm` and `openai-gptlive-realtime` are two
- * more that fit the same rule — `price_ref` groups pricing, not credential
- * homes, so `openai-responses-llm`'s `price_ref: "openai-llm"` does not
- * make it share `openai-llm`'s credential row). Mirrored here as a fixed
- * list — the console has no runtime access to that computation — kept
- * honest by `tests/console-credential-picker.test.tsx`'s check against the
- * generated export.
- */
-export const OPENAI_KEY_HOME_IDS = [
-  "openai-llm",
-  "openai-stt",
-  "openai-tts",
-  "openai-realtime",
-  "openai-image-gen",
-  "openai-embedding",
-  "openai-responses-llm",
-  "openai-gptlive-realtime",
-] as const;
-
 export interface CredentialPickerProps {
   spec: ProviderSpec;
   value: string | null | undefined;
@@ -173,7 +148,11 @@ function SelectedKeyTest({ credentialId }: { credentialId: string }) {
 }
 
 export interface MultiHomeCredentialPickerProps {
-  /** Every registry id whose stored keys are all acceptable here (e.g. `OPENAI_KEY_HOME_IDS`). */
+  /**
+   * Every registry id whose stored keys are all acceptable here — e.g. the
+   * caller's own `useProviders()` result filtered through
+   * `provider-meta.ts`'s `isOpenAiKeyHome` (ask #297).
+   */
   providerIds: readonly string[];
   /** One `ProviderSpec` per id in `providerIds` (order doesn't matter), for "Add key" and each key's home label. */
   specs: readonly ProviderSpec[];
@@ -188,17 +167,20 @@ export interface MultiHomeCredentialPickerProps {
 /**
  * A `CredentialPicker` that lists keys from *several* credential homes at
  * once (ask #297) — a Moderation service rule's OpenAI key, which the api
- * accepts from any of `OPENAI_KEY_HOME_IDS`, not only `openai-llm`. Reads
- * every home with `useCredentialsAcrossHomes` and shows each key's own home
- * next to its label ("My prod key · OpenAI Whisper") so two keys of the
- * same name in different homes stay distinguishable.
+ * accepts from any registry entry `isOpenAiKeyHome` names, not only
+ * `openai-llm`. Reads every home with `useCredentialsAcrossHomes` and shows
+ * each key's own home next to its label ("My prod key · OpenAI Whisper") so
+ * two keys of the same name in different homes stay distinguishable. Not
+ * OpenAI-specific itself — `providerIds`/`specs` are the caller's own list,
+ * so this also serves any future "any key of this vendor" picker.
  *
  * "Add key" always saves the new key under `providerIds[0]`'s home (the
- * first of `OPENAI_KEY_HOME_IDS`, `openai-llm`) — the same single home
- * `CredentialPicker` always used before this — since the api resolves the
- * rule's own credential by id, not by which home it happened to save under,
- * a fresh key from here always works; choosing the *matching* home for a
- * brand-new key is a smaller, separate nicety (flagged as an ask).
+ * caller decides the order — `rule-dialog.tsx` puts `openai-llm` first, the
+ * same single home `CredentialPicker` always used before this) — since the
+ * api resolves the rule's own credential by id, not by which home it
+ * happened to save under, a fresh key from here always works; choosing the
+ * *matching* home for a brand-new key is a smaller, separate nicety
+ * (flagged as an ask).
  */
 export function MultiHomeCredentialPicker({
   providerIds,

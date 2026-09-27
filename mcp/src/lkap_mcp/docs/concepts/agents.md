@@ -101,6 +101,35 @@ the price line). A realtime model decides turn-taking itself, so
 (`office_ambience`, `city_ambience`, `crowded_room`, ...) plays under the
 whole call; neither plays on a typed chat.
 
+## Languages and captions
+
+An agent speaks one language (`config.voice.language`) unless
+`config.voice.languages` lists more; the first one is the default
+(`["en", "hi"]` starts in English and may switch to Hindi). With two or
+more the agent gets the `switch_language` tool and a fixed rule in its
+prompt: when the caller speaks or asks for another listed language it
+switches, and from then on it answers in that language (Hindi in
+Devanagari, so a Hindi voice pronounces it). A switch also changes the
+speech-to-text language when the provider can do that mid-call, and the
+voice when `voices_by_language` has one for that language (a provider
+slot keyed by the language code, for example a Sarvam voice for `hi`);
+a language without its own voice keeps the agent's voice.
+`auto_detect: true` asks the speech-to-text provider to detect the
+caller's language (Deepgram and LiveKit Inference use `multi`, which
+covers English, Spanish, French, German, Hindi, Russian, Portuguese,
+Japanese, Italian and Dutch) and the agent follows it after two turns in
+a row in another listed language, so mixed Hindi and English speech does
+not flip it back and forth. `agent_validate` reports a language the
+speech-to-text provider cannot transcribe (error), one its detection does
+not cover, a provider that cannot switch mid-call, and a language with no
+voice of its own (warnings). A realtime model hears every language
+itself; switching changes only the language it answers in. Each turn of a
+stored transcript carries its `language` when it is known, and
+`language_switched` session events record every switch. A `captions`
+panel block shows large live captions of both sides (`show_user`,
+`show_agent`, `position: bottom` to overlay the video); the words stream
+while the call runs and are not stored in the block.
+
 ## Date, time and timezones
 
 An agent knows the current date and time where the caller is. Two zones are

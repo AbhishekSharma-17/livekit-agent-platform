@@ -10,6 +10,7 @@ from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, DisclosurePosition, ResolvedCompliance
 from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
+from lkap_contracts.guardrails import GuardrailsConfig
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language
 from lkap_contracts.qa import MAX_QA_FIELDS, QaField
 from lkap_contracts.telephony import TelephonyConfig, WarmTransferRoute
@@ -50,7 +51,9 @@ ProviderSlot = Literal[
 #: Keys of :attr:`ResolvedAgentConfig.builtin_providers` (V5-25): the vendor a built-in tool
 #: calls, resolved with its key. Kept out of ``resolved``, whose every slot the worker's
 #: provider factory constructs.
-BuiltinProviderSlot = Literal["web_search", "sms", "notify_team"]
+#: V5-39 adds ``guardrails_llm`` (``guardrails.model``, the classifier's model) and
+#: ``guardrails_moderation`` (the OpenAI key a moderation rule uses).
+BuiltinProviderSlot = Literal["web_search", "sms", "notify_team", "guardrails_llm", "guardrails_moderation"]
 
 __all__ = [
     "KNOWLEDGE_RERANK_VALUES",
@@ -68,6 +71,7 @@ __all__ = [
     "ConversationPreset",
     "DisclosureConfig",
     "DisclosurePosition",
+    "GuardrailsConfig",
     "KnowledgeConfig",
     "KnowledgeQueryMode",
     "KnowledgeSearchMode",
@@ -612,6 +616,9 @@ class AgentConfig(BaseModel):
     """Redaction, storage tier and telemetry (V5-30); agents saved before it keep everything."""
     memory: MemoryConfig = MemoryConfig()
     """Caller memory across sessions (V5-40); off for every agent saved before it."""
+    guardrails: GuardrailsConfig = GuardrailsConfig()
+    """Checks on what the caller says, what the agent says and what tools return (V5-39); no rules
+    for every agent saved before it, so nothing is checked and nothing is added to a turn."""
     tests: list[AgentTest] = Field(
         default=[],
         max_length=MAX_AGENT_TESTS,

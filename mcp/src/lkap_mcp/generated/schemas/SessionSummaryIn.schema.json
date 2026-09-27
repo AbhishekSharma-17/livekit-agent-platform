@@ -36,6 +36,22 @@
           "title": "Id",
           "type": "string"
         },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "tool",
+                "guardrail"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
         "label": {
           "title": "Label",
           "type": "string"

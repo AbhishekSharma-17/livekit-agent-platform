@@ -1,0 +1,52 @@
+{
+  "$id": "lkap-contracts/GuardrailTimeoutEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``guardrail_timeout`` session event: a check let the text through (fail open).",
+  "properties": {
+    "budget_ms": {
+      "minimum": 0,
+      "title": "Budget Ms",
+      "type": "integer"
+    },
+    "kind": {
+      "enum": [
+        "regex",
+        "classifier",
+        "provider"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "timeout",
+        "error",
+        "unavailable"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "rule": {
+      "title": "Rule",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "input",
+        "output",
+        "tool_output"
+      ],
+      "title": "Stage",
+      "type": "string"
+    }
+  },
+  "required": [
+    "stage",
+    "rule",
+    "kind",
+    "reason",
+    "budget_ms"
+  ],
+  "title": "GuardrailTimeoutEvent",
+  "type": "object"
+}

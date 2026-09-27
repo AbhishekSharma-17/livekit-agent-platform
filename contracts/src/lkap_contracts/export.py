@@ -77,6 +77,7 @@ from lkap_contracts.flow import (
     TransferNode,
     VariableSpec,
 )
+from lkap_contracts.guardrails import GuardrailEvent, GuardrailsConfig, GuardrailTimeoutEvent
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
@@ -161,6 +162,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "QaConfig": QaConfig,
     "PrivacyConfig": PrivacyConfig,  # V5-30
     "MemoryConfig": MemoryConfig,  # V5-40
+    "GuardrailsConfig": GuardrailsConfig,  # V5-39
+    "GuardrailEvent": GuardrailEvent,
+    "GuardrailTimeoutEvent": GuardrailTimeoutEvent,
     "ResolvedAgentConfig": ResolvedAgentConfig,
     "DispatchMetadata": DispatchMetadata,
     "Issue": Issue,

@@ -250,6 +250,17 @@ from lkap_contracts.flow import (
     VariableSpec,
     edge_tool_name,
 )
+from lkap_contracts.guardrails import (
+    GUARDRAIL_EVENT,
+    GUARDRAIL_TIMEOUT_EVENT,
+    ClassifierRule,
+    GuardrailEvent,
+    GuardrailRule,
+    GuardrailsConfig,
+    GuardrailTimeoutEvent,
+    ProviderRule,
+    RegexRule,
+)
 from lkap_contracts.migrate import agent_config_v1_to_v2, agent_config_v2_to_v1
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import PRICE_VERSION, PRICES, Price, lookup
@@ -440,6 +451,8 @@ __all__ = [
     "DTMF_PATTERN",
     "E164_PATTERN",
     "FORM_FIELD_TYPES",
+    "GUARDRAIL_EVENT",
+    "GUARDRAIL_TIMEOUT_EVENT",
     "ID_LIKE_FIELD_NAMES",
     "LANGUAGE_TOOL_NAMES",
     "MODEL_ID_PATTERN",
@@ -518,6 +531,7 @@ __all__ = [
     "ChoiceReveal",
     "ChoicesBlockConfig",
     "ChoicesBlockState",
+    "ClassifierRule",
     "ComplianceOut",
     "CompliancePreset",
     "ComplianceSettings",
@@ -580,6 +594,10 @@ __all__ = [
     "FormUploadSpec",
     "GalleryBlockState",
     "GlobalNode",
+    "GuardrailEvent",
+    "GuardrailRule",
+    "GuardrailTimeoutEvent",
+    "GuardrailsConfig",
     "HandoffBlockConfig",
     "HandoffBlockState",
     "HandoffStatus",
@@ -673,6 +691,7 @@ __all__ = [
     "ProviderModelPage",
     "ProviderOut",
     "ProviderRef",
+    "ProviderRule",
     "ProviderSettingsIn",
     "ProviderSlot",
     "ProviderSpec",
@@ -690,6 +709,7 @@ __all__ = [
     "RecordingConfig",
     "RecordingOut",
     "RecordingStartOut",
+    "RegexRule",
     "ReplicaHandle",
     "RequestableState",
     "RequiredKey",

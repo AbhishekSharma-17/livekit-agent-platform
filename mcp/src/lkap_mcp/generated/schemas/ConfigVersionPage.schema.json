@@ -32,6 +32,18 @@
           ],
           "default": null
         },
+        "guardrails": {
+          "$ref": "#/$defs/GuardrailsConfig",
+          "default": {
+            "budget_ms": 300,
+            "input": [],
+            "model": null,
+            "on_trip": "interrupt",
+            "output": [],
+            "safe_reply": "I'm sorry, I can't help with that. Is there anything else I can help you with?",
+            "tool_output": []
+          }
+        },
         "instructions": {
           "title": "Instructions",
           "type": "string"
@@ -659,6 +671,37 @@
       "title": "CapabilitiesConfig",
       "type": "object"
     },
+    "ClassifierRule": {
+      "description": "A plain-language rule a language model judges the text against.",
+      "properties": {
+        "kind": {
+          "const": "classifier",
+          "default": "classifier",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the rule is called.",
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "What the text must not do, in plain words, e.g. `Gives medical advice: tells the caller what medicine or dose to take, or what their symptoms mean.`",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "prompt"
+      ],
+      "title": "ClassifierRule",
+      "type": "object"
+    },
     "ConfigVersionOut": {
       "description": "One row of ``GET /v1/agents/{id}/versions``.",
       "properties": {
@@ -1075,6 +1118,136 @@
         "id"
       ],
       "title": "GlobalNode",
+      "type": "object"
+    },
+    "GuardrailsConfig": {
+      "description": "What the agent checks, and what it does when a check trips (V5-39). Empty by default: no checks.",
+      "properties": {
+        "budget_ms": {
+          "default": 300,
+          "description": "How long a classifier or moderation check may take; past it the text goes through and a `guardrail_timeout` event is recorded.",
+          "maximum": 2000,
+          "minimum": 50,
+          "title": "Budget Ms",
+          "type": "integer"
+        },
+        "input": {
+          "default": [],
+          "description": "Rules on what the caller says (each finished turn).",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "classifier": "#/$defs/ClassifierRule",
+                "provider": "#/$defs/ProviderRule",
+                "regex": "#/$defs/RegexRule"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RegexRule"
+              },
+              {
+                "$ref": "#/$defs/ClassifierRule"
+              },
+              {
+                "$ref": "#/$defs/ProviderRule"
+              }
+            ]
+          },
+          "maxItems": 20,
+          "title": "Input",
+          "type": "array"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The language model that judges classifier rules (a small, fast one is best); `None` uses the agent's workflow model."
+        },
+        "on_trip": {
+          "default": "interrupt",
+          "description": "What a trip on what the caller or the agent says does: `interrupt` stops the agent and says the safe reply; `end_call` also ends the call; `escalate` also asks a person to take over (`escalate_to_human`). A tool's result that trips is always replaced by the safe reply.",
+          "enum": [
+            "interrupt",
+            "end_call",
+            "escalate"
+          ],
+          "title": "On Trip",
+          "type": "string"
+        },
+        "output": {
+          "default": [],
+          "description": "Rules on what the agent says, checked one sentence at a time as it speaks.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "classifier": "#/$defs/ClassifierRule",
+                "provider": "#/$defs/ProviderRule",
+                "regex": "#/$defs/RegexRule"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RegexRule"
+              },
+              {
+                "$ref": "#/$defs/ClassifierRule"
+              },
+              {
+                "$ref": "#/$defs/ProviderRule"
+              }
+            ]
+          },
+          "maxItems": 20,
+          "title": "Output",
+          "type": "array"
+        },
+        "safe_reply": {
+          "default": "I'm sorry, I can't help with that. Is there anything else I can help you with?",
+          "description": "What the agent says after a trip, word for word.",
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Safe Reply",
+          "type": "string"
+        },
+        "tool_output": {
+          "default": [],
+          "description": "Rules on what a tool returns, checked before the agent reads it.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "classifier": "#/$defs/ClassifierRule",
+                "provider": "#/$defs/ProviderRule",
+                "regex": "#/$defs/RegexRule"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RegexRule"
+              },
+              {
+                "$ref": "#/$defs/ClassifierRule"
+              },
+              {
+                "$ref": "#/$defs/ProviderRule"
+              }
+            ]
+          },
+          "maxItems": 20,
+          "title": "Tool Output",
+          "type": "array"
+        }
+      },
+      "title": "GuardrailsConfig",
       "type": "object"
     },
     "InterruptionOptions": {
@@ -1747,6 +1920,73 @@
       "title": "ProviderRef",
       "type": "object"
     },
+    "ProviderRule": {
+      "description": "A hosted moderation service. The text trips the rule when the service flags it.",
+      "properties": {
+        "categories": {
+          "default": [],
+          "description": "Only these categories trip the rule; empty: any category the service flags.",
+          "items": {
+            "enum": [
+              "harassment",
+              "harassment/threatening",
+              "hate",
+              "hate/threatening",
+              "illicit",
+              "illicit/violent",
+              "self-harm",
+              "self-harm/intent",
+              "self-harm/instructions",
+              "sexual",
+              "sexual/minors",
+              "violence",
+              "violence/graphic"
+            ],
+            "type": "string"
+          },
+          "title": "Categories",
+          "type": "array"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The OpenAI key to use; `None` uses the agent's own OpenAI language-model key.",
+          "title": "Credential Id"
+        },
+        "kind": {
+          "const": "provider",
+          "default": "provider",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the rule is called.",
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "const": "openai_moderation",
+          "default": "openai_moderation",
+          "description": "`openai_moderation`: OpenAI's moderation service (free with an OpenAI key).",
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProviderRule",
+      "type": "object"
+    },
     "PublishGate": {
       "description": "Whether publishing needs a passing test run on the version being published (opt-in).",
       "properties": {
@@ -1971,6 +2211,43 @@
         }
       },
       "title": "RecordingConfig",
+      "type": "object"
+    },
+    "RegexRule": {
+      "description": "A pattern (Python regular expression syntax). The text trips the rule when it matches anywhere.",
+      "properties": {
+        "ignore_case": {
+          "default": true,
+          "description": "Match upper and lower case alike.",
+          "title": "Ignore Case",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "regex",
+          "default": "regex",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the rule is called.",
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "A regular expression, e.g. `\\b(?:\\d[ -]?){13,19}\\b` for card numbers. A pattern that does not compile, or that repeats a repeated group (slow on long text), is refused on save.",
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern"
+      ],
+      "title": "RegexRule",
       "type": "object"
     },
     "SmsTarget": {

@@ -121,6 +121,9 @@ export interface LkapContracts {
   FormUploadSpec?: FormUploadSpec;
   GalleryBlockState?: GalleryBlockState;
   GlobalNode?: GlobalNode;
+  GuardrailEvent?: GuardrailEvent;
+  GuardrailTimeoutEvent?: GuardrailTimeoutEvent;
+  GuardrailsConfig?: GuardrailsConfig;
   HandoffBlockState?: HandoffBlockState;
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
@@ -336,6 +339,7 @@ export interface ActivityEvent {
   duration_ms?: number | null;
   headline: string;
   id: string;
+  kind?: ("tool" | "guardrail") | null;
   label: string;
   phase: "running" | "done" | "error" | "cancelled";
   source: string;
@@ -403,6 +407,7 @@ export interface AgentConfig {
   capabilities?: CapabilitiesConfig;
   disclosure?: DisclosureConfig;
   flow?: FlowSpec | null;
+  guardrails?: GuardrailsConfig;
   instructions: string;
   knowledge?: KnowledgeConfig;
   locale?: LocaleConfig;
@@ -637,6 +642,863 @@ export interface VariableSpec {
   options?: string[] | null;
   required?: boolean;
   type?: "string" | "number" | "boolean" | "enum" | "date" | "phone" | "email";
+}
+/**
+ * What the agent checks, and what it does when a check trips (V5-39). Empty by default: no checks.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "GuardrailsConfig".
+ */
+export interface GuardrailsConfig {
+  /**
+   * How long a classifier or moderation check may take; past it the text goes through and a `guardrail_timeout` event is recorded.
+   */
+  budget_ms?: number;
+  /**
+   * Rules on what the caller says (each finished turn).
+   *
+   * @maxItems 20
+   */
+  input?:
+    | []
+    | [RegexRule | ClassifierRule | ProviderRule]
+    | [RegexRule | ClassifierRule | ProviderRule, RegexRule | ClassifierRule | ProviderRule]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ];
+  /**
+   * The language model that judges classifier rules (a small, fast one is best); `None` uses the agent's workflow model.
+   */
+  model?: ProviderRef | null;
+  /**
+   * What a trip on what the caller or the agent says does: `interrupt` stops the agent and says the safe reply; `end_call` also ends the call; `escalate` also asks a person to take over (`escalate_to_human`). A tool's result that trips is always replaced by the safe reply.
+   */
+  on_trip?: "interrupt" | "end_call" | "escalate";
+  /**
+   * Rules on what the agent says, checked one sentence at a time as it speaks.
+   *
+   * @maxItems 20
+   */
+  output?:
+    | []
+    | [RegexRule | ClassifierRule | ProviderRule]
+    | [RegexRule | ClassifierRule | ProviderRule, RegexRule | ClassifierRule | ProviderRule]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ];
+  /**
+   * What the agent says after a trip, word for word.
+   */
+  safe_reply?: string;
+  /**
+   * Rules on what a tool returns, checked before the agent reads it.
+   *
+   * @maxItems 20
+   */
+  tool_output?:
+    | []
+    | [RegexRule | ClassifierRule | ProviderRule]
+    | [RegexRule | ClassifierRule | ProviderRule, RegexRule | ClassifierRule | ProviderRule]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ]
+    | [
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule,
+        RegexRule | ClassifierRule | ProviderRule
+      ];
+}
+/**
+ * A pattern (Python regular expression syntax). The text trips the rule when it matches anywhere.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RegexRule".
+ */
+export interface RegexRule {
+  /**
+   * Match upper and lower case alike.
+   */
+  ignore_case?: boolean;
+  kind?: "regex";
+  /**
+   * What the rule is called.
+   */
+  name: string;
+  /**
+   * A regular expression, e.g. `\b(?:\d[ -]?){13,19}\b` for card numbers. A pattern that does not compile, or that repeats a repeated group (slow on long text), is refused on save.
+   */
+  pattern: string;
+}
+/**
+ * A plain-language rule a language model judges the text against.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ClassifierRule".
+ */
+export interface ClassifierRule {
+  kind?: "classifier";
+  /**
+   * What the rule is called.
+   */
+  name: string;
+  /**
+   * What the text must not do, in plain words, e.g. `Gives medical advice: tells the caller what medicine or dose to take, or what their symptoms mean.`
+   */
+  prompt: string;
+}
+/**
+ * A hosted moderation service. The text trips the rule when the service flags it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderRule".
+ */
+export interface ProviderRule {
+  /**
+   * Only these categories trip the rule; empty: any category the service flags.
+   */
+  categories?: (
+    | "harassment"
+    | "harassment/threatening"
+    | "hate"
+    | "hate/threatening"
+    | "illicit"
+    | "illicit/violent"
+    | "self-harm"
+    | "self-harm/intent"
+    | "self-harm/instructions"
+    | "sexual"
+    | "sexual/minors"
+    | "violence"
+    | "violence/graphic"
+  )[];
+  /**
+   * The OpenAI key to use; `None` uses the agent's own OpenAI language-model key.
+   */
+  credential_id?: string | null;
+  kind?: "provider";
+  /**
+   * What the rule is called.
+   */
+  name: string;
+  /**
+   * `openai_moderation`: OpenAI's moderation service (free with an OpenAI key).
+   */
+  provider?: "openai_moderation";
 }
 /**
  * Knowledge bases attached to the agent and how they are injected.
@@ -3255,6 +4117,51 @@ export interface FormUploadSpec {
 export interface GalleryBlockState {
   asset_ids?: string[];
   selected?: string | null;
+}
+/**
+ * Payload of the ``guardrail`` session event: a rule tripped.
+ *
+ * ``excerpt_hash`` is a keyed hash of the text that tripped (the key is random per
+ * session and never stored): two trips on the same text in one session carry the
+ * same hash, but the text cannot be recovered or matched across sessions.
+ * ``excerpt`` (at most :data:`MAX_GUARDRAIL_EXCERPT_CHARS`) is kept only when the
+ * agent's ``privacy.storage_tier`` is ``full``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "GuardrailEvent".
+ */
+export interface GuardrailEvent {
+  action: "interrupt" | "end_call" | "escalate" | "replaced";
+  /**
+   * What the moderation service flagged (provider rules).
+   */
+  categories?: string[];
+  excerpt?: string | null;
+  excerpt_hash: string;
+  kind: "regex" | "classifier" | "provider";
+  /**
+   * How long the check that tripped took.
+   */
+  latency_ms?: number | null;
+  rule: string;
+  stage: "input" | "output" | "tool_output";
+  /**
+   * The tool whose result tripped (`tool_output`).
+   */
+  tool?: string | null;
+}
+/**
+ * Payload of the ``guardrail_timeout`` session event: a check let the text through (fail open).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "GuardrailTimeoutEvent".
+ */
+export interface GuardrailTimeoutEvent {
+  budget_ms: number;
+  kind: "regex" | "classifier" | "provider";
+  reason: "timeout" | "error" | "unavailable";
+  rule: string;
+  stage: "input" | "output" | "tool_output";
 }
 /**
  * The ``handoff`` block's state (V5-32): the hand-off of the caller to a person.

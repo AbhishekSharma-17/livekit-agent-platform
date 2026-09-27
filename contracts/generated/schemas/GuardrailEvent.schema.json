@@ -1,0 +1,100 @@
+{
+  "$id": "lkap-contracts/GuardrailEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``guardrail`` session event: a rule tripped.\n\n``excerpt_hash`` is a keyed hash of the text that tripped (the key is random per\nsession and never stored): two trips on the same text in one session carry the\nsame hash, but the text cannot be recovered or matched across sessions.\n``excerpt`` (at most :data:`MAX_GUARDRAIL_EXCERPT_CHARS`) is kept only when the\nagent's ``privacy.storage_tier`` is ``full``.",
+  "properties": {
+    "action": {
+      "enum": [
+        "interrupt",
+        "end_call",
+        "escalate",
+        "replaced"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "categories": {
+      "default": [],
+      "description": "What the moderation service flagged (provider rules).",
+      "items": {
+        "type": "string"
+      },
+      "title": "Categories",
+      "type": "array"
+    },
+    "excerpt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Excerpt"
+    },
+    "excerpt_hash": {
+      "title": "Excerpt Hash",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "regex",
+        "classifier",
+        "provider"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "latency_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How long the check that tripped took.",
+      "title": "Latency Ms"
+    },
+    "rule": {
+      "title": "Rule",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "input",
+        "output",
+        "tool_output"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The tool whose result tripped (`tool_output`).",
+      "title": "Tool"
+    }
+  },
+  "required": [
+    "stage",
+    "rule",
+    "kind",
+    "action",
+    "excerpt_hash"
+  ],
+  "title": "GuardrailEvent",
+  "type": "object"
+}

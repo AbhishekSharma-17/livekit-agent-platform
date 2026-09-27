@@ -116,6 +116,9 @@ class ActivityEvent(BaseModel):
     urgent: bool = False
     duration_ms: int | None = None
     detail: dict[str, Any] | None = None
+    kind: Literal["tool", "guardrail"] | None = None
+    """What the row is (V5-39): ``guardrail`` for a guardrail trip (``detail`` then carries
+    ``stage``, ``rule`` and ``action``); ``None`` for every other row, as before."""
 
 
 BlockType = Literal[

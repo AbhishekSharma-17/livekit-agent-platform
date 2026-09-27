@@ -20,6 +20,17 @@ Live rules (HANDOFF rule 3, PLAN-V5 §0.1): a scratch api on its own port and DB
 | 8c | Reconnect in the console (Tools, Apps) | The tool is on again; a chat turn works. | pending |
 | 9 | Cleanup: `agent_apps_mode(mode="off")` on the scratch agent, delete it, `apps_disconnect(purge=true)` after deleting the tools, revoke the run's key | No Tool Router session left for the scratch agent (`apps.router.delete` / `apps.server.delete` audits); record the free-tier figure the dashboard shows. | pending |
 
+### Step S5-41: where a session-initiated sign-in lands (V5-27; R-V5-16 item 6 calls it "step 8")
+
+V5-27 refuses `tools.apps.router.manage_connections` at save and never enables it in a session, until this step shows where an account connected **from inside a Tool Router session** lands. Run it only with the scratch api (the saved-agent path refuses the flag), by calling Composio's session API directly with the run's key.
+
+| # | Step | Expect | Result |
+|---|---|---|---|
+| 10a | Create a Tool Router session for `user_id = ws:<scratch workspace>` with `manage_connections: {enable: true}` and one toolkit the workspace has **not** connected | The session lists `COMPOSIO_MANAGE_CONNECTIONS`; record the exact meta tool names. | pending |
+| 10b | Through that session, initiate and complete a connection for the toolkit as a second test user | Record which `user_id` the new connected account carries (`GET /connected_accounts/{id}`): the session's subject (`ws:<id>`) or something per caller. | pending |
+| 10c | Create a fresh session for the same subject without `connected_accounts` pinned for that toolkit and run a read | Record whether it uses the account of 10b ("most recently connected active account"). If yes, caller sign-ins leak across callers under a shared subject: the feature stays refused and needs per-caller subjects (a v6 design). If no, record the vendor's rule and ask Fable to lift S5-41. | pending |
+| 10d | Cleanup | Delete the session and the connected account of 10b. | pending |
+
 ## Vendor facts (checked for V5-47 on 2026-09-25)
 
 "Verified" = read on that date from the named Composio documentation page and coded to. "Unverified" = not stated on any page read; the code's assumption is given and the live run confirms or corrects it (record only "confirmed" / "differs: <field names>").

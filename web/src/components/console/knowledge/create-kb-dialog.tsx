@@ -109,23 +109,21 @@ export function CreateKbDialog() {
   const { canWrite } = useWriteAccess();
 
   const connectionsQuery = useKnowledgeConnections({ enabled: open && storage !== "platform" });
-  const allConnections = connectionsQuery.data?.items ?? [];
   const storeConnections = React.useMemo(
-    () => allConnections.filter((c) => VECTOR_STORE_CONNECTION_KINDS.includes(c.kind)),
-    [allConnections],
+    () => (connectionsQuery.data?.items ?? []).filter((c) => VECTOR_STORE_CONNECTION_KINDS.includes(c.kind)),
+    [connectionsQuery.data],
   );
   const ragieConnections = React.useMemo(
-    () => allConnections.filter((c) => MANAGED_SEARCH_CONNECTION_KINDS.includes(c.kind)),
-    [allConnections],
+    () => (connectionsQuery.data?.items ?? []).filter((c) => MANAGED_SEARCH_CONNECTION_KINDS.includes(c.kind)),
+    [connectionsQuery.data],
   );
-  const choices = storage === "connection" ? storeConnections : storage === "managed_search" ? ragieConnections : [];
 
   // The only choice (the usual case) is picked for the user.
   React.useEffect(() => {
-    if (storage !== "platform" && connectionId === "" && choices.length === 1) {
-      setConnectionId(choices[0].id);
-    }
-  }, [storage, connectionId, choices]);
+    if (connectionId !== "") return;
+    const choices = storage === "connection" ? storeConnections : storage === "managed_search" ? ragieConnections : [];
+    if (choices.length === 1) setConnectionId(choices[0].id);
+  }, [storage, connectionId, storeConnections, ragieConnections]);
 
   function reset() {
     setName("");
@@ -225,7 +223,7 @@ export function CreateKbDialog() {
                   value="connection"
                   selected={storage === "connection"}
                   title="A knowledge connection"
-                  hint="Keep the vectors in your own Qdrant, Pinecone or Weaviate account."
+                  hint="Keep the vectors in a vector database you connect in Settings."
                 />
                 <ChoiceCard
                   id={`${uid}-storage-managed`}

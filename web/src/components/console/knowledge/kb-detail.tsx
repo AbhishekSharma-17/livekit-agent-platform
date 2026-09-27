@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/console/shared/page-header";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import { knowledgeConnectionKindLabel } from "@/components/console/settings/knowledge-connection-dialog";
 import { KbDocuments } from "@/components/console/knowledge/kb-documents";
+import { KbSourceCard } from "@/components/console/knowledge/kb-source-card";
 import { KbEvalsCard } from "@/components/console/knowledge/kb-evals-card";
 import { KbSearchPanel } from "@/components/console/knowledge/kb-search-panel";
 import { DescriptionList } from "@/components/shared/description-list";
@@ -42,6 +43,11 @@ export function KbDetail({ kbId }: { kbId: string }) {
       ? `${connection.name} (${knowledgeConnectionKindLabel(connection.kind, providersQuery.data?.providers ?? [])})`
       : "A knowledge connection"
     : "This platform";
+  // Managed search (Ragie, V5-45): no documents live here, so the usual
+  // Embedder/Chunks columns and the upload/import/re-index controls don't
+  // apply (the api already refuses them with 409 — ask #232 is presentation
+  // only). Its own source panel replaces `KbDocuments` below.
+  const isExternal = kb.kind === "external";
 
   return (
     <div>
@@ -54,16 +60,24 @@ export function KbDetail({ kbId }: { kbId: string }) {
       <DescriptionList
         className="mb-6"
         columns={3}
-        items={[
-          { term: "Embedder", detail: embedderLabel(kb.embedder_id) },
-          { term: "Documents", detail: pluralize(kb.document_count, "document", "documents"), mono: true },
-          { term: "Chunks", detail: pluralize(kb.chunk_count, "chunk", "chunks"), mono: true },
-          { term: "Stored in", detail: storedIn },
-        ]}
+        items={
+          isExternal
+            ? [
+                { term: "Documents", detail: pluralize(kb.document_count, "document", "documents"), mono: true },
+                { term: "Partition", detail: kb.external_ref ?? "—", mono: true },
+                { term: "Stored in", detail: storedIn },
+              ]
+            : [
+                { term: "Embedder", detail: embedderLabel(kb.embedder_id) },
+                { term: "Documents", detail: pluralize(kb.document_count, "document", "documents"), mono: true },
+                { term: "Chunks", detail: pluralize(kb.chunk_count, "chunk", "chunks"), mono: true },
+                { term: "Stored in", detail: storedIn },
+              ]
+        }
       />
 
       <div className="flex flex-col gap-8">
-        <KbDocuments kbId={kb.id} />
+        {isExternal ? <KbSourceCard kbId={kb.id} externalRef={kb.external_ref} /> : <KbDocuments kbId={kb.id} />}
         <KbSearchPanel kbId={kb.id} />
         <KbEvalsCard kbId={kb.id} />
       </div>

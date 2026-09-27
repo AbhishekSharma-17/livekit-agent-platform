@@ -54,14 +54,17 @@ export const KNOWLEDGE_CONNECTION_PROVIDER_ID: Record<KnowledgeConnectionKind, s
   weaviate: "weaviate",
   cohere_rerank: "cohere-rerank",
   voyage_rerank: "voyage-rerank",
+  ragie: "ragie",
 };
 
 /** Where a knowledge base's vectors may live (`KbCreate.connection_id`). */
 export const VECTOR_STORE_CONNECTION_KINDS: readonly KnowledgeConnectionKind[] = ["qdrant", "pinecone", "weaviate"];
 /** What `KnowledgeConfig.rerank = "connection:<id>"` may name (the search tool only). */
 export const RERANKER_CONNECTION_KINDS: readonly KnowledgeConnectionKind[] = ["cohere_rerank", "voyage_rerank"];
+/** A managed search service (V5-45): it holds and ranks its own documents; a knowledge base of `kind: "external"` reads one of its partitions. Mirrors `EXTERNAL_RETRIEVER_CONNECTION_KINDS` in `api_models.py`. */
+export const MANAGED_SEARCH_CONNECTION_KINDS: readonly KnowledgeConnectionKind[] = ["ragie"];
 
-/** Kinds a connection can be saved without a key for (a local or private cluster) — mirrors `KEY_REQUIRED` in `knowledge_connections/settings.py` (inverted). */
+/** Kinds a connection can be saved without a key for (a local or private cluster) — mirrors `KEY_REQUIRED` in `knowledge_connections/settings.py` (inverted; every other kind, including `ragie`, needs a key). */
 const KEY_OPTIONAL_KINDS: ReadonlySet<KnowledgeConnectionKind> = new Set(["qdrant", "weaviate"]);
 
 /** Settings that fix where a knowledge base's vectors live — read-only once the connection stores one. Mirrors `LOCATION_FIELDS` in `knowledge_connections/settings.py`. */
@@ -71,7 +74,15 @@ const LOCATION_FIELD_NAMES: Record<KnowledgeConnectionKind, ReadonlySet<string>>
   weaviate: new Set(["url", "collection"]),
   cohere_rerank: new Set(),
   voyage_rerank: new Set(),
+  ragie: new Set(),
 };
+
+/** "Vector database" / "Re-ranking service" / "Managed search" — the edit-mode header under the vendor mark. */
+function connectionCategoryLabel(kind: KnowledgeConnectionKind): string {
+  if (VECTOR_STORE_CONNECTION_KINDS.includes(kind)) return "Vector database";
+  if (MANAGED_SEARCH_CONNECTION_KINDS.includes(kind)) return "Managed search";
+  return "Re-ranking service";
+}
 
 export function knowledgeConnectionStatusMeta(
   status: KnowledgeConnectionOut["status"],
@@ -129,7 +140,6 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
   const [testResult, setTestResult] = React.useState<KnowledgeConnectionTestOut | null>(null);
 
   const spec = knowledgeProviders.find((p) => p.id === KNOWLEDGE_CONNECTION_PROVIDER_ID[kind]);
-  const isVectorStore = VECTOR_STORE_CONNECTION_KINDS.includes(kind);
   const keyRequired = !KEY_OPTIONAL_KINDS.has(kind);
 
   const createMutation = useCreateKnowledgeConnection();
@@ -259,7 +269,7 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
             <DialogDescription id="knowledge-connection-dialog-description">
               {saved
                 ? "Run a test to check the key and see what it can see."
-                : "A vector store to keep a knowledge base's vectors in your own account, or a hosted service to re-rank search results."}
+                : "A vector store to keep a knowledge base's vectors in your own account, a managed search service that holds and searches its own documents, or a hosted service to re-rank search results."}
             </DialogDescription>
           </DialogHeader>
 
@@ -286,9 +296,7 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
                     <VendorMark vendor={spec.vendor} size="md" />
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground">{spec.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {isVectorStore ? "Vector database" : "Re-ranking service"}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{connectionCategoryLabel(kind)}</p>
                     </div>
                   </div>
                 ) : null}
@@ -381,6 +389,7 @@ function KindPicker({
 }) {
   const groups: { heading: string; kinds: readonly KnowledgeConnectionKind[] }[] = [
     { heading: "Vector databases", kinds: VECTOR_STORE_CONNECTION_KINDS },
+    { heading: "Managed search", kinds: MANAGED_SEARCH_CONNECTION_KINDS },
     { heading: "Re-ranking services", kinds: RERANKER_CONNECTION_KINDS },
   ];
   const name = `${idPrefix}-kind`;
@@ -461,16 +470,29 @@ function SavedView({
           {testing ? "Testing…" : result ? "Test again" : "Test connection"}
         </Button>
       </div>
-      {testing || result ? <KnowledgeConnectionTestResultView result={result} /> : null}
+      {testing || result ? <KnowledgeConnectionTestResultView result={result} kind={connection.kind} /> : null}
     </div>
   );
 }
 
-/** The result of `POST /v1/knowledge-connections/{id}/test`, shown from the dialog and the connections table. */
-export function KnowledgeConnectionTestResultView({ result }: { result: KnowledgeConnectionTestOut | null }) {
+/**
+ * The result of `POST /v1/knowledge-connections/{id}/test`, shown from the
+ * dialog and the connections table. `collections` names collections or
+ * indexes for a vector store, or partitions for a managed search connection
+ * (Ragie, V5-45) — `kind` picks the right noun.
+ */
+export function KnowledgeConnectionTestResultView({
+  result,
+  kind,
+}: {
+  result: KnowledgeConnectionTestOut | null;
+  kind?: KnowledgeConnectionKind;
+}) {
   if (!result) return null;
   const tone: StatusTone = result.ok ? "success" : "danger";
   const collections = result.collections ?? [];
+  const noun = kind && MANAGED_SEARCH_CONNECTION_KINDS.includes(kind) ? "partition" : "collection or index";
+  const pluralNoun = kind && MANAGED_SEARCH_CONNECTION_KINDS.includes(kind) ? "partitions" : "collections or indexes";
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/30 p-2.5">
       <div className="flex items-center gap-2">
@@ -481,7 +503,7 @@ export function KnowledgeConnectionTestResultView({ result }: { result: Knowledg
       </div>
       {collections.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          Sees {collections.length === 1 ? "1 collection or index" : `${collections.length} collections or indexes`}:{" "}
+          Sees {collections.length === 1 ? `1 ${noun}` : `${collections.length} ${pluralNoun}`}:{" "}
           <span className="font-mono">{collections.slice(0, 8).join(", ")}</span>
           {collections.length > 8 ? "…" : ""}
         </p>

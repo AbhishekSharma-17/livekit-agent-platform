@@ -319,7 +319,12 @@ describe("CreateKbDialog — 'Where is this knowledge stored?' (V5-24)", () => {
 
     const dialog = await openDialog();
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Claims policies" } });
-    fireEvent.click(await within(dialog).findByLabelText(/A knowledge connection/));
+    fireEvent.click(within(dialog).getByRole("radio", { name: /^A knowledge connection/ }));
+    // The connections list is fetched lazily, once this choice is picked; wait for
+    // the only one to be auto-selected before submitting.
+    await waitFor(() =>
+      expect(within(dialog).getByRole("radio", { name: "Prod Qdrant" }).getAttribute("aria-checked")).toBe("true"),
+    );
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))).toBe(true));
@@ -327,7 +332,7 @@ describe("CreateKbDialog — 'Where is this knowledge stored?' (V5-24)", () => {
     expect(post.body).toMatchObject({ name: "Claims policies", connection_id: "kc1" });
   });
 
-  it("posts connection_id: null when Platform default is left selected", async () => {
+  it("omits connection_id entirely when Platform default is left selected, and never fetches the connections list", async () => {
     const calls = mockCreateKbFetch([QDRANT_CONNECTION]);
     renderWithClient(<CreateKbDialog />);
 
@@ -337,16 +342,18 @@ describe("CreateKbDialog — 'Where is this knowledge stored?' (V5-24)", () => {
 
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))).toBe(true));
     const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))!;
-    expect(post.body).toMatchObject({ connection_id: null });
+    expect(post.body).toEqual({ name: "Claims policies", embedder_id: "fastembed-embedding" });
+    expect(calls.some((c) => c.url.endsWith("/knowledge-connections"))).toBe(false);
   });
 
-  it("disables the connection radio and points at Settings when the workspace has no knowledge connections", async () => {
+  it("says plainly when there are no knowledge connections yet, with a link to add one", async () => {
     mockCreateKbFetch([]);
     renderWithClient(<CreateKbDialog />);
 
     const dialog = await openDialog();
-    const connectionRadio = await within(dialog).findByLabelText(/A knowledge connection/);
-    expect(connectionRadio.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(within(dialog).getByRole("radio", { name: /^A knowledge connection/ }));
+
+    expect(await within(dialog).findByText(/No knowledge connections yet\./)).toBeTruthy();
     expect(within(dialog).getByRole("link", { name: "Add one in Settings" }).getAttribute("href")).toBe(
       "/console/settings?tab=knowledge-connections",
     );

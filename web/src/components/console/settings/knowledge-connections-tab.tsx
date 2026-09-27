@@ -36,17 +36,18 @@ import {
   KnowledgeConnectionTestResultView,
   knowledgeConnectionKindLabel,
   knowledgeConnectionStatusMeta,
-  VECTOR_STORE_CONNECTION_KINDS,
+  MANAGED_SEARCH_CONNECTION_KINDS,
+  RERANKER_CONNECTION_KINDS,
 } from "./knowledge-connection-dialog";
 import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut } from "@/contracts/lkap-contracts";
 
 /**
  * Settings → **Knowledge connections** (V5-24, K §5.3): the workspace's Qdrant
- * / Pinecone / Weaviate vector stores and Cohere / Voyage AI hosted
- * re-rankers — add, test, edit and delete. A knowledge base picks one of the
- * vector-store rows when it is created (`create-kb-dialog.tsx`); the agent's
- * Knowledge tab picks a re-ranker row for the search tool
- * (`agents/tabs/knowledge-tab.tsx`).
+ * / Pinecone / Weaviate vector stores, Ragie managed search (V5-45) and
+ * Cohere / Voyage AI hosted re-rankers — add, test, edit and delete. A
+ * knowledge base picks one of the vector-store or Ragie rows when it is
+ * created (`create-kb-dialog.tsx`); the agent's Knowledge tab picks a
+ * re-ranker row for the search tool (`agents/tabs/knowledge-tab.tsx`).
  *
  * Reads need `builder`; every write (add, edit, delete, test) needs `admin`,
  * like the vault keys they use (`knowledge_connections/router.py`).
@@ -95,7 +96,11 @@ function KnowledgeConnectionsTabInner() {
               <div className="truncate font-medium text-foreground">{connection.name}</div>
               <div className="truncate text-xs text-muted-foreground">
                 {knowledgeConnectionKindLabel(connection.kind, providers)}
-                {VECTOR_STORE_CONNECTION_KINDS.includes(connection.kind) ? "" : " · re-ranker"}
+                {RERANKER_CONNECTION_KINDS.includes(connection.kind)
+                  ? " · re-ranker"
+                  : MANAGED_SEARCH_CONNECTION_KINDS.includes(connection.kind)
+                    ? " · managed search"
+                    : ""}
               </div>
             </div>
           </div>
@@ -158,7 +163,7 @@ function KnowledgeConnectionsTabInner() {
     <Section
       id="knowledge-connections"
       title="Knowledge connections"
-      description="Keep a knowledge base's vectors in your own Qdrant, Pinecone or Weaviate account, or re-rank search results with a hosted service."
+      description="Keep a knowledge base's vectors in your own Qdrant, Pinecone or Weaviate account, search documents kept in Ragie, or re-rank search results with a hosted service."
       aside={
         <Button type="button" size="sm" onClick={() => canWrite && setAdding(true)} disabled={!canWrite} title={canWrite ? undefined : writeReason}>
           <PlusIcon />
@@ -318,7 +323,7 @@ function TestConnectionDialog({ connection, onClose }: { connection: KnowledgeCo
           ) : error ? (
             <ErrorBanner message={error} />
           ) : (
-            <KnowledgeConnectionTestResultView result={result} />
+            <KnowledgeConnectionTestResultView result={result} kind={connection.kind} />
           )}
         </DialogBody>
         <DialogFooter showCloseButton />

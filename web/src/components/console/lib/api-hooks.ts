@@ -45,6 +45,7 @@ import type {
   KbPage,
   KbSearchRequest,
   KbSearchResponse,
+  KbSourceOut,
   KnowledgeConnectionCreate,
   KnowledgeConnectionOut,
   KnowledgeConnectionPage,
@@ -99,6 +100,8 @@ const keys = {
   kbs: ["knowledge-bases"] as const,
   kb: (id: string) => ["knowledge-bases", id] as const,
   kbDocuments: (id: string) => ["knowledge-bases", id, "documents"] as const,
+  /** V5-45/ask #232: `GET /v1/knowledge-bases/{id}/source` — an external (managed search) knowledge base's partition and document count. */
+  kbSource: (id: string) => ["knowledge-bases", id, "source"] as const,
   kbEvals: (id: string) => ["knowledge-bases", id, "evals"] as const,
   kbEvalRun: (kbId: string, jobId: string) => ["knowledge-bases", kbId, "evaluate", jobId] as const,
   kbEvalLatest: (id: string) => ["knowledge-bases", id, "evaluate", "latest"] as const,
@@ -487,12 +490,20 @@ export function useRevokeMcpOauth() {
   });
 }
 
-// ---- knowledge connections (V5-24: BYO Qdrant/Pinecone/Weaviate, hosted re-rankers) ----
+// ---- knowledge connections (V5-24: BYO Qdrant/Pinecone/Weaviate, hosted re-rankers, Ragie managed search) ----
 
-export function useKnowledgeConnections() {
+/**
+ * `options.enabled` (ask #234): `create-kb-dialog.tsx` only needs the list
+ * once a connection-backed storage choice is picked, so it passes
+ * `{ enabled: open && storage !== "platform" }` — creating a plain
+ * platform-default knowledge base never calls `GET /v1/knowledge-connections`.
+ * Every other caller omits it and gets react-query's default (`true`).
+ */
+export function useKnowledgeConnections(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: keys.knowledgeConnections,
     queryFn: () => api.get<KnowledgeConnectionPage>("knowledge-connections"),
+    enabled: options?.enabled,
   });
 }
 
@@ -577,6 +588,15 @@ export function useDeleteKb() {
       void queryClient.invalidateQueries({ queryKey: keys.kbs });
       void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
     },
+  });
+}
+
+/** `GET /v1/knowledge-bases/{id}/source` (V5-45/ask #232): only meaningful for a `kind: "external"` knowledge base. */
+export function useKbSource(kbId: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: keys.kbSource(kbId),
+    queryFn: () => api.get<KbSourceOut>(`knowledge-bases/${kbId}/source`),
+    enabled: kbId.length > 0 && (options?.enabled ?? true),
   });
 }
 

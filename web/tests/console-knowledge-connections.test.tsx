@@ -92,7 +92,32 @@ const VOYAGE_PROVIDER: ProviderSpec = {
   capabilities: { video_input: false, tool_calling: false, silent_tool_reply: false, voices: [] },
 } as unknown as ProviderSpec;
 
-const PROVIDERS: ProvidersResponse = { providers: [QDRANT_PROVIDER, VOYAGE_PROVIDER] } as unknown as ProvidersResponse;
+const RAGIE_PROVIDER: ProviderSpec = {
+  v: 2,
+  id: "ragie",
+  kind: "knowledge",
+  label: "Ragie",
+  vendor: "Ragie",
+  status: "deferred",
+  package: "",
+  python_class: "",
+  requires_credential: true,
+  notes: "Searches documents you keep in Ragie; the platform stores none of them.",
+  fields: [
+    { name: "rerank", label: "Re-rank in Ragie", type: "boolean", required: false, help: null, placeholder: null, default: false, options: null, condition: null, positional: false, accept: null, catalog_kind: null, nested_model: null },
+    { name: "recency_bias", label: "Prefer recent documents", type: "boolean", required: false, help: null, placeholder: null, default: false, options: null, condition: null, positional: false, accept: null, catalog_kind: null, nested_model: null },
+  ],
+  secret_fields: [
+    { name: "api_key", label: "Ragie API key", type: "secret", required: true, help: null, placeholder: null, default: null, options: null, condition: null, positional: false, accept: null, catalog_kind: null, nested_model: null },
+  ],
+  models: [],
+  default_model: null,
+  capabilities: { video_input: false, tool_calling: false, silent_tool_reply: false, voices: [] },
+} as unknown as ProviderSpec;
+
+const PROVIDERS: ProvidersResponse = {
+  providers: [QDRANT_PROVIDER, VOYAGE_PROVIDER, RAGIE_PROVIDER],
+} as unknown as ProvidersResponse;
 
 const QDRANT_CONNECTION: KnowledgeConnectionOut = {
   id: "kc1",
@@ -144,6 +169,12 @@ function stubApi(
   role: string = "admin",
 ) {
   const calls: Call[] = [];
+  // A real api's `GET /credentials` reflects what was just created — the
+  // Select in `CredentialPicker` needs the saved credential to actually be
+  // in the (refetched) list, or Radix's own hidden native-select sync resets
+  // a value with no matching option back to "" (a test-mock realism issue,
+  // not a product one: a real server always answers its own just-written row).
+  const createdCredentials: Array<{ id: string; provider_id: string; label: string; fingerprint: string; created_at: string; updated_at: string }> = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -168,7 +199,22 @@ function stubApi(
       if (url.endsWith("/knowledge-connections") && method === "POST") {
         return jsonResponse({ ...QDRANT_CONNECTION, id: "kc-new", name: (call.body as { name: string }).name });
       }
-      if (url.includes("/credentials")) return jsonResponse({ items: [] });
+      if (url.endsWith("/credentials") && method === "POST") {
+        const body = call.body as { provider_id: string; label: string };
+        const created = {
+          id: `cred-${createdCredentials.length + 1}`,
+          provider_id: body.provider_id,
+          label: body.label,
+          fingerprint: "…rag1",
+          created_at: "2026-09-27T00:00:00Z",
+          updated_at: "2026-09-27T00:00:00Z",
+        };
+        createdCredentials.push(created);
+        return jsonResponse(created, 201);
+      }
+      if (url.endsWith("/credentials") && method === "GET") {
+        return jsonResponse({ items: createdCredentials, total: createdCredentials.length });
+      }
       return jsonResponse({});
     }),
   );
@@ -243,6 +289,60 @@ describe("KnowledgeConnectionsTab", () => {
     const put = calls.find((c) => c.method === "PUT")!;
     expect(put.url).toContain("/knowledge-connections/kc1");
     expect(put.body).toEqual({ name: "Prod Qdrant (renamed)" });
+  });
+
+  it("offers Ragie grouped under 'Managed search', with its rerank/recency_bias fields and a required key (ask #234)", async () => {
+    renderTab([]);
+    await screen.findByText("No knowledge connections yet");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Managed search")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("radio", { name: /^Ragie/ }));
+
+    expect(await within(dialog).findByLabelText("Re-rank in Ragie")).toBeTruthy();
+    expect(within(dialog).getByLabelText("Prefer recent documents")).toBeTruthy();
+    // Ragie needs a key (`KEY_REQUIRED` in `knowledge_connections/settings.py`), unlike Qdrant/Weaviate.
+    expect(await within(dialog).findByText(/No Ragie keys yet/)).toBeTruthy();
+
+    // Submitting without a key is refused inline, before any request.
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Ragie prod" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add connection" }));
+    expect(await within(dialog).findByText("Choose or add a key.")).toBeTruthy();
+  });
+
+  it("creates a Ragie connection, picking an existing key and posting its rerank/recency_bias settings", async () => {
+    // An existing Ragie credential, so the picker's Select has something to choose
+    // (the inline "Add key" flow itself is `console-credential-picker.test.tsx`'s).
+    const calls = renderTab([], (call) =>
+      call.url.endsWith("/credentials") && call.method === "GET"
+        ? { body: { items: [{ id: "cred-ragie", provider_id: "ragie", label: "Ragie prod key", fingerprint: "…rag1", created_at: "2026-09-27T00:00:00Z", updated_at: "2026-09-27T00:00:00Z" }], total: 1 } }
+        : undefined,
+    );
+    await screen.findByText("No knowledge connections yet");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("radio", { name: /^Ragie/ }));
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Ragie prod" } });
+    fireEvent.click(await within(dialog).findByLabelText("Re-rank in Ragie"));
+
+    // Pick the existing key from the Select (the same open-then-click-the-item
+    // pattern `console-knowledge-tab.test.tsx` uses for the re-rank picker).
+    fireEvent.click(within(dialog).getByLabelText("Key"));
+    const listbox = await screen.findByRole("listbox");
+    fireEvent.click(within(listbox).getByText(/Ragie prod key/));
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add connection" }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/knowledge-connections"))).toBe(true));
+    const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/knowledge-connections"))!;
+    expect(post.body).toMatchObject({
+      name: "Ragie prod",
+      kind: "ragie",
+      settings: { rerank: true, recency_bias: false },
+      credential_id: "cred-ragie",
+    });
   });
 
   it("Test connection renders the fixture's collections and a dimension mismatch message", async () => {

@@ -7969,7 +7969,7 @@
         "readOnlyHint": true
       },
       "data": "CallOut",
-      "description": "One phone call.",
+      "description": "One phone call, with its answering-machine result and how the agent transferred it.",
       "gate": null,
       "inputSchema": {
         "properties": {

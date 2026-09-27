@@ -207,6 +207,28 @@ export const CAPTIONS_POSITIONS = [
   { value: "bottom", label: "Over the video" },
 ] as const;
 
+/**
+ * A short, curated language list (V5-35): the same set
+ * `agents/tabs/instructions-tab.tsx`'s `voice.language` picker offers, so the
+ * console never shows two different language lists. Used by the Languages
+ * card (`voice.languages`) and the `captions` block's `target_language`
+ * field editor (`block-config-form.tsx`) — both take an IANA-ish two-letter
+ * code (`lkap_contracts.providers.LANGUAGE_CODE_PATTERN`).
+ */
+export const LANGUAGE_OPTIONS = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "hi", label: "Hindi" },
+  { value: "ja", label: "Japanese" },
+] as const;
+
+/** A language code's label, or the code itself for one outside the curated list. */
+export function languageLabel(code: string): string {
+  return LANGUAGE_OPTIONS.find((option) => option.value === code)?.label ?? code;
+}
+
 /** `upload.accept` values (`lkap_contracts.blocks.UPLOAD_MIME_TYPES` plus `image/*`); never HTML or SVG. */
 export const UPLOAD_ACCEPT_OPTIONS = [
   { value: "image/*", label: "Any photo" },

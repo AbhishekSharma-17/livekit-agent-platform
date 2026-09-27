@@ -33,8 +33,13 @@ const conversationSectionExtension: EditorExtension = {
         "voice.thinking_sound",
         "voice.ambient_sound",
         "tools.execution_default",
+        // V5-35's Languages card, mounted in this same section.
+        "voice.languages",
+        "voice.auto_detect",
+        "voice.voices_by_language",
       ],
-      issueKeywords: /\b(turn.?tak|turn detector|endpointing|preemptive|conversation preset|ambient sound|background sound)/i,
+      issueKeywords:
+        /\b(turn.?tak|turn detector|endpointing|preemptive|conversation preset|ambient sound|background sound|languages?|auto.?detect|voice per language)/i,
       issueKeywordPriority: 25,
     },
   ],

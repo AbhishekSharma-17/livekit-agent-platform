@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { BlockSpecForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import type { TableColumn } from "@/contracts/lkap-contracts";
-import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
+import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, LANGUAGE_OPTIONS, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
 
 import { setBlockConfig, updateBlock } from "./composer-model";
 
@@ -332,6 +332,26 @@ function ConfigFieldControl({
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
         />
+      );
+    case "language":
+      // Translated captions are not available yet (ask #203(1)): the picker
+      // is shown, disabled, at "None" rather than hidden — a builder can see
+      // the setting exists and why it does nothing yet, instead of wondering
+      // where it went.
+      return (
+        <Select value="none" disabled>
+          <SelectTrigger id={id} className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            {LANGUAGE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     case "columns":
     case "multiselect":

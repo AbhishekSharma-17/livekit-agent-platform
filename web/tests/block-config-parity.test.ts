@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { BLOCK_CATALOG, BLOCK_TYPES, VIDEO_SOURCES } from "@/panels/blocks/catalog";
+import { BLOCK_CATALOG, BLOCK_TYPES, LANGUAGE_OPTIONS, VIDEO_SOURCES } from "@/panels/blocks/catalog";
 
 /**
  * R-V2-17: `lkap_contracts.blocks` is the per-block config schema, exported as
@@ -80,5 +80,14 @@ describe("block config parity (R-V2-17)", () => {
   it("the consent text's maxLength matches the schema's (V5-17: block-config-form.tsx's 'text' field kind)", () => {
     const field = BLOCK_CATALOG.consent.configFields.find((f) => f.key === "text");
     expect(field && "maxLength" in field ? field.maxLength : undefined).toBe(load("consent").properties?.text?.maxLength);
+  });
+
+  // V5-35: block-config-form.tsx's 'language' field kind (the captions block's target_language).
+  it("the curated LANGUAGE_OPTIONS codes all satisfy captions.target_language's pattern", () => {
+    const schema = load("captions").properties?.target_language as { anyOf?: { pattern?: string }[] } | undefined;
+    const pattern = schema?.anyOf?.find((entry) => entry.pattern)?.pattern;
+    expect(pattern).toBeTruthy();
+    const re = new RegExp(pattern as string);
+    for (const option of LANGUAGE_OPTIONS) expect(re.test(option.value), option.value).toBe(true);
   });
 });

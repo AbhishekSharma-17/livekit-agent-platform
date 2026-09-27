@@ -23,7 +23,8 @@
         "pinecone",
         "weaviate",
         "cohere_rerank",
-        "voyage_rerank"
+        "voyage_rerank",
+        "ragie"
       ],
       "title": "Kind",
       "type": "string"

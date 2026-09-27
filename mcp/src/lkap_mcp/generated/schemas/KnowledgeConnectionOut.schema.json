@@ -27,6 +27,12 @@
           "title": "Hybrid",
           "type": "boolean"
         },
+        "managed_search": {
+          "default": false,
+          "description": "A managed search service (V5-45): it holds and ranks its own documents; knowledge bases of kind `external` are searched there.",
+          "title": "Managed Search",
+          "type": "boolean"
+        },
         "namespaces": {
           "default": false,
           "description": "Each knowledge base is its own namespace or tenant.",
@@ -109,7 +115,8 @@
         "pinecone",
         "weaviate",
         "cohere_rerank",
-        "voyage_rerank"
+        "voyage_rerank",
+        "ragie"
       ],
       "title": "Kind",
       "type": "string"

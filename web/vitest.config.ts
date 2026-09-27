@@ -29,6 +29,8 @@ export default defineConfig({
     // a generous ceiling keeps the gate honest without masking hangs.
     testTimeout: 20_000,
     environment: "jsdom",
+    // Works around nwsapi's `:fullscreen` / `:modal` self-recursion (see the file).
+    setupFiles: ["./tests/setup/jsdom-top-layer.ts"],
     passWithNoTests: true,
     globals: true,
     include: [

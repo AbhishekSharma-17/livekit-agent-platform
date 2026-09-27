@@ -32,6 +32,13 @@ V5-05 (the eval harness): ``POST .../evaluate`` runs the evaluation set as a
 ``kb_evaluate`` job (:mod:`lkap_api.kb.evals`) and returns its id;
 ``GET .../evaluate/{job_id}`` and ``GET .../evaluate/latest`` read the run's
 status and result (recall@k, MRR, every question's outcome) back.
+
+V5-45 (managed search): ``POST /v1/knowledge-bases`` with ``kind="external"``,
+a Ragie ``connection_id`` and ``external_ref`` (the partition) creates a
+knowledge base whose documents live in Ragie. It records no embedder, and
+uploads, url imports and re-indexes to it are 409 (add documents in Ragie).
+``GET .../source`` describes it (the partition's document count). Deleting it
+removes the row only; the documents in Ragie stay.
 """
 
 from __future__ import annotations
@@ -58,6 +65,7 @@ from lkap_contracts.api_models import (
     KbReindexOut,
     KbReindexSkipped,
     KbSearchRequest,
+    KbSourceOut,
 )
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
@@ -94,6 +102,8 @@ from lkap_api.kb.jobs import enqueue_kb_delete
 from lkap_api.kb.rerank import Reranker, get_local_reranker
 from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService
 from lkap_api.kb.store import VectorStore, resolve_store
+from lkap_api.knowledge_connections.http import ConnectorError
+from lkap_api.knowledge_connections.runtime import ConnectionRuntime
 from lkap_api.knowledge_connections.service import bind_for_kb
 from lkap_api.logging import get_logger
 from lkap_api.session_assets.service import load_session_any
@@ -392,6 +402,15 @@ def import_filename(url: str, filename: str | None, mime: str) -> str:
     return name
 
 
+def _refuse_external(kb: KnowledgeBase, what: str) -> None:
+    """409 for a managed-search knowledge base (V5-45): its documents live in the service."""
+    if kb.kind == "external":
+        raise ConflictError(
+            f"'{kb.name}' is searched in a managed search service (Ragie); {what} there, not here",
+            details={"kb_id": kb.id, "kind": "external"},
+        )
+
+
 async def _check_quota(db: AsyncSession, kb: KnowledgeBase, size: int) -> None:
     """Refuse a document past the knowledge base's count or the workspace's byte quota (S5-30).
 
@@ -493,7 +512,9 @@ async def _store_and_enqueue(
         "configured embedder's model and vector width are recorded on it (`embedder_model`, "
         "`dimension`), and a later query from a different embedder is refused with 422 "
         "`kb_embedder_mismatch`. With `connection_id` (a vector-store knowledge connection of the "
-        "workspace) the vectors live in that service, fixed for the knowledge base's life."
+        "workspace) the vectors live in that service, fixed for the knowledge base's life. With "
+        "`kind` `external`, `connection_id` names a managed search service (Ragie) and `external_ref` "
+        "the partition it reads: nothing is uploaded here and no embedder is recorded."
     ),
 )
 async def create_kb(
@@ -510,12 +531,24 @@ async def create_kb(
         chunking=ChunkingConfig().to_json(),
     )
     # --- V5-20: store through a knowledge connection (validated: same workspace, a vector store).
+    # V5-45: or, for `kind="external"`, read a managed search service's partition.
     if payload.connection_id is not None:
-        binding = await bind_for_kb(db, ctx.workspace_id, payload.connection_id, row.id)
+        binding = await bind_for_kb(
+            db,
+            ctx.workspace_id,
+            payload.connection_id,
+            row.id,
+            kb_kind=payload.kind,
+            requested_ref=payload.external_ref,
+        )
         row.connection_id = binding.connection_id
         row.external_ref = binding.external_ref
     # --- end V5-20
-    record_kb_embedder(row, embedder)
+    if payload.kind == "external":
+        # No embedder: the service ranks its own documents (a NULL width/model is never a mismatch).
+        row.kind = "external"
+    else:
+        record_kb_embedder(row, embedder)
     db.add(row)
     await db.flush()
     log.info("kb_created", kb_id=row.id, name=row.name, embedder_model=row.embedder_model)
@@ -573,6 +606,12 @@ async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) 
         )
     if payload.connection_id is not None and payload.connection_id != row.connection_id:  # V5-20
         raise ConflictError("where a knowledge base is stored is fixed when it is created")
+    # V5-45: the kind and the partition are fixed too; a PUT that leaves them out keeps them.
+    sent = payload.model_fields_set
+    if ("kind" in sent and payload.kind != row.kind) or (
+        "external_ref" in sent and row.kind == "external" and payload.external_ref != row.external_ref
+    ):
+        raise ConflictError("a knowledge base's kind and partition are fixed when it is created")
     row.name = payload.name
     row.description = payload.description
     row.embedder_id = payload.embedder_id
@@ -595,13 +634,62 @@ async def delete_kb(kb_id: str, db: DbDep, jobs: JobsDep, ctx: AdminCtxDep) -> R
     """Delete a knowledge base's rows, then enqueue its vector cleanup (D-V5-12: single writer)."""
     row = await _load_kb(db, ctx, kb_id)
     connection_id = row.connection_id  # V5-20: the job cleans the connection's store after the row is gone
+    external = row.kind == "external"
     await db.delete(row)
     # Durable before the job runs on its own connection (and before the
     # response): a failed cleanup job leaves only invisible vectors behind.
     await db.commit()
+    if external:  # V5-45: no vectors here; the documents in the managed search service stay
+        log.info("kb_deleted", kb_id=kb_id, kind="external")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     await enqueue_kb_delete(jobs, kb_id, connection_id=connection_id, workspace_id=ctx.workspace_id)
     log.info("kb_deleted", kb_id=kb_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@admin_router.get(
+    "/{kb_id}/source",
+    response_model=KbSourceOut,
+    summary="Describe a managed search knowledge base",
+    description=(
+        "For a knowledge base of kind `external` (V5-45): asks its managed search service (Ragie) how "
+        "many documents the partition holds. A service failure is `ok=false` with a plain message, "
+        "never an error status. 409 for a knowledge base whose documents are uploaded here."
+    ),
+)
+async def describe_source(
+    kb_id: str, db: DbDep, settings: SettingsDep, vault: VaultDep, ctx: AdminCtxDep
+) -> KbSourceOut:
+    """Describe an external knowledge base's source (document count; sync time when the vendor says)."""
+    kb = await _load_kb(db, ctx, kb_id)
+    if kb.kind != "external":
+        raise ConflictError(
+            f"'{kb.name}' holds its own documents; only a managed search knowledge base has a source",
+            details={"kb_id": kb.id, "kind": kb.kind},
+        )
+    checked_at = utcnow()
+    source_kind = "ragie"
+    try:
+        retriever = await ConnectionRuntime(settings, db, vault).retriever_for_kb(kb.id)
+        info = await retriever.describe()
+    except ConnectorError as exc:
+        log.info("kb_source_unavailable", kb_id=kb.id, reason=exc.message)
+        return KbSourceOut(
+            kind=source_kind,
+            external_ref=kb.external_ref,
+            ok=False,
+            message=exc.message,
+            checked_at=checked_at,
+        )
+    return KbSourceOut(
+        kind=info.kind,
+        external_ref=kb.external_ref,
+        ok=True,
+        document_count=info.document_count,
+        last_synced_at=info.last_synced_at,
+        sources=list(info.sources),
+        checked_at=checked_at,
+    )
 
 
 # --------------------------------------------------------------------------- documents
@@ -633,8 +721,10 @@ async def upload_document(
         UploadTooLargeError: 413 when the file exceeds `MAX_UPLOAD_BYTES` (F-29).
         UnsupportedMediaTypeError: 415 for an extension outside :data:`UPLOAD_MEDIA_TYPES`.
         KbQuotaExceededError: 409 past the document or byte quota.
+        ConflictError: 409 for a managed-search knowledge base (V5-45).
     """
     kb = await _load_kb(db, ctx, kb_id)
+    _refuse_external(kb, "upload documents")
     content_length = file.size
     if content_length is not None and content_length > MAX_UPLOAD_BYTES:
         raise UploadTooLargeError(
@@ -691,6 +781,7 @@ async def import_document(
         UploadTooLargeError: 413 when the body exceeds `MAX_UPLOAD_BYTES`.
     """
     kb = await _load_kb(db, ctx, kb_id)
+    _refuse_external(kb, "import documents")
     url = str(payload.url)
     net_guard.validate_url(url, import_policy(), field_name="url")
     source = await fetch_import_source(client, url, max_bytes=MAX_UPLOAD_BYTES)
@@ -1003,6 +1094,7 @@ async def reindex_kb(
         RateLimitedError: 429 past :data:`KB_JOBS_PER_MIN` re-index/evaluation starts per workspace.
     """
     kb = await _load_kb(db, ctx, kb_id)
+    _refuse_external(kb, "documents are indexed")
     await _check_no_run_pending(db, kb_id, kind=KB_INGEST, what="a re-index")
     await enforce(
         limiter,

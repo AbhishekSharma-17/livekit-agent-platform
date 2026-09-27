@@ -155,6 +155,7 @@ export interface LkapContracts {
   KbSearchResponse?: KbSearchResponse;
   KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
+  KbSourceOut?: KbSourceOut;
   KnowledgeConnectionCapabilities?: KnowledgeConnectionCapabilities;
   KnowledgeConnectionCreate?: KnowledgeConnectionCreate;
   KnowledgeConnectionOut?: KnowledgeConnectionOut;
@@ -3372,11 +3373,19 @@ export interface KbCitation {
  */
 export interface KbCreate {
   /**
-   * Store the vectors through this knowledge connection (a vector store of the same workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists.
+   * Store the vectors through this knowledge connection (a vector store of the same workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists. For `kind=external`, the managed search service (a Ragie connection) that holds the documents.
    */
   connection_id?: string | null;
   description?: string;
   embedder_id?: string;
+  /**
+   * `kind=external` only: where the documents live in the service (a Ragie partition: lower-case letters, digits, `_` and `-`). Fixed once the knowledge base exists.
+   */
+  external_ref?: string | null;
+  /**
+   * `managed`: the platform ingests uploaded documents. `external` (V5-45): a managed search service holds and searches the documents (`connection_id` and `external_ref` required; no uploads). Fixed once the knowledge base exists; a PUT that leaves it out keeps it.
+   */
+  kind?: "managed" | "external";
   name: string;
 }
 /**
@@ -3886,7 +3895,7 @@ export interface KbHit {
    */
   lexical_rank?: number | null;
   /**
-   * The chunk's locators: `filename`, and for chunks ingested since V5-01 `heading_path`, `page`, `char_start`, `char_end`.
+   * The chunk's locators: `filename`, and for chunks ingested since V5-01 `heading_path`, `page`, `char_start`, `char_end`. A managed-search hit (V5-45) carries `document_name`, `source` (`ragie`), `chunk_index` and, when the service knows it, `url`.
    */
   meta?: {
     [k: string]: unknown;
@@ -3897,9 +3906,9 @@ export interface KbHit {
   rerank_score?: number | null;
   score: number;
   /**
-   * Which stage `score` is: `vector`, `fused` or `rerank`.
+   * Which stage `score` is: `vector`, `fused` or `rerank`; `external` is a managed search service's own relevance, relative to that one search and not comparable with the others.
    */
-  score_source?: "vector" | "fused" | "rerank";
+  score_source?: "vector" | "fused" | "rerank" | "external";
   text: string;
   /**
    * Cosine similarity to the query; null when not in the vector list.
@@ -3956,12 +3965,12 @@ export interface KbOut {
    */
   embedder_model?: string | null;
   /**
-   * Where the vectors live in the connection (collection, index and namespace, or tenant).
+   * Where the vectors live in the connection (collection, index and namespace, or tenant); for `kind=external`, where the documents live in the service (the Ragie partition).
    */
   external_ref?: string | null;
   id: string;
   /**
-   * `managed`: the platform ingests it.
+   * `managed`: the platform ingests it. `external`: a managed search service holds and searches it (no uploads).
    */
   kind?: "managed" | "external";
   name: string;
@@ -4140,6 +4149,39 @@ export interface KbSeed {
   kb_name: string;
 }
 /**
+ * ``GET /v1/knowledge-bases/{id}/source`` (V5-45): what the managed search service reports.
+ *
+ * A vendor failure is ``ok=false`` with a plain ``message``, never an error status.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KbSourceOut".
+ */
+export interface KbSourceOut {
+  checked_at: string;
+  /**
+   * Documents the service holds; null when unknown.
+   */
+  document_count?: number | null;
+  /**
+   * Where in the service (the partition).
+   */
+  external_ref?: string | null;
+  /**
+   * The service kind (`ragie`).
+   */
+  kind: string;
+  /**
+   * When the service last synced its sources; null when it does not say.
+   */
+  last_synced_at?: string | null;
+  message?: string | null;
+  ok: boolean;
+  /**
+   * Source names (partitions, sites, drives).
+   */
+  sources?: string[];
+}
+/**
  * What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -4155,6 +4197,10 @@ export interface KnowledgeConnectionCapabilities {
    * Keyword and vector matches are fused inside the store (else the platform fuses them).
    */
   hybrid?: boolean;
+  /**
+   * A managed search service (V5-45): it holds and ranks its own documents; knowledge bases of kind `external` are searched there.
+   */
+  managed_search?: boolean;
   /**
    * Each knowledge base is its own namespace or tenant.
    */
@@ -4181,7 +4227,7 @@ export interface KnowledgeConnectionCapabilities {
  */
 export interface KnowledgeConnectionCreate {
   credential_id?: string | null;
-  kind: "qdrant" | "pinecone" | "weaviate" | "cohere_rerank" | "voyage_rerank";
+  kind: "qdrant" | "pinecone" | "weaviate" | "cohere_rerank" | "voyage_rerank" | "ragie";
   name: string;
   settings?: {
     [k: string]: unknown;
@@ -4202,7 +4248,7 @@ export interface KnowledgeConnectionOut {
   credential_fingerprint?: string | null;
   credential_id?: string | null;
   id: string;
-  kind: "qdrant" | "pinecone" | "weaviate" | "cohere_rerank" | "voyage_rerank";
+  kind: "qdrant" | "pinecone" | "weaviate" | "cohere_rerank" | "voyage_rerank" | "ragie";
   /**
    * Knowledge bases stored through this connection.
    */
@@ -4241,6 +4287,9 @@ export interface KnowledgeConnectionPage {
 export interface KnowledgeConnectionTestOut {
   capabilities: KnowledgeConnectionCapabilities;
   checked_at: string;
+  /**
+   * The collections or indexes the key can see; for a managed search service, its partitions (the first 100).
+   */
   collections?: string[];
   /**
    * The embedding width new knowledge bases are built with.

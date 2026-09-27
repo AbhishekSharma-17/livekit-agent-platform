@@ -14,7 +14,7 @@
         }
       ],
       "default": null,
-      "description": "Store the vectors through this knowledge connection (a vector store of the same workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists.",
+      "description": "Store the vectors through this knowledge connection (a vector store of the same workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists. For `kind=external`, the managed search service (a Ragie connection) that holds the documents.",
       "title": "Connection Id"
     },
     "description": {
@@ -26,6 +26,30 @@
     "embedder_id": {
       "default": "fastembed-embedding",
       "title": "Embedder Id",
+      "type": "string"
+    },
+    "external_ref": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`kind=external` only: where the documents live in the service (a Ragie partition: lower-case letters, digits, `_` and `-`). Fixed once the knowledge base exists.",
+      "title": "External Ref"
+    },
+    "kind": {
+      "default": "managed",
+      "description": "`managed`: the platform ingests uploaded documents. `external` (V5-45): a managed search service holds and searches the documents (`connection_id` and `external_ref` required; no uploads). Fixed once the knowledge base exists; a PUT that leaves it out keeps it.",
+      "enum": [
+        "managed",
+        "external"
+      ],
+      "title": "Kind",
       "type": "string"
     },
     "name": {

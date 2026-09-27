@@ -124,6 +124,44 @@ the `search_knowledge` tool uses it, never automatic knowledge, so
 reports what it used and its price (`rerank_usage`; "no price" when the
 price is unknown).
 
+## Managed search (Ragie)
+
+A **managed search** knowledge base keeps its documents in a search service
+that ingests and ranks them itself; the platform stores none of them. Ragie
+is the first such service. Each knowledge base reads one Ragie **partition**.
+
+1. Store the Ragie key (`provider_key_create(provider_id="ragie", ...)`).
+2. `kb_connection_create(name, kind="ragie", settings={}, credential_id=...)`.
+   Its settings are Ragie's search options: `rerank` (Ragie keeps only the
+   passages it judges relevant; more accurate, slower) and `recency_bias`
+   (newer documents rank higher). Both are off by default.
+3. `kb_connection_test(connection_id)` checks the key and lists the
+   partitions it can see (the first 100) in `collections`.
+4. Create the knowledge base with `kind: "external"`, the connection's id and
+   the partition as `external_ref` (lower-case letters, digits, `_` and `-`):
+   the console's **New knowledge base** dialog does this under "Managed
+   search (Ragie)". The kind and partition are fixed once it exists; it
+   records no embedder.
+
+Documents are added in Ragie, not here: an upload, url import or re-index to
+a managed search knowledge base is refused (409). The knowledge base's
+source (a `KbSourceOut`) reports how many documents the partition holds.
+Deleting the knowledge base leaves the documents in Ragie.
+
+Searching: attach it to an agent like any knowledge base. Ragie is asked for
+the top `k` passages at the same time as the platform's own knowledge bases
+are searched. Its scores are relative to that one search, so results are
+merged **by rank**: the best passage of each knowledge base first, then the
+second of each, and so on. A Ragie hit has `score_source: "external"`,
+`meta.document_name`, `meta.source: "ragie"` and, when Ragie knows the
+document's address, `meta.url`. `min_score`, `mode` and the platform's
+re-rankers apply to the platform's own knowledge bases only. Automatic
+knowledge skips Ragie knowledge bases — they answer through the agent's search
+tool only — and every search counts against the Ragie plan; a slow or failing
+Ragie is skipped with a `kb_timeout` or `kb_error` warning and the other
+knowledge bases still answer. Passages reach the model inside the same
+untrusted-content fence as every other knowledge result.
+
 ## Related tools
 
 `kb_list`, `kb_get`, `kb_create`, `kb_add_document`, `kb_search`,
@@ -136,4 +174,4 @@ price is unknown).
 `KbCreate`, `KbOut`, `KbDocumentOut`, `KbImportIn`, `KbSearchRequest`,
 `KbHit`, `KbSearchResponse`, `KbSeed`, `KbEvalIn`, `KbEvalSetOut`,
 `KnowledgeConnectionCreate`, `KnowledgeConnectionOut`,
-`KnowledgeConnectionTestOut`.
+`KnowledgeConnectionTestOut`, `KbSourceOut`.

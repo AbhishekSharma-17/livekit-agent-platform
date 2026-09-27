@@ -45,6 +45,11 @@ import type {
   KbPage,
   KbSearchRequest,
   KbSearchResponse,
+  KnowledgeConnectionCreate,
+  KnowledgeConnectionOut,
+  KnowledgeConnectionPage,
+  KnowledgeConnectionTestOut,
+  KnowledgeConnectionUpdate,
   McpOauthStartIn,
   McpOauthStartOut,
   McpOauthStatusOut,
@@ -97,6 +102,8 @@ const keys = {
   kbEvals: (id: string) => ["knowledge-bases", id, "evals"] as const,
   kbEvalRun: (kbId: string, jobId: string) => ["knowledge-bases", kbId, "evaluate", jobId] as const,
   kbEvalLatest: (id: string) => ["knowledge-bases", id, "evaluate", "latest"] as const,
+  /** V5-24: BYO Qdrant/Pinecone/Weaviate + hosted re-rankers, `/v1/knowledge-connections`. */
+  knowledgeConnections: ["knowledge-connections"] as const,
   sessions: (agentId?: string, status?: string) => ["sessions", agentId ?? "", status ?? ""] as const,
   session: (id: string) => ["sessions", id] as const,
   sessionEvents: (id: string) => ["sessions", id, "events"] as const,
@@ -480,6 +487,59 @@ export function useRevokeMcpOauth() {
   });
 }
 
+// ---- knowledge connections (V5-24: BYO Qdrant/Pinecone/Weaviate, hosted re-rankers) ----
+
+export function useKnowledgeConnections() {
+  return useQuery({
+    queryKey: keys.knowledgeConnections,
+    queryFn: () => api.get<KnowledgeConnectionPage>("knowledge-connections"),
+  });
+}
+
+export function useCreateKnowledgeConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: KnowledgeConnectionCreate) =>
+      api.post<KnowledgeConnectionOut>("knowledge-connections", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
+    },
+  });
+}
+
+/** `PUT /v1/knowledge-connections/{id}` — `settings` replaces the whole bag; send every field. */
+export function useUpdateKnowledgeConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: KnowledgeConnectionUpdate }) =>
+      api.put<KnowledgeConnectionOut>(`knowledge-connections/${id}`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
+    },
+  });
+}
+
+export function useDeleteKnowledgeConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`knowledge-connections/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
+    },
+  });
+}
+
+/** `POST /v1/knowledge-connections/{id}/test` — the api records the outcome on the row too. */
+export function useTestKnowledgeConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<KnowledgeConnectionTestOut>(`knowledge-connections/${id}/test`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
+    },
+  });
+}
+
 // ---- knowledge bases ----
 
 export function useKbs() {
@@ -503,6 +563,8 @@ export function useCreateKb() {
     mutationFn: (body: KbCreate) => api.post<KbOut>("knowledge-bases", body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.kbs });
+      // `connection_id` on the new row changes the connection's `knowledge_base_count`.
+      void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
     },
   });
 }
@@ -513,6 +575,7 @@ export function useDeleteKb() {
     mutationFn: (id: string) => api.delete<void>(`knowledge-bases/${id}`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.kbs });
+      void queryClient.invalidateQueries({ queryKey: keys.knowledgeConnections });
     },
   });
 }

@@ -14,24 +14,36 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { useKbs } from "@/components/console/lib/api-hooks";
+import { useKbs, useKnowledgeConnections } from "@/components/console/lib/api-hooks";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
+import { RERANKER_CONNECTION_KINDS } from "@/components/console/settings/knowledge-connection-dialog";
 import { DetailsDisclosure } from "@/components/console/sessions/details-disclosure";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { pluralize } from "@/lib/format";
 
-/** `KnowledgeConfig.rerank` is `Literal["none","local"] | str`; everything else (a `connection:<id>` reranker, V5-24) reads as "local" here until that package adds its own picker. */
-function rerankOnServer(value: string | undefined): boolean {
-  return value === "local" || (value !== undefined && value !== "none");
+/** `KnowledgeConfig.rerank = "connection:<id>"` (V5-20/V5-24): the search tool's hosted re-ranker. Mirrors `lkap_contracts.api_models.connection_rerank_id`. */
+const CONNECTION_RERANK_PATTERN = /^connection:([A-Za-z0-9_-]{1,64})$/;
+
+function connectionRerankId(value: string | undefined): string | null {
+  return value ? (CONNECTION_RERANK_PATTERN.exec(value)?.[1] ?? null) : null;
+}
+
+/** The value the `Select` should show: `"none"`, `"local"`, a well-formed `connection:<id>`, or a legacy/unknown string folded into `"local"` (its prior behaviour, before V5-24 added a picker for hosted rerankers). */
+function normalizedRerank(value: string | undefined): string {
+  if (value === undefined || value === "none") return "none";
+  if (value === "local" || connectionRerankId(value) !== null) return value;
+  return "local";
 }
 
 /**
@@ -52,8 +64,22 @@ export function KnowledgeTab() {
   const minScore = watch("config.knowledge.min_score");
   const rerank = watch("config.knowledge.rerank");
   const prefetch = watch("config.knowledge.prefetch");
+  const autoInject = watch("config.knowledge.auto_inject");
   const kbsQuery = useKbs();
+  const connectionsQuery = useKnowledgeConnections();
   const [query, setQuery] = React.useState("");
+
+  // A hosted re-ranker is the search tool's only — the api errors when
+  // automatic knowledge is also on with knowledge bases attached
+  // (`config_service.knowledge_retrieval_issues`, docs/v5/_asks.md #187).
+  const rerankerConnections = (connectionsQuery.data?.items ?? []).filter((c) =>
+    RERANKER_CONNECTION_KINDS.includes(c.kind),
+  );
+  const hostedUnavailable = Boolean(autoInject) && (kbIds ?? []).length > 0;
+  const normalizedRerankValue = normalizedRerank(rerank);
+  const selectedConnectionId = connectionRerankId(normalizedRerankValue);
+  const selectedConnectionMissing =
+    selectedConnectionId !== null && !rerankerConnections.some((c) => c.id === selectedConnectionId);
 
   function toggle(id: string, attached: boolean) {
     const current = kbIds ?? [];
@@ -299,13 +325,15 @@ export function KnowledgeTab() {
             label="Re-rank results"
             htmlFor="knowledge-rerank"
             hint={
-              prefetch ?? true
-                ? "Double-checks the closest matches more carefully before answering."
-                : "Double-checks the closest matches more carefully — adds a short delay to every reply unless Prepare answers early is on."
+              selectedConnectionId
+                ? "Calls a hosted service over the network to rescore results — usually adds 100–300 ms to the search tool's reply."
+                : prefetch ?? true
+                  ? "Double-checks the closest matches more carefully before answering."
+                  : "Double-checks the closest matches more carefully — adds a short delay to every reply unless Prepare answers early is on."
             }
           >
             <Select
-              value={rerankOnServer(rerank) ? "local" : "none"}
+              value={normalizedRerankValue}
               onValueChange={(value) => setValue("config.knowledge.rerank", value, { shouldDirty: true })}
             >
               <SelectTrigger id="knowledge-rerank" className="w-full sm:w-64" data-issue-path="knowledge.rerank">
@@ -314,9 +342,34 @@ export function KnowledgeTab() {
               <SelectContent>
                 <SelectItem value="none">Off</SelectItem>
                 <SelectItem value="local">On this server</SelectItem>
+                {rerankerConnections.length > 0 ? (
+                  <SelectGroup>
+                    <SelectLabel>Hosted re-rankers</SelectLabel>
+                    {rerankerConnections.map((connection) => (
+                      <SelectItem
+                        key={connection.id}
+                        value={`connection:${connection.id}`}
+                        disabled={hostedUnavailable}
+                      >
+                        {connection.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ) : null}
+                {selectedConnectionMissing ? (
+                  <SelectItem value={normalizedRerankValue} disabled>
+                    Connection no longer available
+                  </SelectItem>
+                ) : null}
               </SelectContent>
             </Select>
           </Field>
+          {hostedUnavailable && (selectedConnectionId || rerankerConnections.length > 0) ? (
+            <p className="text-[0.8125rem] text-muted-foreground">
+              A hosted re-ranker works only with the search tool — turn off &quot;Add the best matches to every
+              turn&quot; above to use one.
+            </p>
+          ) : null}
         </SectionRow>
 
         <SectionRow className="flex flex-col gap-1.5">

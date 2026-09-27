@@ -5,8 +5,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { KbDocuments } from "@/components/console/knowledge/kb-documents";
+import { KbDetail } from "@/components/console/knowledge/kb-detail";
 import { KB_UPLOAD_MAX_BYTES } from "@/components/console/lib/upload";
-import type { KbDocumentOut, KbDocumentPage } from "@/contracts/lkap-contracts";
+import type { KbDocumentOut, KbDocumentPage, KbOut, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
 
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -160,5 +161,72 @@ describe("KbDocuments — 25 MB upload cap (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md)
       ([url, init]) => (init?.method ?? "GET") === "POST" && String(url).includes("/documents"),
     );
     expect(uploadCalls).toHaveLength(0);
+  });
+});
+
+describe("KbDetail — 'Stored in' (V5-24: read-only, fixed once the knowledge base exists)", () => {
+  function kb(overrides: Partial<KbOut>): KbOut {
+    return {
+      id: "kb-1",
+      name: "Policy handbook",
+      description: "",
+      embedder_id: "fastembed-embedding",
+      chunk_count: 0,
+      document_count: 0,
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  function mockKbDetailFetch({ theKb, connections = [] }: { theKb: KbOut; connections?: KnowledgeConnectionOut[] }) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input).split("?")[0];
+        if (url.endsWith("/knowledge-bases/kb-1")) return jsonResponse(theKb);
+        if (url.endsWith("/knowledge-connections")) return jsonResponse({ items: connections, total: connections.length });
+        if (url.endsWith("/providers")) {
+          return jsonResponse({
+            providers: [
+              { id: "qdrant", kind: "knowledge", label: "Qdrant", vendor: "Qdrant", package: "", python_class: "" },
+            ],
+          });
+        }
+        if (url.endsWith("/documents")) return jsonResponse({ items: [], total: 0 });
+        return jsonResponse({});
+      }),
+    );
+  }
+
+  it("shows 'This platform' when the knowledge base has no connection", async () => {
+    mockKbDetailFetch({ theKb: kb({ connection_id: null }) });
+    renderWithClient(<KbDetail kbId="kb-1" />);
+    expect(await screen.findByText("This platform")).toBeTruthy();
+  });
+
+  it("names the connection and its kind when the knowledge base stores vectors through one", async () => {
+    const connection: KnowledgeConnectionOut = {
+      id: "kc1",
+      name: "Prod Qdrant",
+      kind: "qdrant",
+      provider_id: "qdrant",
+      settings: { url: "https://cluster.example:6333", collection: "lkap_knowledge", native_hybrid: false },
+      credential_id: null,
+      credential_fingerprint: null,
+      status: "ok",
+      last_checked_at: null,
+      last_error: null,
+      capabilities: { hybrid: false, filters: true, stores_text: false, namespaces: true, rerank: false, dimension: 768, version: null },
+      knowledge_base_count: 1,
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+    };
+    mockKbDetailFetch({ theKb: kb({ connection_id: "kc1", external_ref: "lkap_knowledge" }), connections: [connection] });
+    renderWithClient(<KbDetail kbId="kb-1" />);
+    const storedIn = await screen.findByText("Prod Qdrant (Qdrant)");
+    // Fixed once created: it's a plain description-list value, not a button or a link.
+    expect(storedIn.closest("dd")).toBeTruthy();
+    expect(storedIn.querySelector("button, a")).toBeNull();
   });
 });

@@ -113,7 +113,18 @@ describe("block catalog", () => {
     // V5-23: `upload` joins it too (it needs `@livekit/components-react`, like `video`).
     // V5-35: `captions` joins it too, same reason (`useCaptionsStream` needs a room);
     // `transcript` follows for the same reason once its language chip reads the same hook.
-    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["captions", "document", "markdown", "table", "transcript", "upload", "video"]);
+    // V5-44: `activity` joins it too — its "working on" line reads the room's live
+    // `agent_state` participant attribute the same way.
+    expect([...LAZY_BLOCK_TYPES].sort()).toEqual([
+      "activity",
+      "captions",
+      "document",
+      "markdown",
+      "table",
+      "transcript",
+      "upload",
+      "video",
+    ]);
   });
 
   it("seeds initial state from config keys that name a state field, like the worker", () => {

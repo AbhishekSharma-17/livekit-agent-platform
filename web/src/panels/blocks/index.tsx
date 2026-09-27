@@ -13,9 +13,10 @@
  * `<Block>` picks the block's state out of `props.state.blocks[spec.id]`
  * (over the type's initial state), resolves the heading, and renders the
  * matching component. The `document`, `table`, `video`, `markdown`,
- * `upload`, `captions` and `transcript` components are split out of the
- * first load (`React.lazy`); pdf.js is a further PDF-only split inside the
- * document block.
+ * `upload`, `captions`, `transcript` and `activity` components are split out
+ * of the first load (`React.lazy`); pdf.js is a further PDF-only split
+ * inside the document block, and `link`'s QR encoder (`qrcode-generator`) is
+ * a further dynamic `import()` inside `link.tsx` itself.
  */
 import type { BlockSpec } from "@/contracts/lkap-contracts";
 import * as React from "react";
@@ -25,7 +26,6 @@ import type { PanelProps } from "@/panels/registry";
 import type { BlockType } from "@/panels/composite/layout";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
-import { ActivityBlock } from "./activity";
 import { blockStateOf, blockTitle } from "./catalog";
 import { ChecklistBlock } from "./checklist";
 import { ChoicesBlock } from "./choices";
@@ -37,9 +37,12 @@ import { BlockFrame } from "./frame";
 import { GalleryBlock } from "./gallery";
 import { HandoffBlock } from "./handoff";
 import { KbCitationsBlock } from "./kb_citations";
+import { LinkBlock } from "./link";
 import { NotesBlock } from "./notes";
+import { SlotsBlock } from "./slots";
 import { StatusBlock } from "./status";
 import { StepsBlock } from "./steps";
+import { CardsBlock } from "./cards";
 import type { BlockRenderProps } from "./types";
 
 export { blockDomId, type BlockRenderProps } from "./types";
@@ -48,6 +51,11 @@ export { blockDomId, type BlockRenderProps } from "./types";
 // so every component is stored under the widest signature.
 type AnyBlockComponent = React.ComponentType<BlockRenderProps<never>>;
 
+// `activity` reads the room's live `agent_state` for its "working on" line
+// (V5-44) through `@livekit/components-react`, the same reason `video`,
+// `upload`, `captions` and `transcript` are split out below — kept out of
+// the first load for a session whose panel has no room-bound need for it.
+const ActivityBlock = lazy(() => import("./activity"));
 const DocumentBlock = lazy(() => import("./document"));
 const TableBlock = lazy(() => import("./table"));
 // The video block needs LiveKit's React bindings; kept out of the first load
@@ -71,15 +79,6 @@ const CaptionsBlock = lazy(() => import("./captions"));
 // fallback there is the traded cost).
 const TranscriptBlock = lazy(() => import("./transcript"));
 
-/** A block type this web build has no renderer for yet (V5-43's three; V5-44 renders them). */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
-
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -102,14 +101,14 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   upload: UploadBlock as AnyBlockComponent,
   captions: CaptionsBlock as AnyBlockComponent,
   handoff: HandoffBlock as AnyBlockComponent,
-  // V5-43 added these types to the contract; their renderers come with V5-44.
-  link: NotRenderedYetBlock,
-  slots: NotRenderedYetBlock,
-  cards: NotRenderedYetBlock,
+  link: LinkBlock as AnyBlockComponent,
+  slots: SlotsBlock as AnyBlockComponent,
+  cards: CardsBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
 export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
+  "activity",
   "document",
   "table",
   "video",

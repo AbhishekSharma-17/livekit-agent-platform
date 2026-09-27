@@ -7,13 +7,13 @@ routes show them.
 
 ## Before
 
-1. Apply asks #174 (`routers/internal.py`: `tool_mocks` in the resolved document) and #175
+1. Apply asks #190 (`routers/internal.py`: `tool_mocks` in the resolved document) and #191
    (`agent/main.py`: pass `resolved.tool_mocks` to the HTTP-tool builder). Without them a case's
    mocked tool calls its real endpoint.
 2. Back up the dev database, `cd api && uv run alembic upgrade head` (`v5_002_session_uploads` →
-   `v5_006_agent_tests`), restart the api, restart the worker (for #175).
+   `v5_006_agent_tests`), restart the api, restart the worker (for #191).
 3. On `Demo — Receptionist`, set `pipeline.workflow_llm` to `openrouter-llm` with the stored
-   OpenRouter key (ask #181). The simulated caller and the judges run in the api; LiveKit Inference
+   OpenRouter key (ask #197). The simulated caller and the judges run in the api; LiveKit Inference
    is not callable from there, and a run without an OpenAI-compatible model ends `error` and says so.
 4. Confirm a ready worker on the agent's connection (`connection_fleet`, or Connections → Workers).
 
@@ -29,7 +29,7 @@ routes show them.
    `GET …/tests/runs/{run_id}`). Record: run status, `pass_ratio`, per case the stop reason, the five
    judge verdicts, the turn count, the persona and judge models.
 3. `agent_tests_result(id_or_slug, include_transcripts=true)`: the booking transcript shows the
-   mocked tool's fixture in the agent's answer and a tool call marked `mocked` (after #174/#175).
+   mocked tool's fixture in the agent's answer and a tool call marked `mocked` (after #190/#191).
    The sessions list shows two text sessions named "Agent test: …".
 4. Turn the gate on (`publish_gate: {"require_tests": true, "min_pass_ratio": 1.0}`) — saving makes
    a new version, so `agent_publish` answers `tests_failing` with `reason: "missing"`. Run the tests

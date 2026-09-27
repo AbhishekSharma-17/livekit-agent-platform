@@ -275,6 +275,6 @@ cd api && uv run alembic upgrade head      # v5_002_session_uploads -> v5_006_ag
 
 Instant on the dev database. **Order:** backup → `upgrade head` → restart the api (mounts
 `/v1/agents/{id}/tests/*`, registers the `agent_tests_run` job). The worker needs a restart only for
-the `tool_mocks` branch, and only once asks #174 (`internal.py`) and #175 (`main.py`) are applied. An api on this code
+the `tool_mocks` branch, and only once asks #190 (`internal.py`) and #191 (`main.py`) are applied. An api on this code
 against an unmigrated database fails on the new routes and on **publishing an agent whose
 `publish_gate.require_tests` is on** (no agent has it on before this package), nowhere else.

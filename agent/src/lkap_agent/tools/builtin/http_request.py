@@ -22,7 +22,7 @@ from lkap_agent.tools._http_safety import (
     HttpToolSecurityError,
     check_url_allowed,
     guarded_transport,
-    truncate,
+    read_bounded,
 )
 from lkap_agent.tools.execution import (
     ResolvedExecution,
@@ -32,6 +32,7 @@ from lkap_agent.tools.execution import (
     run_with_policy,
     tool_flags,
 )
+from lkap_agent.tools.untrusted import fence
 
 HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
 
@@ -88,12 +89,16 @@ def build_http_request_tool(
             raise ToolError(str(exc)) from exc
 
         try:
-            async with httpx.AsyncClient(
-                follow_redirects=False, timeout=DEFAULT_TIMEOUT_S, transport=guarded_transport()
-            ) as client:
-                response = await client.request(method, url, content=body, headers=headers)
+            async with (
+                httpx.AsyncClient(
+                    follow_redirects=False, timeout=DEFAULT_TIMEOUT_S, transport=guarded_transport()
+                ) as client,
+                client.stream(method, url, content=body, headers=headers) as response,
+            ):
+                # V5-27: a bounded read; the worker never holds an unbounded body.
+                raw, cut = await read_bounded(response)
         except httpx.HTTPError as exc:
-            raise ToolError(f"HTTP request failed: {exc}") from exc
+            raise ToolError(f"HTTP request failed ({type(exc).__name__})") from exc
 
         ctx.log.debug(
             "builtin_tool.http_request",
@@ -101,7 +106,10 @@ def build_http_request_tool(
             method=method,
             host=httpx.URL(url).host,
             status=response.status_code,
+            truncated=cut,
         )
-        return truncate(response.text, DEFAULT_MAX_RESULT_CHARS)
+        # V5-27 (S5-6, R-V5-15): a third-party body is data, never instructions.
+        text = raw.decode(response.encoding or "utf-8", errors="replace")
+        return fence(text, source="http:http_request", max_chars=DEFAULT_MAX_RESULT_CHARS)
 
     return attach_policy(http_request, ToolPolicy(resolved=policy))

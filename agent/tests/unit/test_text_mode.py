@@ -17,7 +17,7 @@ import pytest
 from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_ctx import FakeRunContext
 from fakes.fake_llm import FakeLLM
-from fakes.fake_room import FakeRoom
+from fakes.fake_room import FakeRemoteParticipant, FakeRoom
 from fakes.fake_tts import FakeTTS
 from livekit import rtc
 from livekit.agents import llm
@@ -234,6 +234,7 @@ async def test_handle_agent_action_unknown_action_raises() -> None:
 
 def _make_channel(**kwargs: object) -> tuple[UiChannel, FakeRoom]:
     room = FakeRoom()
+    room.add_remote_participant(FakeRemoteParticipant("web-ui"))  # the caller (S5-23)
     channel = UiChannel(room, "sess-1", **kwargs)  # type: ignore[arg-type]
     channel.start()
     return channel, room
@@ -328,7 +329,9 @@ async def test_run_session_text_channel_wires_rewind_end_to_end() -> None:
     session.generate_reply = lambda **kw: reply_calls.append(kw)  # type: ignore[method-assign]
 
     action = AgentAction(action="rewind", payload={"turn_index": 1})
-    response = await ctx.room.local_participant.invoke_rpc(RPC_AGENT_ACTION, action.model_dump_json())
+    response = await ctx.room.local_participant.invoke_rpc(
+        RPC_AGENT_ACTION, action.model_dump_json(), caller_identity="user-guest"
+    )
     result = AgentActionResult.model_validate_json(response)
     assert result.ok is True, result.error
     assert result.payload == {"turn_index": 1}
@@ -347,7 +350,9 @@ async def test_run_session_non_text_channel_does_not_wire_on_text_action() -> No
 
     await run_session(ctx, deps)
     action = AgentAction(action="rewind", payload={"turn_index": 0})
-    response = await ctx.room.local_participant.invoke_rpc(RPC_AGENT_ACTION, action.model_dump_json())
+    response = await ctx.room.local_participant.invoke_rpc(
+        RPC_AGENT_ACTION, action.model_dump_json(), caller_identity="user-guest"
+    )
     result = AgentActionResult.model_validate_json(response)
     assert result.ok is False
     assert result.error is not None

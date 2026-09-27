@@ -42,6 +42,13 @@ def _make_channel(room: FakeRoom | None = None, **kwargs: object) -> tuple[UiCha
     return channel, room
 
 
+def _caller_channel(**kwargs: object) -> tuple[UiChannel, FakeRoom]:
+    """A channel whose caller (`web-ui`, `FakeRoom.invoke_rpc`'s default sender) has joined."""
+    channel, room = _make_channel(**kwargs)
+    room.add_remote_participant(FakeRemoteParticipant("web-ui"))
+    return channel, room
+
+
 async def test_snapshot_sent_on_session_start_has_seq_one() -> None:
     channel, room = _make_channel()
     await channel.snapshot()
@@ -185,7 +192,7 @@ async def test_patch_coerces_plain_dict_values_like_the_fake_ui_channel() -> Non
 
 
 async def test_get_snapshot_action_triggers_snapshot_and_returns_ok() -> None:
-    channel, room = _make_channel()
+    channel, room = _caller_channel()
     payload = AgentAction(action="get_snapshot").model_dump_json()
     response = await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, payload)
     result = AgentActionResult.model_validate_json(response)
@@ -200,7 +207,7 @@ async def test_set_video_source_action_calls_callback() -> None:
     async def on_set_video_source(source: str) -> None:
         received.append(source)
 
-    channel, room = _make_channel(on_set_video_source=on_set_video_source)
+    channel, room = _caller_channel(on_set_video_source=on_set_video_source)
     payload = AgentAction(action="set_video_source", payload={"source": "screen"}).model_dump_json()
     response = await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, payload)
     result = AgentActionResult.model_validate_json(response)
@@ -209,7 +216,7 @@ async def test_set_video_source_action_calls_callback() -> None:
 
 
 async def test_set_video_source_action_without_callback_returns_error() -> None:
-    channel, room = _make_channel()
+    channel, room = _caller_channel()
     payload = AgentAction(action="set_video_source", payload={"source": "camera"}).model_dump_json()
     response = await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, payload)
     result = AgentActionResult.model_validate_json(response)
@@ -224,7 +231,7 @@ async def test_ui_action_dispatches_to_pack_callback_and_returns_payload() -> No
         calls.append((name, data))
         return {"confirmed": True}
 
-    channel, room = _make_channel(on_ui_action=on_ui_action)
+    channel, room = _caller_channel(on_ui_action=on_ui_action)
     action = AgentAction(action="ui_action", payload={"name": "confirm_sketch", "data": {"v": 2}})
     response = await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, action.model_dump_json())
     result = AgentActionResult.model_validate_json(response)
@@ -234,7 +241,7 @@ async def test_ui_action_dispatches_to_pack_callback_and_returns_payload() -> No
 
 
 async def test_invalid_action_payload_returns_ok_false_not_an_exception() -> None:
-    channel, room = _make_channel()
+    channel, room = _caller_channel()
     response = await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, "not json")
     result = AgentActionResult.model_validate_json(response)
     assert result.ok is False
@@ -553,6 +560,7 @@ async def test_request_block_survives_a_failed_request_rpc() -> None:
     await _until(lambda: channel.state.blocks["pick"].get("status") == "requested")
     await asyncio.sleep(0)
     assert not task.done()
+    room.add_remote_participant(FakeRemoteParticipant("web-ui"))  # the browser joins and answers
     await _action(room, "block_submit", {"block_id": "pick", "values": {"x": 1}})
     assert await task == {"x": 1}
 
@@ -605,3 +613,23 @@ async def test_block_submit_rejects_bad_payloads(payload: dict[str, Any], error:
     result = await _action(room, "block_submit", payload)
     assert result.ok is False
     assert result.error is not None and error in result.error
+
+
+async def test_agent_action_from_a_non_caller_identity_is_dropped() -> None:
+    """S5-23: an avatar worker or any other participant cannot answer the caller's blocks."""
+    channel, room, events = _request_channel()
+    task = asyncio.create_task(channel.request_block("pick", timeout_s=5))
+    await _until(lambda: channel.pending_requests == {"pick": "request"})
+    raw = AgentAction(
+        action="block_submit", payload={"block_id": "pick", "values": {"x": "forged"}}
+    ).model_dump_json()
+    result = AgentActionResult.model_validate_json(
+        await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw, caller_identity="intruder")
+    )
+    assert result.ok is False
+    assert channel.pending_requests == {"pick": "request"} and not task.done()
+    assert channel.state.blocks["pick"]["status"] == "requested"
+    assert not [payload for _type, payload in events if payload.get("op") == "block_submitted"]
+
+    assert (await _action(room, "block_submit", {"block_id": "pick", "values": {"x": 1}})).ok is True
+    assert await task == {"x": 1}

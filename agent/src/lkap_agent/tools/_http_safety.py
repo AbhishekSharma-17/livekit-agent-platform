@@ -304,6 +304,21 @@ def guarded_transport() -> GuardedTransport:
     return GuardedTransport()
 
 
+#: At most this much of an HTTP tool's response body is read (V5-27): the worker never holds
+#: an unbounded body in memory; the result is cut to the tool's character budget afterwards.
+MAX_RESPONSE_BYTES: Final[int] = 2 * 1024 * 1024
+
+
+async def read_bounded(response: httpx.Response, limit: int = MAX_RESPONSE_BYTES) -> tuple[bytes, bool]:
+    """Up to `limit` bytes of a streamed `response` body, and whether it was cut there."""
+    body = bytearray()
+    async for chunk in response.aiter_bytes():
+        body.extend(chunk)
+        if len(body) > limit:
+            return bytes(body[:limit]), True
+    return bytes(body), False
+
+
 def truncate(text: str, max_chars: int) -> str:
     """Truncate `text` to `max_chars`, appending a marker if it was cut."""
     if len(text) <= max_chars:

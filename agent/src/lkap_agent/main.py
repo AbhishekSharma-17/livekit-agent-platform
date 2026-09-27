@@ -790,6 +790,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
             # api (which refuses the start without it); a decline never starts it.
             logger.info("session recording waits for the caller's consent")
             consent_gate.when_accepted(lambda: recording.start(after=observer.flush))
+            # V5-27 (S5-5): a decline after the start withdraws the consent; the Egress stops.
+            consent_gate.when_withdrawn(lambda: recording.stop(reason="consent_withdrawn"))
         else:
             recording.start()
     logger.info(
@@ -1094,14 +1096,19 @@ class RecordingConsentGate:
     passes through it. The first accepted `recording` consent runs the
     callback given to :meth:`when_accepted` (once, whenever it is given); a
     decline runs nothing, and a later acceptance still starts the recording.
-    A decline after an acceptance does not stop it (pausing an Egress is not
-    something the platform does).
+    V5-27 (S5-5): a decline after the recording started is a withdrawal: the
+    callback given to :meth:`when_withdrawn` runs once (the worker stops the
+    Egress through the api) and the recording is not started again this
+    session. A decline after an acceptance whose start is still waiting for
+    :meth:`when_accepted` cancels that acceptance (the latest answer wins).
     """
 
     def __init__(self) -> None:
         self.accepted = False
         self.declined = False
+        self.withdrawn = False
         self._on_accept: Callable[[], None] | None = None
+        self._on_withdraw: Callable[[], None] | None = None
         self._fired = False
 
     def wrap(self, record: Callable[[str, dict[str, Any]], None]) -> Callable[[str, dict[str, Any]], None]:
@@ -1124,14 +1131,30 @@ class RecordingConsentGate:
         if payload.get("accepted") is True:
             self.accepted = True
             self._maybe_fire()
-        elif payload.get("accepted") is False and not self.accepted:
-            self.declined = True
-            logger.info("the caller declined the recording; the session is not recorded")
+        elif payload.get("accepted") is False:
+            if self._fired:
+                self._withdraw()
+            else:
+                self.accepted = False
+                self.declined = True
+                logger.info("the caller declined the recording; the session is not recorded")
 
     def when_accepted(self, start: Callable[[], None]) -> None:
         """Run `start` once the caller accepted the recording (at once when they already have)."""
         self._on_accept = start
         self._maybe_fire()
+
+    def when_withdrawn(self, stop: Callable[[], None]) -> None:
+        """Run `stop` once if the caller declines after the recording started (S5-5)."""
+        self._on_withdraw = stop
+
+    def _withdraw(self) -> None:
+        if self.withdrawn:
+            return
+        self.withdrawn = True
+        logger.info("the caller withdrew the recording consent; stopping the recording")
+        if self._on_withdraw is not None:
+            self._on_withdraw()
 
     def _maybe_fire(self) -> None:
         if self.accepted and self._on_accept is not None and not self._fired:
@@ -1156,7 +1179,35 @@ class _Recording:
         self._session_id = session_id
         self._record_event = record_event
         self._task: asyncio.Task[None] | None = None
+        self._stop_task: asyncio.Task[None] | None = None
         self.egress_id: str | None = None
+
+    def stop(self, *, reason: str) -> None:
+        """Stop the started Egress through the api without blocking the caller (S5-5).
+
+        Once only. Waits for a start still in flight first; records
+        `recording_stopped {reason}` once the api confirmed the stop.
+        """
+        if self._task is None or self._stop_task is not None:
+            return
+        self._stop_task = asyncio.create_task(self._stop(reason))
+
+    async def _stop(self, reason: str) -> None:
+        start = self._task
+        if start is not None and not start.done():
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await asyncio.shield(start)
+        if self.egress_id is None:
+            # The start failed or never reached the api: nothing is recording.
+            return
+        try:
+            await self._deps.config_client.stop_recording(self._session_id)
+        except RecordingUnavailableError as exc:
+            logger.warning("could not stop the session recording", error=str(exc))
+            self._record_event("recording_stopped", {"reason": reason, "status": "failed", "error": str(exc)})
+            return
+        logger.info("session recording stopped", reason=reason)
+        self._record_event("recording_stopped", {"reason": reason})
 
     def start(self, *, after: Callable[[], Awaitable[None]] | None = None) -> None:
         """Ask the api for the recording without blocking the caller.
@@ -1202,6 +1253,10 @@ class _Recording:
 
     async def finalize(self) -> None:
         """Report the Egress state LiveKit sees now; best effort, never raises."""
+        if self._stop_task is not None and not self._stop_task.done():
+            # A consent withdrawal's stop is in flight: let it reach the api first.
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._stop_task
         if self._task is not None and not self._task.done():
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -1441,7 +1496,10 @@ def _assemble(
         ui=ui,
         frames=frames,
         kb=ApiKbClient(
-            deps.config_client, resolved.kb_ids, options=search_options(resolved.config.knowledge)
+            deps.config_client,
+            resolved.kb_ids,
+            options=search_options(resolved.config.knowledge),
+            session_id=resolved.session_id,
         ),
         workflow_llm=PromptJsonStructuredLLM(_workflow_model(providers)),
         background=deps.background_runner_factory(

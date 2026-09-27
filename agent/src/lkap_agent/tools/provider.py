@@ -10,7 +10,8 @@ with ``{user_id: subject, arguments, version}`` (plus ``connected_account_id``
 when the definition carries one), through the guarded transport, without
 following redirects, bounded by ``timeout_s``. The answer
 ``{data, error, successful, …}`` is reduced like an HTTP tool's: ``result_path``
-(a top-level key such as ``data`` or a JSON pointer), then ``max_result_chars``.
+(a top-level key such as ``data`` or a JSON pointer), then ``max_result_chars``, inside an
+``<untrusted source="app:<toolkit>">`` fence (V5-27, R-V5-15: an app's data is never instructions).
 
 Errors are spoken-safe (D-V5-C9): ``successful=false`` becomes a
 ``ToolError`` with the first sentence of Composio's message, an auth-shaped
@@ -35,7 +36,7 @@ from lkap_contracts.tool_providers import COMPOSIO_HOST
 from lkap_contracts.tools import ProviderToolDefinition, ToolExecutionMode
 
 from lkap_agent.logging import get_logger
-from lkap_agent.tools._http_safety import guarded_transport, truncate
+from lkap_agent.tools._http_safety import guarded_transport
 from lkap_agent.tools.execution import (
     ResolvedExecution,
     ToolPolicy,
@@ -44,6 +45,7 @@ from lkap_agent.tools.execution import (
     run_with_policy,
     tool_flags,
 )
+from lkap_agent.tools.untrusted import fence
 
 _log = get_logger(__name__)
 
@@ -193,7 +195,10 @@ def _request_for(definition: ProviderToolDefinition, transport_factory: Transpor
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ToolError(f"the app's answer has no {definition.result_path!r}") from exc
         text = extracted if isinstance(extracted, str) else json.dumps(extracted)
-        return truncate(text, definition.max_result_chars)
+        # V5-27 (S5-6, R-V5-15): an email or ticket body is data, never instructions.
+        return fence(
+            text, source=f"app:{definition.toolkit or 'unknown'}", max_chars=definition.max_result_chars
+        )
 
     return request
 

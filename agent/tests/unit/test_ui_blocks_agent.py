@@ -146,7 +146,7 @@ async def test_block_action_reaches_the_pack_hook() -> None:
         action="block_action", payload={"block_id": "notes", "name": "pin", "data": {"id": "n1"}}
     ).model_dump_json()
     result = AgentActionResult.model_validate_json(
-        await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw)
+        await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw, caller_identity="user-guest")
     )
     assert result.ok is True
     assert result.payload == {"handled": True}
@@ -158,7 +158,7 @@ async def test_block_action_without_a_pack_hook_is_a_no_op() -> None:
     agent, _channel, room, _ = _agent(_config(GENERIC_PANEL))
     raw = AgentAction(action="block_action", payload={"block_id": "notes", "name": "pin"}).model_dump_json()
     result = AgentActionResult.model_validate_json(
-        await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw)
+        await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw, caller_identity="user-guest")
     )
     assert (result.ok, result.payload) == (True, {})
     del agent
@@ -179,7 +179,7 @@ async def test_late_form_submission_prompts_a_reply(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(PlatformAgent, "session", property(lambda self: fake_session))
 
     raw = AgentAction(action="form_submit", payload={"block_id": "f", "values": {"a": 1}}).model_dump_json()
-    await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw)
+    await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw, caller_identity="user-guest")
 
     assert len(replies) == 1 and '"a": 1' in replies[0]
     assert ("form_submitted", {"block_id": "f", "values": {"a": 1}}) in events
@@ -324,7 +324,9 @@ async def test_barge_in_cancels_a_pending_choice_but_not_a_pending_form() -> Non
     ) in events
 
     raw = AgentAction(action="form_submit", payload={"block_id": "intake", "values": {"a": 1}})
-    await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw.model_dump_json())
+    await room.local_participant.invoke_rpc(
+        RPC_AGENT_ACTION, raw.model_dump_json(), caller_identity="user-guest"
+    )
     assert await form == {"a": 1}
     del agent
 
@@ -339,7 +341,9 @@ async def test_late_choice_submission_prompts_a_block_neutral_reply(monkeypatch:
     )
 
     raw = AgentAction(action="block_submit", payload={"block_id": "pick", "values": {"selected": ["no"]}})
-    await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw.model_dump_json())
+    await room.local_participant.invoke_rpc(
+        RPC_AGENT_ACTION, raw.model_dump_json(), caller_identity="user-guest"
+    )
 
     assert len(replies) == 1
     assert "the pick block on screen" in replies[0] and '"selected": ["no"]' in replies[0]

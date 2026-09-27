@@ -22,9 +22,18 @@ Block configs (R-V2-17): because the layout is public, every
 into ``config_service.VALIDATORS`` when this module is imported (the agents and
 internal routers import it), so a table block saved with ``config.foo`` is a 422
 at ``panel.blocks[0].config.foo``.
+
+V5-43: the ``link``, ``slots`` and ``cards`` configs are checked the same way (a
+``link`` block with no ``allowed_hosts``, or a site that is not a plain host
+name, is an error at ``panel.blocks[i].config.allowed_hosts``), and a ``link``
+block on an agent set up for phone calls without text messages gets a tip
+(:data:`LINK_ON_PHONE_MESSAGE`): phone callers cannot see it, so the agent can
+only text the link when ``tools.sms`` is set.
 """
 
 from __future__ import annotations
+
+from typing import Final
 
 from lkap_contracts.agent_config import AgentConfig, PanelLayout
 from lkap_contracts.blocks import validate_panel_block_configs
@@ -33,6 +42,12 @@ from lkap_contracts.packs import PackManifest
 
 from lkap_api.config_service import ValidationContext, register_validator
 from lkap_api.db.models import Agent
+
+#: A `link` block on an agent set up for phone calls without text messages (V5-43, a tip).
+LINK_ON_PHONE_MESSAGE: Final[str] = (
+    "Tip: callers on a phone line cannot see links; set up text messages so the agent can text the "
+    "link to them instead"
+)
 
 #: The literal `AgentConfig.panel` field default — the "never customized" marker.
 _UNSET_PANEL = PanelLayout()
@@ -78,6 +93,14 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
         the flow warnings at ``panel.blocks[i].config.source`` / ``.config.steps[j].id``.
     """
     issues = validate_panel_block_configs(ctx.config.panel.blocks)
+    config = ctx.config
+    on_phone = config.capabilities.dtmf or bool(config.telephony.transfer_targets)
+    if on_phone and config.tools.sms is None:
+        issues += [
+            Issue(path=f"panel.blocks[{index}]", message=LINK_ON_PHONE_MESSAGE, severity="warning")
+            for index, block in enumerate(config.panel.blocks)
+            if block.type == "link"
+        ]
     flow = ctx.config.flow
     node_ids = {node.id for node in flow.nodes if node.kind == "agent"} if flow is not None else set()
     for index, block in enumerate(ctx.config.panel.blocks):

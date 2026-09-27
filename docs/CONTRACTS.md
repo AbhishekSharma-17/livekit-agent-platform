@@ -1244,6 +1244,41 @@ export function useUiRequests(handler: (req: UiRequest) => Promise<UiRequestResu
 
 `TranscriptTurn.language: str | None` (the caller's detected language on a user turn, the reply language on an assistant turn; `null` when unknown) is stored with the summary and returned by `GET /v1/sessions/{id}`. `BlockType` gains `captions` (`CaptionsBlockConfig {show_user=true, show_agent=true, target_language: str|null (reserved for translation), position: block|bottom}`, `CaptionsBlockState {language, target_language}`). While the panel has a `captions` block the worker streams `CaptionSegment {v:1, id, speaker: user|agent, text, final, language, ts}` JSON on the text-stream topic `lkap.captions` (`TOPIC_UI_CAPTIONS`): an utterance keeps its `id` from the first interim to its final; the agent's words come from a text output after RoomIO's transcription (`TextOutputOptions(next_in_chain=...)`), so they are timed to the audio; interim agent captions at most every 0.25 s. Captions are never stored in `UiState`.
 
+### Links, time slots, cards and `describe_panel` (V5-43)
+
+`BlockType` gains three blocks (configs in `lkap_contracts.blocks`, states in `lkap_contracts.ui_protocol`):
+
+| Block | Config | State | Tools |
+|---|---|---|---|
+| `link` | `allowed_hosts: [str]` (required; `example.com` or `*.example.com` for its sub-domains, never a scheme, path, port or IP), `open_in: new_tab\|dialog`, `show_qr` | `LinkBlockState {url (https only), label (≤ 80), kind: checkout\|esign\|portal\|other, status: idle\|pending\|opened\|completed\|failed\|expired, reference, channel: panel\|sms, sent_at, opened_at, expires_at, completed_at}` | `send_link` |
+| `slots` | `timezone_mode: caller\|agent`, `days_visible` (1–31), `allow_custom` | `SlotsBlockState` (requestable) `{prompt, timezone, slots: [TimeSlot {id, start, end (ISO 8601 with UTC offset, end > start), label, capacity}] (≤ 50), selected, grouped_by_day}` | `request_slot`, `resolve_slot` |
+| `cards` | `layout: carousel\|grid\|list`, `selectable`, `max_cards` (1–20), `image_hosts: [str]` | `CardsBlockState {cards: [Card {id, title, subtitle, image_asset_id, image_url (https), facts [{label, value}] ≤ 8, badges ≤ 5, actions [{name, label, tone}] ≤ 3}] ≤ 20, selected}` | `show_cards`, `update_block` |
+
+**Links are checked at the contract layer.** `https_url_problem(url, allowed_hosts=…)` refuses every scheme but `https` (`javascript:`, `data:`, `http:`), user names or passwords in the link, spaces, quotes, angle brackets, backslashes and control characters, IP literals and links over 2048 characters; `host_allowed` matches exact names and `*.` sub-domains (the bare domain of a `*.` entry is not included). `LinkBlockState.url` and `Card.image_url` validate with it; `send_link` and `show_cards` also check the block's allowlist.
+
+**Answers from the browser.** A `slots` tap is `block_submit {values: {selected: <slot id>}}`: the worker reads only `selected` (an unknown id is not stored) and takes `start`/`end` from its own slots, for the waiting tool and for a late answer alike. A card tap is `block_action {name: "select", data: {card_id}}` (with `selectable`), a card button `block_action {name: <action>, data: {card_id}}`; the worker refuses a card or a button that is not on the block, records `selected` for a tap, and gives the model a short user message with the card title fenced. A link tap is `block_action {name: "opened"}` (`pending → opened`); a browser can never complete a link.
+
+**Link outcomes.** `POST /v1/hooks/link/{session_id}` with `LinkHookIn {block_id | reference, status: completed|failed|expired}` (`extra="forbid"`), signed `X-LKAP-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>` with the signing secret of any enabled webhook endpoint of the session's workspace (±300 s). 202 `LinkHookOut {id, session_id, status, delivered_to}`; 401 for an unknown session or a bad signature (indistinguishable); 422 for a bad body; 409 `not_live` / `no_agent`. The api sends `LinkCompletedPacket {v, op: "link_completed", id, session_id, block_id, reference, status}` as a reliable data packet on `lkap.ui.link` (`TOPIC_UI_LINK`) to the room's agents only; the worker honours a packet only without a participant (server-sent) and for its own session, and applies it only while the link is `pending` or `opened` (idempotent). The model then gets `[The payment link <untrusted source="panel">…</untrusted> was completed.]`.
+
+**`describe_panel`** (registered with any block): one entry per block — `id`, `type`, `title`, `status` and a type summary (counts and at most eight short labels; a link's site, never its URL; never bytes) — as JSON inside `<untrusted source="panel">`, at most 4000 characters (details dropped first, then trailing blocks, with a note).
+
+**Late listener snapshot (asks #252).** `UiSnapshotRequestPacket {v: 1, op: "snapshot", session_id}` on the supervisor topic, server-sent, makes the worker republish a full `UiSnapshot`.
+
+#### The AG-UI state adapter (`lkap_contracts.ui_agui`)
+
+Our wire protocol is unchanged; the adapter maps it to AG-UI's state events (`STATE_SNAPSHOT {snapshot}`, `STATE_DELTA {delta: RFC 6902 ops}`; docs.ag-ui.com concepts/state, concepts/events and the Python SDK's `EventType`, checked 2026-09-27). Each LKAP op is mapped against the state before it:
+
+| LKAP op | RFC 6902 |
+|---|---|
+| `set` on an object member | `add` (missing parents added as `{}` first) |
+| `set` on an array index | `replace` |
+| `append` | `add <path>/-` (`add <path> [value]` when the list is missing) |
+| `remove` (no `key`) | `remove` (nothing if absent) |
+| `remove` with `key` | `remove <path>/<i>` per matching item (`key` or `id`), highest index first |
+| `upsert` | `replace <path>/<i>` on a match, else `add <path>/-` |
+
+`/activity` overflow past 30 rows becomes `remove /activity/0`. Inbound, `agui_delta_to_patch(delta, state)` accepts only `/blocks/<id>/…` paths (and `from` paths), checks every op against the state the previous ops left (a failed `test` or a missing target refuses the whole delta), and maps `add`/`replace` on a member → `set`, `add …/-` → `append`, `remove` → `remove`, `replace` at an index → `set`, and an insert at an index, `move` and `copy` → `set` of the changed container. `AgentAction {action: "state_delta", payload: StateDeltaPayload {type?: "STATE_DELTA", delta (1–100 ops)}}` applies such a delta from the caller's page to blocks `update_block` may write **except `kb_citations` and `custom`** (the worker's `STATE_DELTA_BLOCK_TYPES`): every touched block is validated before one `UiPatch` is sent; a requestable block, a link, consent, upload, captions or handoff block is refused. Round trips (`LKAP → AG-UI → LKAP` and `AG-UI → LKAP → AG-UI`) are pinned on the web fixture layout (`contracts/tests/test_ui_agui.py`).
+
 ## 11. Frontend panel registry (`web/src/panels/registry.ts`)
 
 ```ts

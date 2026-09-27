@@ -8,7 +8,7 @@ import { KbDocuments } from "@/components/console/knowledge/kb-documents";
 import { KbDetail } from "@/components/console/knowledge/kb-detail";
 import { CreateKbDialog } from "@/components/console/knowledge/create-kb-dialog";
 import { KB_UPLOAD_MAX_BYTES } from "@/components/console/lib/upload";
-import type { KbDocumentOut, KbDocumentPage, KbOut, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
+import type { KbDocumentOut, KbDocumentPage, KbOut, KbSourceOut, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
 
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -180,11 +180,20 @@ describe("KbDetail — 'Stored in' (V5-24: read-only, fixed once the knowledge b
     };
   }
 
-  function mockKbDetailFetch({ theKb, connections = [] }: { theKb: KbOut; connections?: KnowledgeConnectionOut[] }) {
+  function mockKbDetailFetch({
+    theKb,
+    connections = [],
+    source,
+  }: {
+    theKb: KbOut;
+    connections?: KnowledgeConnectionOut[];
+    source?: KbSourceOut;
+  }) {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input).split("?")[0];
+        if (url.endsWith("/knowledge-bases/kb-1/source")) return jsonResponse(source ?? {});
         if (url.endsWith("/knowledge-bases/kb-1")) return jsonResponse(theKb);
         if (url.endsWith("/knowledge-connections")) return jsonResponse({ items: connections, total: connections.length });
         if (url.endsWith("/providers")) {
@@ -229,6 +238,104 @@ describe("KbDetail — 'Stored in' (V5-24: read-only, fixed once the knowledge b
     // Fixed once created: it's a plain description-list value, not a button or a link.
     expect(storedIn.closest("dd")).toBeTruthy();
     expect(storedIn.querySelector("button, a")).toBeNull();
+  });
+});
+
+describe("KbDetail — managed search (Ragie, V5-45/ask #232): no upload, its own source panel", () => {
+  function kb(overrides: Partial<KbOut>): KbOut {
+    return {
+      id: "kb-1",
+      name: "Harbor Lane",
+      description: "",
+      embedder_id: "fastembed-embedding",
+      chunk_count: 0,
+      document_count: 42,
+      kind: "external",
+      external_ref: "policies",
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  function mockExternalKbFetch(source: KbSourceOut) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input).split("?")[0];
+        if (url.endsWith("/knowledge-bases/kb-1/source")) return jsonResponse(source);
+        if (url.endsWith("/knowledge-bases/kb-1")) return jsonResponse(kb({}));
+        if (url.endsWith("/knowledge-connections")) return jsonResponse({ items: [], total: 0 });
+        if (url.endsWith("/providers")) return jsonResponse({ providers: [] });
+        return jsonResponse({});
+      }),
+    );
+  }
+
+  it("shows the partition and live document count instead of Embedder/Chunks, and hides the upload controls", async () => {
+    mockExternalKbFetch({
+      ok: true,
+      kind: "ragie",
+      external_ref: "policies",
+      document_count: 42,
+      last_synced_at: "2026-09-26T00:00:00Z",
+      checked_at: "2026-09-27T00:00:00Z",
+    });
+    renderWithClient(<KbDetail kbId="kb-1" />);
+
+    expect(await screen.findByText("Source")).toBeTruthy();
+    // The description list's own "Documents" count and the source card's live
+    // count both read "42 documents" (the same number, two honest places).
+    expect((await screen.findAllByText("42 documents")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Connected")).toBeTruthy();
+    expect(screen.getByText("Partition")).toBeTruthy();
+    expect(screen.getByText("policies")).toBeTruthy();
+
+    // No Embedder column for a knowledge base with no local embedder, and no upload/import affordance.
+    expect(screen.queryByText("Embedder")).toBeNull();
+    expect(screen.queryByRole("button", { name: /drop files here/i })).toBeNull();
+  });
+
+  it("shows a Problem status and the vendor's message when the source is unreachable", async () => {
+    mockExternalKbFetch({ ok: false, kind: "ragie", message: "the key for this connection was deleted", checked_at: "2026-09-27T00:00:00Z" });
+    renderWithClient(<KbDetail kbId="kb-1" />);
+
+    expect(await screen.findByText("Problem")).toBeTruthy();
+    expect(screen.getByText("the key for this connection was deleted")).toBeTruthy();
+  });
+});
+
+describe("KbList — 'Managed search' chip (V5-45/ask #232)", () => {
+  it("shows a Managed search chip for an external knowledge base, in both the table and the phone card", async () => {
+    const { KbList } = await import("@/components/console/knowledge/kb-list");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input).split("?")[0];
+        if (url.endsWith("/knowledge-bases")) {
+          return jsonResponse({
+            items: [
+              {
+                id: "kb-1",
+                name: "Harbor Lane",
+                description: "",
+                embedder_id: "fastembed-embedding",
+                chunk_count: 0,
+                document_count: 42,
+                kind: "external",
+                external_ref: "policies",
+                created_at: "2026-09-01T00:00:00Z",
+                updated_at: "2026-09-01T00:00:00Z",
+              },
+            ],
+            total: 1,
+          });
+        }
+        return jsonResponse({});
+      }),
+    );
+    renderWithClient(<KbList />);
+    expect((await screen.findAllByText("Managed search")).length).toBeGreaterThan(0);
   });
 });
 

@@ -83,12 +83,18 @@ export function KbList() {
     {
       id: "chunks",
       header: "Chunks",
-      cell: (kb) => <span className="tabular-nums">{kb.chunk_count}</span>,
+      // No local vectors for a managed search (Ragie) knowledge base — nothing to count.
+      cell: (kb) => (kb.kind === "external" ? <span className="text-muted-foreground">—</span> : <span className="tabular-nums">{kb.chunk_count}</span>),
     },
     {
       id: "embedder",
       header: "Embedder",
-      cell: (kb) => <span className="text-muted-foreground">{embedderLabel(kb.embedder_id)}</span>,
+      cell: (kb) =>
+        kb.kind === "external" ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <span className="text-muted-foreground">{embedderLabel(kb.embedder_id)}</span>
+        ),
     },
     {
       id: "updated",

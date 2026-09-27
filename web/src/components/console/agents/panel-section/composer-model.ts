@@ -98,6 +98,11 @@ export function setBlockConfig(
   return updateBlock(panel, index, { config });
 }
 
+/** `accept_state_delta` (V5-43) survives a panel switch; absent stays absent. */
+function keepStateDelta(panel: PanelLayoutForm): Pick<PanelLayoutForm, "accept_state_delta"> {
+  return panel.accept_state_delta !== undefined ? { accept_state_delta: panel.accept_state_delta } : {};
+}
+
 /** Switch panels: blocks survive only on the composite panel. */
 export function switchPanel(panel: PanelLayoutForm, panelId: string): PanelLayoutForm {
   if (panelId === panel.panel_id) return panel;
@@ -112,9 +117,14 @@ export function switchPanel(panel: PanelLayoutForm, panelId: string): PanelLayou
             config: { ...block.config },
             order: block.order ?? 0,
           }));
-    return { panel_id: panelId, layout: panel.panel_id === COMPOSITE_PANEL_ID ? panel.layout : "side", blocks: renumber(blocks) };
+    return {
+      panel_id: panelId,
+      layout: panel.panel_id === COMPOSITE_PANEL_ID ? panel.layout : "side",
+      blocks: renumber(blocks),
+      ...keepStateDelta(panel),
+    };
   }
-  return { panel_id: panelId, layout: panelMeta(panelId).layout, blocks: [] };
+  return { panel_id: panelId, layout: panelMeta(panelId).layout, blocks: [], ...keepStateDelta(panel) };
 }
 
 export interface BlockToolStatus {

@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/StateDeltaPayload.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``AgentAction.payload`` for ``action == \"state_delta\"`` (V5-43).\n\n``delta`` is an AG-UI ``STATE_DELTA`` event's ``delta``: RFC 6902 operations\n(``add``, ``remove``, ``replace``, ``move``, ``copy``, ``test``) whose paths\nare JSON Pointers into :class:`UiState`. Only ``/blocks/<id>/...`` paths of\nblocks whose type ``update_block`` may write are accepted; the whole delta is\nrefused when one operation is (a failed ``test`` included). ``type`` may be\nsent as ``\"STATE_DELTA\"`` so a whole AG-UI event can be forwarded as is.",
+  "description": "``AgentAction.payload`` for ``action == \"state_delta\"`` (V5-43).\n\n``delta`` is an AG-UI ``STATE_DELTA`` event's ``delta``: RFC 6902 operations\n(``add``, ``remove``, ``replace``, ``move``, ``copy``, ``test``) whose paths\nare JSON Pointers into :class:`UiState`. The worker refuses it unless the agent's\n``PanelLayout.accept_state_delta`` is on (default off). Only ``/blocks/<id>/...``\npaths of blocks whose type ``update_block`` may write (less ``kb_citations`` and\n``custom``) are accepted; the whole delta is\nrefused when one operation is (a failed ``test`` included). ``type`` may be\nsent as ``\"STATE_DELTA\"`` so a whole AG-UI event can be forwarded as is.",
   "properties": {
     "delta": {
       "items": {

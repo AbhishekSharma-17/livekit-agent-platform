@@ -72,6 +72,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Which panel renders the session, and (for ``composite``) its blocks.",
   "properties": {
+    "accept_state_delta": {
+      "default": false,
+      "description": "Let the caller's page change what some panel blocks show (V5-43, ruling on ask #309). On, the page may send an AG-UI `STATE_DELTA` (`AgentAction.action == \"state_delta\"`) that writes the display blocks `update_block` may write, except `kb_citations` and `custom`; requestable, link, consent, upload, captions and handoff blocks are never writable from the page. Off (the default), every such change is refused, so the page cannot alter what `describe_panel` hands the model or what the console's live view shows.",
+      "title": "Accept State Delta",
+      "type": "boolean"
+    },
     "blocks": {
       "default": [],
       "items": {

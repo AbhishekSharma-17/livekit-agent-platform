@@ -691,6 +691,11 @@ export const panelLayoutSchema = z
     panel_id: z.string().min(1, "Choose a panel"),
     layout: z.enum(["side", "wide"]),
     blocks: z.array(blockSpecSchema),
+    /**
+     * `PanelLayout.accept_state_delta` (V5-43, ask #309): the caller's page may change some
+     * display blocks. Carried so a save never drops it; the switch comes with V5-44.
+     */
+    accept_state_delta: z.boolean().optional(),
   })
   .superRefine((val, ctx) => {
     const seen = new Set<string>();

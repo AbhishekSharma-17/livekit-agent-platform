@@ -953,8 +953,10 @@ class AgentAction(BaseModel):
       (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
     * ``state_delta`` — ``{delta: [...]}`` (V5-43): an AG-UI ``STATE_DELTA`` (RFC 6902
       operations, :mod:`lkap_contracts.ui_agui`) on ``/blocks/<id>/...`` paths of blocks
-      ``update_block`` may write (:data:`lkap_contracts.tools.UPDATABLE_BLOCK_TYPES`),
-      applied all or nothing through the block validators (:class:`StateDeltaPayload`)
+      ``update_block`` may write (:data:`lkap_contracts.tools.UPDATABLE_BLOCK_TYPES`) less
+      ``kb_citations`` and ``custom``, applied all or nothing through the block validators
+      (:class:`StateDeltaPayload`); refused unless the agent's ``PanelLayout.accept_state_delta``
+      is on (default off)
     """
 
     v: Literal[1] = 1
@@ -989,8 +991,10 @@ class StateDeltaPayload(BaseModel):
 
     ``delta`` is an AG-UI ``STATE_DELTA`` event's ``delta``: RFC 6902 operations
     (``add``, ``remove``, ``replace``, ``move``, ``copy``, ``test``) whose paths
-    are JSON Pointers into :class:`UiState`. Only ``/blocks/<id>/...`` paths of
-    blocks whose type ``update_block`` may write are accepted; the whole delta is
+    are JSON Pointers into :class:`UiState`. The worker refuses it unless the agent's
+    ``PanelLayout.accept_state_delta`` is on (default off). Only ``/blocks/<id>/...``
+    paths of blocks whose type ``update_block`` may write (less ``kb_citations`` and
+    ``custom``) are accepted; the whole delta is
     refused when one operation is (a failed ``test`` included). ``type`` may be
     sent as ``"STATE_DELTA"`` so a whole AG-UI event can be forwarded as is.
     """

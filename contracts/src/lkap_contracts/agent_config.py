@@ -550,6 +550,16 @@ class PanelLayout(BaseModel):
     panel_id: str = "composite"
     layout: Literal["side", "wide"] = "side"
     blocks: list[BlockSpec] = []
+    accept_state_delta: bool = Field(
+        default=False,
+        description="Let the caller's page change what some panel blocks show (V5-43, ruling on "
+        "ask #309). On, the page may send an AG-UI `STATE_DELTA` (`AgentAction.action == "
+        '"state_delta"`) that writes the display blocks `update_block` may write, except '
+        "`kb_citations` and `custom`; requestable, link, consent, upload, captions and handoff "
+        "blocks are never writable from the page. Off (the default), every such change is refused, "
+        "so the page cannot alter what `describe_panel` hands the model or what the console's "
+        "live view shows.",
+    )
 
 
 #: ``LocaleConfig.caller_timezone``: ``detect`` resolves the caller's own zone per session

@@ -183,3 +183,13 @@ def test_the_state_delta_action() -> None:
         StateDeltaPayload.model_validate({"delta": []})
     with pytest.raises(ValidationError):
         StateDeltaPayload.model_validate({"type": "STATE_SNAPSHOT", "delta": [{"op": "add"}]})
+
+
+def test_state_delta_is_opt_in_and_an_old_panel_is_unchanged() -> None:
+    """Ruling on ask #309: off by default; a stored panel without the key reads the same."""
+    from lkap_contracts.agent_config import PanelLayout
+
+    stored = {"panel_id": "composite", "layout": "side", "blocks": []}
+    assert PanelLayout().accept_state_delta is False
+    assert PanelLayout.model_validate(stored) == PanelLayout()
+    assert PanelLayout(accept_state_delta=True).accept_state_delta is True

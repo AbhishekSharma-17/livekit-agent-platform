@@ -140,7 +140,14 @@ export function panelFormValue(agent: AgentOut): PanelLayoutForm {
       config: block.config ?? {},
       order,
     }));
-  return { panel_id: panelId, layout: stored?.layout ?? panelMeta(panelId).layout, blocks };
+  // V5-43 (ask #309): carried as stored so a save never turns it off.
+  const accept = stored?.accept_state_delta;
+  return {
+    panel_id: panelId,
+    layout: stored?.layout ?? panelMeta(panelId).layout,
+    blocks,
+    ...(accept !== undefined ? { accept_state_delta: accept } : {}),
+  };
 }
 
 export function toFormValues(agent: AgentOut): AgentEditorForm {

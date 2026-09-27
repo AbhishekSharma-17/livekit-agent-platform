@@ -374,8 +374,10 @@ export interface ActivityEvent {
  *   (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
  * * ``state_delta`` — ``{delta: [...]}`` (V5-43): an AG-UI ``STATE_DELTA`` (RFC 6902
  *   operations, :mod:`lkap_contracts.ui_agui`) on ``/blocks/<id>/...`` paths of blocks
- *   ``update_block`` may write (:data:`lkap_contracts.tools.UPDATABLE_BLOCK_TYPES`),
- *   applied all or nothing through the block validators (:class:`StateDeltaPayload`)
+ *   ``update_block`` may write (:data:`lkap_contracts.tools.UPDATABLE_BLOCK_TYPES`) less
+ *   ``kb_citations`` and ``custom``, applied all or nothing through the block validators
+ *   (:class:`StateDeltaPayload`); refused unless the agent's ``PanelLayout.accept_state_delta``
+ *   is on (default off)
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "AgentAction".
@@ -1617,6 +1619,10 @@ export interface MemoryConfig {
  * via the `definition` "PanelLayout".
  */
 export interface PanelLayout {
+  /**
+   * Let the caller's page change what some panel blocks show (V5-43, ruling on ask #309). On, the page may send an AG-UI `STATE_DELTA` (`AgentAction.action == "state_delta"`) that writes the display blocks `update_block` may write, except `kb_citations` and `custom`; requestable, link, consent, upload, captions and handoff blocks are never writable from the page. Off (the default), every such change is refused, so the page cannot alter what `describe_panel` hands the model or what the console's live view shows.
+   */
+  accept_state_delta?: boolean;
   blocks?: BlockSpec[];
   layout?: "side" | "wide";
   panel_id?: string;
@@ -7547,8 +7553,10 @@ export interface ToolSeed {
  *
  * ``delta`` is an AG-UI ``STATE_DELTA`` event's ``delta``: RFC 6902 operations
  * (``add``, ``remove``, ``replace``, ``move``, ``copy``, ``test``) whose paths
- * are JSON Pointers into :class:`UiState`. Only ``/blocks/<id>/...`` paths of
- * blocks whose type ``update_block`` may write are accepted; the whole delta is
+ * are JSON Pointers into :class:`UiState`. The worker refuses it unless the agent's
+ * ``PanelLayout.accept_state_delta`` is on (default off). Only ``/blocks/<id>/...``
+ * paths of blocks whose type ``update_block`` may write (less ``kb_citations`` and
+ * ``custom``) are accepted; the whole delta is
  * refused when one operation is (a failed ``test`` included). ``type`` may be
  * sent as ``"STATE_DELTA"`` so a whole AG-UI event can be forwarded as is.
  *

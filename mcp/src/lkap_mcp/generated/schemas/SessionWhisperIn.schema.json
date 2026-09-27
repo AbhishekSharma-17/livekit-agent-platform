@@ -1,0 +1,23 @@
+{
+  "$id": "lkap-contracts/SessionWhisperIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/sessions/{id}/whisper``: written guidance for the agent, never heard by the caller.\n\n``reply_now`` asks the agent to act on it at once (it speaks next, without waiting for the\ncaller); by default the guidance shapes the agent's next reply.",
+  "properties": {
+    "reply_now": {
+      "default": false,
+      "title": "Reply Now",
+      "type": "boolean"
+    },
+    "text": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "title": "SessionWhisperIn",
+  "type": "object"
+}

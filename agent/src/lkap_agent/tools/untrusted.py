@@ -51,6 +51,8 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     "lkap_agent.tools.provider",
     "lkap_agent.tools.declarative",
     "lkap_agent.tools.mcp_client",
+    # V5-40 (ask #256): recalled caller memories go into the instructions.
+    "lkap_agent.session_builder",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

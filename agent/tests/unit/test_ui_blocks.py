@@ -735,10 +735,10 @@ def test_handoff_and_captions_blocks_have_state_models() -> None:
         "agent_name": None,
         "reason": None,
     }
-    # asks #202: the config seeds `target_language`; the conversation's language is left for
-    # `PlatformAgent._init_captions` to fill (it uses `setdefault`).
+    # asks #202/#210: the config seeds `target_language`; the conversation's language stays
+    # `None` here and `PlatformAgent._init_captions` fills it before the first snapshot.
     captions = BlockSpec(id="cap", type="captions", config={"target_language": "hi", "position": "bottom"})
-    assert initial_block_state(captions) == {"target_language": "hi"}
+    assert initial_block_state(captions) == {"language": None, "target_language": "hi"}
 
 
 def test_a_captions_or_handoff_state_is_now_validated() -> None:

@@ -39,6 +39,7 @@ from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityErr
 from lkap_api.logging import get_logger
 from lkap_api.mcp_oauth import revoke as mcp_oauth_revoke
 from lkap_api.mcp_oauth.tokens import oauth_definition
+from lkap_api.memory.identity import MEMORY_KEY_PROVIDER_ID
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault, fingerprint
 
@@ -106,8 +107,18 @@ def _refuse_hand_made_sign_in(provider_id: str) -> None:
         raise UnprocessableEntityError(_SIGN_IN_ONLY)
 
 
+#: Rows the platform manages itself: never listed, fetched, edited, tested or deleted as keys.
+HIDDEN_PROVIDER_IDS: frozenset[str] = frozenset({TOOL_PROVIDER_ACCOUNT, MEMORY_KEY_PROVIDER_ID})
+
+
 def _refuse_connection_row(row: Credential) -> None:
     """S5-7: a connected app is managed (and disconnected) through the Apps routes only."""
+    if row.provider_id == MEMORY_KEY_PROVIDER_ID:
+        # V5-40 (ask #257): deleting it would make every caller memory unreachable.
+        raise ConflictError(
+            "the caller-memory key is managed by the platform; purge memories with POST /v1/memory/purge",
+            details={"credential_id": row.id},
+        )
     if row.provider_id == TOOL_PROVIDER_ACCOUNT:
         raise ConflictError(
             "a connected app is removed through its connection, not as a key: "
@@ -145,6 +156,10 @@ async def create_credential(
     """
     spec = _spec_for(payload.provider_id)
     _refuse_hand_made_sign_in(spec.id)
+    if spec.id in HIDDEN_PROVIDER_IDS:
+        raise UnprocessableEntityError(
+            f"'{spec.id}' keys are managed by the platform and cannot be added by hand"
+        )
     _check_secrets(spec, payload.secrets)
     row = Credential(
         workspace_id=ctx.workspace_id,
@@ -179,7 +194,10 @@ async def list_credentials(
     Connected apps (``tool-provider-account`` rows) are not keys and are never listed
     here (S5-7); ``GET /v1/tool-providers/composio/connections`` lists them.
     """
-    visible = (Credential.workspace_id == ctx.workspace_id, Credential.provider_id != TOOL_PROVIDER_ACCOUNT)
+    visible = (
+        Credential.workspace_id == ctx.workspace_id,
+        Credential.provider_id.not_in(HIDDEN_PROVIDER_IDS),
+    )
     stmt = select(Credential).where(*visible)
     count_stmt = select(func.count()).select_from(Credential).where(*visible)
     if provider_id:
@@ -200,7 +218,7 @@ async def list_credentials(
 async def get_credential(credential_id: str, db: DbDep, ctx: AdminCtxDep) -> CredentialOut:
     """Return one credential's metadata (a connected app is a 404 here, S5-7)."""
     row = await _load(db, ctx, credential_id)
-    if row.provider_id == TOOL_PROVIDER_ACCOUNT:
+    if row.provider_id in HIDDEN_PROVIDER_IDS:
         raise NotFoundError(f"unknown credential '{credential_id}'")
     return _to_out(row)
 
@@ -378,6 +396,8 @@ async def test_credential(
 ) -> CredentialTestResult:
     """Verify a stored credential against its vendor."""
     row = await _load(db, ctx, credential_id)
+    if row.provider_id in HIDDEN_PROVIDER_IDS:
+        raise NotFoundError(f"unknown credential '{credential_id}'")
     spec = _spec_for(row.provider_id)
 
     if credential_tests.has_adapter(spec) and credential_tests.is_cache_fresh(row.last_test_at):

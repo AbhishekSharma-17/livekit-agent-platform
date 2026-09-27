@@ -24,11 +24,14 @@ _RANK: dict[str, int] = {role: rank for rank, role in enumerate(ROLES)}
 
 #: Every scope an API key may carry (CONTRACTS-V2 §3.1); ``*`` grants all.
 #: ``audit:read`` (v3, D-V3-9) reads ``GET /v1/audit`` without the ``*`` scope.
+#: ``sessions:listen`` (V5-37) listens in to a live session and whispers to its agent;
+#: ``sessions:write`` implies it (:data:`IMPLIED_SCOPES`).
 Scope = Literal[
     "agents:read",
     "agents:write",
     "sessions:read",
     "sessions:write",
+    "sessions:listen",
     "calls:write",
     "connections:read",
     "connections:write",
@@ -39,6 +42,9 @@ Scope = Literal[
     "*",
 ]
 SCOPES: frozenset[str] = frozenset(get_args(Scope))
+
+#: Scopes a broader scope implies beyond the ``x:write`` ⇒ ``x:read`` rule (V5-37).
+IMPLIED_SCOPES: dict[str, frozenset[str]] = {"sessions:listen": frozenset({"sessions:write"})}
 
 #: The role an API key acts with inside its own workspace.
 API_KEY_ROLE: Role = "admin"
@@ -62,9 +68,12 @@ def role_at_least(role: str | None, minimum: Role) -> bool:
 def scope_allows(scopes: list[str] | tuple[str, ...] | frozenset[str], needed: str) -> bool:
     """Return whether an API key's ``scopes`` cover ``needed``.
 
-    ``*`` covers everything and ``x:write`` implies ``x:read``.
+    ``*`` covers everything, ``x:write`` implies ``x:read`` and ``sessions:write``
+    implies ``sessions:listen`` (:data:`IMPLIED_SCOPES`).
     """
     if "*" in scopes or needed in scopes:
+        return True
+    if any(broader in scopes for broader in IMPLIED_SCOPES.get(needed, ())):
         return True
     if needed.endswith(":read"):
         return needed.removesuffix(":read") + ":write" in scopes
@@ -107,7 +116,21 @@ ROUTE_POLICY: tuple[_Rule, ...] = (
         Requirement("viewer", "sessions:read"),
         Requirement("builder", "sessions:write"),
     ),
+    # V5-37: listening in and whispering need `sessions:listen` (builder+; `sessions:write` implies it).
+    _Rule(
+        "/v1/sessions/{session_id}/listen-token",
+        Requirement("builder", "sessions:listen"),
+        Requirement("builder", "sessions:listen"),
+    ),
+    _Rule(
+        "/v1/sessions/{session_id}/whisper",
+        Requirement("builder", "sessions:listen"),
+        Requirement("builder", "sessions:listen"),
+    ),
     _Rule("/v1/analytics", Requirement("viewer", "sessions:read"), Requirement("admin", "sessions:write")),
+    # V5-40 (ask #258): caller memory — reading a session's memories is a session read; forgetting
+    # a caller or purging the workspace is an admin write.
+    _Rule("/v1/memory", Requirement("viewer", "sessions:read"), Requirement("admin", "sessions:write")),
     _Rule("/v1/calls", Requirement("viewer", "sessions:read"), Requirement("builder", "calls:write")),
     # Builders pick credentials in the agent editor; only admins create or change them.
     _Rule(

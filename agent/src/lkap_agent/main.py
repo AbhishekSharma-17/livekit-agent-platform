@@ -129,6 +129,7 @@ from lkap_agent.session_builder import (
     SessionBuilder,
     SessionPlan,
     apply_compliance,
+    apply_memory_recall,
     factory_view,
     is_text_channel,
     prepare_resolved,
@@ -724,6 +725,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         resolved = apply_call_variables(resolved)
         # V5-15: the disclosure and consent wording, after the flow's start greeting is in place.
         resolved = apply_compliance(resolved)
+        # V5-40 (ask #255): what the memory knows about the caller; no call while memory is off.
+        resolved = await apply_memory_recall(resolved, deps.config_client)
         plan, agent = _assemble(ctx, deps, resolved, record_event=consent_gate.wrap(observer.record))
     except Exception as exc:
         logger.error("could not build the session", error=str(exc), exc_info=True)

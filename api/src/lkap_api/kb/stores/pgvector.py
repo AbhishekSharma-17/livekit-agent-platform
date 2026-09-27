@@ -91,6 +91,8 @@ PGVECTOR_CAPABILITIES: Final = StoreCapabilities(
 
 #: The table migration ``v5_003_pgvector`` creates.
 TABLE: Final = "kb_vectors"
+#: ``kb_vectors.chunk_id``'s ``DEFERRABLE INITIALLY DEFERRED`` foreign key (``db.models.KbVector``).
+CHUNK_FK: Final = "fk_kb_vectors_chunk_id_kb_chunks"
 #: pgvector's HNSW limits: ``vector`` indexes up to 2,000 dimensions, ``halfvec`` up to 4,000.
 MAX_VECTOR_INDEX_DIM: Final = 2000
 MAX_HALFVEC_INDEX_DIM: Final = 4000
@@ -227,7 +229,14 @@ class PgVectorStore:
         existing = await self._kb_indexes(kb_id)
         await self._drop_indexes(kb_id, [name for name in existing if name != wanted])
         if create is not None and wanted not in existing:
+            # Postgres refuses CREATE INDEX on a table with pending trigger events, which the
+            # deferred chunk foreign key leaves behind for every vector this transaction already
+            # wrote (e.g. another knowledge base's). Flush the chunk rows, run those checks now,
+            # then defer the key again for the rest of the transaction.
+            await self._session.flush()
+            await self._session.execute(text(f"SET CONSTRAINTS {CHUNK_FK} IMMEDIATE"))
             await self._session.execute(text(create))
+            await self._session.execute(text(f"SET CONSTRAINTS {CHUNK_FK} DEFERRED"))
             log.info("kb_vector_index_created", kb_id=kb_id, dimension=dimension, index=wanted)
 
     # ------------------------------------------------------------------- the Protocol

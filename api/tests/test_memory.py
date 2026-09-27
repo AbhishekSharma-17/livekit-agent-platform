@@ -232,6 +232,29 @@ async def test_the_memory_key_is_created_once_and_kept_in_the_vault(
     assert Vault(settings.master_key).decrypt(rows[0].ciphertext) == {"key": first.hex()}
 
 
+async def test_the_memory_key_is_hidden_and_guarded_on_the_keys_routes(
+    admin_client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    """Ask #257: the platform's memory key never shows up, or goes away, as a hand-made key."""
+    await _key(database, settings)
+    async with database.session() as db:
+        key_id = (
+            await db.execute(select(Credential.id).where(Credential.provider_id == MEMORY_KEY_PROVIDER_ID))
+        ).scalar_one()
+
+    listed = (await admin_client.get("/v1/credentials")).json()
+    fetched = await admin_client.get(f"/v1/credentials/{key_id}")
+    renamed = await admin_client.put(f"/v1/credentials/{key_id}", json={"label": "x"})
+    deleted = await admin_client.delete(f"/v1/credentials/{key_id}")
+    tested = await admin_client.post(f"/v1/credentials/{key_id}/test")
+
+    assert key_id not in [item["id"] for item in listed["items"]]
+    assert fetched.status_code == 404 and tested.status_code == 404
+    assert renamed.status_code == 409 and deleted.status_code == 409
+    assert "managed by the platform" in deleted.json()["error"]["message"]
+    assert await _key(database, settings)  # still there
+
+
 # -------------------------------------------------------------------------------- recall
 
 

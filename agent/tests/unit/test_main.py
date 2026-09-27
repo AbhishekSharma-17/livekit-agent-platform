@@ -232,6 +232,22 @@ async def test_run_session_starts_a_cascaded_session_and_reports_it_started() ->
     assert "session_started" in api.event_types()
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_run_session_recalls_memory_only_when_it_is_on(enabled: bool) -> None:
+    """V5-40 (ask #255): one recall with the session id when memory is on; none when off."""
+    from lkap_contracts.agent_config import MemoryConfig
+
+    resolved = resolved_config()
+    config = resolved.config.model_copy(update={"memory": MemoryConfig(enabled=enabled)})
+    api = FakeApi(resolved.model_copy(update={"config": config}))
+    ctx = FakeJobContext(_metadata())
+
+    await run_session(ctx, _deps(api))
+
+    assert [request.session_id for request in api.memory_recalls] == (["sess-1"] if enabled else [])
+    await ctx.fire_shutdown("done")
+
+
 async def test_run_session_speaks_the_greeting_via_say_when_a_tts_exists() -> None:
     """With a TTS, `greeting_mode="say"` speaks the exact line and skips the LLM."""
     factory = _RecordingFactory(with_tts=True)

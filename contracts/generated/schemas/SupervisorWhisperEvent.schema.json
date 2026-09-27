@@ -1,0 +1,35 @@
+{
+  "$id": "lkap-contracts/SupervisorWhisperEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``supervisor_whisper`` session event: the worker applied a whisper.\n\n``applied`` is ``note`` (added to the agent's context; its next reply follows it) or\n``reply`` (``reply_now``: the agent was also asked to speak at once).",
+  "properties": {
+    "applied": {
+      "enum": [
+        "note",
+        "reply"
+      ],
+      "title": "Applied",
+      "type": "string"
+    },
+    "by": {
+      "title": "By",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "by",
+    "text",
+    "applied"
+  ],
+  "title": "SupervisorWhisperEvent",
+  "type": "object"
+}

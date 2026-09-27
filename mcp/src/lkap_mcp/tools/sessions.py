@@ -4,6 +4,12 @@ Transcript turns and event payloads came from callers and models, so they are
 returned inside the ``Untrusted`` envelope (R-V3-12). The time filters are
 ``since``/``until`` (the api's ``from``/``to``; ``from`` is not a valid
 parameter name).
+
+``session_whisper`` (V5-37) sends a live session's agent written guidance the
+caller never hears (``POST /v1/sessions/{id}/whisper``); it needs ``confirm=true``
+and takes ``plan=true``. It is declared with ``sessions:write`` (which implies the
+api's ``sessions:listen``) because this server's scope check knows only the
+``x:write`` ⇒ ``x:read`` rule.
 """
 
 from __future__ import annotations
@@ -18,7 +24,7 @@ from pydantic import Field
 from lkap_mcp.client import ApiFailure
 from lkap_mcp.registry import DESTRUCTIVE, READ, Registry
 from lkap_mcp.results import ToolResult, untrusted
-from lkap_mcp.tools._common import seg
+from lkap_mcp.tools._common import planned, request, seg
 
 SessionStatus = Literal["created", "active", "ended", "failed"]
 
@@ -159,3 +165,37 @@ def register(registry: Registry) -> None:
                 "delete every caller memory of this workspace, for every agent (cannot be undone)"
             )
         return ToolResult.success(await client.post("/v1/memory/purge", json={"confirm": True}))
+
+    @registry.tool(scopes={"sessions:write"}, annotations=DESTRUCTIVE, data="SessionWhisperOut")
+    async def session_whisper(
+        session_id: str,
+        text: Annotated[str, Field(min_length=1, max_length=1000)],
+        reply_now: bool = False,
+        confirm: bool = False,
+        plan: bool = False,
+    ) -> ToolResult:
+        """Whisper guidance to a live session's agent (the caller never hears it; needs confirm).
+
+        The agent treats it as a supervisor's note for its next reply; ``reply_now`` makes it
+        speak at once. Only for an active session with an agent in the room.
+        """
+        path = f"/v1/sessions/{seg(session_id)}/whisper"
+        body = {"text": text, "reply_now": reply_now}
+        if plan:
+            return planned(request("POST", path, body, note="the agent reads it; the caller never hears it"))
+        if not confirm:
+            return ToolResult.needs_confirmation(
+                f"send guidance to the agent of live session {session_id}; it may change what the agent says"
+            )
+        try:
+            return ToolResult.success(await client.post(path, body))
+        except ApiFailure as failure:
+            if failure.status == 409:
+                result = failure.to_result()
+                if result.error is not None:
+                    result.error.hint = (
+                        "whispers reach only an active session whose agent is in the room; check "
+                        "session_get(session_id).status"
+                    )
+                return result
+            raise

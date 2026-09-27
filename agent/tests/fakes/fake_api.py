@@ -177,6 +177,8 @@ class FakeApi:
         self.kb_options: list[KbSearchOptions | None] = []
         #: The `session_id` of each `kb_search` (S5-29; `None` when the caller sent none).
         self.kb_session_ids: list[str | None] = []
+        #: Every memory recall request (V5-40, ask #255).
+        self.memory_recalls: list[Any] = []
         #: Every `POST /internal/v1/sessions/{id}/recording/stop` (S5-5): the session ids.
         self.recording_stops: list[str] = []
         #: Raised by `stop_recording` when set (the api's 404 for an unknown session, ...).
@@ -238,6 +240,12 @@ class FakeApi:
         """Record the posted summary."""
         self.summaries.append(summary)
         self.call_log.append("summary")
+
+    async def memory_recall(self, request: Any) -> Any:
+        from lkap_contracts.api_models import MemoryRecallOut
+
+        self.memory_recalls.append(request)
+        return MemoryRecallOut(status="empty")
 
     async def kb_search(
         self,

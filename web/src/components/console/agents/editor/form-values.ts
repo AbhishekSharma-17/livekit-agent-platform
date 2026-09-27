@@ -79,10 +79,15 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       disclosure: { ...DEFAULT_DISCLOSURE, ...config.disclosure },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
-      // V5-25: only the fields this editor shows. `DEFAULT_TELEPHONY` (defaults.ts) also carries
-      // `sms_targets`, and an empty list here would replace the stored numbers on save
-      // (`buildAgentUpdate` merges the form over the stored telephony).
-      telephony: { transfer_targets: [...(config.telephony?.transfer_targets ?? [])] },
+      // R-V2-21 / V5-28: the Tools section's "Phone calls" card edits both lists —
+      // transfer destinations and (V5-28) the SMS contacts `send_sms` may text besides
+      // the caller. Both are loaded here (not just `transfer_targets`) so the editor
+      // shows what is actually stored and `buildAgentUpdate`'s merge only overwrites a
+      // list the form genuinely edited.
+      telephony: {
+        transfer_targets: [...(config.telephony?.transfer_targets ?? [])],
+        sms_targets: [...(config.telephony?.sms_targets ?? [])],
+      },
     },
   };
 }

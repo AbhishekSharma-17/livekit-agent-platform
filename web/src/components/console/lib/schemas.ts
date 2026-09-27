@@ -214,6 +214,20 @@ export const capabilitiesConfigSchema = z.object({
   vision_inject_per_turn: z.boolean(),
 });
 
+/**
+ * `NotifyTeamConfig` (V5-25, `lkap_contracts.tools`): where `notify_team` (and
+ * `escalate_to_human`) posts a summary. `credential_id` names an
+ * `http-tool-secret` key holding the webhook URL — never the URL itself.
+ */
+export const notifyTeamConfigSchema = z.object({
+  credential_id: z.string().min(1, "Choose a key"),
+  include_transcript: z.boolean().optional(),
+  on_escalation: z.boolean().optional(),
+  secret_name: z.string().optional(),
+  style: z.enum(["slack", "generic"]).optional(),
+});
+export type NotifyTeamConfigForm = z.infer<typeof notifyTeamConfigSchema>;
+
 export const toolsConfigSchema = z.object({
   builtin_disabled: z.array(z.string()),
   http_request_enabled: z.boolean(),
@@ -229,6 +243,19 @@ export const toolsConfigSchema = z.object({
    */
   execution_default: z.enum(["blocking", "background", "auto"]),
   builtin_execution: z.record(z.string(), z.custom<ToolExecution>()),
+  /**
+   * V5-25's curated network built-ins (V5-28's Tools-tab slots edit these):
+   * without them here, `z.object`'s resolver parse would strip every one of
+   * them from a save (the file header's warning) — the slots' edits would
+   * never persist. `web_search`/`sms` reuse `providerRefSchema` (the same
+   * shape pipeline slots use); `fetch_url_allowed_hosts` is site names only
+   * (no scheme, no path — the api refuses anything else); `notify_team` is
+   * `null` until the "Notify your team" card is turned on.
+   */
+  fetch_url_allowed_hosts: z.array(z.string().min(1)).max(50, "50 sites max").optional(),
+  web_search: providerRefSchema.nullable().optional(),
+  sms: providerRefSchema.nullable().optional(),
+  notify_team: notifyTeamConfigSchema.nullable().optional(),
   /**
    * V5-48 (`connected-apps-card.tsx`): `AppsMode` (docs/v5/COMPOSIO.md
    * D-V5-C6) is a passthrough for the same reason as `builtin_execution`
@@ -344,8 +371,31 @@ export const transferTargetSchema = z.object({
 });
 export type TransferTargetForm = z.infer<typeof transferTargetSchema>;
 
+/** `SmsTarget` (V5-25, `lkap_contracts.telephony`): a saved contact `send_sms` may text besides the caller. */
+export const SMS_TARGET_PATTERN = /^\+[1-9]\d{6,14}$/;
+
+export const smsTargetSchema = z.object({
+  label: z.string().trim().min(1, "Name the contact").max(64, "64 characters max"),
+  to: z
+    .string()
+    .trim()
+    .max(32, "32 characters max")
+    .regex(SMS_TARGET_PATTERN, "Use international format, e.g. +15551234567"),
+});
+export type SmsTargetForm = z.infer<typeof smsTargetSchema>;
+
 export const telephonyConfigSchema = z
-  .object({ transfer_targets: z.array(transferTargetSchema).max(50, "50 destinations max") })
+  .object({
+    transfer_targets: z.array(transferTargetSchema).max(50, "50 destinations max"),
+    /**
+     * V5-25 (`DEFAULT_TELEPHONY`, `agents/defaults.ts`); V5-28 edits it here so a
+     * save actually carries the Tools section's "Send a text message" contacts
+     * instead of the resolver stripping them (see `toolsConfigSchema` above).
+     * Optional like `apps`/`locale`: a fixture built before this field existed
+     * doesn't need it, and `toFormValues` always supplies a concrete list.
+     */
+    sms_targets: z.array(smsTargetSchema).max(50, "50 contacts max").optional(),
+  })
   .superRefine((val, ctx) => {
     const seen = new Set<string>();
     val.transfer_targets.forEach((target, index) => {
@@ -358,6 +408,18 @@ export const telephonyConfigSchema = z
         });
       }
       seen.add(key);
+    });
+    const seenSms = new Set<string>();
+    (val.sms_targets ?? []).forEach((target, index) => {
+      const key = target.label.trim().toLowerCase();
+      if (key && seenSms.has(key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sms_targets", index, "label"],
+          message: "Two contacts can't share a name.",
+        });
+      }
+      seenSms.add(key);
     });
   });
 export type TelephonyConfigForm = z.infer<typeof telephonyConfigSchema>;

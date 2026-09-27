@@ -12,9 +12,9 @@
  *
  * `<Block>` picks the block's state out of `props.state.blocks[spec.id]`
  * (over the type's initial state), resolves the heading, and renders the
- * matching component. The `document`, `table`, `video` and `markdown`
- * components are split out of the first load (`React.lazy`); pdf.js is a
- * further PDF-only split inside the document block.
+ * matching component. The `document`, `table`, `video`, `markdown` and
+ * `upload` components are split out of the first load (`React.lazy`); pdf.js
+ * is a further PDF-only split inside the document block.
  */
 import type { BlockSpec } from "@/contracts/lkap-contracts";
 import * as React from "react";
@@ -49,22 +49,16 @@ type AnyBlockComponent = React.ComponentType<BlockRenderProps<never>>;
 
 const DocumentBlock = lazy(() => import("./document"));
 const TableBlock = lazy(() => import("./table"));
-// The video block is the only one that needs LiveKit's React bindings; kept
-// out of the first load so the console pages that render panels (session
-// detail, the composer preview) don't pull livekit-client in.
+// The video block needs LiveKit's React bindings; kept out of the first load
+// so the console pages that render panels (session detail, the composer
+// preview) don't pull livekit-client in.
 const VideoBlock = lazy(() => import("./video"));
 // `markdown` pulls in `streamdown`; kept out of the first load the same way,
 // for a session whose panel has no `markdown` block (V5-12).
 const MarkdownBlock = lazy(() => import("./markdown"));
-
-/** A block type this web build has no renderer for yet. */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
+// `upload` also needs LiveKit's React bindings (`useMaybeRoomContext`, for
+// its byte-stream sender) — the same reason `video` is split out (V5-23).
+const UploadBlock = lazy(() => import("./upload"));
 
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
@@ -85,12 +79,11 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   markdown: MarkdownBlock as AnyBlockComponent,
   steps: StepsBlock as AnyBlockComponent,
   consent: ConsentBlock as AnyBlockComponent,
-  // V5-19 added this type to the contract; its renderer comes with V5-23.
-  upload: NotRenderedYetBlock,
+  upload: UploadBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
-export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(["document", "table", "video", "markdown"]);
+export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(["document", "table", "video", "markdown", "upload"]);
 
 export interface BlockProps extends PanelProps {
   spec: BlockSpec;

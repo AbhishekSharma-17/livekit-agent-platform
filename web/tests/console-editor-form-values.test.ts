@@ -187,7 +187,7 @@ describe("unappliedFields", () => {
   });
 });
 
-describe("config.telephony (R-V2-21)", () => {
+describe("config.telephony (R-V2-21, V5-28)", () => {
   const TELEPHONY = {
     transfer_targets: [
       { label: "Front desk", to: "+15550003333" },
@@ -199,18 +199,19 @@ describe("config.telephony (R-V2-21)", () => {
     const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
     const body = buildAgentUpdate(a, submitted(a, (v) => (v.config.instructions = "Something else.")));
 
-    expect(JSON.stringify(body.config?.telephony)).toBe(JSON.stringify(TELEPHONY));
+    expect(body.config?.telephony).toEqual({ ...TELEPHONY, sms_targets: [] });
   });
 
-  it("an agent without a telephony block gets an empty destination list, not a dropped one", () => {
+  it("an agent without a telephony block gets empty lists, not dropped ones", () => {
     const a = agent();
-    expect(toFormValues(a).config.telephony).toEqual({ transfer_targets: [] });
-    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({ transfer_targets: [] });
+    expect(toFormValues(a).config.telephony).toEqual({ transfer_targets: [], sms_targets: [] });
+    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({ transfer_targets: [], sms_targets: [] });
   });
 
-  it("keeps stored SMS numbers on a save that does not edit them (V5-25)", () => {
+  it("loads stored SMS contacts into the form and keeps them on an unrelated save (V5-25, V5-28)", () => {
     const sms = { transfer_targets: [], sms_targets: [{ label: "Claims desk", to: "+15550002222" }] };
     const a = agent({ config: { ...agent().config, telephony: sms } });
+    expect(toFormValues(a).config.telephony).toEqual(sms);
     expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual(sms);
   });
 
@@ -221,6 +222,22 @@ describe("config.telephony (R-V2-21)", () => {
       submitted(a, (v) => (v.config.telephony.transfer_targets = [{ label: "Sales", to: "+15550001111" }])),
     );
 
-    expect(body.config?.telephony).toEqual({ transfer_targets: [{ label: "Sales", to: "+15550001111" }] });
+    expect(body.config?.telephony).toEqual({
+      transfer_targets: [{ label: "Sales", to: "+15550001111" }],
+      sms_targets: [],
+    });
+  });
+
+  it("sends edited SMS contacts without touching transfer destinations (V5-28)", () => {
+    const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
+    const body = buildAgentUpdate(
+      a,
+      submitted(a, (v) => (v.config.telephony.sms_targets = [{ label: "Claims desk", to: "+15550002222" }])),
+    );
+
+    expect(body.config?.telephony).toEqual({
+      ...TELEPHONY,
+      sms_targets: [{ label: "Claims desk", to: "+15550002222" }],
+    });
   });
 });

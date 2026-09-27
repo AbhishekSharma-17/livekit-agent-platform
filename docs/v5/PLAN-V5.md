@@ -653,12 +653,12 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-19 | Opus | 4 | merged | | | |
 | V5-20 | Opus | 4 | planned | | deferred (needs store keys) | |
 | V5-21 | Sonnet | 5 | planned | | needs a Linear account | |
-| V5-23 | Sonnet | 5 | planned | | | |
+| V5-23 | Sonnet | 5 | merged | | | |
 | V5-24 | Sonnet | 5 | planned | | | |
-| V5-25 | Opus | 5 | planned | | partly deferred (search, SMS, Cal.com keys) | |
-| V5-26 | Opus + Fable | 6 | planned | | | |
+| V5-25 | Opus | 5 | merged | | partly deferred (search, SMS, Cal.com keys) | |
+| V5-26 | Opus + Fable | 6 | done (review) | | | |
 | V5-27 | Opus | 6 | planned | | | |
-| V5-28 | Sonnet | 6 | planned | | | |
+| V5-28 | Sonnet | 6 | merged | | with V5-25's deferred keys (dev-stack walk not run in this session) | |
 | V5-29 | Opus | 7 | planned | | | |
 | V5-30 | Opus | 7 | planned | | STT redaction deferred | |
 | V5-31 | Opus | 7 | planned | | Inference `multi` to confirm | |

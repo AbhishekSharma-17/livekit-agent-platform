@@ -22,7 +22,7 @@ import {
   plusOneAlone,
   policyFromSettings,
 } from "@/components/console/telephony/dialing-policy";
-import { PhoneCallsCard } from "@/components/console/telephony/tools-section";
+import { PhoneCallsCard, SmsContactsCard } from "@/components/console/telephony/tools-section";
 import { TELEPHONY_TOOLS, BUILTIN_TOOLS } from "@/components/console/lib/constants";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { FormProvider, useForm } from "react-hook-form";
@@ -531,6 +531,65 @@ describe("PhoneCallsCard", () => {
     await waitFor(() =>
       expect(latest?.config.telephony.transfer_targets).toEqual([{ label: "Desk", to: "sip:desk@pbx.example.com" }]),
     );
+  });
+});
+
+// ------------------------------------- V5-28: SMS contacts (send_sms's destination policy)
+function SmsCardHarness({
+  contacts = [],
+  onValues,
+}: {
+  contacts?: { label: string; to: string }[];
+  onValues: (values: AgentEditorForm) => void;
+}) {
+  const form = useForm<AgentEditorForm>({
+    defaultValues: {
+      config: { telephony: { transfer_targets: [], sms_targets: contacts } },
+    } as unknown as AgentEditorForm,
+  });
+  const values = form.watch();
+  React.useEffect(() => {
+    onValues(values as AgentEditorForm);
+  });
+  return (
+    <FormProvider {...form}>
+      <SmsContactsCard />
+    </FormProvider>
+  );
+}
+
+describe("SmsContactsCard (V5-25, V5-28)", () => {
+  it("explains the destination policy in plain words and starts empty", () => {
+    render(<SmsCardHarness onValues={() => {}} />);
+    expect(screen.getByText(/the agent can text the caller automatically/i)).toBeTruthy();
+    expect(screen.getByText(/No saved contacts/)).toBeTruthy();
+  });
+
+  it("adds a contact", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(<SmsCardHarness onValues={(v) => (latest = v)} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Claims desk" } });
+    fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: "+15550002222" } });
+
+    await waitFor(() =>
+      expect(latest?.config.telephony.sms_targets).toEqual([{ label: "Claims desk", to: "+15550002222" }]),
+    );
+  });
+
+  it("removes a contact", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(
+      <SmsCardHarness
+        contacts={[{ label: "Claims desk", to: "+15550002222" }, { label: "Sales", to: "+15550001111" }]}
+        onValues={(v) => (latest = v)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove contact 1" }));
+
+    await waitFor(() => expect(latest?.config.telephony.sms_targets).toEqual([{ label: "Sales", to: "+15550001111" }]));
   });
 });
 

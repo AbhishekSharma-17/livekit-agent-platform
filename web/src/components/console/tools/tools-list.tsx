@@ -19,6 +19,7 @@ import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-edito
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
+import { ToolTemplateDialog } from "@/components/console/tools/tool-template-dialog";
 import type { AppConnectionOut, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 import { PageHeader } from "@/components/shared/page-header";
 import { SkeletonRows } from "@/components/shared/loading-state";
@@ -97,6 +98,21 @@ export function ToolsList() {
       description="HTTP tools and MCP servers, shared across agents."
       actions={
         <>
+          <ToolTemplateDialog
+            agentId={null}
+            secretBagSpec={secretBagSpec}
+            onInstantiated={refetch}
+            trigger={
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
+                <PlusIcon className="size-3.5" /> From a template
+              </Button>
+            }
+          />
           <McpToolEditorDialog
             agentId={null}
             secretBagSpec={secretBagSpec}

@@ -28,7 +28,44 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
   if (provider.kind === "tool_provider") {
     return <ToolProviderRow provider={provider} />;
   }
+  // V5-25/V5-28 (docs/v5/_asks.md #154(c)): `web_search`/`sms` run per agent
+  // (an agent's own Tools tab picks the vendor and key), not per LiveKit
+  // connection — the generic row's Enable switch (`workspace_providers.enabled`)
+  // and "installed on <connection>" badges describe a worker-install concept
+  // that means nothing here, so this reads like `tool_provider`: read-only,
+  // pointing at where it's actually turned on.
+  if (provider.kind === "web_search" || provider.kind === "sms") {
+    return <NetworkToolProviderRow provider={provider} />;
+  }
   return <GenericProviderRow provider={provider} connections={connections} />;
+}
+
+function NetworkToolProviderRow({ provider }: { provider: ProviderOut }) {
+  const { data: credentials } = useCredentials(provider.id);
+  const hasKey = (credentials?.items.length ?? 0) > 0;
+  const verification = verificationMeta(provider);
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-1 gap-3">
+        <VendorMark vendor={provider.vendor} size="md" className="mt-0.5" />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">{provider.label}</span>
+            <span title={verification.help}>
+              <StatusChip tone={verification.label === "Verified" ? "success" : "neutral"} size="sm">
+                {verification.label}
+              </StatusChip>
+            </span>
+            <CapabilityBadge kind={hasKey ? "key-set" : "key-required"}>{hasKey ? "Key set" : "Key required"}</CapabilityBadge>
+          </div>
+          {provider.notes ? <p className="text-xs text-pretty text-muted-foreground">{provider.notes}</p> : null}
+        </div>
+      </div>
+      <p className="shrink-0 text-xs text-muted-foreground sm:text-right">
+        Picked per agent, in its Tools tab.
+      </p>
+    </div>
+  );
 }
 
 function ToolProviderRow({ provider }: { provider: ProviderOut }) {

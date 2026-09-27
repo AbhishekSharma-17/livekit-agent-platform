@@ -14,25 +14,45 @@
  * requestable block's renderer now shares.
  *
  * Schema subset (the worker's `fields_to_schema`): `properties` in field
- * order, each `{title, type: string|number|integer|boolean, format?: date|email,
- * enum?}`, plus `required`.
+ * order, each `{title, type: string|number|integer|boolean, format?:
+ * date|email|phone, enum?}`, plus `required`; V5-19/V5-23 add two JSON-schema
+ * extension keys the worker also emits (`lkap_contracts.ui_protocol`,
+ * `FORM_WIDGET_KEY`/`FORM_UPLOAD_KEY` — not exported to the generated
+ * contracts, so their literal strings are pinned here and in
+ * `panel-blocks.test.tsx`): `"x-lkap-widget": "textarea"` for a longer text
+ * field, and `"x-lkap-widget": "file"` + `"x-lkap-upload": {accept,
+ * max_files, max_bytes}` for a field the caller fills by sending files.
+ *
+ * A `file` field's control (`FormFileField`) lives in `./upload.tsx`, not
+ * here, and is loaded lazily: it needs `useMaybeRoomContext`
+ * (`@livekit/components-react`), and this block — unlike `upload` — is
+ * common enough (and rendered in the composer preview and the console's
+ * read-only snapshot, `BLOCK_COMPONENTS` in `blocks/index.tsx`) that it must
+ * not pull `livekit-client` into every page that renders a panel (the same
+ * reason `video`/`document`/`table`/`markdown` are lazy). `formFields`
+ * itself needs no room, so parsing a schema with a `file` field, and every
+ * other field kind, stays synchronous.
  */
 import * as React from "react";
-import { useId, useMemo, useState } from "react";
+import { Suspense, lazy, useId, useMemo, useState } from "react";
 
 import { Field } from "@/components/shared/field";
 import { StatusChip } from "@/components/shared/status-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { FormBlockState } from "@/contracts/lkap-contracts";
+import { Textarea } from "@/components/ui/textarea";
+import type { AssetRef, FormBlockState } from "@/contracts/lkap-contracts";
 import { formatTime } from "@/lib/format";
 import { useBlockRequest } from "@/panels/composite/use-block-request";
+import { DEFAULT_UPLOAD_ACCEPT, type UploadLimits } from "@/panels/composite/upload";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
 import { BlockFrame } from "./frame";
 import type { BlockRenderProps } from "./types";
 
-export type FormFieldKind = "text" | "email" | "date" | "number" | "integer" | "boolean" | "select";
+const FormFileField = lazy(() => import("./upload").then((m) => ({ default: m.FormFileField })));
+
+export type FormFieldKind = "text" | "email" | "phone" | "date" | "number" | "integer" | "boolean" | "select" | "textarea" | "file";
 
 export interface FormFieldSpec {
   name: string;
@@ -40,10 +60,27 @@ export interface FormFieldSpec {
   kind: FormFieldKind;
   required: boolean;
   options: string[];
+  /** `x-lkap-upload`'s limits, only present for `kind === "file"`. */
+  upload?: UploadLimits;
 }
+
+/** `lkap_contracts.ui_protocol.FORM_WIDGET_KEY` / `FORM_UPLOAD_KEY` (not in the generated contracts — plain constants, not a model). */
+const FORM_WIDGET_KEY = "x-lkap-widget";
+const FORM_UPLOAD_KEY = "x-lkap-upload";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function uploadSpecOf(raw: unknown): UploadLimits {
+  const spec = isRecord(raw) ? raw : {};
+  const accept =
+    Array.isArray(spec.accept) && spec.accept.every((a) => typeof a === "string") && spec.accept.length > 0
+      ? (spec.accept as string[])
+      : DEFAULT_UPLOAD_ACCEPT;
+  const maxFiles = typeof spec.max_files === "number" && spec.max_files > 0 ? spec.max_files : 1;
+  const maxBytes = typeof spec.max_bytes === "number" && spec.max_bytes > 0 ? spec.max_bytes : 10 * 1024 * 1024;
+  return { accept, maxFiles, maxBytes };
 }
 
 /** Flatten the block's JSON schema into renderable fields, in property order. */
@@ -53,25 +90,34 @@ export function formFields(schema: unknown): FormFieldSpec[] {
   return Object.entries(schema.properties).map(([name, raw]) => {
     const prop = isRecord(raw) ? raw : {};
     const options = Array.isArray(prop.enum) ? prop.enum.map((o) => String(o)) : [];
+    const widget = typeof prop[FORM_WIDGET_KEY] === "string" ? prop[FORM_WIDGET_KEY] : null;
     let kind: FormFieldKind = "text";
-    if (options.length > 0) kind = "select";
+    let upload: UploadLimits | undefined;
+    if (widget === "file") {
+      kind = "file";
+      upload = uploadSpecOf(prop[FORM_UPLOAD_KEY]);
+    } else if (widget === "textarea") {
+      kind = "textarea";
+    } else if (options.length > 0) kind = "select";
     else if (prop.type === "boolean") kind = "boolean";
     else if (prop.type === "integer") kind = "integer";
     else if (prop.type === "number") kind = "number";
     else if (prop.format === "date") kind = "date";
     else if (prop.format === "email") kind = "email";
+    else if (prop.format === "phone") kind = "phone";
     const label = typeof prop.title === "string" && prop.title ? prop.title : name;
-    return { name, label, kind, required: required.has(name), options };
+    return { name, label, kind, required: required.has(name), options, upload };
   });
 }
 
-type Draft = Record<string, string | boolean>;
+type Draft = Record<string, string | boolean | string[]>;
 
 function toDraft(fields: FormFieldSpec[], values: Record<string, unknown>): Draft {
   const draft: Draft = {};
   for (const field of fields) {
     const value = values[field.name];
     if (field.kind === "boolean") draft[field.name] = value === true;
+    else if (field.kind === "file") draft[field.name] = Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
     else draft[field.name] = value === undefined || value === null ? "" : String(value);
   }
   return draft;
@@ -81,7 +127,9 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Validate and coerce the draft into the `values` object the worker expects.
- * Optional empty fields are omitted; numbers are numbers, booleans booleans.
+ * Optional empty fields are omitted; numbers are numbers, booleans booleans,
+ * a `file` field the stored asset ids it has actually received (never
+ * something the caller typed).
  */
 export function coerceForm(
   fields: FormFieldSpec[],
@@ -93,6 +141,15 @@ export function coerceForm(
     const raw = draft[field.name];
     if (field.kind === "boolean") {
       values[field.name] = raw === true;
+      continue;
+    }
+    if (field.kind === "file") {
+      const ids = Array.isArray(raw) ? raw : [];
+      if (ids.length === 0) {
+        if (field.required) errors[field.name] = `Attach ${field.label.toLowerCase()}.`;
+        continue;
+      }
+      values[field.name] = ids;
       continue;
     }
     const text = typeof raw === "string" ? raw.trim() : "";
@@ -127,7 +184,13 @@ const SELECT_CLASSES =
 
 type AriaProps = Pick<React.AriaAttributes, "aria-describedby" | "aria-invalid" | "aria-required">;
 
-/** `Field` clones its child with the aria wiring; forward it to the real control. */
+/**
+ * `Field` clones its child with the aria wiring; forward it to the real
+ * control. Never called for `kind === "file"` — `FormEditor` renders
+ * `FormFileField` directly for that one, in a `<fieldset>` instead of a
+ * `<Field>` (the same reason `block-config-form.tsx`'s `multiselect`/`list`
+ * kinds bypass their own single-input `ConfigFieldControl`).
+ */
 function FieldControl({
   field,
   id,
@@ -175,6 +238,22 @@ function FieldControl({
           ))}
         </select>
       );
+    case "textarea":
+      return (
+        <Textarea
+          id={id}
+          name={field.name}
+          rows={4}
+          value={typeof value === "string" ? value : ""}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          {...aria}
+        />
+      );
+    case "file":
+      // `FormEditor` never reaches this branch for a `file` field (see the
+      // docstring above); kept only so the switch stays exhaustive.
+      return null;
     default:
       return (
         <Input
@@ -185,11 +264,15 @@ function FieldControl({
               ? "number"
               : field.kind === "date" || field.kind === "email"
                 ? field.kind
-                : "text"
+                : field.kind === "phone"
+                  ? "tel"
+                  : "text"
           }
-          inputMode={field.kind === "integer" ? "numeric" : field.kind === "number" ? "decimal" : undefined}
+          inputMode={
+            field.kind === "integer" ? "numeric" : field.kind === "number" ? "decimal" : field.kind === "phone" ? "tel" : undefined
+          }
           step={field.kind === "integer" ? 1 : field.kind === "number" ? "any" : undefined}
-          autoComplete={field.kind === "email" ? "email" : "off"}
+          autoComplete={field.kind === "email" ? "email" : field.kind === "phone" ? "tel" : "off"}
           value={typeof value === "string" ? value : ""}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
@@ -202,6 +285,7 @@ function FieldControl({
 function formatValue(value: unknown): string {
   if (value === true) return "Yes";
   if (value === false) return "No";
+  if (Array.isArray(value)) return value.length === 0 ? "—" : `${value.length} file${value.length === 1 ? "" : "s"}`;
   if (value === undefined || value === null || value === "") return "—";
   return String(value);
 }
@@ -216,12 +300,16 @@ function FormEditor({
   title,
   fields,
   prefill,
+  assets,
+  panelAssets,
   perform,
 }: {
   blockId: string;
   title: string | null;
   fields: FormFieldSpec[];
   prefill: Record<string, unknown>;
+  assets: AssetRef[];
+  panelAssets: Map<string, string>;
   perform: BlockRenderProps["panel"]["perform"];
 }) {
   const baseId = useId();
@@ -253,6 +341,38 @@ function FormEditor({
       ) : (
         fields.map((field) => {
           const id = `${baseId}-${field.name}`;
+          if (field.kind === "file") {
+            // A fieldset, not a `<Field>`: `FormFileField` is a composite
+            // control (a button, a hidden input and a file list), not the
+            // single focusable element `Field` clones aria props onto — the
+            // same reason `block-config-form.tsx`'s `multiselect`/`list`
+            // kinds render their own `<fieldset>` too.
+            return (
+              <fieldset key={field.name} className="flex flex-col gap-1.5">
+                <legend className="mb-1 text-sm leading-5 font-medium">
+                  {field.label}
+                  {field.required && (
+                    <span className="text-muted-foreground ml-1.5 text-[0.8125rem] font-normal">Required</span>
+                  )}
+                </legend>
+                <Suspense fallback={<PanelEmpty>Loading…</PanelEmpty>}>
+                  <FormFileField
+                    field={field}
+                    blockId={blockId}
+                    assets={assets}
+                    panelAssets={panelAssets}
+                    disabled={sending !== null}
+                    onChange={(ids) => setDraft((prev) => ({ ...prev, [field.name]: ids }))}
+                  />
+                </Suspense>
+                {errors[field.name] && (
+                  <p role="alert" className="text-danger-text text-[0.8125rem]">
+                    {errors[field.name]}
+                  </p>
+                )}
+              </fieldset>
+            );
+          }
           return (
             <Field
               key={field.name}
@@ -265,7 +385,7 @@ function FormEditor({
               <FieldControl
                 field={field}
                 id={id}
-                value={draft[field.name] ?? (field.kind === "boolean" ? false : "")}
+                value={draft[field.name] as string | boolean | undefined ?? (field.kind === "boolean" ? false : "")}
                 disabled={sending !== null}
                 onChange={(value) => setDraft((prev) => ({ ...prev, [field.name]: value }))}
               />
@@ -300,7 +420,16 @@ export function FormBlock({ spec, data, panel, title, highlighted }: BlockRender
   let body: React.ReactNode;
   if (status === "requested") {
     body = (
-      <FormEditor key={requestKey} blockId={spec.id} title={title} fields={fields} prefill={prefill} perform={panel.perform} />
+      <FormEditor
+        key={requestKey}
+        blockId={spec.id}
+        title={title}
+        fields={fields}
+        prefill={prefill}
+        assets={panel.state.assets ?? []}
+        panelAssets={panel.assets}
+        perform={panel.perform}
+      />
     );
   } else if (status === "cancelled") {
     body = <PanelEmpty>You dismissed this without answering.</PanelEmpty>;

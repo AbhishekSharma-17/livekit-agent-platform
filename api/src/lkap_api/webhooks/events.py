@@ -31,4 +31,5 @@ KNOWN_EVENTS: tuple[str, ...] = (
     RECORDING_READY,
     CALL_STARTED,
     CALL_ENDED,
+    TOOL_NEEDS_REAUTH,
 )

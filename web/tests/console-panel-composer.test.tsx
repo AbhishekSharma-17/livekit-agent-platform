@@ -305,6 +305,18 @@ describe("PanelComposer", () => {
     expect(await within(preview).findByText("Induction hob")).toBeTruthy();
   });
 
+  it("previews a freshly-added link block with its fixture state (V5-44)", async () => {
+    stubFetch();
+    render(<Harness agent={agent()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add block" }));
+    fireEvent.click(within(screen.getByRole("list", { name: "Block types" })).getByText("Link"));
+    const preview = await screen.findByTestId("composer-preview", {}, { timeout: 5000 });
+    // `BLOCK_FIXTURE_STATES.link` is applied to every `link` block by type,
+    // regardless of its (freshly assigned) id — same mechanism the table
+    // case above already proves.
+    expect(await within(preview).findByText("Pay the excess")).toBeTruthy();
+  });
+
   it("reorders with the keyboard on the drag handle and announces it", async () => {
     stubFetch();
     render(<Harness agent={agent()} />);

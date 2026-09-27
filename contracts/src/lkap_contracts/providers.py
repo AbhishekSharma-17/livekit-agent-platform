@@ -3226,7 +3226,9 @@ _NEW: list[ProviderSpec] = [
     # The keys and non-secret fields of `/v1/knowledge-connections`: `fields` is the per-kind
     # settings schema the console renders (the api validates the same names). The api speaks each
     # vendor's REST API itself, so there is no package or class; the key is checked by the
-    # connection's `Test connection` (it needs the url or index the fields name).
+    # connection's `Test connection` (it needs the url or index the fields name). Every entry
+    # keeps `requires_credential` so the add-key dialog offers it; a local Qdrant or Weaviate
+    # connection may still have no key (the api decides, not the registry).
     _full(
         "qdrant",
         "knowledge",
@@ -3234,7 +3236,6 @@ _NEW: list[ProviderSpec] = [
         "Qdrant",
         "",
         "",
-        requires_credential=False,
         secret_fields=[
             _api_key(
                 "Qdrant API key", help_text="A database API key of the cluster; none for a local cluster."
@@ -3320,7 +3321,6 @@ _NEW: list[ProviderSpec] = [
         "Weaviate",
         "",
         "",
-        requires_credential=False,
         secret_fields=[
             _api_key("Weaviate API key", help_text="The cluster's API key. Leave out for a local cluster.")
         ],

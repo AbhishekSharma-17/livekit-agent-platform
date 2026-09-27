@@ -11788,7 +11788,7 @@
       "price_ref": null,
       "probe": null,
       "python_class": "",
-      "requires_credential": false,
+      "requires_credential": true,
       "secret_fields": [
         {
           "accept": null,
@@ -12016,7 +12016,7 @@
       "price_ref": null,
       "probe": null,
       "python_class": "",
-      "requires_credential": false,
+      "requires_credential": true,
       "secret_fields": [
         {
           "accept": null,

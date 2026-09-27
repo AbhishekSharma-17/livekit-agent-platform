@@ -632,7 +632,9 @@ def test_knowledge_connection_fields_are_the_settings_the_api_accepts(
     assert [field.name for field in get(provider_id).fields] == fields
 
 
-def test_keyless_knowledge_stores_do_not_require_a_credential() -> None:
-    assert get("qdrant").requires_credential is False
-    assert get("weaviate").requires_credential is False
-    assert get("pinecone").requires_credential is True
+def test_every_knowledge_entry_is_offered_in_the_add_key_dialog() -> None:
+    # The console's add-key dialog lists only entries with `requires_credential` (V5-20). A local
+    # Qdrant or Weaviate may still run keyless: the connection's `credential_id` is optional for
+    # them in the api (`knowledge_connections.settings.KEY_REQUIRED`), not in the registry.
+    for provider_id in ("qdrant", "pinecone", "weaviate", "cohere-rerank", "voyage-rerank"):
+        assert get(provider_id).requires_credential is True

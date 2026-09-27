@@ -35,6 +35,14 @@ from lkap_contracts.agent_config import (
     RecordingConfig,
     ResolvedAgentConfig,
 )
+from lkap_contracts.agent_tests import (
+    AgentTest,
+    AgentTestRun,
+    AgentTestRunIn,
+    AgentTestRunPage,
+    PublishGate,
+    PublishGateRefusal,
+)
 from lkap_contracts.blocks import BLOCK_CONFIG_MODELS, block_config_schema_name
 from lkap_contracts.common import Issue
 from lkap_contracts.compliance import (
@@ -139,6 +147,13 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PanelLayout": PanelLayout,
     "RecordingConfig": RecordingConfig,
     "DisclosureConfig": DisclosureConfig,
+    # V5-29: text simulations, judges and the pre-publish gate
+    "AgentTest": AgentTest,
+    "PublishGate": PublishGate,
+    "AgentTestRun": AgentTestRun,
+    "AgentTestRunIn": AgentTestRunIn,
+    "AgentTestRunPage": AgentTestRunPage,
+    "PublishGateRefusal": PublishGateRefusal,
     "QaConfig": QaConfig,
     "PrivacyConfig": PrivacyConfig,  # V5-30
     "ResolvedAgentConfig": ResolvedAgentConfig,

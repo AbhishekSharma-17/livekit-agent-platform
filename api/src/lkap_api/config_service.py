@@ -507,6 +507,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(choices_on_phone_issues(ctx))
     findings.extend(consent_issues(ctx))
     findings.extend(curated_tool_issues(ctx))
+    findings.extend(agent_test_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1244,6 +1245,62 @@ def _fetch_host_problem(host: str) -> str | None:
     if name == "localhost" or name.endswith(_LOCAL_SUFFIXES):
         return "names a private network, which the agent never reads"
     return None
+
+
+def agent_test_issues(ctx: ValidationContext) -> list[Issue]:
+    """The test-case checks of V5-29 (``tests``, ``publish_gate``).
+
+    * A mock naming a tool that is not one of the agent's HTTP tools or connected-app
+      actions → error: only those are mocked by the worker (``tools/declarative.py``), so any
+      other name (a built-in, a pack tool, an MCP server's tool, a typo) would silently call
+      the real thing. An MCP server attached to the agent softens it to a warning, because its
+      tools are only discovered when a session starts.
+    * ``publish_gate.require_tests`` with no test cases → warning: publishing will be refused.
+
+    Runs only when the tool rows are known (``tool_names_by_id`` and
+    ``tool_definitions_by_id``); the gate warning always runs.
+    """
+    config = ctx.config
+    issues: list[Issue] = []
+    if config.publish_gate.require_tests and not config.tests:
+        issues.append(
+            Issue(
+                path="publish_gate.require_tests",
+                message="publishing needs passing tests, but the agent has no test cases yet: publishing "
+                "will be refused until you add some and run them",
+                severity="warning",
+            )
+        )
+    names_by_id, definitions = ctx.tool_names_by_id, ctx.tool_definitions_by_id
+    if names_by_id is None or definitions is None:
+        return issues
+    mockable: set[str] = set()
+    has_mcp = False
+    for tool_id in config.tools.tool_ids:
+        definition = definitions.get(tool_id)
+        kind = definition.get("kind") if isinstance(definition, Mapping) else None
+        if kind in ("http", "provider") and tool_id in names_by_id:
+            mockable.add(names_by_id[tool_id])
+        elif kind == "mcp":
+            has_mcp = True
+    for index, case in enumerate(config.tests):
+        for name in sorted(set(case.mocks) - mockable):
+            issues.append(
+                Issue(
+                    path=f"tests[{index}].mocks.{name}",
+                    message=(
+                        f"'{name}' is not one of this agent's HTTP tools or app actions, so it cannot be "
+                        "mocked"
+                        + (
+                            "; if it is a tool of an attached MCP server, it will run for real"
+                            if has_mcp
+                            else ""
+                        )
+                    ),
+                    severity="warning" if has_mcp else "error",
+                )
+            )
+    return issues
 
 
 def curated_tool_issues(ctx: ValidationContext) -> list[Issue]:

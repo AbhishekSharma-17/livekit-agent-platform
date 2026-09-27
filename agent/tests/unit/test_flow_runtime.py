@@ -595,7 +595,7 @@ async def test_flow_node_background_tools_run_blocking_until_livekit_agents_1_8_
         api,
         factory=_FlowFactory(ScriptedLLM(["Hi."]), FakeLLM(["{}"])),
         session_starter=starter,
-        declarative_tools_builder=lambda defs: build_http_tools(
+        declarative_tools_builder=lambda defs, **_: build_http_tools(
             defs, platform_allowed_hosts=["api.example.com"]
         ),
         mcp_servers_builder=_mcp_builder,
@@ -926,7 +926,7 @@ def _silent_flow_deps(
         FakeApi(resolved),
         factory=_FlowFactory(conversation, workflow),
         session_starter=starter,
-        declarative_tools_builder=lambda _defs: [_push_status_tool(calls)],
+        declarative_tools_builder=lambda _defs, **_: [_push_status_tool(calls)],
     )
     return ctx, starter, deps
 

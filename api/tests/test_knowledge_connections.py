@@ -648,7 +648,7 @@ def _migration() -> ModuleType:
 def test_the_migration_chains_after_session_uploads() -> None:
     module = _migration()
     assert module.revision == "v5_005_knowledge_connections"
-    assert module.down_revision == "v5_002_session_uploads"
+    assert module.down_revision == "v5_006_agent_tests"
 
 
 async def test_existing_knowledge_bases_read_as_platform_managed(

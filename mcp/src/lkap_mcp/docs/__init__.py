@@ -74,6 +74,7 @@ CONCEPT_TOPICS: Final[tuple[str, ...]] = (
     "roles-and-scopes",
     "apps",  # V5-18
     "tools",  # V5-25: built-ins and tool templates
+    "testing",  # V5-29: simulated callers, judges, the publish gate
 )
 
 #: The 10 recipes of AGENT-ACCESS.md §3.1.

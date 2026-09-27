@@ -20,11 +20,11 @@ On SQLite the new foreign key rebuilds ``knowledge_bases`` through
 constraint, so reflection is lossless, and the migration connection does not
 enable ``PRAGMA foreign_keys``, so dropping the old copy cascades nothing).
 
-Chained after ``v5_002_session_uploads``, the head when V5-20 started
+Chained after ``v5_006_agent_tests`` (re-chained at merge; V5-20 started on ``v5_002_session_uploads``)
 (ledger numbers are not chain order).
 
 Revision ID: v5_005_knowledge_connections
-Revises: v5_002_session_uploads
+Revises: v5_006_agent_tests
 Create Date: 2026-09-27
 """
 
@@ -37,7 +37,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "v5_005_knowledge_connections"
-down_revision: str | None = "v5_002_session_uploads"
+down_revision: str | None = "v5_006_agent_tests"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

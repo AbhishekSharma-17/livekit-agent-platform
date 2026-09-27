@@ -1,0 +1,436 @@
+{
+  "$defs": {
+    "AgentTestJudgeScore": {
+      "description": "One judge's verdict on one case.",
+      "properties": {
+        "judge": {
+          "enum": [
+            "task_completion",
+            "tool_use",
+            "safety",
+            "relevancy",
+            "accuracy"
+          ],
+          "title": "Judge",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0 (worst) to 1 (best).",
+          "title": "Score"
+        },
+        "verdict": {
+          "enum": [
+            "pass",
+            "fail",
+            "inconclusive"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "judge",
+        "verdict"
+      ],
+      "title": "AgentTestJudgeScore",
+      "type": "object"
+    },
+    "AgentTestRun": {
+      "description": "``POST /v1/agents/{id}/tests/run`` and ``GET …/tests/runs[/{run_id}]``.",
+      "properties": {
+        "agent_id": {
+          "title": "Agent Id",
+          "type": "string"
+        },
+        "case_ids": {
+          "default": [],
+          "description": "The cases this run plays, in order.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Case Ids",
+          "type": "array"
+        },
+        "config_version": {
+          "title": "Config Version",
+          "type": "integer"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the run could not run (status `error`).",
+          "title": "Error"
+        },
+        "errored": {
+          "default": 0,
+          "title": "Errored",
+          "type": "integer"
+        },
+        "failed": {
+          "default": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "inconclusive": {
+          "default": 0,
+          "title": "Inconclusive",
+          "type": "integer"
+        },
+        "judge_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Model"
+        },
+        "pass_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "passed / cases, once finished; null while running or on error.",
+          "title": "Pass Ratio"
+        },
+        "passed": {
+          "default": 0,
+          "title": "Passed",
+          "type": "integer"
+        },
+        "persona_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Model"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "passed",
+            "failed",
+            "inconclusive",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "verdicts": {
+          "default": [],
+          "description": "Per-case outcomes; empty in the runs list, filled on the run itself.",
+          "items": {
+            "$ref": "#/$defs/AgentTestVerdict"
+          },
+          "title": "Verdicts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "agent_id",
+        "config_version",
+        "status",
+        "created_at"
+      ],
+      "title": "AgentTestRun",
+      "type": "object"
+    },
+    "AgentTestToolCall": {
+      "description": "A tool the agent called during the case (from the session's events).",
+      "properties": {
+        "arguments": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The call's arguments as the worker logged them.",
+          "title": "Arguments"
+        },
+        "mocked": {
+          "default": false,
+          "title": "Mocked",
+          "type": "boolean"
+        },
+        "result_preview": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Preview"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "AgentTestToolCall",
+      "type": "object"
+    },
+    "AgentTestTurn": {
+      "description": "One line of a simulated conversation (``user`` is the persona).",
+      "properties": {
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "text"
+      ],
+      "title": "AgentTestTurn",
+      "type": "object"
+    },
+    "AgentTestVerdict": {
+      "description": "One case's outcome within a run.",
+      "properties": {
+        "case_id": {
+          "title": "Case Id",
+          "type": "string"
+        },
+        "case_name": {
+          "title": "Case Name",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "scores": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTestJudgeScore"
+          },
+          "title": "Scores",
+          "type": "array"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "inconclusive",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stopped_by": {
+          "anyOf": [
+            {
+              "enum": [
+                "persona_done",
+                "max_turns",
+                "agent_timeout",
+                "disconnected",
+                "error"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stopped By"
+        },
+        "tool_calls": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTestToolCall"
+          },
+          "title": "Tool Calls",
+          "type": "array"
+        },
+        "transcript": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTestTurn"
+          },
+          "title": "Transcript",
+          "type": "array"
+        },
+        "turns": {
+          "default": 0,
+          "title": "Turns",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "case_id",
+        "case_name",
+        "status"
+      ],
+      "title": "AgentTestVerdict",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/AgentTestRunPage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/agents/{id}/tests/runs``: newest first.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/AgentTestRun"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "AgentTestRunPage",
+  "type": "object"
+}

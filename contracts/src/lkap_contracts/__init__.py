@@ -26,6 +26,19 @@ from lkap_contracts.agent_config import (
     effective_qa,
     pipeline_issues,
 )
+from lkap_contracts.agent_tests import (
+    AGENT_TEST_JUDGES,
+    AgentTest,
+    AgentTestJudgeScore,
+    AgentTestRun,
+    AgentTestRunIn,
+    AgentTestRunPage,
+    AgentTestToolCall,
+    AgentTestTurn,
+    AgentTestVerdict,
+    PublishGate,
+    PublishGateRefusal,
+)
 from lkap_contracts.api_models import (
     AgentCreate,
     AgentOut,
@@ -384,6 +397,7 @@ from lkap_contracts.ui_protocol import (
 
 __all__ = [
     "ACTIVITY_RING_SIZE",
+    "AGENT_TEST_JUDGES",
     "ASSET_TOOL_NAMES",
     "BACKGROUNDABLE_BUILTINS",
     "BLOCK_CONFIG_MODELS",
@@ -431,6 +445,14 @@ __all__ = [
     "AgentOut",
     "AgentPage",
     "AgentPublicOut",
+    "AgentTest",
+    "AgentTestJudgeScore",
+    "AgentTestRun",
+    "AgentTestRunIn",
+    "AgentTestRunPage",
+    "AgentTestToolCall",
+    "AgentTestTurn",
+    "AgentTestVerdict",
     "AgentUpdate",
     "AnalyticsBucket",
     "AnalyticsSummary",
@@ -609,6 +631,8 @@ __all__ = [
     "ProviderSpec",
     "ProviderToolDefinition",
     "ProvidersResponse",
+    "PublishGate",
+    "PublishGateRefusal",
     "QaConfig",
     "QaField",
     "QaNode",

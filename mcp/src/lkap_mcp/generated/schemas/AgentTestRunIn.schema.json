@@ -1,0 +1,25 @@
+{
+  "$id": "lkap-contracts/AgentTestRunIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/agents/{id}/tests/run``: which cases to play (all of them by default).",
+  "properties": {
+    "case_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Case Ids"
+    }
+  },
+  "title": "AgentTestRunIn",
+  "type": "object"
+}

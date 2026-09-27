@@ -10,6 +10,7 @@ tool relays. ``mode`` is never sent: the api derives it from ``config.flow``
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated, Any, Literal
 
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
@@ -20,7 +21,7 @@ from pydantic import Field, ValidationError
 
 from lkap_mcp.client import ApiFailure, LkapClient
 from lkap_mcp.registry import DESTRUCTIVE, IDEMPOTENT_WRITE, READ, WRITE, Registry, ServerContext
-from lkap_mcp.results import ToolResult
+from lkap_mcp.results import ToolResult, untrusted
 from lkap_mcp.tools._common import forbidden, matches, merge_patch, planned, request, resolve_agent, seg
 
 Patch = Annotated[
@@ -82,6 +83,88 @@ async def template_next_steps(client: LkapClient, template_id: str) -> list[str]
     if not labels:
         return []
     return [*labels, DEFAULT_CREATE_NEXT_STEPS[1]]
+
+
+#: ``agent_tests_run(wait=true)`` polls the run this often.
+TESTS_POLL_S = 3.0
+
+
+def gate_next_steps(agent: dict[str, Any], details: Any) -> list[str]:
+    """What to do after a ``422 tests_failing`` publish refusal (V5-29), by ``details.reason``."""
+    reason = details.get("reason") if isinstance(details, dict) else None
+    ref = agent.get("slug") or agent.get("id")
+    off = f'or turn the gate off: agent_update("{ref}", patch={{"publish_gate": {{"require_tests": false}}}})'
+    match reason:
+        case "running":
+            return [f'wait for the run, then agent_tests_result("{ref}") and publish again']
+        case "failing":
+            return [
+                f'agent_tests_result("{ref}", include_transcripts=true) to see which cases failed and why',
+                f'fix the agent, then agent_tests_run("{ref}", wait=true) and publish again, {off}',
+            ]
+        case "error":
+            return [
+                "the tests did not run (not a failure): fix what details.error names, e.g. start a worker",
+                f'then agent_tests_run("{ref}", wait=true) and publish again, {off}',
+            ]
+        case _:
+            return [f'agent_tests_run("{ref}", wait=true) on this version, then publish again, {off}']
+
+
+def shape_test_run(run: dict[str, Any], *, include_transcripts: bool) -> dict[str, Any]:
+    """A run for the model: agent-written text wrapped as untrusted; transcripts only on request."""
+    run_id = str(run.get("id") or "")
+    verdicts: list[dict[str, Any]] = []
+    for raw in run.get("verdicts") or []:
+        if not isinstance(raw, dict):
+            continue
+        verdict = dict(raw)
+        source = f"test:{run_id}:{verdict.get('case_id')}"
+        verdict["scores"] = [
+            {**score, "reason": untrusted(score.get("reason", ""), source)}
+            for score in verdict.get("scores") or []
+            if isinstance(score, dict)
+        ]
+        if include_transcripts:
+            verdict["transcript"] = [
+                {**turn, "text": untrusted(turn.get("text", ""), source)}
+                for turn in verdict.get("transcript") or []
+                if isinstance(turn, dict)
+            ]
+            verdict["tool_calls"] = [
+                {
+                    **call,
+                    "arguments": untrusted(call.get("arguments") or "", source),
+                    "result_preview": untrusted(call.get("result_preview") or "", source),
+                }
+                for call in verdict.get("tool_calls") or []
+                if isinstance(call, dict)
+            ]
+        else:
+            verdict["tool_calls"] = [
+                {"tool": call.get("tool"), "status": call.get("status"), "mocked": call.get("mocked")}
+                for call in verdict.get("tool_calls") or []
+                if isinstance(call, dict)
+            ]
+            verdict.pop("transcript", None)
+        if verdict.get("error"):
+            verdict["error"] = untrusted(verdict["error"], source)
+        verdicts.append(verdict)
+    return {**run, "verdicts": verdicts}
+
+
+def run_next_steps(agent: dict[str, Any], run: dict[str, Any]) -> list[str]:
+    """Next steps after reading a run."""
+    ref = agent.get("slug") or agent.get("id")
+    match run.get("status"):
+        case "queued" | "running":
+            return [f'agent_tests_result("{ref}", run_id="{run.get("id")}") in a minute']
+        case "passed":
+            return [f'agent_publish("{ref}")']
+        case "error":
+            return ["the run did not play its cases: fix what `error` names, then run again"]
+        case _:
+            return [f'agent_tests_result("{ref}", run_id="{run.get("id")}", include_transcripts=true)']
 
 
 def register(registry: Registry) -> None:
@@ -300,11 +383,79 @@ def register(registry: Registry) -> None:
         path = f"/v1/agents/{seg(agent['id'])}"
         if plan:
             return planned(request("PUT", path, {"published": published}))
-        updated = await _update(client, agent["id"], {"published": published})
+        try:
+            updated = await _update(client, agent["id"], {"published": published})
+        except ApiFailure as failure:
+            if failure.code != "tests_failing":
+                raise
+            # V5-29: the opt-in publish gate refused; say how to get past it.
+            result = failure.to_result()
+            result.next_steps = gate_next_steps(agent, failure.details)
+            return result
         data: dict[str, Any] = {"agent": updated}
         if published:
             data["session_path"] = session_path(updated)
         return ToolResult.success(data)
+
+    @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="AgentTestRun")
+    async def agent_tests_run(
+        id_or_slug: str,
+        case_ids: Annotated[
+            list[str] | None, Field(description="Run only these test cases (default: every case in `tests`)")
+        ] = None,
+        wait: Annotated[
+            bool,
+            Field(description="Wait for the run to finish (up to timeout_s) rather than return queued"),
+        ] = False,
+        timeout_s: Annotated[int, Field(ge=5, le=900, description="How long wait=true waits")] = 300,
+        plan: bool = False,
+    ) -> ToolResult:
+        """Run an agent's test cases: a simulated caller per case over a text session, then five judges.
+
+        Cases live in the agent's config (`tests`; add them with agent_update). Needs a ready worker
+        on the agent's connection and an OpenAI-compatible workflow or QA model (OpenRouter works) to
+        play the caller and judge. Read the verdicts with agent_tests_result.
+        """
+        agent = await resolve_agent(client, id_or_slug)
+        path = f"/v1/agents/{seg(agent['id'])}/tests/run"
+        body = {"case_ids": case_ids} if case_ids is not None else None
+        if plan:
+            return planned(request("POST", path, body))
+        run = await client.post(path, body)
+        run_id = str((run or {}).get("id") or "")
+        if wait and run_id:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + timeout_s
+            while (run or {}).get("status") in ("queued", "running") and loop.time() < deadline:
+                await asyncio.sleep(min(TESTS_POLL_S, max(0.0, deadline - loop.time())))
+                run = await client.get(f"/v1/agents/{seg(agent['id'])}/tests/runs/{seg(run_id)}")
+        shaped = shape_test_run(dict(run or {}), include_transcripts=False)
+        return ToolResult.success(shaped, next_steps=run_next_steps(agent, shaped))
+
+    @registry.tool(scopes={"agents:read"}, annotations=READ, data="AgentTestRun")
+    async def agent_tests_result(
+        id_or_slug: str,
+        run_id: Annotated[str | None, Field(description="A run id (default: the latest run)")] = None,
+        include_transcripts: Annotated[
+            bool, Field(description="Include each case's transcript and tool calls (untrusted)")
+        ] = False,
+    ) -> ToolResult:
+        """An agent's test run: status, totals and per-case verdicts (five judge scores each)."""
+        agent = await resolve_agent(client, id_or_slug)
+        base = f"/v1/agents/{seg(agent['id'])}/tests/runs"
+        if run_id is None:
+            page = await client.get(base, params={"limit": 1})
+            items = (page or {}).get("items") or []
+            if not items:
+                return ToolResult.fail(
+                    "not_found",
+                    "this agent has no test runs yet",
+                    next_steps=["agent_tests_run(id_or_slug) once the agent has test cases"],
+                )
+            run_id = str(items[0]["id"])
+        run = await client.get(f"{base}/{seg(run_id)}")
+        shaped = shape_test_run(dict(run or {}), include_transcripts=include_transcripts)
+        return ToolResult.success(shaped, next_steps=run_next_steps(agent, shaped))
 
     @registry.tool(scopes={"agents:write"}, annotations=DESTRUCTIVE, data="AgentOut")
     async def agent_archive(id_or_slug: str, archive: bool = True, confirm: bool = False) -> ToolResult:

@@ -1125,7 +1125,7 @@ async def test_real_sdk_a_policy_sibling_of_an_edge_gets_no_router_reply_and_is_
         FakeApi(resolved),
         factory=_FlowFactory(scripted),
         session_starter=starter,
-        declarative_tools_builder=lambda defs: build_http_tools(
+        declarative_tools_builder=lambda defs, **_: build_http_tools(
             defs, platform_allowed_hosts=["api.example.com"]
         ),
     )

@@ -4,7 +4,7 @@ Status: **as built** (V5-46, 2026-09-28), describing `main` at `86d0f3b`, where 
 
 The v1 architecture ([`../ARCHITECTURE.md`](../ARCHITECTURE.md)) and the v2 architecture ([`../v2/ARCHITECTURE-V2.md`](../v2/ARCHITECTURE-V2.md)) still hold for everything v5 did not change: the three services (`api/`, `agent/` — the LiveKit worker, now on `livekit-agents` 1.8.3 — and `web/`), `contracts/` as the single source of shapes, packs, connections and worker pools, the vault, and the agent ↔ UI protocol.
 
-Scope of v5 in one line: the three v4 research documents (`docs/research-v4/`) turned into 53 packages — conversation quality, knowledge, tools and integrations (Composio first), panel blocks, capabilities, memory — plus a security review that gated the second half. Local use only; there is no production deployment.
+Scope of v5 in one line: the three v4 research documents (`docs/research-v4/`) turned into 54 packages (V5-01 … V5-54; one of them the security review, one this closing package) — conversation quality, knowledge, tools and integrations (Composio first), panel blocks, capabilities, memory — plus a security review that gated the second half. Local use only; there is no production deployment.
 
 ## 1. What changed, at a glance
 

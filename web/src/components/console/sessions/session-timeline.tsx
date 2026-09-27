@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDownIcon, ChevronRightIcon, CircleDotIcon, ListTreeIcon, WrenchIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, CircleDotIcon, ListTreeIcon, ShieldAlertIcon, ShieldOffIcon, WrenchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,8 +10,15 @@ import { Icon } from "@/components/shared/icon";
 import { StateMeter } from "@/components/shared/state-meter";
 import { StatusChip } from "@/components/shared/status-chip";
 import type { MeterState } from "@/components/shared/agent-state";
+import { RULE_KIND_LABEL } from "@/components/console/agents/guardrails/kinds";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import type { ConsentEvent, SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
+import type {
+  ConsentEvent,
+  GuardrailEvent,
+  GuardrailTimeoutEvent,
+  SessionDetailOut,
+  SessionEventOut,
+} from "@/contracts/lkap-contracts";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CONSENT_KINDS } from "@/panels/blocks/catalog";
@@ -205,7 +212,15 @@ function TimelineRowView({ row, origin, agentName }: { row: TimelineRow; origin:
       // V5-17: `consent` answers get a plain-language row of their own,
       // never the generic "Other" one — a reviewer needs to read who agreed
       // or declined at a glance, not open a Details disclosure for it.
-      return row.type === "consent" ? <ConsentRow entry={row} origin={origin} /> : <EventRow entry={row} origin={origin} />;
+      if (row.type === "consent") return <ConsentRow entry={row} origin={origin} />;
+      // V5-41 (ask #280): a `guardrail` trip on `input` drops the caller's
+      // turn entirely (the worker never lets it reach the transcript, so
+      // there is no `TurnRow` for it) — this row is the only record that the
+      // caller said anything at all, so it gets its own plain-language
+      // reading rather than the generic "Other" disclosure.
+      if (row.type === "guardrail") return <GuardrailRow entry={row} origin={origin} />;
+      if (row.type === "guardrail_timeout") return <GuardrailTimeoutRow entry={row} origin={origin} />;
+      return <EventRow entry={row} origin={origin} />;
   }
 }
 
@@ -238,6 +253,114 @@ function ConsentRow({ entry, origin }: { entry: EventEntry; origin: number }) {
           <CodeBlock label={`Text hash: ${hash.slice(0, 8)}…`} value={prettyJson(latest.payload)} />
         </DetailsDisclosure>
       ) : null}
+    </RowFrame>
+  );
+}
+
+/** `GuardrailEvent.stage` / `GuardrailTimeoutEvent.stage` → what was being checked, plainly. */
+const STAGE_LABEL: Record<"input" | "output" | "tool_output", string> = {
+  input: "the caller's words",
+  output: "the agent's reply",
+  tool_output: "a tool's result",
+};
+
+/** `GuardrailEvent.stage` → what the trip stopped, as ask #280's suggested phrasing. */
+const STAGE_STOPPED_LABEL: Record<"input" | "output" | "tool_output", string> = {
+  input: "Stopped the caller's words",
+  output: "Stopped the agent's reply",
+  tool_output: "Withheld a tool result",
+};
+
+/** `GuardrailEvent.action` → what happened after the safe reply, plainly. */
+const ACTION_LABEL: Record<GuardrailEvent["action"], string> = {
+  interrupt: "Said the safe reply",
+  end_call: "Said the safe reply, then ended the call",
+  escalate: "Said the safe reply, then handed to a person",
+  replaced: "Replaced it with the safe reply",
+};
+
+/** `GuardrailTimeoutEvent.reason` → why the check let the text through, plainly. */
+const TIMEOUT_REASON_LABEL: Record<GuardrailTimeoutEvent["reason"], string> = {
+  timeout: "didn't answer in time",
+  error: "failed",
+  unavailable: "wasn't available",
+};
+
+/**
+ * A `guardrail` session event (`lkap_contracts.guardrails.GuardrailEvent`,
+ * V5-39/V5-41, ask #280): a rule tripped. `input` is the one stage whose trip
+ * drops the caller's own turn from the transcript (`StopResponse()`, before
+ * the words are ever added) — this row is written to read as that missing
+ * turn, with a "You" chip the same `TurnRow` above uses, rather than as a
+ * generic system notice. The exact wording that tripped it, if the agent's
+ * storage tier kept one, stays behind "Details", never in the open row (the
+ * `ConsentRow` hash precedent above).
+ */
+function GuardrailRow({ entry, origin }: { entry: EventEntry; origin: number }) {
+  const latest = entry.events[entry.events.length - 1];
+  const payload = (latest.payload ?? {}) as Partial<GuardrailEvent>;
+  const stage = payload.stage ?? "input";
+  const action = payload.action ?? "interrupt";
+  const urgent = action === "end_call" || action === "escalate";
+  const kindLabel = payload.kind ? RULE_KIND_LABEL[payload.kind] : "Rule";
+  const excerpt = typeof payload.excerpt === "string" ? payload.excerpt : null;
+  const categories = Array.isArray(payload.categories) ? payload.categories : [];
+
+  return (
+    <RowFrame at={entry.at} origin={origin} tone={urgent ? "danger" : "warning"} testId="guardrail">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        {stage === "input" ? (
+          <StatusChip tone="neutral" size="sm">
+            You
+          </StatusChip>
+        ) : null}
+        <Icon as={ShieldAlertIcon} size="sm" label="Guardrail" className={urgent ? "text-danger" : "text-warning"} />
+        <span className="font-medium text-foreground">{STAGE_STOPPED_LABEL[stage]}</span>
+        <StatusChip tone={urgent ? "danger" : "warning"} size="sm">
+          {ACTION_LABEL[action]}
+        </StatusChip>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {kindLabel} · {payload.rule ?? "Unnamed rule"}
+        {payload.tool ? ` · Tool: ${payload.tool}` : null}
+        {categories.length > 0 ? ` · ${categories.join(", ")}` : null}
+        {typeof payload.latency_ms === "number" ? ` · ${formatMs(payload.latency_ms)}` : null}
+      </p>
+      {excerpt ? (
+        <DetailsDisclosure>
+          <CodeBlock label="What tripped it (kept because storage keeps full transcripts)" value={excerpt} />
+        </DetailsDisclosure>
+      ) : null}
+    </RowFrame>
+  );
+}
+
+/**
+ * A `guardrail_timeout` session event: a check ran past its time budget (or
+ * failed, or wasn't available) and, by design, let the text through rather
+ * than making the caller wait (V5-39's fail-open rule). A thin, neutral row —
+ * nothing was blocked, so it reads as a note, not a warning.
+ */
+function GuardrailTimeoutRow({ entry, origin }: { entry: EventEntry; origin: number }) {
+  const latest = entry.events[entry.events.length - 1];
+  const payload = (latest.payload ?? {}) as Partial<GuardrailTimeoutEvent>;
+  const stage = payload.stage ?? "input";
+  const reason = payload.reason ?? "timeout";
+  const kindLabel = payload.kind ? RULE_KIND_LABEL[payload.kind] : "Rule";
+
+  return (
+    <RowFrame at={entry.at} origin={origin} thin testId="guardrail-timeout">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+        <Icon as={ShieldOffIcon} size="sm" />
+        <span>
+          A check on {STAGE_LABEL[stage]} {TIMEOUT_REASON_LABEL[reason]}
+          {typeof payload.budget_ms === "number" ? ` (over ${formatMs(payload.budget_ms)})` : ""} — the text went
+          through unchecked.
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        {kindLabel} · {payload.rule ?? "Unnamed rule"}
+      </p>
     </RowFrame>
   );
 }

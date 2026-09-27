@@ -3,6 +3,7 @@ import type {
   AvatarOptions,
   CapabilitiesConfig,
   DisclosureConfig,
+  GuardrailsConfig,
   KnowledgeConfig,
   LocaleConfig,
   MemoryConfig,
@@ -130,6 +131,22 @@ export const DEFAULT_MEMORY: Required<MemoryConfig> = {
   consent_line: null,
   max_recall_tokens: 400,
   verbatim: false,
+};
+
+/**
+ * `GuardrailsConfig` defaults (V5-39/V5-41): every rule list empty (no check,
+ * no added latency), a trip stops the agent and speaks the safe reply, no
+ * model of its own (falls back to the agent's workflow model), a 300 ms
+ * budget. `safe_reply` mirrors `lkap_contracts.guardrails.DEFAULT_SAFE_REPLY`.
+ */
+export const DEFAULT_GUARDRAILS: Required<GuardrailsConfig> = {
+  input: [],
+  output: [],
+  tool_output: [],
+  on_trip: "interrupt",
+  safe_reply: "I'm sorry, I can't help with that. Is there anything else I can help you with?",
+  model: null,
+  budget_ms: 300,
 };
 
 /** `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar card). */

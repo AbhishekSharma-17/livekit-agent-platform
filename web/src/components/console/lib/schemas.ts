@@ -417,6 +417,98 @@ export const memoryConfigSchema = z.object({
 export type MemoryConfigForm = z.infer<typeof memoryConfigSchema>;
 
 /**
+ * `GuardrailsConfig` / `RegexRule` / `ClassifierRule` / `ProviderRule` (V5-39,
+ * `lkap_contracts.guardrails`): rules on what the caller says, what the agent
+ * says and what a tool returns. `kind` is a required literal on each rule
+ * schema (the generated `lkap-contracts.d.ts` marks it optional — a
+ * `json-schema-to-typescript` default rendering — but the form needs it
+ * concrete to discriminate the union), so `guardrailRuleSchema` can be a
+ * `z.discriminatedUnion` the way the api's own `Annotated[..., discriminator]`
+ * reads it. Limits mirror the Pydantic model exactly: `name` 1..60,
+ * `pattern` 1..300, `prompt` 1..1000, `safe_reply` 1..500, `budget_ms`
+ * 50..2000, at most 20 rules per stage. The api's own `_unique_names`
+ * `model_validator` (case-insensitive per stage) does not come back as a
+ * clean `issues[].path`, so `guardrailsConfigSchema`'s `superRefine` below
+ * catches it client-side too.
+ */
+export const regexRuleSchema = z.object({
+  kind: z.literal("regex"),
+  name: z.string().min(1, "Name is required").max(60, "60 characters max"),
+  pattern: z.string().min(1, "Pattern is required").max(300, "300 characters max"),
+  ignore_case: z.boolean(),
+});
+export type RegexRuleForm = z.infer<typeof regexRuleSchema>;
+
+export const classifierRuleSchema = z.object({
+  kind: z.literal("classifier"),
+  name: z.string().min(1, "Name is required").max(60, "60 characters max"),
+  prompt: z.string().min(1, "Instruction is required").max(1000, "1000 characters max"),
+});
+export type ClassifierRuleForm = z.infer<typeof classifierRuleSchema>;
+
+export const MODERATION_CATEGORY_VALUES = [
+  "harassment",
+  "harassment/threatening",
+  "hate",
+  "hate/threatening",
+  "illicit",
+  "illicit/violent",
+  "self-harm",
+  "self-harm/intent",
+  "self-harm/instructions",
+  "sexual",
+  "sexual/minors",
+  "violence",
+  "violence/graphic",
+] as const;
+
+export const providerRuleSchema = z.object({
+  kind: z.literal("provider"),
+  name: z.string().min(1, "Name is required").max(60, "60 characters max"),
+  provider: z.literal("openai_moderation"),
+  categories: z.array(z.enum(MODERATION_CATEGORY_VALUES)),
+  credential_id: z.string().nullable(),
+});
+export type ProviderRuleForm = z.infer<typeof providerRuleSchema>;
+
+export const guardrailRuleSchema = z.discriminatedUnion("kind", [
+  regexRuleSchema,
+  classifierRuleSchema,
+  providerRuleSchema,
+]);
+export type GuardrailRuleForm = z.infer<typeof guardrailRuleSchema>;
+
+const guardrailRuleListSchema = z.array(guardrailRuleSchema).max(20, "20 rules max");
+
+export const guardrailsConfigSchema = z
+  .object({
+    input: guardrailRuleListSchema,
+    output: guardrailRuleListSchema,
+    tool_output: guardrailRuleListSchema,
+    on_trip: z.enum(["interrupt", "end_call", "escalate"]),
+    safe_reply: z.string().min(1, "The safe reply can't be empty").max(500, "500 characters max"),
+    model: providerRefSchema.nullable(),
+    budget_ms: z.number().int().min(50, "At least 50 ms").max(2000, "2000 ms max"),
+  })
+  .superRefine((val, ctx) => {
+    (["input", "output", "tool_output"] as const).forEach((stage) => {
+      const seen = new Set<string>();
+      val[stage].forEach((rule, index) => {
+        const key = rule.name.trim().toLowerCase();
+        if (key && seen.has(key)) {
+          ctx.addIssue({
+            code: "custom",
+            path: [stage, index, "name"],
+            message: `Two ${stage === "input" ? "caller" : stage === "output" ? "agent" : "tool"} rules can't share a name.`,
+          });
+        }
+        seen.add(key);
+      });
+    });
+  });
+export type GuardrailsConfigForm = z.infer<typeof guardrailsConfigSchema>;
+
+/**
  * `QaField` (V5-30): one post-call field the judge fills in. `name` mirrors
  * the contract's lowercase-identifier pattern so a bad name is caught before
  * save rather than as a 422.
@@ -655,6 +747,13 @@ export const agentConfigFormSchema = z
      * always supplies a concrete value from `DEFAULT_MEMORY`).
      */
     memory: memoryConfigSchema.optional(),
+    /**
+     * V5-41's Guardrails card: `config.guardrails` (optional, like `memory`
+     * above — a fixture built before this package keeps validating;
+     * `toFormValues` always supplies a concrete value from
+     * `DEFAULT_GUARDRAILS`).
+     */
+    guardrails: guardrailsConfigSchema.optional(),
     panel: panelLayoutSchema,
     /**
      * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the

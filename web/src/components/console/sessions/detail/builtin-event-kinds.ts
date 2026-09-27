@@ -6,6 +6,7 @@ import {
   PhoneIcon,
   PhoneOffIcon,
   RadioIcon,
+  ShieldAlertIcon,
   WorkflowIcon,
 } from "lucide-react";
 
@@ -104,6 +105,27 @@ export const BUILTIN_EVENT_KINDS: TimelineEventKind[] = [
     icon: FlagIcon,
     title: () => "Escalated",
     summary: (payload) => text(payload, "reason") ?? text(payload, "message"),
+  },
+  /**
+   * V5-41 (ask #296): guardrail rows render through their own components in
+   * `session-timeline.tsx`; these entries only file them under "Errors" for the
+   * filter chips (a trip and a check that ran out of time are both worth a look).
+   */
+  {
+    type: "guardrail",
+    filter: "errors",
+    tone: "warning",
+    icon: ShieldAlertIcon,
+    title: () => "Guardrail",
+    summary: (payload) => text(payload, "rule"),
+  },
+  {
+    type: "guardrail_timeout",
+    filter: "errors",
+    tone: "warning",
+    icon: ShieldAlertIcon,
+    title: () => "Guardrail check skipped",
+    summary: (payload) => text(payload, "rule"),
   },
   /**
    * V4-13 (BACKGROUND-TOOLS.md D-V4-38): the two events a non-blocking tool

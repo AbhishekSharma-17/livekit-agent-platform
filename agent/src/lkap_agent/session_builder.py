@@ -614,9 +614,11 @@ class SessionBuilder:
                 logger.info("realtime model keeps server-side turn detection; no client turn detector")
                 detector = None
             if stt is not None and stt_decides_turns(resolved):
-                # V6-02 (D-V6-5): the transcriber's end-of-turn replaces the platform's default
-                # detector; an explicitly configured `turn_detection` slot still wins.
-                if providers.turn_detection is None:
+                # V6-02 (D-V6-5): the transcriber's end-of-turn replaces the platform's detector
+                # unless the admin configured a `turn_detection` slot. The check reads the stored
+                # config, not `providers.turn_detection`: `prepare_resolved` synthesizes a detector
+                # slot from `pipeline.turn_detector` settings (always on a `local` connection).
+                if config.pipeline.turn_detection is None:
                     logger.info("the transcriber decides when the caller's turn ends", turn_detection="stt")
                     detector = STT_TURN_DETECTION
                 else:

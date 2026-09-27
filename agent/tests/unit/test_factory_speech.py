@@ -11,7 +11,9 @@ import pytest
 from fakes.fake_api import resolved_config
 from livekit.plugins import deepgram, openai
 from lkap_contracts import providers as provider_registry
-from lkap_contracts.agent_config import ResolvedAgentConfig, ResolvedProvider
+from lkap_contracts.agent_config import ResolvedAgentConfig, ResolvedProvider, TurnDetectorSettings
+from lkap_contracts.common import ProviderRef
+from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 
 from lkap_agent.providers.factory import BuiltProviders, ProviderFactory, deepgram_flux_kwargs
 from lkap_agent.providers.openrouter import (
@@ -21,7 +23,12 @@ from lkap_agent.providers.openrouter import (
     AudioFormat,
     parse_audio_content_type,
 )
-from lkap_agent.session_builder import STT_TURN_DETECTION, SessionBuilder, stt_decides_turns
+from lkap_agent.session_builder import (
+    STT_TURN_DETECTION,
+    SessionBuilder,
+    prepare_resolved,
+    stt_decides_turns,
+)
 
 KEY = "dg-placeholder-key"
 
@@ -147,8 +154,33 @@ async def test_flux_makes_the_session_use_stt_turn_detection() -> None:
     assert plan.session.turn_detection == STT_TURN_DETECTION
 
 
+async def test_a_synthesized_detector_on_a_local_connection_does_not_override_flux() -> None:
+    """`prepare_resolved` builds a detector slot from settings (always on `local`); Flux still ends turns."""
+    base = _with_stt(resolved_config(), _resolved("deepgram-flux-stt", api_key=KEY))
+    pipeline = base.config.pipeline.model_copy(update={"turn_detector": TurnDetectorSettings()})
+    base = base.model_copy(
+        update={
+            "config": base.config.model_copy(update={"pipeline": pipeline}),
+            "connection": ConnectionInfo(
+                connection_id="c1", capabilities=ConnectionCapabilities(turn_detector_mode="local")
+            ),
+        }
+    )
+    prepared = prepare_resolved(base)
+    assert "turn_detection" in prepared.resolved, "the precondition: a detector slot was synthesized"
+    providers = BuiltProviders(llm=object(), stt=object(), tts=object(), turn_detection=object())
+
+    plan = SessionBuilder().build(prepared, providers, vad=object(), turn_detector=object())
+
+    assert plan.session.turn_detection == STT_TURN_DETECTION
+
+
 async def test_an_explicit_turn_detection_slot_still_wins_over_flux() -> None:
     config = _with_stt(resolved_config(), _resolved("deepgram-flux-stt", api_key=KEY))
+    pipeline = config.config.pipeline.model_copy(
+        update={"turn_detection": ProviderRef(provider_id="inference-turn-detector")}
+    )
+    config = config.model_copy(update={"config": config.config.model_copy(update={"pipeline": pipeline})})
     slot_detector = object()
     providers = BuiltProviders(llm=object(), stt=object(), tts=object(), turn_detection=slot_detector)
 

@@ -22,7 +22,9 @@ import {
   plusOneAlone,
   policyFromSettings,
 } from "@/components/console/telephony/dialing-policy";
-import { PhoneCallsCard, SmsContactsCard } from "@/components/console/telephony/tools-section";
+import { PhoneCallsCard, SmsContactsCard, VoicemailCard } from "@/components/console/telephony/tools-section";
+import { EditorContextProvider, type EditorContextValue } from "@/components/console/agents/editor/editor-context";
+import type { EditorIssue } from "@/components/console/agents/editor/validation-map";
 import { TELEPHONY_TOOLS, BUILTIN_TOOLS } from "@/components/console/lib/constants";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { FormProvider, useForm } from "react-hook-form";
@@ -251,6 +253,37 @@ describe("TelephonyPage", () => {
 
     await waitFor(() => expect(requests.some((r) => r.method === "POST" && r.path === "calls/call-1/hangup")).toBe(true));
   });
+
+  // ----------------------------------- V5-32/36: AMD result and transfer outcome (#211)
+  it("shows what answered the call and how it was handed over, with the full summary behind a dialog", async () => {
+    const withOutcome: CallOut = {
+      ...CALL,
+      status: "transferred",
+      amd_result: "machine-vm",
+      transfer_mode: "warm",
+      transfer_summary: "Ada Lee, claim C-1001, wants a callback about the delayed repair estimate.",
+    };
+    stubApi({ "GET calls": { items: [withOutcome], total: 1 } });
+    renderWithClient(<TelephonyPage />);
+    const calls = within(await screen.findByRole("table", { name: "Calls" }));
+
+    expect(await calls.findByText("Answered by: voicemail")).toBeTruthy();
+    expect(calls.getByText("Introduced first")).toBeTruthy();
+
+    fireEvent.click(calls.getByRole("button", { name: "View summary" }));
+    const dialog = await screen.findByRole("dialog", { name: "Call summary" });
+    expect(within(dialog).getByText(/wants a callback about the delayed repair estimate/)).toBeTruthy();
+  });
+
+  it("shows nothing extra for a call where detection never ran", async () => {
+    stubApi();
+    renderWithClient(<TelephonyPage />);
+    const calls = within(await screen.findByRole("table", { name: "Calls" }));
+    await calls.findByText("In call");
+
+    expect(calls.queryByText(/Answered by:/)).toBeNull();
+    expect(calls.queryByRole("button", { name: "View summary" })).toBeNull();
+  });
 });
 
 describe("TrunkDialog", () => {
@@ -467,10 +500,12 @@ function PhoneCardHarness({
   targets = [],
   disabled = [],
   onValues,
+  issues = [],
 }: {
-  targets?: { label: string; to: string }[];
+  targets?: { label: string; to: string; mode?: "cold" | "warm" }[];
   disabled?: string[];
   onValues: (values: AgentEditorForm) => void;
+  issues?: EditorIssue[];
 }) {
   const form = useForm<AgentEditorForm>({
     defaultValues: {
@@ -484,10 +519,20 @@ function PhoneCardHarness({
   React.useEffect(() => {
     onValues(values as AgentEditorForm);
   });
+  const ctx: EditorContextValue = {
+    agent: {} as AgentOut,
+    sections: [],
+    activeSection: "tools",
+    goToSection: vi.fn(),
+    issues,
+    focusIssue: vi.fn(),
+  };
   return (
-    <FormProvider {...form}>
-      <PhoneCallsCard />
-    </FormProvider>
+    <EditorContextProvider value={ctx}>
+      <FormProvider {...form}>
+        <PhoneCallsCard />
+      </FormProvider>
+    </EditorContextProvider>
   );
 }
 
@@ -512,7 +557,9 @@ describe("PhoneCallsCard", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Front desk" } });
     fireEvent.change(screen.getByLabelText("Number or SIP address"), { target: { value: "+15550003333" } });
     await waitFor(() =>
-      expect(latest?.config.telephony.transfer_targets).toEqual([{ label: "Front desk", to: "+15550003333" }]),
+      expect(latest?.config.telephony.transfer_targets).toEqual([
+        { label: "Front desk", to: "+15550003333", mode: "cold" },
+      ]),
     );
     expect(screen.getByRole("switch", { name: "Transfer calls" }).getAttribute("data-disabled")).toBeNull();
   });
@@ -529,8 +576,104 @@ describe("PhoneCallsCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove destination 1" }));
 
     await waitFor(() =>
-      expect(latest?.config.telephony.transfer_targets).toEqual([{ label: "Desk", to: "sip:desk@pbx.example.com" }]),
+      expect(latest?.config.telephony.transfer_targets).toEqual([
+        { label: "Desk", to: "sip:desk@pbx.example.com", mode: "cold" },
+      ]),
     );
+  });
+
+  // ----------------------------------- V5-32/36: transfer mode (#211)
+  it("defaults a target's mode to 'Put through directly' and switches to warm", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(<PhoneCardHarness targets={[{ label: "Sales", to: "+15550001111" }]} onValues={(v) => (latest = v)} />);
+
+    const select = screen.getByLabelText("How the call is handed over") as HTMLSelectElement;
+    expect(select.value).toBe("cold");
+
+    fireEvent.change(select, { target: { value: "warm" } });
+
+    await waitFor(() =>
+      expect(latest?.config.telephony.transfer_targets).toEqual([
+        { label: "Sales", to: "+15550001111", mode: "warm" },
+      ]),
+    );
+  });
+
+  it("shows a mode warning as a hint, never a red field error", () => {
+    const issue: EditorIssue = {
+      key: "w1",
+      path: "telephony.transfer_targets.0.mode",
+      message: "This falls back to a standard transfer (needs LiveKit Cloud with one outbound line).",
+      severity: "warning",
+      section: "tools",
+      source: "server",
+    };
+    render(
+      <PhoneCardHarness
+        targets={[{ label: "Sales", to: "+15550001111", mode: "warm" }]}
+        onValues={() => {}}
+        issues={[issue]}
+      />,
+    );
+    const warning = screen.getByText(/falls back to a standard transfer/);
+    expect(warning.className).toContain("text-warning-text");
+    expect(warning.className).not.toContain("text-danger-text");
+  });
+});
+
+// ----------------------------------- V5-32/36: Voicemail card (#211)
+function VoicemailCardHarness({ onValues }: { onValues: (values: AgentEditorForm) => void }) {
+  const form = useForm<AgentEditorForm>({
+    defaultValues: {
+      config: { telephony: { amd: { enabled: false, on_machine: "hangup", message: null, ivr_detection: false } } },
+    } as unknown as AgentEditorForm,
+  });
+  const values = form.watch();
+  React.useEffect(() => {
+    onValues(values as AgentEditorForm);
+  });
+  return (
+    <FormProvider {...form}>
+      <VoicemailCard />
+    </FormProvider>
+  );
+}
+
+describe("VoicemailCard", () => {
+  it("says outbound calls only, and starts collapsed", () => {
+    render(<VoicemailCardHarness onValues={() => {}} />);
+    expect(screen.getByText(/Outbound calls only/)).toBeTruthy();
+    expect(screen.queryByLabelText("When a machine answers")).toBeNull();
+  });
+
+  it("turning detection on reveals the on-machine choice and the ivr switch, and writes config.telephony.amd", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(<VoicemailCardHarness onValues={(v) => (latest = v)} />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Detect answering machines" }));
+    await waitFor(() => expect(latest?.config.telephony.amd?.enabled).toBe(true));
+    expect(screen.getByLabelText("When a machine answers")).toBeTruthy();
+    expect(screen.getByLabelText("Message")).toHaveProperty("disabled", true);
+
+    fireEvent.change(screen.getByLabelText("When a machine answers"), { target: { value: "leave_message" } });
+    await waitFor(() => expect(latest?.config.telephony.amd?.on_machine).toBe("leave_message"));
+    expect(screen.getByLabelText("Message")).toHaveProperty("disabled", false);
+
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "We'll call back shortly." } });
+    await waitFor(() => expect(latest?.config.telephony.amd?.message).toBe("We'll call back shortly."));
+
+    fireEvent.click(screen.getByRole("switch", { name: "Let the agent work through phone menus" }));
+    await waitFor(() => expect(latest?.config.telephony.amd?.ivr_detection).toBe(true));
+  });
+
+  it("an empty message saves as null, not an empty string", async () => {
+    let latest: AgentEditorForm | undefined;
+    render(<VoicemailCardHarness onValues={(v) => (latest = v)} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Detect answering machines" }));
+    fireEvent.change(await screen.findByLabelText("When a machine answers"), { target: { value: "leave_message" } });
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Call back" } });
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "" } });
+    await waitFor(() => expect(latest?.config.telephony.amd?.message).toBeNull());
   });
 });
 

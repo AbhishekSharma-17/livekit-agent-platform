@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { useFieldArray, useFormContext } from "react-hook-form";
+import { Controller, useFieldArray, useFormContext } from "react-hook-form";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Field, Icon } from "@/components/shared";
 import { Section, SectionRow } from "@/components/shared/section";
 import { ToolsTab } from "@/components/console/agents/tabs/tools-tab";
@@ -14,6 +15,8 @@ import { useSectionIssues } from "@/components/console/agents/editor/editor-cont
 import type { EditorSectionProps } from "@/components/console/agents/editor/types";
 import { TELEPHONY_TOOLS, TELEPHONY_TOOLS_HINT } from "@/components/console/lib/constants";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
+
+import { NativeSelect } from "./native-select";
 
 /**
  * The agent editor's Tools section (V2-19, rulings R-V2-21 / R-V2-25): WP-5's
@@ -31,6 +34,7 @@ export function ToolsSection({ agent }: EditorSectionProps) {
     <div className="flex flex-col gap-6">
       <ToolsTab agent={agent} />
       <PhoneCallsCard />
+      <VoicemailCard />
       <SmsContactsCard />
     </div>
   );
@@ -96,43 +100,66 @@ export function PhoneCallsCard() {
               {fields.map((field, index) => {
                 const labelId = `transfer-target-${index}-label`;
                 const toId = `transfer-target-${index}-to`;
+                const modeId = `transfer-target-${index}-mode`;
                 const labelError =
                   targetErrors?.[index]?.label?.message ?? issueFor(`telephony.transfer_targets.${index}.label`)?.message;
                 const toError =
                   targetErrors?.[index]?.to?.message ?? issueFor(`telephony.transfer_targets.${index}.to`)?.message;
+                // V5-32/36: a `warm` target off LiveKit Cloud, or without exactly one
+                // outbound line, is a *warning* (the transfer still works — it falls
+                // back to a direct handover) — never painted as a field error.
+                const modeIssue = issueFor(`telephony.transfer_targets.${index}.mode`);
+                const modeWarning = modeIssue?.severity === "warning" ? modeIssue.message : undefined;
                 return (
-                  <li key={field.id} className="flex flex-wrap items-start gap-2">
-                    <Field label="Name" htmlFor={labelId} error={labelError} className="min-w-40 flex-1">
-                      <Input
-                        id={labelId}
-                        placeholder="Front desk"
-                        autoComplete="off"
-                        data-issue-path={`telephony.transfer_targets[${index}].label`}
-                        {...register(`config.telephony.transfer_targets.${index}.label`)}
-                      />
-                    </Field>
-                    <Field label="Number or SIP address" htmlFor={toId} error={toError} className="min-w-56 flex-[2]">
-                      <Input
-                        id={toId}
-                        placeholder="+15551234567"
-                        inputMode="tel"
-                        autoComplete="off"
-                        spellCheck={false}
-                        className="font-mono text-[0.8125rem]"
-                        data-issue-path={`telephony.transfer_targets[${index}].to`}
-                        {...register(`config.telephony.transfer_targets.${index}.to`)}
-                      />
-                    </Field>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="mt-6"
-                      aria-label={`Remove destination ${index + 1}`}
-                      onClick={() => remove(index)}
-                    >
-                      <Icon as={Trash2Icon} size="sm" />
-                    </Button>
+                  <li key={field.id} className="flex flex-col gap-1.5">
+                    <div className="flex flex-wrap items-start gap-2">
+                      <Field label="Name" htmlFor={labelId} error={labelError} className="min-w-40 flex-1">
+                        <Input
+                          id={labelId}
+                          placeholder="Front desk"
+                          autoComplete="off"
+                          data-issue-path={`telephony.transfer_targets[${index}].label`}
+                          {...register(`config.telephony.transfer_targets.${index}.label`)}
+                        />
+                      </Field>
+                      <Field label="Number or SIP address" htmlFor={toId} error={toError} className="min-w-56 flex-[2]">
+                        <Input
+                          id={toId}
+                          placeholder="+15551234567"
+                          inputMode="tel"
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="font-mono text-[0.8125rem]"
+                          data-issue-path={`telephony.transfer_targets[${index}].to`}
+                          {...register(`config.telephony.transfer_targets.${index}.to`)}
+                        />
+                      </Field>
+                      <Field label="How the call is handed over" htmlFor={modeId} className="min-w-56 flex-[2]">
+                        <NativeSelect
+                          id={modeId}
+                          data-issue-path={`telephony.transfer_targets[${index}].mode`}
+                          {...register(`config.telephony.transfer_targets.${index}.mode`)}
+                        >
+                          <option value="cold">Put through directly</option>
+                          <option value="warm">Introduce the caller first (LiveKit Cloud)</option>
+                        </NativeSelect>
+                      </Field>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="mt-6"
+                        aria-label={`Remove destination ${index + 1}`}
+                        onClick={() => remove(index)}
+                      >
+                        <Icon as={Trash2Icon} size="sm" />
+                      </Button>
+                    </div>
+                    {modeWarning ? (
+                      <p data-issue-path={`telephony.transfer_targets[${index}].mode`} className="text-[0.8125rem] text-warning-text">
+                        {modeWarning}
+                      </p>
+                    ) : null}
                   </li>
                 );
               })}
@@ -148,7 +175,7 @@ export function PhoneCallsCard() {
               variant="outline"
               size="sm"
               disabled={fields.length >= 50}
-              onClick={() => append({ label: "", to: "" }, { shouldFocus: true })}
+              onClick={() => append({ label: "", to: "", mode: "cold" }, { shouldFocus: true })}
             >
               <Icon as={PlusIcon} size="sm" />
               Add destination
@@ -156,6 +183,123 @@ export function PhoneCallsCard() {
           </div>
         </div>
       </SectionRow>
+    </Section>
+  );
+}
+
+/**
+ * V5-32/V5-36 (`docs/v5/_asks.md` #211): whether the agent notices an
+ * answering machine on an outbound call, and what it does about it
+ * (`config.telephony.amd`, `lkap_contracts.telephony.AmdConfig`). Outbound
+ * calls only — inbound calls and browser/text sessions never see this.
+ */
+export function VoicemailCard() {
+  const { control, register, watch, formState } = useFormContext<AgentEditorForm>();
+  const { issueFor } = useSectionIssues("tools");
+  const enabled = watch("config.telephony.amd.enabled");
+  const onMachine = watch("config.telephony.amd.on_machine");
+  const enabledId = "amd-enabled";
+  const onMachineId = "amd-on-machine";
+  const messageId = "amd-message";
+  const ivrId = "amd-ivr-detection";
+  const messageError = formState.errors.config?.telephony?.amd?.message?.message;
+  const enabledIssue = issueFor("telephony.amd.enabled");
+  const messageIssue = issueFor("telephony.amd.message");
+  const enabledWarning = enabledIssue?.severity === "warning" ? enabledIssue.message : undefined;
+  const messageWarning = !messageError && messageIssue?.severity === "warning" ? messageIssue.message : undefined;
+
+  return (
+    <Section
+      id="tools-voicemail"
+      title="Voicemail"
+      description="Outbound calls only: what the agent does when a machine answers instead of a person."
+    >
+      <SectionRow>
+        <Field
+          inline
+          label="Detect answering machines"
+          htmlFor={enabledId}
+          hint="Listens for a voicemail greeting or a phone menu before the agent speaks."
+        >
+          <Controller
+            control={control}
+            name="config.telephony.amd.enabled"
+            render={({ field }) => (
+              <Switch
+                id={enabledId}
+                data-issue-path="telephony.amd.enabled"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />
+            )}
+          />
+        </Field>
+        {enabledWarning ? (
+          <p data-issue-path="telephony.amd.enabled" className="text-[0.8125rem] text-warning-text">
+            {enabledWarning}
+          </p>
+        ) : null}
+      </SectionRow>
+
+      {enabled ? (
+        <>
+          <SectionRow>
+            <Field label="When a machine answers" htmlFor={onMachineId} className="max-w-xs">
+              <NativeSelect id={onMachineId} {...register("config.telephony.amd.on_machine")}>
+                <option value="hangup">Hang up</option>
+                <option value="leave_message">Leave a message</option>
+              </NativeSelect>
+            </Field>
+          </SectionRow>
+
+          <SectionRow>
+            <Field
+              label="Message"
+              htmlFor={messageId}
+              error={messageError}
+              hint="What the agent says to the voicemail. Leave empty for a short call-back request."
+              className={onMachine === "leave_message" ? undefined : "opacity-60"}
+            >
+              <Controller
+                control={control}
+                name="config.telephony.amd.message"
+                render={({ field }) => (
+                  <Textarea
+                    id={messageId}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Please call us back at your convenience."
+                    disabled={onMachine !== "leave_message"}
+                    data-issue-path="telephony.amd.message"
+                    value={field.value ?? ""}
+                    onChange={(event) => field.onChange(event.target.value === "" ? null : event.target.value)}
+                  />
+                )}
+              />
+            </Field>
+            {messageWarning ? (
+              <p data-issue-path="telephony.amd.message" className="text-[0.8125rem] text-warning-text">
+                {messageWarning}
+              </p>
+            ) : null}
+          </SectionRow>
+
+          <SectionRow>
+            <Field
+              inline
+              label="Let the agent work through phone menus"
+              htmlFor={ivrId}
+              hint="Off: a phone menu is treated the same as an answering machine and the agent hangs up."
+            >
+              <Controller
+                control={control}
+                name="config.telephony.amd.ivr_detection"
+                render={({ field }) => <Switch id={ivrId} checked={field.value} onCheckedChange={field.onChange} />}
+              />
+            </Field>
+          </SectionRow>
+        </>
+      ) : null}
     </Section>
   );
 }

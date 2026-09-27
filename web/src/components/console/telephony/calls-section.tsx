@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { PhoneIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, RelativeTime, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
@@ -13,12 +15,52 @@ import type { CallOut } from "@/contracts/lkap-contracts";
 
 import { CallControls } from "./call-controls";
 import { useCalls } from "./hooks";
-import { callStatusMeta } from "./model";
+import { AMD_RESULT_LABEL, callStatusMeta, TRANSFER_MODE_LABEL } from "./model";
 
 function duration(call: CallOut): string {
   if (!call.answered_at) return "—";
   const end = call.ended_at ? Date.parse(call.ended_at) : Date.now();
   return formatDuration(end - Date.parse(call.answered_at));
+}
+
+/**
+ * V5-32/36: what answered an outbound call (`amd_result`) and how it was
+ * handed over (`transfer_mode`, `transfer_summary`) — under the status chip,
+ * next to the existing `transfer_to` / `hangup_reason` lines. A summary can
+ * run to 2000 characters, so it is truncated inline with a dialog for the
+ * full text (never a side sheet).
+ */
+function CallOutcome({ call }: { call: CallOut }) {
+  const [showSummary, setShowSummary] = React.useState(false);
+  const amdLabel = call.amd_result ? AMD_RESULT_LABEL[call.amd_result] : null;
+  const transferLabel = call.transfer_mode ? TRANSFER_MODE_LABEL[call.transfer_mode] : null;
+  if (!amdLabel && !transferLabel) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      {amdLabel ? <span className="text-xs text-muted-foreground">Answered by: {amdLabel}</span> : null}
+      {transferLabel ? <span className="text-xs text-muted-foreground">{transferLabel}</span> : null}
+      {call.transfer_summary ? (
+        <>
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto justify-start p-0 text-xs"
+            onClick={() => setShowSummary(true)}
+          >
+            View summary
+          </Button>
+          <Dialog open={showSummary} onOpenChange={setShowSummary}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Call summary</DialogTitle>
+              </DialogHeader>
+              <p className="max-h-96 overflow-y-auto text-sm whitespace-pre-wrap">{call.transfer_summary}</p>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 /** Calls log (V2-17): inbound and outbound legs, newest first; polls while any call is live. */
@@ -64,6 +106,7 @@ export function CallsSection() {
             ) : call.hangup_reason && call.status !== "completed" ? (
               <span className="text-xs text-muted-foreground">{call.hangup_reason}</span>
             ) : null}
+            <CallOutcome call={call} />
           </div>
         );
       },
@@ -127,6 +170,7 @@ export function CallsSection() {
                     {meta.label}
                   </StatusChip>
                 </div>
+                <CallOutcome call={call} />
                 <CallControls call={call} compact />
               </div>
             );

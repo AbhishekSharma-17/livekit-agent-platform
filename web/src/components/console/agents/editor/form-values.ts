@@ -131,6 +131,21 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       telephony: {
         transfer_targets: [...(config.telephony?.transfer_targets ?? [])],
         sms_targets: [...(config.telephony?.sms_targets ?? [])],
+        // V5-36 (docs/v5/_asks.md #237): loaded here too, else a Voicemail card bound to
+        // `config.telephony.amd` would render blank and `register` would write into a
+        // field with no default — the next save would silently reset it to defaults.
+        // Every `AmdConfig` field is generated as optional (it has a pydantic default),
+        // so each one is resolved by hand rather than spread (a spread of a possibly
+        // `undefined` `config.telephony?.amd` widens every field of the result back to
+        // optional, which the form schema's `amd` object does not accept); the fallback
+        // literals mirror `DEFAULT_TELEPHONY.amd` (`agents/defaults.ts`), whose own type
+        // is widened the same way by `AmdConfig`'s generated optional fields.
+        amd: {
+          enabled: config.telephony?.amd?.enabled ?? false,
+          on_machine: config.telephony?.amd?.on_machine ?? "hangup",
+          message: config.telephony?.amd?.message ?? null,
+          ivr_detection: config.telephony?.amd?.ivr_detection ?? false,
+        },
       },
     },
   };

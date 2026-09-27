@@ -16,7 +16,7 @@
  * are configurable, and nothing else is — `BlockSpec.config` is public
  * (R-V2-7), so it never carries anything but these.
  */
-import type { DocumentBlockState, FormBlockState, GalleryBlockState, KbCitationsBlockState, TableBlockState, TableColumn, TranscriptBlockState, VideoBlockState, BlockSpec } from "@/contracts/lkap-contracts";
+import type { DocumentBlockState, FormBlockState, GalleryBlockState, HandoffBlockState, KbCitationsBlockState, TableBlockState, TableColumn, TranscriptBlockState, VideoBlockState, BlockSpec } from "@/contracts/lkap-contracts";
 
 import type { BlockType } from "@/panels/composite/layout";
 
@@ -562,6 +562,7 @@ export interface BlockStateByType {
   transcript: Required<TranscriptBlockState>;
   video: Required<VideoBlockState>;
   kb_citations: Required<KbCitationsBlockState>;
+  handoff: Required<HandoffBlockState>;
 }
 
 const STATE_DEFAULTS: { [K in keyof BlockStateByType]: () => BlockStateByType[K] } = {
@@ -572,6 +573,9 @@ const STATE_DEFAULTS: { [K in keyof BlockStateByType]: () => BlockStateByType[K]
   transcript: () => ({ show_tools: false }),
   video: () => ({ source: "agent_avatar", muted: false }),
   kb_citations: () => ({ items: [] }),
+  // V5-32/36: the worker seeds `handoff` the same way (`ui/blocks.py::BLOCK_STATE_MODELS`,
+  // docs/v5/_asks.md #210) — idle, nothing filled in yet.
+  handoff: () => ({ status: "idle", mode: null, target: null, queue_position: null, agent_name: null, reason: null }),
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

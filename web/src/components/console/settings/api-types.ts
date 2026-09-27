@@ -31,6 +31,7 @@ export type Scope =
   | "agents:write"
   | "sessions:read"
   | "sessions:write"
+  | "sessions:listen"
   | "calls:write"
   | "connections:read"
   | "connections:write"
@@ -45,6 +46,7 @@ export const SCOPES: Scope[] = [
   "agents:write",
   "sessions:read",
   "sessions:write",
+  "sessions:listen",
   "calls:write",
   "connections:read",
   "connections:write",
@@ -54,6 +56,17 @@ export const SCOPES: Scope[] = [
   "audit:read",
   "*",
 ];
+
+/**
+ * Human-readable label for a scope that isn't self-explanatory as a raw
+ * string (shown next to the `font-mono` scope value in the API-key create
+ * dialog, `api-keys-tab.tsx`). Scopes left out of this map need no gloss.
+ */
+export const SCOPE_LABEL: Partial<Record<Scope, string>> = {
+  // V5-37/V5-38 (ask #248): listens in to a live session's room and whispers
+  // to its agent (`builder`+; `sessions:write` implies it).
+  "sessions:listen": "Listen in to live sessions",
+};
 
 export const ROLE_LABEL: Record<Role, string> = {
   viewer: "Viewer",

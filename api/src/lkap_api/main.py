@@ -90,8 +90,9 @@ tools, knowledge bases, sessions and the browser `connect` endpoint.
 1. the `lkap_session` cookie of a signed-in console user;
 2. an **API key**, `Authorization: Bearer lkap_…`, bound to one workspace. A key
    carries **scopes** (`agents:read`, `agents:write`, `sessions:read`, `sessions:write`,
-   `calls:write`, `connections:read`, `connections:write`, `providers:read`,
-   `providers:write`, `webhooks:write`, `audit:read`, or `*` for all); `x:write` implies
+   `sessions:listen` (implied by `sessions:write`), `calls:write`, `connections:read`,
+   `connections:write`, `providers:read`, `providers:write`, `webhooks:write`,
+   `audit:read`, or `*` for all); `x:write` implies
    `x:read`, and a route answers 403 naming the scope it needs. `GET /v1/api-keys/self`
    returns the calling key's scopes and workspace (no secret material). Agent keys
    (`kind=agent`) are the ones the console mints for AI coding agents;

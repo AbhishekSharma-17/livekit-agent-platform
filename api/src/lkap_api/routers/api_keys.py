@@ -91,7 +91,8 @@ async def list_api_keys(
     summary="Create an API key",
     description=(
         "Returns the raw key (`lkap_…`) exactly once; only its sha256 is stored. Scopes: "
-        "`agents:read|write`, `sessions:read|write`, `calls:write`, `connections:read|write`, "
+        "`agents:read|write`, `sessions:read|write`, `sessions:listen` (implied by `sessions:write`), "
+        "`calls:write`, `connections:read|write`, "
         "`providers:read|write`, `webhooks:write`, `audit:read` or `*`. `kind=agent` with a "
         "`client` marks a key minted for an AI coding agent. Needs `admin`."
     ),

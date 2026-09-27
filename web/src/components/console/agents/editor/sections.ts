@@ -1,9 +1,10 @@
-import { FlaskConicalIcon, MessageCircleIcon, ShieldIcon } from "lucide-react";
+import { BrainIcon, FlaskConicalIcon, MessageCircleIcon, ShieldIcon } from "lucide-react";
 
 import { BUILTIN_SECTIONS } from "./builtin-sections";
 import { EDITOR_EXTENSIONS } from "./extensions";
 import { resolveEditorSections, resolveEditorSlots } from "./registry";
 import { ConversationSection } from "./sections/conversation-section";
+import { MemorySection } from "./sections/memory-section";
 import { PrivacySection } from "./sections/privacy-section";
 import { TestsSection } from "./sections/tests-section";
 import type { EditorExtension } from "./types";
@@ -93,15 +94,41 @@ const privacySectionExtension: EditorExtension = {
 };
 
 /**
+ * V5-42: the Memory section (whether the agent remembers a returning
+ * caller, scope, retention, the spoken consent line, how much is recalled).
+ * Same rationale as V5-11's/V5-33's/V5-34's own extensions above — this
+ * package's exclusive files are `sections.ts` / `registry.ts`, not
+ * `extensions.ts`. `order: 74` sits right after "Privacy" (72) — both are
+ * about what the platform keeps about a caller — and before "Limits" (80),
+ * so "Tests" (85) stays last (`console-editor-sections.test.tsx`).
+ */
+const memorySectionExtension: EditorExtension = {
+  id: "V5-42",
+  sections: [
+    {
+      id: "memory",
+      label: "Memory",
+      icon: BrainIcon,
+      order: 74,
+      Component: MemorySection,
+      issuePaths: ["memory"],
+      issueKeywords: /\b(memory|remember|returning caller|pseudonymous)/i,
+      issueKeywordPriority: 22,
+    },
+  ],
+};
+
+/**
  * The editor's section registry (docs/UI_UX_SPEC.md §7.4 item 3): built-ins
- * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's and V5-34's own extensions
- * above, resolved once at module load.
+ * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's, V5-34's and V5-42's own
+ * extensions above, resolved once at module load.
  */
 export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   ...EDITOR_EXTENSIONS,
   conversationSectionExtension,
   testsSectionExtension,
   privacySectionExtension,
+  memorySectionExtension,
 ]);
 export const EDITOR_SLOTS = resolveEditorSlots(EDITOR_EXTENSIONS);
 

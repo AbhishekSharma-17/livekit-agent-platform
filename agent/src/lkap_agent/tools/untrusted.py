@@ -53,6 +53,8 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     "lkap_agent.tools.mcp_client",
     # V5-40 (ask #256): recalled caller memories go into the instructions.
     "lkap_agent.session_builder",
+    # V5-39 (ask #278): a classifier guardrail sends caller, reply or tool text to a model.
+    "lkap_agent.guardrails",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

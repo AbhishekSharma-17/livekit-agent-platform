@@ -398,6 +398,25 @@ export const privacyConfigSchema = z.object({
 export type PrivacyConfigForm = z.infer<typeof privacyConfigSchema>;
 
 /**
+ * `MemoryConfig` (V5-40, `lkap_contracts.agent_config`): whether the agent
+ * remembers a returning caller between calls, its scope, retention, the
+ * spoken consent line and how much is recalled at session start. Optional on
+ * `agentConfigFormSchema` like `privacyConfigSchema` above — `toFormValues`
+ * always supplies a concrete value from `DEFAULT_MEMORY`. Ranges mirror the
+ * Pydantic model exactly (`retention_days` 1..3650, `consent_line` <= 500
+ * chars, `max_recall_tokens` 50..2000) so the client and server agree.
+ */
+export const memoryConfigSchema = z.object({
+  enabled: z.boolean(),
+  scope: z.enum(["agent", "workspace"]),
+  retention_days: z.number().int().min(1, "At least 1 day").max(3650, "3650 days max"),
+  consent_line: z.string().max(500, "500 characters max").nullable(),
+  max_recall_tokens: z.number().int().min(50, "At least 50").max(2000, "2000 max"),
+  verbatim: z.boolean(),
+});
+export type MemoryConfigForm = z.infer<typeof memoryConfigSchema>;
+
+/**
  * `QaField` (V5-30): one post-call field the judge fills in. `name` mirrors
  * the contract's lowercase-identifier pattern so a bad name is caught before
  * save rather than as a 422.
@@ -627,6 +646,12 @@ export const agentConfigFormSchema = z
      */
     privacy: privacyConfigSchema.optional(),
     qa: qaConfigSchema.optional(),
+    /**
+     * V5-42's Memory card: `config.memory` (optional, like `privacy` above —
+     * a fixture built before this package keeps validating; `toFormValues`
+     * always supplies a concrete value from `DEFAULT_MEMORY`).
+     */
+    memory: memoryConfigSchema.optional(),
     panel: panelLayoutSchema,
     /**
      * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the

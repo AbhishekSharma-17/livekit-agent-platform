@@ -67,7 +67,10 @@ import type {
   ProvidersResponse,
   SessionDetailOut,
   SessionEventPage,
+  SessionListenTokenOut,
   SessionPage,
+  SessionWhisperIn,
+  SessionWhisperOut,
   ToolCreate,
   ToolDryRunRequest,
   ToolDryRunResult,
@@ -116,6 +119,8 @@ const keys = {
   sessions: (agentId?: string, status?: string) => ["sessions", agentId ?? "", status ?? ""] as const,
   session: (id: string) => ["sessions", id] as const,
   sessionEvents: (id: string) => ["sessions", id, "events"] as const,
+  /** V5-38: the Live tab's own polled feed (separate from `sessionEvents`'s one-shot fetch above). */
+  sessionLiveEvents: (id: string) => ["sessions", id, "events", "live"] as const,
   /** Every model-record query of one provider (`["provider-models", providerId, …]`), for invalidation. */
   providerModelsAll: (providerId: string) => ["provider-models", providerId] as const,
   providerModels: (providerId: string, params: { custom: boolean; limit?: number }) =>
@@ -778,6 +783,52 @@ export function useSessionEvents(id: string) {
     queryKey: keys.sessionEvents(id),
     queryFn: () => api.get<SessionEventPage>(`sessions/${id}/events`),
     enabled: id.length > 0,
+  });
+}
+
+// ---- V5-38: the Live tab (listen-in and whisper, ask #251) ----
+
+/**
+ * `POST /v1/sessions/{id}/listen-token` — a fresh, admin-authenticated call
+ * each time it's invoked. Not a `useQuery`/`useMutation`: it's called from
+ * inside a `TokenSource.custom` fetcher (`live/listen-session.ts`), which the
+ * LiveKit client itself decides when to invoke (once on mount, again after an
+ * unexpected drop) — 15-minute tokens, ask again before `expiresAt` (#251).
+ * 409 `not_live` when the session isn't `active`.
+ */
+export function fetchSessionListenToken(sessionId: string): Promise<SessionListenTokenOut> {
+  return api.post<SessionListenTokenOut>(`sessions/${sessionId}/listen-token`);
+}
+
+/**
+ * `POST /v1/sessions/{id}/whisper` (202): written guidance for the agent,
+ * never heard or seen by the caller. 409 `no_agent` when no agent is in the
+ * room. The Live tab clears its box on success and surfaces the api's
+ * message on failure (`ApiError.message`).
+ */
+export function useSessionWhisper(sessionId: string) {
+  return useMutation({
+    mutationFn: (body: SessionWhisperIn) => api.post<SessionWhisperOut>(`sessions/${sessionId}/whisper`, body),
+  });
+}
+
+/** How often the Live tab polls for new supervisor events while it's open. */
+const LIVE_EVENTS_POLL_MS = 4_000;
+/** Enough rows to show the last few whispers/escalations without paging. */
+const LIVE_EVENTS_LIMIT = 100;
+
+/**
+ * The Live tab's own event feed (distinct from `useSessionEvents`'s one-shot
+ * read above): polls while `enabled`, so a whisper the worker just applied or
+ * an escalation the agent just raised shows up within a few seconds without
+ * a room-level RPC (a hidden listener can't call one — ask #251).
+ */
+export function useLiveSessionEvents(sessionId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.sessionLiveEvents(sessionId),
+    queryFn: () => api.get<SessionEventPage>(`sessions/${sessionId}/events`, { limit: LIVE_EVENTS_LIMIT }),
+    enabled: enabled && sessionId.length > 0,
+    refetchInterval: enabled ? LIVE_EVENTS_POLL_MS : false,
   });
 }
 

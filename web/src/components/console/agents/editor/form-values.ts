@@ -5,6 +5,7 @@ import {
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
   DEFAULT_LOCALE,
+  DEFAULT_MEMORY,
   DEFAULT_PRIVACY,
   DEFAULT_PUBLISH_GATE,
   DEFAULT_RECORDING,
@@ -121,6 +122,8 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       // `qaConfigSchema`'s `.catchall` is what stops the resolver parse from dropping them.
       privacy: { ...DEFAULT_PRIVACY, ...config.privacy },
       qa: { ...config.qa, fields: (config.qa?.fields ?? []).map(qaFieldFormValue) },
+      // V5-42's Memory card: `config.memory`, the same optional-field pattern as `privacy` above.
+      memory: { ...DEFAULT_MEMORY, ...config.memory },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
       // R-V2-21 / V5-28: the Tools section's "Phone calls" card edits both lists —
@@ -217,6 +220,8 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
   // value so `enabled`/`rubric_prompt`/`model` (no editor yet) survive untouched.
   if (edited.privacy !== undefined) config.privacy = { ...stored.privacy, ...edited.privacy };
   if (edited.qa !== undefined) config.qa = { ...stored.qa, ...edited.qa };
+  // V5-42: the Memory card owns `config.memory`.
+  if (edited.memory !== undefined) config.memory = { ...stored.memory, ...edited.memory };
   // R-V2-21: the Tools section edits `config.telephony` (the transfer destinations).
   if (edited.telephony !== undefined) config.telephony = { ...stored.telephony, ...edited.telephony };
   // The flow builder (V2-16) owns `config.flow`; the api derives `mode` from it (R-V2-12).

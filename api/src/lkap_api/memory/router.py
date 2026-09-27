@@ -1,8 +1,8 @@
 """The console's memory routes (V5-40): forget a caller, purge the workspace, a session's memory.
 
-``/v1/memory/*`` has no ``ROUTE_POLICY`` rule of its own, so it takes the
-fail-closed default (``admin``, API-key scope ``*``); the session route sits
-under ``/v1/sessions`` (``viewer`` / ``sessions:read``).
+``/v1/memory/*`` reads as ``viewer`` / ``sessions:read`` and writes (forget, purge) as
+``admin`` / ``sessions:write`` (``auth/roles.py::ROUTE_POLICY``, ask #258); the session
+route sits under ``/v1/sessions`` (``viewer`` / ``sessions:read``).
 """
 
 from __future__ import annotations

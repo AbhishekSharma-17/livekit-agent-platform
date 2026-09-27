@@ -327,7 +327,7 @@ describe("SessionDetailView — caller time zone chip (R-V5-10, V5-52)", () => {
 });
 
 describe("SessionDetailView — tabs", () => {
-  it("opens Timeline by default with the built-in tabs plus V2-14's Cost/QA in order (Recording hidden — no recording on this fixture)", async () => {
+  it("opens Timeline by default with the built-in tabs plus V2-14's Cost/QA and V5-42's Memory in order (Recording hidden — no recording on this fixture)", async () => {
     stubApi(detail());
     renderView();
     const tablist = await screen.findByRole("tablist", { name: "Session views" });
@@ -336,6 +336,7 @@ describe("SessionDetailView — tabs", () => {
       "Transcript",
       "Cost",
       "QA",
+      "Memory",
       "Panel at end of call",
       "Raw events",
     ]);

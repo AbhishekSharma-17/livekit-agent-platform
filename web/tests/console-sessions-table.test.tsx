@@ -190,6 +190,30 @@ describe("SessionsTable — V2-20-3 failed-recording chip", () => {
   });
 });
 
+describe("SessionsTable — V5-38 Live indicator", () => {
+  it("shows a 'Listen in' link to the Live tab only on an active session", async () => {
+    stubApi([
+      session({ id: "s-active", status: "active", started_at: "2026-09-19T00:00:00Z" }),
+      session({ id: "s-ended", status: "ended", started_at: "2026-09-19T00:00:00Z", ended_at: "2026-09-19T00:01:00Z" }),
+    ]);
+    renderWithClient(<SessionsTable />);
+    const t = await loadedTable();
+
+    const listenLink = await t.findByRole("link", { name: /listen in/i });
+    expect(listenLink.getAttribute("href")).toBe("/console/sessions/s-active?tab=live");
+
+    // Only one row is active — the ended row gets no listen-in link.
+    expect(t.getAllByRole("link", { name: /listen in/i })).toHaveLength(1);
+  });
+
+  it("shows no 'Listen in' link when nothing is active", async () => {
+    stubApi([session({ id: "s-created", status: "created" })]);
+    renderWithClient(<SessionsTable />);
+    await loadedTable();
+    expect(screen.queryByRole("link", { name: /listen in/i })).toBeNull();
+  });
+});
+
 describe("SessionsTable — columns, links, pagination", () => {
   it("asks the api for its maximum page and renders duration, channel, mode and a row link", async () => {
     stubApi([

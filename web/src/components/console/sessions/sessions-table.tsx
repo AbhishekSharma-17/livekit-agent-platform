@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, HistoryIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, HeadphonesIcon, HistoryIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -208,7 +209,13 @@ export function SessionsTable() {
         </div>
       ),
     },
-    { id: "status", header: "Status", cell: (session) => <SessionStatusChips session={session} /> },
+    {
+      id: "status",
+      header: "Status",
+      // V5-38: the "Live" link needs to stay clickable over the row's own link overlay.
+      interactive: true,
+      cell: (session) => <SessionStatusChips session={session} />,
+    },
     {
       id: "channel",
       header: "Channel",
@@ -501,7 +508,26 @@ export function SessionStatusChips({ session }: { session: SessionOut }) {
           </StatusChip>
         </span>
       ) : null}
+      {session.status === "active" ? <LiveIndicatorLink sessionId={session.id} /> : null}
     </div>
+  );
+}
+
+/**
+ * V5-38: a link straight to the session's Live tab, next to the plain
+ * "Active" status chip. The status column is `interactive`, which lifts it
+ * above the row's own stretched link overlay (`ResponsiveTable`), so this
+ * stays independently clickable.
+ */
+function LiveIndicatorLink({ sessionId }: { sessionId: string }) {
+  return (
+    <Link
+      href={`/console/sessions/${sessionId}?tab=live`}
+      className="focus-visible:ring-ring inline-flex items-center gap-1 rounded-xs bg-brand-soft px-1.5 py-0.5 text-[0.6875rem] font-medium text-brand-text outline-none hover:underline focus-visible:ring-2"
+    >
+      <Icon as={HeadphonesIcon} size="sm" />
+      Listen in
+    </Link>
   );
 }
 

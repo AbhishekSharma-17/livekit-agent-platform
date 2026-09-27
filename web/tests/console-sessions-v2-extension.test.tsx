@@ -38,9 +38,21 @@ describe("sessionsV2Extension registration", () => {
     expect(SESSION_DETAIL_EXTENSIONS).toContain(sessionsV2Extension);
   });
 
-  it("adds recording (30), cost (40) and qa (50) after transcript and before panel/raw", () => {
+  it("adds recording (30), cost (40), qa (50) and memory (55) after transcript and before panel/raw", () => {
     const tabs = resolveSessionTabs(BUILTIN_SESSION_TABS, [sessionsV2Extension]);
-    expect(tabs.map((t) => t.id)).toEqual(["timeline", "transcript", "recording", "cost", "qa", "panel", "raw"]);
+    // V5-38's "live" (order 5) sits ahead of everything else — it's hidden
+    // again by `visibleTabs` the moment a session isn't `active`; V5-42's "memory" follows "qa".
+    expect(tabs.map((t) => t.id)).toEqual([
+      "live",
+      "timeline",
+      "transcript",
+      "recording",
+      "cost",
+      "qa",
+      "memory",
+      "panel",
+      "raw",
+    ]);
   });
 
   it("hides the Recording tab when there is no recording", () => {
@@ -79,6 +91,32 @@ describe("sessionsV2Extension registration", () => {
     expect(kind?.title({})).toBe("Transcript cleaned");
     expect(kind?.summary?.({ tier: "redacted", replaced: { email: 2, card_number: 1 } })).toBe("3 details masked");
     expect(kind?.summary?.({ tier: "redacted", replaced: {} })).toBeNull();
+  });
+
+  // V5-42 (ask #263): the three caller-memory timeline rows. Titles never
+  // show the memory text itself (R-V5-15) — the Memory tab does.
+  it("shows memory_recalled/memory_stored/memory_forgotten in plain words, never the memory text", () => {
+    const kinds = resolveEventKinds(BUILTIN_EVENT_KINDS, [sessionsV2Extension]);
+
+    const recalled = kinds.get("memory_recalled");
+    expect(recalled?.title({ status: "recalled", count: 2, memories: ["likes mornings"] })).toBe(
+      "Recalled 2 caller memories",
+    );
+    expect(recalled?.title({ status: "empty" })).toBe("Nothing to recall (first call)");
+    expect(recalled?.title({ status: "no_identity" })).toBe("No caller id to recall memories for");
+    expect(recalled?.summary?.({ status: "recalled", forgotten: true })).toBe(
+      "This caller has since been forgotten",
+    );
+
+    const stored = kinds.get("memory_stored");
+    expect(stored?.title({ status: "stored", count: 1 })).toBe("Stored 1 caller memory");
+    expect(stored?.title({ status: "skipped" })).toBe("Memory not stored");
+    expect(stored?.summary?.({ status: "skipped", reason: "no caller identity" })).toBe("no caller identity");
+
+    const forgotten = kinds.get("memory_forgotten");
+    expect(forgotten?.title({ reason: "caller" })).toBe("Caller forgotten");
+    expect(forgotten?.summary?.({ reason: "workspace" })).toBe("The whole workspace's memories were purged");
+    expect(forgotten?.summary?.({ reason: "retention" })).toBe("Removed automatically after its retention period");
   });
 });
 

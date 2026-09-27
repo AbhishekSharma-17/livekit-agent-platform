@@ -70,7 +70,10 @@ function statusText(data: HandoffBlockState, config: HandoffConfig): string {
   const target = data.target ?? "a person";
   switch (data.status) {
     case "requested":
-      return `Handing you over to ${target}.`;
+      // `escalate_to_human` writes a plain, fixed line per mode into `reason`
+      // (mode stays null there — ask #212/#250 item 3); `transfer_call` never
+      // sets `reason` at `requested`, so its wording is unchanged (ask #254).
+      return data.reason ?? `Handing you over to ${target}.`;
     case "connecting":
       return data.mode === "warm" ? `Calling ${target} first…` : `Connecting you to ${target}…`;
     case "connected": {

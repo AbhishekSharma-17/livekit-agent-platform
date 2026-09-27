@@ -14816,7 +14816,7 @@
           "SessionWhisperOut"
         ],
         "lkap/scopes": [
-          "sessions:write"
+          "sessions:listen"
         ]
       },
       "annotations": {
@@ -14866,7 +14866,7 @@
       "kind": "destructive",
       "mixed": false,
       "scopes": [
-        "sessions:write"
+        "sessions:listen"
       ],
       "write_scopes": []
     },

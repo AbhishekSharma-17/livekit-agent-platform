@@ -668,11 +668,11 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-35 | Sonnet | 8 | merged | 6642f5d | | |
 | V5-36 | Sonnet | 8 | merged | be14db3 | deferred (telephony offline) | |
 | V5-37 | Opus | 8 | merged | cda51ba | | |
-| V5-38 | Sonnet | 9 | planned | | | |
+| V5-38 | Sonnet | 9 | merged | e1ddc2b | | |
 | V5-39 | Opus | 9 | planned | | | |
 | V5-40 | Opus | 9 | merged | 56f595f | | |
 | V5-41 | Sonnet | 10 | planned | | | |
-| V5-42 | Sonnet | 10 | planned | | | |
+| V5-42 | Sonnet | 10 | merged | b657283 | | |
 | V5-43 | Opus | 10 | planned | | | |
 | V5-44 | Sonnet | 10 | planned | | | |
 | V5-45 | Opus | 10 | merged | f3f060f | deferred (needs a Ragie key) | |

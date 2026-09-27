@@ -667,7 +667,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-34 | Sonnet | 8 | merged | 6642f5d | | |
 | V5-35 | Sonnet | 8 | merged | 6642f5d | | |
 | V5-36 | Sonnet | 8 | merged | be14db3 | deferred (telephony offline) | |
-| V5-37 | Opus | 8 | planned | | | |
+| V5-37 | Opus | 8 | merged | cda51ba | | |
 | V5-38 | Sonnet | 9 | planned | | | |
 | V5-39 | Opus | 9 | planned | | | |
 | V5-40 | Opus | 9 | planned | | | |

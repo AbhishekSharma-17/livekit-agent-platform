@@ -684,8 +684,9 @@ def _kind(provider_id: str) -> str | None:
 
 
 #: OpenRouter ``pricing`` keys per unit, by entry kind (all USD per single unit).
-#: The STT/TTS ``prompt`` unit is undocumented: per audio second (STT) and per
-#: character (TTS) were derived against Deepgram's own page (COSTS.md §1.2).
+#: The STT/TTS rows are the meta-less defaults (the drift job compares table rows
+#: with them); a live quote for an STT/TTS entry reads the model's own catalogue
+#: item through :func:`openrouter_unit` instead (D-V6-9).
 _OPENROUTER_KEYS: dict[str, dict[str, str]] = {
     "llm": {
         "tokens_in": "prompt",
@@ -708,10 +709,163 @@ _OPENROUTER_KEYS: dict[str, dict[str, str]] = {
 }
 
 
-def openrouter_key(provider_id: str, unit: Unit) -> str | None:
-    """The OpenRouter ``pricing`` key that prices ``unit`` for this entry's kind, if any."""
+#: How an OpenRouter speech model is metered (D-V6-9).
+OpenRouterUnit = Literal["per_second", "per_token", "per_char", "unknown"]
+
+#: The note an unpriced line carries when an OpenRouter speech model's unit cannot be told.
+UNIT_UNKNOWN_NOTE = "no price (unit unknown)"
+
+#: D-V6-9's sanity bounds: a live speech price above either is refused as "unit unknown".
+STT_MAX_USD_PER_MIN = Decimal(1)
+TTS_MAX_USD_PER_1K_CHARS = Decimal(1)
+
+# Bound-only constants (never used to price anything): the highest documented audio-token
+# rate (Gemini, 25 tokens per second of audio, https://ai.google.dev/gemini-api/docs/pricing),
+# speaking speed (150 words a minute of about 6 characters with the space) and text
+# characters per token.
+_BOUND_AUDIO_TOKENS_PER_S = Decimal(25)
+_BOUND_CHARS_PER_S = Decimal(15)
+_BOUND_CHARS_PER_TOKEN = Decimal(4)
+
+_SPEECH_KINDS = ("stt", "tts")
+
+
+def _speech_prices(
+    meta: Mapping[str, Any],
+) -> tuple[Decimal | None, Decimal | None, Decimal | None, Decimal | None]:
+    """``(prompt, completion, audio, audio_output)`` of a catalogue item (``None``: absent or variable)."""
+    raw = meta.get("pricing")
+    table: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+    return (
+        _decimal(table.get("prompt")),
+        _decimal(table.get("completion")),
+        _decimal(table.get("audio")),
+        _decimal(table.get("audio_output")),
+    )
+
+
+def _modality_fits(meta: Mapping[str, Any], kind: str) -> bool:
+    """False only when the item's ``architecture`` says it is not a model of this kind."""
+    arch = meta.get("architecture")
+    if not isinstance(arch, Mapping):
+        return True  # an item cached without its architecture: the pricing keys decide
+    inputs = arch.get("input_modalities")
+    outputs = arch.get("output_modalities")
+    if not isinstance(inputs, list) or not isinstance(outputs, list):
+        return True
+    if kind == "stt":
+        return "audio" in inputs or "transcription" in outputs
+    return "speech" in outputs or "audio" in outputs
+
+
+def openrouter_unit(meta: Mapping[str, Any], kind: str) -> OpenRouterUnit:
+    """How an OpenRouter speech model is metered, from its catalogue item (D-V6-9).
+
+    OpenRouter does not document the unit of an STT/TTS ``prompt`` price, and it
+    varies per model. The item's pricing keys decide it (checked against the
+    catalogue on 2026-09-28): a model that also bills its output (``completion``
+    or ``audio_output`` above zero: ``openai/gpt-4o-mini-transcribe``,
+    ``google/gemini-3.8-flash-tts``) is billed per **token**; any other STT model
+    per audio **second** (``deepgram/nova-3``, $0.0043 a minute) and any other TTS
+    model per **character** (``deepgram/aura-2``, $0.030 per 1,000). The
+    ``architecture.tokenizer`` does not decide it: ``openai/whisper-1`` names the
+    GPT tokenizer and is billed per second.
+
+    A figure above the sanity bound (STT above $1 per audio minute, TTS above $1
+    per 1,000 characters, token prices converted at the bound-only rates above),
+    an item whose ``architecture`` says it is not speech of this kind, and a
+    missing or variable price are all ``"unknown"``: the model shows "no price",
+    never a number.
+
+    Args:
+        meta: The cached catalogue item's ``meta`` (``pricing``, optionally ``architecture``).
+        kind: The registry entry's kind; anything but ``stt``/``tts`` is ``"per_token"``.
+
+    Returns:
+        ``"per_second"``, ``"per_token"``, ``"per_char"`` or ``"unknown"``.
+    """
+    if kind not in _SPEECH_KINDS:
+        return "per_token"
+    if not _modality_fits(meta, kind):
+        return "unknown"
+    prompt, completion, audio, audio_output = _speech_prices(meta)
+    token_billed = (completion is not None and completion > 0) or (
+        audio_output is not None and audio_output > 0
+    )
+    if kind == "stt":
+        if token_billed:
+            audio_in = audio if audio is not None else prompt
+            if audio_in is None:
+                return "unknown"
+            transcript_tokens_per_min = _BOUND_CHARS_PER_S * 60 / _BOUND_CHARS_PER_TOKEN
+            per_min = (
+                audio_in * _BOUND_AUDIO_TOKENS_PER_S * 60
+                + (completion or Decimal(0)) * transcript_tokens_per_min
+            )
+            return "per_token" if per_min <= STT_MAX_USD_PER_MIN else "unknown"
+        if prompt is None:
+            return "unknown"
+        return "per_second" if prompt * 60 <= STT_MAX_USD_PER_MIN else "unknown"
+    if token_billed:
+        spoken = audio_output if audio_output is not None else completion
+        audio_tokens_per_1k = Decimal(1000) / _BOUND_CHARS_PER_S * _BOUND_AUDIO_TOKENS_PER_S
+        per_1k = (prompt or Decimal(0)) * (Decimal(1000) / _BOUND_CHARS_PER_TOKEN) + (
+            spoken or Decimal(0)
+        ) * audio_tokens_per_1k
+        return "per_token" if per_1k <= TTS_MAX_USD_PER_1K_CHARS else "unknown"
+    if prompt is None:
+        return "unknown"
+    return "per_char" if prompt * 1000 <= TTS_MAX_USD_PER_1K_CHARS else "unknown"
+
+
+def _speech_key(kind: str, unit: Unit, meta: Mapping[str, Any]) -> str | None:
+    """The pricing key for one unit of a speech model, by its :func:`openrouter_unit`."""
+    metered = openrouter_unit(meta, kind)
+    if metered == "unknown":
+        return None
+    if unit == "requests":
+        return "request"
+    _, _, audio, audio_output = _speech_prices(meta)
+    if metered == "per_second":
+        return "prompt" if unit == "audio_s_in" else None
+    if metered == "per_char":
+        return "prompt" if unit == "chars" else None
+    if kind == "stt":
+        if unit == "audio_tokens_in":
+            return "audio" if audio is not None else "prompt"
+        return "completion" if unit == "tokens_out" else None
+    if unit == "tokens_in":
+        return "prompt"
+    if unit == "tokens_out":
+        # The audio spoken: OpenRouter lists it as `completion` today; `audio_output` wins if listed.
+        return "audio_output" if audio_output is not None else "completion"
+    return None
+
+
+def openrouter_key(provider_id: str, unit: Unit, meta: Mapping[str, Any] | None = None) -> str | None:
+    """The OpenRouter ``pricing`` key that prices ``unit``, if any.
+
+    Args:
+        provider_id: The registry id (its kind picks the key map).
+        unit: The unit being priced.
+        meta: The model's cached catalogue item. For an STT/TTS entry it decides the
+            unit per model (:func:`openrouter_unit`); without it the per-kind default applies.
+
+    Returns:
+        The key, or ``None`` when that unit is not priced for this entry or model.
+    """
     kind = _kind(provider_id) or "llm"
+    if meta is not None and kind in _SPEECH_KINDS:
+        return _speech_key(kind, unit, meta)
     return _OPENROUTER_KEYS.get(kind, _OPENROUTER_KEYS["llm"]).get(unit)
+
+
+def live_unpriced_note(provider_id: str, catalog_meta: Mapping[str, Any] | None) -> str | None:
+    """:data:`UNIT_UNKNOWN_NOTE` when an OpenRouter speech model's unit cannot be told, else ``None``."""
+    kind = _kind(provider_id)
+    if catalog_meta is None or kind not in _SPEECH_KINDS:
+        return None
+    return UNIT_UNKNOWN_NOTE if openrouter_unit(catalog_meta, kind) == "unknown" else None
 
 
 def _decimal(value: Any) -> Decimal | None:
@@ -771,7 +925,7 @@ def _live_quote(
     now: dt.datetime,
 ) -> PriceQuote | None:
     pricing = catalog_meta.get("pricing")
-    key = openrouter_key(provider_id, unit)
+    key = openrouter_key(provider_id, unit, catalog_meta)
     if not isinstance(pricing, Mapping) or key is None:
         return None
     value = _decimal(pricing.get(key))

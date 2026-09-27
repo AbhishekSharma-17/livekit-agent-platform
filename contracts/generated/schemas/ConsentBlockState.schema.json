@@ -1,7 +1,7 @@
 {
   "$id": "lkap-contracts/ConsentBlockState.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A consent question or disclosure the caller accepts or declines (``request_consent``, V5-15).\n\n``status`` is the request lifecycle every requestable block shares\n(:class:`RequestableState`); the caller's decision is ``accepted``\n(``None`` until they answer). A tap answers with ``block_submit {values:\n{accepted: true | false}}``; a spoken answer is recorded by\n``record_consent`` (``method=\"voice\"``). ``text`` is the exact wording\nshown (the block's ``config.text``, else the workspace's preset for its\n``kind``) and ``text_hash`` its SHA-256 once answered, so the answer is\ntied to the wording (``lkap_contracts.compliance.consent_text_hash``).",
+  "description": "A consent question or disclosure the caller accepts or declines (``request_consent``, V5-15).\n\n``status`` is the request lifecycle every requestable block shares\n(:class:`RequestableState`); the caller's decision is ``accepted``\n(``None`` until they answer). A tap answers with ``block_submit {values:\n{accepted: true | false}}`` (only ``accepted`` is read from a browser,\nV5-27 S5-3); a spoken answer is recorded by ``record_consent`` (always\n``method=\"voice\"``, with the user turn it was heard in, S5-4). ``text`` is\nthe exact wording shown (the block's ``config.text``, else the workspace's\npreset for its ``kind``) and ``text_hash`` its SHA-256 once answered; the\nworker hashes the wording it computed, never block state, so the answer is\ntied to the wording (``lkap_contracts.compliance.consent_text_hash``).",
   "properties": {
     "accepted": {
       "anyOf": [

@@ -578,6 +578,10 @@ def _session(llm_: ScriptedLLM) -> AgentSession[Any]:
     return AgentSession(llm=llm_, tool_handling={"async_options": ASYNC_TOOL_OPTIONS["cascaded"]})
 
 
+#: What the model receives for the HTTP tool's body (V5-27, S5-6: fenced as untrusted).
+_FENCED_STOCK = '<untrusted source="http:lookup_item">item 42 is in stock</untrusted>'
+
+
 async def _slow_ok(request: httpx.Request) -> httpx.Response:
     await asyncio.sleep(1.5)
     return httpx.Response(200, text="item 42 is in stock")
@@ -618,7 +622,7 @@ async def test_real_sdk_a_slow_auto_tool_announces_then_replies_at_idle() -> Non
     assert choice == "none"
     outputs = [i for i in session.history.items if i.type == "function_call_output"]
     assert outputs[-1].call_id == "call-1_final"
-    assert outputs[-1].output == "item 42 is in stock"
+    assert outputs[-1].output == _FENCED_STOCK
     assistant = [
         i.text_content for i in session.history.items if i.type == "message" and i.role == "assistant"
     ]
@@ -760,7 +764,7 @@ async def test_real_sdk_interrupting_the_turn_keeps_the_tool_running_and_the_res
     final = [
         i for i in session.history.items if i.type == "function_call_output" and i.call_id == "call-1_final"
     ]
-    assert final and final[0].output == "item 42 is in stock"
+    assert final and final[0].output == _FENCED_STOCK
     await session.aclose()
 
 

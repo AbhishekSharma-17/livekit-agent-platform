@@ -93,6 +93,7 @@ from lkap_agent.tools.execution import (
     sdk_version_at_least,
     wrap_tool,
 )
+from lkap_agent.tools.untrusted import UNTRUSTED_RULE
 from lkap_agent.ui.blocks import (
     VOICE_ONLY_CHANNELS,
     block_ids_of_type,
@@ -192,13 +193,16 @@ def compose_instructions(
 
     Returns:
         The composed prompt: agent instructions, then the pack's mode addendum,
-        then the date-and-time stamp, then the platform pipeline note.
+        then the `<untrusted>` rule (V5-27, R-V5-15: one fixed line, the same
+        in every session), then the date-and-time stamp, then the platform
+        pipeline note.
     """
     blocks = [base.strip()]
     if manifest is not None:
         addendum = manifest.instructions_by_mode.get(mode, "").strip()
         if addendum:
             blocks.append(addendum)
+    blocks.append(UNTRUSTED_RULE)
     if locale is not None:
         blocks.append(locale.stamp())
     blocks.append(PIPELINE_NOTES[mode])

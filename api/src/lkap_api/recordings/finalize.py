@@ -46,6 +46,7 @@ from lkap_api.db.models import Job, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.jobs.kinds import RECORDING_FINALIZE
 from lkap_api.logging import get_logger
+from lkap_api.recordings.service import RECORDING_STOPPED_NOTE
 
 log = get_logger(__name__)
 
@@ -121,7 +122,9 @@ async def apply_egress_result(
             since-recovered recording.
     """
     session.recording_status = status
-    session.recording_error = error if status == "failed" else None
+    # S5-5: a recording stopped because consent was withdrawn keeps that note once ready.
+    stopped_note = session.recording_error if session.recording_error == RECORDING_STOPPED_NOTE else None
+    session.recording_error = error if status == "failed" else stopped_note
     if duration_s is not None:
         session.recording_duration_s = duration_s
     if status == "ready":

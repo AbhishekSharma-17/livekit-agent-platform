@@ -47,6 +47,20 @@
           "pattern": "^[0-9a-f]{64}$",
           "title": "Text Hash",
           "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A voice answer's user turn (the transcript row it was heard in); null for a tap and for events written before V5-27.",
+          "title": "Turn Id"
         }
       },
       "required": [
@@ -78,6 +92,23 @@
         ]
       },
       "title": "Latest",
+      "type": "object"
+    },
+    "withdrawn_at": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "default": {},
+      "description": "When an accepted answer was replaced by a decline (epoch seconds), per kind (V5-27, S5-5): for `recording` the worker stops the Egress then.",
+      "propertyNames": {
+        "enum": [
+          "recording",
+          "ai_disclosure",
+          "terms",
+          "custom"
+        ]
+      },
+      "title": "Withdrawn At",
       "type": "object"
     }
   },

@@ -634,10 +634,12 @@ def test_apps_mode_with_composio_turned_off_is_an_error() -> None:
     assert "turned off" in issues[0].message
 
 
-def test_router_manage_connections_is_a_warning() -> None:
+def test_manage_connections_is_refused_at_save_until_the_live_check() -> None:
+    """S5-41 (R-V5-16 amended): the V5-47 warning is an error until the Composio live check."""
     ctx = _apps_ctx({"mode": "router", "router": {"manage_connections": True}})
 
-    assert _paths(ctx) == {"tools.apps.router.manage_connections": "warning"}
+    assert _paths(ctx) == {"tools.apps.router.manage_connections": "error"}
+    assert _paths(_apps_ctx({"mode": "router", "router": {"manage_connections": False}})) == {}
 
 
 @pytest.mark.parametrize(

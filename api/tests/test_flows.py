@@ -11,6 +11,7 @@ import respx
 from conftest import create_agent, inference_config
 from lkap_contracts.agent_config import AgentConfig, PipelineConfig, ProviderRef, QaConfig
 from lkap_contracts.flow import AgentNode
+from lkap_contracts.tools import BLOCK_TOOL_TYPES
 from sqlalchemy import select
 
 from lkap_api.config_service import (
@@ -186,6 +187,22 @@ async def test_a_block_tool_without_its_block_is_an_error(admin_client: httpx.As
     (issue,) = body["issues"]
     assert issue["path"] == "flow.nodes[1].tools[0]"
     assert "document block" in issue["message"]
+
+
+@pytest.mark.parametrize("tool", sorted(BLOCK_TOOL_TYPES))
+async def test_flow_validation_names_the_missing_block_for_every_block_tool(
+    admin_client: httpx.AsyncClient, tool: str
+) -> None:
+    """S5-31 (ask #129(2)): every block tool without its block is a named error, never a 500."""
+    agent = await create_agent(admin_client)
+
+    body = await _validate(admin_client, agent["id"], _flow(tools=[tool]))
+
+    (issue,) = body["issues"]
+    assert issue["path"] == "flow.nodes[1].tools[0]"
+    assert issue["message"].endswith("block in the panel")
+    if tool != "update_block":
+        assert f"{sorted(BLOCK_TOOL_TYPES[tool])[0]} block" in issue["message"]
 
 
 async def test_a_node_kb_outside_the_agents_kbs_is_an_error(admin_client: httpx.AsyncClient) -> None:

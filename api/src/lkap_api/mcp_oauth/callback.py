@@ -9,6 +9,11 @@ trusted alone. In order:
    committed in its own transaction before anything else, so a ``state`` works once
    even when a later step fails; an already-claimed row is refused.
 3. Expiry (ten minutes from ``oauth/start``).
+3a. The browser binding (R-V5-14): a flow a person started (``actor_type`` other than
+   ``api_key``) needs the ``lkap_mcp_oauth`` cookie ``oauth/start`` set, compared in
+   constant time with the hash kept in the flow's encrypted bag; otherwise
+   ``browser_mismatch`` (consumed, audited). ``LKAP_MCP_OAUTH_ALLOW_UNBOUND=true`` turns
+   the check off for split-origin deployments.
 4. RFC 9207, as the MCP spec tabulates it: when ``iss`` is present it must equal the
    issuer recorded at start, byte for byte (no case folding, no trailing-slash or
    percent-encoding normalisation); when it is absent and the provider advertised
@@ -23,9 +28,13 @@ trusted alone. In order:
 8. The ``mcp-oauth`` credential is written through the vault (``expires_at`` absolute)
    and the tool's ``auth.credential_id`` points at it; audit ``mcp_oauth.callback_ok``.
 
-Every refusal is audited as ``mcp_oauth.callback_rejected`` with a reason and no value
-from the query. A ``state`` that names no live sign-in (unknown, already used,
-expired, malformed) is answered ``400`` without a token exchange; every other outcome
+Every refusal of an identified sign-in is audited as ``mcp_oauth.callback_rejected``
+with a reason and no value from the query; a ``state`` that names no sign-in
+(``malformed_state``, ``unknown_state``) writes only a log line, so an unauthenticated
+client cannot grow the audit table (S5-21, with the route's per-client rate limit). An
+unexpected failure after the claim is ``internal`` (audited), never a bare 500 (S5-18).
+A ``state`` that names no live sign-in (unknown, already used, expired, malformed) is
+answered ``400`` without a token exchange; every other outcome
 lands the browser on the console's tools page with ``oauth=ok`` or ``oauth=error`` and
 nothing else.
 """
@@ -54,8 +63,8 @@ from lkap_api.db.session import Database
 from lkap_api.logging import get_logger
 from lkap_api.mcp_oauth.credential import STATUS_ACTIVE, binds_tool, fingerprint_of
 from lkap_api.mcp_oauth.discovery import resource_covers
-from lkap_api.mcp_oauth.flows import MAX_STATE_CHARS, hash_state
-from lkap_api.mcp_oauth.http import McpOauthError, UrlPolicy, fetch, host_of, require_url
+from lkap_api.mcp_oauth.flows import MAX_BINDER_CHARS, MAX_STATE_CHARS, hash_binder, hash_state
+from lkap_api.mcp_oauth.http import McpOauthError, UrlPolicy, fetch, host_of, require_url, token_lifetime
 from lkap_api.mcp_oauth.registration import client_secrets
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
@@ -170,11 +179,28 @@ def _audit(
     )
 
 
+#: Refusals that name no sign-in: logged, never audited (S5-21).
+_UNAUDITED_REASONS: Final[frozenset[str]] = frozenset({"malformed_state", "unknown_state"})
+
+
 async def _reject(database: Database, flow: _Flow | None, reason: str, **payload: Any) -> CallbackOutcome:
-    async with database.session() as db:
-        _audit(db, flow, "mcp_oauth.callback_rejected", reason=reason, **payload)
+    if reason not in _UNAUDITED_REASONS:
+        async with database.session() as db:
+            _audit(db, flow, "mcp_oauth.callback_rejected", reason=reason, **payload)
     log.info("mcp_oauth_callback_rejected", reason=reason, tool_id=flow.tool_id if flow else None)
     return CallbackOutcome(False, reason)
+
+
+def _browser_bound(flow: _Flow, settings: Settings) -> bool:
+    """Whether this flow must be finished by the browser that started it (R-V5-14)."""
+    return flow.actor_type != "api_key" and not settings.mcp_oauth_allow_unbound
+
+
+def _binder_matches(flow: _Flow, vault: Vault, binder: str | None) -> bool:
+    expected = vault.decrypt(flow.verifier_ciphertext).get("binder_sha256")
+    if not isinstance(expected, str) or not expected or not binder or len(binder) > MAX_BINDER_CHARS:
+        return False
+    return hmac.compare_digest(expected.encode("ascii"), hash_binder(binder).encode("ascii"))
 
 
 async def _claim(database: Database, state: str, now: dt.datetime) -> _Flow | str:
@@ -290,6 +316,7 @@ async def _exchange(
         raise McpOauthError("token_exchange_failed", "the sign-in provider sent no usable access token")
     if token.refresh_token is not None and len(token.refresh_token) > MAX_TOKEN_CHARS:
         raise McpOauthError("token_exchange_failed", "the sign-in provider's refresh token is too long")
+    token_lifetime(token.expires_in)  # refuses zero or a negative lifetime (S5-18)
     return token
 
 
@@ -301,14 +328,11 @@ def _bag(
     client_metadata_url: str | None,
 ) -> dict[str, str]:
     scope = token.scope if token.scope is not None else (flow.scopes or "")
+    lifetime = token_lifetime(token.expires_in)
     values: dict[str, str | None] = {
         "access_token": token.access_token,
         "refresh_token": token.refresh_token,
-        "expires_at": (
-            (now + dt.timedelta(seconds=int(token.expires_in))).isoformat()
-            if token.expires_in is not None and token.expires_in > 0
-            else None
-        ),
+        "expires_at": (now + dt.timedelta(seconds=lifetime)).isoformat() if lifetime is not None else None,
         "scope": scope or None,
         "issuer": flow.issuer,
         "token_endpoint": flow.token_endpoint,
@@ -336,6 +360,8 @@ async def _store(
     token: OAuthToken,
     secrets_bag: dict[str, str],
     now: dt.datetime,
+    *,
+    browser_bound: bool,
 ) -> CallbackOutcome:
     async with database.session() as db:
         row = await _load_tool(db, flow)
@@ -401,6 +427,7 @@ async def _store(
             registration=flow.registration,
             scope_count=len(bag.get("scope", "").split()),
             refresh_token=bool(token.refresh_token),
+            browser_bound=browser_bound,
         )
     log.info("mcp_oauth_connected", tool_id=flow.tool_id, registration=flow.registration)
     return CallbackOutcome(True, "ok")
@@ -416,6 +443,7 @@ async def handle_callback(
     code: str | None,
     iss: str | None,
     error: str | None,
+    binder: str | None = None,
     now: dt.datetime | None = None,
 ) -> CallbackOutcome:
     """Finish a sign-in (see the module docstring for the order of checks)."""
@@ -426,8 +454,35 @@ async def handle_callback(
     if isinstance(claimed, str):
         return await _reject(database, None, claimed)
     flow = claimed
+    try:
+        return await _finish(
+            database, vault, client, settings, flow, code=code, iss=iss, error=error, binder=binder, now=ts
+        )
+    except Exception as exc:  # noqa: BLE001 - a consumed flow always ends in an audited refusal
+        log.warning("mcp_oauth_callback_failed", tool_id=flow.tool_id, error_type=type(exc).__name__)
+        return await _reject(database, flow, "internal")
+
+
+async def _finish(
+    database: Database,
+    vault: Vault,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    flow: _Flow,
+    *,
+    code: str | None,
+    iss: str | None,
+    error: str | None,
+    binder: str | None,
+    now: dt.datetime,
+) -> CallbackOutcome:
+    """Every check after the claim, the exchange and the store."""
+    ts = now
     if ts >= flow.expires_at:
         return await _reject(database, flow, "expired")
+    browser_bound = _browser_bound(flow, settings)
+    if browser_bound and not _binder_matches(flow, vault, binder):
+        return await _reject(database, flow, "browser_mismatch")
     issuer_problem = _issuer_problem(flow, iss)
     if issuer_problem is not None:
         return await _reject(database, flow, issuer_problem)  # the error parameters are ignored
@@ -454,7 +509,7 @@ async def handle_callback(
         )
     except McpOauthError as exc:
         return await _reject(database, flow, exc.reason)
-    return await _store(database, vault, flow, token, secrets_bag, ts)
+    return await _store(database, vault, flow, token, secrets_bag, ts, browser_bound=browser_bound)
 
 
 __all__ = [

@@ -7,10 +7,11 @@ The built-in names are the single source the worker, the api and the web share
 ``generated/builtin_tools.json`` carries them to the console.
 """
 
+import json
 from datetime import datetime
 from typing import Annotated, Any, Final, Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from lkap_contracts.tool_providers import ToolProviderId
 
@@ -349,12 +350,25 @@ class McpOAuthAuth(BaseModel):
 McpAuth = Annotated[McpNoAuth | McpHeaderAuth | McpOAuthAuth, Field(discriminator="kind")]
 
 
+#: Caps on a stored ``tools/list`` snapshot (the ones ``POST /v1/tools/{id}/test`` applies, S5-42).
+MAX_CACHED_TOOLS: Final = 200
+MAX_CACHED_TOOL_DESCRIPTION: Final = 1000
+MAX_CACHED_TOOL_SCHEMA_BYTES: Final = 16_000
+
+
 class McpToolSnapshot(BaseModel):
     """One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it."""
 
     name: str = Field(min_length=1, max_length=200)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_CACHED_TOOL_DESCRIPTION)
     input_schema: dict[str, Any] | None = None
+
+    @field_validator("input_schema")
+    @classmethod
+    def _schema_size(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is not None and len(json.dumps(value, default=str)) > MAX_CACHED_TOOL_SCHEMA_BYTES:
+            raise ValueError(f"input_schema is larger than {MAX_CACHED_TOOL_SCHEMA_BYTES} bytes")
+        return value
 
 
 class McpTestResult(BaseModel):
@@ -405,7 +419,7 @@ class McpServerDefinition(BaseModel):
     """Set on servers LKAP provisions for a tool provider (Composio's app server or tool finder,
     docs/v5/COMPOSIO.md D-V5-C6). The api manages these rows; the worker connects to them only
     over ``https`` on the provider's host."""
-    cached_tools: list[McpToolSnapshot] | None = None
+    cached_tools: list[McpToolSnapshot] | None = Field(default=None, max_length=MAX_CACHED_TOOLS)
     """The server's tools as ``POST /v1/tools/{id}/test`` last listed them, for the console.
     The worker still lists tools itself at session start (research-v4 tools §4.3.7)."""
     cached_at: datetime | None = None

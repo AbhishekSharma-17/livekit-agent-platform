@@ -16,8 +16,9 @@ reads need ``viewer`` + ``connections:read``, every write ``admin`` +
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
 from lkap_contracts.api_models import (
     ConnectionCreate,
@@ -28,6 +29,7 @@ from lkap_contracts.api_models import (
     ConnectionUpdate,
 )
 
+from lkap_api.auth.deps import AUDIT_PAYLOAD_STATE
 from lkap_api.connections import bundle, service
 from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.probe import probe_connection
@@ -80,6 +82,7 @@ async def list_connections(
 )
 async def create_connection(
     payload: ConnectionCreate,
+    request: Request,
     db: DbDep,
     vault: VaultDep,
     settings: SettingsDep,
@@ -88,7 +91,20 @@ async def create_connection(
 ) -> ConnectionOut:
     """Create a connection."""
     row = await service.create_connection(db, vault, workspace_id, payload, settings.packs_list)
+    _audit_destination(request, payload)
     return service.to_out(row, vault)
+
+
+def _audit_destination(request: Request, payload: ConnectionCreate) -> None:
+    """R-V5-17 (S5-14): the request's audit row names the host and deployment type it reaches."""
+    setattr(
+        request.state,
+        AUDIT_PAYLOAD_STATE,
+        {
+            "host": (urlsplit(str(payload.url)).hostname or "")[:253],
+            "deployment_type": payload.deployment_type,
+        },
+    )
 
 
 @router.post(
@@ -102,9 +118,10 @@ async def create_connection(
     ),
 )
 async def test_unsaved_connection(
-    payload: ConnectionCreate, vault: VaultDep, factory: ClientFactoryDep, _admin: AdminDep
+    payload: ConnectionCreate, request: Request, vault: VaultDep, factory: ClientFactoryDep, _admin: AdminDep
 ) -> ConnectionTestResult:
-    """Probe connection details without saving them."""
+    """Probe connection details without saving them (the destination is audited, S5-14)."""
+    _audit_destination(request, payload)
     unsaved = service.UnsavedConnection.from_create(vault, payload)
     return await probe_connection(
         factory, unsaved, deployment_type=payload.deployment_type, use_inference=payload.use_inference

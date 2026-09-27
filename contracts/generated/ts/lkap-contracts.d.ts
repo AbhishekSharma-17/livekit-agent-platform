@@ -2010,10 +2010,12 @@ export interface ConnectionUpdate {
  * ``status`` is the request lifecycle every requestable block shares
  * (:class:`RequestableState`); the caller's decision is ``accepted``
  * (``None`` until they answer). A tap answers with ``block_submit {values:
- * {accepted: true | false}}``; a spoken answer is recorded by
- * ``record_consent`` (``method="voice"``). ``text`` is the exact wording
- * shown (the block's ``config.text``, else the workspace's preset for its
- * ``kind``) and ``text_hash`` its SHA-256 once answered, so the answer is
+ * {accepted: true | false}}`` (only ``accepted`` is read from a browser,
+ * V5-27 S5-3); a spoken answer is recorded by ``record_consent`` (always
+ * ``method="voice"``, with the user turn it was heard in, S5-4). ``text`` is
+ * the exact wording shown (the block's ``config.text``, else the workspace's
+ * preset for its ``kind``) and ``text_hash`` its SHA-256 once answered; the
+ * worker hashes the wording it computed, never block state, so the answer is
  * tied to the wording (``lkap_contracts.compliance.consent_text_hash``).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -2048,6 +2050,10 @@ export interface ConsentEvent {
    * SHA-256 of the exact text, lowercase hex.
    */
   text_hash: string;
+  /**
+   * A voice answer's user turn (the transcript row it was heard in); null for a tap and for events written before V5-27.
+   */
+  turn_id?: string | null;
 }
 /**
  * ``sessions.consent_state``: the latest answer per consent kind (a later answer replaces it).
@@ -2058,6 +2064,12 @@ export interface ConsentEvent {
 export interface ConsentState {
   latest?: {
     [k: string]: ConsentRecord;
+  };
+  /**
+   * When an accepted answer was replaced by a decline (epoch seconds), per kind (V5-27, S5-5): for `recording` the worker stops the Egress then.
+   */
+  withdrawn_at?: {
+    [k: string]: number;
   };
 }
 /**
@@ -2079,6 +2091,10 @@ export interface ConsentRecord {
    * SHA-256 of the exact text, lowercase hex.
    */
   text_hash: string;
+  /**
+   * A voice answer's user turn (the transcript row it was heard in); null for a tap and for events written before V5-27.
+   */
+  turn_id?: string | null;
 }
 /**
  * ``GET /v1/cost-estimates/assumptions``: the workspace's effective assumptions.
@@ -2314,7 +2330,7 @@ export interface MoneyRange {
 export interface CostEstimateRequest {
   agent_id?: string | null;
   /**
-   * Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`).
+   * Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`); at most 50.
    */
   assumptions?: {
     [k: string]: number | string;
@@ -2779,6 +2795,10 @@ export interface InternalKbSearchRequest {
    * `local` rescores the top candidates with the local cross-encoder; `connection:<id>` with the hosted re-ranking service of that knowledge connection.
    */
   rerank?: string;
+  /**
+   * The session searching; when set, only knowledge bases of that session's workspace are searched (S5-29). Null from a pre-V5-27 worker.
+   */
+  session_id?: string | null;
 }
 /**
  * ``POST /internal/v1/telephony/sessions/{id}/transfer`` (the ``transfer_call`` tool).

@@ -579,3 +579,51 @@ async def test_the_agent_row_is_untouched_by_an_estimate(
     async with database.session() as session:
         row = await session.get(Agent, str(agent["id"]))
         assert row is not None and row.config_version == agent["config_version"]
+
+
+async def test_estimate_ignores_a_credential_of_another_workspace(database: Database) -> None:
+    """S5-27: a keyed catalogue row is read only through a credential of the caller's workspace."""
+    from auth_helpers import make_workspace
+
+    from lkap_api.costs.prices import load_live_sheets
+    from lkap_api.db.models import Credential, ProviderCatalogCache
+
+    other_ws = await make_workspace(database, "other-costs")
+    model = "vendor/private-model"
+    async with database.session() as session:
+        foreign = Credential(
+            workspace_id=other_ws,
+            provider_id="openrouter-llm",
+            label="theirs",
+            ciphertext=b"x",
+            fingerprint="f",
+        )
+        own = Credential(provider_id="openrouter-llm", label="ours", ciphertext=b"x", fingerprint="o")
+        session.add_all([foreign, own])
+        await session.flush()
+        for credential, price in ((foreign, "0.000009"), (own, "0.000001")):
+            session.add(
+                ProviderCatalogCache(
+                    provider_id="openrouter-llm",
+                    credential_id=credential.id,
+                    kind="models",
+                    items=[{"id": model, "meta": {"pricing": {"prompt": price, "completion": price}}}],
+                    ttl_s=21600,
+                )
+            )
+        await session.flush()
+        foreign_id, own_id = foreign.id, own.id
+
+    async with database.session() as session:
+        theirs = await load_live_sheets(
+            session,
+            [ProviderRef(provider_id="openrouter-llm", model=model, credential_id=foreign_id)],
+            workspace_id=DEFAULT_WORKSPACE_ID,
+        )
+        ours = await load_live_sheets(
+            session,
+            [ProviderRef(provider_id="openrouter-llm", model=model, credential_id=own_id)],
+            workspace_id=DEFAULT_WORKSPACE_ID,
+        )
+    assert theirs == {}
+    assert ours[("openrouter-llm", model)].meta["pricing"]["prompt"] == "0.000001"

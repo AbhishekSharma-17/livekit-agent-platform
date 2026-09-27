@@ -68,7 +68,10 @@ from aiohttp.resolver import DefaultResolver
 from aiohttp.tracing import Trace
 
 from lkap_api.errors import UnprocessableEntityError
+from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
+
+_log = get_logger(__name__)
 
 __all__ = [
     "DEV_DEFAULT_ALLOW",
@@ -91,6 +94,7 @@ __all__ = [
     "mcp_policy",
     "numeric_host",
     "policy_from_settings",
+    "self_hosted_networks_from_settings",
     "validate_url",
 ]
 
@@ -163,7 +167,11 @@ class NetPolicy:
     allow_hosts: frozenset[str] = frozenset()
     allow_networks: tuple[IpNetwork, ...] = field(default=())
     trusted_private: bool = False
-    """A self-hosted LiveKit connection: :data:`SELF_HOSTED_NETWORKS` and ``localhost`` are reachable."""
+    """A self-hosted LiveKit connection: :attr:`self_hosted_networks` (and ``localhost`` when a
+    loopback network is among them) are reachable."""
+    self_hosted_networks: tuple[IpNetwork, ...] = SELF_HOSTED_NETWORKS
+    """R-V5-17 (S5-14): the operator's ceiling on what a self-hosted connection may reach
+    (``LKAP_SELF_HOSTED_ALLOWED_NETWORKS``; the default keeps the pre-V5-27 reach)."""
     private_hint: str = ""
     """Appended to a refusal of an address or name :attr:`trusted_private` would allow."""
 
@@ -204,13 +212,56 @@ class NetPolicy:
         """Whether an address falls in an allowlisted or trusted network (metadata never does)."""
         if address in METADATA_ADDRESSES:
             return False
-        if self.trusted_private and _self_hosted_address(address):
+        if self.trusted_private and any(address in network for network in self.self_hosted_networks):
             return True
         return any(address in network for network in self.allow_networks)
+
+    def trusts_localhost(self) -> bool:
+        """Whether ``localhost`` names are reachable: self-hosted with a loopback network allowed."""
+        return self.trusted_private and any(
+            network.overlaps(loopback)
+            for network in self.self_hosted_networks
+            for loopback in _LOOPBACK_NETWORKS
+            if network.version == loopback.version
+        )
+
+
+_LOOPBACK_NETWORKS: Final[tuple[IpNetwork, ...]] = (
+    ipaddress.IPv4Network("127.0.0.0/8"),
+    ipaddress.IPv6Network("::1/128"),
+)
 
 
 def _self_hosted_address(address: IpAddress) -> bool:
     return any(address in network for network in SELF_HOSTED_NETWORKS)
+
+
+def self_hosted_networks_from_settings(settings: Settings) -> tuple[IpNetwork, ...]:
+    """``LKAP_SELF_HOSTED_ALLOWED_NETWORKS`` as networks (R-V5-17).
+
+    Unset: :data:`SELF_HOSTED_NETWORKS` (today's reach). An empty value: none (a self-hosted
+    connection then reaches only what ``LKAP_NET_ALLOW_PRIVATE_HOSTS`` allows). Otherwise the
+    listed CIDRs, clipped to the self-hosted ranges: metadata, link-local, multicast, reserved
+    and unspecified addresses stay refused whatever is listed.
+
+    Raises:
+        ValueError: An entry that is not an IP network.
+    """
+    raw = settings.self_hosted_allowed_networks
+    if raw is None:
+        return SELF_HOSTED_NETWORKS
+    networks: list[IpNetwork] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        network = ipaddress.ip_network(entry, strict=False)
+        if any(
+            network.version == allowed.version and network.subnet_of(allowed)  # type: ignore[arg-type]
+            for allowed in SELF_HOSTED_NETWORKS
+        ):
+            networks.append(network)
+    return tuple(networks)
 
 
 def _local_name(name: str) -> bool:
@@ -221,8 +272,10 @@ def policy_from_settings(settings: Settings) -> NetPolicy:
     """The process's policy: ``LKAP_NET_ALLOW_PRIVATE_HOSTS``, or the dev default."""
     raw = settings.net_allow_private_hosts
     if raw is None:
-        return NetPolicy.from_entries(DEV_DEFAULT_ALLOW if settings.env == "dev" else ())
-    return NetPolicy.from_entries(raw.split(","))
+        policy = NetPolicy.from_entries(DEV_DEFAULT_ALLOW if settings.env == "dev" else ())
+    else:
+        policy = NetPolicy.from_entries(raw.split(","))
+    return replace(policy, self_hosted_networks=self_hosted_networks_from_settings(settings))
 
 
 def _normalise_host(host: str) -> str:
@@ -311,7 +364,7 @@ def host_problem(host: str, policy: NetPolicy) -> str | None:
         return f"{name} is a numeric address in a non-canonical form"
     if policy.host_exempt(name):
         return None
-    if policy.trusted_private and _local_name(name):
+    if policy.trusts_localhost() and _local_name(name):
         # Still resolved and checked: `localhost` must answer with a loopback address.
         return None
     if name in BLOCKED_HOST_NAMES or _local_name(name):
@@ -464,7 +517,11 @@ async def checked_addresses(
     for address in addresses:
         problem = address_problem(address, policy, host_exempt=exempt)
         if problem is not None:
-            raise BlockedDestinationError(f"blocked destination: {host} resolves to {problem}")
+            # S5-19: the caller-facing text names the kind of address, never the address
+            # (a Builder's test route would otherwise read internal DNS); the log keeps it.
+            _log.info("blocked_destination_resolved", host=host, detail=problem)
+            kind = problem.split(" is ", 1)[1] if " is " in problem else "a blocked address"
+            raise BlockedDestinationError(f"blocked destination: {host} resolves to {kind}")
     return addresses
 
 

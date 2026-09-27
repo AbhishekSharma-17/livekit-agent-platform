@@ -28,6 +28,7 @@ from livekit.agents import FunctionTool, RunContext, function_tool
 from lkap_contracts.api_models import KbHit
 from packs.base import PackSessionContext
 
+from lkap_agent.knowledge import KNOWLEDGE_SOURCE, safe_filename
 from lkap_agent.tools.execution import (
     ResolvedExecution,
     ToolPolicy,
@@ -36,6 +37,7 @@ from lkap_agent.tools.execution import (
     run_with_policy,
     tool_flags,
 )
+from lkap_agent.tools.untrusted import fence
 from lkap_agent.ui.blocks import block_ids_of_type, session_block_specs
 
 __all__ = ["build_search_knowledge_tool", "cite_sources"]
@@ -80,8 +82,15 @@ def build_search_knowledge_tool(
         if not hits:
             return "No relevant knowledge found."
         await cite_sources(ctx, hits)
-        return json.dumps(
-            [{"source": hit.filename, "text": hit.text, "score": round(hit.score, 3)} for hit in hits]
+        # V5-27 (S5-6, R-V5-15): the passages are data, fenced; filenames as the note labels them.
+        return fence(
+            json.dumps(
+                [
+                    {"source": safe_filename(hit.filename), "text": hit.text, "score": round(hit.score, 3)}
+                    for hit in hits
+                ]
+            ),
+            source=KNOWLEDGE_SOURCE,
         )
 
     @function_tool(flags=flags, on_duplicate=on_duplicate, duplicate_scope=duplicate_scope)

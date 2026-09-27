@@ -36,6 +36,7 @@ status and result (recall@k, MRR, every question's outcome) back.
 
 from __future__ import annotations
 
+import unicodedata
 from pathlib import PurePosixPath
 from typing import Annotated, Literal
 from urllib.parse import unquote, urlsplit
@@ -93,6 +94,7 @@ from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService
 from lkap_api.kb.store import VectorStore, resolve_store
 from lkap_api.knowledge_connections.service import bind_for_kb
 from lkap_api.logging import get_logger
+from lkap_api.session_assets.service import load_session_any
 from lkap_api.storage.base import StorageBackend, UploadTooLargeError
 from lkap_api.storage.deps import StorageDep
 
@@ -296,11 +298,21 @@ def upload_basename(filename: str | None) -> str:
     """The client's filename reduced to its last path segment (V2-22, REVIEW-V2 R2-26).
 
     It becomes part of the object key and the stored document name, so any
-    directory part (``../../x``, ``C:\\x``, ``/etc/x``) is dropped; an empty or
-    dot-only result falls back to ``document``.
+    directory part (``../../x``, ``C:\\x``, ``/etc/x``) is dropped; control and
+    format characters (newlines, bidi overrides) are removed, since the name reaches
+    the model inside retrieved passages (S5-6); an empty or dot-only result falls
+    back to ``document``.
     """
-    base = PurePosixPath((filename or "").replace("\\", "/")).name.strip()
+    cleaned = "".join(
+        char for char in (filename or "") if unicodedata.category(char) not in _UNSAFE_NAME_CATEGORIES
+    )
+    base = PurePosixPath(cleaned.replace("\\", "/")).name.strip()
     return base if base.strip(".") else "document"
+
+
+#: Unicode categories dropped from a document name: control (``\n``, ``\x00``) and format
+#: (bidi overrides, zero-width) characters.
+_UNSAFE_NAME_CATEGORIES: frozenset[str] = frozenset({"Cc", "Cf"})
 
 
 def import_filename(url: str, filename: str | None, mime: str) -> str:
@@ -521,7 +533,13 @@ async def upload_document(
     document = await _store_and_enqueue(
         db, storage, jobs, background_tasks, kb=kb, filename=filename, mime=mime, data=data
     )
-    log.info("kb_document_uploaded", kb_id=kb.id, document_id=document.id, filename=filename, bytes=len(data))
+    log.info(
+        "kb_document_uploaded",
+        kb_id=kb.id,
+        document_id=document.id,
+        extension=PurePosixPath(filename).suffix.lower()[:16],
+        bytes=len(data),
+    )
     return _document_out(document)
 
 
@@ -570,7 +588,7 @@ async def import_document(
         "kb_document_imported",
         kb_id=kb.id,
         document_id=document.id,
-        filename=filename,
+        extension=PurePosixPath(filename).suffix.lower()[:16],
         host=urlsplit(url).hostname,
         bytes=len(source.data),
     )
@@ -927,8 +945,16 @@ async def internal_search_kb(
     reranker: RerankerDep,
     _service: ServiceDep,
 ) -> KnowledgeSearchResponse:
-    """Search across the given knowledge bases (worker-only)."""
+    """Search across the given knowledge bases (worker-only).
+
+    With ``session_id`` (S5-29) only knowledge bases of that session's workspace are
+    searched; an unknown session is a 404. Without it (a pre-V5-27 worker) the ids are
+    read across workspaces as before.
+    """
     _check_k(payload.k)
+    workspace_id: str | None = None
+    if payload.session_id is not None:
+        workspace_id = (await load_session_any(db, payload.session_id)).workspace_id
     service = KnowledgeService(db, store=store, embedder=embedder, reranker=reranker)
     return await service.search(
         payload.kb_ids,
@@ -937,5 +963,6 @@ async def internal_search_kb(
         min_score=payload.min_score,
         rerank=payload.rerank,
         mode=payload.mode,
+        workspace_id=workspace_id,
         purpose=payload.purpose,  # V5-20: auto-inject never uses a hosted re-ranker
     )

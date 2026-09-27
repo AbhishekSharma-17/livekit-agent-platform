@@ -19,6 +19,7 @@
     },
     "description": {
       "default": "",
+      "maxLength": 4000,
       "title": "Description",
       "type": "string"
     },
@@ -28,6 +29,7 @@
       "type": "string"
     },
     "name": {
+      "maxLength": 200,
       "title": "Name",
       "type": "string"
     }

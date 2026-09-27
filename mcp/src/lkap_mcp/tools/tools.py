@@ -225,7 +225,12 @@ def register(registry: Registry) -> None:
         body["tool_names"] = untrusted(", ".join(body.get("tool_names") or []), f"mcp:{tool_id}")
         if body.get("ok"):
             return ToolResult.success(body)
-        return ToolResult.success(body, warnings=[f"The server could not be listed: {body.get('error')}"])
+        # The error can carry text the server chose (V5-27, S5-20): data, never instructions.
+        body["error"] = untrusted(body.get("error") or "", f"mcp:{tool_id}")
+        reason = body.get("reason") or "unknown"
+        return ToolResult.success(
+            body, warnings=[f"The server could not be listed ({reason}); data.error has the details."]
+        )
 
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="ToolDryRunResult")
     async def tool_dry_run(tool_id: str, arguments: dict[str, Any] | None = None) -> ToolResult:

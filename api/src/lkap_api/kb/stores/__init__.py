@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict
 #: Ids are our own uuid4 hex values; this guards every hand-built filter or
 #: identifier (a LanceDB ``IN (...)`` clause, a Postgres partial-index
 #: predicate) against anything else ever reaching one.
-SAFE_ID: Final = re.compile(r"^[A-Za-z0-9_-]+$")
+SAFE_ID: Final = re.compile(r"[A-Za-z0-9_-]+")
 
 #: The only metadata filter every store understands: restrict a query to these documents.
 FILTER_DOCUMENT_ID: Final = "document_id"
@@ -36,7 +36,7 @@ def check_safe_id(value: str, *, what: str = "id") -> str:
     Raises:
         ValueError: When it contains anything outside ``[A-Za-z0-9_-]``.
     """
-    if not SAFE_ID.match(value):
+    if not SAFE_ID.fullmatch(value):
         raise ValueError(f"unsafe {what} for a vector-store filter: {value!r}")
     return value
 

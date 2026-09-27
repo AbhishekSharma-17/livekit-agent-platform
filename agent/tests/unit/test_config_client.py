@@ -2,19 +2,28 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 import httpx
 import pytest
 import respx
-from fakes.fake_api import resolved_config
-from lkap_contracts.api_models import KbHit, SessionEventIn, SessionSummaryIn, TranscriptTurn
+from fakes.fake_api import FakeApi, resolved_config
+from lkap_contracts.api_models import (
+    MAX_KB_QUERY_CHARS,
+    KbHit,
+    KbSearchOptions,
+    SessionEventIn,
+    SessionSummaryIn,
+    TranscriptTurn,
+)
 
 from lkap_agent.config_client import (
     ApiKbClient,
     ConfigClient,
     ConfigUnavailableError,
+    RecordingUnavailableError,
     SessionEndedError,
     SessionNotFoundError,
 )
@@ -169,6 +178,49 @@ async def test_kb_search_short_circuits_without_kbs_or_a_query() -> None:
         assert await client.kb_search(["kb-1"], "   ") == []
 
     assert not route.called
+
+
+@respx.mock
+async def test_kb_search_sends_the_session_id_when_the_session_is_known() -> None:
+    """S5-29: the api keeps an internal search inside the session's workspace."""
+    route = respx.post(f"{BASE_URL}/internal/v1/kb/search").mock(
+        return_value=httpx.Response(200, json={"hits": []})
+    )
+
+    async with _client() as client:
+        await client.kb_search(["kb-1"], "is it covered", session_id="sess-7")
+        await client.kb_search(["kb-1"], "is it covered")
+        await client.kb_search(["kb-1"], "x" * 5000)
+
+    bodies = [json.loads(call.request.content) for call in route.calls]
+    assert [body["session_id"] for body in bodies] == ["sess-7", None, None]
+    assert len(bodies[2]["query"]) == MAX_KB_QUERY_CHARS
+
+
+async def test_api_kb_client_binds_the_session_id() -> None:
+    api = FakeApi()
+    await ApiKbClient(api, ["kb-a"], session_id="sess-7").search("question")
+    await ApiKbClient(api, ["kb-a"], options=KbSearchOptions(), session_id="sess-7").search("question")
+    await ApiKbClient(api, ["kb-a"]).search("question")
+    assert api.kb_session_ids == ["sess-7", "sess-7", None]
+
+
+@respx.mock
+@pytest.mark.parametrize("status", [200, 404, 500])
+async def test_stop_recording_posts_the_stop_route(status: int) -> None:
+    """S5-5: the worker stops a withdrawn recording through the api (service token)."""
+    route = respx.post(f"{BASE_URL}/internal/v1/sessions/s/recording/stop").mock(
+        return_value=httpx.Response(status, json={"stopped": status == 200})
+    )
+
+    async with _client() as client:
+        if status == 200:
+            await client.stop_recording("s")
+        else:
+            with pytest.raises(RecordingUnavailableError, match=str(status)):
+                await client.stop_recording("s")
+
+    assert route.calls.last.request.headers["X-Service-Token"] == "service-token-abc"
 
 
 async def test_api_kb_client_binds_the_agents_knowledge_bases() -> None:

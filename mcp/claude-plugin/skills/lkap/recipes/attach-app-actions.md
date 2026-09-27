@@ -51,9 +51,11 @@ an admin — reconnect it in the console's Tools, Apps.
 - `server` offers the picked actions of the allowed apps through one managed
   app server.
 - `router` lets the agent search for actions and run them during the
-  conversation (Composio's tool finder). Replies are slower; connecting new
-  apps from a conversation stays off unless `router.manage_connections` is
-  set, and never helps a phone caller.
+  conversation (Composio's tool finder). Replies are slower. Connecting new
+  apps from a conversation (`router.manage_connections`) is refused for now:
+  an admin connects apps under Tools, Apps. Turning `server` or `router` on,
+  reviewing a destructive action or naming accounts needs an admin key
+  (`providers:write`); a Builder key gets a 403.
 - `off` removes the server or finder; attached action tools stay.
 
 Saving provisions the server or finder and attaches it as a managed MCP

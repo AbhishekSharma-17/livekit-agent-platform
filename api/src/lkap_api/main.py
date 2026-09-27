@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from lkap_api import __version__
+from lkap_api.body_limit import BodySizeLimitMiddleware, RequestBodyTooLargeError, error_body
 from lkap_api.bootstrap import bootstrap
 from lkap_api.custom_models.router import router as model_test_router
 from lkap_api.db.session import Database
@@ -138,6 +139,12 @@ def _register_exception_handlers(app: FastAPI) -> None:
             "unprocessable_entity",
             "request body failed validation",
             {"errors": _sanitised_validation_details(exc)},
+        )
+
+    @app.exception_handler(RequestBodyTooLargeError)
+    async def _body_too_large(_request: Request, exc: RequestBodyTooLargeError) -> JSONResponse:
+        return JSONResponse(
+            status_code=413, content=error_body(exc.max_bytes), headers={"connection": "close"}
         )
 
     @app.exception_handler(StarletteHTTPException)
@@ -322,6 +329,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # S5-12: outermost of the added middleware, so an oversized body is refused before
+    # CORS, routing, authentication or multipart parsing.
+    app.add_middleware(BodySizeLimitMiddleware)
     _register_exception_handlers(app)
     _include_routers(app)
     return app

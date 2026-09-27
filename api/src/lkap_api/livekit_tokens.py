@@ -22,6 +22,9 @@ TOKEN_TTL = dt.timedelta(hours=2)
 
 #: Participant attributes the platform sets itself; a client never supplies one (R-V5-10).
 RESERVED_ATTRIBUTE_PREFIX = "lkap."
+#: Every attribute prefix a client may not set (S5-25): the platform's own, LiveKit's
+#: (``lk.publish_on_behalf``, ``lk.agent.*``) and SIP's (``sip.phoneNumber``, ``sip.callID``).
+RESERVED_ATTRIBUTE_PREFIXES: tuple[str, ...] = (RESERVED_ATTRIBUTE_PREFIX, "lk.", "sip.")
 
 #: The ``participant_metadata`` key carrying the browser's IANA timezone (R-V5-10).
 TIMEZONE_METADATA_KEY = "timezone"
@@ -32,9 +35,9 @@ def participant_attributes(
 ) -> dict[str, str] | None:
     """The caller's token attributes from ``participant_metadata`` (R-V5-10).
 
-    Every ``lkap.*`` key the client sent is dropped, so the worker can trust the
-    platform's own. The caller's timezone (``timezone``, else
-    ``metadata["timezone"]``) is kept only when it is an IANA name, as
+    Every ``lkap.*``, ``lk.*`` and ``sip.*`` key the client sent is dropped, so the
+    worker can trust the platform's, LiveKit's and SIP's own (S5-25). The caller's
+    timezone (``timezone``, else ``metadata["timezone"]``) is kept only when it is an IANA name, as
     ``lkap.tz``; the raw ``timezone`` key is never forwarded, and an unknown name
     is dropped without an error.
 
@@ -46,7 +49,9 @@ def participant_attributes(
         The attributes, or ``None`` when nothing is left.
     """
     attributes = {
-        key: value for key, value in metadata.items() if not key.startswith(RESERVED_ATTRIBUTE_PREFIX)
+        key: value
+        for key, value in metadata.items()
+        if not key.lower().startswith(RESERVED_ATTRIBUTE_PREFIXES)
     }
     from_metadata = attributes.pop(TIMEZONE_METADATA_KEY, None)
     zone = next((name for name in (timezone, from_metadata) if is_iana_timezone(name)), None)

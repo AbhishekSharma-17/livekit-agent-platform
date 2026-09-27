@@ -369,7 +369,8 @@ class SessionObserver:
         if not text:
             return
         if item.role == "user":
-            self.record("user_turn", {"text": text})
+            # V5-27 (S5-4): `turn_id` is the message id a voice `consent` event points at.
+            self.record("user_turn", {"text": text, "turn_id": item.id})
         elif item.role == "assistant":
             payload: dict[str, Any] = {"text": text, "interrupted": bool(item.interrupted)}
             if item.metrics is not None:

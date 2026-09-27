@@ -571,6 +571,8 @@ async def test_the_session_context_kb_client_is_bound_to_the_agents_knowledge_ba
     session_ctx = seen[0]
     assert await session_ctx.kb.search("is flood covered") == [hit]
     assert api.kb_queries[0][0] == ["kb-1", "kb-2"]
+    # S5-29: the session's own id goes with every search.
+    assert api.kb_session_ids[0] == "sess-1"
 
 
 # --------------------------------------------------------------- workflow llm

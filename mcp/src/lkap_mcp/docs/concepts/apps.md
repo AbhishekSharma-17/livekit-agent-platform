@@ -101,8 +101,10 @@ An agent's `tools.apps.mode` (set with `agent_apps_mode`) chooses:
   allowed apps.
 - `router` — a tool finder: the agent searches Composio's actions and runs
   them during the conversation. Replies are slower. Letting the agent start
-  a sign-in (`router.manage_connections`) is off by default and never works
-  on a phone call.
+  a sign-in (`router.manage_connections`) is refused at save for now (it may
+  share one caller's account with the next); connect apps under Tools, Apps.
+  Turning `server`/`router` on, reviewing destructive actions or naming
+  accounts needs an admin key (`providers:write`).
 - `off` — the default; nothing is provisioned.
 
 In `server` and `router` modes a destructive action (delete, remove, send

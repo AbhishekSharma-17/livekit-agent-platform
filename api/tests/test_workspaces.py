@@ -28,13 +28,18 @@ async def test_update_workspace_needs_admin_and_merges_settings(app: FastAPI, da
     async with await login(app, "b@example.com") as builder:
         refused = await builder.put("/v1/workspaces/default", json={"name": "Nope"})
     async with await login(app, "a@example.com") as admin:
-        first = await admin.put("/v1/workspaces/default", json={"settings": {"timezone": "Asia/Kolkata"}})
+        first = await admin.put(
+            "/v1/workspaces/default", json={"settings": {"locale": {"timezone": "Asia/Kolkata"}}}
+        )
         second = await admin.put("/v1/workspaces/default", json={"name": "Acme"})
+        # V5-27 (S5-26): an unknown top-level key is refused, not stored.
+        unknown = await admin.put("/v1/workspaces/default", json={"settings": {"timezone": "Asia/Kolkata"}})
 
     assert refused.status_code == 403
     assert first.status_code == 200
     assert second.json()["name"] == "Acme"
-    assert second.json()["settings"] == {"timezone": "Asia/Kolkata"}
+    assert second.json()["settings"] == {"locale": {"timezone": "Asia/Kolkata"}}
+    assert unknown.status_code == 422
 
 
 async def test_members_are_listed_to_viewers(app: FastAPI, database: Database) -> None:

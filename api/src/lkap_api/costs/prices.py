@@ -28,7 +28,7 @@ from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.auth.audit import ActorType, record
-from lkap_api.db.models import ProviderCatalogCache, Workspace, utcnow
+from lkap_api.db.models import Credential, ProviderCatalogCache, Workspace, utcnow
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -169,13 +169,19 @@ class LiveSheet:
 
 
 async def load_live_sheets(
-    db: AsyncSession, refs: Iterable[ProviderRef | tuple[str, str | None]]
+    db: AsyncSession,
+    refs: Iterable[ProviderRef | tuple[str, str | None]],
+    *,
+    workspace_id: str | None = None,
 ) -> dict[tuple[str, str], LiveSheet]:
     """The cached OpenRouter pricing for every OpenRouter ref given (a public or a keyed row).
 
     Args:
         db: Any session (the catalog cache is not workspace-scoped).
         refs: ``ProviderRef``s or ``(provider_id, model)`` pairs; non-OpenRouter ones are ignored.
+        workspace_id: Only credentials of this workspace select keyed rows (S5-27: the cache
+            table has no workspace column, so another workspace's credential id is dropped);
+            ``None`` reads the public rows only.
 
     Returns:
         ``(provider_id, model) -> LiveSheet`` for the ids found in the cache.
@@ -198,6 +204,18 @@ async def load_live_sheets(
             wanted.setdefault(provider_id, set()).add(model)
     if not wanted:
         return {}
+    if credentials and workspace_id is not None:
+        credentials = set(
+            (
+                await db.execute(
+                    select(Credential.id).where(
+                        Credential.workspace_id == workspace_id, Credential.id.in_(sorted(credentials))
+                    )
+                )
+            ).scalars()
+        )
+    elif workspace_id is None:
+        credentials = set()
     condition: ColumnElement[bool] = ProviderCatalogCache.credential_id.is_(None)
     if credentials:
         condition = or_(ProviderCatalogCache.credential_id.in_(credentials), condition)
@@ -257,7 +275,9 @@ async def load_price_book(
 ) -> PriceBook:
     """Build the workspace's :class:`PriceBook` (``workspace_id=None`` gives table + live only)."""
     prices = await load_workspace_prices(db, workspace_id) if workspace_id else []
-    return PriceBook(workspace_prices=prices, live=await load_live_sheets(db, refs))
+    return PriceBook(
+        workspace_prices=prices, live=await load_live_sheets(db, refs, workspace_id=workspace_id)
+    )
 
 
 def pipeline_refs(config_pipeline: Any, extra: Iterable[ProviderRef | None] = ()) -> list[ProviderRef]:

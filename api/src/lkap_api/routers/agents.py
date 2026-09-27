@@ -37,6 +37,8 @@ from lkap_contracts.api_models import (
 )
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.templates import StarterTemplate
+from lkap_contracts.tool_providers import AppsMode
+from pydantic import ValidationError
 from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +48,7 @@ from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import connection_context_for, validate_in_db
 from lkap_api.db.constants import DEFAULT_WORKSPACE_ID
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
-from lkap_api.db.models import Agent, AgentConfigVersion, Credential, LiveKitConnection, utcnow
+from lkap_api.db.models import Agent, AgentConfigVersion, Credential, LiveKitConnection, Tool, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.deps import AdminCtxDep, DbDep, SettingsDep, VaultDep
 from lkap_api.errors import (
@@ -519,6 +521,66 @@ def check_endpoint_overrides(ctx: WorkspaceContext, old: Any, new: Any) -> None:
         )
 
 
+#: The Apps admin gate (R-V5-16 amended, S5-40): what the Apps routes reserve for admins.
+_SET_APPS = Requirement("admin", "providers:write")
+
+
+def _apps_of(config: Any) -> AppsMode:
+    """``tools.apps`` of a config document or model (the default when absent or unreadable)."""
+    if isinstance(config, AgentConfig):
+        return config.tools.apps
+    raw = config.get("tools", {}).get("apps") if isinstance(config, dict) else None
+    try:
+        return AppsMode.model_validate(raw or {})
+    except ValidationError:
+        return AppsMode()
+
+
+def apps_admin_changes(old: AppsMode, new: AppsMode) -> list[str]:
+    """The ``tools.apps`` changes only an admin may make (R-V5-16 amended), as field paths.
+
+    Turning ``mode`` to ``server`` or ``router`` (a Composio session on the workspace key),
+    adding a slug to ``reviewed_actions`` (un-denies a destructive action), turning
+    ``router.manage_connections`` on, or naming a new account in ``accounts``. A Builder may
+    still pick actions, set ``allowed_toolkits``, add to ``denied_actions`` and switch
+    ``mode`` off or to ``actions``.
+    """
+    changes: list[str] = []
+    if new.mode in ("server", "router") and new.mode != old.mode:
+        changes.append("tools.apps.mode")
+    old_reviewed = {slug.strip().upper() for slug in old.reviewed_actions}
+    if {slug.strip().upper() for slug in new.reviewed_actions if slug.strip()} - old_reviewed:
+        changes.append("tools.apps.reviewed_actions")
+    if new.router.manage_connections and not old.router.manage_connections:
+        changes.append("tools.apps.router.manage_connections")
+    old_accounts = {(toolkit, account) for toolkit, ids in old.accounts.items() for account in ids}
+    if {(toolkit, account) for toolkit, ids in new.accounts.items() for account in ids} - old_accounts:
+        changes.append("tools.apps.accounts")
+    return changes
+
+
+def check_apps_changes(ctx: WorkspaceContext, old: Any, new: Any) -> None:
+    """Refuse a Builder who makes an Apps admin decision through the agent config (S5-40).
+
+    Raises:
+        ForbiddenError: The caller is below ``admin`` (or an API key without
+            ``providers:write``) and the new ``tools.apps`` makes a change of
+            :func:`apps_admin_changes`.
+    """
+    changes = apps_admin_changes(_apps_of(old), _apps_of(new))
+    if changes and not ctx.allows(_SET_APPS):
+        raise ForbiddenError(
+            "turning on an app server or tool finder, reviewing a destructive action, letting the "
+            "agent connect apps or choosing accounts needs the 'admin' role (and the "
+            "'providers:write' scope for API keys), as in the Apps settings",
+            details={
+                "fields": changes,
+                "required_role": _SET_APPS.role,
+                "required_scope": _SET_APPS.scope,
+            },
+        )
+
+
 def _raise_if_invalid(result: ValidationResult) -> None:
     if not result.ok:
         raise UnprocessableEntityError(
@@ -632,6 +694,7 @@ async def create_agent(
         pack_id = payload.pack_id
         config = payload.config
         check_endpoint_overrides(ctx, {}, config.model_dump(mode="json"))
+        check_apps_changes(ctx, {}, config)
         pack = get_manifest(settings.packs_list, pack_id)
         panel_id = pack.ui_panel_id if pack else "generic"
 
@@ -788,6 +851,7 @@ async def update_agent(
         row.ui_panel_id = payload.ui_panel_id
     if payload.config is not None:
         check_endpoint_overrides(ctx, row.config, payload.config.model_dump(mode="json"))
+        check_apps_changes(ctx, row.config, payload.config)
         _raise_if_invalid(
             await validate_stored_config(
                 db,
@@ -973,7 +1037,13 @@ async def get_version(agent_id: str, config_version: int, db: DbDep, ctx: AdminC
     summary="Restore a config version",
     description="Re-validates the old config and saves it as a *new* version (never rewrites history).",
 )
-async def restore_version(agent_id: str, config_version: int, db: DbDep, ctx: AdminCtxDep) -> AgentOut:
+async def restore_version(
+    agent_id: str,
+    config_version: int,
+    db: DbDep,
+    ctx: AdminCtxDep,
+    apps: AppsProvisionerDep,  # S5-39
+) -> AgentOut:
     """Restore an old version as the agent's current config.
 
     Raises:
@@ -985,11 +1055,27 @@ async def restore_version(agent_id: str, config_version: int, db: DbDep, ctx: Ad
     version_row = await _load_version(db, row.id, config_version)
     restored = AgentConfig.model_validate(version_row.config)
     check_endpoint_overrides(ctx, row.config, restored.model_dump(mode="json"))
+    check_apps_changes(ctx, row.config, restored)
+    if restored.tools.apps.mode in ("server", "router"):
+        # S5-39: the version names the app server / tool finder row of its day, which a later
+        # save replaced; provisioning below attaches the current one, so a vanished id goes.
+        known = set(
+            (
+                await db.execute(
+                    select(Tool.id).where(
+                        Tool.workspace_id == row.workspace_id, Tool.id.in_(restored.tools.tool_ids)
+                    )
+                )
+            ).scalars()
+        )
+        restored.tools.tool_ids = [tid for tid in restored.tools.tool_ids if tid in known]
     _raise_if_invalid(
         await validate_stored_config(
             db, restored, workspace_id=row.workspace_id, connection_id=row.connection_id, pack_id=row.pack_id
         )
     )
+    # S5-39 (ask #21): a restored `tools.apps` is provisioned like a saved one.
+    restored = await apps.on_save(db, ctx, row, restored)
     new_config = restored.model_dump(mode="json")
     if new_config != row.config:
         row.config = new_config

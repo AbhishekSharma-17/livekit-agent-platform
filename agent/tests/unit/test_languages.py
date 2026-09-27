@@ -597,3 +597,8 @@ def test_sdk_surfaces_this_package_relies_on() -> None:
     assert "language" in UserInputTranscribedEvent.model_fields, "no detected language on transcripts"
     assert "extra" in ChatMessage.model_fields, "ChatMessage.extra carries the turn language"
     assert "next_in_chain" in inspect.signature(TextOutputOptions).parameters, "captions tap has no seam"
+    # `languages._running` falls back to the session's own components.
+    from livekit.agents import AgentSession
+
+    assert isinstance(AgentSession.__dict__.get("tts"), property), "AgentSession.tts is gone"
+    assert isinstance(AgentSession.__dict__.get("stt"), property), "AgentSession.stt is gone"

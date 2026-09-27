@@ -33,7 +33,8 @@ auto-detect "needs a Deepgram key".
    log shows the STT built with `language=multi` and no gateway error (this answers the card's
    question).
 4. Say "can we continue in English?": the model calls `switch_language("en")`
-   (`source: "tool"`), the default voice returns.
+   (`source: "tool"`), the default voice returns. Keep talking for three more turns and record whether replies
+   stay in English (a tool switch leaves only the tool's answer as the reminder; ask #174).
 5. Mixed Hinglish for three turns ("mera claim status kya hai, it was filed last week"): the
    language should not flip on every turn (hysteresis). Record the per-turn languages.
 6. Captions: in the browser console, `room.registerTextStreamHandler("lkap.captions", …)` (or

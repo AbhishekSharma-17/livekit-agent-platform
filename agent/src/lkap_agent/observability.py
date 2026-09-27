@@ -185,7 +185,9 @@ CONSENT_EVENT: Final[str] = _CONSENT_EVENT
 #: `ChatMessage.extra` key of a turn's language (V5-31): the caller's detected language on a
 #: user message (`PlatformAgent` stamps the turn's majority language, else the observer the
 #: transcriber's last final one), the reply language on an assistant message. It becomes
-#: `TranscriptTurn.language` and the `language` of the `user_turn` / `agent_turn` events.
+#: `TranscriptTurn.language` (read at shutdown, so always complete) and the `language` of the
+#: `user_turn` event; an `agent_turn` event carries it only when the message was stamped before
+#: the observer saw it (the handlers' order is not fixed), so the stored transcript is the record.
 LANGUAGE_EXTRA_KEY: Final[str] = "lkap.language"
 
 #: Transcriber language values that name no language.

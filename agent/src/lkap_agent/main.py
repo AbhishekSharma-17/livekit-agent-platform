@@ -611,8 +611,13 @@ def _wire_optional_modules(deps: Deps) -> None:
     try:
         from lkap_agent.tools.declarative import build_http_tools, build_mcp_toolsets  # noqa: PLC0415
 
-        def _make_http(defs: list[Any]) -> list[Any]:
-            return list(build_http_tools(defs, platform_allowed_hosts=allowed_hosts, user_agent=user_agent))
+        def _make_http(defs: list[Any], mocks: Any = None) -> list[Any]:
+            # V5-29 (ask #191): a test case's scratch session answers mocked tools from fixtures.
+            return list(
+                build_http_tools(
+                    defs, platform_allowed_hosts=allowed_hosts, user_agent=user_agent, mocks=mocks
+                )
+            )
 
         deps.declarative_tools_builder = _make_http
         deps.mcp_servers_builder = lambda defs, **kwargs: list(build_mcp_toolsets(defs, **kwargs))
@@ -689,6 +694,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         client=deps.config_client,
         # V4-17 (D-V4-45): the workspace's reconciliation opt-in; empty collects no ids.
         cost_reconcile=resolved.cost_reconcile,
+        # V5-30 (ask #175): lets LiveKit's OTLP telemetry carry PII only when the agent opts in.
+        telemetry_pii=resolved.config.privacy.telemetry_pii,
     )
     # V5-15: sees every `consent` event the session records; starts a consent-gated recording.
     consent_gate = RecordingConsentGate()
@@ -1538,7 +1545,9 @@ def _assemble(
             resolved.config.tools.http_request_enabled,
         ),
         # V5-47: `provider` (a connected app's action) is built by the same declarative builder.
-        *deps.declarative_tools_builder([t for t in resolved.tools if t.kind in ("http", "provider")]),
+        *deps.declarative_tools_builder(
+            [t for t in resolved.tools if t.kind in ("http", "provider")], mocks=resolved.tool_mocks
+        ),
         *pack.tools(session_ctx),
         *(
             telephony.tools(config=resolved.config, shutdown=lambda reason: ctx.shutdown(reason=reason))

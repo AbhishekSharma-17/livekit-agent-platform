@@ -3,6 +3,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "LLM-judge scoring of a finished session.",
   "properties": {
+    "fields": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "Post-call fields (V5-30, `QaConfig.fields`): `{name: value}` as the judge filled them, `null` for a field the conversation did not state; empty when none are defined.",
+      "title": "Fields",
+      "type": "object"
+    },
     "model": {
       "anyOf": [
         {

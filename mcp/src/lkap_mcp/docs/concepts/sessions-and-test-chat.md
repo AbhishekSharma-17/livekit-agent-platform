@@ -10,6 +10,16 @@ turns), QA, cost, latency and any variables a flow extracted.
 tool-call and block-update events; they are timer-flushed by the worker, so
 treat them as best-effort, slightly-delayed, never a strict real-time feed.
 
+## Post-call fields, cleanup and deletion
+
+`session_get` shows the agent's post-call fields under `qa.fields`
+(`{name: value}`, `null` when the conversation did not settle one) once the
+call review has run, and `scrubbed_at` once the privacy cleanup of an agent
+with `privacy.storage_tier` `redacted` or `basic` has rewritten the
+transcript and events (it runs by itself when the session ends, once). The
+console's sessions export is a CSV with one column per post-call field.
+Deleting a session removes its uploaded files and its recording right away.
+
 ## Test chat: your own session, over the room
 
 `chat_start`, `chat_send`, `chat_rewind` and `chat_end` run a real

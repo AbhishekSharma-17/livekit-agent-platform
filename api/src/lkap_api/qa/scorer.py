@@ -189,20 +189,28 @@ async def _persist(session: AsyncSession, session_id: str, outcome: QaOutcome) -
         qa = SessionQa(session_id=session_id)
         session.add(qa)
     qa.scored_by = "api"  # this module only ever runs a re-score (R-V2-5); the worker sets "worker"
+    # V5-30 (ask #176): a re-score judges the verdict only; keep the worker's post-call fields.
+    previous_raw = qa.raw if isinstance(qa.raw, dict) else {}
+    kept = {key: previous_raw[key] for key in ("fields", "fields_error") if key in previous_raw}
+    raw = outcome.raw
+    if kept:
+        raw = dict(outcome.raw) if isinstance(outcome.raw, dict) else {}
+        for key, value in kept.items():
+            raw.setdefault(key, value)
     if outcome.action == "done":
         qa.status = "done"
         qa.score = outcome.score
         qa.sentiment = outcome.sentiment
         qa.tags = outcome.tags
         qa.summary = outcome.summary
-        qa.raw = outcome.raw
+        qa.raw = raw
         qa.model = outcome.model
         qa.scored_at = utcnow()
         qa.error = None
     else:
         qa.status = "failed"
         qa.error = outcome.error
-        qa.raw = outcome.raw
+        qa.raw = raw
         if outcome.model:
             qa.model = outcome.model
 

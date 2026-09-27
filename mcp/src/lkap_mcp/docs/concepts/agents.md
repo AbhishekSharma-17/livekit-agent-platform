@@ -142,6 +142,34 @@ of the exact wording. `agent_validate` warns when consent is required without
 a consent block (voice answers still work), when recording is off, and when
 the disclosure is turned off (naming the workspace's jurisdiction).
 
+## Privacy and post-call fields
+
+`config.privacy` says what the platform keeps about a caller. The defaults
+keep everything, as before:
+
+- `stt_redact` — `["pci", "pii", "phi", "numbers"]`, any of them: the
+  speech-to-text provider masks card numbers, personal details, health
+  details or every number while it transcribes. Only providers that support
+  it apply it (Deepgram today); `agent_validate` warns and the setting is
+  ignored elsewhere, including LiveKit Inference.
+- `storage_tier` — `full` (default) keeps everything; `redacted` rewrites the
+  transcript, the session events and the final panel state after the call,
+  masking emails, card numbers and long numbers; `basic` does the same and
+  also drops tool arguments and results from the events.
+- `scrub_model` — an OpenAI or OpenRouter model with a key that also masks
+  names, addresses and other details in that after-call cleanup. Other
+  providers are skipped with a warning; the deterministic masking still runs.
+- `telemetry_pii` — when the worker exports traces to your own
+  OpenTelemetry backend, `false` keeps conversation text and tool payloads out
+  of it. It does not change what the LiveKit Cloud dashboard receives.
+
+`config.qa.fields` (up to 20) are structured answers the call review fills
+from the finished conversation: `{name, type: text|number|boolean|select,
+options, description}`, for example `{name: "claim_type", type: "select",
+options: ["auto", "home"]}` and `{name: "injury", type: "boolean"}`. They need
+`qa.enabled` (`agent_validate` warns otherwise); a field the conversation did
+not settle is `null`.
+
 ## Prompt vs. flow
 
 A **prompt** agent is one system prompt (`config.instructions`) plus tools

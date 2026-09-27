@@ -1058,6 +1058,11 @@ class QaOut(BaseModel):
     scored_at: datetime | None = None
     model: str | None = None
     scored_by: Literal["worker", "api"] | None = None
+    fields: dict[str, Any] = Field(
+        default={},
+        description="Post-call fields (V5-30, `QaConfig.fields`): `{name: value}` as the judge filled "
+        "them, `null` for a field the conversation did not state; empty when none are defined.",
+    )
 
 
 #: Mirrors the `recording_status_valid` CHECK on `sessions` (db/models.py).
@@ -1142,6 +1147,19 @@ class SessionDetailOut(SessionOut):
     latency: SessionLatency = SessionLatency()
     qa: QaOut | None = None
     variables: dict[str, Any] = {}
+    scrubbed_at: datetime | None = Field(
+        default=None,
+        description="When the post-call privacy scrub (V5-30, `privacy.storage_tier`) rewrote this "
+        "session's transcript and events; `None` when it has not run.",
+    )
+
+
+class SessionScrubOut(BaseModel):
+    """``POST /v1/sessions/{id}/scrub`` (V5-30): the privacy scrub was queued, or had already run."""
+
+    status: Literal["queued", "already_scrubbed"]
+    job_id: str | None = None
+    scrubbed_at: datetime | None = None
 
 
 class SessionAssetOut(BaseModel):

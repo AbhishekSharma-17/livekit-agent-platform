@@ -427,6 +427,14 @@
           "title": "Platforms",
           "type": "array"
         },
+        "redaction": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Redaction",
+          "type": "array"
+        },
         "silent_tool_reply": {
           "default": false,
           "title": "Silent Tool Reply",
@@ -499,6 +507,7 @@
         "cloud_only": false,
         "languages": [],
         "platforms": [],
+        "redaction": [],
         "silent_tool_reply": false,
         "text_modality": false,
         "tool_calling": true,

@@ -615,70 +615,110 @@ Per package (only the packages that need something), then the aggregate. "Deferr
 
 Aggregate, by account: **Composio** (present) · **Linear** (free, for OAuth) · Tavily or Brave · Twilio or Telnyx (SMS) · Cal.com · Deepgram (or Inference confirmed for `multi`/`redact`) · Qdrant Cloud / Pinecone / Weaviate · Cohere or Voyage · Ragie · the LiveKit number online plus an outbound trunk. Present today: OpenRouter, Beyond Presence, Simli, Composio.
 
+
+### 5.1 Deferred live checks at close (V5-46, 2026-09-28)
+
+Every V5 package merged with its offline gates green; almost no dev-stack live check has run yet. What ran: the knowledge baseline on a scratch stack (V5-05, 2026-09-26, `KNOWLEDGE-BASELINE.md`), the local re-rank latency measurement (V5-04), and the scratch-Postgres migration and re-index run (V5-13, 2026-09-27). Every other check is deferred. The table groups packages that share one walk; the brief holds the steps. "Coordinator walk" means the dev-stack rules of §0.1 (a scratch api and a worker under a fresh agent name, a Builder or Operator key minted for the run and revoked after, `Demo — ` objects only) and an api and worker restart on the merged code. All ten V5 migrations are applied to the dev database (§6), so no check waits for a migration. Keys are always added by the user in the console (Keys, or the feature's own dialog), never pasted into a file, a brief or a chat.
+
+| Check (packages) | What is deferred | What unblocks it | Brief |
+|---|---|---|---|
+| Knowledge ingest and search (V5-01, V5-04) | Dev-stack ingest of a PDF, DOCX and HTML file with locators; the four search modes and the worker path | Coordinator walk | `_briefs/v5-01-live.md`, `_briefs/v5-04-live.md` |
+| Eval harness (V5-05) | The evaluate routes against the dev api (the baseline itself ran on a scratch stack) | Coordinator walk; eval sets loaded into the seed knowledge bases | `_briefs/v5-05-live.md` |
+| Retrieval gate and console knowledge (V5-06, V5-10) | A voice session with knowledge; the `prefetch_ready_before_final` data that R-V5-12 and ask #58 wait for; the console screenshots | Coordinator walk with a voice session | `_briefs/v5-06-live.md` |
+| Conversation presets (V5-07, V5-11) | A voice session per preset; the console screenshot | Coordinator walk with a voice session on LiveKit Inference | `_briefs/v5-07-live.md` |
+| Phone noise cancellation (V5-07, R-V5-3, ask #208) | The Cloud filter pin and the `telephony` preset on a real call | The LiveKit phone number back online, the user's acceptance of the metered Cloud filter, then the pin (ask #208) | `_briefs/v5-07-live.md` |
+| Block quartet and citations (V5-02, V5-03, V5-08, V5-12) | A browser walk through `choices`, `details`, `markdown`, `steps` and a citation click-through | Coordinator walk (no brief was written; V5-08's card names one) | — |
+| MCP definitions (V5-09) | Save, test and use a keyless public MCP server under `LKAP_MCP_ALLOWED_HOSTS` | Coordinator walk and a reachable public MCP server that needs no sign-in (steps 1–4 can run against a local fake) | `_briefs/v5-09-live.md` |
+| Knowledge vectors in Postgres (V5-13) | The prod compose with the pgvector image, seed and search | Docker running on the machine | `_briefs/v5-13-live.md` |
+| MCP sign-in (V5-14, V5-16, V5-21) | Sign in with dynamic client registration, a session using the token, refresh, revoke | A Linear account (free) signed in by the user in the browser during the walk | — |
+| Consent and disclosure (V5-15, V5-17, V5-27 consent fixes) | Consent tap with a matching text hash, Egress gated on consent, a spoken withdrawal stopping the recording | Coordinator walk on a connection that can record (Egress with S3-compatible storage configured) | `_briefs/v5-15-live.md` |
+| Composio apps (V5-18, V5-22, V5-47, V5-48, V5-49, V5-50) | Key test, connect, actions as tools, app server, tool finder, the destructive-action scan (ask #50), `connected_account_id` with two accounts (ask #22), where a caller sign-in lands (S5-41, R-V5-16 item 6) | The Composio API key added by the user in Tools → Apps → Enable Composio or Keys, and a low-risk app the user chooses (a keyless toolkit is best; otherwise the user completes the vendor sign-in) | `_briefs/v5-18-live.md`, `_briefs/v5-47-live.md` |
+| Several accounts of one app (V5-53, V5-54) | Two accounts of one app on one agent; the account line reaching the model (ask #84) | As for Composio, ideally two accounts of the same low-risk app | `_briefs/v5-53-live.md` |
+| Uploads and caller files (V5-19, V5-23) | Upload, camera capture, `describe_asset` on a vision model, citation opening a copied document, HEIC (ask #134) | Coordinator walk at phone width with a vision-capable model (the stored OpenRouter key works); an iPhone is optional for HEIC | `_briefs/v5-19-live.md` |
+| Knowledge connections and hosted re-rank (V5-20, V5-24) | A BYO store end to end and a hosted re-ranker | Any of: a Qdrant Cloud key, a Pinecone key, a Weaviate sandbox, a Cohere or Voyage AI key — or Docker for a local Qdrant (counts as the Qdrant check); hosted re-rank on a real call also needs ask #181 | — |
+| Curated built-in tools (V5-25, V5-28) | The no-key tools (`calculate`, `spell_back`, `current_time`, `fetch_url`) on a text chat; web search; SMS; Cal.com booking | No-key part: coordinator walk. Web search: a Tavily or Brave key. SMS: a Twilio or Telnyx key and a sending number. Cal.com: an API key and an event type. A team webhook address is optional | `_briefs/v5-25-live.md` |
+| Security fixes (V5-27) | Zip-bomb and regex fixtures on the dev stack, a fenced knowledge answer | Coordinator walk (no vendor keys) | — |
+| Tests and the publish gate (V5-29, V5-33) | A persona run with judges and the publish gate on `Demo — Receptionist` | Ask #197: the agent's workflow or QA model on an OpenAI-compatible provider with a stored key (OpenRouter works); then a coordinator walk | `_briefs/v5-29-live.md` |
+| Privacy and post-call fields (V5-30, V5-34) | Storage tiers, the scrub, post-call fields, CSV export; STT redaction | Coordinator walk. STT redaction: a Deepgram key, unless LiveKit Inference is confirmed to pass `redact`. An OTLP collector is optional for the telemetry step | `_briefs/v5-30-live.md` |
+| Languages and captions (V5-31, V5-35) | Hindi/English switching, detection, captions | Coordinator walk with a voice session; LiveKit Inference accepting `language=multi` (checked first), else a Deepgram key | `_briefs/v5-31-live.md` |
+| AMD and warm transfer (V5-32, V5-36) | Answering-machine detection, warm and cold transfer, voicemail | The LiveKit phone number back online and an outbound-capable SIP trunk (Twilio/Telnyx deferred by the user) | — (to be written when telephony returns) |
+| Supervisor listen-in (V5-37, V5-38) | Listen token, hidden listener receiving the panel stream, whisper, the Live tab's accessibility pass (ask #266) | Coordinator walk with a voice session in two browser tabs (a Builder and a Viewer member) | `_briefs/v5-37-live.md` |
+| Guardrails (V5-39, V5-41) | Input, output and tool-output rules tripping on a text chat and a voice session; the timeline row (ask #302) | Coordinator walk; a paid classifier model call; an OpenAI key in the vault only for the moderation step | `_briefs/v5-39-live.md` |
+| Caller memory (V5-40, V5-42) | Recall for a returning caller, remember at session end, forget and purge | Coordinator walk (the memory extra is installed in the dev venv); a stable caller identity passed through the API, since the console Test chat sends none (ask #289) | `_briefs/v5-40-live.md` |
+| Links, time slots, cards (V5-43, V5-44) | `send_link` with QR, a signed `POST /v1/hooks/link/{session_id}`, slots by tap, cards | Coordinator walk after a worker restart (V5-44 is merged, so ask #314 is unblocked); one production web build for the public-page budget (ask #319) | — (V5-43's card names a brief that was not written) |
+| Managed search (V5-45) | A Ragie knowledge base end to end and the four facts of ask #235 | A Ragie API key (free developer tier) | — |
+| Caller timezone (V5-51, V5-52) | A browser chat answered in the caller's zone; the tool on a text chat. Phone inference | Coordinator walk. Phone inference: the LiveKit number online | `_briefs/v5-51-live.md` |
+
+Aggregate, by what the user supplies: **Composio key** (added in the console; the coordinator reported it present) · **a Linear account** · **Tavily or Brave**, **Twilio or Telnyx with a number**, **Cal.com** · **Deepgram** (or Inference confirmed for `multi` and `redact`) · **Qdrant Cloud / Pinecone / Weaviate, Cohere or Voyage AI** (or Docker for a local Qdrant) · **Ragie** · **Docker** · **the LiveKit number online and an outbound trunk**. Everything else is a coordinator walk on the dev stack with the keys already stored.
+
 ---
 
 ## 6. Status table (the coordinator updates this as packages land)
 
 Status values: `planned` · `running` · `contracts-committed` · `merged` · `live-checked` · `deferred (needs …)` · `blocked (ask #n)`.
 
+Closed by V5-46 on 2026-09-28 against `git log main` at `86d0f3b`: every package is merged. **Commit** is the commit that put the package on `main`: a `Merge V5-nn` commit, the same with "via b93cb33" for the eight packages that reached `main` through the `integ-db` integration merge, or the branch tip `main` fast-forwarded to. **Live** is the dev-stack check; §5.1 says what unblocks each deferred one.
+
 | ID | Owner | Wave | Status | Commit | Live | Open asks |
 |---|---|---|---|---|---|---|
-| V5-01 | Opus | 1 | merged | branch cf293e3 | | |
-| V5-02 | Opus | 1 | merged | 753d0c9 (+ d128e20 exports) | | |
-| V5-03 | Sonnet | 1 | merged | 5f3c540 (+ aa6c81f) | | |
-| V5-04 | Opus | 1 | merged | | | |
-| V5-05 | Opus | 1 | merged | | | |
-| V5-18 | Opus | 1 | merged | bd5f198 | needs the Composio key (present) | |
-| V5-06 | Opus | 2 | merged | | | |
-| V5-07 | Opus | 2 | merged | | | |
-| V5-08 | Opus | 2 | merged | | | |
-| V5-09 | Opus | 2 | merged | | | |
-| V5-22 | Sonnet | 2 | merged | | | |
-| V5-47 | Opus | 2 | merged | | Composio live check | |
-| V5-10 | Sonnet | 3 | merged | | | |
-| V5-11 | Sonnet | 3 | merged | | | |
-| V5-12 | Sonnet | 3 | merged | | | |
-| V5-13 | Opus | 3 | merged | | needs Docker | |
-| V5-14 | Opus | 3 | merged | | with V5-16 | |
-| V5-15 | Opus | 3 | merged | | | |
-| V5-48 | Sonnet | 3 | merged | | Composio live check | |
-| V5-49 | Opus | 3 | merged | | | R-V5-9 |
-| V5-50 | Sonnet | 3 | merged | | | R-V5-8, R-V5-9 |
-| V5-51 | Opus | 3 | merged | | | R-V5-10 |
-| V5-52 | Sonnet | 3 | merged | | | R-V5-10 |
-| V5-53 | Opus | 4 | merged | | Composio live check | R-V5-13 |
-| V5-54 | Sonnet | 4 | merged | | | R-V5-13 |
-| V5-16 | Opus | 4 | merged | | needs a Linear account | |
-| V5-17 | Sonnet | 4 | merged | | | |
-| V5-19 | Opus | 4 | merged | | | |
-| V5-20 | Opus | 4 | merged | 9b75adf | deferred (needs store keys) | |
-| V5-21 | Sonnet | 5 | merged | | needs a Linear account | |
-| V5-23 | Sonnet | 5 | merged | | | |
-| V5-24 | Sonnet | 5 | merged | 703ef69 | | |
-| V5-25 | Opus | 5 | merged | | partly deferred (search, SMS, Cal.com keys) | |
-| V5-26 | Opus + Fable | 6 | done (review) | | | |
-| V5-27 | Opus | 6 | merged | | | |
-| V5-28 | Sonnet | 6 | merged | | with V5-25's deferred keys (dev-stack walk not run in this session) | |
-| V5-29 | Opus | 7 | merged | cdd5855 | | |
-| V5-30 | Opus | 7 | merged | 983faf7 | STT redaction deferred | |
-| V5-31 | Opus | 7 | merged | 8c7331f | Inference `multi` to confirm | |
-| V5-32 | Opus | 7 | merged | ea2a094 | deferred (telephony offline) | |
-| V5-33 | Sonnet | 8 | merged | 6642f5d | | |
-| V5-34 | Sonnet | 8 | merged | 6642f5d | | |
-| V5-35 | Sonnet | 8 | merged | 6642f5d | | |
-| V5-36 | Sonnet | 8 | merged | be14db3 | deferred (telephony offline) | |
-| V5-37 | Opus | 8 | merged | cda51ba | | |
-| V5-38 | Sonnet | 9 | merged | e1ddc2b | | |
-| V5-39 | Opus | 9 | merged | 37a25af | | |
-| V5-40 | Opus | 9 | merged | 56f595f | | |
-| V5-41 | Sonnet | 10 | merged | 96d8ff8 | | |
-| V5-42 | Sonnet | 10 | merged | b657283 | | |
-| V5-43 | Opus | 10 | merged | 3a4ceed | | |
-| V5-44 | Sonnet | 10 | merged | 7af0056 | | |
-| V5-45 | Opus | 10 | merged | f3f060f | deferred (needs a Ragie key) | |
-| V5-46 | Opus + Fable | 11 | planned | | | |
+| V5-01 | Opus | 1 | merged | ee04540 via b93cb33 | deferred (needs a coordinator walk) | |
+| V5-02 | Opus | 1 | merged | 0986463 (+ cff1720 exports) | none of its own (V5-08's walk) | |
+| V5-03 | Sonnet | 1 | merged | e97a6dd (+ c70acf4) | none of its own (V5-08's walk) | |
+| V5-04 | Opus | 1 | merged | de52b3a via b93cb33 | partly: re-rank latency measured; dev-stack search deferred (needs a coordinator walk) | |
+| V5-05 | Opus | 1 | merged | 2e4be19 | partly: baseline on a scratch stack 2026-09-26; evaluate routes deferred (needs a coordinator walk) | |
+| V5-18 | Opus | 1 | merged | 186cf6a | deferred (needs the Composio key and a low-risk app; not run) | |
+| V5-06 | Opus | 2 | merged | 96ba29e (+ ef23f9e) | deferred (needs a voice session on the dev stack) | #58 |
+| V5-07 | Opus | 2 | merged | c7d7bf0 via b93cb33 | deferred (presets: a voice session; phone noise cancellation: the number and the Cloud filter, #208) | |
+| V5-08 | Opus | 2 | merged | 0e0b939 via b93cb33 | deferred (needs a browser walk; no brief written) | |
+| V5-09 | Opus | 2 | merged | 31cafe6 | deferred (needs a public MCP server without sign-in) | |
+| V5-22 | Sonnet | 2 | merged | 2d61fe9 | deferred (with V5-18/V5-47) | |
+| V5-47 | Opus | 2 | merged | 438661a via b93cb33 | deferred (needs the Composio key and a low-risk app; not run) | #22, #50 |
+| V5-10 | Sonnet | 3 | merged | 047e333 | deferred (with V5-06) | |
+| V5-11 | Sonnet | 3 | merged | af57357 | deferred (with V5-07) | |
+| V5-12 | Sonnet | 3 | merged | d39d2b2 | deferred (with V5-08) | |
+| V5-13 | Opus | 3 | merged | d46571e (+ 53f4f7c) | partly: scratch Postgres run 2026-09-27; prod compose deferred (needs Docker) | |
+| V5-14 | Opus | 3 | merged | 914d7e4 | deferred (with V5-16) | |
+| V5-15 | Opus | 3 | merged | 92a6da8 | deferred (needs a coordinator walk on a recording-capable connection) | |
+| V5-48 | Sonnet | 3 | merged | 88ad58d via b93cb33 | deferred (with V5-47) | |
+| V5-49 | Opus | 3 | merged | b5bf47f via b93cb33 | deferred (with V5-47's router re-run) | R-V5-9 |
+| V5-50 | Sonnet | 3 | merged | 7a53f35 via b93cb33 | deferred (with V5-47) | R-V5-8, R-V5-9 |
+| V5-51 | Opus | 3 | merged | b6fbcd7 | deferred (needs a coordinator walk; phone inference needs the number) | R-V5-10 |
+| V5-52 | Sonnet | 3 | merged | a19f01f | deferred (with V5-51) | R-V5-10 |
+| V5-53 | Opus | 4 | merged | 12e4d94 | deferred (needs the Composio key, ideally two accounts of one app) | R-V5-13 |
+| V5-54 | Sonnet | 4 | merged | 71d5f8a | deferred (with V5-53) | R-V5-13 |
+| V5-16 | Opus | 4 | merged | 13e1212 | deferred (needs a Linear account) | |
+| V5-17 | Sonnet | 4 | merged | 9723dc4 | deferred (with V5-15) | |
+| V5-19 | Opus | 4 | merged | 58c62bd | deferred (needs a coordinator walk with a vision-capable model) | |
+| V5-20 | Opus | 4 | merged | 9b75adf (ff; noted in dc5869f) | deferred (needs store or re-ranker keys, or Docker for a local Qdrant) | #181 |
+| V5-21 | Sonnet | 5 | merged | 05da73b | deferred (with V5-16) | |
+| V5-23 | Sonnet | 5 | merged | 74b1068 | deferred (with V5-19) | |
+| V5-24 | Sonnet | 5 | merged | 703ef69 (ff; noted in ef77143) | deferred (with V5-20) | |
+| V5-25 | Opus | 5 | merged | 2eb658a | deferred (no-key part: a coordinator walk; web search, SMS and Cal.com keys) | |
+| V5-26 | Opus + Fable | 6 | done (review) | df737d3 | none (review); §4 rows 9 and 16 re-reviewed in the final review | |
+| V5-27 | Opus | 6 | merged | dc86d5c | deferred (needs a coordinator walk; no vendor keys) | |
+| V5-28 | Sonnet | 6 | merged | 3b8806a | deferred (with V5-25) | |
+| V5-29 | Opus | 7 | merged | cdd5855 (ff; noted in 94bc7e6) | deferred (needs #197, then a coordinator walk) | #197 |
+| V5-30 | Opus | 7 | merged | 983faf7 | deferred (needs a coordinator walk; STT redaction needs a Deepgram key unless Inference passes `redact`) | |
+| V5-31 | Opus | 7 | merged | 8c7331f (ff; + 96a95c6) | deferred (needs a voice session; Inference `multi` unconfirmed, else a Deepgram key) | |
+| V5-32 | Opus | 7 | merged | ea2a094 (ff; noted in ee40669) | deferred (needs the phone number online and an outbound trunk) | #208 |
+| V5-33 | Sonnet | 8 | merged | 6642f5d (ff; noted in e4e05ed) | deferred (with V5-29) | |
+| V5-34 | Sonnet | 8 | merged | 6642f5d (ff; noted in e4e05ed) | deferred (with V5-30) | |
+| V5-35 | Sonnet | 8 | merged | 6642f5d (ff; noted in e4e05ed) | deferred (with V5-31) | |
+| V5-36 | Sonnet | 8 | merged | be14db3 (ff; noted in bbd4e13) | deferred (with V5-32) | |
+| V5-37 | Opus | 8 | merged | cda51ba (ff; noted in 9475415) | deferred (needs a two-tab voice session) | #253 |
+| V5-38 | Sonnet | 9 | merged | e1ddc2b (ff; noted in 12f5d34) | deferred (with V5-37) | #266 |
+| V5-39 | Opus | 9 | merged | 37a25af (ff; noted in dec8707) | deferred (needs a coordinator walk and a paid classifier call) | #277 |
+| V5-40 | Opus | 9 | merged | 56f595f (ff; noted in 9017ef6) | deferred (needs a coordinator walk with a stable caller identity, #289) | #264 |
+| V5-41 | Sonnet | 10 | merged | 96d8ff8 (ff; noted in 811263f) | deferred (with V5-39) | #302 |
+| V5-42 | Sonnet | 10 | merged | b657283 (ff; noted in 3312ece) | deferred (with V5-40) | #289 |
+| V5-43 | Opus | 10 | merged | 3a4ceed (ff; noted in fb1d8f7) | deferred (needs a coordinator walk after a worker restart) | #314 |
+| V5-44 | Sonnet | 10 | merged | 7af0056 (ff; noted in 58c377d) | deferred (with V5-43; one production web build, #319) | #319 |
+| V5-45 | Opus | 10 | merged | f3f060f (ff; noted in e1d04d6) | deferred (needs a Ragie key) | #235 |
+| V5-46 | Opus (docs) + Fable | 11 | running: docs half committed on its branch; Fable's final review pending (§7) | | none (card) | |
 
-Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v4_003_session_estimates`, `v5_001_knowledge_p0`, `v5_010_tool_provider_kind` · 2026-09-26 (user-approved) · backup `lkap.db.pre-v4_003-v5_010.<ts>` in the session scratchpad; row counts unchanged, FTS 154/154, integrity and FK checks clean. Rehearsed on `integ-db`: `v4_002 → v4_003 → v5_001 → v5_010` (`v5_010_tool_provider_kind`, V5-47's `Tool.kind` check constraint, added to the ledger).
+Status corrections made at close: V5-01, V5-02, V5-03 and V5-18 named branch commits that are not on `main` (`cf293e3`, `753d0c9`/`d128e20`, `5f3c540`/`aa6c81f`, `bd5f198`); they now name the commits that landed. The Live column said nothing for most packages; every blank now says whether the check ran. V5-25's "partly deferred" and V5-30's "STT redaction deferred" implied the rest had run; their briefs say nothing ran. V5-18's "needs the Composio key (present)" did not say the check never ran. V5-46 was `planned`.
+
+Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v4_003_session_estimates`, `v5_001_knowledge_p0`, `v5_010_tool_provider_kind` · 2026-09-26 (user-approved) · backup `lkap.db.pre-v4_003-v5_010.<ts>` in the session scratchpad; row counts unchanged, FTS 154/154, integrity and FK checks clean. Rehearsed on `integ-db`: `v4_002 → v4_003 → v5_001 → v5_010` (`v5_010_tool_provider_kind`, V5-47's `Tool.kind` check constraint, added to the ledger). Later applications, as the coordinator's merge commits record them (each after a backup): `v5_003_pgvector` (53f4f7c), `v5_009_consent` (c63c03b), `v5_004_mcp_oauth` and `v5_002_session_uploads` (d621fc7: "dev DB at v5_002"), `v5_006_agent_tests` (94bc7e6), `v5_005_knowledge_connections` (dc5869f), `v5_007_telephony_amd` (ee40669), `v5_008_memory` (9017ef6). The dev DB is at the head, `v5_008_memory`; the chain order is in `docs/RUNBOOK.md` §9.7.
 
 ---
 
@@ -751,3 +791,7 @@ Facts (S5-14): since `28dbd29` any workspace admin may create or test a `self_ho
 `SECURITY-REVIEW-V5.md` §8 verbatim: the integrations wave at `d621fc7` is sound for supervised local use and conditionally approved for waves 7–11 — no Critical finding, no cross-workspace secret exposure, no unauthenticated write path beyond the two correctly bound callbacks; two Highs (Builder-level denial of service through knowledge ingest, S5-1/S5-2) and fourteen Mediums (consent integrity S5-3/4/5, the untrusted-content fence S5-6, Composio and MCP hardening S5-7…S5-13, the self-hosted ceiling S5-14, the Builder side door into the Apps gate S5-40 and caller sign-ins S5-41). Conditions: V5-27 merges with S5-1 … S5-13, S5-40 and S5-41 fixed and their named tests passing; the non-gate rows fixed or deferred with the coordinator's note; V5-16 carries S5-15, S5-16 and S5-35 as acceptance lines and starts after V5-27; §4 rows 9 and 16 are re-reviewed when V5-16 and V5-25 merge. V5-28 runs beside V5-27 as planned; V5-29 onward start once V5-27 is merged. The V5-26 card's `test_security_v5.py` xfail files were not written (the review names each pinning test instead); V5-27 lands each fix with its test.
 
 Next entries expected: the `v4_003` name once COSTS.md lands (§0.3), the V5-27 merge note (which non-gate rows were deferred, if any), the re-review of §4 rows 9 and 16 when V5-16 and V5-25 merge, and any "verify at implementation" fact from `COMPOSIO.md` §1 that turns out different.
+
+### Final review (pending Fable)
+
+*Left for Fable by V5-46 (docs half). Inputs: `docs/v5/ARCHITECTURE-V5.md`, §5.1 (deferred live checks), §6 (closed status table), the "Open at close" section of `docs/v5/_asks.md`, and §4 rows 9 and 16 (V5-16, V5-25), which `SECURITY-REVIEW-V5.md` leaves for re-review at V5-46 at the latest.*

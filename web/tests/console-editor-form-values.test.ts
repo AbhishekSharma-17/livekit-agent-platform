@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildAgentUpdate, toFormValues, unappliedFields } from "@/components/console/agents/editor/form-values";
 import { agentEditorFormSchema } from "@/components/console/lib/schemas";
-import type { AgentOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, AgentTest } from "@/contracts/lkap-contracts";
 
 const ref = (provider_id: string) => ({ provider_id, credential_id: null, model: null, fields: {} });
 
@@ -140,6 +140,25 @@ describe("buildAgentUpdate", () => {
     expect(changed.limits?.max_concurrent_sessions).toBe(2);
     expect(changed.allowed_origins).toEqual(["https://example.com"]);
     expect(changed.connection_id).toBe("conn-1");
+  });
+
+  it("keeps test cases and the publish gate on a console save (V5-29, ask #194)", () => {
+    const a = agent();
+    const tests: AgentTest[] = [
+      {
+        id: "booking",
+        name: "Books a table",
+        persona_instructions: "A caller who wants a table for two.",
+        scenario: "",
+        expectations: ["Confirms the time"],
+        mocks: {},
+        max_turns: 12,
+      },
+    ];
+    a.config = { ...a.config, tests, publish_gate: { require_tests: true, min_pass_ratio: 1 } };
+    const body = buildAgentUpdate(a, submitted(a, (v) => (v.config.instructions = "New.")));
+    expect(body.config?.tests).toEqual(tests);
+    expect(body.config?.publish_gate).toEqual({ require_tests: true, min_pass_ratio: 1 });
   });
 
   it("keeps config.panel.panel_id in step when the panel id changes", () => {

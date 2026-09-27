@@ -12,15 +12,21 @@ job kind) and :mod:`lkap_api.qa` (registers `qa_scoring`) — the same
 "a router main.py already includes is how a package's handlers get imported"
 trick `routers/webhooks.py` uses for `lkap_api.qa` (`from lkap_api import qa
 as _qa`).
+
+V5-30 adds the post-call fields (`QaOut.fields`, the CSV export's columns), the
+privacy scrub (`scrubbed_at`, `POST .../scrub`) and, on delete, the removal of
+the session's stored files and recording (S5-36).
 """
 
 from __future__ import annotations
 
+import csv
 import datetime as dt
+import io
 from decimal import Decimal
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Query, Response, status
 from fastapi.responses import RedirectResponse
 from lkap_contracts.agent_config import AgentConfig
 from lkap_contracts.api_models import (
@@ -31,6 +37,7 @@ from lkap_contracts.api_models import (
     SessionEventPage,
     SessionOut,
     SessionPage,
+    SessionScrubOut,
     TranscriptTurn,
 )
 from lkap_contracts.api_models import SessionLatency as SessionLatencyOut
@@ -39,19 +46,21 @@ from lkap_contracts.ui_protocol import UiState
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api import qa as _qa  # noqa: F401 - registers the qa_scoring job handler
 from lkap_api import (
+    privacy,  # registers the privacy validator and the session_scrub handler
     recordings,  # registers egress_ended/recording_finalize handlers; resolve_storage_row below
 )
+from lkap_api import qa as _qa  # noqa: F401 - registers the qa_scoring job handler
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.costs import config_for_session, cost_context, render_cost
 from lkap_api.db.models import Agent, LiveKitConnection, SessionEvent, SessionQa, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import SessionCost as SessionCostRow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
-from lkap_api.errors import ApiError, NotFoundError
+from lkap_api.errors import ApiError, ConflictError, NotFoundError
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.logging import get_logger
+from lkap_api.privacy.fields import csv_cell, qa_fields
 from lkap_api.qa.job import enqueue_for_session
 from lkap_api.qa.resolve import resolve_judge
 from lkap_api.settings import Settings
@@ -64,6 +73,26 @@ router = APIRouter(prefix="/v1/sessions", tags=["sessions"])
 
 #: How long a freshly-minted recording playback URL is valid for.
 _RECORDING_URL_TTL_S = 3600
+
+#: V5-30: the most rows one CSV export returns (newest first).
+MAX_EXPORT_ROWS = 5000
+
+#: The CSV export's fixed columns; one column per post-call field follows them.
+EXPORT_COLUMNS: tuple[str, ...] = (
+    "session_id",
+    "agent_id",
+    "agent_name",
+    "channel",
+    "status",
+    "created_at",
+    "ended_at",
+    "duration_s",
+    "cost_usd",
+    "disposition",
+    "qa_status",
+    "qa_score",
+    "qa_sentiment",
+)
 
 
 class QaJudgeUnavailableError(ApiError):
@@ -136,6 +165,7 @@ def _qa_out(row: SessionQa | None) -> QaOut | None:
         scored_at=row.scored_at,
         model=row.model or None,
         scored_by=cast(_ScoredBy, row.scored_by) if row.scored_by else None,
+        fields=qa_fields(row.raw),
     )
 
 
@@ -211,7 +241,35 @@ async def list_sessions(
     offset: int = Query(default=0, ge=0, description="Rows to skip"),
 ) -> SessionPage:
     """Return a page of the workspace's (non-deleted) sessions with their agent names."""
-    conditions = [SessionRow.workspace_id == ctx.workspace_id, SessionRow.deleted_at.is_(None)]
+    conditions = _session_filters(
+        ctx,
+        agent_id=agent_id,
+        status=status,
+        channel=channel,
+        connection_id=connection_id,
+        from_=from_,
+        to=to,
+    )
+
+    stmt = select(SessionRow, Agent.name).join(Agent, Agent.id == SessionRow.agent_id).where(*conditions)
+    count_stmt = select(func.count()).select_from(SessionRow).where(*conditions)
+    rows = (await db.execute(stmt.order_by(SessionRow.created_at.desc()).limit(limit).offset(offset))).all()
+    total = (await db.execute(count_stmt)).scalar_one()
+    return SessionPage(items=[_to_out(row, name) for row, name in rows], total=total)
+
+
+def _session_filters(
+    ctx: WorkspaceContext,
+    *,
+    agent_id: str | None,
+    status: str | None,
+    channel: str | None,
+    connection_id: str | None,
+    from_: dt.datetime | None,
+    to: dt.datetime | None,
+) -> list[Any]:
+    """The `WHERE` terms shared by the list and the CSV export (non-deleted, this workspace)."""
+    conditions: list[Any] = [SessionRow.workspace_id == ctx.workspace_id, SessionRow.deleted_at.is_(None)]
     if agent_id:
         conditions.append(SessionRow.agent_id == agent_id)
     if status:
@@ -224,12 +282,114 @@ async def list_sessions(
         conditions.append(SessionRow.created_at >= from_)
     if to is not None:
         conditions.append(SessionRow.created_at < to)
+    return conditions
 
-    stmt = select(SessionRow, Agent.name).join(Agent, Agent.id == SessionRow.agent_id).where(*conditions)
-    count_stmt = select(func.count()).select_from(SessionRow).where(*conditions)
-    rows = (await db.execute(stmt.order_by(SessionRow.created_at.desc()).limit(limit).offset(offset))).all()
-    total = (await db.execute(count_stmt)).scalar_one()
-    return SessionPage(items=[_to_out(row, name) for row, name in rows], total=total)
+
+async def _field_columns(
+    db: AsyncSession, ctx: WorkspaceContext, agent_id: str | None, qa_rows: list[SessionQa | None]
+) -> list[str]:
+    """The post-call field columns: the agent's current fields in order, then any older ones seen."""
+    names: list[str] = []
+    if agent_id:
+        agent = await db.scalar(
+            select(Agent).where(Agent.id == agent_id, Agent.workspace_id == ctx.workspace_id)
+        )
+        if agent is not None:
+            try:
+                names = [field.name for field in AgentConfig.model_validate(agent.config).qa.fields]
+            except ValueError:
+                names = []
+    seen = {key for qa in qa_rows if qa is not None for key in qa_fields(qa.raw)}
+    return names + sorted(seen - set(names))
+
+
+def _duration_s(row: SessionRow) -> float | None:
+    start = row.started_at or row.created_at
+    if row.ended_at is None or start is None:
+        return None
+    return round((row.ended_at - start).total_seconds(), 1)
+
+
+@router.get(
+    "/export.csv",
+    response_class=Response,
+    summary="Export sessions as CSV",
+    description=(
+        "The same filters as the list, newest first, at most 5,000 rows, as a CSV file: the session, "
+        "agent, channel, status, times, cost, disposition and QA score, then one column per post-call "
+        "field (V5-30; the agent's current fields first when `agent_id` is given, then any other field "
+        "found in the rows). A text cell that would start a spreadsheet formula gets a leading `'`."
+    ),
+    responses={200: {"content": {"text/csv": {}}, "description": "The CSV file."}},
+)
+async def export_sessions_csv(
+    db: DbDep,
+    ctx: AdminCtxDep,
+    agent_id: str | None = Query(default=None, description="Only sessions of this agent"),
+    status: str | None = Query(default=None, description="created | active | ended | failed"),
+    channel: str | None = Query(
+        default=None, description="web | test | text | sip_in | sip_out | widget | api"
+    ),
+    connection_id: str | None = Query(default=None, description="Only sessions run on this connection"),
+    from_: dt.datetime | None = Query(  # noqa: B008 - see list_sessions
+        default=None, alias="from", description="Only sessions created at/after this time"
+    ),
+    to: dt.datetime | None = Query(  # noqa: B008 - see list_sessions
+        default=None, description="Only sessions created before this time"
+    ),
+    limit: int = Query(default=1000, ge=1, le=MAX_EXPORT_ROWS, description="Maximum rows to return"),
+) -> Response:
+    """Return the workspace's (non-deleted) sessions as a CSV attachment."""
+    conditions = _session_filters(
+        ctx,
+        agent_id=agent_id,
+        status=status,
+        channel=channel,
+        connection_id=connection_id,
+        from_=from_,
+        to=to,
+    )
+    stmt = (
+        select(SessionRow, Agent.name, SessionQa)
+        .join(Agent, Agent.id == SessionRow.agent_id)
+        .outerjoin(SessionQa, SessionQa.session_id == SessionRow.id)
+        .where(*conditions)
+        .order_by(SessionRow.created_at.desc())
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).all()
+    field_names = await _field_columns(db, ctx, agent_id, [qa for _, _, qa in rows])
+    headers = [*EXPORT_COLUMNS, *(f"field_{n}" if n in EXPORT_COLUMNS else n for n in field_names)]
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(headers)
+    for row, agent_name, qa in rows:
+        values = qa_fields(qa.raw) if qa is not None else {}
+        writer.writerow(
+            [
+                csv_cell(row.id),
+                csv_cell(row.agent_id),
+                csv_cell(agent_name),
+                csv_cell(row.channel),
+                csv_cell(row.status),
+                csv_cell(row.created_at.isoformat() if row.created_at else None),
+                csv_cell(row.ended_at.isoformat() if row.ended_at else None),
+                csv_cell(_duration_s(row)),
+                csv_cell(row.cost_usd),
+                csv_cell(row.disposition),
+                csv_cell(qa.status if qa is not None else None),
+                csv_cell(qa.score if qa is not None else None),
+                csv_cell(qa.sentiment if qa is not None else None),
+                *(csv_cell(values.get(name)) for name in field_names),
+            ]
+        )
+    log.info("sessions_exported", rows=len(rows), field_columns=len(field_names))
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="sessions.csv"', "Cache-Control": "no-store"},
+    )
 
 
 @router.get(
@@ -271,6 +431,7 @@ async def get_session(
         latency=latency,
         qa=_qa_out(qa_row),
         variables=row.variables or {},
+        scrubbed_at=await privacy.scrubbed_at(db, session_id),
     )
 
 
@@ -337,19 +498,73 @@ async def rescore_session(
     return QaOut(status="pending")
 
 
+@router.post(
+    "/{session_id}/scrub",
+    response_model=SessionScrubOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Scrub a session now",
+    description=(
+        "Queues the post-call privacy scrub (V5-30) for a finished session of an agent whose "
+        "`privacy.storage_tier` is `redacted` or `basic`: emails, card numbers and long numbers are "
+        "masked in the transcript, events and final panel state (and names and addresses when a "
+        "cleanup model is set); `basic` also drops tool arguments and results. It normally runs by "
+        "itself when the session ends; this is for sessions that ended before the tier was chosen. "
+        "Runs once per session (`already_scrubbed` afterwards). 409 when the agent keeps sessions in "
+        "full or the session has not ended."
+    ),
+)
+async def scrub_session_now(
+    session_id: str, db: DbDep, ctx: AdminCtxDep, jobs: JobsDep, background_tasks: BackgroundTasks
+) -> SessionScrubOut:
+    """Enqueue the scrub of one session.
+
+    Raises:
+        NotFoundError: Unknown session.
+        ConflictError: 409 for a `full` tier or a session that has not ended.
+    """
+    row = await _load_scoped(db, ctx, session_id)
+    done_at = await privacy.scrubbed_at(db, session_id)
+    if done_at is not None:
+        return SessionScrubOut(status="already_scrubbed", scrubbed_at=done_at)
+    config = await config_for_session(db, row)
+    if not privacy.scrub_due(config):
+        raise ConflictError(
+            "this agent keeps sessions in full; choose 'redacted' or 'basic' in its privacy settings first",
+            details={"session_id": session_id, "reason": "storage_tier_full"},
+        )
+    if row.status not in ("ended", "failed"):
+        raise ConflictError(
+            "the session has not ended yet", details={"session_id": session_id, "reason": "not_ended"}
+        )
+    # The job opens its own connection (ask #40): nothing of this request is pending, but commit anyway.
+    await db.commit()
+    job_id = await privacy.enqueue_scrub(jobs, session_id, background_tasks=background_tasks)
+    log.info("session_scrub_requested", session_id=session_id)
+    return SessionScrubOut(status="queued", job_id=job_id)
+
+
 @router.delete(
     "/{session_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a session (soft)",
-    description="Marks the session deleted; it drops out of the list but a direct fetch by id still works.",
+    description=(
+        "Marks the session deleted; it drops out of the list but a direct fetch by id still works. "
+        "Its stored files and its recording are removed at once (V5-30), not at the end of the "
+        "recording retention."
+    ),
 )
-async def delete_session(session_id: str, db: DbDep, ctx: AdminCtxDep) -> Response:
-    """Soft-delete a session."""
+async def delete_session(
+    session_id: str, db: DbDep, ctx: AdminCtxDep, settings: SettingsDep, vault: VaultDep
+) -> Response:
+    """Soft-delete a session and remove its files and recording (S5-36)."""
     row = await _load_scoped(db, ctx, session_id)
     if row.deleted_at is None:
         row.deleted_at = utcnow()
         await db.flush()
         log.info("session_deleted", session_id=session_id)
+    # Also on a repeated delete: a purge that failed the first time is retried.
+    await privacy.purge_session_files(db, settings, vault, row)
+    await db.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

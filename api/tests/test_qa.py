@@ -308,3 +308,36 @@ async def test_qa_disabled_skip_emits_no_webhook(database: Database, settings: S
     async with database.session() as session:
         deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
     assert deliveries == []
+
+
+# ------------------------------------ V5-30 (ask #176): post-call fields survive a re-score
+async def test_a_rescore_keeps_the_workers_post_call_fields(database: Database, settings: Settings) -> None:
+    vault = Vault(settings.master_key)
+    credential_id = await _make_credential(database, vault)
+    config = inference_config(
+        qa=QaConfig(enabled=True, model=ProviderRef(provider_id="openai-llm", credential_id=credential_id))
+    )
+    agent_id = await _make_agent(database, config)
+    session_id = await _make_session(database, agent_id, transcript=TRANSCRIPT)
+    async with database.session() as session:
+        session.add(
+            SessionQa(
+                session_id=session_id,
+                status="done",
+                scored_by="worker",
+                raw={"score": 5, "fields": {"claim_type": "water"}, "fields_error": None},
+            )
+        )
+        await session.commit()
+
+    with respx.mock:
+        respx.post(CHAT_URL).mock(return_value=_judge_response(score=9))
+        async with httpx.AsyncClient() as http:
+            await score_session(_ctx(database, settings, vault, http), session_id)
+
+    qa = await _get_qa(database, session_id)
+    assert qa is not None
+    assert qa.status == "done" and qa.scored_by == "api"
+    assert qa.raw is not None
+    assert qa.raw["fields"] == {"claim_type": "water"}
+    assert "fields_error" in qa.raw

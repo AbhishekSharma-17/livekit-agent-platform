@@ -574,6 +574,13 @@
     "QaOut": {
       "description": "LLM-judge scoring of a finished session.",
       "properties": {
+        "fields": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "Post-call fields (V5-30, `QaConfig.fields`): `{name: value}` as the judge filled them, `null` for a field the conversation did not state; empty when none are defined.",
+          "title": "Fields",
+          "type": "object"
+        },
         "model": {
           "anyOf": [
             {
@@ -1386,6 +1393,20 @@
     "room_name": {
       "title": "Room Name",
       "type": "string"
+    },
+    "scrubbed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the post-call privacy scrub (V5-30, `privacy.storage_tier`) rewrote this session's transcript and events; `None` when it has not run.",
+      "title": "Scrubbed At"
     },
     "started_at": {
       "anyOf": [

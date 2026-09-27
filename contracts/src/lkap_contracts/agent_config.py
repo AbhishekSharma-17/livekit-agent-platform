@@ -5,11 +5,13 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from lkap_contracts.agent_tests import MAX_AGENT_TESTS, AgentTest, PublishGate
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, DisclosurePosition, ResolvedCompliance
 from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language
+from lkap_contracts.qa import MAX_QA_FIELDS, QaField
 from lkap_contracts.telephony import TelephonyConfig
 from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
@@ -76,13 +78,17 @@ __all__ = [
     "PanelLayout",
     "PipelineConfig",
     "PipelineMode",
+    "PrivacyConfig",
     "ProviderRef",
     "ProviderSlot",
     "QaConfig",
+    "QaField",
     "RecordingConfig",
     "ResolvedAgentConfig",
     "ResolvedCompliance",
     "ResolvedProvider",
+    "StorageTier",
+    "SttRedaction",
     "TelephonyConfig",
     "ThinkingSound",
     "ToolsConfig",
@@ -394,6 +400,77 @@ class QaConfig(BaseModel):
     enabled: bool = False
     rubric_prompt: str | None = None
     model: ProviderRef | None = None
+    fields: list[QaField] = Field(
+        default=[],
+        description="Post-call fields (V5-30, at most 20): the judge fills each from the finished "
+        "conversation into `session_qa.raw['fields']`; they run only when QA is on.",
+    )
+
+    @field_validator("fields")
+    @classmethod
+    def _unique_field_names(cls, fields: list[QaField]) -> list[QaField]:
+        # A validator rather than `max_length`: the TS generator expands a small `maxItems`
+        # into a tuple union the console could not assign an array to.
+        if len(fields) > MAX_QA_FIELDS:
+            raise ValueError(f"at most {MAX_QA_FIELDS} post-call fields")
+        names = [field.name for field in fields]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"post-call field names must be unique: {', '.join(duplicates)}")
+        return fields
+
+
+#: ``PrivacyConfig.stt_redact``: what the speech-to-text provider masks before the transcript
+#: exists (Deepgram's ``redact`` classes). Honoured only by providers whose registry entry lists
+#: the class in ``capabilities.redaction``.
+SttRedaction = Literal["pci", "pii", "phi", "numbers"]
+
+#: ``PrivacyConfig.storage_tier``: what is kept once a session ends. ``full`` keeps everything;
+#: ``redacted`` rewrites the transcript and the event texts with card numbers, emails, phone
+#: numbers and long digit runs masked (plus the ``scrub_model`` pass when set); ``basic`` does
+#: the same and also drops tool arguments and results from the events.
+StorageTier = Literal["full", "redacted", "basic"]
+
+
+class PrivacyConfig(BaseModel):
+    """What the platform keeps and shares about a caller (V5-30, P §4.2 C10).
+
+    The defaults keep today's behaviour: nothing is masked, every session is
+    kept in full and third-party telemetry receives the conversation.
+    """
+
+    stt_redact: list[SttRedaction] = Field(
+        default=[],
+        description="Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, "
+        "`pii` personal details, `phi` health details, `numbers` every number). Only providers that "
+        "support it apply it; others ignore it with a validation warning.",
+    )
+    storage_tier: StorageTier = Field(
+        default="full",
+        description="What is kept after the call: `full` everything; `redacted` the transcript and "
+        "events with card numbers, emails, phone numbers and long numbers masked (and the "
+        "`scrub_model` pass when set); `basic` also drops tool arguments and results.",
+    )
+    telemetry_pii: bool = Field(
+        default=True,
+        description="Whether a third-party OpenTelemetry exporter configured on the worker (an "
+        "`OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads "
+        "(`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights "
+        "receives (that is the project's setting in the LiveKit Cloud dashboard). The worker "
+        "applies it once per process: the first session's setting holds for later sessions "
+        "that reuse the same process.",
+    )
+    scrub_model: ProviderRef | None = Field(
+        default=None,
+        description="An LLM that also masks names, addresses and other personal details after the "
+        "call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key "
+        "(OpenAI, OpenRouter) can run from the api; others are skipped with a warning.",
+    )
+
+    @field_validator("stt_redact")
+    @classmethod
+    def _dedupe(cls, values: list[SttRedaction]) -> list[SttRedaction]:
+        return list(dict.fromkeys(values))
 
 
 class PanelLayout(BaseModel):
@@ -464,6 +541,26 @@ class AgentConfig(BaseModel):
     """How the caller's timezone is chosen (R-V5-10); agents saved before it behave as ``detect``."""
     disclosure: DisclosureConfig = DisclosureConfig()
     """The AI disclosure (V5-15). On by default: agents saved before it now open with the line."""
+    privacy: PrivacyConfig = PrivacyConfig()
+    """Redaction, storage tier and telemetry (V5-30); agents saved before it keep everything."""
+    tests: list[AgentTest] = Field(
+        default=[],
+        max_length=MAX_AGENT_TESTS,
+        description="Simulated conversations the agent is tested with (V5-29); they version with the config.",
+    )
+    publish_gate: PublishGate = PublishGate()
+    """V5-29: opt-in; when on, publishing needs a passing test run on the version being published."""
+
+    @field_validator("tests")
+    @classmethod
+    def _unique_test_ids(cls, value: list[AgentTest]) -> list[AgentTest]:
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for case in value:
+            (duplicates if case.id in seen else seen).add(case.id)
+        if duplicates:
+            raise ValueError(f"test ids must be unique: {', '.join(sorted(duplicates))}")
+        return value
 
 
 class ResolvedProvider(BaseModel):
@@ -580,6 +677,10 @@ class ResolvedAgentConfig(BaseModel):
     #: secrets.** Empty (an api before V5-31, or no per-language voice) = ``switch_language``
     #: keeps the pipeline's voice.
     voices_by_language: dict[str, ResolvedProvider] = {}
+    #: V5-29: tool name → the fixture a mocked tool returns instead of calling out, for a test
+    #: case's scratch session only (``AgentTest.mocks``). The worker honours it for HTTP tools
+    #: and connected-app actions. Empty (every real session, and an api before V5-29) = no mocks.
+    tool_mocks: dict[str, Any] = {}
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

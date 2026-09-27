@@ -26,6 +26,10 @@ export interface LkapContracts {
   AgentOut?: AgentOut;
   AgentPage?: AgentPage;
   AgentPublicOut?: AgentPublicOut;
+  AgentTest?: AgentTest;
+  AgentTestRun?: AgentTestRun;
+  AgentTestRunIn?: AgentTestRunIn;
+  AgentTestRunPage?: AgentTestRunPage;
   AgentUpdate?: AgentUpdate;
   AnalyticsBucket?: AnalyticsBucket;
   AnalyticsDriver?: AnalyticsDriver;
@@ -189,6 +193,7 @@ export interface LkapContracts {
   PriceQuoteItemIn?: PriceQuoteItemIn;
   PriceQuotesRequest?: PriceQuotesRequest;
   PriceQuotesResponse?: PriceQuotesResponse;
+  PrivacyConfig?: PrivacyConfig;
   ProbeResult?: ProbeResult;
   ProviderModelDeclare?: ProviderModelDeclare;
   ProviderModelOut?: ProviderModelOut;
@@ -198,7 +203,10 @@ export interface LkapContracts {
   ProviderSpec?: ProviderSpec;
   ProviderToolDefinition?: ProviderToolDefinition;
   ProvidersResponse?: ProvidersResponse;
+  PublishGate?: PublishGate;
+  PublishGateRefusal?: PublishGateRefusal;
   QaConfig?: QaConfig;
+  QaField?: QaField;
   QaNode?: QaNode;
   QaOut?: QaOut;
   QaVerdict?: QaVerdict;
@@ -224,6 +232,7 @@ export interface LkapContracts {
   SessionPage?: SessionPage;
   SessionQaIn?: SessionQaIn;
   SessionRecordingIn?: SessionRecordingIn;
+  SessionScrubOut?: SessionScrubOut;
   SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
   SmsTarget?: SmsTarget;
@@ -373,9 +382,17 @@ export interface AgentConfig {
   };
   panel?: PanelLayout;
   pipeline: PipelineConfig;
+  privacy?: PrivacyConfig;
+  publish_gate?: PublishGate;
   qa?: QaConfig;
   recording?: RecordingConfig;
   telephony?: TelephonyConfig;
+  /**
+   * Simulated conversations the agent is tested with (V5-29); they version with the config.
+   *
+   * @maxItems 50
+   */
+  tests?: AgentTest[];
   /**
    * The business timezone (IANA name): opening hours and bookings are in this zone.
    */
@@ -822,6 +839,49 @@ export interface UserTurnLimitOptions {
   [k: string]: unknown;
 }
 /**
+ * What the platform keeps and shares about a caller (V5-30, P §4.2 C10).
+ *
+ * The defaults keep today's behaviour: nothing is masked, every session is
+ * kept in full and third-party telemetry receives the conversation.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PrivacyConfig".
+ */
+export interface PrivacyConfig {
+  /**
+   * An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning.
+   */
+  scrub_model?: ProviderRef | null;
+  /**
+   * What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.
+   */
+  storage_tier?: "full" | "redacted" | "basic";
+  /**
+   * Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.
+   */
+  stt_redact?: ("pci" | "pii" | "phi" | "numbers")[];
+  /**
+   * Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.
+   */
+  telemetry_pii?: boolean;
+}
+/**
+ * Whether publishing needs a passing test run on the version being published (opt-in).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PublishGate".
+ */
+export interface PublishGate {
+  /**
+   * The share of cases that must pass (1.0 = every case).
+   */
+  min_pass_ratio?: number;
+  /**
+   * Refuse to publish unless the latest test run on this version passed.
+   */
+  require_tests?: boolean;
+}
+/**
  * Post-call scoring of the session by an LLM judge.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -829,8 +889,39 @@ export interface UserTurnLimitOptions {
  */
 export interface QaConfig {
   enabled?: boolean;
+  /**
+   * Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.
+   */
+  fields?: QaField[];
   model?: ProviderRef | null;
   rubric_prompt?: string | null;
+}
+/**
+ * One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).
+ *
+ * Results land in ``session_qa.raw["fields"]`` as ``{name: value}``; a value
+ * the conversation does not state is ``null``. ``select`` takes exactly one of
+ * ``options``; the other types take no ``options``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "QaField".
+ */
+export interface QaField {
+  /**
+   * What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').
+   */
+  description?: string;
+  /**
+   * Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.
+   */
+  name: string;
+  /**
+   * The choices of a `select` field (one is picked); empty for the other types.
+   *
+   * @maxItems 50
+   */
+  options?: string[];
+  type?: "text" | "number" | "boolean" | "select";
 }
 /**
  * Whether and where the session is recorded through Egress.
@@ -901,6 +992,175 @@ export interface TransferTarget {
    * E.164 number or tel:/sip:/sips: URI
    */
   to: string;
+}
+/**
+ * One simulated conversation: who the caller is, what they want, what must happen.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTest".
+ */
+export interface AgentTest {
+  /**
+   * What must be true of the agent's side, one statement each (the accuracy and task-completion judges check them).
+   *
+   * @maxItems 20
+   */
+  expectations?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string]
+    | [string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ]
+    | [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string
+      ];
+  /**
+   * Stable case id, unique in the agent.
+   */
+  id: string;
+  /**
+   * Caller turns before the conversation is stopped.
+   */
+  max_turns?: number;
+  /**
+   * Tool name → the result the tool returns in this case instead of calling out (HTTP tools and connected-app actions). A string is returned as-is; anything else as JSON.
+   */
+  mocks?: {
+    [k: string]: unknown;
+  };
+  name: string;
+  /**
+   * Who the simulated caller is and how they talk (played by an LLM).
+   */
+  persona_instructions: string;
+  /**
+   * What the caller wants in this conversation; the persona pursues it.
+   */
+  scenario?: string;
 }
 /**
  * Built-in tool gating plus references to admin-authored tool rows.
@@ -1174,6 +1434,122 @@ export interface AgentPublicOut {
   pipeline_mode: "realtime" | "cascaded" | "half_cascade";
   slug: string;
   ui_panel_id: string;
+}
+/**
+ * ``POST /v1/agents/{id}/tests/run`` and ``GET …/tests/runs[/{run_id}]``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestRun".
+ */
+export interface AgentTestRun {
+  agent_id: string;
+  /**
+   * The cases this run plays, in order.
+   */
+  case_ids?: string[];
+  config_version: number;
+  created_at: string;
+  /**
+   * Why the run could not run (status `error`).
+   */
+  error?: string | null;
+  errored?: number;
+  failed?: number;
+  finished_at?: string | null;
+  id: string;
+  inconclusive?: number;
+  judge_model?: string | null;
+  /**
+   * passed / cases, once finished; null while running or on error.
+   */
+  pass_ratio?: number | null;
+  passed?: number;
+  persona_model?: string | null;
+  started_at?: string | null;
+  status: "queued" | "running" | "passed" | "failed" | "inconclusive" | "error";
+  /**
+   * Per-case outcomes; empty in the runs list, filled on the run itself.
+   */
+  verdicts?: AgentTestVerdict[];
+}
+/**
+ * One case's outcome within a run.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestVerdict".
+ */
+export interface AgentTestVerdict {
+  case_id: string;
+  case_name: string;
+  error?: string | null;
+  finished_at?: string | null;
+  scores?: AgentTestJudgeScore[];
+  session_id?: string | null;
+  started_at?: string | null;
+  status: "passed" | "failed" | "inconclusive" | "error";
+  stopped_by?: ("persona_done" | "max_turns" | "agent_timeout" | "disconnected" | "error") | null;
+  tool_calls?: AgentTestToolCall[];
+  transcript?: AgentTestTurn[];
+  turns?: number;
+}
+/**
+ * One judge's verdict on one case.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestJudgeScore".
+ */
+export interface AgentTestJudgeScore {
+  judge: "task_completion" | "tool_use" | "safety" | "relevancy" | "accuracy";
+  reason?: string;
+  /**
+   * 0 (worst) to 1 (best).
+   */
+  score?: number | null;
+  verdict: "pass" | "fail" | "inconclusive";
+}
+/**
+ * A tool the agent called during the case (from the session's events).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestToolCall".
+ */
+export interface AgentTestToolCall {
+  /**
+   * The call's arguments as the worker logged them.
+   */
+  arguments?: string | null;
+  mocked?: boolean;
+  result_preview?: string | null;
+  status?: string | null;
+  tool: string;
+}
+/**
+ * One line of a simulated conversation (``user`` is the persona).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestTurn".
+ */
+export interface AgentTestTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+/**
+ * ``POST /v1/agents/{id}/tests/run``: which cases to play (all of them by default).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestRunIn".
+ */
+export interface AgentTestRunIn {
+  case_ids?: string[] | null;
+}
+/**
+ * ``GET /v1/agents/{id}/tests/runs``: newest first.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentTestRunPage".
+ */
+export interface AgentTestRunPage {
+  items: AgentTestRun[];
 }
 /**
  * ``PUT /v1/agents/{id}`` — a partial update; omitted fields are unchanged.
@@ -4445,6 +4821,7 @@ export interface ProviderCapabilities {
   language_switch?: boolean;
   languages?: string[];
   platforms?: string[];
+  redaction?: string[];
   silent_tool_reply?: boolean;
   text_modality?: boolean;
   tool_calling?: boolean;
@@ -4646,12 +5023,33 @@ export interface ProvidersResponse {
   v?: 1 | 2;
 }
 /**
+ * ``details`` of the ``422 tests_failing`` publish refusal.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PublishGateRefusal".
+ */
+export interface PublishGateRefusal {
+  config_version: number;
+  error?: string | null;
+  min_pass_ratio: number;
+  pass_ratio?: number | null;
+  reason: "missing" | "running" | "failing" | "error";
+  run_id?: string | null;
+  run_status?: ("queued" | "running" | "passed" | "failed" | "inconclusive" | "error") | null;
+}
+/**
  * LLM-judge scoring of a finished session.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "QaOut".
  */
 export interface QaOut {
+  /**
+   * Post-call fields (V5-30, `QaConfig.fields`): `{name: value}` as the judge filled them, `null` for a field the conversation did not state; empty when none are defined.
+   */
+  fields?: {
+    [k: string]: unknown;
+  };
   model?: string | null;
   score?: number | null;
   scored_at?: string | null;
@@ -4765,6 +5163,9 @@ export interface ResolvedAgentConfig {
     [k: string]: ResolvedProvider;
   };
   session_id: string;
+  tool_mocks?: {
+    [k: string]: unknown;
+  };
   tools: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition)[];
   ui_panel_id: string;
   v?: 2;
@@ -4921,6 +5322,10 @@ export interface SessionDetailOut {
   recording?: RecordingOut;
   recording_status?: "none" | "requested" | "active" | "ready" | "failed";
   room_name: string;
+  /**
+   * When the post-call privacy scrub (V5-30, `privacy.storage_tier`) rewrote this session's transcript and events; `None` when it has not run.
+   */
+  scrubbed_at?: string | null;
   started_at?: string | null;
   status: "created" | "active" | "ended" | "failed";
   transcript?: TranscriptTurn[] | null;
@@ -5184,6 +5589,17 @@ export interface SessionRecordingIn {
   egress_id?: string;
   error?: string | null;
   status: "none" | "requested" | "active" | "ready" | "failed";
+}
+/**
+ * ``POST /v1/sessions/{id}/scrub`` (V5-30): the privacy scrub was queued, or had already run.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionScrubOut".
+ */
+export interface SessionScrubOut {
+  job_id?: string | null;
+  scrubbed_at?: string | null;
+  status: "queued" | "already_scrubbed";
 }
 /**
  * ``POST /internal/v1/sessions/start`` — the worker creates the session row.

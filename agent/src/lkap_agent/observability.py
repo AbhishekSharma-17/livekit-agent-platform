@@ -36,6 +36,15 @@ itself says "Use ... ChatMessage.metrics for per-turn latency":
 EOU-to-first-audio figure, `llm_node_ttft` the LLM time to first token and
 `tts_node_ttfb` the TTS time to first byte. p50/p95 are posted to
 `POST /internal/v1/sessions/{id}/metrics` just before the summary.
+
+**Third-party telemetry and personal data (V5-30).** When the worker has an
+OpenTelemetry exporter configured (an ``OTEL_EXPORTER_OTLP_*`` endpoint),
+:func:`apply_telemetry_pii` sets ``LIVEKIT_TELEMETRY_ALLOW_PII`` from the
+agent's ``privacy.telemetry_pii`` so the SDK strips conversation text and tool
+payloads before that exporter when the agent says so. The SDK reads the
+variable once per tracer provider per process, so in a reused job process the
+first session's setting holds; LiveKit Cloud Insights follows the project's own
+dashboard setting and is not affected.
 """
 
 from __future__ import annotations
@@ -43,9 +52,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import math
+import os
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import MutableMapping, Sequence
 from typing import Any, Final
 
 import structlog
@@ -84,9 +94,12 @@ __all__ = [
     "LANGUAGE_EXTRA_KEY",
     "LOCALE_EVENT",
     "MAX_PROVIDER_REQUEST_IDS",
+    "OTLP_ENDPOINT_ENV_VARS",
+    "TELEMETRY_ALLOW_PII_ENV",
     "LatencyCollector",
     "ProviderRequestCollector",
     "SessionObserver",
+    "apply_telemetry_pii",
     "bind_session_context",
     "locale_event_payload",
     "percentile",
@@ -107,6 +120,38 @@ _REDACTED_ARG_KEYS: Final[frozenset[str]] = frozenset(
 )
 #: D-V4-45: the most per-request ids one session reports; later ones are only counted.
 MAX_PROVIDER_REQUEST_IDS: Final[int] = 2000
+
+#: V5-30: any of these set means the worker exports telemetry to a third-party OTLP backend.
+OTLP_ENDPOINT_ENV_VARS: Final[tuple[str, ...]] = (
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+)
+#: The livekit-agents 1.8.3 switch (`telemetry/utils.py`): `0` strips personal data before
+#: every exporter except LiveKit Cloud's.
+TELEMETRY_ALLOW_PII_ENV: Final[str] = "LIVEKIT_TELEMETRY_ALLOW_PII"
+
+
+def apply_telemetry_pii(allow: bool, environ: MutableMapping[str, str] | None = None) -> bool:
+    """Set ``LIVEKIT_TELEMETRY_ALLOW_PII`` from ``privacy.telemetry_pii`` when an OTLP exporter is set.
+
+    Args:
+        allow: ``AgentConfig.privacy.telemetry_pii``.
+        environ: The environment to write (``os.environ`` by default; tests pass a dict).
+
+    Returns:
+        Whether the variable was set: ``False`` when no ``OTEL_EXPORTER_OTLP_*``
+        endpoint is configured (nothing third-party receives spans, so there is
+        nothing to decide).
+    """
+    env = os.environ if environ is None else environ
+    if not any(env.get(name) for name in OTLP_ENDPOINT_ENV_VARS):
+        return False
+    value = "1" if allow else "0"
+    if env.get(TELEMETRY_ALLOW_PII_ENV) != value:
+        env[TELEMETRY_ALLOW_PII_ENV] = value
+        logger.info("third-party telemetry personal data setting applied", allow_pii=allow)
+    return True
 
 
 #: `ChatMessage.metrics` keys (seconds) → the `SessionLatency` figure they feed.
@@ -276,6 +321,7 @@ class SessionObserver:
         client: ConfigClientProtocol,
         flush_interval_s: float = _FLUSH_INTERVAL_S,
         cost_reconcile: Sequence[str] = (),
+        telemetry_pii: bool | None = None,
     ) -> None:
         """Build an observer for one session.
 
@@ -285,7 +331,11 @@ class SessionObserver:
             flush_interval_s: How long a non-full event buffer waits.
             cost_reconcile: ``ResolvedAgentConfig.cost_reconcile`` (V4-17). Non-empty
                 subscribes to ``metrics_collected`` and posts the per-request ids.
+            telemetry_pii: ``AgentConfig.privacy.telemetry_pii`` (V5-30), applied through
+                :func:`apply_telemetry_pii`; ``None`` leaves the environment alone.
         """
+        if telemetry_pii is not None:
+            apply_telemetry_pii(telemetry_pii)
         self._session_id = session_id
         self._client = client
         self._flush_interval_s = flush_interval_s

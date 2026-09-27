@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Final, Literal
 from urllib.parse import quote
 
@@ -68,6 +68,25 @@ MAX_HTTP_RESPONSE_BYTES: Final = MAX_RESPONSE_BYTES
 _ARG_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
 
 Handler = Callable[[dict[str, object], RunContext[Any]], Awaitable[str]]
+
+#: V5-29: ``ResolvedAgentConfig.tool_mocks`` — tool name → the fixture a test case's
+#: session returns instead of calling out. Empty for every real session.
+ToolMocks = Mapping[str, Any]
+
+
+def mock_result_text(fixture: Any) -> str:
+    """A mock fixture as the tool's result text: a string as-is, anything else as JSON."""
+    return fixture if isinstance(fixture, str) else json.dumps(fixture, ensure_ascii=False, default=str)
+
+
+def _mocked_request(name: str, fixture: Any, *, source: str, max_chars: int) -> Handler:
+    """The body of a mocked tool (V5-29): the fixture, fenced like a real result, no network."""
+
+    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+        _log.debug("declarative_tool.mocked", tool=name, call_id=context.function_call.call_id)
+        return fence(mock_result_text(fixture), source=source, max_chars=max_chars)
+
+    return handler
 
 
 def _render(template: str, arguments: dict[str, Any], *, escape: Callable[[str], str]) -> str:
@@ -149,9 +168,22 @@ def _handler_for(
     platform_allowed_hosts: list[str] | None,
     user_agent: str | None = None,
     resolved: ResolvedExecution | None = None,
+    mocks: ToolMocks | None = None,
 ) -> Handler:
-    """The raw tool body; with ``resolved`` it runs through `run_with_policy` (BACKGROUND-TOOLS §4.2)."""
-    request = _request_for(definition, platform_allowed_hosts=platform_allowed_hosts, user_agent=user_agent)
+    """The raw tool body; with ``resolved`` it runs through `run_with_policy` (BACKGROUND-TOOLS §4.2).
+
+    V5-29: a tool named in ``mocks`` returns its fixture instead of sending the request.
+    """
+    request = (
+        _mocked_request(
+            definition.name,
+            mocks[definition.name],
+            source=f"http:{definition.name}",
+            max_chars=definition.max_result_chars,
+        )
+        if mocks and definition.name in mocks
+        else _request_for(definition, platform_allowed_hosts=platform_allowed_hosts, user_agent=user_agent)
+    )
     if resolved is None:
         return request
 
@@ -244,6 +276,7 @@ def build_http_tool(
     user_agent: str | None = None,
     execution_default: ToolExecutionMode = "blocking",
     flow_node: bool = False,
+    mocks: ToolMocks | None = None,
 ) -> RawFunctionTool[..., Any]:
     """Build one HTTP tool under its execution policy (docs/v4/BACKGROUND-TOOLS.md §4.2).
 
@@ -273,6 +306,7 @@ def build_http_tool(
             platform_allowed_hosts=platform_allowed_hosts,
             user_agent=user_agent,
             resolved=resolved,
+            mocks=mocks,
         ),
         raw_schema={
             "name": definition.name,
@@ -291,6 +325,7 @@ def build_http_tool(
             user_agent=user_agent,
             execution_default=default,
             flow_node=flow,
+            mocks=mocks,
         )
 
     policy = ToolPolicy(resolved=resolved, rebind=_rebind, built_with=(execution_default, flow_node))
@@ -305,6 +340,7 @@ def build_http_tools(
     user_agent: str | None = None,
     execution_default: ToolExecutionMode = "blocking",
     flow_node: bool = False,
+    mocks: ToolMocks | None = None,
 ) -> list[RawFunctionTool[..., Any]]:
     """Build one `@function_tool(raw_schema=...)` per `HttpToolDefinition`.
 
@@ -322,6 +358,9 @@ def build_http_tools(
             `PlatformAgent` re-binds the tools to the agent's own default and
             flow-ness (`execution.bind_agent_policy`).
         flow_node: The tools run on flow nodes (the 1.8.3 gate, R-V4-39).
+        mocks: V5-29, ``ResolvedAgentConfig.tool_mocks``: a tool (HTTP or connected-app
+            action) named here returns its fixture, fenced like a real result, and never
+            calls out. Only a test case's scratch session has any.
 
     Returns:
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.
@@ -332,6 +371,16 @@ def build_http_tools(
     tools: list[RawFunctionTool[..., Any]] = []
     for definition in defs:
         if isinstance(definition, ProviderToolDefinition):
+            if mocks and definition.name in mocks:
+                tools.append(
+                    build_mocked_provider_tool(
+                        definition,
+                        mocks[definition.name],
+                        execution_default=execution_default,
+                        flow_node=flow_node,
+                    )
+                )
+                continue
             from lkap_agent.tools.provider import build_provider_tool  # noqa: PLC0415 - avoids a cycle
 
             tools.append(
@@ -345,9 +394,62 @@ def build_http_tools(
                 user_agent=user_agent,
                 execution_default=execution_default,
                 flow_node=flow_node,
+                mocks=mocks,
             )
         )
     return tools
+
+
+def build_mocked_provider_tool(
+    definition: ProviderToolDefinition,
+    fixture: Any,
+    *,
+    execution_default: ToolExecutionMode = "blocking",
+    flow_node: bool = False,
+) -> RawFunctionTool[..., Any]:
+    """A connected-app action that returns ``fixture`` instead of calling the vendor (V5-29).
+
+    Same name, schema and execution policy as `tools.provider.build_provider_tool` builds,
+    so the model sees the tool it would see in a real session.
+    """
+    parameters = definition.parameters
+    if not isinstance(parameters, dict) or parameters.get("type") != "object":
+        parameters = {"type": "object", "properties": {}, **(parameters or {})}
+    resolved = resolve_execution(
+        name=definition.name,
+        kind="provider",
+        is_read=definition.risk == "read",
+        declared=definition.execution,
+        agent_default=execution_default,
+        flow_node=flow_node,
+    )
+    flags, on_duplicate, duplicate_scope = tool_flags(resolved)
+    request = _mocked_request(
+        definition.name,
+        fixture,
+        source=f"app:{definition.toolkit or definition.provider}",
+        max_chars=definition.max_result_chars,
+    )
+
+    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+        result: str = await run_with_policy(context, resolved, lambda: request(raw_arguments, context))
+        return result
+
+    tool = function_tool(
+        handler,
+        raw_schema={"name": definition.name, "description": definition.description, "parameters": parameters},
+        flags=flags,
+        on_duplicate=on_duplicate,
+        duplicate_scope=duplicate_scope,
+    )
+
+    def _rebind(default: ToolExecutionMode, flow: bool) -> RawFunctionTool[..., Any]:
+        return build_mocked_provider_tool(definition, fixture, execution_default=default, flow_node=flow)
+
+    attach_policy(
+        tool, ToolPolicy(resolved=resolved, rebind=_rebind, built_with=(execution_default, flow_node))
+    )
+    return tool
 
 
 def check_origin_host(url: str) -> None:

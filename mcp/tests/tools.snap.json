@@ -653,10 +653,27 @@
               "pipeline": {
                 "$ref": "#/$defs/PipelineConfig"
               },
+              "privacy": {
+                "$ref": "#/$defs/PrivacyConfig",
+                "default": {
+                  "scrub_model": null,
+                  "storage_tier": "full",
+                  "stt_redact": [],
+                  "telemetry_pii": true
+                }
+              },
+              "publish_gate": {
+                "$ref": "#/$defs/PublishGate",
+                "default": {
+                  "min_pass_ratio": 1.0,
+                  "require_tests": false
+                }
+              },
               "qa": {
                 "$ref": "#/$defs/QaConfig",
                 "default": {
                   "enabled": false,
+                  "fields": [],
                   "model": null,
                   "rubric_prompt": null
                 }
@@ -678,6 +695,16 @@
                   "sms_targets": [],
                   "transfer_targets": []
                 }
+              },
+              "tests": {
+                "default": [],
+                "description": "Simulated conversations the agent is tested with (V5-29); they version with the config.",
+                "items": {
+                  "$ref": "#/$defs/AgentTest"
+                },
+                "maxItems": 50,
+                "title": "Tests",
+                "type": "array"
               },
               "timezone": {
                 "default": "UTC",
@@ -854,6 +881,69 @@
               "id"
             ],
             "title": "AgentNode",
+            "type": "object"
+          },
+          "AgentTest": {
+            "description": "One simulated conversation: who the caller is, what they want, what must happen.",
+            "properties": {
+              "expectations": {
+                "default": [],
+                "description": "What must be true of the agent's side, one statement each (the accuracy and task-completion judges check them).",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Expectations",
+                "type": "array"
+              },
+              "id": {
+                "description": "Stable case id, unique in the agent.",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "max_turns": {
+                "default": 12,
+                "description": "Caller turns before the conversation is stopped.",
+                "maximum": 40,
+                "minimum": 1,
+                "title": "Max Turns",
+                "type": "integer"
+              },
+              "mocks": {
+                "additionalProperties": true,
+                "default": {},
+                "description": "Tool name → the result the tool returns in this case instead of calling out (HTTP tools and connected-app actions). A string is returned as-is; anything else as JSON.",
+                "title": "Mocks",
+                "type": "object"
+              },
+              "name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "persona_instructions": {
+                "description": "Who the simulated caller is and how they talk (played by an LLM).",
+                "maxLength": 4000,
+                "minLength": 1,
+                "title": "Persona Instructions",
+                "type": "string"
+              },
+              "scenario": {
+                "default": "",
+                "description": "What the caller wants in this conversation; the persona pursues it.",
+                "maxLength": 4000,
+                "title": "Scenario",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "persona_instructions"
+            ],
+            "title": "AgentTest",
             "type": "object"
           },
           "AppsMode": {
@@ -1953,6 +2043,57 @@
             "title": "PreemptiveGenerationOptions",
             "type": "object"
           },
+          "PrivacyConfig": {
+            "description": "What the platform keeps and shares about a caller (V5-30, P §4.2 C10).\n\nThe defaults keep today's behaviour: nothing is masked, every session is\nkept in full and third-party telemetry receives the conversation.",
+            "properties": {
+              "scrub_model": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning."
+              },
+              "storage_tier": {
+                "default": "full",
+                "description": "What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.",
+                "enum": [
+                  "full",
+                  "redacted",
+                  "basic"
+                ],
+                "title": "Storage Tier",
+                "type": "string"
+              },
+              "stt_redact": {
+                "default": [],
+                "description": "Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.",
+                "items": {
+                  "enum": [
+                    "pci",
+                    "pii",
+                    "phi",
+                    "numbers"
+                  ],
+                  "type": "string"
+                },
+                "title": "Stt Redact",
+                "type": "array"
+              },
+              "telemetry_pii": {
+                "default": true,
+                "description": "Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.",
+                "title": "Telemetry Pii",
+                "type": "boolean"
+              }
+            },
+            "title": "PrivacyConfig",
+            "type": "object"
+          },
           "ProviderRef": {
             "description": "Points at a registry provider plus the credential and options to use.",
             "properties": {
@@ -2012,6 +2153,27 @@
             "title": "ProviderRef",
             "type": "object"
           },
+          "PublishGate": {
+            "description": "Whether publishing needs a passing test run on the version being published (opt-in).",
+            "properties": {
+              "min_pass_ratio": {
+                "default": 1.0,
+                "description": "The share of cases that must pass (1.0 = every case).",
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Min Pass Ratio",
+                "type": "number"
+              },
+              "require_tests": {
+                "default": false,
+                "description": "Refuse to publish unless the latest test run on this version passed.",
+                "title": "Require Tests",
+                "type": "boolean"
+              }
+            },
+            "title": "PublishGate",
+            "type": "object"
+          },
           "QaConfig": {
             "description": "Post-call scoring of the session by an LLM judge.",
             "properties": {
@@ -2019,6 +2181,15 @@
                 "default": false,
                 "title": "Enabled",
                 "type": "boolean"
+              },
+              "fields": {
+                "default": [],
+                "description": "Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.",
+                "items": {
+                  "$ref": "#/$defs/QaField"
+                },
+                "title": "Fields",
+                "type": "array"
               },
               "model": {
                 "anyOf": [
@@ -2045,6 +2216,50 @@
               }
             },
             "title": "QaConfig",
+            "type": "object"
+          },
+          "QaField": {
+            "description": "One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).\n\nResults land in ``session_qa.raw[\"fields\"]`` as ``{name: value}``; a value\nthe conversation does not state is ``null``. ``select`` takes exactly one of\n``options``; the other types take no ``options``.",
+            "properties": {
+              "description": {
+                "default": "",
+                "description": "What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').",
+                "maxLength": 500,
+                "title": "Description",
+                "type": "string"
+              },
+              "name": {
+                "description": "Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.",
+                "pattern": "^[a-z][a-z0-9_]{0,47}$",
+                "title": "Name",
+                "type": "string"
+              },
+              "options": {
+                "default": [],
+                "description": "The choices of a `select` field (one is picked); empty for the other types.",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "title": "Options",
+                "type": "array"
+              },
+              "type": {
+                "default": "text",
+                "enum": [
+                  "text",
+                  "number",
+                  "boolean",
+                  "select"
+                ],
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "QaField",
             "type": "object"
           },
           "QaNode": {
@@ -3999,6 +4214,136 @@
       ],
       "write_scopes": []
     },
+    "agent_tests_result": {
+      "_meta": {
+        "lkap/data": [
+          "AgentTestRun"
+        ],
+        "lkap/scopes": [
+          "agents:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "AgentTestRun",
+      "description": "An agent's test run: status, totals and per-case verdicts (five judge scores each).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "id_or_slug": {
+            "title": "Id Or Slug",
+            "type": "string"
+          },
+          "include_transcripts": {
+            "default": false,
+            "description": "Include each case's transcript and tool calls (untrusted)",
+            "title": "Include Transcripts",
+            "type": "boolean"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A run id (default: the latest run)",
+            "title": "Run Id"
+          }
+        },
+        "required": [
+          "id_or_slug"
+        ],
+        "title": "agent_tests_resultArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "agents:read"
+      ],
+      "write_scopes": []
+    },
+    "agent_tests_run": {
+      "_meta": {
+        "lkap/data": [
+          "AgentTestRun"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "AgentTestRun",
+      "description": "Run an agent's test cases: a simulated caller per case over a text session, then five judges.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "case_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Run only these test cases (default: every case in `tests`)",
+            "title": "Case Ids"
+          },
+          "id_or_slug": {
+            "title": "Id Or Slug",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "timeout_s": {
+            "default": 300,
+            "description": "How long wait=true waits",
+            "maximum": 900,
+            "minimum": 5,
+            "title": "Timeout S",
+            "type": "integer"
+          },
+          "wait": {
+            "default": false,
+            "description": "Wait for the run to finish (up to timeout_s) rather than return queued",
+            "title": "Wait",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id_or_slug"
+        ],
+        "title": "agent_tests_runArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
     "agent_update": {
       "_meta": {
         "lkap/data": [
@@ -4093,10 +4438,27 @@
               "pipeline": {
                 "$ref": "#/$defs/PipelineConfig"
               },
+              "privacy": {
+                "$ref": "#/$defs/PrivacyConfig",
+                "default": {
+                  "scrub_model": null,
+                  "storage_tier": "full",
+                  "stt_redact": [],
+                  "telemetry_pii": true
+                }
+              },
+              "publish_gate": {
+                "$ref": "#/$defs/PublishGate",
+                "default": {
+                  "min_pass_ratio": 1.0,
+                  "require_tests": false
+                }
+              },
               "qa": {
                 "$ref": "#/$defs/QaConfig",
                 "default": {
                   "enabled": false,
+                  "fields": [],
                   "model": null,
                   "rubric_prompt": null
                 }
@@ -4118,6 +4480,16 @@
                   "sms_targets": [],
                   "transfer_targets": []
                 }
+              },
+              "tests": {
+                "default": [],
+                "description": "Simulated conversations the agent is tested with (V5-29); they version with the config.",
+                "items": {
+                  "$ref": "#/$defs/AgentTest"
+                },
+                "maxItems": 50,
+                "title": "Tests",
+                "type": "array"
               },
               "timezone": {
                 "default": "UTC",
@@ -4294,6 +4666,69 @@
               "id"
             ],
             "title": "AgentNode",
+            "type": "object"
+          },
+          "AgentTest": {
+            "description": "One simulated conversation: who the caller is, what they want, what must happen.",
+            "properties": {
+              "expectations": {
+                "default": [],
+                "description": "What must be true of the agent's side, one statement each (the accuracy and task-completion judges check them).",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Expectations",
+                "type": "array"
+              },
+              "id": {
+                "description": "Stable case id, unique in the agent.",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "max_turns": {
+                "default": 12,
+                "description": "Caller turns before the conversation is stopped.",
+                "maximum": 40,
+                "minimum": 1,
+                "title": "Max Turns",
+                "type": "integer"
+              },
+              "mocks": {
+                "additionalProperties": true,
+                "default": {},
+                "description": "Tool name → the result the tool returns in this case instead of calling out (HTTP tools and connected-app actions). A string is returned as-is; anything else as JSON.",
+                "title": "Mocks",
+                "type": "object"
+              },
+              "name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "persona_instructions": {
+                "description": "Who the simulated caller is and how they talk (played by an LLM).",
+                "maxLength": 4000,
+                "minLength": 1,
+                "title": "Persona Instructions",
+                "type": "string"
+              },
+              "scenario": {
+                "default": "",
+                "description": "What the caller wants in this conversation; the persona pursues it.",
+                "maxLength": 4000,
+                "title": "Scenario",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "persona_instructions"
+            ],
+            "title": "AgentTest",
             "type": "object"
           },
           "AppsMode": {
@@ -5393,6 +5828,57 @@
             "title": "PreemptiveGenerationOptions",
             "type": "object"
           },
+          "PrivacyConfig": {
+            "description": "What the platform keeps and shares about a caller (V5-30, P §4.2 C10).\n\nThe defaults keep today's behaviour: nothing is masked, every session is\nkept in full and third-party telemetry receives the conversation.",
+            "properties": {
+              "scrub_model": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning."
+              },
+              "storage_tier": {
+                "default": "full",
+                "description": "What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.",
+                "enum": [
+                  "full",
+                  "redacted",
+                  "basic"
+                ],
+                "title": "Storage Tier",
+                "type": "string"
+              },
+              "stt_redact": {
+                "default": [],
+                "description": "Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.",
+                "items": {
+                  "enum": [
+                    "pci",
+                    "pii",
+                    "phi",
+                    "numbers"
+                  ],
+                  "type": "string"
+                },
+                "title": "Stt Redact",
+                "type": "array"
+              },
+              "telemetry_pii": {
+                "default": true,
+                "description": "Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.",
+                "title": "Telemetry Pii",
+                "type": "boolean"
+              }
+            },
+            "title": "PrivacyConfig",
+            "type": "object"
+          },
           "ProviderRef": {
             "description": "Points at a registry provider plus the credential and options to use.",
             "properties": {
@@ -5452,6 +5938,27 @@
             "title": "ProviderRef",
             "type": "object"
           },
+          "PublishGate": {
+            "description": "Whether publishing needs a passing test run on the version being published (opt-in).",
+            "properties": {
+              "min_pass_ratio": {
+                "default": 1.0,
+                "description": "The share of cases that must pass (1.0 = every case).",
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Min Pass Ratio",
+                "type": "number"
+              },
+              "require_tests": {
+                "default": false,
+                "description": "Refuse to publish unless the latest test run on this version passed.",
+                "title": "Require Tests",
+                "type": "boolean"
+              }
+            },
+            "title": "PublishGate",
+            "type": "object"
+          },
           "QaConfig": {
             "description": "Post-call scoring of the session by an LLM judge.",
             "properties": {
@@ -5459,6 +5966,15 @@
                 "default": false,
                 "title": "Enabled",
                 "type": "boolean"
+              },
+              "fields": {
+                "default": [],
+                "description": "Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.",
+                "items": {
+                  "$ref": "#/$defs/QaField"
+                },
+                "title": "Fields",
+                "type": "array"
               },
               "model": {
                 "anyOf": [
@@ -5485,6 +6001,50 @@
               }
             },
             "title": "QaConfig",
+            "type": "object"
+          },
+          "QaField": {
+            "description": "One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).\n\nResults land in ``session_qa.raw[\"fields\"]`` as ``{name: value}``; a value\nthe conversation does not state is ``null``. ``select`` takes exactly one of\n``options``; the other types take no ``options``.",
+            "properties": {
+              "description": {
+                "default": "",
+                "description": "What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').",
+                "maxLength": 500,
+                "title": "Description",
+                "type": "string"
+              },
+              "name": {
+                "description": "Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.",
+                "pattern": "^[a-z][a-z0-9_]{0,47}$",
+                "title": "Name",
+                "type": "string"
+              },
+              "options": {
+                "default": [],
+                "description": "The choices of a `select` field (one is picked); empty for the other types.",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "title": "Options",
+                "type": "array"
+              },
+              "type": {
+                "default": "text",
+                "enum": [
+                  "text",
+                  "number",
+                  "boolean",
+                  "select"
+                ],
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "QaField",
             "type": "object"
           },
           "QaNode": {
@@ -8190,10 +8750,27 @@
               "pipeline": {
                 "$ref": "#/$defs/PipelineConfig"
               },
+              "privacy": {
+                "$ref": "#/$defs/PrivacyConfig",
+                "default": {
+                  "scrub_model": null,
+                  "storage_tier": "full",
+                  "stt_redact": [],
+                  "telemetry_pii": true
+                }
+              },
+              "publish_gate": {
+                "$ref": "#/$defs/PublishGate",
+                "default": {
+                  "min_pass_ratio": 1.0,
+                  "require_tests": false
+                }
+              },
               "qa": {
                 "$ref": "#/$defs/QaConfig",
                 "default": {
                   "enabled": false,
+                  "fields": [],
                   "model": null,
                   "rubric_prompt": null
                 }
@@ -8215,6 +8792,16 @@
                   "sms_targets": [],
                   "transfer_targets": []
                 }
+              },
+              "tests": {
+                "default": [],
+                "description": "Simulated conversations the agent is tested with (V5-29); they version with the config.",
+                "items": {
+                  "$ref": "#/$defs/AgentTest"
+                },
+                "maxItems": 50,
+                "title": "Tests",
+                "type": "array"
               },
               "timezone": {
                 "default": "UTC",
@@ -8391,6 +8978,69 @@
               "id"
             ],
             "title": "AgentNode",
+            "type": "object"
+          },
+          "AgentTest": {
+            "description": "One simulated conversation: who the caller is, what they want, what must happen.",
+            "properties": {
+              "expectations": {
+                "default": [],
+                "description": "What must be true of the agent's side, one statement each (the accuracy and task-completion judges check them).",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Expectations",
+                "type": "array"
+              },
+              "id": {
+                "description": "Stable case id, unique in the agent.",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "max_turns": {
+                "default": 12,
+                "description": "Caller turns before the conversation is stopped.",
+                "maximum": 40,
+                "minimum": 1,
+                "title": "Max Turns",
+                "type": "integer"
+              },
+              "mocks": {
+                "additionalProperties": true,
+                "default": {},
+                "description": "Tool name → the result the tool returns in this case instead of calling out (HTTP tools and connected-app actions). A string is returned as-is; anything else as JSON.",
+                "title": "Mocks",
+                "type": "object"
+              },
+              "name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "persona_instructions": {
+                "description": "Who the simulated caller is and how they talk (played by an LLM).",
+                "maxLength": 4000,
+                "minLength": 1,
+                "title": "Persona Instructions",
+                "type": "string"
+              },
+              "scenario": {
+                "default": "",
+                "description": "What the caller wants in this conversation; the persona pursues it.",
+                "maxLength": 4000,
+                "title": "Scenario",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "persona_instructions"
+            ],
+            "title": "AgentTest",
             "type": "object"
           },
           "AppsMode": {
@@ -9490,6 +10140,57 @@
             "title": "PreemptiveGenerationOptions",
             "type": "object"
           },
+          "PrivacyConfig": {
+            "description": "What the platform keeps and shares about a caller (V5-30, P §4.2 C10).\n\nThe defaults keep today's behaviour: nothing is masked, every session is\nkept in full and third-party telemetry receives the conversation.",
+            "properties": {
+              "scrub_model": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning."
+              },
+              "storage_tier": {
+                "default": "full",
+                "description": "What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.",
+                "enum": [
+                  "full",
+                  "redacted",
+                  "basic"
+                ],
+                "title": "Storage Tier",
+                "type": "string"
+              },
+              "stt_redact": {
+                "default": [],
+                "description": "Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.",
+                "items": {
+                  "enum": [
+                    "pci",
+                    "pii",
+                    "phi",
+                    "numbers"
+                  ],
+                  "type": "string"
+                },
+                "title": "Stt Redact",
+                "type": "array"
+              },
+              "telemetry_pii": {
+                "default": true,
+                "description": "Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.",
+                "title": "Telemetry Pii",
+                "type": "boolean"
+              }
+            },
+            "title": "PrivacyConfig",
+            "type": "object"
+          },
           "ProviderRef": {
             "description": "Points at a registry provider plus the credential and options to use.",
             "properties": {
@@ -9549,6 +10250,27 @@
             "title": "ProviderRef",
             "type": "object"
           },
+          "PublishGate": {
+            "description": "Whether publishing needs a passing test run on the version being published (opt-in).",
+            "properties": {
+              "min_pass_ratio": {
+                "default": 1.0,
+                "description": "The share of cases that must pass (1.0 = every case).",
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Min Pass Ratio",
+                "type": "number"
+              },
+              "require_tests": {
+                "default": false,
+                "description": "Refuse to publish unless the latest test run on this version passed.",
+                "title": "Require Tests",
+                "type": "boolean"
+              }
+            },
+            "title": "PublishGate",
+            "type": "object"
+          },
           "QaConfig": {
             "description": "Post-call scoring of the session by an LLM judge.",
             "properties": {
@@ -9556,6 +10278,15 @@
                 "default": false,
                 "title": "Enabled",
                 "type": "boolean"
+              },
+              "fields": {
+                "default": [],
+                "description": "Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.",
+                "items": {
+                  "$ref": "#/$defs/QaField"
+                },
+                "title": "Fields",
+                "type": "array"
               },
               "model": {
                 "anyOf": [
@@ -9582,6 +10313,50 @@
               }
             },
             "title": "QaConfig",
+            "type": "object"
+          },
+          "QaField": {
+            "description": "One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).\n\nResults land in ``session_qa.raw[\"fields\"]`` as ``{name: value}``; a value\nthe conversation does not state is ``null``. ``select`` takes exactly one of\n``options``; the other types take no ``options``.",
+            "properties": {
+              "description": {
+                "default": "",
+                "description": "What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').",
+                "maxLength": 500,
+                "title": "Description",
+                "type": "string"
+              },
+              "name": {
+                "description": "Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.",
+                "pattern": "^[a-z][a-z0-9_]{0,47}$",
+                "title": "Name",
+                "type": "string"
+              },
+              "options": {
+                "default": [],
+                "description": "The choices of a `select` field (one is picked); empty for the other types.",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "title": "Options",
+                "type": "array"
+              },
+              "type": {
+                "default": "text",
+                "enum": [
+                  "text",
+                  "number",
+                  "boolean",
+                  "select"
+                ],
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "QaField",
             "type": "object"
           },
           "QaNode": {
@@ -11272,7 +12047,8 @@
               "sessions-and-test-chat",
               "roles-and-scopes",
               "apps",
-              "tools"
+              "tools",
+              "testing"
             ],
             "title": "Topic",
             "type": "string"
@@ -13918,6 +14694,8 @@
       "agent_limits",
       "agent_list",
       "agent_publish",
+      "agent_tests_result",
+      "agent_tests_run",
       "agent_update",
       "agent_validate",
       "agent_versions",
@@ -13983,6 +14761,8 @@
       "agent_limits",
       "agent_list",
       "agent_publish",
+      "agent_tests_result",
+      "agent_tests_run",
       "agent_update",
       "agent_validate",
       "agent_versions",
@@ -14058,6 +14838,7 @@
       "agent_get",
       "agent_limits",
       "agent_list",
+      "agent_tests_result",
       "agent_versions",
       "api_request",
       "apps_actions",
@@ -14103,6 +14884,8 @@
       "agent_limits",
       "agent_list",
       "agent_publish",
+      "agent_tests_result",
+      "agent_tests_run",
       "agent_update",
       "agent_validate",
       "agent_versions",
@@ -14186,6 +14969,8 @@
       "agent_limits",
       "agent_list",
       "agent_publish",
+      "agent_tests_result",
+      "agent_tests_run",
       "agent_update",
       "agent_validate",
       "agent_versions",
@@ -14261,6 +15046,7 @@
       "agent_get",
       "agent_limits",
       "agent_list",
+      "agent_tests_result",
       "agent_versions",
       "api_request",
       "apps_actions",

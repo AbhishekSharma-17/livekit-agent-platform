@@ -118,6 +118,8 @@ export const DEFAULT_TELEPHONY: Required<TelephonyConfig> = {
   transfer_targets: [],
   // V5-25: numbers `send_sms` may text by label (V5-28's telephony editor).
   sms_targets: [],
+  // V5-32: answering-machine detection on outbound calls, off (V5-36's Voicemail card).
+  amd: { enabled: false, on_machine: "hangup", message: null, ivr_detection: false },
 };
 
 /** `AgentLimits` defaults (CONTRACTS-V2 §3.3). */

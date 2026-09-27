@@ -104,7 +104,8 @@
             "steps",
             "consent",
             "upload",
-            "captions"
+            "captions",
+            "handoff"
           ],
           "title": "Type",
           "type": "string"

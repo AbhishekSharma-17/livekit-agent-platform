@@ -3,6 +3,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "One inbound or outbound call.",
   "properties": {
+    "amd_result": {
+      "anyOf": [
+        {
+          "enum": [
+            "human",
+            "machine-ivr",
+            "machine-vm",
+            "machine-unavailable",
+            "uncertain"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Amd Result"
+    },
     "answered_at": {
       "anyOf": [
         {
@@ -131,6 +150,34 @@
       "default": "",
       "title": "To E164",
       "type": "string"
+    },
+    "transfer_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transfer Mode"
+    },
+    "transfer_summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transfer Summary"
     },
     "transfer_to": {
       "anyOf": [

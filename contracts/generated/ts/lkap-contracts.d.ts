@@ -31,6 +31,7 @@ export interface LkapContracts {
   AgentTestRunIn?: AgentTestRunIn;
   AgentTestRunPage?: AgentTestRunPage;
   AgentUpdate?: AgentUpdate;
+  AmdConfig?: AmdConfig;
   AnalyticsBucket?: AnalyticsBucket;
   AnalyticsDriver?: AnalyticsDriver;
   AnalyticsSummary?: AnalyticsSummary;
@@ -119,6 +120,7 @@ export interface LkapContracts {
   FormUploadSpec?: FormUploadSpec;
   GalleryBlockState?: GalleryBlockState;
   GlobalNode?: GlobalNode;
+  HandoffBlockState?: HandoffBlockState;
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
   IdIssue?: IdIssue;
@@ -269,6 +271,7 @@ export interface LkapContracts {
   ToolkitPage?: ToolkitPage;
   TranscriptBlockState?: TranscriptBlockState;
   TranscriptTurn?: TranscriptTurn;
+  TransferEvent?: TransferEvent;
   TransferNode?: TransferNode;
   TransferTarget?: TransferTarget;
   TrunkCreate?: TrunkCreate;
@@ -285,6 +288,8 @@ export interface LkapContracts {
   ValidationResult?: ValidationResult;
   VariableSpec?: VariableSpec;
   VideoBlockState?: VideoBlockState;
+  VoicemailEvent?: VoicemailEvent;
+  WarmTransferRoute?: WarmTransferRoute;
   WebhookDeliveryOut?: WebhookDeliveryOut;
   WebhookDeliveryPage?: WebhookDeliveryPage;
   WebhookEndpointCreate?: WebhookEndpointCreate;
@@ -719,7 +724,8 @@ export interface BlockSpec {
     | "steps"
     | "consent"
     | "upload"
-    | "captions";
+    | "captions"
+    | "handoff";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -957,6 +963,7 @@ export interface RecordingConfig {
  * via the `definition` "TelephonyConfig".
  */
 export interface TelephonyConfig {
+  amd?: AmdConfig;
   /**
    * Numbers the agent may text by label, besides the caller of a phone call (send_sms).
    *
@@ -967,6 +974,33 @@ export interface TelephonyConfig {
    * @maxItems 50
    */
   transfer_targets?: TransferTarget[];
+}
+/**
+ * Answering-machine detection on outbound calls (``TelephonyConfig.amd``, V5-32).
+ *
+ * When ``enabled``, the worker listens to how an outbound call is answered and
+ * classifies it with the agent's own speech-to-text and language model before
+ * the agent speaks. A person (or an unsure result) → the conversation goes on as
+ * usual. A voicemail greeting → ``on_machine``: ``leave_message`` speaks
+ * ``message`` after the greeting and hangs up; ``hangup`` hangs up at once. A
+ * mailbox that cannot take a message is always hung up. A phone menu is
+ * navigated by the agent when ``ivr_detection`` is on, else treated as a machine.
+ * Inbound calls and web sessions ignore this setting.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AmdConfig".
+ */
+export interface AmdConfig {
+  enabled?: boolean;
+  /**
+   * Let the agent navigate a phone menu instead of hanging up on it.
+   */
+  ivr_detection?: boolean;
+  /**
+   * What the agent says to a voicemail (leave_message). Empty: a short call-back request.
+   */
+  message?: string | null;
+  on_machine?: "hangup" | "leave_message";
 }
 /**
  * One number ``send_sms`` may text, named by its label (V5-25).
@@ -995,6 +1029,10 @@ export interface TransferTarget {
    * What the model and the caller call it
    */
   label: string;
+  /**
+   * cold: hand the call over at once. warm: the agent calls the person first and briefs them while the caller is on hold, then joins them (LiveKit Cloud only; elsewhere the transfer is cold and the summary is kept on the call).
+   */
+  mode?: "cold" | "warm";
   /**
    * E.164 number or tel:/sip:/sips: URI
    */
@@ -1990,6 +2028,7 @@ export interface CallDtmfOut {
  * via the `definition` "CallOut".
  */
 export interface CallOut {
+  amd_result?: ("human" | "machine-ivr" | "machine-vm" | "machine-unavailable" | "uncertain") | null;
   answered_at?: string | null;
   connection_id?: string;
   direction: "inbound" | "outbound";
@@ -2003,6 +2042,8 @@ export interface CallOut {
   started_at?: string | null;
   status?: "dialing" | "ringing" | "answered" | "no_answer" | "busy" | "failed" | "completed" | "transferred";
   to_e164?: string;
+  transfer_mode?: ("cold" | "warm") | null;
+  transfer_summary?: string | null;
   transfer_to?: string | null;
   workspace_id?: string;
 }
@@ -2025,14 +2066,18 @@ export interface CallPage {
  * via the `definition` "CallReportIn".
  */
 export interface CallReportIn {
+  amd_result?: ("human" | "machine-ivr" | "machine-vm" | "machine-unavailable" | "uncertain") | null;
   direction?: ("inbound" | "outbound") | null;
   from_e164?: string | null;
   participant_identity?: string | null;
   reason?: string | null;
   session_id: string;
   sip_call_id?: string | null;
-  status: "answered" | "completed" | "failed";
+  status: "answered" | "completed" | "failed" | "transferred";
   to_e164?: string | null;
+  transfer_mode?: ("cold" | "warm") | null;
+  transfer_summary?: string | null;
+  transfer_to?: string | null;
 }
 /**
  * ``POST /v1/calls/{id}/transfer``: a cold (SIP REFER) transfer.
@@ -3143,6 +3188,26 @@ export interface FormUploadSpec {
 export interface GalleryBlockState {
   asset_ids?: string[];
   selected?: string | null;
+}
+/**
+ * The ``handoff`` block's state (V5-32): the hand-off of the caller to a person.
+ *
+ * ``target`` is the destination's label (never its number); ``mode`` is the
+ * transfer that actually ran (a warm request on a connection that cannot do it
+ * runs ``cold``); ``queue_position`` and ``agent_name`` are shown when the block's
+ * config asks for them and something fills them (V5-37's queue, the person's
+ * name once connected); ``reason`` is a short plain-words line for ``timeout``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "HandoffBlockState".
+ */
+export interface HandoffBlockState {
+  agent_name?: string | null;
+  mode?: ("cold" | "warm") | null;
+  queue_position?: number | null;
+  reason?: string | null;
+  status?: "idle" | "requested" | "connecting" | "connected" | "timeout" | "ended";
+  target?: string | null;
 }
 /**
  * ``GET /v1/health``.
@@ -5390,6 +5455,7 @@ export interface ResolvedAgentConfig {
   voices_by_language?: {
     [k: string]: ResolvedProvider;
   };
+  warm_transfer?: WarmTransferRoute | null;
   workspace_id?: string;
 }
 /**
@@ -5427,6 +5493,34 @@ export interface McpOAuthAccess {
   name: string;
   tool_id: string;
   url: string;
+}
+/**
+ * What the worker needs to place a warm transfer's private consult call (V5-32).
+ *
+ * Filled by the api in ``/internal/v1/sessions/{id}/resolved`` only when the
+ * session runs on a LiveKit Cloud connection with exactly one synced outbound
+ * trunk and at least one ``warm`` target passes the workspace's dialing policy
+ * today (R-V2-23: the worker dials these itself, so the api vets them here).
+ * ``None`` on the resolved document = every transfer is cold.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "WarmTransferRoute".
+ */
+export interface WarmTransferRoute {
+  /**
+   * The number the person sees
+   */
+  caller_id?: string;
+  /**
+   * The warm targets' ``to`` values that the dialing policy allows
+   *
+   * @maxItems 50
+   */
+  targets?: string[];
+  /**
+   * The LiveKit outbound trunk id
+   */
+  trunk_id: string;
 }
 /**
  * ``POST /internal/v1/sessions/{id}/assets/from-document``: the cited KB document to copy (R-V5-5).
@@ -6306,6 +6400,28 @@ export interface TranscriptBlockState {
   show_tools?: boolean;
 }
 /**
+ * Payload of the ``transfer`` session event.
+ *
+ * The V2-17 keys (``to``, ``ok``, ``status``, ``reason``) stay; V5-32 adds how the
+ * transfer ran. ``requested_mode`` is the target's configured mode and ``mode`` the
+ * one that ran: a warm request falls back to ``cold`` off LiveKit Cloud or without a
+ * warm route (D-V5-21), and ``summary`` is then kept on the call row, not spoken.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TransferEvent".
+ */
+export interface TransferEvent {
+  mode?: "cold" | "warm";
+  ok: boolean;
+  outcome?: ("connected" | "transferred" | "timeout" | "declined" | "refused" | "failed") | null;
+  reason?: string | null;
+  requested_mode?: "cold" | "warm";
+  status: string;
+  summary?: string | null;
+  target?: string | null;
+  to: string;
+}
+/**
  * ``POST /v1/telephony/trunks``.
  *
  * ``inbound`` trunks accept calls to ``numbers`` (optionally only from
@@ -6536,6 +6652,20 @@ export interface ValidationResult {
 export interface VideoBlockState {
   muted?: boolean;
   source?: string;
+}
+/**
+ * Payload of the ``voicemail`` session event (V5-32): a machine answered an outbound call.
+ *
+ * Recorded only for ``machine-*`` verdicts; the verdict of every detection (a person
+ * included) is on the call row (``CallOut.amd_result``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "VoicemailEvent".
+ */
+export interface VoicemailEvent {
+  action: "hangup" | "leave_message" | "navigate";
+  message_left?: boolean;
+  result: "human" | "machine-ivr" | "machine-vm" | "machine-unavailable" | "uncertain";
 }
 /**
  * One delivery attempt of one event to one endpoint.

@@ -1,0 +1,101 @@
+{
+  "$id": "lkap-contracts/TransferEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``transfer`` session event.\n\nThe V2-17 keys (``to``, ``ok``, ``status``, ``reason``) stay; V5-32 adds how the\ntransfer ran. ``requested_mode`` is the target's configured mode and ``mode`` the\none that ran: a warm request falls back to ``cold`` off LiveKit Cloud or without a\nwarm route (D-V5-21), and ``summary`` is then kept on the call row, not spoken.",
+  "properties": {
+    "mode": {
+      "default": "cold",
+      "enum": [
+        "cold",
+        "warm"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "connected",
+            "transferred",
+            "timeout",
+            "declined",
+            "refused",
+            "failed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Outcome"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "requested_mode": {
+      "default": "cold",
+      "enum": [
+        "cold",
+        "warm"
+      ],
+      "title": "Requested Mode",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Summary"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target"
+    },
+    "to": {
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "to",
+    "ok",
+    "status"
+  ],
+  "title": "TransferEvent",
+  "type": "object"
+}

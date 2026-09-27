@@ -91,6 +91,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   upload: UploadBlock as AnyBlockComponent,
   // V5-31 added this type to the contract; its renderer comes with V5-35.
   captions: NotRenderedYetBlock,
+  // V5-32 added this type to the contract; its renderer comes with V5-36.
+  handoff: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

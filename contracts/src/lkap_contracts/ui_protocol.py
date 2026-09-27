@@ -138,6 +138,7 @@ BlockType = Literal[
     "consent",
     "upload",
     "captions",
+    "handoff",
 ]
 
 
@@ -464,6 +465,32 @@ class CaptionsBlockState(BaseModel):
 
     language: str | None = None
     target_language: str | None = None
+
+
+#: Where a hand-off to a person stands (V5-32; V5-37 drives it from ``escalate_to_human`` too):
+#: ``idle`` (nothing asked), ``requested`` (the agent decided to hand over), ``connecting``
+#: (the person's phone is ringing, or the caller is being put through), ``connected`` (the
+#: person is on the call), ``timeout`` (nobody answered, or they declined: the agent carries on),
+#: ``ended`` (the call left the agent, e.g. after a standard transfer).
+HandoffStatus = Literal["idle", "requested", "connecting", "connected", "timeout", "ended"]
+
+
+class HandoffBlockState(BaseModel):
+    """The ``handoff`` block's state (V5-32): the hand-off of the caller to a person.
+
+    ``target`` is the destination's label (never its number); ``mode`` is the
+    transfer that actually ran (a warm request on a connection that cannot do it
+    runs ``cold``); ``queue_position`` and ``agent_name`` are shown when the block's
+    config asks for them and something fills them (V5-37's queue, the person's
+    name once connected); ``reason`` is a short plain-words line for ``timeout``.
+    """
+
+    status: HandoffStatus = "idle"
+    mode: Literal["cold", "warm"] | None = None
+    target: str | None = None
+    queue_position: int | None = Field(default=None, ge=0)
+    agent_name: str | None = None
+    reason: str | None = None
 
 
 #: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).

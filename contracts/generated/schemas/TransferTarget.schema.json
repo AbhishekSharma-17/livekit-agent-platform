@@ -10,6 +10,16 @@
       "title": "Label",
       "type": "string"
     },
+    "mode": {
+      "default": "cold",
+      "description": "cold: hand the call over at once. warm: the agent calls the person first and briefs them while the caller is on hold, then joins them (LiveKit Cloud only; elsewhere the transfer is cold and the summary is kept on the call).",
+      "enum": [
+        "cold",
+        "warm"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
     "to": {
       "description": "E.164 number or tel:/sip:/sips: URI",
       "maxLength": 256,

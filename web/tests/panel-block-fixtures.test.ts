@@ -30,6 +30,7 @@ const SCHEMA_FILE: Record<string, string> = {
   consent: "ConsentBlockState",
   upload: "UploadBlockState",
   captions: "CaptionsBlockState",
+  handoff: "HandoffBlockState",
 };
 
 type JsonSchema = {

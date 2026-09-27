@@ -376,6 +376,12 @@ export const transferTargetSchema = z.object({
     .trim()
     .max(256, "256 characters max")
     .regex(TRANSFER_TARGET_PATTERN, "Use +15551234567, tel:+15551234567 or sip:user@host"),
+  /**
+   * V5-32: `cold` (hand over at once) or `warm` (the agent briefs the person first; LiveKit
+   * Cloud only). Optional so a target saved before V5-32 validates; carried so a save never
+   * turns a warm target cold (V5-36 edits it).
+   */
+  mode: z.enum(["cold", "warm"]).optional(),
 });
 export type TransferTargetForm = z.infer<typeof transferTargetSchema>;
 
@@ -403,6 +409,18 @@ export const telephonyConfigSchema = z
      * doesn't need it, and `toFormValues` always supplies a concrete list.
      */
     sms_targets: z.array(smsTargetSchema).max(50, "50 contacts max").optional(),
+    /**
+     * V5-32: answering-machine detection on outbound calls (`AmdConfig`). Optional and carried
+     * so a save keeps it; V5-36's Voicemail card edits it.
+     */
+    amd: z
+      .object({
+        enabled: z.boolean(),
+        on_machine: z.enum(["hangup", "leave_message"]),
+        message: z.string().max(1000, "1000 characters max").nullable().optional(),
+        ivr_detection: z.boolean(),
+      })
+      .optional(),
   })
   .superRefine((val, ctx) => {
     const seen = new Set<string>();
@@ -456,6 +474,7 @@ export const BLOCK_TYPE_VALUES = [
   "consent",
   "upload",
   "captions",
+  "handoff",
 ] as const;
 
 /** Block ids key `UiState.blocks` and appear in patch paths: no `/`, no spaces. */

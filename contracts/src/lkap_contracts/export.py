@@ -30,6 +30,7 @@ from lkap_contracts.agent_config import (
     LocaleConfig,
     NotifyTeamConfig,
     PanelLayout,
+    PrivacyConfig,
     QaConfig,
     RecordingConfig,
     ResolvedAgentConfig,
@@ -70,7 +71,7 @@ from lkap_contracts.flow import (
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
-from lkap_contracts.qa import QaVerdict, SessionQaIn
+from lkap_contracts.qa import QaField, QaVerdict, SessionQaIn
 from lkap_contracts.telephony import SmsTarget, TelephonyConfig, TransferTarget
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
@@ -139,6 +140,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "RecordingConfig": RecordingConfig,
     "DisclosureConfig": DisclosureConfig,
     "QaConfig": QaConfig,
+    "PrivacyConfig": PrivacyConfig,  # V5-30
     "ResolvedAgentConfig": ResolvedAgentConfig,
     "DispatchMetadata": DispatchMetadata,
     "Issue": Issue,
@@ -282,6 +284,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "TranscriptTurn": api_models.TranscriptTurn,
     "SessionOut": api_models.SessionOut,
     "SessionDetailOut": api_models.SessionDetailOut,
+    "SessionScrubOut": api_models.SessionScrubOut,  # V5-30
     "LocaleEvent": api_models.LocaleEvent,
     # V5-15: consent and disclosure
     "ConsentEvent": ConsentEvent,
@@ -330,6 +333,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # QA (R-V2-5): the judge verdict schema and the worker's PUT body
     "QaVerdict": QaVerdict,
     "SessionQaIn": SessionQaIn,
+    "QaField": QaField,  # V5-30
     # auth, team and connections
     "UserOut": api_models.UserOut,
     "WorkspaceMembership": api_models.WorkspaceMembership,

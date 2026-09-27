@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/PrivacyConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the platform keeps and shares about a caller (V5-30, P §4.2 C10).\n\nThe defaults keep today's behaviour: nothing is masked, every session is\nkept in full and third-party telemetry receives the conversation.",
+  "properties": {
+    "scrub_model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning."
+    },
+    "storage_tier": {
+      "default": "full",
+      "description": "What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.",
+      "enum": [
+        "full",
+        "redacted",
+        "basic"
+      ],
+      "title": "Storage Tier",
+      "type": "string"
+    },
+    "stt_redact": {
+      "default": [],
+      "description": "Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.",
+      "items": {
+        "enum": [
+          "pci",
+          "pii",
+          "phi",
+          "numbers"
+        ],
+        "type": "string"
+      },
+      "title": "Stt Redact",
+      "type": "array"
+    },
+    "telemetry_pii": {
+      "default": true,
+      "description": "Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.",
+      "title": "Telemetry Pii",
+      "type": "boolean"
+    }
+  },
+  "title": "PrivacyConfig",
+  "type": "object"
+}

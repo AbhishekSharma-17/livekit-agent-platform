@@ -58,6 +58,50 @@
       ],
       "title": "ProviderRef",
       "type": "object"
+    },
+    "QaField": {
+      "description": "One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).\n\nResults land in ``session_qa.raw[\"fields\"]`` as ``{name: value}``; a value\nthe conversation does not state is ``null``. ``select`` takes exactly one of\n``options``; the other types take no ``options``.",
+      "properties": {
+        "description": {
+          "default": "",
+          "description": "What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.",
+          "pattern": "^[a-z][a-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "default": [],
+          "description": "The choices of a `select` field (one is picked); empty for the other types.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Options",
+          "type": "array"
+        },
+        "type": {
+          "default": "text",
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "select"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "QaField",
+      "type": "object"
     }
   },
   "$id": "lkap-contracts/QaConfig.schema.json",
@@ -68,6 +112,15 @@
       "default": false,
       "title": "Enabled",
       "type": "boolean"
+    },
+    "fields": {
+      "default": [],
+      "description": "Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.",
+      "items": {
+        "$ref": "#/$defs/QaField"
+      },
+      "title": "Fields",
+      "type": "array"
     },
     "model": {
       "anyOf": [

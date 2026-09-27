@@ -5,6 +5,7 @@ import type {
   DisclosureConfig,
   KnowledgeConfig,
   LocaleConfig,
+  PublishGate,
   RecordingConfig,
   TelephonyConfig,
   ToolsConfig,
@@ -103,6 +104,12 @@ export const DEFAULT_DISCLOSURE: Required<DisclosureConfig> = {
   enabled: true,
   position: "both",
   text: null,
+};
+
+/** `PublishGate` defaults (V5-29): off, and every case must pass once turned on. */
+export const DEFAULT_PUBLISH_GATE: Required<PublishGate> = {
+  require_tests: false,
+  min_pass_ratio: 1,
 };
 
 /** `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar card). */

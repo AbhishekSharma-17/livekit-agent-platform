@@ -354,6 +354,35 @@ export const disclosureConfigSchema = z.object({
 });
 export type DisclosureConfigForm = z.infer<typeof disclosureConfigSchema>;
 
+/**
+ * `AgentTest` (V5-29, `lkap_contracts.agent_tests`): one simulated
+ * conversation. `mocks` is a tool name → the fixture value it returns
+ * instead of calling out; the console edits it as text and the case dialog
+ * `JSON.parse`s it, falling back to the raw string (the contract's "a string
+ * is returned as-is; anything else as JSON").
+ */
+export const agentTestSchema = z.object({
+  id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/, "Letters, numbers, - or _; must start with a letter or number"),
+  name: z.string().min(1, "Name is required").max(120, "120 characters max"),
+  persona_instructions: z.string().min(1, "Describe the caller").max(4000, "4000 characters max"),
+  scenario: z.string().max(4000, "4000 characters max"),
+  expectations: z.array(z.string().min(1, "Can't be empty").max(500, "500 characters max")).max(20, "20 max"),
+  mocks: z.record(z.string(), z.unknown()),
+  max_turns: z.number().int().min(1, "At least 1").max(40, "40 max"),
+});
+export type AgentTestForm = z.infer<typeof agentTestSchema>;
+
+/**
+ * `PublishGate` (V5-29): opt-in "require a passing test run before publish".
+ * Like `disclosureConfigSchema` above, optional on `agentConfigFormSchema` so
+ * a fixture built before V5-33 keeps validating.
+ */
+export const publishGateSchema = z.object({
+  require_tests: z.boolean(),
+  min_pass_ratio: z.number().min(0).max(1),
+});
+export type PublishGateForm = z.infer<typeof publishGateSchema>;
+
 /** `AgentLimits` (CONTRACTS-V2 §3.3) — top-level on the agent, not in `config`. */
 export const agentLimitsSchema = z.object({
   max_concurrent_sessions: wholeNumber("Whole numbers only").min(1, "At least 1"),
@@ -513,6 +542,13 @@ export const agentConfigFormSchema = z
      * `DEFAULT_DISCLOSURE`.
      */
     disclosure: disclosureConfigSchema.optional(),
+    /**
+     * V5-33's Tests section: `config.tests` (optional, like `disclosure`
+     * above, so a fixture built before this package keeps validating) and
+     * the opt-in publish gate.
+     */
+    tests: z.array(agentTestSchema).max(50, "50 cases max").optional(),
+    publish_gate: publishGateSchema.optional(),
     panel: panelLayoutSchema,
     /**
      * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the
@@ -529,6 +565,14 @@ export const agentConfigFormSchema = z
     if (!isFlow && !val.instructions.trim()) {
       ctx.addIssue({ code: "custom", path: ["instructions"], message: "Instructions are required" });
     }
+    // V5-33: two cases can't share an id (`lkap_contracts.agent_config._unique_test_ids`).
+    const seenTestIds = new Set<string>();
+    (val.tests ?? []).forEach((testCase, index) => {
+      if (seenTestIds.has(testCase.id)) {
+        ctx.addIssue({ code: "custom", path: ["tests", index, "id"], message: "Two cases can't share an id." });
+      }
+      seenTestIds.add(testCase.id);
+    });
   });
 export type AgentConfigForm = z.infer<typeof agentConfigFormSchema>;
 

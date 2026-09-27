@@ -14,6 +14,9 @@ import { isSendableModelId, modelIdPath } from "@/lib/model-ids";
 import { uploadKbDocument } from "@/components/console/lib/upload";
 import type {
   AgentCreate,
+  AgentTestRun,
+  AgentTestRunIn,
+  AgentTestRunPage,
   AgentOut,
   AgentPage,
   AgentUpdate,
@@ -97,6 +100,9 @@ const keys = {
   kbEvals: (id: string) => ["knowledge-bases", id, "evals"] as const,
   kbEvalRun: (kbId: string, jobId: string) => ["knowledge-bases", kbId, "evaluate", jobId] as const,
   kbEvalLatest: (id: string) => ["knowledge-bases", id, "evaluate", "latest"] as const,
+  /** V5-33: an agent's test runs, nested under `["agents", id, ...]` so the agent's own invalidation reaches them too. */
+  agentTestRuns: (agentId: string, limit: number) => ["agents", agentId, "tests", "runs", limit] as const,
+  agentTestRun: (agentId: string, runId: string) => ["agents", agentId, "tests", "runs", runId] as const,
   sessions: (agentId?: string, status?: string) => ["sessions", agentId ?? "", status ?? ""] as const,
   session: (id: string) => ["sessions", id] as const,
   sessionEvents: (id: string) => ["sessions", id, "events"] as const,
@@ -308,6 +314,42 @@ export function useDeleteAgent() {
 export function useValidateAgent(id: string) {
   return useMutation({
     mutationFn: () => api.post<ValidationResult>(`agents/${id}/validate`),
+  });
+}
+
+// ---- agent tests (V5-33) ----
+
+/** `GET .../tests/runs`: newest first, no verdicts (the run table). */
+export function useAgentTestRuns(agentId: string, limit = 20) {
+  return useQuery({
+    queryKey: keys.agentTestRuns(agentId, limit),
+    queryFn: () => api.get<AgentTestRunPage>(`agents/${agentId}/tests/runs`, { limit }),
+    enabled: agentId.length > 0,
+  });
+}
+
+/** Polls one run (verdicts included) until it leaves `queued`/`running`. `runId: null` disables the query. */
+export function useAgentTestRun(agentId: string, runId: string | null) {
+  return useQuery({
+    queryKey: keys.agentTestRun(agentId, runId ?? "none"),
+    queryFn: () => api.get<AgentTestRun>(`agents/${agentId}/tests/runs/${runId}`),
+    enabled: agentId.length > 0 && runId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "queued" || status === "running" ? 1500 : false;
+    },
+  });
+}
+
+/** `POST .../tests/run`: 202 with the queued run (no verdicts yet); the section polls it with `useAgentTestRun`. */
+export function useRunAgentTests(agentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body?: AgentTestRunIn) => api.post<AgentTestRun>(`agents/${agentId}/tests/run`, body),
+    onSuccess: (run) => {
+      queryClient.setQueryData(keys.agentTestRun(agentId, run.id), run);
+      void queryClient.invalidateQueries({ queryKey: keys.agentTestRuns(agentId, 20) });
+    },
   });
 }
 

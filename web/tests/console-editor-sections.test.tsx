@@ -155,3 +155,14 @@ describe("FlowSection", () => {
     expect(screen.getByText("This agent runs a flow")).toBeTruthy();
   });
 });
+
+describe("EDITOR_SECTIONS (V5-33)", () => {
+  it("registers the Tests section after the built-ins, with the tests/publish_gate issue paths", async () => {
+    const { EDITOR_SECTIONS } = await import("@/components/console/agents/editor/sections");
+    const tests = EDITOR_SECTIONS.find((section) => section.id === "tests");
+    expect(tests?.label).toBe("Tests");
+    expect(tests?.issuePaths).toEqual(["tests", "publish_gate"]);
+    expect(EDITOR_SECTIONS.map((s) => s.id)).toContain("limits");
+    expect(EDITOR_SECTIONS[EDITOR_SECTIONS.length - 1]?.id).toBe("tests");
+  });
+});

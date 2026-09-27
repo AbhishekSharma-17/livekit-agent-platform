@@ -1,9 +1,10 @@
-import { MessageCircleIcon } from "lucide-react";
+import { FlaskConicalIcon, MessageCircleIcon } from "lucide-react";
 
 import { BUILTIN_SECTIONS } from "./builtin-sections";
 import { EDITOR_EXTENSIONS } from "./extensions";
 import { resolveEditorSections, resolveEditorSlots } from "./registry";
 import { ConversationSection } from "./sections/conversation-section";
+import { TestsSection } from "./sections/tests-section";
 import type { EditorExtension } from "./types";
 
 /**
@@ -39,13 +40,38 @@ const conversationSectionExtension: EditorExtension = {
 };
 
 /**
+ * V5-33: the Tests section (cases, run, run history and verdicts, the
+ * publish gate). Same rationale as V5-11's own extension above — this
+ * package's exclusive files are `sections.ts` / `registry.ts` /
+ * `publish-popover.tsx`, not `extensions.ts`. `order: 85` sits after
+ * "Limits" (80), the last built-in: testing comes once everything else is
+ * configured.
+ */
+const testsSectionExtension: EditorExtension = {
+  id: "V5-33",
+  sections: [
+    {
+      id: "tests",
+      label: "Tests",
+      icon: FlaskConicalIcon,
+      order: 85,
+      Component: TestsSection,
+      issuePaths: ["tests", "publish_gate"],
+      issueKeywords: /\b(test case|publish gate|require.{0,3}tests?)/i,
+      issueKeywordPriority: 15,
+    },
+  ],
+};
+
+/**
  * The editor's section registry (docs/UI_UX_SPEC.md §7.4 item 3): built-ins
- * plus `EDITOR_EXTENSIONS` plus V5-11's own extension above, resolved once at
- * module load.
+ * plus `EDITOR_EXTENSIONS` plus V5-11's and V5-33's own extensions above,
+ * resolved once at module load.
  */
 export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   ...EDITOR_EXTENSIONS,
   conversationSectionExtension,
+  testsSectionExtension,
 ]);
 export const EDITOR_SLOTS = resolveEditorSlots(EDITOR_EXTENSIONS);
 

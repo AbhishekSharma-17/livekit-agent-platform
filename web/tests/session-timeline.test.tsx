@@ -421,8 +421,9 @@ describe("session detail tab registry (WP-7 → V2-14 contract)", () => {
     ...extra,
   });
 
-  it("ships timeline · transcript · recording/cost/qa (V2-14) · panel · raw", () => {
+  it("ships live · timeline · transcript · recording/cost/qa (V2-14) · panel · raw", () => {
     expect(sessionTabs().map((t) => [t.id, t.order])).toEqual([
+      ["live", 5],
       ["timeline", 10],
       ["transcript", 20],
       ["recording", 30],

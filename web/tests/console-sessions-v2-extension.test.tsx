@@ -40,7 +40,9 @@ describe("sessionsV2Extension registration", () => {
 
   it("adds recording (30), cost (40) and qa (50) after transcript and before panel/raw", () => {
     const tabs = resolveSessionTabs(BUILTIN_SESSION_TABS, [sessionsV2Extension]);
-    expect(tabs.map((t) => t.id)).toEqual(["timeline", "transcript", "recording", "cost", "qa", "panel", "raw"]);
+    // V5-38's "live" (order 5) sits ahead of everything else — it's hidden
+    // again by `visibleTabs` the moment a session isn't `active`.
+    expect(tabs.map((t) => t.id)).toEqual(["live", "timeline", "transcript", "recording", "cost", "qa", "panel", "raw"]);
   });
 
   it("hides the Recording tab when there is no recording", () => {

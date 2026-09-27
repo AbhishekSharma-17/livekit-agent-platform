@@ -74,10 +74,20 @@
         "pipeline": {
           "$ref": "#/$defs/PipelineConfig"
         },
+        "privacy": {
+          "$ref": "#/$defs/PrivacyConfig",
+          "default": {
+            "scrub_model": null,
+            "storage_tier": "full",
+            "stt_redact": [],
+            "telemetry_pii": true
+          }
+        },
         "qa": {
           "$ref": "#/$defs/QaConfig",
           "default": {
             "enabled": false,
+            "fields": [],
             "model": null,
             "rubric_prompt": null
           }
@@ -2079,6 +2089,57 @@
       "title": "PreemptiveGenerationOptions",
       "type": "object"
     },
+    "PrivacyConfig": {
+      "description": "What the platform keeps and shares about a caller (V5-30, P §4.2 C10).\n\nThe defaults keep today's behaviour: nothing is masked, every session is\nkept in full and third-party telemetry receives the conversation.",
+      "properties": {
+        "scrub_model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning."
+        },
+        "storage_tier": {
+          "default": "full",
+          "description": "What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.",
+          "enum": [
+            "full",
+            "redacted",
+            "basic"
+          ],
+          "title": "Storage Tier",
+          "type": "string"
+        },
+        "stt_redact": {
+          "default": [],
+          "description": "Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.",
+          "items": {
+            "enum": [
+              "pci",
+              "pii",
+              "phi",
+              "numbers"
+            ],
+            "type": "string"
+          },
+          "title": "Stt Redact",
+          "type": "array"
+        },
+        "telemetry_pii": {
+          "default": true,
+          "description": "Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.",
+          "title": "Telemetry Pii",
+          "type": "boolean"
+        }
+      },
+      "title": "PrivacyConfig",
+      "type": "object"
+    },
     "ProviderRef": {
       "description": "Points at a registry provider plus the credential and options to use.",
       "properties": {
@@ -2293,6 +2354,15 @@
           "title": "Enabled",
           "type": "boolean"
         },
+        "fields": {
+          "default": [],
+          "description": "Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.",
+          "items": {
+            "$ref": "#/$defs/QaField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
         "model": {
           "anyOf": [
             {
@@ -2318,6 +2388,50 @@
         }
       },
       "title": "QaConfig",
+      "type": "object"
+    },
+    "QaField": {
+      "description": "One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).\n\nResults land in ``session_qa.raw[\"fields\"]`` as ``{name: value}``; a value\nthe conversation does not state is ``null``. ``select`` takes exactly one of\n``options``; the other types take no ``options``.",
+      "properties": {
+        "description": {
+          "default": "",
+          "description": "What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.",
+          "pattern": "^[a-z][a-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "default": [],
+          "description": "The choices of a `select` field (one is picked); empty for the other types.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Options",
+          "type": "array"
+        },
+        "type": {
+          "default": "text",
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "select"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "QaField",
       "type": "object"
     },
     "QaNode": {

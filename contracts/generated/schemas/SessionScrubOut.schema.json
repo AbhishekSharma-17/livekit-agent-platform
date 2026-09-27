@@ -1,0 +1,45 @@
+{
+  "$id": "lkap-contracts/SessionScrubOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/sessions/{id}/scrub`` (V5-30): the privacy scrub was queued, or had already run.",
+  "properties": {
+    "job_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "scrubbed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scrubbed At"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "already_scrubbed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "SessionScrubOut",
+  "type": "object"
+}

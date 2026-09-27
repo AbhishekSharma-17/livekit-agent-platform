@@ -661,7 +661,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-28 | Sonnet | 6 | merged | | with V5-25's deferred keys (dev-stack walk not run in this session) | |
 | V5-29 | Opus | 7 | merged | cdd5855 | | |
 | V5-30 | Opus | 7 | merged | 983faf7 | STT redaction deferred | |
-| V5-31 | Opus | 7 | planned | | Inference `multi` to confirm | |
+| V5-31 | Opus | 7 | merged | 8c7331f | Inference `multi` to confirm | |
 | V5-32 | Opus | 7 | planned | | deferred (telephony offline) | |
 | V5-33 | Sonnet | 8 | planned | | | |
 | V5-34 | Sonnet | 8 | planned | | | |

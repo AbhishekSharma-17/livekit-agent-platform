@@ -380,3 +380,34 @@ async def test_summary_records_a_failure(
     async with database.session() as session:
         row = (await session.execute(select(SessionRow))).scalar_one()
     assert (row.status, row.error) == ("failed", "provider unavailable")
+
+
+# --------------------------------------------------------------------------- V5-29 (ask #190): tool mocks
+async def test_resolved_carries_the_mocks_of_a_running_test_case_only(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    from lkap_api.db.models import AgentTestResult, AgentTestRun
+
+    case_session_id, agent = await _session_for(admin_client)
+    real_session_id, _ = await _session_for(admin_client)
+    async with database.session() as db:
+        run = AgentTestRun(agent_id=agent["id"], config_version=1, status="running", summary={})
+        db.add(run)
+        await db.flush()
+        db.add(
+            AgentTestResult(
+                run_id=run.id,
+                case_id="booking",
+                ordinal=0,
+                session_id=case_session_id,
+                status="running",
+                mocks={"check_slots": {"slots": ["10:00"]}},
+            )
+        )
+        await db.commit()
+
+    case = (await service_client.get(f"/internal/v1/sessions/{case_session_id}/resolved")).json()
+    real = (await service_client.get(f"/internal/v1/sessions/{real_session_id}/resolved")).json()
+
+    assert case["tool_mocks"] == {"check_slots": {"slots": ["10:00"]}}
+    assert real["tool_mocks"] == {}

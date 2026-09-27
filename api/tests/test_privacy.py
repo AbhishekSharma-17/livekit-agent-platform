@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from lkap_api import privacy
 from lkap_api.config_service import validate_agent_config
-from lkap_api.db.models import Credential, SessionAsset, SessionEvent, SessionQa
+from lkap_api.db.models import Credential, SessionAsset, SessionEvent, SessionQa, WebhookDelivery
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.jobs import kinds as jobs_kinds
@@ -366,10 +366,25 @@ async def _ended_session(
     return session_id
 
 
-async def test_scrub_route_queues_once_and_the_detail_shows_scrubbed_at(
+async def test_the_summary_queues_the_scrub_for_a_redacted_tier(
     admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient
 ) -> None:
+    """Ask #174: `put_summary` enqueues the scrub itself; the route then has nothing left to do."""
     session_id = await _ended_session(admin_client, service_client, _redacted())
+
+    detail = (await admin_client.get(f"/v1/sessions/{session_id}")).json()
+    again = await admin_client.post(f"/v1/sessions/{session_id}/scrub")
+
+    assert detail["scrubbed_at"] is not None
+    assert detail["transcript"][2]["text"] == f"{EMAIL_TOKEN}, and call me on {NUMBER_TOKEN}."
+    assert again.json()["status"] == "already_scrubbed"
+
+
+async def test_scrub_route_queues_once_and_the_detail_shows_scrubbed_at(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    # A finished session the summary hook never saw (written straight to the database).
+    session_id = await _make_session(database, _redacted())
 
     first = await admin_client.post(f"/v1/sessions/{session_id}/scrub")
     detail = (await admin_client.get(f"/v1/sessions/{session_id}")).json()
@@ -423,6 +438,28 @@ async def test_the_fields_reach_the_session_detail(
     qa = (await admin_client.get(f"/v1/sessions/{session_id}")).json()["qa"]
 
     assert qa["fields"] == {"claim_type": "home", "injury": False, "status": None}
+
+
+async def test_the_fields_ride_on_session_qa_completed(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    """Ask #174: the post-call fields reach webhooks on `session.qa_completed` (sent after the verdict)."""
+    created = await admin_client.post(
+        "/v1/webhooks", json={"url": "https://hooks.example.com/fields", "events": ["session.qa_completed"]}
+    )
+    assert created.status_code == 201, created.text
+    config = inference_config(qa=QaConfig(enabled=True, fields=FIELDS))
+    session_id = await _ended_session(admin_client, service_client, config)
+
+    with respx.mock:
+        respx.post("https://hooks.example.com/fields").mock(return_value=httpx.Response(200))
+        fields = {"claim_type": "auto", "injury": True, "status": None}
+        await _qa_with_fields(service_client, session_id, fields)
+
+    async with database.session() as session:
+        deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
+    (delivery,) = [d for d in deliveries if d.event_type == "session.qa_completed"]
+    assert delivery.payload["data"]["fields"] == fields
 
 
 async def test_the_csv_has_one_column_per_field(

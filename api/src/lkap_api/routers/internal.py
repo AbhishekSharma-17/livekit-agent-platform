@@ -53,7 +53,8 @@ from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api import webhooks
+from lkap_api import privacy, webhooks
+from lkap_api.agent_tests import tool_mocks_for_session
 from lkap_api.config_service import (
     SLOT_KIND,
     builtin_credential_ids,
@@ -70,7 +71,7 @@ from lkap_api.connections.service import (
     get_connection_by_id,
     resolve_agent_connection,
 )
-from lkap_api.costs import cost_session
+from lkap_api.costs import config_for_session, cost_session
 from lkap_api.costs.service import reconcile_due
 from lkap_api.costs.snapshot import attach_estimate
 from lkap_api.costs.vendors import workspace_reconcile_vendors
@@ -94,6 +95,7 @@ from lkap_api.mcp_oauth.tokens import (
 )
 from lkap_api.packs import get_manifest
 from lkap_api.panels import effective_layout
+from lkap_api.privacy.fields import qa_fields
 from lkap_api.recordings.consent import apply_consent_event, note_unrecorded
 from lkap_api.recordings.finalize import apply_egress_result, schedule_finalize_once
 from lkap_api.recordings.service import RecordingStopOut
@@ -423,6 +425,8 @@ async def _build_resolved(
         builtin_providers=resolve_builtin_providers(config, secrets),
         # V5-31: a voice per language, with its key.
         voices_by_language=resolve_language_voices(config, secrets),
+        # V5-29 (ask #190): a running test case's fixtures; `{}` for every real session.
+        tool_mocks=await tool_mocks_for_session(db, session),
     )
 
 
@@ -896,6 +900,8 @@ async def put_summary(
     await cost_session(db, session)
     await db.flush()
     reconcile = await reconcile_due(db, session)
+    # V5-30 (ask #174): the config the session ran decides whether the post-call scrub is due.
+    scrub_config = await config_for_session(db, session)
     workspace_id, terminal_status = await _summary_webhook_context(db, session)
     log.info(
         "session_finished",
@@ -909,6 +915,8 @@ async def put_summary(
     if reconcile:
         # V4-17: after the commit (ask #40), and off the response path (the lookups are HTTP).
         await enqueue_reconcile(jobs, session_id, background_tasks=background_tasks)
+    # V5-30 (ask #174): a `full` storage tier (every agent saved before V5-30) enqueues nothing.
+    await privacy.enqueue_scrub_if_due(jobs, session_id, scrub_config, background_tasks=background_tasks)
     if terminal_status:
         await webhooks.emit(
             database,
@@ -1001,6 +1009,8 @@ async def put_qa(
             "score": payload.score,
             "sentiment": payload.sentiment,
             "scored_by": "worker",
+            # V5-30 (ask #174): the post-call fields; `session.ended` is sent before the verdict exists.
+            "fields": qa_fields(payload.raw),
         },
         background_tasks=background_tasks,
     )

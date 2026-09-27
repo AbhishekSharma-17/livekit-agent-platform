@@ -50,7 +50,11 @@ No migration. Restart the api (new routes, new scope) and the worker (the whispe
    `escalate_to_human(mode="listen_in", …)`: the `handoff` block shows "requested" with "A member of
    the team may listen in to help."; the `escalation` event carries `mode: "listen_in"`; with
    `tools.notify_team` configured the team post ends "(asks for a supervisor to listen in)".
-9. Ended session: after tab A hangs up, `listen-token` and `whisper` → 409 `not_live`.
+9. Ended session: after tab A hangs up, `listen-token` and `whisper` → 409 `not_live`. Known limit to
+   record: `roomCreate=false` gates the CreateRoom API, not join-time auto-create (a server setting,
+   on by default on Cloud), so a listener still holding an unexpired token could re-join an empty
+   room of the same name within its 15 minutes; note whether that happens. A whisper whose room is
+   already gone answers 422 (LiveKit's 404 through `raise_upstream`), not 409.
 10. Record: whether the listener's audio arrived, the latency from whisper to the agent's next reply
     that used it, whether a second tab with the same member replaced the first in the room (same
     identity `supervisor:<user id>`), and anything the Live tab could not mirror.

@@ -85,7 +85,8 @@ jobs:
   # env var names kept verbatim from the V2-01 stub this replaces.
   test-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The Postgres run took ~18 min at V5-27 and grows with every package; 20 cancelled it.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -138,4 +139,4 @@ jobs:
 
       - name: Run the api suite against Postgres
         working-directory: api
-        run: uv run pytest -q -m "not live"
+        run: uv run pytest -q -m "not live" --durations=20

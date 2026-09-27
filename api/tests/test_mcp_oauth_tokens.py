@@ -16,7 +16,7 @@ import fakeredis
 import httpx
 import pytest
 from auth_helpers import key_client, make_api_key
-from conftest import captured_text, create_agent, inference_config
+from conftest import captured_text, create_agent, inference_config, postgres_url
 from fakes.oauth_as import MCP_URL, OAuthWorld
 from fastapi import FastAPI
 from lkap_contracts.agent_config import ResolvedAgentConfig
@@ -440,6 +440,7 @@ async def test_the_resolved_config_carries_minutes_lived_access_and_no_refresh_t
         assert secret not in response.text
 
 
+@pytest.mark.skipif(postgres_url() is not None, reason="SQLite write-lock behaviour only")
 async def test_sessions_start_on_sqlite_defers_a_stale_token_to_the_worker(
     admin_client: httpx.AsyncClient,
     client: httpx.AsyncClient,

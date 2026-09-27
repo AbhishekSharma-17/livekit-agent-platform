@@ -31,6 +31,15 @@ dependencies = [
   "mcp>=1.30,<2",
 ]
 
+[project.optional-dependencies]
+#: V5-40 (D-V5-17): caller memory through Mem0 OSS, lazily imported by `lkap_api.memory.mem0`.
+#: psycopg + psycopg-pool are what Mem0's pgvector store connects with on Postgres.
+memory = [
+  "mem0ai>=2.2.1,<3",
+  "psycopg[binary]>=3.2.8,<4",
+  "psycopg-pool>=3.2.6,<4",
+]
+
 [dependency-groups]
 dev = [
   "pytest>=8.4",

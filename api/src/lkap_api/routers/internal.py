@@ -36,6 +36,8 @@ from lkap_contracts.agent_config import (
     effective_qa,
 )
 from lkap_contracts.api_models import (
+    MemoryRecallIn,
+    MemoryRecallOut,
     RecordingStartOut,
     SessionEventsIn,
     SessionMetricsIn,
@@ -53,7 +55,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lkap_api import privacy, webhooks
+from lkap_api import memory, privacy, webhooks
 from lkap_api.agent_tests import tool_mocks_for_session
 from lkap_api.config_service import (
     SLOT_KIND,
@@ -920,6 +922,8 @@ async def put_summary(
         await enqueue_reconcile(jobs, session_id, background_tasks=background_tasks)
     # V5-30 (ask #174): a `full` storage tier (every agent saved before V5-30) enqueues nothing.
     await privacy.enqueue_scrub_if_due(jobs, session_id, scrub_config, background_tasks=background_tasks)
+    # V5-40: memory on writes the session to the caller's memory (never per turn); off enqueues nothing.
+    await memory.enqueue_remember_if_due(jobs, session_id, scrub_config, background_tasks=background_tasks)
     if terminal_status:
         await webhooks.emit(
             database,
@@ -936,6 +940,26 @@ async def put_summary(
             background_tasks=background_tasks,
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/memory/recall",
+    response_model=MemoryRecallOut,
+    summary="What the memory knows about the session's caller (worker only)",
+    description=(
+        "V5-40: called once at session start, before the greeting, when the agent's "
+        "`memory.enabled` is on. The api resolves the caller from the session (the phone number "
+        "of a call, a chosen participant identity) and reads their memories under the caller's "
+        "pseudonymous id; the worker never sees the id or the number's hash. Records "
+        "`memory_recalled`. `status` says why nothing came back (`disabled`, `no_identity`, "
+        "`unavailable`, `failed`); the session then simply starts without memories."
+    ),
+)
+async def memory_recall(
+    payload: MemoryRecallIn, db: DbDep, vault: VaultDep, settings: SettingsDep, _service: ServiceDep
+) -> MemoryRecallOut:
+    """Recall the caller's memories for the worker (V5-40)."""
+    return await memory.recall_for_session(db, vault, settings, payload)
 
 
 async def _summary_webhook_context(db: AsyncSession, session: SessionRow) -> tuple[str, bool]:

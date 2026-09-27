@@ -1369,3 +1369,65 @@ class AgentTestResult(Base):
         Index("ix_agent_test_results_session", "session_id"),
         Index("ix_agent_test_results_workspace", "workspace_id"),
     )
+
+
+class MemorySubject(Base):
+    """One caller the memory knows, per scope (V5-40, `v5_008_memory`, D-V5-17).
+
+    `subject_id` is the caller's pseudonymous id: the hex HMAC-SHA256 of their phone
+    number or chosen identity under the workspace's memory key (`lkap_api.memory.identity`);
+    the identity itself is never stored. `scope_key` is the agent id for an agent-scoped
+    memory and `workspace` for a workspace-scoped one (a non-null key, so the unique index
+    holds on every dialect); `agent_id` is the agent that last wrote it, informational only.
+    `retention_until` is `last_seen_at` plus the agent's `memory.retention_days`; the
+    sessions sweep forgets a row once it passes (`memory.service.sweep_memory_retention`).
+    The memories themselves live in the memory backend, never in this table.
+    """
+
+    __tablename__ = "memory_subjects"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    subject_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    last_seen_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    retention_until: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "subject_id", "scope_key", name="uq_memory_subjects_workspace_subject_scope"
+        ),
+        Index("ix_memory_subjects_retention", "retention_until"),
+    )
+
+
+class MemoryEvent(Base):
+    """What the memory did for a caller, without the content (V5-40, `v5_008_memory`).
+
+    `kind` is `recalled`, `stored`, `forgotten`, `purged` or `expired`; `count` is how
+    many memories were involved. The memory text is never kept here: the session's
+    `memory_recalled` / `memory_stored` events carry it (and are blanked on forget), so
+    this audit trail survives an erasure without keeping what was erased. A session's
+    `subject_id` is read from its `recalled`/`stored` rows.
+    """
+
+    __tablename__ = "memory_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    subject_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True
+    )
+    agent_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('recalled','stored','forgotten','purged','expired')", name="kind_valid"),
+        Index("ix_memory_events_subject", "workspace_id", "subject_id"),
+        Index("ix_memory_events_session", "session_id"),
+    )

@@ -59,6 +59,17 @@ AGENT_TESTS_RUN = "agent_tests_run"
 #: `privacy/scrub.py`.
 SESSION_SCRUB = "session_scrub"
 
+#: V5-40 (D-V5-17): writes a finished session to the caller's memory (the transcript, masked
+#: when `privacy.storage_tier != "full"`, through the agent's model or verbatim); records a
+#: `memory_stored` session event, once per session. Enqueued once the summary commits when
+#: `memory.enabled`; handler in `memory/jobs.py`.
+MEMORY_REMEMBER = "memory_remember"
+
+#: V5-40: deletes a purged workspace's memories from the backend (`{workspace_id,
+#: subject_ids}`). Enqueued by `POST /v1/memory/purge` after the key and the subject rows are
+#: gone; handler in `memory/jobs.py`.
+MEMORY_PURGE = "memory_purge"
+
 #: Reserved for other packages' handlers (PLAN-V2 §"V2-08" scope line); this
 #: package never enqueues these itself.
 CONNECTION_PROBE = "connection_probe"

@@ -342,6 +342,7 @@ async def sweep_loop(db: Database, settings: Settings) -> None:
     the loop — the next tick tries again.
     """
     # Deferred for the same import-cycle reason as `sweep_recording_retention`'s import.
+    from lkap_api.memory.service import sweep_memory_retention  # noqa: PLC0415 - same deferral
     from lkap_api.telephony.calls import sweep_stuck_calls  # noqa: PLC0415
 
     while True:
@@ -356,6 +357,7 @@ async def sweep_loop(db: Database, settings: Settings) -> None:
             await sweep_stuck_calls(db)  # R-V2-24: calls stuck in `dialing` / left open
             await sweep_app_connections(db, settings)  # V5-18: unfinished app sign-ins
             await sweep_mcp_oauth(db)  # V5-14: finished or expired MCP sign-in flows
+            await sweep_memory_retention(db, settings)  # V5-40: caller memories past retention
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - a sweep failure must never kill the loop

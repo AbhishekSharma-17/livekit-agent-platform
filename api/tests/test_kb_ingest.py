@@ -551,13 +551,14 @@ async def test_ingest_extraction_timeout_marks_the_document_failed(
 def test_chunk_document_long_heading_line_is_linear_time() -> None:
     # "# x" + spaces + "y" backtracked quadratically in the old heading pattern (16k: ~3 s).
     line = "# x" + " " * 200_000 + "y"
-    started = time.perf_counter()
+    # CPU time, not wall time: under pytest-xdist the other workers compete for the cores.
+    started = time.process_time()
     chunks = chunk_document(
         ExtractedDocument(text=f"{line}\n\nBody text."),
         config=ChunkingConfig(),
         count_tokens=approx_token_count,
     )
-    assert time.perf_counter() - started < 1.0
+    assert time.process_time() - started < 1.0
     assert chunks  # a line over the heading cap is plain text, still chunked
 
 
@@ -583,7 +584,8 @@ def test_heading_reads_atx_headings(line: str, heading: tuple[int, str] | None) 
 def test_sentences_long_paragraph_is_linear_time() -> None:
     # Every ". " used to slice the rest of the paragraph: ~17 s for this 2 MB paragraph.
     text = "Ab. " * 500_000
-    started = time.perf_counter()
+    # CPU time, not wall time: under pytest-xdist the other workers compete for the cores.
+    started = time.process_time()
     spans = ingest_module._sentences(text, 0, len(text))
-    assert time.perf_counter() - started < 2.0
+    assert time.process_time() - started < 2.0
     assert len(spans) == 500_000

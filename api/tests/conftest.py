@@ -7,6 +7,7 @@ no `.env`, and no network (`pytest -m "not live"`).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -28,6 +29,7 @@ from lkap_contracts.agent_config import (
 )
 from lkap_contracts.migrate import default_panel_for
 from lkap_contracts.packs import PackManifest
+from sqlalchemy.engine import make_url
 
 from lkap_api.bootstrap import bootstrap
 from lkap_api.db.guard import tenant_scope_guard
@@ -45,13 +47,59 @@ REQUIRED_ENV: dict[str, str] = {
 }
 
 
-def postgres_url() -> str | None:
-    """Return `LKAP_TEST_DATABASE_URL` when the suite should run against Postgres.
+def _xdist_worker() -> str | None:
+    """The pytest-xdist worker id (`gw0`, `gw1`, ...), or None in a serial run."""
+    return os.environ.get("PYTEST_XDIST_WORKER") or None
 
-    CI sets it to an `asyncpg` url (`.github/workflows/python.yml`, `test-postgres`); locally
-    it is unset and every test runs on SQLite.
+
+def postgres_url() -> str | None:
+    """Return the Postgres url this process should use, or None to run on SQLite.
+
+    CI sets `LKAP_TEST_DATABASE_URL` to an `asyncpg` url (`.github/workflows/python.yml`,
+    `test-postgres`); locally it is unset and every test runs on SQLite. Under pytest-xdist
+    each worker gets its own database, `<name>_<worker>` (created by
+    `_postgres_worker_database`), because the `database` fixture creates and drops the
+    whole schema per test and two workers sharing one database would drop each other's.
     """
-    return os.environ.get("LKAP_TEST_DATABASE_URL") or None
+    base = os.environ.get("LKAP_TEST_DATABASE_URL") or None
+    if base is None or (worker := _xdist_worker()) is None:
+        return base
+    url = make_url(base)
+    return url.set(database=f"{url.database}_{worker}").render_as_string(hide_password=False)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _postgres_worker_database() -> Iterator[None]:
+    """Create this xdist worker's Postgres database for the session and drop it afterwards.
+
+    A no-op on SQLite and in serial runs (which use `LKAP_TEST_DATABASE_URL` as is). The
+    database is dropped first in case a crashed run left it behind. `CREATE DATABASE` cannot
+    run in a transaction, so this uses a bare asyncpg connection (autocommit) to the base
+    database rather than a SQLAlchemy engine. pgvector needs nothing here: `create_all`
+    runs `CREATE EXTENSION IF NOT EXISTS vector` in the new database.
+    """
+    base, worker_url = os.environ.get("LKAP_TEST_DATABASE_URL"), postgres_url()
+    if not base or worker_url is None or worker_url == base:
+        yield
+        return
+    import asyncpg
+
+    admin_dsn = make_url(base).set(drivername="postgresql").render_as_string(hide_password=False)
+    name = make_url(worker_url).database
+
+    async def run(*statements: str) -> None:
+        connection = await asyncpg.connect(admin_dsn)
+        try:
+            for statement in statements:
+                await connection.execute(statement)
+        finally:
+            await connection.close()
+
+    asyncio.run(run(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)', f'CREATE DATABASE "{name}"'))
+    try:
+        yield
+    finally:
+        asyncio.run(run(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
 
 
 @pytest.fixture
@@ -148,7 +196,8 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
     keep resolving against.
 
     Set `LKAP_TEST_DATABASE_URL` to run the suite against Postgres instead; the
-    schema is created and dropped per test, so point it at a scratch database.
+    schema is created and dropped per test, so point it at a scratch database (under
+    pytest-xdist each worker uses its own copy, see `postgres_url`).
     The url is also written into `settings`, because code under test that opens
     its own `Database(settings.resolved_database_url)` (the `set-password` CLI,
     `keys rotate`) must reach the same database, not a SQLite file in `data_dir`.

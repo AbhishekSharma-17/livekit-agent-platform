@@ -6,7 +6,6 @@ Synchronous on purpose: `alembic/env.py` drives the async engine with
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -40,11 +39,9 @@ def _run(data_dir: Path, action: Callable[[Config], None]) -> Path:
     url = f"sqlite+aiosqlite:///{data_dir}/lkap.db"
     config.set_main_option("sqlalchemy.url", url)
     config.attributes["configure_logger"] = False
-    os.environ["LKAP_DATABASE_URL"] = url
-    try:
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("LKAP_DATABASE_URL", url)
         action(config)
-    finally:
-        os.environ.pop("LKAP_DATABASE_URL", None)
     return data_dir / "lkap.db"
 
 

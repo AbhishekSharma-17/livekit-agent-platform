@@ -51,6 +51,7 @@ dev = [
   "moto[s3]>=5.0,<6",
   "respx>=0.21,<1",
   "boto3-stubs[s3]>=1.35,<2",
+  "pytest-xdist>=3.8.0",
 ]
 
 [tool.uv.sources]

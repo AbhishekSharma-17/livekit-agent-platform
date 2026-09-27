@@ -7,7 +7,6 @@ available locally); this file drives the SQLite branch directly.
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -35,11 +34,9 @@ def _migrate(database: Path, target: str, *, downgrade: bool = False) -> None:
     config.attributes["configure_logger"] = False
     url = f"sqlite+aiosqlite:///{database}"
     config.set_main_option("sqlalchemy.url", url)
-    os.environ["LKAP_DATABASE_URL"] = url
-    try:
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("LKAP_DATABASE_URL", url)
         (command.downgrade if downgrade else command.upgrade)(config, target)
-    finally:
-        os.environ.pop("LKAP_DATABASE_URL", None)
 
 
 def _query(database: Path, sql: str, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import datetime as dt
 import ipaddress
-import os
 import sqlite3
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -643,11 +642,9 @@ def _migrate(database: Path, target: str, *, downgrade: bool = False) -> None:
     config.attributes["configure_logger"] = False
     url = f"sqlite+aiosqlite:///{database}"
     config.set_main_option("sqlalchemy.url", url)
-    os.environ["LKAP_DATABASE_URL"] = url
-    try:
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("LKAP_DATABASE_URL", url)
         (command.downgrade if downgrade else command.upgrade)(config, target)
-    finally:
-        os.environ.pop("LKAP_DATABASE_URL", None)
 
 
 def _sql(database: Path, statement: str, *params: object) -> list[tuple[Any, ...]]:

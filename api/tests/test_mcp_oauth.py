@@ -10,7 +10,6 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import logging
-import os
 import shutil
 import sqlite3
 from collections.abc import AsyncIterator, Iterator
@@ -1080,9 +1079,13 @@ async def test_an_unknown_flow_leaves_no_audit_row(client: httpx.AsyncClient, da
     assert await _audits(database, "mcp_oauth.callback_rejected") == []
 
 
-async def test_callback_is_rate_limited_per_client(client: httpx.AsyncClient) -> None:
+async def test_callback_is_rate_limited_per_client(app: FastAPI, client: httpx.AsyncClient) -> None:
+    from lkap_api.auth.ratelimit import InMemoryRateLimiter
     from lkap_api.mcp_oauth.router import CALLBACK_PER_MIN
 
+    # A frozen clock: on a loaded runner (pytest-xdist) the bucket would otherwise refill
+    # (one token per 2 s) before the last request and let it through.
+    app.state.rate_limiter = InMemoryRateLimiter(clock=lambda: 0.0)
     statuses = [
         (await _callback(client, {"state": f"s{i}"}, binder=None)).status_code
         for i in range(CALLBACK_PER_MIN + 1)
@@ -1254,11 +1257,9 @@ def _migrate_copy(database: Path, revision: str, *, downgrade: bool = False) -> 
     url = f"sqlite+aiosqlite:///{database}"
     config.set_main_option("sqlalchemy.url", url)
     config.attributes["configure_logger"] = False
-    os.environ["LKAP_DATABASE_URL"] = url
-    try:
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("LKAP_DATABASE_URL", url)
         (command.downgrade if downgrade else command.upgrade)(config, revision)
-    finally:
-        os.environ.pop("LKAP_DATABASE_URL", None)
 
 
 def _tables(database: Path) -> set[str]:

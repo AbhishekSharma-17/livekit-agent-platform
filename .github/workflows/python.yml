@@ -37,8 +37,9 @@ jobs:
   # a Docker build context).
   test:
     runs-on: ubuntu-latest
-    # The api suite reached ~2800 tests in V5 and ran past 20 min on the hosted runners.
-    timeout-minutes: 40
+    # The api suite reached ~2800 tests in V5 and ran past 20 min serially on the hosted
+    # runners; it now runs under pytest-xdist (see `pytest_args` below).
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +50,12 @@ jobs:
         # `connection_fakes`). The full checkout above provides both. `test_stdio.py` spawns
         # `python -m lkap_mcp` against a closed loopback port, so the job needs no network or secrets.
         package: [api, agent, packs, supervisor, testing, mcp]
+        # Only the api has pytest-xdist (a dev dep) and a parallel-safe suite: every test gets
+        # its own tmp data dir and SQLite file (`api/tests/conftest.py`). The other packages
+        # stay serial; `mcp` also spawns `python -m lkap_mcp` and boots the api in-process.
+        include:
+          - package: api
+            pytest_args: "-n auto"
 
     steps:
       - uses: actions/checkout@v4
@@ -79,15 +86,16 @@ jobs:
       # tests all pass with a bare `uv run pytest`.
       - name: Test
         working-directory: ${{ matrix.package }}
-        run: uv run pytest -q -m "not live"
+        run: uv run pytest -q -m "not live" ${{ matrix.pytest_args }}
 
   # Postgres leg (api only): the only place the v2 migration chain and full
   # api suite run against a real server (docs/v2/_asks.md #18). Sequence and
   # env var names kept verbatim from the V2-01 stub this replaces.
   test-postgres:
     runs-on: ubuntu-latest
-    # The Postgres run took ~18 min at V5-27 and passed 45 min by V5-31 on the hosted runners.
-    timeout-minutes: 75
+    # The Postgres run took ~18 min at V5-27 and passed 45 min by V5-31 serially on the hosted
+    # runners; it now runs under pytest-xdist with one database per worker (below).
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -138,6 +146,11 @@ jobs:
           uv run alembic upgrade head
           uv run alembic downgrade base
 
+      # `-n auto`: each xdist worker runs on its own database, `lkap_test_gw0`, `lkap_test_gw1`, ...,
+      # which `tests/conftest.py::_postgres_worker_database` creates from `LKAP_TEST_DATABASE_URL`
+      # (the `lkap` user is the container's superuser, so it may CREATE DATABASE / EXTENSION)
+      # and drops at the end, because the `database` fixture creates and drops the whole schema
+      # per test. The migration step above keeps using `lkap_test` itself.
       - name: Run the api suite against Postgres
         working-directory: api
-        run: uv run pytest -q -m "not live" --durations=20 --timeout=300
+        run: uv run pytest -q -m "not live" -n auto --durations=20 --timeout=300

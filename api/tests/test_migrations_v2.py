@@ -11,7 +11,6 @@ the copy, so the committed fixture is never modified.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -53,12 +52,10 @@ def _config(database: Path) -> Config:
 
 def _migrate(database: Path, target: str, *, downgrade: bool = False) -> None:
     """Run alembic against `database` only, never the developer's data dir."""
-    os.environ["LKAP_DATABASE_URL"] = f"sqlite+aiosqlite:///{database}"
-    try:
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("LKAP_DATABASE_URL", f"sqlite+aiosqlite:///{database}")
         runner = command.downgrade if downgrade else command.upgrade
         runner(_config(database), target)
-    finally:
-        os.environ.pop("LKAP_DATABASE_URL", None)
 
 
 def _counts(database: Path, tables: dict[str, int]) -> dict[str, int]:

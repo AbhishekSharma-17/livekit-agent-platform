@@ -6,7 +6,6 @@ copy of the v1 seed under ``tmp_path``, never the live database.
 
 from __future__ import annotations
 
-import os
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -431,11 +430,9 @@ def _migrate(database: Path, revision: str, *, downgrade: bool = False) -> None:
     url = f"sqlite+aiosqlite:///{database}"
     config.set_main_option("sqlalchemy.url", url)
     config.attributes["configure_logger"] = False
-    os.environ["LKAP_DATABASE_URL"] = url
-    try:
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("LKAP_DATABASE_URL", url)
         (command.downgrade if downgrade else command.upgrade)(config, revision)
-    finally:
-        os.environ.pop("LKAP_DATABASE_URL", None)
 
 
 def _calls_columns(database: Path) -> set[str]:

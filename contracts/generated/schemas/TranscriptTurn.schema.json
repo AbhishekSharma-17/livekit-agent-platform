@@ -8,6 +8,18 @@
       "title": "Interrupted",
       "type": "boolean"
     },
+    "language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
     "role": {
       "enum": [
         "user",

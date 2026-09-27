@@ -34,6 +34,7 @@ schema. The eighteen block types:
 | `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
 | `consent` | `kind` (`recording`/`ai_disclosure`/`terms`/`custom`), `text` (empty = the workspace's wording for `recording` and `ai_disclosure`), `required`, `decline_action` (`continue`/`end_call`), `show_banner` | A question the caller accepts or declines, such as agreeing to be recorded, plus the "you're talking to an AI assistant" banner. The text is public by design. |
 | `upload` | `accept` (`image/*` or exact types: JPEG, PNG, WebP, GIF, HEIC/HEIF, PDF; default photos and PDFs), `max_files` (1–10, default 3), `max_bytes` (up to 25 MB, default 10 MB), `camera_capture` | A file picker (and the phone camera) for the caller to send photos or documents, such as a damage photo or a driving licence. HTML, SVG and other types are never accepted. |
+| `captions` | `show_user`, `show_agent` (default both on), `position` (`block`, or `bottom` to overlay the video on avatar layouts), `target_language` (kept for translated captions, not used yet) | Large live captions of what the caller and the agent are saying, with the language of each line. The words stream on their own channel while the call runs; nothing is stored in the block but the current language. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
 panel has a `document` block, the agent copies that knowledge-base document

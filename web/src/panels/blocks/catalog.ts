@@ -40,6 +40,7 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "steps",
   "consent",
   "upload",
+  "captions",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -144,6 +145,14 @@ export type BlockConfigField =
       hint?: string;
       default: string[];
       options: readonly { value: string; label: string }[];
+    }
+  | {
+      key: string;
+      label: string;
+      /** A language code or none (`captions.target_language`, V5-31); the editor comes with V5-35. */
+      kind: "language";
+      hint?: string;
+      default: string | null;
     };
 
 export interface BlockCatalogEntry {
@@ -190,6 +199,12 @@ export const CONSENT_KINDS = [
 export const CONSENT_DECLINE_ACTIONS = [
   { value: "continue", label: "Carry on without it" },
   { value: "end_call", label: "Say goodbye and end the call" },
+] as const;
+
+/** `captions.position` values (V5-31). */
+export const CAPTIONS_POSITIONS = [
+  { value: "block", label: "In the panel" },
+  { value: "bottom", label: "Over the video" },
 ] as const;
 
 /** `upload.accept` values (`lkap_contracts.blocks.UPLOAD_MIME_TYPES` plus `image/*`); never HTML or SVG. */
@@ -468,6 +483,28 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       { key: "camera_capture", label: "Open the camera on phones", kind: "boolean", default: false },
     ],
     filledBy: "request_upload",
+  },
+  // V5-31: minimal entry (PLAN-V5 §0.1, R-V5-7); the renderer, the `lkap.captions` reader and
+  // the `language` field editor come with V5-35.
+  captions: {
+    type: "captions",
+    label: "Captions",
+    description: "Large live captions of what the caller and the agent are saying.",
+    defaultTitle: "Captions",
+    idStem: "captions",
+    configFields: [
+      { key: "show_user", label: "Show what the caller says", kind: "boolean", default: true },
+      { key: "show_agent", label: "Show what the agent says", kind: "boolean", default: true },
+      { key: "position", label: "Where", kind: "select", default: "block", options: CAPTIONS_POSITIONS },
+      {
+        key: "target_language",
+        label: "Translate into",
+        kind: "language",
+        hint: "Translated captions are not available yet.",
+        default: null,
+      },
+    ],
+    filledBy: "the conversation",
   },
 };
 

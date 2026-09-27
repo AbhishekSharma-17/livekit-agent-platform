@@ -96,6 +96,8 @@ from lkap_contracts.ui_protocol import (
     BlockRequestPayload,
     BlockSpec,
     BlockSubmitPayload,
+    CaptionsBlockState,
+    CaptionSegment,
     ChoicesBlockState,
     ConsentBlockState,
     DetailsBlockState,
@@ -182,6 +184,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ConsentBlockState": ConsentBlockState,
     "UploadBlockState": UploadBlockState,
     "FormUploadSpec": FormUploadSpec,
+    "CaptionsBlockState": CaptionsBlockState,  # V5-31
+    "CaptionSegment": CaptionSegment,  # V5-31
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
     "RequestableState": RequestableState,
@@ -283,6 +287,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SessionOut": api_models.SessionOut,
     "SessionDetailOut": api_models.SessionDetailOut,
     "LocaleEvent": api_models.LocaleEvent,
+    "LanguageSwitchedEvent": api_models.LanguageSwitchedEvent,  # V5-31
     # V5-15: consent and disclosure
     "ConsentEvent": ConsentEvent,
     "ConsentState": ConsentState,

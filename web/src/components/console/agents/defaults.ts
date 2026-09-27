@@ -27,6 +27,10 @@ export const DEFAULT_VOICE: Required<VoiceConfig> = {
   thinking_sound: "none",
   // V5-07: no background clip unless the agent picks one (V5-11's Conversation section edits it).
   ambient_sound: "none",
+  // V5-31: one language, no detection, the pipeline's voice (V5-35's Languages card edits these).
+  languages: [],
+  auto_detect: false,
+  voices_by_language: {},
 };
 
 export const DEFAULT_CAPABILITIES: Required<CapabilitiesConfig> = {

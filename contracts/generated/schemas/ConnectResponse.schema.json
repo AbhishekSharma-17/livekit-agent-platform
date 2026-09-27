@@ -101,7 +101,8 @@
             "markdown",
             "steps",
             "consent",
-            "upload"
+            "upload",
+            "captions"
           ],
           "title": "Type",
           "type": "string"

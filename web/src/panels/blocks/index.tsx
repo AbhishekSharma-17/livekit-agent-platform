@@ -60,6 +60,15 @@ const MarkdownBlock = lazy(() => import("./markdown"));
 // its byte-stream sender) — the same reason `video` is split out (V5-23).
 const UploadBlock = lazy(() => import("./upload"));
 
+/** A block type this web build has no renderer for yet. */
+function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
+  return (
+    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
+      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
+    </BlockFrame>
+  );
+}
+
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -80,6 +89,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   steps: StepsBlock as AnyBlockComponent,
   consent: ConsentBlock as AnyBlockComponent,
   upload: UploadBlock as AnyBlockComponent,
+  // V5-31 added this type to the contract; its renderer comes with V5-35.
+  captions: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

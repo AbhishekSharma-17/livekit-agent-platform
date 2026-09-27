@@ -30,6 +30,8 @@ schemas by a vitest parity test):
   ``end_call``) and ``show_banner`` (V5-15);
 * ``upload`` → ``accept`` (media types or ``image/*`` from :data:`UPLOAD_MIME_TYPES`),
   ``max_files``, ``max_bytes`` and ``camera_capture`` (V5-19);
+* ``captions`` → ``show_user``, ``show_agent``, ``target_language`` (reserved for
+  translated captions) and ``position`` (``block`` / ``bottom``) (V5-31);
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -50,12 +52,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from lkap_contracts.common import Issue
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, ConsentDeclineAction, ConsentKind
+from lkap_contracts.providers import LANGUAGE_CODE_PATTERN
 from lkap_contracts.ui_protocol import (
     DEFAULT_UPLOAD_MAX_BYTES,
     MAX_UPLOAD_BYTES,
     MAX_UPLOAD_FILES,
     BlockSpec,
     BlockType,
+    CaptionsPosition,
     DetailsValueType,
 )
 
@@ -64,6 +68,7 @@ __all__ = [
     "DEFAULT_UPLOAD_ACCEPT",
     "UPLOAD_EXTENSIONS",
     "UPLOAD_MIME_TYPES",
+    "CaptionsBlockConfig",
     "ChoicesBlockConfig",
     "ConsentBlockConfig",
     "CustomBlockConfig",
@@ -364,6 +369,22 @@ class UploadBlockConfig(_StrictConfig):
         return normalised
 
 
+class CaptionsBlockConfig(_StrictConfig):
+    """``captions``: live captions of both sides (V5-31).
+
+    The worker streams each utterance on ``lkap.captions`` (``CaptionSegment``) while a
+    ``captions`` block is on the panel: the caller's side when any such block has
+    ``show_user``, the agent's when any has ``show_agent``. ``position="bottom"``
+    overlays the captions on the video of avatar layouts. ``target_language`` is kept
+    for translated captions, which a later package adds; the worker ignores it today.
+    """
+
+    show_user: bool = True
+    show_agent: bool = True
+    target_language: str | None = Field(default=None, pattern=LANGUAGE_CODE_PATTERN)
+    position: CaptionsPosition = "block"
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -397,6 +418,7 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "steps": StepsBlockConfig,
     "consent": ConsentBlockConfig,
     "upload": UploadBlockConfig,
+    "captions": CaptionsBlockConfig,
 }
 
 

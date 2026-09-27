@@ -1,0 +1,40 @@
+{
+  "$id": "lkap-contracts/LanguageSwitchedEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``language_switched`` session event (V5-31).\n\n``stt_switched``: the transcriber was told the new language (false while it\nauto-detects, or when the provider cannot switch mid-call); ``voice_switched``: the\nagent now speaks with the language's own voice (``voice.voices_by_language``).",
+  "properties": {
+    "from_language": {
+      "title": "From Language",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "tool",
+        "detected"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "stt_switched": {
+      "default": false,
+      "title": "Stt Switched",
+      "type": "boolean"
+    },
+    "to_language": {
+      "title": "To Language",
+      "type": "string"
+    },
+    "voice_switched": {
+      "default": false,
+      "title": "Voice Switched",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "from_language",
+    "to_language",
+    "source"
+  ],
+  "title": "LanguageSwitchedEvent",
+  "type": "object"
+}

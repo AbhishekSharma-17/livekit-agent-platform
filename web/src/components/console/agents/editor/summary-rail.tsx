@@ -295,6 +295,8 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
     fetch_url: (savedTools?.fetch_url_allowed_hosts ?? []).length > 0,
     send_sms: Boolean(savedTools?.sms),
     notify_team: Boolean(savedTools?.notify_team),
+    // V5-31: registered only when the agent speaks more than one language.
+    switch_language: (config?.voice?.languages ?? []).length > 1,
   };
   const toolCounts = {
     builtin: BUILTIN_TOOLS.filter(

@@ -205,6 +205,14 @@ export const voiceConfigSchema = z.object({
    * `"none"` in the real editor.
    */
   ambient_sound: z.string().optional(),
+  /**
+   * V5-31: the languages the agent may speak (first = default), automatic detection and a
+   * voice per language. Optional so fixtures built before V5-31 keep validating; carried
+   * here so saving the editor never drops them (V5-35's Languages card edits them).
+   */
+  languages: z.array(z.string()).optional(),
+  auto_detect: z.boolean().optional(),
+  voices_by_language: z.record(z.string(), providerRefSchema).optional(),
 });
 
 export const capabilitiesConfigSchema = z.object({
@@ -447,6 +455,7 @@ export const BLOCK_TYPE_VALUES = [
   "steps",
   "consent",
   "upload",
+  "captions",
 ] as const;
 
 /** Block ids key `UiState.blocks` and appear in patch paths: no `/`, no spaces. */

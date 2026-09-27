@@ -19,6 +19,10 @@ TOPIC_UI_ASSET = "lkap.ui.asset"
 #: ``form`` file field (V5-19). Stream attributes: ``block_id`` (required), ``name`` (the
 #: file's display name) and, for a form, ``field`` (the property name).
 TOPIC_UI_UPLOAD = "lkap.ui.upload"
+#: Agent -> browser text stream of live captions (V5-31): one :class:`CaptionSegment` JSON per
+#: message, both sides of the conversation, published only while the panel has a ``captions``
+#: block. The agent's words arrive in step with its audio (after the transcript synchroniser).
+TOPIC_UI_CAPTIONS = "lkap.captions"
 RPC_UI_REQUEST = "lkap.ui.request"
 RPC_AGENT_ACTION = "lkap.agent.action"
 
@@ -29,6 +33,7 @@ TOPICS: dict[str, str] = {
     "TOPIC_UI_ACTIVITY": TOPIC_UI_ACTIVITY,
     "TOPIC_UI_ASSET": TOPIC_UI_ASSET,
     "TOPIC_UI_UPLOAD": TOPIC_UI_UPLOAD,
+    "TOPIC_UI_CAPTIONS": TOPIC_UI_CAPTIONS,
     "RPC_UI_REQUEST": RPC_UI_REQUEST,
     "RPC_AGENT_ACTION": RPC_AGENT_ACTION,
 }
@@ -132,6 +137,7 @@ BlockType = Literal[
     "steps",
     "consent",
     "upload",
+    "captions",
 ]
 
 
@@ -422,6 +428,42 @@ class UploadBlockState(RequestableState):
     files: list[UploadedFile] = []
     rejected: list[UploadRejection] = []
     progress: float | None = Field(default=None, ge=0, le=1)
+
+
+#: Who said a caption's words (V5-31).
+CaptionSpeaker = Literal["user", "agent"]
+#: Where a ``captions`` block renders: in its panel slot, or over the video on avatar layouts.
+CaptionsPosition = Literal["block", "bottom"]
+
+
+class CaptionSegment(BaseModel):
+    """One live caption message on ``lkap.captions`` (V5-31).
+
+    ``id`` names the utterance: interim messages (``final: false``) carry the text so
+    far and are replaced by later ones with the same ``id``; the ``final`` one closes
+    it. ``language`` is the transcriber's detected language for the caller, or the
+    agent's current reply language; ``None`` when unknown.
+    """
+
+    v: Literal[1] = 1
+    id: str = Field(min_length=1)
+    speaker: CaptionSpeaker
+    text: str
+    final: bool
+    language: str | None = None
+    ts: float
+
+
+class CaptionsBlockState(BaseModel):
+    """The ``captions`` block's state (V5-31). The words themselves stream on ``lkap.captions``.
+
+    ``language`` is the conversation's current language (the agent's reply language,
+    updated on a switch); ``target_language`` is copied from the config and reserved
+    for translated captions (a later package).
+    """
+
+    language: str | None = None
+    target_language: str | None = None
 
 
 #: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).

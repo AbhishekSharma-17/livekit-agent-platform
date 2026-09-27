@@ -1,0 +1,42 @@
+{
+  "$id": "lkap-contracts/BlockConfig_captions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``captions``: live captions of both sides (V5-31).\n\nThe worker streams each utterance on ``lkap.captions`` (``CaptionSegment``) while a\n``captions`` block is on the panel: the caller's side when any such block has\n``show_user``, the agent's when any has ``show_agent``. ``position=\"bottom\"``\noverlays the captions on the video of avatar layouts. ``target_language`` is kept\nfor translated captions, which a later package adds; the worker ignores it today.",
+  "properties": {
+    "position": {
+      "default": "block",
+      "enum": [
+        "block",
+        "bottom"
+      ],
+      "title": "Position",
+      "type": "string"
+    },
+    "show_agent": {
+      "default": true,
+      "title": "Show Agent",
+      "type": "boolean"
+    },
+    "show_user": {
+      "default": true,
+      "title": "Show User",
+      "type": "boolean"
+    },
+    "target_language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Language"
+    }
+  },
+  "title": "BlockConfig_captions",
+  "type": "object"
+}

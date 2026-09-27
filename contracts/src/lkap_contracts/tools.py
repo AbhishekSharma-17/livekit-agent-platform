@@ -41,6 +41,9 @@ BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "fetch_url",
     "send_sms",
     "notify_team",
+    # V5-31: registered only when the agent lists more than one language
+    # (``AgentConfig.voice.languages``); see :data:`LANGUAGE_TOOL_NAMES`.
+    "switch_language",
 )
 
 #: Built-ins that reach a vendor or the internet and are registered only when the agent
@@ -52,6 +55,10 @@ CONFIGURED_BUILTINS: Final[frozenset[str]] = frozenset({"web_search", "fetch_url
 #: Built-ins that change the world (V5-25): run with ``is_read=False``, so a non-blocking run
 #: asks before running twice (``on_duplicate="confirm"``) and is not cancellable by default.
 WRITE_BUILTINS: Final[frozenset[str]] = frozenset({"send_sms", "notify_team"})
+
+#: Built-ins registered only when the agent speaks more than one language (V5-31):
+#: ``switch_language`` changes the reply language, the voice and the transcriber mid-call.
+LANGUAGE_TOOL_NAMES: Final[frozenset[str]] = frozenset({"switch_language"})
 
 #: Built-ins registered only when the agent has camera or screen share on.
 VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", "pin_frame"})
@@ -244,6 +251,8 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         # V5-25: local and instant.
         "calculate",
         "spell_back",
+        # V5-31: instant, and the model's next sentence is in the new language.
+        "switch_language",
         # Composio Tool Router meta tools (docs/v5/COMPOSIO.md D-V5-C7): running an action,
         # opening a connection or waiting on one always waits for the result.
         "COMPOSIO_MULTI_EXECUTE_TOOL",

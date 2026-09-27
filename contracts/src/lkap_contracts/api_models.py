@@ -930,6 +930,10 @@ class TranscriptTurn(BaseModel):
     text: str
     ts: float
     interrupted: bool = False
+    language: str | None = None
+    """V5-31: the caller's detected language for a user turn (the transcriber's, when it
+    reports one), the agent's reply language for an assistant turn; ``None`` when unknown
+    (a text chat, a transcriber that does not report it, or a session before V5-31)."""
 
 
 class SessionLatency(BaseModel):
@@ -1129,6 +1133,27 @@ class LocaleEvent(BaseModel):
     caller_timezone: str
     source: LocaleSource
     business_timezone: str
+
+
+#: Why the conversation's language changed (the ``language_switched`` event, V5-31): the model
+#: called ``switch_language`` (``tool``), or the transcriber heard the caller speak another
+#: allowed language on consecutive turns (``detected``).
+LanguageSwitchSource = Literal["tool", "detected"]
+
+
+class LanguageSwitchedEvent(BaseModel):
+    """Payload of the ``language_switched`` session event (V5-31).
+
+    ``stt_switched``: the transcriber was told the new language (false while it
+    auto-detects, or when the provider cannot switch mid-call); ``voice_switched``: the
+    agent now speaks with the language's own voice (``voice.voices_by_language``).
+    """
+
+    from_language: str
+    to_language: str
+    source: LanguageSwitchSource
+    stt_switched: bool = False
+    voice_switched: bool = False
 
 
 class SessionDetailOut(SessionOut):

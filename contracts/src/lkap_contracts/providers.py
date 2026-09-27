@@ -451,10 +451,37 @@ class ProviderCapabilities(BaseModel):
     text_modality: bool = False
     audio_input: bool = True
     languages: list[str] = []
+    """The languages this provider transcribes (STT) or speaks (TTS), as base codes (``hi``,
+    not ``hi-IN``) from the vendor's documentation (V5-31). Empty = not recorded, never "none":
+    validators treat an empty list as unknown and say nothing."""
     vision: bool | None = None
     voices_dynamic: bool = False
     cloud_only: bool = False
     platforms: list[str] = []
+    language_detection: str | None = Field(
+        None,
+        description=(
+            "STT only (V5-31): the value of the entry's `language` field that makes the transcriber "
+            "detect the language itself (`multi` for Deepgram and LiveKit Inference, `unknown` for "
+            "Sarvam; the worker maps `multi` to `detect_language` for the OpenAI transcriptions "
+            "class). Unset = the entry cannot be asked to detect the language."
+        ),
+    )
+    detect_languages: list[str] = Field(
+        default=[],
+        description=(
+            "STT only (V5-31): the base codes automatic detection covers when it is narrower than "
+            "`languages` (Deepgram's `multi` covers ten). Empty = the same as `languages`."
+        ),
+    )
+    language_switch: bool = Field(
+        False,
+        description=(
+            "STT only (V5-31): `update_options(language=...)` changes the language of a running "
+            "transcriber (checked against the plugin source for livekit-agents 1.8.3). False = a "
+            "mid-call switch leaves the transcriber as it is."
+        ),
+    )
 
 
 class ProviderSpec(BaseModel):
@@ -3389,8 +3416,138 @@ def _live_verified(spec: ProviderSpec) -> ProviderSpec:
     return ProviderSpec.model_validate({**spec.model_dump(exclude={"status"}), "verification": "verified"})
 
 
+# ------------------------------------------------------------------ languages (V5-31)
+#: A language code as the platform stores it: a base code (ISO 639-1, or 639-3 when there is
+#: none) and optional BCP-47 subtags (``en``, ``hi``, ``en-IN``, ``pt-BR``, ``kok-IN``).
+LANGUAGE_CODE_PATTERN = r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+
+#: Base code → English name, for prompts and validator messages. Not an allowlist: a code
+#: missing here is shown as itself.
+LANGUAGE_NAMES: dict[str, str] = {
+    "af": "Afrikaans", "ar": "Arabic", "as": "Assamese", "az": "Azerbaijani", "be": "Belarusian",
+    "bg": "Bulgarian", "bn": "Bengali", "bs": "Bosnian", "ca": "Catalan", "cs": "Czech",
+    "cy": "Welsh", "da": "Danish", "de": "German", "el": "Greek", "en": "English",
+    "es": "Spanish", "et": "Estonian", "fa": "Persian", "fi": "Finnish", "fr": "French",
+    "gl": "Galician", "gu": "Gujarati", "he": "Hebrew", "hi": "Hindi", "hr": "Croatian",
+    "hu": "Hungarian", "hy": "Armenian", "id": "Indonesian", "is": "Icelandic", "it": "Italian",
+    "ja": "Japanese", "kk": "Kazakh", "kn": "Kannada", "ko": "Korean", "lt": "Lithuanian",
+    "lv": "Latvian", "mi": "Maori", "mk": "Macedonian", "ml": "Malayalam", "mr": "Marathi",
+    "ms": "Malay", "ne": "Nepali", "nl": "Dutch", "no": "Norwegian", "od": "Odia",
+    "or": "Odia", "pa": "Punjabi", "pl": "Polish", "pt": "Portuguese", "ro": "Romanian",
+    "ru": "Russian", "sk": "Slovak", "sl": "Slovenian", "sr": "Serbian", "sv": "Swedish",
+    "sw": "Swahili", "ta": "Tamil", "te": "Telugu", "th": "Thai", "tl": "Tagalog",
+    "tr": "Turkish", "uk": "Ukrainian", "ur": "Urdu", "vi": "Vietnamese", "zh": "Chinese",
+}  # fmt: skip
+
+
+def base_language(code: str) -> str:
+    """The base code of a language tag: ``hi-IN`` → ``hi``, ``pt_BR`` → ``pt``, ``EN`` → ``en``."""
+    return code.strip().replace("_", "-").split("-", 1)[0].lower()
+
+
+def language_name(code: str) -> str:
+    """A language's English name (``hi-IN`` → ``Hindi``), else the code itself."""
+    return LANGUAGE_NAMES.get(base_language(code), code.strip())
+
+
+def declares_language(declared: list[str], code: str) -> bool | None:
+    """Whether a capability list covers ``code``, compared on base codes.
+
+    Returns:
+        ``None`` when ``declared`` is empty (the registry does not know), else whether
+        the base code of ``code`` is in it.
+    """
+    if not declared:
+        return None
+    return base_language(code) in {base_language(item) for item in declared}
+
+
+#: Deepgram Nova-3 monolingual languages (base codes), from Deepgram's models-and-languages
+#: overview and LiveKit Inference's Deepgram page (accessed 2026-09-27).
+_NOVA3_LANGUAGES: list[str] = (
+    "ar be bn bs bg ca hr cs da nl en et fi fr de el he hi hu id it ja kn ko lv lt mk ms mr no fa "
+    "pl pt ro ru sr sk sl es sv tl ta te tr uk ur vi zh"
+).split()
+#: What Nova-3 ``language=multi`` (code-switching) covers: English, Spanish, French, German,
+#: Hindi, Russian, Portuguese, Japanese, Italian and Dutch (the same sources).
+_DEEPGRAM_MULTI_LANGUAGES: list[str] = "en es fr de hi ru pt ja it nl".split()
+#: The OpenAI transcription models' supported languages (the Whisper list of 57, which the
+#: OpenAI speech-to-text guide refers to); OpenRouter's copy of the endpoint takes the same.
+_WHISPER_LANGUAGES: list[str] = (
+    "af ar hy az be bs bg ca zh hr cs da nl en et fi fr gl de el he hi hu is id it ja kn kk ko lv "
+    "lt mk ms mr mi ne no fa pl pt ro ru sr sk sl es sw sv tl ta th tr uk ur vi cy"
+).split()
+#: Sarvam speech-to-text (``SpeechToTextLanguage`` in livekit-plugins-sarvam 1.8.3; ``unknown``
+#: asks it to detect), base codes.
+_SARVAM_STT_LANGUAGES: list[str] = (
+    "hi bn kn ml mr od pa ta te en gu as ur ne kok ks sd sa sat mni brx mai doi"
+).split()
+#: Sarvam text-to-speech (``SarvamTTSLanguages`` in the same plugin), base codes.
+_SARVAM_TTS_LANGUAGES: list[str] = "bn en gu hi kn ml mr od pa ta te".split()
+
+#: STT entries whose ``update_options`` takes ``language=`` on the ``STT`` object in
+#: livekit-agents 1.8.3 and reaches the running transcriber (open streams, or the next request
+#: of a batch transcriber). Checked in each plugin's source: Google and Gladia take
+#: ``languages=``, AssemblyAI ``language_codes=``, Sarvam only on its stream and with a
+#: ``model``, Palabra on new streams only; ElevenLabs, Speechmatics, Soniox, AWS, Gnani, NVIDIA,
+#: Telnyx, Meta, Gradium and Simplismart have no language update.
+_LANGUAGE_SWITCH_STT: frozenset[str] = frozenset(
+    {
+        "livekit-inference-stt",
+        "deepgram-stt",
+        "openai-stt",
+        "openrouter-stt",
+        "azure-stt",
+        "cartesia-stt",
+        "clova-stt",
+        "fal-wizper-stt",
+        "fireworksai-stt",
+        "mistral-stt",
+        "slng-stt",
+        "smallestai-stt",
+        "xai-stt",
+        "baseten-stt",
+    }
+)
+
+#: Per-entry language capabilities (V5-31). Only what was checked against a vendor page or the
+#: plugin source is recorded; every other entry keeps empty lists (unknown). The LiveKit
+#: Inference and Deepgram rows describe their default model, Nova-3.
+_LANGUAGE_CAPABILITIES: dict[str, dict[str, Any]] = {
+    "livekit-inference-stt": {
+        "languages": _NOVA3_LANGUAGES,
+        "language_detection": "multi",
+        "detect_languages": _DEEPGRAM_MULTI_LANGUAGES,
+    },
+    "deepgram-stt": {
+        "languages": _NOVA3_LANGUAGES,
+        "language_detection": "multi",
+        "detect_languages": _DEEPGRAM_MULTI_LANGUAGES,
+    },
+    "openai-stt": {"languages": _WHISPER_LANGUAGES, "language_detection": "multi"},
+    "openrouter-stt": {"languages": _WHISPER_LANGUAGES, "language_detection": "multi"},
+    "sarvam-stt": {"languages": _SARVAM_STT_LANGUAGES, "language_detection": "unknown"},
+    "sarvam-tts": {"languages": _SARVAM_TTS_LANGUAGES},
+}
+
+
+def _with_language_capabilities(spec: ProviderSpec) -> ProviderSpec:
+    """Return ``spec`` with its recorded language capabilities (V5-31)."""
+    update: dict[str, Any] = {
+        key: list(value) if isinstance(value, list) else value
+        for key, value in _LANGUAGE_CAPABILITIES.get(spec.id, {}).items()
+    }
+    if spec.id in _LANGUAGE_SWITCH_STT:
+        update["language_switch"] = True
+    if not update:
+        return spec
+    capabilities = spec.capabilities.model_copy(update=update)
+    return spec.model_copy(update={"capabilities": capabilities})
+
+
 REGISTRY: list[ProviderSpec] = [
-    _live_verified(spec) for spec in [*_MVP, *_OPENROUTER, *_FULL, *_NEW, *_DEFERRED]
+    _with_language_capabilities(_live_verified(spec))
+    for spec in [*_MVP, *_OPENROUTER, *_FULL, *_NEW, *_DEFERRED]
 ]
 
 _BY_ID: dict[str, ProviderSpec] = {spec.id: spec for spec in REGISTRY}

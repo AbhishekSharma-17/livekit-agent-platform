@@ -83,7 +83,8 @@
     "web_search",
     "fetch_url",
     "send_sms",
-    "notify_team"
+    "notify_team",
+    "switch_language"
   ],
   "configured_builtins": [
     "fetch_url",

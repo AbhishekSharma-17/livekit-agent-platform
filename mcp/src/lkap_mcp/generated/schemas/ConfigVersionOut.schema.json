@@ -147,12 +147,15 @@
           "default": {
             "allow_interruptions": true,
             "ambient_sound": "none",
+            "auto_detect": false,
             "first_speaker": "agent",
             "greeting": "Hello! How can I help you today?",
             "greeting_mode": "say",
             "language": "en",
+            "languages": [],
             "thinking_sound": "none",
-            "user_away_timeout_s": 15.0
+            "user_away_timeout_s": 15.0,
+            "voices_by_language": {}
           }
         }
       },
@@ -461,7 +464,8 @@
             "markdown",
             "steps",
             "consent",
-            "upload"
+            "upload",
+            "captions"
           ],
           "title": "Type",
           "type": "string"
@@ -2228,6 +2232,12 @@
           "title": "Ambient Sound",
           "type": "string"
         },
+        "auto_detect": {
+          "default": false,
+          "description": "Ask the transcriber to detect the caller's language (`multi` on Deepgram and LiveKit Inference) and follow it when it is one of `languages` (V5-31).",
+          "title": "Auto Detect",
+          "type": "boolean"
+        },
         "first_speaker": {
           "default": "agent",
           "enum": [
@@ -2256,6 +2266,16 @@
           "title": "Language",
           "type": "string"
         },
+        "languages": {
+          "default": [],
+          "description": "The languages the agent may speak (V5-31); the first is the default. Empty = only `language`. With more than one, the agent can switch mid-call (`switch_language`). At most 10.",
+          "items": {
+            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        },
         "thinking_sound": {
           "default": "none",
           "enum": [
@@ -2278,6 +2298,17 @@
           ],
           "default": 15.0,
           "title": "User Away Timeout S"
+        },
+        "voices_by_language": {
+          "default": {},
+          "description": "A text-to-speech voice per language (V5-31), keyed like `languages`; a language without one keeps the pipeline's voice.",
+          "patternProperties": {
+            "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$": {
+              "$ref": "#/$defs/ProviderRef"
+            }
+          },
+          "title": "Voices By Language",
+          "type": "object"
         }
       },
       "title": "VoiceConfig",

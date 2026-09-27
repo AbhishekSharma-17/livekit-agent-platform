@@ -1,0 +1,59 @@
+{
+  "$id": "lkap-contracts/CaptionSegment.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One live caption message on ``lkap.captions`` (V5-31).\n\n``id`` names the utterance: interim messages (``final: false``) carry the text so\nfar and are replaced by later ones with the same ``id``; the ``final`` one closes\nit. ``language`` is the transcriber's detected language for the caller, or the\nagent's current reply language; ``None`` when unknown.",
+  "properties": {
+    "final": {
+      "title": "Final",
+      "type": "boolean"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "speaker": {
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "title": "Speaker",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "speaker",
+    "text",
+    "final",
+    "ts"
+  ],
+  "title": "CaptionSegment",
+  "type": "object"
+}

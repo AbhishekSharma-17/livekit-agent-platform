@@ -440,6 +440,34 @@
           "title": "Cloud Only",
           "type": "boolean"
         },
+        "detect_languages": {
+          "default": [],
+          "description": "STT only (V5-31): the base codes automatic detection covers when it is narrower than `languages` (Deepgram's `multi` covers ten). Empty = the same as `languages`.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Detect Languages",
+          "type": "array"
+        },
+        "language_detection": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "STT only (V5-31): the value of the entry's `language` field that makes the transcriber detect the language itself (`multi` for Deepgram and LiveKit Inference, `unknown` for Sarvam; the worker maps `multi` to `detect_language` for the OpenAI transcriptions class). Unset = the entry cannot be asked to detect the language.",
+          "title": "Language Detection"
+        },
+        "language_switch": {
+          "default": false,
+          "description": "STT only (V5-31): `update_options(language=...)` changes the language of a running transcriber (checked against the plugin source for livekit-agents 1.8.3). False = a mid-call switch leaves the transcriber as it is.",
+          "title": "Language Switch",
+          "type": "boolean"
+        },
         "languages": {
           "default": [],
           "items": {
@@ -524,6 +552,9 @@
           "default": {
             "audio_input": true,
             "cloud_only": false,
+            "detect_languages": [],
+            "language_detection": null,
+            "language_switch": false,
             "languages": [],
             "platforms": [],
             "silent_tool_reply": false,

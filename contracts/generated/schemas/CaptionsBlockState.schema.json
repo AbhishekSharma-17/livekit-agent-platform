@@ -1,0 +1,33 @@
+{
+  "$id": "lkap-contracts/CaptionsBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The ``captions`` block's state (V5-31). The words themselves stream on ``lkap.captions``.\n\n``language`` is the conversation's current language (the agent's reply language,\nupdated on a switch); ``target_language`` is copied from the config and reserved\nfor translated captions (a later package).",
+  "properties": {
+    "language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "target_language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Language"
+    }
+  },
+  "title": "CaptionsBlockState",
+  "type": "object"
+}

@@ -57,6 +57,8 @@ export interface LkapContracts {
   CallPage?: CallPage;
   CallReportIn?: CallReportIn;
   CallTransferIn?: CallTransferIn;
+  CaptionSegment?: CaptionSegment;
+  CaptionsBlockState?: CaptionsBlockState;
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
@@ -146,6 +148,7 @@ export interface LkapContracts {
   KbSearchResponse?: KbSearchResponse;
   KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
+  LanguageSwitchedEvent?: LanguageSwitchedEvent;
   LocaleConfig?: LocaleConfig;
   LocaleEvent?: LocaleEvent;
   MarkdownBlockState?: MarkdownBlockState;
@@ -487,6 +490,9 @@ export interface AgentNode {
 /**
  * Points at a registry provider plus the credential and options to use.
  *
+ * This interface was referenced by `undefined`'s JSON-Schema definition
+ * via the `patternProperty` "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$".
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ProviderRef".
  */
@@ -688,7 +694,8 @@ export interface BlockSpec {
     | "markdown"
     | "steps"
     | "consent"
-    | "upload";
+    | "upload"
+    | "captions";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -1058,12 +1065,26 @@ export interface NotifyTeamConfig {
 export interface VoiceConfig {
   allow_interruptions?: boolean;
   ambient_sound?: string;
+  /**
+   * Ask the transcriber to detect the caller's language (`multi` on Deepgram and LiveKit Inference) and follow it when it is one of `languages` (V5-31).
+   */
+  auto_detect?: boolean;
   first_speaker?: "agent" | "user";
   greeting?: string;
   greeting_mode?: "say" | "generate";
   language?: string;
+  /**
+   * The languages the agent may speak (V5-31); the first is the default. Empty = only `language`. With more than one, the agent can switch mid-call (`switch_language`). At most 10.
+   */
+  languages?: string[];
   thinking_sound?: "none" | "keyboard_typing" | "keyboard_typing2" | "office_ambience";
   user_away_timeout_s?: number | null;
+  /**
+   * A text-to-speech voice per language (V5-31), keyed like `languages`; a language without one keeps the pipeline's voice.
+   */
+  voices_by_language?: {
+    [k: string]: ProviderRef;
+  };
 }
 /**
  * ``POST /v1/agents``. ``config=None`` seeds from ``template_id`` or the pack manifest.
@@ -1643,6 +1664,40 @@ export interface CallTransferIn {
    * E.164 number or tel:/sip: URI
    */
   to: string;
+}
+/**
+ * One live caption message on ``lkap.captions`` (V5-31).
+ *
+ * ``id`` names the utterance: interim messages (``final: false``) carry the text so
+ * far and are replaced by later ones with the same ``id``; the ``final`` one closes
+ * it. ``language`` is the transcriber's detected language for the caller, or the
+ * agent's current reply language; ``None`` when unknown.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CaptionSegment".
+ */
+export interface CaptionSegment {
+  final: boolean;
+  id: string;
+  language?: string | null;
+  speaker: "user" | "agent";
+  text: string;
+  ts: number;
+  v?: 1;
+}
+/**
+ * The ``captions`` block's state (V5-31). The words themselves stream on ``lkap.captions``.
+ *
+ * ``language`` is the conversation's current language (the agent's reply language,
+ * updated on a switch); ``target_language`` is copied from the config and reserved
+ * for translated captions (a later package).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CaptionsBlockState".
+ */
+export interface CaptionsBlockState {
+  language?: string | null;
+  target_language?: string | null;
 }
 /**
  * Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).
@@ -3569,6 +3624,23 @@ export interface KbSeed {
   kb_name: string;
 }
 /**
+ * Payload of the ``language_switched`` session event (V5-31).
+ *
+ * ``stt_switched``: the transcriber was told the new language (false while it
+ * auto-detects, or when the provider cannot switch mid-call); ``voice_switched``: the
+ * agent now speaks with the language's own voice (``voice.voices_by_language``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "LanguageSwitchedEvent".
+ */
+export interface LanguageSwitchedEvent {
+  from_language: string;
+  source: "tool" | "detected";
+  stt_switched?: boolean;
+  to_language: string;
+  voice_switched?: boolean;
+}
+/**
  * Payload of the ``locale`` session event the worker records at session start (R-V5-10).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -4359,6 +4431,18 @@ export interface ProviderOut {
 export interface ProviderCapabilities {
   audio_input?: boolean;
   cloud_only?: boolean;
+  /**
+   * STT only (V5-31): the base codes automatic detection covers when it is narrower than `languages` (Deepgram's `multi` covers ten). Empty = the same as `languages`.
+   */
+  detect_languages?: string[];
+  /**
+   * STT only (V5-31): the value of the entry's `language` field that makes the transcriber detect the language itself (`multi` for Deepgram and LiveKit Inference, `unknown` for Sarvam; the worker maps `multi` to `detect_language` for the OpenAI transcriptions class). Unset = the entry cannot be asked to detect the language.
+   */
+  language_detection?: string | null;
+  /**
+   * STT only (V5-31): `update_options(language=...)` changes the language of a running transcriber (checked against the plugin source for livekit-agents 1.8.3). False = a mid-call switch leaves the transcriber as it is.
+   */
+  language_switch?: boolean;
   languages?: string[];
   platforms?: string[];
   silent_tool_reply?: boolean;
@@ -4687,6 +4771,9 @@ export interface ResolvedAgentConfig {
   variables?: {
     [k: string]: unknown;
   };
+  voices_by_language?: {
+    [k: string]: ResolvedProvider;
+  };
   workspace_id?: string;
 }
 /**
@@ -4955,6 +5042,7 @@ export interface SessionLatency {
  */
 export interface TranscriptTurn {
   interrupted?: boolean;
+  language?: string | null;
   role: "user" | "assistant";
   text: string;
   ts: number;

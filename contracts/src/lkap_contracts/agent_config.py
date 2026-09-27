@@ -9,7 +9,7 @@ from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, DisclosurePosition, ResolvedCompliance
 from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
-from lkap_contracts.providers import ModelCapabilities
+from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language
 from lkap_contracts.telephony import TelephonyConfig
 from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
@@ -52,6 +52,7 @@ BuiltinProviderSlot = Literal["web_search", "sms", "notify_team"]
 
 __all__ = [
     "KNOWLEDGE_RERANK_VALUES",
+    "MAX_AGENT_LANGUAGES",
     "AgentConfig",
     "AgentLimits",
     "AppsMode",
@@ -88,7 +89,9 @@ __all__ = [
     "TurnDetectorSettings",
     "TurnHandlingOptions",
     "VoiceConfig",
+    "effective_languages",
     "pipeline_issues",
+    "voice_for_language",
 ]
 
 
@@ -141,6 +144,11 @@ class PipelineConfig(BaseModel):
         return value
 
 
+#: The most languages one agent may list (``VoiceConfig.languages``, V5-31). Enforced by a
+#: validator rather than ``max_length`` so the TypeScript type stays a plain array.
+MAX_AGENT_LANGUAGES = 10
+
+
 class VoiceConfig(BaseModel):
     """Greeting and conversational behaviour."""
 
@@ -156,6 +164,56 @@ class VoiceConfig(BaseModel):
     """A background clip played for the whole call (V5-07): ``none``, a built-in name
     (``turn_handling.AMBIENT_SOUNDS``) or ``asset:<id>`` (an uploaded clip, played from a later
     package). Needs audio output; never on the text channel."""
+    languages: list[Annotated[str, Field(pattern=LANGUAGE_CODE_PATTERN)]] = Field(
+        default=[],
+        description=(
+            "The languages the agent may speak (V5-31); the first is the default. Empty = only "
+            "`language`. With more than one, the agent can switch mid-call (`switch_language`). "
+            "At most 10."
+        ),
+    )
+    auto_detect: bool = Field(
+        default=False,
+        description=(
+            "Ask the transcriber to detect the caller's language (`multi` on Deepgram and LiveKit "
+            "Inference) and follow it when it is one of `languages` (V5-31)."
+        ),
+    )
+    voices_by_language: dict[Annotated[str, Field(pattern=LANGUAGE_CODE_PATTERN)], ProviderRef] = Field(
+        default={},
+        description=(
+            "A text-to-speech voice per language (V5-31), keyed like `languages`; a language without "
+            "one keeps the pipeline's voice."
+        ),
+    )
+
+    @field_validator("languages", mode="after")
+    @classmethod
+    def _unique_languages(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_AGENT_LANGUAGES:
+            raise ValueError(f"list at most {MAX_AGENT_LANGUAGES} languages")
+        seen: set[str] = set()
+        for code in value:
+            if code.lower() in seen:
+                raise ValueError(f"'{code}' is listed twice")
+            seen.add(code.lower())
+        return value
+
+
+def effective_languages(voice: VoiceConfig) -> list[str]:
+    """The agent's languages, default first: ``voice.languages``, or ``[voice.language]`` (V5-31)."""
+    return list(voice.languages) if voice.languages else [voice.language]
+
+
+def voice_for_language(voice: VoiceConfig, code: str) -> ProviderRef | None:
+    """The ``voices_by_language`` entry for ``code``: an exact key first, then the same base code."""
+    if code in voice.voices_by_language:
+        return voice.voices_by_language[code]
+    wanted = base_language(code)
+    for key, ref in voice.voices_by_language.items():
+        if base_language(key) == wanted:
+            return ref
+    return None
 
 
 class CapabilitiesConfig(BaseModel):
@@ -518,6 +576,10 @@ class ResolvedAgentConfig(BaseModel):
     #: ``kwargs={"webhook_url": ...}``). **Contains secrets.** Empty (an api before V5-25) = those
     #: tools are not registered.
     builtin_providers: dict[BuiltinProviderSlot, ResolvedProvider] = {}
+    #: V5-31: ``config.voice.voices_by_language`` resolved with their keys, same keys. **Contains
+    #: secrets.** Empty (an api before V5-31, or no per-language voice) = ``switch_language``
+    #: keeps the pipeline's voice.
+    voices_by_language: dict[str, ResolvedProvider] = {}
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

@@ -18,6 +18,7 @@ import { useFormContext, useWatch } from "react-hook-form";
 import {
   ActivityIcon,
   ChevronDownIcon,
+  CaptionsIcon,
   ClipboardListIcon,
   FileTextIcon,
   GaugeIcon,
@@ -83,6 +84,7 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   steps: ListOrderedIcon,
   consent: ShieldCheckIcon,
   upload: UploadIcon,
+  captions: CaptionsIcon,
 };
 
 /**

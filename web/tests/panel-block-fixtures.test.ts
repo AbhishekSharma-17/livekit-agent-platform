@@ -29,6 +29,7 @@ const SCHEMA_FILE: Record<string, string> = {
   steps: "StepsBlockState",
   consent: "ConsentBlockState",
   upload: "UploadBlockState",
+  captions: "CaptionsBlockState",
 };
 
 type JsonSchema = {

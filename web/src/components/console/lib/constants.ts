@@ -63,6 +63,12 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
     help: "Texts the caller or a saved number. Needs a text message service.",
   },
   { name: "notify_team", label: "Tell your team", help: "Posts a short summary to your team's webhook." },
+  // V5-31: offered only when the agent speaks more than one language (V5-35's Languages card).
+  {
+    name: "switch_language",
+    label: "Switch language",
+    help: "Lets the agent change the language it speaks, and its voice, when the caller asks or switches.",
+  },
 ];
 
 export const PROVIDER_KIND_LABELS: Record<string, string> = {

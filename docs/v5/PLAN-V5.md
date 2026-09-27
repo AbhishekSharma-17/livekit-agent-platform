@@ -662,7 +662,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-29 | Opus | 7 | merged | cdd5855 | | |
 | V5-30 | Opus | 7 | merged | 983faf7 | STT redaction deferred | |
 | V5-31 | Opus | 7 | merged | 8c7331f | Inference `multi` to confirm | |
-| V5-32 | Opus | 7 | planned | | deferred (telephony offline) | |
+| V5-32 |Opus | 7 | merged | ea2a094 | deferred (telephony offline) | |
 | V5-33 | Sonnet | 8 | planned | | | |
 | V5-34 | Sonnet | 8 | planned | | | |
 | V5-35 | Sonnet | 8 | planned | | | |

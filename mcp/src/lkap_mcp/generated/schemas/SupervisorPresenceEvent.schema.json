@@ -1,0 +1,16 @@
+{
+  "$id": "lkap-contracts/SupervisorPresenceEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``supervisor_joined`` / ``supervisor_left`` session events.",
+  "properties": {
+    "identity": {
+      "title": "Identity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "identity"
+  ],
+  "title": "SupervisorPresenceEvent",
+  "type": "object"
+}

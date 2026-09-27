@@ -1,0 +1,47 @@
+{
+  "$id": "lkap-contracts/SessionListenTokenOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/sessions/{id}/listen-token``: a hidden, listen-only room token (camelCase like\n:class:`ConnectResponse`, so a LiveKit ``TokenSource`` can use it unchanged).\n\nThe token joins only this session's room, is hidden from the other participants, may\nsubscribe but never publish (audio, video or data) and expires at ``expiresAt``\n(:data:`LISTEN_TOKEN_TTL_S`). A whisper goes through ``POST /v1/sessions/{id}/whisper``.",
+  "properties": {
+    "expiresAt": {
+      "format": "date-time",
+      "title": "Expiresat",
+      "type": "string"
+    },
+    "identity": {
+      "title": "Identity",
+      "type": "string"
+    },
+    "participantName": {
+      "title": "Participantname",
+      "type": "string"
+    },
+    "participantToken": {
+      "title": "Participanttoken",
+      "type": "string"
+    },
+    "roomName": {
+      "title": "Roomname",
+      "type": "string"
+    },
+    "serverUrl": {
+      "title": "Serverurl",
+      "type": "string"
+    },
+    "sessionId": {
+      "title": "Sessionid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "serverUrl",
+    "participantToken",
+    "roomName",
+    "participantName",
+    "identity",
+    "sessionId",
+    "expiresAt"
+  ],
+  "title": "SessionListenTokenOut",
+  "type": "object"
+}

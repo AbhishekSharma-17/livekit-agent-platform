@@ -59,7 +59,7 @@ from lkap_contracts.telephony import (
     TransferMode,
 )
 from lkap_contracts.templates import StarterTemplate
-from lkap_contracts.tools import ToolDefinition
+from lkap_contracts.tools import EscalationMode, ToolDefinition
 from lkap_contracts.ui_protocol import SHA256_PATTERN, SessionAssetKind, UiState
 
 
@@ -1451,6 +1451,120 @@ class TransferEvent(BaseModel):
     target: str | None = None
     outcome: TransferOutcome | None = None
     summary: str | None = Field(default=None, max_length=MAX_TRANSFER_SUMMARY_CHARS)
+
+
+class EscalationEvent(BaseModel):
+    """Payload of the ``escalation`` session event (``escalate_to_human``; V5-37 adds ``mode``).
+
+    ``reason`` is the model's own words (for the team, never shown to the caller).
+    """
+
+    reason: str
+    urgency: Literal["low", "normal", "high"] = "normal"
+    mode: EscalationMode = "transfer"
+
+
+# ------------------------------------------------------ supervisor listen-in (V5-37)
+#: A listener's LiveKit identity is ``supervisor:<user or API key id>`` (one per person: a
+#: second tab with the same identity replaces the first in the room).
+SUPERVISOR_IDENTITY_PREFIX = "supervisor:"
+#: The participant attribute naming a platform role. The api stamps it on the tokens it mints;
+#: a client can never set an ``lkap.*`` attribute (``RESERVED_ATTRIBUTE_PREFIXES``), so the
+#: worker may trust it.
+PARTICIPANT_ROLE_ATTRIBUTE = "lkap.role"
+#: ``supervisor``: a hidden listener; ``human``: a person who joins to take the call over (the
+#: worker marks the ``handoff`` block ``connected`` when one joins).
+ParticipantRole = Literal["supervisor", "human"]
+#: The data-packet topic of supervisor messages. The api sends them with the server API
+#: (``RoomService.SendData``, only to the room's agent participants); the worker honours a
+#: packet on this topic only when the server sent it (no sending participant).
+SUPERVISOR_TOPIC = "lkap.supervisor"
+#: Lifetime of a listen token.
+LISTEN_TOKEN_TTL_S = 900
+#: Longest supervisor whisper.
+MAX_WHISPER_CHARS = 1000
+#: Longest supervisor label carried with a whisper.
+MAX_SUPERVISOR_LABEL_CHARS = 120
+
+#: Session events of the listen-in: a listener joined or left the room, a whisper reached the agent.
+SUPERVISOR_JOINED_EVENT = "supervisor_joined"
+SUPERVISOR_LEFT_EVENT = "supervisor_left"
+SUPERVISOR_WHISPER_EVENT = "supervisor_whisper"
+
+
+class SessionListenTokenOut(BaseModel):
+    """``POST /v1/sessions/{id}/listen-token``: a hidden, listen-only room token (camelCase like
+    :class:`ConnectResponse`, so a LiveKit ``TokenSource`` can use it unchanged).
+
+    The token joins only this session's room, is hidden from the other participants, may
+    subscribe but never publish (audio, video or data) and expires at ``expiresAt``
+    (:data:`LISTEN_TOKEN_TTL_S`). A whisper goes through ``POST /v1/sessions/{id}/whisper``.
+    """
+
+    serverUrl: str
+    participantToken: str
+    roomName: str
+    participantName: str
+    identity: str
+    sessionId: str
+    expiresAt: datetime
+
+
+class SessionWhisperIn(BaseModel):
+    """``POST /v1/sessions/{id}/whisper``: written guidance for the agent, never heard by the caller.
+
+    ``reply_now`` asks the agent to act on it at once (it speaks next, without waiting for the
+    caller); by default the guidance shapes the agent's next reply.
+    """
+
+    text: str = Field(min_length=1, max_length=MAX_WHISPER_CHARS)
+    reply_now: bool = False
+
+    @field_validator("text")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("the whisper is empty")
+        return stripped
+
+
+class SessionWhisperOut(BaseModel):
+    """The whisper was handed to the agent in the room (``delivered_to`` agent participants)."""
+
+    id: str
+    delivered_to: int = Field(ge=1)
+
+
+class SupervisorWhisperPacket(BaseModel):
+    """The data packet the api sends the worker on :data:`SUPERVISOR_TOPIC` (version 1)."""
+
+    v: Literal[1] = 1
+    op: Literal["whisper"] = "whisper"
+    id: str = Field(min_length=1, max_length=64)
+    session_id: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=MAX_WHISPER_CHARS)
+    reply_now: bool = False
+    by: str = Field(default="Supervisor", max_length=MAX_SUPERVISOR_LABEL_CHARS)
+
+
+class SupervisorWhisperEvent(BaseModel):
+    """Payload of the ``supervisor_whisper`` session event: the worker applied a whisper.
+
+    ``applied`` is ``note`` (added to the agent's context; its next reply follows it) or
+    ``reply`` (``reply_now``: the agent was also asked to speak at once).
+    """
+
+    id: str
+    by: str
+    text: str
+    applied: Literal["note", "reply"]
+
+
+class SupervisorPresenceEvent(BaseModel):
+    """Payload of the ``supervisor_joined`` / ``supervisor_left`` session events."""
+
+    identity: str
 
 
 class SessionDetailOut(SessionOut):

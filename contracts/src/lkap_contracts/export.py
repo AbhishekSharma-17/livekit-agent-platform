@@ -318,6 +318,12 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "LanguageSwitchedEvent": api_models.LanguageSwitchedEvent,  # V5-31
     "VoicemailEvent": api_models.VoicemailEvent,  # V5-32
     "TransferEvent": api_models.TransferEvent,  # V5-32
+    "EscalationEvent": api_models.EscalationEvent,  # V5-37
+    "SessionListenTokenOut": api_models.SessionListenTokenOut,  # V5-37
+    "SessionWhisperIn": api_models.SessionWhisperIn,  # V5-37
+    "SessionWhisperOut": api_models.SessionWhisperOut,  # V5-37
+    "SupervisorWhisperEvent": api_models.SupervisorWhisperEvent,  # V5-37
+    "SupervisorPresenceEvent": api_models.SupervisorPresenceEvent,  # V5-37
     # V5-15: consent and disclosure
     "ConsentEvent": ConsentEvent,
     "ConsentState": ConsentState,

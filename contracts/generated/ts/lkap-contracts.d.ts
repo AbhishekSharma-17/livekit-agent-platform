@@ -107,6 +107,7 @@ export interface LkapContracts {
   EndNode?: EndNode;
   ErrorBody?: ErrorBody;
   ErrorResponse?: ErrorResponse;
+  EscalationEvent?: EscalationEvent;
   EstimateLine?: EstimateLine;
   FleetActionIn?: FleetActionIn;
   FleetDesired?: FleetDesired;
@@ -237,6 +238,7 @@ export interface LkapContracts {
   SessionEventPage?: SessionEventPage;
   SessionEventsIn?: SessionEventsIn;
   SessionLatency?: SessionLatency;
+  SessionListenTokenOut?: SessionListenTokenOut;
   SessionMetricsIn?: SessionMetricsIn;
   SessionOut?: SessionOut;
   SessionPage?: SessionPage;
@@ -245,10 +247,14 @@ export interface LkapContracts {
   SessionScrubOut?: SessionScrubOut;
   SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
+  SessionWhisperIn?: SessionWhisperIn;
+  SessionWhisperOut?: SessionWhisperOut;
   SmsTarget?: SmsTarget;
   StartNode?: StartNode;
   StarterTemplate?: StarterTemplate;
   StepsBlockState?: StepsBlockState;
+  SupervisorPresenceEvent?: SupervisorPresenceEvent;
+  SupervisorWhisperEvent?: SupervisorWhisperEvent;
   TableBlockState?: TableBlockState;
   TelephonyConfig?: TelephonyConfig;
   TemplateEstimate?: TemplateEstimate;
@@ -3074,6 +3080,19 @@ export interface ErrorResponse {
   error: ErrorBody;
 }
 /**
+ * Payload of the ``escalation`` session event (``escalate_to_human``; V5-37 adds ``mode``).
+ *
+ * ``reason`` is the model's own words (for the team, never shown to the caller).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EscalationEvent".
+ */
+export interface EscalationEvent {
+  mode?: "transfer" | "takeover" | "listen_in" | "callback";
+  reason: string;
+  urgency?: "low" | "normal" | "high";
+}
+/**
  * ``POST /v1/connections/{id}/fleet`` (supervised connections only).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -5855,6 +5874,26 @@ export interface SessionEventsIn {
   events: SessionEventIn[];
 }
 /**
+ * ``POST /v1/sessions/{id}/listen-token``: a hidden, listen-only room token (camelCase like
+ * :class:`ConnectResponse`, so a LiveKit ``TokenSource`` can use it unchanged).
+ *
+ * The token joins only this session's room, is hidden from the other participants, may
+ * subscribe but never publish (audio, video or data) and expires at ``expiresAt``
+ * (:data:`LISTEN_TOKEN_TTL_S`). A whisper goes through ``POST /v1/sessions/{id}/whisper``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionListenTokenOut".
+ */
+export interface SessionListenTokenOut {
+  expiresAt: string;
+  identity: string;
+  participantName: string;
+  participantToken: string;
+  roomName: string;
+  serverUrl: string;
+  sessionId: string;
+}
+/**
  * ``POST /internal/v1/sessions/{id}/metrics``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -6000,6 +6039,29 @@ export interface SessionSummaryIn {
   };
 }
 /**
+ * ``POST /v1/sessions/{id}/whisper``: written guidance for the agent, never heard by the caller.
+ *
+ * ``reply_now`` asks the agent to act on it at once (it speaks next, without waiting for the
+ * caller); by default the guidance shapes the agent's next reply.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionWhisperIn".
+ */
+export interface SessionWhisperIn {
+  reply_now?: boolean;
+  text: string;
+}
+/**
+ * The whisper was handed to the agent in the room (``delivered_to`` agent participants).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionWhisperOut".
+ */
+export interface SessionWhisperOut {
+  delivered_to: number;
+  id: string;
+}
+/**
  * One starter: gallery metadata, the overlay on the pack manifest, and extras on the seeded config.
  *
  * Overlay fields left ``None`` keep the pack manifest's value. ``voice`` and
@@ -6135,6 +6197,30 @@ export interface StepItem {
   label: string;
   note?: string | null;
   status?: "pending" | "active" | "done" | "skipped" | "failed";
+}
+/**
+ * Payload of the ``supervisor_joined`` / ``supervisor_left`` session events.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SupervisorPresenceEvent".
+ */
+export interface SupervisorPresenceEvent {
+  identity: string;
+}
+/**
+ * Payload of the ``supervisor_whisper`` session event: the worker applied a whisper.
+ *
+ * ``applied`` is ``note`` (added to the agent's context; its next reply follows it) or
+ * ``reply`` (``reply_now``: the agent was also asked to speak at once).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SupervisorWhisperEvent".
+ */
+export interface SupervisorWhisperEvent {
+  applied: "note" | "reply";
+  by: string;
+  id: string;
+  text: string;
 }
 /**
  * Tabular data the agent appends rows to.

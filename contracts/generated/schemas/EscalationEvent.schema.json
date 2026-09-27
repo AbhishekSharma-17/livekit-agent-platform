@@ -1,0 +1,37 @@
+{
+  "$id": "lkap-contracts/EscalationEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``escalation`` session event (``escalate_to_human``; V5-37 adds ``mode``).\n\n``reason`` is the model's own words (for the team, never shown to the caller).",
+  "properties": {
+    "mode": {
+      "default": "transfer",
+      "enum": [
+        "transfer",
+        "takeover",
+        "listen_in",
+        "callback"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "urgency": {
+      "default": "normal",
+      "enum": [
+        "low",
+        "normal",
+        "high"
+      ],
+      "title": "Urgency",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "EscalationEvent",
+  "type": "object"
+}

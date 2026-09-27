@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/SessionWhisperOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The whisper was handed to the agent in the room (``delivered_to`` agent participants).",
+  "properties": {
+    "delivered_to": {
+      "minimum": 1,
+      "title": "Delivered To",
+      "type": "integer"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "delivered_to"
+  ],
+  "title": "SessionWhisperOut",
+  "type": "object"
+}

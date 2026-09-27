@@ -60,6 +60,14 @@ WRITE_BUILTINS: Final[frozenset[str]] = frozenset({"send_sms", "notify_team"})
 #: ``switch_language`` changes the reply language, the voice and the transcriber mid-call.
 LANGUAGE_TOOL_NAMES: Final[frozenset[str]] = frozenset({"switch_language"})
 
+#: How ``escalate_to_human`` asks a person to get involved (V5-37): ``transfer`` (hand the caller
+#: over; the default, and the tool's only behaviour before V5-37), ``takeover`` (a person joins and
+#: takes over the call), ``listen_in`` (a supervisor listens and may guide the agent in writing),
+#: ``callback`` (someone calls the caller back later). The tool flags the session, records the
+#: ``escalation`` event with the mode and writes the ``handoff`` block; it does not dial anyone.
+EscalationMode = Literal["transfer", "takeover", "listen_in", "callback"]
+ESCALATION_MODES: Final[tuple[str, ...]] = ("transfer", "takeover", "listen_in", "callback")
+
 #: Built-ins registered only when the agent has camera or screen share on.
 VISION_TOOL_NAMES: Final[frozenset[str]] = frozenset({"describe_current_frame", "pin_frame"})
 

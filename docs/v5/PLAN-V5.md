@@ -672,7 +672,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-39 | Opus | 9 | planned | | | |
 | V5-40 | Opus | 9 | merged | 56f595f | | |
 | V5-41 | Sonnet | 10 | planned | | | |
-| V5-42 | Sonnet | 10 | planned | | | |
+| V5-42 | Sonnet | 10 | merged | b657283 | | |
 | V5-43 | Opus | 10 | planned | | | |
 | V5-44 | Sonnet | 10 | planned | | | |
 | V5-45 | Opus | 10 | merged | f3f060f | deferred (needs a Ragie key) | |

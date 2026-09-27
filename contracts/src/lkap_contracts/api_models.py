@@ -50,7 +50,14 @@ from lkap_contracts.providers import (
     ProviderKind,
     ProviderSpec,
 )
-from lkap_contracts.telephony import DTMF_PATTERN, E164_PATTERN, TRANSFER_TARGET_PATTERN
+from lkap_contracts.telephony import (
+    DTMF_PATTERN,
+    E164_PATTERN,
+    MAX_TRANSFER_SUMMARY_CHARS,
+    TRANSFER_TARGET_PATTERN,
+    AmdResult,
+    TransferMode,
+)
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tools import ToolDefinition
 from lkap_contracts.ui_protocol import SHA256_PATTERN, SessionAssetKind, UiState
@@ -1401,6 +1408,51 @@ class LanguageSwitchedEvent(BaseModel):
     voice_switched: bool = False
 
 
+#: What the agent did once answering-machine detection returned (the ``voicemail`` event, V5-32):
+#: ``hangup`` (hung up at once), ``leave_message`` (spoke the message, then hung up), ``navigate``
+#: (a phone menu the agent works through, ``ivr_detection``).
+VoicemailAction = Literal["hangup", "leave_message", "navigate"]
+
+
+class VoicemailEvent(BaseModel):
+    """Payload of the ``voicemail`` session event (V5-32): a machine answered an outbound call.
+
+    Recorded only for ``machine-*`` verdicts; the verdict of every detection (a person
+    included) is on the call row (``CallOut.amd_result``).
+    """
+
+    result: AmdResult
+    action: VoicemailAction
+    message_left: bool = False
+
+
+#: How a transfer ended (the ``transfer`` event, V5-32): ``connected`` (warm: the person joined
+#: the caller), ``transferred`` (cold: the caller was put through), ``timeout`` (nobody answered),
+#: ``declined`` (the person said no), ``refused`` (not allowed: dialing policy, not answered yet),
+#: ``failed`` (the phone system failed).
+TransferOutcome = Literal["connected", "transferred", "timeout", "declined", "refused", "failed"]
+
+
+class TransferEvent(BaseModel):
+    """Payload of the ``transfer`` session event.
+
+    The V2-17 keys (``to``, ``ok``, ``status``, ``reason``) stay; V5-32 adds how the
+    transfer ran. ``requested_mode`` is the target's configured mode and ``mode`` the
+    one that ran: a warm request falls back to ``cold`` off LiveKit Cloud or without a
+    warm route (D-V5-21), and ``summary`` is then kept on the call row, not spoken.
+    """
+
+    to: str
+    ok: bool
+    status: str
+    reason: str | None = None
+    mode: TransferMode = "cold"
+    requested_mode: TransferMode = "cold"
+    target: str | None = None
+    outcome: TransferOutcome | None = None
+    summary: str | None = Field(default=None, max_length=MAX_TRANSFER_SUMMARY_CHARS)
+
+
 class SessionDetailOut(SessionOut):
     """Session detail, including the transcript and the final UI state."""
 
@@ -1951,6 +2003,14 @@ class CallOut(BaseModel):
     ended_at: datetime | None = None
     hangup_reason: str | None = None
     transfer_to: str | None = None
+    #: V5-32: what answered an outbound call when answering-machine detection ran
+    #: (``telephony.amd.enabled``); ``None`` = detection did not run.
+    amd_result: AmdResult | None = None
+    #: V5-32: the transfer that ran (``cold`` / ``warm``); ``None`` = not transferred by the agent.
+    transfer_mode: TransferMode | None = None
+    #: V5-32: the agent's summary of the call for the person it was handed to (warm: what it
+    #: briefed them with; cold, including a warm request that fell back: kept here instead).
+    transfer_summary: str | None = None
 
 
 # ------------------------------------------------ telephony (V2-17, promoted by R-V2-25)
@@ -2183,13 +2243,20 @@ class CallReportIn(BaseModel):
     """
 
     session_id: str
-    status: Literal["answered", "completed", "failed"]
+    #: ``transferred`` (V5-32): the agent handed the caller to a person (the transfer fields say how).
+    status: Literal["answered", "completed", "failed", "transferred"]
     direction: Literal["inbound", "outbound"] | None = None
     from_e164: str | None = Field(default=None, max_length=32)
     to_e164: str | None = Field(default=None, max_length=32)
     sip_call_id: str | None = Field(default=None, max_length=128)
     participant_identity: str | None = Field(default=None, max_length=200)
     reason: str | None = Field(default=None, max_length=128)
+    #: V5-32: the answering-machine verdict of an outbound call (sent once, with ``answered``).
+    amd_result: AmdResult | None = None
+    #: V5-32: sent with ``transferred`` (and after a cold transfer the api already recorded).
+    transfer_mode: TransferMode | None = None
+    transfer_to: str | None = Field(default=None, max_length=256)
+    transfer_summary: str | None = Field(default=None, max_length=MAX_TRANSFER_SUMMARY_CHARS)
 
 
 class InternalTransferIn(BaseModel):

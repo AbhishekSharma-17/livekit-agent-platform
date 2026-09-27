@@ -80,7 +80,7 @@ from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
 from lkap_contracts.qa import QaField, QaVerdict, SessionQaIn
-from lkap_contracts.telephony import SmsTarget, TelephonyConfig, TransferTarget
+from lkap_contracts.telephony import AmdConfig, SmsTarget, TelephonyConfig, TransferTarget, WarmTransferRoute
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
@@ -114,6 +114,7 @@ from lkap_contracts.ui_protocol import (
     FormBlockState,
     FormUploadSpec,
     GalleryBlockState,
+    HandoffBlockState,
     KbCitationsBlockState,
     MarkdownBlockState,
     RequestableState,
@@ -202,6 +203,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "UploadBlockState": UploadBlockState,
     "FormUploadSpec": FormUploadSpec,
     "CaptionsBlockState": CaptionsBlockState,  # V5-31
+    "HandoffBlockState": HandoffBlockState,  # V5-32
     "CaptionSegment": CaptionSegment,  # V5-31
     "UiRequest": UiRequest,
     "UiRequestResult": UiRequestResult,
@@ -314,6 +316,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SessionScrubOut": api_models.SessionScrubOut,  # V5-30
     "LocaleEvent": api_models.LocaleEvent,
     "LanguageSwitchedEvent": api_models.LanguageSwitchedEvent,  # V5-31
+    "VoicemailEvent": api_models.VoicemailEvent,  # V5-32
+    "TransferEvent": api_models.TransferEvent,  # V5-32
     # V5-15: consent and disclosure
     "ConsentEvent": ConsentEvent,
     "ConsentState": ConsentState,
@@ -385,6 +389,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "TransferTarget": TransferTarget,
     "SmsTarget": SmsTarget,  # V5-25
     "TelephonyConfig": TelephonyConfig,
+    "AmdConfig": AmdConfig,  # V5-32
+    "WarmTransferRoute": WarmTransferRoute,  # V5-32
     "TrunkCreate": api_models.TrunkCreate,
     "TrunkUpdate": api_models.TrunkUpdate,
     "TrunkOut": api_models.TrunkOut,

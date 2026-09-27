@@ -1,0 +1,87 @@
+{
+  "$id": "lkap-contracts/HandoffBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The ``handoff`` block's state (V5-32): the hand-off of the caller to a person.\n\n``target`` is the destination's label (never its number); ``mode`` is the\ntransfer that actually ran (a warm request on a connection that cannot do it\nruns ``cold``); ``queue_position`` and ``agent_name`` are shown when the block's\nconfig asks for them and something fills them (V5-37's queue, the person's\nname once connected); ``reason`` is a short plain-words line for ``timeout``.",
+  "properties": {
+    "agent_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Name"
+    },
+    "mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mode"
+    },
+    "queue_position": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Queue Position"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "connecting",
+        "connected",
+        "timeout",
+        "ended"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target"
+    }
+  },
+  "title": "HandoffBlockState",
+  "type": "object"
+}

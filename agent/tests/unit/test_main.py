@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from fakes.fake_amd import FakeAMD, FakeAMDFactory
 from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_llm import FakeLLM
 from fakes.fake_room import FakeRemoteParticipant, FakeRoom
@@ -23,7 +24,7 @@ from livekit.agents import AgentServer, AgentSession, inference, llm
 from lkap_contracts.api_models import KbHit
 from lkap_contracts.compliance import COMPLIANCE_PRESETS
 from lkap_contracts.dispatch import DispatchMetadata
-from lkap_contracts.telephony import TelephonyConfig, TransferTarget
+from lkap_contracts.telephony import AmdConfig, TelephonyConfig, TransferTarget
 from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
 from packs.base import UiChannel as UiChannelProtocol
 
@@ -1485,6 +1486,111 @@ async def test_a_sip_out_job_starts_only_once_the_callee_answers() -> None:
 
     assert starter.session is not None
     await ctx.fire_shutdown("participant left")
+    assert "session_started" in api.event_types()
+
+
+def _amd_resolved(**amd: Any) -> Any:
+    resolved = _sip_resolved("sip_out")
+    telephony = resolved.config.telephony.model_copy(update={"amd": AmdConfig(enabled=True, **amd)})
+    return resolved.model_copy(update={"config": resolved.config.model_copy(update={"telephony": telephony})})
+
+
+class _OrderedStarter(RoomlessStarter):
+    """Records when the session starts relative to the detector."""
+
+    def __init__(self, log: list[str]) -> None:
+        super().__init__()
+        self.log = log
+
+    async def __call__(self, **kwargs: Any) -> None:
+        self.log.append("session:start")
+        await super().__call__(**kwargs)
+
+
+async def test_a_sip_out_job_with_amd_starts_on_join_listens_before_the_answer_and_reports_the_verdict() -> (
+    None
+):
+    """V5-32: the detector is entered after the session starts and before the callee answers."""
+    log: list[str] = []
+    room = FakeRoom("lkap-call-1")
+    api = FakeApi(_amd_resolved())
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    factory = FakeAMDFactory(FakeAMD("human", log=log))
+    starter = _OrderedStarter(log)
+
+    job = asyncio.create_task(run_session(ctx, _deps(api, session_starter=starter, amd_factory=factory)))
+    await asyncio.sleep(0.05)
+    assert log == [], "nothing starts before the leg joins"
+    leg = _sip_leg("ringing")
+    room.add_remote_participant(leg)
+    room.emit("participant_connected", leg)
+    for _ in range(100):
+        if "amd:enter" in log:
+            break
+        await asyncio.sleep(0.02)
+    assert log == ["session:start", "amd:enter"], "listening while it still rings"
+    assert not job.done()
+    leg.attributes["sip.callStatus"] = "active"
+    room.emit("participant_attributes_changed", {"sip.callStatus": "active"}, leg)
+    await asyncio.wait_for(job, 2.0)
+    await asyncio.sleep(0.05)
+
+    assert log == ["session:start", "amd:enter", "amd:execute", "amd:exit"]
+    assert factory.calls[0]["ivr_detection"] is False
+    assert [r.amd_result for r in api.call_reports if r.amd_result] == ["human"]
+    assert ctx.shutdown_reasons == []
+    await ctx.fire_shutdown("participant left")
+
+
+async def test_a_sip_out_job_with_amd_hangs_up_on_a_voicemail() -> None:
+    room = FakeRoom("lkap-call-1")
+    room.add_remote_participant(_sip_leg("active"))
+    api = FakeApi(_amd_resolved(on_machine="hangup"))
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    factory = FakeAMDFactory(FakeAMD("machine-vm"))
+
+    await run_session(ctx, _deps(api, amd_factory=factory))
+    await asyncio.sleep(0.05)
+
+    assert ctx.shutdown_reasons == ["answering machine (machine-vm)"]
+    assert [r.amd_result for r in api.call_reports if r.amd_result] == ["machine-vm"]
+    await ctx.fire_shutdown("answering machine (machine-vm)")
+    assert [e.payload for e in api.events_of("voicemail")] == [
+        {"result": "machine-vm", "action": "hangup", "message_left": False}
+    ]
+
+
+async def test_a_sip_out_job_with_amd_but_no_answer_fails_silently() -> None:
+    room = FakeRoom("lkap-call-1")
+    room.add_remote_participant(_sip_leg("ringing"))
+    api = FakeApi(_amd_resolved())
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    factory = FakeAMDFactory(FakeAMD("human"))
+    deps = _deps(api, amd_factory=factory, fallback_speaker=None)
+    deps.settings = deps.settings.model_copy(update={"sip_answer_timeout_s": 0.05})
+
+    await run_session(ctx, deps)
+
+    assert [s.status for s in api.summaries] == ["failed"]
+    assert factory.detector.log == ["amd:enter", "amd:exit"]
+
+
+async def test_amd_on_a_realtime_agent_is_skipped_and_the_call_starts_as_before() -> None:
+    room = FakeRoom("lkap-call-1")
+    room.add_remote_participant(_sip_leg("active"))
+    resolved = _amd_resolved()
+    pipeline = resolved.config.pipeline.model_copy(update={"mode": "realtime"})
+    api = FakeApi(
+        resolved.model_copy(update={"config": resolved.config.model_copy(update={"pipeline": pipeline})})
+    )
+    ctx = FakeJobContext(_sip_metadata("sip_out"), room=cast(rtc.Room, room))
+    factory = FakeAMDFactory()
+
+    await run_session(ctx, _deps(api, amd_factory=factory))
+    await ctx.fire_shutdown("participant left")
+
+    assert factory.calls == []
+    assert any("Answering-machine detection" in e.payload.get("message", "") for e in api.events_of("info"))
     assert "session_started" in api.event_types()
 
 

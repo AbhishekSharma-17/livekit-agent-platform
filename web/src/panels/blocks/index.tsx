@@ -12,9 +12,10 @@
  *
  * `<Block>` picks the block's state out of `props.state.blocks[spec.id]`
  * (over the type's initial state), resolves the heading, and renders the
- * matching component. The `document`, `table`, `video`, `markdown` and
- * `upload` components are split out of the first load (`React.lazy`); pdf.js
- * is a further PDF-only split inside the document block.
+ * matching component. The `document`, `table`, `video`, `markdown`,
+ * `upload`, `captions` and `transcript` components are split out of the
+ * first load (`React.lazy`); pdf.js is a further PDF-only split inside the
+ * document block.
  */
 import type { BlockSpec } from "@/contracts/lkap-contracts";
 import * as React from "react";
@@ -38,7 +39,6 @@ import { KbCitationsBlock } from "./kb_citations";
 import { NotesBlock } from "./notes";
 import { StatusBlock } from "./status";
 import { StepsBlock } from "./steps";
-import { TranscriptBlock } from "./transcript";
 import type { BlockRenderProps } from "./types";
 
 export { blockDomId, type BlockRenderProps } from "./types";
@@ -59,6 +59,16 @@ const MarkdownBlock = lazy(() => import("./markdown"));
 // `upload` also needs LiveKit's React bindings (`useMaybeRoomContext`, for
 // its byte-stream sender) — the same reason `video` is split out (V5-23).
 const UploadBlock = lazy(() => import("./upload"));
+// `captions` also needs LiveKit's React bindings (`useMaybeRoomContext`, through
+// `composite/captions-stream.ts`'s `useCaptionsStream`) — the same reason
+// `video`/`upload` are split out (V5-35).
+const CaptionsBlock = lazy(() => import("./captions"));
+// V5-35: the transcript block's language chip reads `useCaptionsStream` too
+// (matching a stored turn to its caption segment), so it now needs LiveKit's
+// React bindings the same way — split out for the same reason, even though
+// `transcript` is one of the more commonly-placed blocks (a brief Suspense
+// fallback there is the traded cost).
+const TranscriptBlock = lazy(() => import("./transcript"));
 
 /** A block type this web build has no renderer for yet. */
 function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
@@ -89,12 +99,21 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   steps: StepsBlock as AnyBlockComponent,
   consent: ConsentBlock as AnyBlockComponent,
   upload: UploadBlock as AnyBlockComponent,
-  // V5-31 added this type to the contract; its renderer comes with V5-35.
-  captions: NotRenderedYetBlock,
+  captions: CaptionsBlock as AnyBlockComponent,
+  // V5-32 added this type to the contract; its renderer comes with V5-36.
+  handoff: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
-export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(["document", "table", "video", "markdown", "upload"]);
+export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
+  "document",
+  "table",
+  "video",
+  "markdown",
+  "upload",
+  "captions",
+  "transcript",
+]);
 
 export interface BlockProps extends PanelProps {
   spec: BlockSpec;

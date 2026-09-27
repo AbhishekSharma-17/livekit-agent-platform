@@ -3,6 +3,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "``POST /internal/v1/telephony/calls/report`` — the worker's view of a SIP leg.\n\nWebhooks are the primary source of call status, but a dev install often\nhas no public webhook url; the worker reports what it saw so the calls log\nis right either way. Transitions only ever move forward.",
   "properties": {
+    "amd_result": {
+      "anyOf": [
+        {
+          "enum": [
+            "human",
+            "machine-ivr",
+            "machine-vm",
+            "machine-unavailable",
+            "uncertain"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Amd Result"
+    },
     "direction": {
       "anyOf": [
         {
@@ -79,7 +98,8 @@
       "enum": [
         "answered",
         "completed",
-        "failed"
+        "failed",
+        "transferred"
       ],
       "title": "Status",
       "type": "string"
@@ -96,6 +116,48 @@
       ],
       "default": null,
       "title": "To E164"
+    },
+    "transfer_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transfer Mode"
+    },
+    "transfer_summary": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transfer Summary"
+    },
+    "transfer_to": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transfer To"
     }
   },
   "required": [

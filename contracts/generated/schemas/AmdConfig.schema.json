@@ -1,0 +1,43 @@
+{
+  "$id": "lkap-contracts/AmdConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Answering-machine detection on outbound calls (``TelephonyConfig.amd``, V5-32).\n\nWhen ``enabled``, the worker listens to how an outbound call is answered and\nclassifies it with the agent's own speech-to-text and language model before\nthe agent speaks. A person (or an unsure result) → the conversation goes on as\nusual. A voicemail greeting → ``on_machine``: ``leave_message`` speaks\n``message`` after the greeting and hangs up; ``hangup`` hangs up at once. A\nmailbox that cannot take a message is always hung up. A phone menu is\nnavigated by the agent when ``ivr_detection`` is on, else treated as a machine.\nInbound calls and web sessions ignore this setting.",
+  "properties": {
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "ivr_detection": {
+      "default": false,
+      "description": "Let the agent navigate a phone menu instead of hanging up on it.",
+      "title": "Ivr Detection",
+      "type": "boolean"
+    },
+    "message": {
+      "anyOf": [
+        {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the agent says to a voicemail (leave_message). Empty: a short call-back request.",
+      "title": "Message"
+    },
+    "on_machine": {
+      "default": "hangup",
+      "enum": [
+        "hangup",
+        "leave_message"
+      ],
+      "title": "On Machine",
+      "type": "string"
+    }
+  },
+  "title": "AmdConfig",
+  "type": "object"
+}

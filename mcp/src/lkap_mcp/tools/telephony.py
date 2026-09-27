@@ -83,7 +83,7 @@ def register(registry: Registry) -> None:
 
     @registry.tool(scopes={"sessions:read"}, annotations=READ, data="CallOut")
     async def call_get(call_id: str) -> ToolResult:
-        """One phone call."""
+        """One phone call, with its answering-machine result and how the agent transferred it."""
         return ToolResult.success(await client.get(f"/v1/calls/{seg(call_id)}"))
 
     @registry.tool(scopes={"calls:write"}, annotations=DESTRUCTIVE, gated_by=dial_enabled, data="CallOut")

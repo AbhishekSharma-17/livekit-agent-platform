@@ -1,12 +1,15 @@
 import * as React from "react";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { RoomContext } from "@livekit/components-react";
+import type { Room, TextStreamReader } from "livekit-client";
 
-import type { AgentPublicOut, BlockSpec, PanelLayout, UiRequest } from "@/contracts/lkap-contracts";
+import type { AgentPublicOut, BlockSpec, CaptionSegment, PanelLayout, UiRequest } from "@/contracts/lkap-contracts";
 import { emptyUiState } from "@/lib/ui-state";
 import { BLOCK_COMPONENTS, Block, LAZY_BLOCK_TYPES } from "@/panels/blocks";
 import { BLOCK_CATALOG, BLOCK_TYPES, blockStateOf, blockTitle, initialBlockState } from "@/panels/blocks/catalog";
+import { latestSegmentFor, TOPIC_UI_CAPTIONS, useCaptionsStream } from "@/panels/composite/captions-stream";
 import { coerceForm, formFields } from "@/panels/blocks/form";
 import { formatCell } from "@/panels/blocks/table";
 import { resolveDocument } from "@/panels/blocks/document";
@@ -108,7 +111,9 @@ describe("block catalog", () => {
     expect([...BLOCK_TYPES].sort()).toEqual(Object.keys(BLOCK_CATALOG).sort());
     // V5-12: `markdown` joins the lazy split (it pulls in `streamdown`).
     // V5-23: `upload` joins it too (it needs `@livekit/components-react`, like `video`).
-    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["document", "markdown", "table", "upload", "video"]);
+    // V5-35: `captions` joins it too, same reason (`useCaptionsStream` needs a room);
+    // `transcript` follows for the same reason once its language chip reads the same hook.
+    expect([...LAZY_BLOCK_TYPES].sort()).toEqual(["captions", "document", "markdown", "table", "transcript", "upload", "video"]);
   });
 
   it("seeds initial state from config keys that name a state field, like the worker", () => {
@@ -179,8 +184,9 @@ describe("each block renders its fixture state", () => {
     ],
     [
       "transcript",
-      (el) => {
-        expect(within(el).getByText("There was a small kitchen fire this morning.")).toBeTruthy();
+      // Lazy since V5-35 (the language chip needs `useCaptionsStream`).
+      async (el) => {
+        expect(await within(el).findByText("There was a small kitchen fire this morning.")).toBeTruthy();
         // show_tools: the activity rows are interleaved.
         expect(el.querySelectorAll("[data-slot=block-transcript-tool]").length).toBeGreaterThan(0);
       },
@@ -502,9 +508,11 @@ describe("table block", () => {
 });
 
 describe("transcript block", () => {
-  it("hides tool rows unless show_tools", () => {
+  it("hides tool rows unless show_tools", async () => {
     const state = fixtureUiState({ transcript: { show_tools: false } });
     render(<Block spec={specOf("transcript")} {...panelProps({ state })} />);
+    // `transcript` is lazy-loaded since V5-35 (its language chip needs `useCaptionsStream`).
+    await screen.findByText(/kitchen fire/);
     expect(document.querySelectorAll("[data-slot=block-transcript-tool]")).toHaveLength(0);
     expect(document.querySelector("[data-who=user]")?.textContent).toContain("kitchen fire");
   });
@@ -720,5 +728,120 @@ describe("panel intents → lkap.agent.action (session-room's perform)", () => {
       action: "block_action",
       payload: { block_id: "t", name: "select", data: { row: "r1" } },
     });
+  });
+});
+
+/** A fake `Room` that captures the one `lkap.captions` handler `captions-stream.ts` registers (the same shape `use-byte-stream.test.tsx` uses for `registerByteStreamHandler`). */
+function fakeCaptionsRoom() {
+  let handler: ((reader: TextStreamReader) => void) | null = null;
+  const registerTextStreamHandler = vi.fn((topic: string, cb: (reader: TextStreamReader) => void) => {
+    if (topic === TOPIC_UI_CAPTIONS) handler = cb;
+  });
+  const unregisterTextStreamHandler = vi.fn((topic: string) => {
+    if (topic === TOPIC_UI_CAPTIONS) handler = null;
+  });
+  const room = { registerTextStreamHandler, unregisterTextStreamHandler };
+  function emit(segment: CaptionSegment) {
+    const reader = { readAll: async () => JSON.stringify(segment) } as unknown as TextStreamReader;
+    handler?.(reader);
+  }
+  return { room: room as unknown as Room, emit, registerTextStreamHandler, unregisterTextStreamHandler };
+}
+
+function segment(overrides: Partial<CaptionSegment> = {}): CaptionSegment {
+  return { v: 1, id: "u1", speaker: "user", text: "Hello", final: false, language: null, ts: 1, ...overrides };
+}
+
+describe("useCaptionsStream (V5-35)", () => {
+  it("registers lkap.captions once on mount and unregisters on unmount", () => {
+    const { room, registerTextStreamHandler, unregisterTextStreamHandler } = fakeCaptionsRoom();
+    const { unmount } = renderHook(() => useCaptionsStream({ room }));
+    expect(registerTextStreamHandler).toHaveBeenCalledTimes(1);
+    expect(registerTextStreamHandler.mock.calls[0]?.[0]).toBe(TOPIC_UI_CAPTIONS);
+    unmount();
+    expect(unregisterTextStreamHandler).toHaveBeenCalledWith(TOPIC_UI_CAPTIONS);
+  });
+
+  it("registers only once for two mounted readers of the same room (only one handler per topic per room)", async () => {
+    const { room, emit, registerTextStreamHandler } = fakeCaptionsRoom();
+    const first = renderHook(() => useCaptionsStream({ room }));
+    renderHook(() => useCaptionsStream({ room }));
+    expect(registerTextStreamHandler).toHaveBeenCalledTimes(1);
+
+    act(() => emit(segment({ text: "Hi" })));
+    await waitFor(() => expect(first.result.current).toHaveLength(1));
+  });
+
+  it("replaces an interim segment with its final one in place, by id", async () => {
+    const { room, emit } = fakeCaptionsRoom();
+    const { result } = renderHook(() => useCaptionsStream({ room }));
+
+    act(() => emit(segment({ id: "u1", text: "Hel", final: false })));
+    await waitFor(() => expect(result.current).toHaveLength(1));
+    act(() => emit(segment({ id: "u1", text: "Hello there", final: true })));
+    await waitFor(() => expect(result.current[0]?.text).toBe("Hello there"));
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0]?.final).toBe(true);
+  });
+
+  it("keeps both sides as separate segments and latestSegmentFor reads the right one", async () => {
+    const { room, emit } = fakeCaptionsRoom();
+    const { result } = renderHook(() => useCaptionsStream({ room }));
+
+    act(() => emit(segment({ id: "u1", speaker: "user", text: "Hi" })));
+    act(() => emit(segment({ id: "a1", speaker: "agent", text: "Hello!" })));
+    await waitFor(() => expect(result.current).toHaveLength(2));
+
+    expect(latestSegmentFor(result.current, "user")?.text).toBe("Hi");
+    expect(latestSegmentFor(result.current, "agent")?.text).toBe("Hello!");
+    expect(latestSegmentFor(result.current, "user")).not.toBe(null);
+    expect(latestSegmentFor([], "user")).toBeNull();
+  });
+
+  it("does nothing without a room", () => {
+    expect(() => renderHook(() => useCaptionsStream())).not.toThrow();
+  });
+});
+
+describe("captions block (V5-35)", () => {
+  function captionsSpec(config: Record<string, unknown> = {}): BlockSpec {
+    return { id: "live_captions", type: "captions", title: null, config, order: 0 };
+  }
+
+  it("shows an empty state with no captions yet (and no room, in the console preview)", async () => {
+    render(<Block spec={captionsSpec()} {...panelProps()} />);
+    expect(await screen.findByText("Captions appear here once someone speaks.")).toBeTruthy();
+  });
+
+  it("shows the current utterance per side, and a language chip when it differs from the conversation's language", async () => {
+    const { room, emit } = fakeCaptionsRoom();
+    const state = fixtureUiState({ live_captions: { language: "en", target_language: null } });
+    render(
+      <RoomContext.Provider value={room}>
+        <Block spec={captionsSpec()} {...panelProps({ state })} />
+      </RoomContext.Provider>,
+    );
+    await screen.findByText("Captions appear here once someone speaks.");
+
+    act(() => emit(segment({ id: "u1", speaker: "user", text: "¿Qué tal?", language: "es", final: true })));
+    expect(await screen.findByText("¿Qué tal?")).toBeTruthy();
+    expect(screen.getByText("Spanish")).toBeTruthy();
+
+    act(() => emit(segment({ id: "a1", speaker: "agent", text: "All good", language: "en", final: true })));
+    await screen.findByText("All good");
+    // The agent's line is in English, the conversation's own language — no chip on it.
+    expect(screen.queryByText("English")).toBeNull();
+  });
+
+  it("hides a side whose show_user/show_agent is off", async () => {
+    const { room, emit } = fakeCaptionsRoom();
+    render(
+      <RoomContext.Provider value={room}>
+        <Block spec={captionsSpec({ show_user: false })} {...panelProps()} />
+      </RoomContext.Provider>,
+    );
+    act(() => emit(segment({ id: "u1", speaker: "user", text: "Hidden" })));
+    await waitFor(() => expect(screen.queryByText("Captions appear here once someone speaks.")).toBeTruthy());
+    expect(screen.queryByText("Hidden")).toBeNull();
   });
 });

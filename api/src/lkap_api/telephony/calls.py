@@ -37,6 +37,15 @@ it), and :func:`_emit_call_event` fans the webhook out a tick later on its own
 connection — the outbox pattern ``recordings.finalize`` uses for
 ``recording.ready``. A bare row outside any session (unit tests) emits nothing.
 
+**Answering machines and transfers (V5-32).** The worker's call report carries
+the answering-machine verdict of an outbound call (``amd_result``, stored once;
+a ``machine-*`` verdict queues the ``call.voicemail`` webhook through the same
+outbox) and, after the agent hands the caller over, ``transferred`` with the
+mode (``cold`` / ``warm``) and its summary for the person taking the call
+(``transfer_mode`` / ``transfer_summary``): a warm transfer never passes through
+:func:`transfer`, and a warm request that fell back to cold records its summary
+here instead of speaking it (D-V5-21).
+
 :func:`sweep_stuck_calls` (run by ``sessions_sweep.sweep_loop``, R-V2-24)
 closes rows nobody else will: an outbound dial the api forgot (restart
 mid-dial), and any open row whose session already ended.
@@ -65,7 +74,7 @@ from livekit.api import (
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.api_models import CallCreate, CallOut, CallReportIn
 from lkap_contracts.dispatch import DispatchMetadata
-from lkap_contracts.telephony import E164_PATTERN
+from lkap_contracts.telephony import AMD_MACHINE_RESULTS, AMD_RESULTS, E164_PATTERN, WarmTransferRoute
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import object_session
@@ -83,6 +92,7 @@ from lkap_api.limits import live_session_count
 from lkap_api.logging import get_logger
 from lkap_api.telephony.common import (
     DTMF_TOPIC,
+    SIP_CHANNELS,
     LiveKitUpstreamError,
     connection_of,
     get_agent,
@@ -92,9 +102,15 @@ from lkap_api.telephony.common import (
     require_sip,
     to_sip_uri,
 )
-from lkap_api.telephony.policy import CallsBusyError, TelephonyPolicy, check_destination
+from lkap_api.telephony.policy import (
+    CallsBusyError,
+    DestinationNotAllowedError,
+    TelephonyPolicy,
+    check_destination,
+    workspace_policy,
+)
 from lkap_api.webhooks import emit
-from lkap_api.webhooks.events import CALL_ENDED, CALL_STARTED
+from lkap_api.webhooks.events import CALL_ENDED, CALL_STARTED, CALL_VOICEMAIL
 
 log = get_logger(__name__)
 
@@ -191,7 +207,7 @@ def call_event_data(call: Call) -> dict[str, Any]:
     }
 
 
-def _queue_call_event(call: Call, event_type: str) -> None:
+def _queue_call_event(call: Call, event_type: str, extra: dict[str, Any] | None = None) -> None:
     """Add a ``call_event`` job to the call's own session (committed with the transition)."""
     session = object_session(call)
     if session is None:
@@ -202,7 +218,7 @@ def _queue_call_event(call: Call, event_type: str) -> None:
             payload={
                 "event_type": event_type,
                 "workspace_id": call.workspace_id,
-                "data": call_event_data(call),
+                "data": {**call_event_data(call), **(extra or {})},
             },
             status="pending",
             run_at=utcnow(),
@@ -250,6 +266,10 @@ def call_out(row: Call) -> CallOut:
         ended_at=row.ended_at,
         hangup_reason=row.hangup_reason,
         transfer_to=row.transfer_to,
+        # V5-32: a value outside the contract (never written by this api) reads as unknown.
+        amd_result=row.amd_result if row.amd_result in AMD_RESULTS else None,
+        transfer_mode=row.transfer_mode if row.transfer_mode in ("cold", "warm") else None,
+        transfer_summary=row.transfer_summary,
     )
 
 
@@ -798,8 +818,93 @@ async def apply_report(db: AsyncSession, session: SessionRow, report: CallReport
         advance(call, "failed", reason=report.reason or "ended before answer")
     else:
         advance(call, report.status, reason=report.reason)
+    apply_amd_result(call, report.amd_result)
+    if report.status == "transferred":
+        apply_transfer(
+            call, mode=report.transfer_mode, to=report.transfer_to, summary=report.transfer_summary
+        )
     await db.flush()
     return call
+
+
+def apply_amd_result(call: Call, result: str | None) -> bool:
+    """Store an outbound call's answering-machine verdict once (V5-32).
+
+    A ``machine-*`` verdict queues the ``call.voicemail`` webhook (``data`` = the
+    ``call.*`` fields plus ``amd_result``). A second report never overwrites the first.
+
+    Returns:
+        Whether the verdict was stored.
+    """
+    if result is None or call.amd_result is not None or result not in AMD_RESULTS:
+        return False
+    call.amd_result = result
+    if result in AMD_MACHINE_RESULTS:
+        _queue_call_event(call, CALL_VOICEMAIL, {"amd_result": result})
+    return True
+
+
+def apply_transfer(call: Call, *, mode: str | None, to: str | None, summary: str | None) -> None:
+    """Record how the agent handed the caller over (V5-32): the mode, the target, the summary.
+
+    The cold path has already moved the row to ``transferred`` (:func:`transfer`); a
+    warm one arrives here first. Either way the row keeps the latest mode and summary.
+    """
+    if mode in ("cold", "warm"):
+        call.transfer_mode = mode
+    if to and not call.transfer_to:
+        call.transfer_to = to[:64]
+    if summary is not None:
+        call.transfer_summary = summary
+
+
+# ------------------------------------------------------------------ warm transfer
+async def outbound_trunks(db: AsyncSession, workspace_id: str, connection_id: str) -> list[SipTrunk]:
+    """The connection's outbound trunks."""
+    return list(
+        await db.scalars(
+            select(SipTrunk).where(
+                SipTrunk.workspace_id == workspace_id,
+                SipTrunk.connection_id == connection_id,
+                SipTrunk.direction == "outbound",
+            )
+        )
+    )
+
+
+async def warm_transfer_route(
+    db: AsyncSession, session: SessionRow, conn: LiveKitConnection, config: AgentConfig
+) -> WarmTransferRoute | None:
+    """What the worker needs to place a warm transfer itself (V5-32, D-V5-21); ``None`` = cold only.
+
+    A route exists only for a phone session on a LiveKit Cloud connection with
+    exactly one synced outbound trunk, and it names only the ``warm`` targets the
+    workspace's dialing policy allows **now** (R-V2-23): the worker dials these
+    without asking the api again, so this is where the policy is applied.
+    """
+    if session.channel not in SIP_CHANNELS or conn.deployment_type != "cloud":
+        return None
+    warm = [target.to for target in config.telephony.transfer_targets if target.mode == "warm"]
+    if not warm:
+        return None
+    trunks = await outbound_trunks(db, session.workspace_id, conn.id)
+    if len(trunks) != 1 or not trunks[0].lk_trunk_id:
+        return None
+    policy = await workspace_policy(db, session.workspace_id)
+    allowed: list[str] = []
+    for to in warm:
+        try:
+            check_destination(policy, to)
+        except DestinationNotAllowedError:
+            continue
+        if to not in allowed:
+            allowed.append(to)
+    if not allowed:
+        return None
+    trunk = trunks[0]
+    return WarmTransferRoute(
+        trunk_id=str(trunk.lk_trunk_id), caller_id=str((trunk.numbers or [""])[0])[:32], targets=allowed
+    )
 
 
 # --------------------------------------------------------------------------- sweep

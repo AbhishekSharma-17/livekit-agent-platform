@@ -26,6 +26,7 @@ import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { cn } from "@/lib/utils";
 
 import { describedBy } from "./field-aria";
+import { LanguagesCard } from "./languages-card";
 
 /**
  * "Conversation" (V5-11, `docs/v5/PLAN-V5.md` V5-11, `docs/UI_UX_SPEC.md`
@@ -472,6 +473,8 @@ export function ConversationSection() {
           </div>
         </SectionRow>
       </Section>
+
+      <LanguagesCard />
 
       <Section
         id="conversation-tools"

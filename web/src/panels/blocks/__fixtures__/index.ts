@@ -22,6 +22,7 @@ import type { BlockType } from "@/panels/composite/layout";
 import genericUiState from "../../../../tests/fixtures/generic_ui_state.json";
 import choicesState from "./choices.json";
 import captionsState from "./captions.json";
+import handoffState from "./handoff.json";
 import consentState from "./consent.json";
 import detailsState from "./details.json";
 import documentState from "./document.json";
@@ -56,6 +57,7 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   consent: consentState,
   upload: uploadState,
   captions: captionsState,
+  handoff: handoffState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */
@@ -79,6 +81,8 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   upload: { type: "upload", state: uploadState },
   // V5-31: the captions block's state (renderer and scenes come with V5-35).
   captions: { type: "captions", state: captionsState },
+  // V5-32: the handoff block's state (renderer and scenes come with V5-36).
+  handoff: { type: "handoff", state: handoffState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -142,6 +146,7 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     recording_consent: consentState,
     documents: uploadState,
     live_captions: captionsState,
+    handoff: handoffState,
   };
 }
 

@@ -19,11 +19,36 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useUpdateAgent, useValidateAgent } from "@/components/console/lib/api-hooks";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { errorMessage } from "@/components/console/shared/error-banner";
-import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
+import { ApiError } from "@/lib/api";
+import type { AgentOut, PublishGateRefusal, ValidationResult } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { useEditorContext } from "./editor-context";
 import { validationMessages } from "./validation-map";
+
+/**
+ * The `422 tests_failing` publish refusal's `details.reason` (V5-29), in
+ * plain words. `error` reads as "the tests didn't run", never "failed" —
+ * `agent_tests.py`'s own rule.
+ */
+function testsFailingMessage(details: PublishGateRefusal): string {
+  const needed = Math.round(details.min_pass_ratio * 100);
+  switch (details.reason) {
+    case "missing":
+      return `This version hasn't been tested yet. Run its tests first — publishing needs ${needed}% of cases to pass.`;
+    case "running":
+      return "Its tests are still running. Wait for them to finish, then publish.";
+    case "failing": {
+      const got = details.pass_ratio != null ? Math.round(details.pass_ratio * 100) : null;
+      return got != null
+        ? `Only ${got}% of its tests passed; publishing needs ${needed}%.`
+        : `Its last test run didn't reach ${needed}% passing.`;
+    }
+    case "error":
+      return `The tests didn't run${details.error ? ` — ${details.error}` : ""}. Run them again, or turn off "Require passing tests".`;
+  }
+}
 
 /** What the shell's save returns to the header actions. */
 export interface SaveOutcome {
@@ -68,11 +93,14 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   const validateAgent = useValidateAgent(agent.id);
   const { canWrite } = useWriteAccess();
   const writeReason = writeAccessReason();
+  const ctx = useEditorContext();
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<"unsaved" | "review">("review");
   const [check, setCheck] = React.useState<CheckState>({ status: "idle" });
   const [saving, setSaving] = React.useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = React.useState(false);
+  // V5-33: the `422 tests_failing` publish refusal (`config.publish_gate.require_tests`).
+  const [testsFailing, setTestsFailing] = React.useState<PublishGateRefusal | null>(null);
 
   const url = publicUrl(agent.slug);
 
@@ -90,11 +118,16 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   }
 
   async function publish() {
+    setTestsFailing(null);
     try {
       await updateAgent.mutateAsync({ published: true });
       toast.success("Published");
       setOpen(false);
     } catch (error) {
+      if (error instanceof ApiError && error.code === "tests_failing") {
+        setTestsFailing(error.details as PublishGateRefusal);
+        return;
+      }
       toast.error(`Couldn't publish — ${errorMessage(error)}`);
     }
   }
@@ -112,6 +145,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   function onOpenChange(next: boolean) {
     setOpen(next);
     if (!next || agent.published) return;
+    setTestsFailing(null);
     if (dirty) {
       setStep("unsaved");
       setCheck({ status: "idle" });
@@ -251,6 +285,27 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
                   goToFirstIssue();
                 }}
               />
+              {testsFailing ? (
+                <div role="status" className="flex flex-col gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-[0.8125rem] text-danger-text">
+                  <p className="flex items-center gap-1.5 font-semibold">
+                    <Icon as={CircleAlertIcon} size="sm" />
+                    Tests failing
+                  </p>
+                  <p>{testsFailingMessage(testsFailing)}</p>
+                  {ctx ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        ctx.goToSection("tests");
+                      }}
+                      className="self-start font-medium underline underline-offset-2"
+                    >
+                      Open Tests
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               <PublicUrlRow url={url} />
             </div>
             <div className="flex justify-end gap-2 border-t border-border px-4 py-3">

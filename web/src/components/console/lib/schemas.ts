@@ -354,6 +354,87 @@ export const disclosureConfigSchema = z.object({
 });
 export type DisclosureConfigForm = z.infer<typeof disclosureConfigSchema>;
 
+/**
+ * `AgentTest` (V5-29, `lkap_contracts.agent_tests`): one simulated
+ * conversation. `mocks` is a tool name → the fixture value it returns
+ * instead of calling out; the console edits it as text and the case dialog
+ * `JSON.parse`s it, falling back to the raw string (the contract's "a string
+ * is returned as-is; anything else as JSON").
+ */
+export const agentTestSchema = z.object({
+  id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/, "Letters, numbers, - or _; must start with a letter or number"),
+  name: z.string().min(1, "Name is required").max(120, "120 characters max"),
+  persona_instructions: z.string().min(1, "Describe the caller").max(4000, "4000 characters max"),
+  scenario: z.string().max(4000, "4000 characters max"),
+  expectations: z.array(z.string().min(1, "Can't be empty").max(500, "500 characters max")).max(20, "20 max"),
+  mocks: z.record(z.string(), z.unknown()),
+  max_turns: z.number().int().min(1, "At least 1").max(40, "40 max"),
+});
+export type AgentTestForm = z.infer<typeof agentTestSchema>;
+
+/**
+ * `PublishGate` (V5-29): opt-in "require a passing test run before publish".
+ * Like `disclosureConfigSchema` above, optional on `agentConfigFormSchema` so
+ * a fixture built before V5-33 keeps validating.
+ */
+export const publishGateSchema = z.object({
+  require_tests: z.boolean(),
+  min_pass_ratio: z.number().min(0).max(1),
+});
+export type PublishGateForm = z.infer<typeof publishGateSchema>;
+
+/**
+ * `PrivacyConfig` (V5-30, `lkap_contracts.agent_config`): what the platform
+ * hides in transcripts, keeps after a call, and shares with third-party
+ * analytics. Optional on `agentConfigFormSchema` like `disclosureConfigSchema`
+ * above — `toFormValues` always supplies a concrete value from `DEFAULT_PRIVACY`.
+ */
+export const privacyConfigSchema = z.object({
+  stt_redact: z.array(z.enum(["pci", "pii", "phi", "numbers"])),
+  storage_tier: z.enum(["full", "redacted", "basic"]),
+  telemetry_pii: z.boolean(),
+  scrub_model: providerRefSchema.nullable(),
+});
+export type PrivacyConfigForm = z.infer<typeof privacyConfigSchema>;
+
+/**
+ * `QaField` (V5-30): one post-call field the judge fills in. `name` mirrors
+ * the contract's lowercase-identifier pattern so a bad name is caught before
+ * save rather than as a 422.
+ */
+export const qaFieldSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Name is required")
+      .regex(/^[a-z][a-z0-9_]{0,47}$/, "Lowercase letters, numbers, underscore; must start with a letter"),
+    type: z.enum(["text", "number", "boolean", "select"]),
+    options: z.array(z.string().min(1, "Can't be empty").max(100, "100 characters max")).max(50, "50 max"),
+    description: z.string().max(500, "500 characters max"),
+  })
+  .superRefine((val, ctx) => {
+    if (val.type === "select" && val.options.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["options"], message: "A select field needs at least one option" });
+    }
+    if (val.type !== "select" && val.options.length > 0) {
+      ctx.addIssue({ code: "custom", path: ["options"], message: "Only a select field takes options" });
+    }
+  });
+export type QaFieldForm = z.infer<typeof qaFieldSchema>;
+
+/**
+ * `QaConfig` (post-call scoring). Only `fields` is bound to an input here
+ * (the Post-call fields editor, V5-34); `enabled`/`rubric_prompt`/`model`
+ * have no console editor yet and must still round-trip a save, hence
+ * `.catchall(z.unknown())` — without it `z.object`'s resolver parse would
+ * silently drop them (this file's header warning), turning QA back off on
+ * the next save of any agent that had it on.
+ */
+export const qaConfigSchema = z
+  .object({ fields: z.array(qaFieldSchema).max(20, "20 fields max") })
+  .catchall(z.unknown());
+export type QaConfigForm = z.infer<typeof qaConfigSchema>;
+
 /** `AgentLimits` (CONTRACTS-V2 §3.3) — top-level on the agent, not in `config`. */
 export const agentLimitsSchema = z.object({
   max_concurrent_sessions: wholeNumber("Whole numbers only").min(1, "At least 1"),
@@ -376,6 +457,12 @@ export const transferTargetSchema = z.object({
     .trim()
     .max(256, "256 characters max")
     .regex(TRANSFER_TARGET_PATTERN, "Use +15551234567, tel:+15551234567 or sip:user@host"),
+  /**
+   * V5-32: `cold` (hand over at once) or `warm` (the agent briefs the person first; LiveKit
+   * Cloud only). Optional so a target saved before V5-32 validates; carried so a save never
+   * turns a warm target cold (V5-36 edits it).
+   */
+  mode: z.enum(["cold", "warm"]).optional(),
 });
 export type TransferTargetForm = z.infer<typeof transferTargetSchema>;
 
@@ -403,6 +490,18 @@ export const telephonyConfigSchema = z
      * doesn't need it, and `toFormValues` always supplies a concrete list.
      */
     sms_targets: z.array(smsTargetSchema).max(50, "50 contacts max").optional(),
+    /**
+     * V5-32: answering-machine detection on outbound calls (`AmdConfig`). Optional and carried
+     * so a save keeps it; V5-36's Voicemail card edits it.
+     */
+    amd: z
+      .object({
+        enabled: z.boolean(),
+        on_machine: z.enum(["hangup", "leave_message"]),
+        message: z.string().max(1000, "1000 characters max").nullable().optional(),
+        ivr_detection: z.boolean(),
+      })
+      .optional(),
   })
   .superRefine((val, ctx) => {
     const seen = new Set<string>();
@@ -456,6 +555,7 @@ export const BLOCK_TYPE_VALUES = [
   "consent",
   "upload",
   "captions",
+  "handoff",
 ] as const;
 
 /** Block ids key `UiState.blocks` and appear in patch paths: no `/`, no spaces. */
@@ -513,6 +613,20 @@ export const agentConfigFormSchema = z
      * `DEFAULT_DISCLOSURE`.
      */
     disclosure: disclosureConfigSchema.optional(),
+    /**
+     * V5-33's Tests section: `config.tests` (optional, like `disclosure`
+     * above, so a fixture built before this package keeps validating) and
+     * the opt-in publish gate.
+     */
+    tests: z.array(agentTestSchema).max(50, "50 cases max").optional(),
+    publish_gate: publishGateSchema.optional(),
+    /**
+     * V5-34's Privacy card and the post-call fields editor: `config.privacy`
+     * (optional, like `disclosure` above) and `config.qa` (the `.catchall`
+     * keeps `enabled`/`rubric_prompt`/`model`; only `fields` is edited here).
+     */
+    privacy: privacyConfigSchema.optional(),
+    qa: qaConfigSchema.optional(),
     panel: panelLayoutSchema,
     /**
      * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the
@@ -529,6 +643,22 @@ export const agentConfigFormSchema = z
     if (!isFlow && !val.instructions.trim()) {
       ctx.addIssue({ code: "custom", path: ["instructions"], message: "Instructions are required" });
     }
+    // V5-33: two cases can't share an id (`lkap_contracts.agent_config._unique_test_ids`).
+    const seenTestIds = new Set<string>();
+    (val.tests ?? []).forEach((testCase, index) => {
+      if (seenTestIds.has(testCase.id)) {
+        ctx.addIssue({ code: "custom", path: ["tests", index, "id"], message: "Two cases can't share an id." });
+      }
+      seenTestIds.add(testCase.id);
+    });
+    // V5-34: two post-call fields can't share a name (`lkap_contracts.agent_config.QaConfig._unique_field_names`).
+    const seenFieldNames = new Set<string>();
+    (val.qa?.fields ?? []).forEach((field, index) => {
+      if (seenFieldNames.has(field.name)) {
+        ctx.addIssue({ code: "custom", path: ["qa", "fields", index, "name"], message: "Two fields can't share a name." });
+      }
+      seenFieldNames.add(field.name);
+    });
   });
 export type AgentConfigForm = z.infer<typeof agentConfigFormSchema>;
 

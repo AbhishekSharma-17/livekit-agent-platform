@@ -510,7 +510,7 @@ describe("saving", () => {
     expect(body.config?.v).toBe(2);
     expect(body.config?.instructions).toBe("Be brief.");
     expect(body.config?.panel).toEqual({ panel_id: "insurance_notebook", layout: "wide", blocks: [] });
-    expect(body.config?.qa).toEqual({ enabled: false, rubric_prompt: null, model: null });
+    expect(body.config?.qa).toEqual({ enabled: false, rubric_prompt: null, model: null, fields: [] });
     expect(body.config?.pipeline.realtime).toBeNull();
     expect(body).not.toHaveProperty("published");
     await waitFor(() => expect(server.validateCalls).toBe(validatesBefore + 1));

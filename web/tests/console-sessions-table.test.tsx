@@ -1,10 +1,10 @@
 import * as React from "react";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { SessionsTable } from "@/components/console/sessions/sessions-table";
+import { exportCsvHref, SessionsTable } from "@/components/console/sessions/sessions-table";
 import {
   filterSessions,
   EMPTY_FILTERS,
@@ -16,7 +16,7 @@ import {
   sweptReason,
   usageTurns,
 } from "@/components/console/sessions/session-model";
-import type { AgentPage, ConnectionPage, SessionOut, SessionPage } from "@/contracts/lkap-contracts";
+import type { AgentOut, AgentPage, ConnectionPage, SessionOut, SessionPage } from "@/contracts/lkap-contracts";
 
 /**
  * Sessions list (docs/UI_UX_SPEC.md §4.10, §7.8 item 1; v2 amendments §3):
@@ -75,10 +75,36 @@ function stubApi(items: SessionOut[], { total, agents = [], connections = [] }: 
   );
 }
 
+// The "Columns" picker (V5-34) is a `SearchableSelect` (cmdk + a Radix
+// Popover), which needs the same jsdom shims `tests/searchable-select.test.tsx`
+// uses for the same combination: `:popover-open`/`:modal`, `scrollIntoView`
+// and `ResizeObserver`.
+const nativeMatches = Element.prototype.matches;
+const nativeScrollIntoView = Element.prototype.scrollIntoView;
+beforeAll(() => {
+  Element.prototype.matches = function matches(this: Element, selector: string) {
+    if (selector === ":popover-open" || selector === ":modal") return false;
+    return nativeMatches.call(this, selector);
+  };
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+});
+afterAll(() => {
+  Element.prototype.matches = nativeMatches;
+  Element.prototype.scrollIntoView = nativeScrollIntoView;
+});
+
 beforeEach(() => {
   searchParams = new URLSearchParams();
   routerReplace.mockReset();
   requested.length = 0;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
 
 afterEach(() => {
@@ -308,6 +334,81 @@ describe("SessionsTable — filters", () => {
     expect(screen.getByRole("combobox", { name: "Filter by channel" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Filter by agent" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Filter by date" })).toBeTruthy();
+  });
+});
+
+// V5-34: `GET /v1/sessions/export.csv` (a new route, ask #178(7) — the console
+// gets a button, not an extension of an existing one) and the optional
+// post-call field columns (`config.qa.fields` of the single filtered agent).
+describe("SessionsTable — export CSV and post-call field columns (V5-34)", () => {
+  function agent(overrides: Partial<AgentOut> = {}): AgentOut {
+    return {
+      id: "a-1",
+      slug: "claims",
+      name: "Claims desk",
+      description: "",
+      pack_id: "generic",
+      ui_panel_id: "generic",
+      published: false,
+      config_version: 1,
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+      config: { instructions: "Hi", pipeline: { mode: "cascaded" } },
+      ...overrides,
+    } as AgentOut;
+  }
+
+  it("exportCsvHref carries the same filters as the list", () => {
+    expect(exportCsvHref(EMPTY_FILTERS)).toBe("/api/console/sessions/export.csv");
+    expect(exportCsvHref({ agentId: "a-1", status: "ended", channel: "web", connectionId: "c-1", range: "" })).toBe(
+      "/api/console/sessions/export.csv?agent_id=a-1&status=ended&channel=web&connection_id=c-1",
+    );
+    const href = exportCsvHref({ ...EMPTY_FILTERS, range: "today" });
+    expect(href).toContain("from=");
+  });
+
+  it("offers an Export CSV link to the same route with no filters applied", async () => {
+    stubApi([session({ id: "1" })]);
+    renderWithClient(<SessionsTable />);
+    await loadedTable();
+    const link = screen.getByRole("link", { name: /Export CSV/ });
+    expect(link.getAttribute("href")).toBe("/api/console/sessions/export.csv");
+  });
+
+  it("offers no Columns picker with no single agent filtered", async () => {
+    stubApi([session({ id: "1" })], { agents: [agent({ config: { instructions: "Hi", pipeline: { mode: "cascaded" }, qa: { fields: [{ name: "claim_type" }] } } })] });
+    renderWithClient(<SessionsTable />);
+    await loadedTable();
+    expect(screen.queryByRole("combobox", { name: "Columns" })).toBeNull();
+  });
+
+  it("offers the filtered agent's post-call fields as toggleable columns", async () => {
+    searchParams = new URLSearchParams("agent=a-1");
+    stubApi([session({ id: "1", agent_id: "a-1" })], {
+      agents: [
+        agent({
+          config: {
+            instructions: "Hi",
+            pipeline: { mode: "cascaded" },
+            qa: { fields: [{ name: "claim_type", type: "text" }, { name: "injury", type: "boolean" }] },
+          },
+        }),
+      ],
+    });
+    renderWithClient(<SessionsTable />);
+    await loadedTable();
+
+    expect(table().queryByText("Claim type")).toBeNull();
+    fireEvent.click(screen.getByRole("combobox", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("option", { name: "Claim type" }));
+    const header = table().getByText("Claim type");
+    expect(header).toBeTruthy();
+    // Not in the (not yet extended) list payload — the column renders honestly as "—",
+    // in the cell right under the new header (never "Not mentioned", reserved for a value
+    // the api actually returned as `null`).
+    const columnIndex = Array.from(header.closest("tr")?.children ?? []).indexOf(header.closest("th")!);
+    const bodyRow = table().getAllByRole("row")[1];
+    expect(bodyRow.children[columnIndex]?.textContent).toBe("—");
   });
 });
 

@@ -34,6 +34,36 @@ workspace policy above. Set it with `agent_update(patch={"telephony":
 {"transfer_targets": [{"label": "Claims desk", "to": "+18005550123"}]}}
 )`.
 
+## Transfer modes
+
+Each target has a `mode`: `cold` (the default — the caller is put through
+at once and the agent leaves) or `warm` (the agent first calls the person on
+a private line and briefs them from the conversation while the caller hears
+hold music, then joins them to the call). Warm needs a LiveKit Cloud
+connection with exactly one outbound phone line, and the target must pass
+the dialing policy when the call starts; anywhere else the transfer runs
+cold and the agent's summary is kept on the call instead of being spoken
+(`agent_validate` warns about it). If nobody answers a warm transfer the
+caller is back with the agent. `transfer_call` takes an optional `summary`
+for the person taking the call. `CallOut.transfer_mode` and
+`transfer_summary` record what happened; the panel's `handoff` block shows
+the caller where the hand-off stands.
+
+## Voicemail on outbound calls
+
+`AgentConfig.telephony.amd` (`AmdConfig{enabled, on_machine, message,
+ivr_detection}`, off by default) makes the agent listen to how an outbound
+call is answered before it speaks, using the agent's own speech-to-text and
+language model. A person (or an unsure result) hears the usual greeting. A
+voicemail greeting either gets `message` read after the beep
+(`on_machine="leave_message"`) or is hung up on (`"hangup"`); a full mailbox
+is always hung up on; a phone menu is worked through when `ivr_detection`
+is on. `CallOut.amd_result` is the verdict (human, machine-vm,
+machine-unavailable, machine-ivr or uncertain), a machine also records a
+`voicemail` session event, and the workspace webhook `call.voicemail`
+fires. It needs a speech-to-text plus language-model pipeline and an
+outbound phone line; `agent_validate` warns otherwise.
+
 ## Dialing out
 
 `call_place(agent_id, to_e164, trunk_id=, variables=, confirm=true)` and
@@ -58,6 +88,7 @@ there is no tool for them.
 
 ## Related schemas
 
-`TelephonyConfig`, `TransferTarget`, `CallCreate`, `CallOut`,
+`TelephonyConfig`, `TransferTarget`, `AmdConfig`, `CallCreate`, `CallOut`,
 `CallTransferIn`, `CallDtmfIn`, `CallDtmfOut`, `TrunkOut`,
-`DispatchRuleOut`, `PhoneNumberOut`.
+`DispatchRuleOut`, `PhoneNumberOut`, `VoicemailEvent`, `TransferEvent`,
+`HandoffBlockState`.

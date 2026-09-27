@@ -22,6 +22,7 @@ import {
   ClipboardListIcon,
   FileTextIcon,
   GaugeIcon,
+  HeadsetIcon,
   GripVerticalIcon,
   IdCardIcon,
   ImagesIcon,
@@ -85,6 +86,7 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   consent: ShieldCheckIcon,
   upload: UploadIcon,
   captions: CaptionsIcon,
+  handoff: HeadsetIcon,
 };
 
 /**

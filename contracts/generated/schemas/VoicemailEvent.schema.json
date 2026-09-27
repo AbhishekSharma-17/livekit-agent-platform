@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/VoicemailEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``voicemail`` session event (V5-32): a machine answered an outbound call.\n\nRecorded only for ``machine-*`` verdicts; the verdict of every detection (a person\nincluded) is on the call row (``CallOut.amd_result``).",
+  "properties": {
+    "action": {
+      "enum": [
+        "hangup",
+        "leave_message",
+        "navigate"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "message_left": {
+      "default": false,
+      "title": "Message Left",
+      "type": "boolean"
+    },
+    "result": {
+      "enum": [
+        "human",
+        "machine-ivr",
+        "machine-vm",
+        "machine-unavailable",
+        "uncertain"
+      ],
+      "title": "Result",
+      "type": "string"
+    }
+  },
+  "required": [
+    "result",
+    "action"
+  ],
+  "title": "VoicemailEvent",
+  "type": "object"
+}

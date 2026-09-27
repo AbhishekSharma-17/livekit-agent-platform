@@ -35,6 +35,26 @@ leg has, through one object per job, :class:`TelephonySession`:
   registered only when ``config.telephony.transfer_targets`` names at least
   one (R-V2-21), and the api checks every target against the workspace's
   dialing policy again before it dials (R-V2-23).
+* **Warm transfer** (V5-32, D-V5-21): a target with ``mode="warm"`` runs
+  :func:`run_warm_transfer` — livekit-agents 1.8.3's beta ``WarmTransferTask``
+  (hold music from ``BuiltinAudioClip.HOLD_MUSIC`` for the caller, a private
+  consult room, the person dialled through the connection's outbound trunk and
+  briefed from the conversation, then ``MoveParticipant`` into the caller's
+  room). It runs only on a LiveKit Cloud connection whose resolved document
+  carries a :class:`~lkap_contracts.telephony.WarmTransferRoute` naming the
+  target (the api vets it against the dialing policy, since the worker dials
+  it itself); otherwise :meth:`TelephonySession.hand_over` transfers cold and
+  keeps the summary on the call row. Nobody answering raises a ``ToolError``
+  and the conversation resumes. The ``handoff`` block follows along
+  (``requested → connecting → connected | timeout | ended``).
+* **Answering-machine detection** (V5-32): :class:`AmdRunner` wraps
+  livekit-agents 1.8.3's ``AMD`` for outbound calls with
+  ``config.telephony.amd.enabled``. The api places the call after dispatching
+  the agent, so ``main._start`` waits for the leg to *join*, starts the
+  session, enters the detector (which holds the agent's speech and waits for
+  ``sip.callStatus == "active"`` itself), then waits for the answer; the
+  verdict goes to the api on the call report and a machine is hung up on or
+  left a message (``on_machine``).
 * **Call variables** (R-V2-22): :func:`apply_call_variables` appends an
   outbound call's ``variables`` to a prompt agent's instructions; flow agents
   seed ``FlowState.variables`` with them instead.
@@ -52,41 +72,70 @@ Nothing here runs for web, test or text sessions: :func:`is_sip_channel`.
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import json
 import re
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from livekit import rtc
-from lkap_contracts.agent_config import ResolvedAgentConfig
-from lkap_contracts.api_models import CallReportIn, InternalTransferOut
-from lkap_contracts.telephony import DTMF_PATTERN, TelephonyConfig
+from lkap_contracts.agent_config import PanelLayout, ResolvedAgentConfig
+from lkap_contracts.api_models import CallReportIn, InternalTransferOut, TransferEvent, VoicemailEvent
+from lkap_contracts.telephony import (
+    AMD_MACHINE_RESULTS,
+    DTMF_PATTERN,
+    MAX_TRANSFER_SUMMARY_CHARS,
+    AmdConfig,
+    TelephonyConfig,
+    WarmTransferRoute,
+)
+from lkap_contracts.ui_protocol import HandoffStatus
 from packs.base import DtmfPack
 
 from lkap_agent.flow.runtime import is_flow
 from lkap_agent.flow.variables import VariableValue, known_variables_block
 from lkap_agent.logging import get_logger
+from lkap_agent.ui.blocks import set_handoff
 
 __all__ = [
+    "AMD_USERDATA_KEY",
+    "DEFAULT_VOICEMAIL_MESSAGE",
     "DTMF_TOPIC",
     "SIP_CHANNELS",
     "TELEPHONY_TOOL_NAMES",
+    "TRANSFER_EVENT",
+    "VOICEMAIL_EVENT",
+    "WARM_RING_TIMEOUT_S",
+    "AmdRunner",
     "DtmfCollector",
     "DtmfPack",
+    "HandOver",
+    "HandOverResult",
     "TelephonyApi",
     "TelephonySession",
+    "WarmRequest",
+    "WarmResult",
+    "amd_config_for",
+    "amd_supported",
     "apply_call_variables",
     "build_telephony_tools",
     "caller_info",
+    "default_amd_factory",
     "dtmf_code",
+    "hang_up",
     "is_sip_channel",
     "publish_digits",
+    "run_warm_transfer",
     "seed_variables",
     "session_for",
     "sip_participant",
+    "transfer_modes",
     "transfer_targets",
     "wait_for_answer",
+    "wait_for_sip_participant",
+    "warm_transfer_task_class",
 ]
 
 logger = get_logger(__name__)
@@ -119,6 +168,29 @@ DTMF_DIGITS = re.compile(DTMF_PATTERN)
 #: The phone-only built-in tools (``tools.builtin_disabled`` switches them off; the console
 #: shows them as ``TELEPHONY_TOOLS``). Re-exported by ``lkap_agent.tools.builtin``.
 TELEPHONY_TOOL_NAMES: tuple[str, ...] = ("send_dtmf", "transfer_call")
+
+#: Session event of a transfer (`lkap_contracts.api_models.TransferEvent`).
+TRANSFER_EVENT = "transfer"
+
+#: Session event of a machine answering an outbound call (`VoicemailEvent`, V5-32).
+VOICEMAIL_EVENT = "voicemail"
+
+#: `SessionContext.userdata` key of the outbound call's :class:`AmdRunner` (V5-32).
+AMD_USERDATA_KEY = "lkap.amd"
+
+#: What the agent says to a voicemail when ``amd.message`` is empty.
+DEFAULT_VOICEMAIL_MESSAGE = (
+    "Hello, sorry we missed you. Please call us back when you have a moment. Thank you, goodbye."
+)
+
+#: How long a warm transfer lets the person's phone ring before the caller is taken off hold.
+WARM_RING_TIMEOUT_S = 30.0
+
+#: Longest the agent waits for its voicemail message to finish playing.
+_VOICEMAIL_PLAYOUT_TIMEOUT_S = 60.0
+
+#: Longest the worker waits for LiveKit to delete the room when it hangs up.
+_HANGUP_TIMEOUT_S = 5.0
 
 
 def is_sip_channel(channel: str) -> bool:
@@ -209,6 +281,42 @@ async def wait_for_answer(room: rtc.Room, *, timeout_s: float) -> rtc.RemotePart
         room.off("disconnected", on_disconnected)
 
 
+async def wait_for_sip_participant(room: rtc.Room, *, timeout_s: float) -> rtc.RemoteParticipant | None:
+    """Wait until the call's SIP leg has *joined* the room (ringing or answered).
+
+    Answering-machine detection must be listening before the callee answers
+    (V5-32), so an outbound job with AMD starts its session once the leg is in
+    the room, not once it is answered (:func:`wait_for_answer`).
+
+    Returns:
+        The SIP participant, or ``None`` after ``timeout_s`` or when the room
+        closes first (the api deleted it: the dial failed).
+    """
+    present = sip_participant(room)
+    if present is not None:
+        return present
+    loop = asyncio.get_running_loop()
+    done: asyncio.Future[rtc.RemoteParticipant | None] = loop.create_future()
+
+    def on_connected(participant: Any) -> None:
+        if not done.done() and getattr(participant, "kind", None) == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            done.set_result(participant)
+
+    def on_disconnected(*_args: Any) -> None:
+        if not done.done():
+            done.set_result(None)
+
+    room.on("participant_connected", on_connected)
+    room.on("disconnected", on_disconnected)
+    try:
+        return await asyncio.wait_for(done, timeout=timeout_s)
+    except TimeoutError:
+        return None
+    finally:
+        room.off("participant_connected", on_connected)
+        room.off("disconnected", on_disconnected)
+
+
 def caller_info(attributes: Mapping[str, str], *, channel: str) -> dict[str, str]:
     """``from``/``to``/``call_id``/``trunk_id`` of a leg, oriented by the call's direction."""
     remote = attributes.get(ATTR_PHONE_NUMBER, "")
@@ -237,6 +345,18 @@ def transfer_targets(telephony: TelephonyConfig) -> dict[str, str]:
             seen.add(label.casefold())
             targets[label] = target.to.strip()
     return targets
+
+
+def transfer_modes(telephony: TelephonyConfig) -> dict[str, str]:
+    """``{label: mode}`` of the transfer allowlist, keyed like :func:`transfer_targets` (V5-32)."""
+    modes: dict[str, str] = {}
+    seen: set[str] = set()
+    for target in telephony.transfer_targets:
+        label = target.label.strip()
+        if label and label.casefold() not in seen:
+            seen.add(label.casefold())
+            modes[label] = target.mode
+    return modes
 
 
 def seed_variables(variables: Mapping[str, Any]) -> dict[str, VariableValue]:
@@ -382,6 +502,10 @@ class TelephonySession:
         dtmf_to_model: bool,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         flush_after_s: float = DTMF_FLUSH_AFTER_S,
+        panel: PanelLayout | None = None,
+        cloud: bool = False,
+        warm_route: WarmTransferRoute | None = None,
+        warm_runner: WarmRunner | None = None,
     ) -> None:
         """Create the wiring; nothing is registered until :meth:`start`.
 
@@ -396,6 +520,10 @@ class TelephonySession:
             dtmf_to_model: ``capabilities.dtmf``: unconsumed keypad entries become user turns.
             sleep: Clock seam for tests.
             flush_after_s: Keypad inter-digit pause.
+            panel: The agent's panel layout (the ``handoff`` block, V5-32).
+            cloud: The session runs on a LiveKit Cloud connection (warm transfer, D-V5-21).
+            warm_route: The api's vetted warm-transfer route (``ResolvedAgentConfig.warm_transfer``).
+            warm_runner: Runs a warm transfer (default :func:`run_warm_transfer`; tests pass a fake).
         """
         self._room = room
         self._session_id = session_id
@@ -412,6 +540,10 @@ class TelephonySession:
         self._identity: str | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
         self._started = False
+        self._panel = panel if panel is not None else PanelLayout()
+        self._cloud = cloud
+        self._warm_route = warm_route
+        self._warm_runner: WarmRunner = warm_runner or run_warm_transfer
 
     @property
     def participant_identity(self) -> str | None:
@@ -553,6 +685,121 @@ class TelephonySession:
         )
         return result
 
+    def _leg_identity(self) -> str | None:
+        if self._identity is not None:
+            return self._identity
+        participant = sip_participant(self._room)
+        return participant.identity if participant else None
+
+    def warm_unavailable(self, to: str) -> str | None:
+        """Why ``to`` cannot be transferred warm here, in plain words; ``None`` = it can (D-V5-21)."""
+        if not self._cloud:
+            return "warm transfer needs a LiveKit Cloud connection"
+        if self._warm_route is None:
+            return "no outbound line is set up for warm transfer"
+        if to not in self._warm_route.targets:
+            return "this destination is not allowed for warm transfer"
+        return None
+
+    async def _handoff(self, status: HandoffStatus, **fields: Any) -> None:
+        ui = getattr(self._pack_ctx, "ui", None)
+        if ui is None:
+            return
+        try:
+            await set_handoff(ui, self._panel, status, **fields)
+        except Exception:  # noqa: BLE001 - the panel never fails a transfer
+            logger.debug("handoff block update failed", exc_info=True)
+
+    async def hand_over(self, request: HandOver) -> HandOverResult:
+        """Hand the caller to a person: warm when the target and the connection allow it, else cold.
+
+        Drives the ``handoff`` block, records one ``transfer`` event
+        (:class:`~lkap_contracts.api_models.TransferEvent`) and, on success, reports
+        ``transferred`` with the mode and the summary before the tool ends the job (so
+        the call row has them whatever the job's teardown order).
+        """
+        summary = (request.summary or "").strip()[:MAX_TRANSFER_SUMMARY_CHARS] or None
+        await self._handoff("requested", mode=request.mode, target=request.label)
+        fallback = self.warm_unavailable(request.to) if request.mode == "warm" else None
+        if request.mode == "warm" and fallback is None and self._warm_route is not None:
+            return await self._warm(request, summary, self._warm_route)
+        if fallback is not None:
+            logger.info("warm transfer falls back to cold", reason=fallback)
+            self._record(
+                "info", {"message": f"Warm transfer is not available ({fallback}); transferring directly."}
+            )
+        await self._handoff("connecting", mode="cold", target=request.label)
+        result = await self._api.transfer_call(self._session_id, request.to, self._leg_identity())
+        outcome = "transferred" if result.ok else ("refused" if result.status == "refused" else "failed")
+        self._record_transfer(request, result.ok, result.status, result.reason, "cold", outcome, summary)
+        if result.ok:
+            await self._report_transferred(request.to, "cold", summary)
+            await self._handoff("ended", mode="cold", target=request.label)
+        else:
+            await self._handoff("timeout", mode="cold", target=request.label, reason=_plain_reason(outcome))
+        return HandOverResult(
+            ok=result.ok, status=result.status, reason=result.reason, mode="cold", outcome=outcome
+        )
+
+    async def _warm(self, request: HandOver, summary: str | None, route: WarmTransferRoute) -> HandOverResult:
+        await self._handoff("connecting", mode="warm", target=request.label)
+        warm = await self._warm_runner(
+            WarmRequest(
+                to=request.to, label=request.label, summary=summary, chat_ctx=request.chat_ctx, route=route
+            )
+        )
+        status = "transferred" if warm.ok else warm.outcome
+        self._record_transfer(request, warm.ok, status, warm.reason, "warm", warm.outcome, summary)
+        if warm.ok:
+            await self._report_transferred(request.to, "warm", summary)
+            await self._handoff("connected", mode="warm", target=request.label)
+        else:
+            await self._handoff(
+                "timeout", mode="warm", target=request.label, reason=_plain_reason(warm.outcome)
+            )
+        return HandOverResult(
+            ok=warm.ok, status=status, reason=warm.reason, mode="warm", outcome=warm.outcome
+        )
+
+    def _record_transfer(
+        self,
+        request: HandOver,
+        ok: bool,
+        status: str,
+        reason: str | None,
+        mode: str,
+        outcome: str,
+        summary: str | None,
+    ) -> None:
+        payload = TransferEvent.model_validate(
+            {
+                "to": request.to,
+                "ok": ok,
+                "status": status,
+                "reason": reason,
+                "mode": mode,
+                "requested_mode": request.mode,
+                "target": request.label,
+                "outcome": outcome,
+                "summary": summary,
+            }
+        )
+        self._record(TRANSFER_EVENT, payload.model_dump(mode="json"))
+
+    async def _report_transferred(self, to: str, mode: str, summary: str | None) -> None:
+        await self._api.report_call(
+            CallReportIn.model_validate(
+                {
+                    "session_id": self._session_id,
+                    "status": "transferred",
+                    "participant_identity": self._leg_identity(),
+                    "transfer_mode": mode,
+                    "transfer_to": to[:256],
+                    "transfer_summary": summary,
+                }
+            )
+        )
+
     async def flow_transfer(self, node: Any, state: Any) -> bool:
         """``FlowServices.transfer`` for flow ``transfer`` nodes (asks V2-15-6).
 
@@ -574,6 +821,7 @@ class TelephonySession:
             dtmf_enabled=bool(config.capabilities.dtmf),
             targets=transfer_targets(config.telephony),
             shutdown=shutdown,
+            modes=transfer_modes(config.telephony),
         )
 
     def _spawn(self, coro: Awaitable[Any]) -> None:
@@ -591,6 +839,7 @@ def build_telephony_tools(
     dtmf_enabled: bool,
     targets: Mapping[str, str],
     shutdown: Callable[[str], None] | None = None,
+    modes: Mapping[str, str] | None = None,
 ) -> list[Any]:
     """The phone-only built-in tools this session gets.
 
@@ -610,7 +859,12 @@ def build_telephony_tools(
     if targets and "transfer_call" not in skip:
         tools.append(
             build_transfer_call_tool(
-                pack_ctx, targets=dict(targets), transfer=telephony.transfer, shutdown=shutdown
+                pack_ctx,
+                targets=dict(targets),
+                transfer=telephony.transfer,
+                shutdown=shutdown,
+                modes=dict(modes or {}),
+                hand_over=telephony.hand_over,
             )
         )
     return tools
@@ -652,4 +906,336 @@ def session_for(
         api=api,
         record_event=record_event,
         dtmf_to_model=bool(resolved.config.capabilities.dtmf),
+        panel=getattr(resolved, "panel", None),
+        cloud=getattr(getattr(resolved, "connection", None), "deployment_type", "") == "cloud",
+        warm_route=getattr(resolved, "warm_transfer", None),
     )
+
+
+# ---------------------------------------------------------------- warm transfer (V5-32)
+@dataclass(frozen=True, slots=True)
+class HandOver:
+    """One ``transfer_call`` request (label and number already matched against the allowlist)."""
+
+    label: str
+    to: str
+    mode: str = "cold"
+    summary: str | None = None
+    chat_ctx: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class HandOverResult:
+    """How :meth:`TelephonySession.hand_over` ended (the tool reads ``ok`` / ``status`` / ``reason``)."""
+
+    ok: bool
+    status: str
+    reason: str | None = None
+    mode: str = "cold"
+    outcome: str = "transferred"
+
+
+@dataclass(frozen=True, slots=True)
+class WarmRequest:
+    """What :func:`run_warm_transfer` needs."""
+
+    to: str
+    label: str
+    summary: str | None
+    chat_ctx: Any
+    route: WarmTransferRoute
+
+
+@dataclass(frozen=True, slots=True)
+class WarmResult:
+    """A warm transfer's end: ``connected``, or ``timeout`` / ``declined`` / ``failed`` with a reason."""
+
+    ok: bool
+    outcome: str
+    reason: str | None = None
+
+
+WarmRunner = Callable[[WarmRequest], Awaitable[WarmResult]]
+
+
+def _plain_reason(outcome: str) -> str:
+    return {
+        "timeout": "Nobody answered.",
+        "declined": "They could not take the call.",
+        "refused": "That transfer is not allowed.",
+    }.get(outcome, "The transfer did not go through.")
+
+
+def _briefing(summary: str | None) -> str:
+    if not summary:
+        return ""
+    return f"The assistant's own summary of the call, to share with them: {summary}"
+
+
+@functools.cache
+def warm_transfer_task_class() -> type[Any]:
+    """LKAP's ``WarmTransferTask`` (livekit-agents 1.8.3 beta), built on first use.
+
+    The beta import stays out of module import time, so a changed SDK breaks the
+    tripwire test (``test_warm_transfer.py``), not the worker's start. The subclass
+    only reports its steps — ``hold`` (the task starts the hold music), ``consult``
+    (the private room and the dial), ``briefing`` (the person answered and the
+    agent briefs them) and ``move`` (``MoveParticipant`` into the caller's room) —
+    through ``on_step``; everything else is the SDK's.
+    """
+    from livekit.agents.beta.workflows import WarmTransferTask  # noqa: PLC0415
+
+    class LkapWarmTransferTask(WarmTransferTask):
+        def __init__(
+            self,
+            *,
+            to: str,
+            route: WarmTransferRoute,
+            chat_ctx: Any,
+            summary: str | None,
+            on_step: Callable[[str], None],
+            ringing_timeout: float = WARM_RING_TIMEOUT_S,
+        ) -> None:
+            kwargs: dict[str, Any] = {
+                "sip_trunk_id": route.trunk_id,
+                "sip_number": route.caller_id,
+                "ringing_timeout": ringing_timeout,
+                "extra_instructions": _briefing(summary),
+            }
+            if chat_ctx is not None:
+                kwargs["chat_ctx"] = chat_ctx
+            super().__init__(to, **kwargs)
+            self._on_step = on_step
+
+        async def on_enter(self) -> None:
+            self._on_step("hold")
+            await super().on_enter()
+
+        async def _dial_human_agent(self) -> Any:
+            self._on_step("consult")
+            session = await super()._dial_human_agent()
+            self._on_step("briefing")
+            return session
+
+        async def _merge_calls(self) -> None:
+            self._on_step("move")
+            await super()._merge_calls()
+
+    return LkapWarmTransferTask
+
+
+def _warm_outcome(exc: BaseException) -> WarmResult:
+    message = str(exc) or type(exc).__name__
+    lowered = message.lower()
+    if "declined" in lowered:
+        return WarmResult(ok=False, outcome="declined", reason=message[:300])
+    if "could not dial" in lowered or "voicemail" in lowered or "room closed" in lowered:
+        return WarmResult(ok=False, outcome="timeout", reason=message[:300])
+    return WarmResult(ok=False, outcome="failed", reason=message[:300])
+
+
+async def run_warm_transfer(request: WarmRequest, *, task_class: type[Any] | None = None) -> WarmResult:
+    """Run the SDK's warm transfer from inside the ``transfer_call`` tool; never raises.
+
+    Must be awaited inside a tool call (an ``AgentTask`` takes over the session
+    until it completes). A ``ToolError`` from the task (nobody answered, the person
+    declined, voicemail) or any other failure comes back as a result.
+    """
+    steps: list[str] = []
+    cls = task_class or warm_transfer_task_class()
+    try:
+        task = cls(
+            to=request.to,
+            route=request.route,
+            chat_ctx=request.chat_ctx,
+            summary=request.summary,
+            on_step=steps.append,
+        )
+        await task
+    except Exception as exc:  # noqa: BLE001 - reported to the model as a result
+        logger.info("warm transfer did not connect", steps=steps, error=str(exc)[:200])
+        return _warm_outcome(exc)
+    logger.info("warm transfer connected", steps=steps)
+    return WarmResult(ok=True, outcome="connected")
+
+
+# ------------------------------------------------------- answering-machine detection (V5-32)
+def amd_config_for(resolved: ResolvedAgentConfig) -> AmdConfig | None:
+    """The AMD settings of an outbound call that asked for them, else ``None``."""
+    if resolved.channel != "sip_out":
+        return None
+    amd = resolved.config.telephony.amd
+    return amd if amd.enabled else None
+
+
+def amd_supported(session: Any) -> bool:
+    """Whether the session's LLM can classify greetings (a cascaded pipeline's text LLM).
+
+    livekit-agents 1.8.3 ``AMD`` with ``llm=None`` reuses the session's LLM and
+    refuses anything that is not an ``llm.LLM`` (a realtime model), so AMD is
+    skipped there with an event instead of failing the call.
+    """
+    from livekit.agents import llm as lk_llm  # noqa: PLC0415
+
+    return isinstance(getattr(session, "llm", None), lk_llm.LLM)
+
+
+def default_amd_factory(session: Any, *, participant_identity: str, ivr_detection: bool) -> Any:
+    """livekit-agents 1.8.3 ``AMD`` on LKAP's own slots.
+
+    ``llm=None`` / ``stt=None`` make it reuse the session's resolved LLM and
+    transcripts: the default (``NOT_GIVEN``) would pick LiveKit Inference models on a
+    Cloud connection, which is neither what the agent is configured with nor free.
+    """
+    from livekit.agents import AMD  # noqa: PLC0415
+
+    kwargs: dict[str, Any] = {"participant_identity": participant_identity} if participant_identity else {}
+    return AMD(
+        session,
+        llm=None,
+        stt=None,
+        ivr_detection=ivr_detection,
+        suppress_compatibility_warning=True,
+        **kwargs,
+    )
+
+
+class AmdRunner:
+    """One answering-machine detection on an outbound call (V5-32).
+
+    :meth:`start` enters the detector (the agent's speech is held from then on);
+    :meth:`run` waits for the verdict, reports it on the call row, and acts on a
+    machine: ``leave_message`` speaks the message once the greeting is over, then
+    hangs up; ``hangup`` (and a mailbox that cannot take a message, and a phone
+    menu without ``ivr_detection``) hangs up at once. A person or an unsure
+    verdict lets the conversation go on (the held greeting plays).
+    """
+
+    def __init__(
+        self,
+        *,
+        session: Any,
+        config: AmdConfig,
+        session_id: str,
+        participant_identity: str,
+        api: TelephonyApi,
+        record_event: RecordEvent,
+        hang_up: Callable[[str], Awaitable[None]],
+        factory: Callable[..., Any] = default_amd_factory,
+    ) -> None:
+        """Create the runner; nothing listens until :meth:`start`."""
+        self._session = session
+        self._config = config
+        self._session_id = session_id
+        self._identity = participant_identity
+        self._api = api
+        self._record = record_event
+        self._hang_up = hang_up
+        self._factory = factory
+        self._detector: Any = None
+        self.verdict: str | None = None
+        self.action: str | None = None
+
+    async def start(self) -> None:
+        """Enter the detector: it holds the agent's speech and waits for the answer itself."""
+        self._detector = self._factory(
+            self._session, participant_identity=self._identity, ivr_detection=self._config.ivr_detection
+        )
+        await self._detector.__aenter__()
+
+    def action_for(self, verdict: str) -> str | None:
+        """What the agent does for a verdict (``None`` = carry on with the conversation)."""
+        if verdict not in AMD_MACHINE_RESULTS:
+            return None
+        if verdict == "machine-ivr":
+            return "navigate" if self._config.ivr_detection else "hangup"
+        if verdict == "machine-vm" and self._config.on_machine == "leave_message":
+            return "leave_message"
+        return "hangup"
+
+    async def run(self) -> str | None:
+        """Wait for the verdict and act on it; returns the verdict (``None`` if detection broke)."""
+        if self._detector is None:
+            return None
+        try:
+            result = await self._detector.execute()
+        except Exception as exc:  # noqa: BLE001 - a detector failure never ends the call
+            logger.warning("answering-machine detection gave no verdict", error=str(exc)[:200])
+            await self.aclose()
+            return None
+        category = getattr(result, "category", "uncertain")
+        verdict = str(getattr(category, "value", category))
+        self.verdict = verdict
+        await self._api.report_call(
+            CallReportIn.model_validate(
+                {
+                    "session_id": self._session_id,
+                    "status": "answered",
+                    "direction": "outbound",
+                    "participant_identity": self._identity,
+                    "amd_result": verdict if verdict in _AMD_VALUES else "uncertain",
+                }
+            )
+        )
+        self.action = self.action_for(verdict)
+        if self.action is None:
+            await self.aclose()
+            return verdict
+        message_left = False
+        if self.action == "leave_message":
+            message_left = await self._leave_message()
+        self._record(
+            VOICEMAIL_EVENT,
+            VoicemailEvent.model_validate(
+                {"result": verdict, "action": self.action, "message_left": message_left}
+            ).model_dump(mode="json"),
+        )
+        await self.aclose()
+        if self.action != "navigate":
+            await self._hang_up(f"answering machine ({verdict})")
+        return verdict
+
+    async def _leave_message(self) -> bool:
+        text = (self._config.message or "").strip() or DEFAULT_VOICEMAIL_MESSAGE
+        try:
+            handle: Any = self._session.say(text, allow_interruptions=False)
+            if inspect.isawaitable(handle):
+                handle = await handle
+            wait = getattr(handle, "wait_for_playout", None)
+            if callable(wait):
+                await asyncio.wait_for(wait(), _VOICEMAIL_PLAYOUT_TIMEOUT_S)
+        except Exception:  # noqa: BLE001 - hang up anyway
+            logger.warning("voicemail message could not be played", exc_info=True)
+            return False
+        return True
+
+    async def aclose(self) -> None:
+        """Leave the detector (resumes the agent's speech); idempotent."""
+        detector, self._detector = self._detector, None
+        if detector is None:
+            return
+        try:
+            await detector.__aexit__(None, None, None)
+        except Exception:  # noqa: BLE001 - teardown
+            logger.debug("amd close failed", exc_info=True)
+
+
+_AMD_VALUES: frozenset[str] = frozenset(
+    {"human", "machine-ivr", "machine-vm", "machine-unavailable", "uncertain"}
+)
+
+
+async def hang_up(ctx: Any, reason: str) -> None:
+    """End a phone call from the worker: delete the room (the SIP leg hangs up), then end the job.
+
+    ``shutdown`` alone would leave the leg in the room (``delete_room_on_close`` is off).
+    """
+    delete = getattr(ctx, "delete_room", None)
+    if callable(delete):
+        try:
+            pending = delete()
+            if inspect.isawaitable(pending):
+                await asyncio.wait_for(pending, _HANGUP_TIMEOUT_S)
+        except Exception:  # noqa: BLE001 - the job still ends
+            logger.warning("could not delete the call's room", exc_info=True)
+    ctx.shutdown(reason=reason[:200])

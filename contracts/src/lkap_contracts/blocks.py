@@ -32,6 +32,7 @@ schemas by a vitest parity test):
   ``max_files``, ``max_bytes`` and ``camera_capture`` (V5-19);
 * ``captions`` → ``show_user``, ``show_agent``, ``target_language`` (reserved for
   translated captions) and ``position`` (``block`` / ``bottom``) (V5-31);
+* ``handoff`` → ``show_queue`` and ``show_agent_name`` (V5-32);
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -76,6 +77,7 @@ __all__ = [
     "DetailsFieldConfig",
     "DocumentBlockConfig",
     "EmptyBlockConfig",
+    "HandoffBlockConfig",
     "MarkdownBlockConfig",
     "StepConfig",
     "StepsBlockConfig",
@@ -385,6 +387,19 @@ class CaptionsBlockConfig(_StrictConfig):
     position: CaptionsPosition = "block"
 
 
+class HandoffBlockConfig(_StrictConfig):
+    """``handoff``: where the hand-off of the caller to a person stands (V5-32).
+
+    The worker writes ``HandoffBlockState`` as ``transfer_call`` runs
+    (``requested → connecting → connected | timeout | ended``). ``show_queue`` shows the
+    caller's place in a queue when one is known; ``show_agent_name`` shows the person's
+    name once they are on the call.
+    """
+
+    show_queue: bool = True
+    show_agent_name: bool = True
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -419,6 +434,7 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "consent": ConsentBlockConfig,
     "upload": UploadBlockConfig,
     "captions": CaptionsBlockConfig,
+    "handoff": HandoffBlockConfig,
 }
 
 

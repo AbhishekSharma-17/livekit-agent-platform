@@ -26,7 +26,10 @@ export interface AgentKeyPreset {
 }
 
 const READ_ONLY_SCOPES: Scope[] = ["agents:read", "sessions:read", "connections:read", "providers:read", "audit:read"];
-const BUILDER_SCOPES: Scope[] = [...READ_ONLY_SCOPES, "agents:write", "sessions:write"];
+// `sessions:write` already implies `sessions:listen` (`auth/roles.py::IMPLIED_SCOPES`), but it is
+// listed explicitly here too (ask #248) so a Builder+ agent key visibly carries "Listen in to live
+// sessions" rather than relying on an implication the console doesn't show.
+const BUILDER_SCOPES: Scope[] = [...READ_ONLY_SCOPES, "agents:write", "sessions:write", "sessions:listen"];
 const OPERATOR_SCOPES: Scope[] = [...BUILDER_SCOPES, "connections:write", "providers:write", "webhooks:write"];
 
 /** R-V3-9: the three console presets. `calls:write` is never part of a preset — it's the separate checkbox. */

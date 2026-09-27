@@ -30,7 +30,7 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { api, ApiError } from "@/lib/api";
 import type { ApiKeyCreated, ApiKeyOut, Scope } from "./api-types";
-import { SCOPES } from "./api-types";
+import { SCOPE_LABEL, SCOPES } from "./api-types";
 import { useActiveWorkspace, useApiKeys, useInvalidateSettings } from "./use-settings-queries";
 import { SkeletonRows } from "@/components/shared/loading-state";
 
@@ -280,6 +280,9 @@ function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
                     <label key={scope} className="flex items-center gap-2 text-sm">
                       <Checkbox checked={scopes.has(scope)} onCheckedChange={() => toggleScope(scope)} disabled={creating} />
                       <span className="font-mono text-xs">{scope}</span>
+                      {SCOPE_LABEL[scope] ? (
+                        <span className="text-muted-foreground text-xs">({SCOPE_LABEL[scope]})</span>
+                      ) : null}
                     </label>
                   ))}
                 </div>

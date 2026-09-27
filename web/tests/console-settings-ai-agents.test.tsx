@@ -207,6 +207,7 @@ describe("ConnectAgentDialog — the full flow", () => {
       "audit:read",
       "agents:write",
       "sessions:write",
+      "sessions:listen",
     ]);
     // 30-day default expiry (docs/v3/PLAN-V3.md R-V3-9), within a minute of "now".
     const days = (Date.parse(body.expires_at as string) - Date.now()) / 86_400_000;

@@ -485,8 +485,14 @@ def test_search_options_follow_the_knowledge_config() -> None:
 
 
 def test_search_options_ignore_values_the_platform_cannot_honour() -> None:
-    options = search_options(KnowledgeConfig(rerank="connection:abc", min_score=1.5))
+    options = search_options(KnowledgeConfig(rerank="someday", min_score=1.5))
     assert (options.rerank, options.min_score) == ("none", None)
+
+
+def test_search_options_pass_a_hosted_reranker_through() -> None:
+    """Asks #181/#326: the search tool uses the connection's re-ranker; the api refuses it on
+    `auto_inject` searches, so automatic knowledge never calls it."""
+    assert search_options(KnowledgeConfig(rerank="connection:abc")).rerank == "connection:abc"
 
 
 async def test_api_kb_client_sends_the_bound_options() -> None:

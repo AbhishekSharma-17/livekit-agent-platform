@@ -177,6 +177,8 @@ class FakeApi:
         self.kb_options: list[KbSearchOptions | None] = []
         #: The `session_id` of each `kb_search` (S5-29; `None` when the caller sent none).
         self.kb_session_ids: list[str | None] = []
+        #: The `purpose` of each `kb_search` (ask #326; `None` when the caller sent none).
+        self.kb_purposes: list[str | None] = []
         #: Every memory recall request (V5-40, ask #255).
         self.memory_recalls: list[Any] = []
         #: Every `POST /internal/v1/sessions/{id}/recording/stop` (S5-5): the session ids.
@@ -255,11 +257,13 @@ class FakeApi:
         *,
         options: KbSearchOptions | None = None,
         session_id: str | None = None,
+        purpose: str | None = None,
     ) -> list[KbHit]:
-        """Record the query (its options and session) and return the canned hits."""
+        """Record the query (its options, session and purpose) and return the canned hits."""
         self.kb_queries.append((list(kb_ids), query, k))
         self.kb_options.append(options)
         self.kb_session_ids.append(session_id)
+        self.kb_purposes.append(purpose)
         return self.hits[:k]
 
     async def report_call(self, report: CallReportIn) -> None:

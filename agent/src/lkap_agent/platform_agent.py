@@ -1409,6 +1409,20 @@ class PlatformAgent(Agent):
             variables=variables if isinstance(variables, dict) else None,
         )
 
+    def _auto_inject_kb(self) -> KbClient:
+        """The knowledge client for automatic knowledge: searches marked `auto_inject` (ask #326).
+
+        The api then skips hosted re-rankers and managed-search knowledge bases, which answer
+        through `search_knowledge` only (D-V5-19, ask #236). A pack's own client without
+        `with_purpose` is used as it is.
+        """
+        kb = self._ctx.kb
+        with_purpose = getattr(kb, "with_purpose", None)
+        if callable(with_purpose):
+            marked: KbClient = with_purpose("auto_inject")
+            return marked
+        return kb
+
     def _auto_inject_active(self) -> bool:
         knowledge = self._ctx.config.knowledge
         return knowledge.auto_inject and bool(self._auto_inject_kb_ids())
@@ -1428,7 +1442,7 @@ class PlatformAgent(Agent):
         text = state.running_text(transcript, is_final=is_final)
         if skip_reason(text, skip_short_turns=knowledge.skip_short_turns) is not None:
             return
-        kb = self._ctx.kb
+        kb = self._auto_inject_kb()
         top_k = knowledge.top_k
 
         async def _search(query: str) -> list[KbHit]:
@@ -1464,7 +1478,7 @@ class PlatformAgent(Agent):
             query = self._knowledge_query(text, turn_ctx)
             try:
                 hits = await asyncio.wait_for(
-                    self._ctx.kb.search(query, k=knowledge.top_k), timeout=INJECT_TIMEOUT_S
+                    self._auto_inject_kb().search(query, k=knowledge.top_k), timeout=INJECT_TIMEOUT_S
                 )
             except TimeoutError:
                 logger.warning("knowledge auto-inject timed out", timeout_s=INJECT_TIMEOUT_S)

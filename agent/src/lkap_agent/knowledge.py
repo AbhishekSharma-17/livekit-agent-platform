@@ -593,14 +593,22 @@ def prefetch_listener(session: Any) -> Callable[[Any], None]:
 # --------------------------------------------------------------------------- search options
 
 
+#: A knowledge connection's hosted re-ranker (``KbRerankMode``'s ``connection:<id>`` form).
+_HOSTED_RERANK = re.compile(r"connection:[A-Za-z0-9_-]{1,64}")
+
+
 def search_options(knowledge: KnowledgeConfig) -> KbSearchOptions:
     """The api search options an agent's knowledge config asks for.
 
-    A rerank the platform does not implement yet (a future ``connection:<id>``)
-    falls back to ``none`` and a floor outside [0, 1] is ignored; the api
-    validator reports both as errors before a config is published.
+    A ``connection:<id>`` rerank (a hosted re-ranking service, V5-20) goes to the api as it
+    is: automatic knowledge marks its searches ``auto_inject`` and the api then never calls
+    the service (asks #181, #326). Any other unknown rerank falls back to ``none`` and a
+    floor outside [0, 1] is ignored; the api validator reports both before a config is
+    published.
     """
-    rerank = knowledge.rerank if knowledge.rerank in KNOWLEDGE_RERANK_VALUES else "none"
+    rerank = knowledge.rerank
+    if rerank not in KNOWLEDGE_RERANK_VALUES and not _HOSTED_RERANK.fullmatch(rerank):
+        rerank = "none"
     min_score = knowledge.min_score
     if min_score is not None and not 0.0 <= min_score <= 1.0:
         logger.warning("ignoring knowledge.min_score outside [0, 1]", min_score=min_score)

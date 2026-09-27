@@ -263,3 +263,33 @@ async def test_api_kb_client_search_passes_k_through_unchanged(k: int | None, ex
         await kb.search("question", k=k)
 
     assert calls == [expected]
+
+
+async def test_automatic_knowledge_marks_its_searches_auto_inject() -> None:
+    """Ask #326: the api skips hosted re-rankers and managed-search KBs only when told why."""
+    from types import SimpleNamespace
+
+    from lkap_agent.platform_agent import PlatformAgent
+
+    api = FakeApi()
+    client = ApiKbClient(api, ["kb-a"], options=KbSearchOptions(), session_id="sess-7")
+    auto = PlatformAgent._auto_inject_kb(SimpleNamespace(_ctx=SimpleNamespace(kb=client)))  # type: ignore[arg-type]
+
+    await auto.search("question")
+    await client.search("question")  # a tool's search is left as it was
+
+    assert api.kb_purposes == ["auto_inject", None]
+    assert api.kb_session_ids == ["sess-7", "sess-7"]
+    assert api.kb_queries[0][0] == ["kb-a"]
+
+
+@respx.mock
+async def test_the_search_request_carries_the_purpose() -> None:
+    route = respx.post(f"{BASE_URL}/internal/v1/kb/search").mock(
+        return_value=httpx.Response(200, json={"hits": []})
+    )
+    async with _client() as client:
+        await client.kb_search(["kb-1"], "is it covered", purpose="auto_inject")
+        await client.kb_search(["kb-1"], "is it covered")
+
+    assert [json.loads(call.request.content)["purpose"] for call in route.calls] == ["auto_inject", None]

@@ -548,8 +548,35 @@ async def test_card_taps_are_checked_recorded_and_reach_the_model() -> None:
 # ------------------------------------------------------------------------- state_delta
 
 
+DETAILS_DELTA = [{"op": "add", "path": "/blocks/claim/items/-", "value": {"key": "k", "label": "K"}}]
+
+
+async def test_state_delta_is_refused_unless_the_panel_accepts_it() -> None:
+    """Ruling on ask #309: off by default; the refusal changes nothing and is logged once."""
+    ctx, ui, room = _ctx()
+    session = MagicMock()
+    PlatformAgent(ctx=_session_ctx(ui, room, session), pack=NullPack(), has_tts=True)
+    for _ in range(2):
+        refused = await _action(room, "state_delta", {"delta": DETAILS_DELTA})
+        assert refused["ok"] is False and "not enabled" in refused["error"]
+    assert ui.state.blocks["claim"].get("items") == []
+
+
+async def test_the_agent_binds_the_panels_state_delta_switch() -> None:
+    ctx, ui, room = _ctx()
+    opted = ctx.config.model_copy(
+        update={"panel": ctx.config.panel.model_copy(update={"accept_state_delta": True})}
+    )
+    context = _session_ctx(ui, room, MagicMock())
+    context.config = opted
+    PlatformAgent(ctx=context, pack=NullPack(), has_tts=True)
+    accepted = await _action(room, "state_delta", {"delta": DETAILS_DELTA})
+    assert accepted["ok"] is True and ui.state.blocks["claim"]["items"][0]["key"] == "k"
+
+
 async def test_state_delta_writes_display_blocks_all_or_nothing() -> None:
     _ctx_, ui, room = _ctx()
+    ui.bind(accept_state_delta=True)  # the builder turned it on
     delta = [
         {
             "op": "add",

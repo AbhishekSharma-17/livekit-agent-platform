@@ -717,6 +717,7 @@ class PlatformAgent(Agent):
                 on_block_action=self._on_block_action,
                 on_unsolicited_form=self._on_unsolicited_form,
                 record_event=self._ctx.record_event,
+                accept_state_delta=self._ctx.config.panel.accept_state_delta,
             )
         self._wire_barge_in()
         logger.debug(

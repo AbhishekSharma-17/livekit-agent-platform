@@ -508,6 +508,9 @@ class UiChannel:
         self._form_uploads: dict[tuple[str, str], list[str]] = {}
         self._upload_handler_registered = False
         self._upload_lock = asyncio.Lock()
+        # V5-43, ruling on ask #309: `state_delta` from the page is opt-in per agent.
+        self._accept_state_delta = False
+        self._state_delta_refusal_logged = False
 
     def start(self) -> None:
         """Register the `lkap.agent.action` RPC handler and the `lkap.ui.upload` byte-stream handler.
@@ -565,6 +568,7 @@ class UiChannel:
         on_text_action: OnTextAction | None = None,
         record_event: RecordEvent | None = None,
         asset_api: AssetApi | None = None,
+        accept_state_delta: bool | None = None,
     ) -> None:
         """Attach the platform callbacks for block actions, late form submissions and events.
 
@@ -585,6 +589,9 @@ class UiChannel:
             self._record_event = record_event
         if asset_api is not None:
             self._asset_api = asset_api
+        if accept_state_delta is not None:
+            # `PanelLayout.accept_state_delta` (V5-43, ask #309): off unless the builder turns it on.
+            self._accept_state_delta = accept_state_delta
 
     def init_blocks(self, specs: Iterable[BlockSpec]) -> None:
         """Seed `state.blocks` with the panel's empty block states (once per session).
@@ -1504,12 +1511,22 @@ class UiChannel:
     async def _handle_state_delta(self, payload: dict[str, Any]) -> AgentActionResult:
         """`state_delta` (V5-43): an AG-UI `STATE_DELTA` on the blocks a caller may write.
 
+        Refused outright unless the agent's `PanelLayout.accept_state_delta` is on (bound by
+        `PlatformAgent`; default off, ruling on ask #309); the refusal is logged once per session.
+
         Every operation must address `/blocks/<id>/...` of a block whose type is in
         :data:`STATE_DELTA_BLOCK_TYPES`; the delta is translated with
         `lkap_contracts.ui_agui.agui_delta_to_patch` against the current state and every
         touched block is validated against its state model before one patch is sent.
         Anything wrong refuses the whole delta and changes nothing.
         """
+        if not self._accept_state_delta:
+            if not self._state_delta_refusal_logged:
+                self._state_delta_refusal_logged = True
+                self._log.info(
+                    "state_delta refused: this agent's panel does not accept changes from the page"
+                )
+            return AgentActionResult(ok=False, error="state_delta is not enabled for this agent's panel")
         try:
             parsed = StateDeltaPayload.model_validate(payload)
         except ValidationError:

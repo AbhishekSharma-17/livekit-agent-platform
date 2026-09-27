@@ -350,10 +350,10 @@ def test_openrouter_llm_models_promoted_on_the_vision_probe_support_vision(model
 
 
 # ------------------------------------------------ custom model ids, live catalogs (V4-07)
-#: The 26 string-typed ``model`` fields retyped ``type="model"`` (R-V4-22). bitHuman's
-#: ``model`` is a genuine two-value enum (its runtime mode), not a vendor model id, and
-#: stays ``type="enum"``.
-EXPECTED_MODEL_FIELD_COUNT = 26
+#: The 26 string-typed ``model`` fields retyped ``type="model"`` (R-V4-22), plus the two
+#: hosted re-rankers (V5-20). bitHuman's ``model`` is a genuine two-value enum (its runtime
+#: mode), not a vendor model id, and stays ``type="enum"``.
+EXPECTED_MODEL_FIELD_COUNT = 28
 
 
 def test_every_string_model_field_is_typed_model() -> None:
@@ -576,7 +576,7 @@ def test_metered_noise_cancellation_entries_show_a_price_note() -> None:
         assert note is not None
         assert "minute" in note
     # V5-25: the built-in tool vendors are metered outside the price table too.
-    metered_kinds = {"noise_cancellation", "web_search", "sms"}
+    metered_kinds = {"noise_cancellation", "web_search", "sms", "knowledge"}
     assert all(spec.price_note is None for spec in REGISTRY if spec.kind not in metered_kinds)
 
 
@@ -599,3 +599,42 @@ def test_http_tool_secret_stays_the_first_secret_bag() -> None:
     bags = [spec.id for spec in REGISTRY if spec.kind == "secret_bag"]
     assert bags[0] == "http-tool-secret"
     assert "mcp-oauth" in bags
+
+
+# ------------------------------------------------------------------ V5-20: knowledge connections
+def test_knowledge_connection_kinds_each_have_a_registry_entry() -> None:
+    from typing import get_args
+
+    from lkap_contracts.api_models import KNOWLEDGE_CONNECTION_PROVIDER_IDS, KnowledgeConnectionKind
+
+    assert set(KNOWLEDGE_CONNECTION_PROVIDER_IDS) == set(get_args(KnowledgeConnectionKind))
+    for provider_id in KNOWLEDGE_CONNECTION_PROVIDER_IDS.values():
+        spec = get(provider_id)
+        assert spec.kind == "knowledge"
+        assert spec.package == "" and spec.python_class == ""
+        assert [field.name for field in spec.secret_fields] == ["api_key"]
+        assert credential_home(spec) == provider_id
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "fields"),
+    [
+        ("qdrant", ["url", "collection", "native_hybrid"]),
+        ("pinecone", ["index", "cloud", "region"]),
+        ("weaviate", ["url", "collection", "native_hybrid"]),
+        ("cohere-rerank", ["model"]),
+        ("voyage-rerank", ["model"]),
+    ],
+)
+def test_knowledge_connection_fields_are_the_settings_the_api_accepts(
+    provider_id: str, fields: list[str]
+) -> None:
+    assert [field.name for field in get(provider_id).fields] == fields
+
+
+def test_every_knowledge_entry_is_offered_in_the_add_key_dialog() -> None:
+    # The console's add-key dialog lists only entries with `requires_credential` (V5-20). A local
+    # Qdrant or Weaviate may still run keyless: the connection's `credential_id` is optional for
+    # them in the api (`knowledge_connections.settings.KEY_REQUIRED`), not in the registry.
+    for provider_id in ("qdrant", "pinecone", "weaviate", "cohere-rerank", "voyage-rerank"):
+        assert get(provider_id).requires_credential is True

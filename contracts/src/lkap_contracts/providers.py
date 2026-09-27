@@ -27,10 +27,14 @@ ProviderKind = Literal[
     "tool_provider",
     "web_search",
     "sms",
+    "knowledge",
 ]
 #: ``web_search`` and ``sms`` (V5-25, D-V5-7): vendors a built-in tool calls (``ToolsConfig.web_search``,
 #: ``ToolsConfig.sms``). Nothing to construct, so no package or class; the worker's own adapters
 #: (``lkap_agent.tools.vendors``) speak each vendor's API.
+#: ``knowledge`` (V5-20, D-V5-16/19): the keys and non-secret fields of a knowledge connection (a
+#: vector store a knowledge base can live in, or a hosted re-ranking service). The api speaks each
+#: vendor's REST API itself (``lkap_api.kb.stores``, ``lkap_api.kb.rerankers``); nothing to construct.
 FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "model", "file", "catalog"]
 
 #: Whether the platform offers a provider at all (CONTRACTS-V2 §4.1).
@@ -3250,6 +3254,189 @@ _NEW: list[ProviderSpec] = [
         price_note="Charged per message by Telnyx, by destination country.",
         docs_url="https://developers.telnyx.com/api/messaging/send-message",
         get_key_url="https://portal.telnyx.com",
+    ),
+    # ------------------------------------------------ knowledge connections (V5-20, D-V5-16/19)
+    # The keys and non-secret fields of `/v1/knowledge-connections`: `fields` is the per-kind
+    # settings schema the console renders (the api validates the same names). The api speaks each
+    # vendor's REST API itself, so there is no package or class; the key is checked by the
+    # connection's `Test connection` (it needs the url or index the fields name). Every entry
+    # keeps `requires_credential` so the add-key dialog offers it; a local Qdrant or Weaviate
+    # connection may still have no key (the api decides, not the registry).
+    _full(
+        "qdrant",
+        "knowledge",
+        "Qdrant",
+        "Qdrant",
+        "",
+        "",
+        secret_fields=[
+            _api_key(
+                "Qdrant API key", help_text="A database API key of the cluster; none for a local cluster."
+            )
+        ],
+        fields=[
+            FieldSpec(
+                name="url",
+                label="Cluster address",
+                type="string",
+                required=True,
+                placeholder="https://your-cluster.cloud.qdrant.io:6333",
+                help="The cluster's REST address (https; a local cluster may use http://localhost:6333).",
+            ),
+            FieldSpec(
+                name="collection",
+                label="Collection",
+                type="string",
+                default="lkap_knowledge",
+                help="Created on first use; every knowledge base of this connection shares it.",
+            ),
+            FieldSpec(
+                name="native_hybrid",
+                label="Keyword search in Qdrant",
+                type="boolean",
+                default=False,
+                help="Let Qdrant combine keyword and meaning matches itself (applies to text indexed after "
+                "it is on). Off: the platform combines them.",
+            ),
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Keeps a knowledge base's vectors in your own Qdrant cluster; the text stays on the platform.",
+        price_note="Qdrant Cloud has a free cluster (1 GB memory, 4 GB disk); larger clusters are billed "
+        "by Qdrant.",
+        docs_url="https://qdrant.tech/documentation/concepts/collections/",
+        get_key_url="https://cloud.qdrant.io",
+    ),
+    _full(
+        "pinecone",
+        "knowledge",
+        "Pinecone",
+        "Pinecone",
+        "",
+        "",
+        secret_fields=[_api_key("Pinecone API key", help_text="From the Pinecone console's API keys page.")],
+        fields=[
+            FieldSpec(
+                name="index",
+                label="Index",
+                type="string",
+                required=True,
+                placeholder="lkap-knowledge",
+                help="Lower-case letters, digits and hyphens. Created on first use (cosine, serverless) if "
+                "it does not exist; each knowledge base is its own namespace in it.",
+            ),
+            FieldSpec(
+                name="cloud",
+                label="Cloud",
+                type="enum",
+                options=["aws", "gcp", "azure"],
+                default="aws",
+                help="Where a new index is created.",
+            ),
+            FieldSpec(
+                name="region",
+                label="Region",
+                type="string",
+                default="us-east-1",
+                help="Where a new index is created (the free plan offers aws us-east-1 only).",
+            ),
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Keeps a knowledge base's vectors in your own Pinecone index; the text stays on the platform.",
+        price_note="The free Starter plan has 5 indexes, 100 namespaces per index and 2 GB; paid plans bill "
+        "storage, reads and writes.",
+        docs_url="https://docs.pinecone.io/guides/index-data/indexing-overview",
+        get_key_url="https://app.pinecone.io",
+    ),
+    _full(
+        "weaviate",
+        "knowledge",
+        "Weaviate",
+        "Weaviate",
+        "",
+        "",
+        secret_fields=[
+            _api_key("Weaviate API key", help_text="The cluster's API key. Leave out for a local cluster.")
+        ],
+        fields=[
+            FieldSpec(
+                name="url",
+                label="Cluster address",
+                type="string",
+                required=True,
+                placeholder="https://your-cluster.weaviate.cloud",
+                help="The cluster's REST address (https; a local cluster may use http://localhost:8080).",
+            ),
+            FieldSpec(
+                name="collection",
+                label="Collection",
+                type="string",
+                default="LkapKnowledge",
+                help="Starts with a capital letter. Created on first use with one tenant per knowledge base.",
+            ),
+            FieldSpec(
+                name="native_hybrid",
+                label="Keyword search in Weaviate",
+                type="boolean",
+                default=False,
+                help="Let Weaviate combine keyword and meaning matches itself (stores the text of chunks "
+                "indexed after it is on). Off: the platform combines them.",
+            ),
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Keeps a knowledge base's vectors in your own Weaviate cluster; the text stays on the "
+        "platform.",
+        price_note="Weaviate Cloud has a free sandbox; serverless clusters are billed by Weaviate.",
+        docs_url="https://docs.weaviate.io/weaviate/manage-collections/multi-tenancy",
+        get_key_url="https://console.weaviate.cloud",
+    ),
+    _full(
+        "cohere-rerank",
+        "knowledge",
+        "Cohere Rerank",
+        "Cohere",
+        "",
+        "",
+        secret_fields=[_api_key("Cohere API key", help_text="From the Cohere dashboard's API keys page.")],
+        fields=[
+            FieldSpec(
+                name="model",
+                label="Model",
+                type="model",
+                default="rerank-v4.0-fast",
+                help="`rerank-v4.0-fast` answers fastest; `rerank-v4.0-pro` ranks best; `rerank-v3.5` "
+                "is the previous generation.",
+            )
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Re-orders the search tool's results with Cohere; automatic knowledge never uses it.",
+        price_note="Billed per search (one question with up to 100 passages); see Cohere's pricing page.",
+        docs_url="https://docs.cohere.com/reference/rerank",
+        get_key_url="https://dashboard.cohere.com/api-keys",
+    ),
+    _full(
+        "voyage-rerank",
+        "knowledge",
+        "Voyage AI Rerank",
+        "Voyage AI",
+        "",
+        "",
+        secret_fields=[_api_key("Voyage AI API key", help_text="From the Voyage AI dashboard.")],
+        fields=[
+            FieldSpec(
+                name="model",
+                label="Model",
+                type="model",
+                default="rerank-2.5-lite",
+                help="`rerank-2.5-lite` answers fastest; `rerank-2.5` ranks best; `rerank-3-lite` and "
+                "`rerank-3` are previews.",
+            )
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Re-orders the search tool's results with Voyage AI; automatic knowledge never uses it.",
+        price_note="Billed per token: $0.02 per million (lite models), $0.05 (the others); the preview "
+        "rerank-3 models include 200 million free tokens (Voyage AI's pricing page).",
+        docs_url="https://docs.voyageai.com/docs/reranker",
+        get_key_url="https://dashboard.voyageai.com",
     ),
 ]
 

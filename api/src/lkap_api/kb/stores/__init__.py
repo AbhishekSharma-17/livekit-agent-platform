@@ -14,6 +14,7 @@ that join).
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -38,6 +39,20 @@ def check_safe_id(value: str, *, what: str = "id") -> str:
     if not SAFE_ID.fullmatch(value):
         raise ValueError(f"unsafe {what} for a vector-store filter: {value!r}")
     return value
+
+
+def as_uuid(chunk_id: str) -> str:
+    """A chunk id (32 hex characters) in the dashed UUID form Qdrant and Weaviate require.
+
+    Raises:
+        ValueError: The id is not 32 hex characters.
+    """
+    return str(uuid.UUID(hex=check_safe_id(chunk_id)))
+
+
+def from_uuid(value: str) -> str:
+    """The chunk id back from its dashed UUID form (lower-case hex, no dashes)."""
+    return value.replace("-", "").lower()
 
 
 def document_filter(filters: Mapping[str, object] | None) -> list[str] | None:
@@ -100,11 +115,18 @@ class StoreHealth(BaseModel):
 
 @dataclass(slots=True, frozen=True)
 class VectorRecord:
-    """One chunk's vector, keyed by its `KbChunk.id`."""
+    """One chunk's vector, keyed by its `KbChunk.id`.
+
+    ``text`` (V5-20, optional) is the text the chunk was embedded from. Only a
+    store with its own keyword index uses it (Qdrant's sparse vector, Weaviate's
+    keyword property); every other store ignores it, and the SQL row stays the
+    source of truth for the chunk's text (D-V5-37).
+    """
 
     id: str
     vector: list[float]
     document_id: str
+    text: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

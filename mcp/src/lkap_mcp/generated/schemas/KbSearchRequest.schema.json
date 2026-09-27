@@ -43,11 +43,9 @@
     },
     "rerank": {
       "default": "none",
-      "description": "`local` rescores the top candidates with the local cross-encoder.",
-      "enum": [
-        "none",
-        "local"
-      ],
+      "description": "`local` rescores the top candidates with the local cross-encoder; `connection:<id>` with the hosted re-ranking service of that knowledge connection.",
+      "maxLength": 75,
+      "pattern": "^(none|local|connection:[A-Za-z0-9_-]{1,64})$",
       "title": "Rerank",
       "type": "string"
     }

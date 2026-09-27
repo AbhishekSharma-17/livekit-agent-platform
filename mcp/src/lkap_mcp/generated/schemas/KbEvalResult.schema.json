@@ -315,10 +315,8 @@
       "title": "Recall At K"
     },
     "rerank": {
-      "enum": [
-        "none",
-        "local"
-      ],
+      "maxLength": 75,
+      "pattern": "^(none|local|connection:[A-Za-z0-9_-]{1,64})$",
       "title": "Rerank",
       "type": "string"
     },

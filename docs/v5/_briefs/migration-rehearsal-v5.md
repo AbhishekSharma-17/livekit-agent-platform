@@ -266,6 +266,40 @@ head` again; `alembic check` = "No new upgrade operations detected"; `alembic_ve
 **Postgres: not executed** (no Postgres here). Only `op.create_table` / `op.create_index` /
 `op.drop_*` with portable types; the CI `test-postgres` job's up/down/up step runs it.
 
+## `v5_005_knowledge_connections` (V5-20)
+
+Rehearsed 2026-09-27 by V5-20 on **scratch SQLite databases only**. **Not applied** to the dev database, and the dev database was not read or copied (the package brief forbids touching `api/data/lkap.db`); the coordinator rehearses on its own `.backup` copy before applying.
+
+**Chain.** Re-chained at merge to `down_revision = "v5_006_agent_tests"` (V5-29 landed first; applied to the dev database on 2026-09-27 after a backup). Originally `down_revision = "v5_002_session_uploads"` (the head when V5-20 started; ledger numbers are not chain order).
+
+### What the revision does
+
+| Object | Change |
+|---|---|
+| `knowledge_connections` (new) | `id PK, workspace_id → workspaces ON DELETE CASCADE, name, kind VARCHAR(32) (no CHECK: validated by the contracts literal, so V5-45's `ragie` needs no rebuild), settings JSON, credential_id → credentials ON DELETE SET NULL, status CHECK (unverified|ok|error), last_checked_at, last_error, capabilities JSON, created_at, updated_at` + `ix_knowledge_connections_workspace`. |
+| `knowledge_bases` | `+ connection_id VARCHAR(32) NULL → knowledge_connections (no ondelete: a connection with knowledge bases is refused with 409 first)`, `+ kind VARCHAR(16) NOT NULL DEFAULT 'managed'`, `+ external_ref VARCHAR(512) NULL`. On SQLite the foreign key rebuilds the table through `batch_alter_table` (the `v2_004` precedent; the migration connection does not enable `PRAGMA foreign_keys`, so dropping the old copy cascades nothing). Existing rows read as `connection_id NULL, kind 'managed'` = the platform's store, unchanged. |
+
+**Downgrade** drops the foreign key and the three columns (a batch rebuild on SQLite) and then the table. A knowledge base that was stored through a connection falls back to the platform's store (re-index it afterwards).
+
+### Rehearsal (scratch SQLite)
+
+Fresh database: `upgrade head` → `downgrade v5_002_session_uploads` → `upgrade head` → `alembic check` = "No new upgrade operations detected."; `PRAGMA integrity_check` = ok, `foreign_key_check` = no rows.
+
+Seeded database (`upgrade v5_002_session_uploads`, then one workspace, two knowledge bases — one with a recorded 384-wide embedder, one legacy with NULLs — two documents, three chunks, FTS rows by the `v5_001` triggers):
+
+```
+before:         2 kbs, 2 docs, 3 chunks, 3 fts
+after up:       2 kbs, 2 docs, 3 chunks, 3 fts
+  kb1|NULL|managed|NULL|384      kb2|NULL|managed|NULL|NULL
+  fts MATCH 'text:flood' -> 1
+check:          No new upgrade operations detected.
+after down:     2 kbs, 2 docs, 3 chunks, 3 fts   (columns back to the v5_002 set)
+after up again: 2 kbs, 2 docs, 3 chunks, 3 fts
+integrity: ok   fk_violations: 0
+```
+
+**Postgres: rendered, not executed** (no Postgres here). `alembic upgrade v5_002_session_uploads:v5_005_knowledge_connections --sql` against a Postgres url emits `CREATE TABLE knowledge_connections (…)`, the index, three `ALTER TABLE knowledge_bases ADD COLUMN` and one `ADD CONSTRAINT … FOREIGN KEY`, no rebuild; the CI `test-postgres` job's up/down/up step runs it.
+
 ### To apply (coordinator)
 
 ```
@@ -278,3 +312,9 @@ Instant on the dev database. **Order:** backup → `upgrade head` → restart th
 the `tool_mocks` branch, and only once asks #190 (`internal.py`) and #191 (`main.py`) are applied. An api on this code
 against an unmigrated database fails on the new routes and on **publishing an agent whose
 `publish_gate.require_tests` is on** (no agent has it on before this package), nowhere else.
+
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_005.db"
+cd api && uv run alembic upgrade head      # v5_002_session_uploads -> v5_005_knowledge_connections
+```
+
+Instant on the dev database (a small table rebuild of `knowledge_bases`). **Order:** backup → `upgrade head` → restart the api (it mounts `/v1/knowledge-connections` and reads the new columns; an api on this code against an unmigrated database fails on every knowledge-base query). The worker needs no restart for V5-20.

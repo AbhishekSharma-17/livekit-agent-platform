@@ -174,7 +174,8 @@
             "secret_bag",
             "tool_provider",
             "web_search",
-            "sms"
+            "sms",
+            "knowledge"
           ],
           "type": "string"
         },

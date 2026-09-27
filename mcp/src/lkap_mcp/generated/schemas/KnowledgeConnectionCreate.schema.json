@@ -1,0 +1,49 @@
+{
+  "$id": "lkap-contracts/KnowledgeConnectionCreate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``POST /v1/knowledge-connections``.\n\n``settings`` holds the non-secret fields of the kind's registry entry\n(``fields``: url, collection or index name, cloud, region, model); the key\nis a vault credential of the kind's provider, referenced by id.",
+  "properties": {
+    "credential_id": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "kind": {
+      "enum": [
+        "qdrant",
+        "pinecone",
+        "weaviate",
+        "cohere_rerank",
+        "voyage_rerank"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "settings": {
+      "additionalProperties": true,
+      "title": "Settings",
+      "type": "object"
+    }
+  },
+  "required": [
+    "name",
+    "kind"
+  ],
+  "title": "KnowledgeConnectionCreate",
+  "type": "object"
+}

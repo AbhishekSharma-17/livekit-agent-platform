@@ -663,12 +663,59 @@ class KnowledgeBase(Base):
     embedder_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     #: V5-01: `{max_tokens, overlap}` of the structure-aware chunker; `NULL` = the defaults.
     chunking: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: V5-20: the knowledge connection (a vector store of the same workspace) holding this
+    #: KB's vectors; `NULL` = the platform's own store. Fixed at creation. A connection
+    #: with knowledge bases cannot be deleted (409), hence no `ondelete` action.
+    connection_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("knowledge_connections.id"), nullable=True
+    )
+    #: V5-20: `managed` (LKAP ingests) or `external` (a vendor does, V5-45).
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="managed", server_default="managed")
+    #: V5-20: where the vectors live in the connection (collection, index/namespace, tenant),
+    #: derived by the server from the connection and the KB id, never sent by a client.
+    external_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
 
     __table_args__ = (Index("ix_knowledge_bases_workspace", "workspace_id"),)
+
+
+class KnowledgeConnection(Base):
+    """A knowledge connection (V5-20): a bring-your-own vector store or a hosted re-ranker.
+
+    `settings` carries only the non-secret fields of the kind's registry entry
+    (url, collection or index, cloud, region, model); the key is a vault
+    credential referenced by `credential_id`. Deleting that credential leaves the
+    connection keyless (`SET NULL`), and its next use or test reports it.
+    """
+
+    __tablename__ = "knowledge_connections"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    credential_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("credentials.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="unverified")
+    last_checked_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    capabilities: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    # `kind` has no CHECK constraint on purpose: the contracts literal validates it, and a
+    # later kind (V5-45's `ragie`) then needs no table rebuild.
+    __table_args__ = (
+        CheckConstraint("status IN ('unverified','ok','error')", name="status_valid"),
+        Index("ix_knowledge_connections_workspace", "workspace_id"),
+    )
 
 
 class KbDocument(Base):

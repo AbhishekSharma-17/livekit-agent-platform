@@ -3,6 +3,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "``POST /v1/knowledge-bases``.",
   "properties": {
+    "connection_id": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Store the vectors through this knowledge connection (a vector store of the same workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists.",
+      "title": "Connection Id"
+    },
     "description": {
       "default": "",
       "maxLength": 4000,

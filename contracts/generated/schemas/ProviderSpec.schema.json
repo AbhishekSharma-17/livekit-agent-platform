@@ -635,7 +635,8 @@
         "secret_bag",
         "tool_provider",
         "web_search",
-        "sms"
+        "sms",
+        "knowledge"
       ],
       "title": "Kind",
       "type": "string"

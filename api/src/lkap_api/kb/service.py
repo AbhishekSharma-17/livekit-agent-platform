@@ -48,6 +48,19 @@ service's own path fuses one global keyword list instead). A store that
 reports a knowledge base built at another width
 (:class:`~lkap_api.kb.embed.KbEmbedderMismatchError`) gets that knowledge base
 skipped with a ``kb_embedder_mismatch`` warning, like stage 1 does.
+
+**Knowledge connections (V5-20).** Knowledge bases stored through a
+connection are queried through the same store (a
+:class:`~lkap_api.kb.store.KbStoreRouter` routes by knowledge base). Native
+hybrid is decided per knowledge base (:func:`~lkap_api.kb.store.kb_capabilities`):
+the store fuses only when *every* searched knowledge base's store does;
+otherwise the service's own keyword list (the text is in SQL for every
+knowledge base, D-V5-37) is fused as above. ``rerank="connection:<id>"`` uses
+that connection's hosted re-ranker (relevance on ``[0, 1]``, no sigmoid) and
+attaches the call's cost line (``rerank_usage``, priced from the price table;
+an unknown price is "no price", never zero). A search whose ``purpose`` is
+``auto_inject`` never calls a hosted re-ranker (D-V5-19): it is refused with a
+``rerank_refused`` warning and the fused order is kept.
 """
 
 from __future__ import annotations
@@ -56,16 +69,21 @@ import asyncio
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Final
 
+from lkap_contracts import pricing
 from lkap_contracts.api_models import (
     KbHit,
     KbRerankMode,
+    KbRerankUsage,
     KbScoreSource,
     KbSearchMode,
+    KbSearchPurpose,
     KbSearchResponse,
     KbSearchWarning,
     KbSearchWarningCode,
+    connection_rerank_id,
 )
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -75,9 +93,9 @@ from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase
 from lkap_api.kb.embed import Embedder, KbEmbedderMismatchError, kb_embedder_mismatch
 from lkap_api.kb.lexical import LexicalResult, lexical_search
-from lkap_api.kb.rerank import Reranker, sigmoid
+from lkap_api.kb.rerankers.base import HostedReranker, Reranker, scores_are_normalized, sigmoid
 from lkap_api.kb.search import QUERY_CACHE, QueryEmbeddingCache, fuse_rrf
-from lkap_api.kb.store import VectorHit, VectorStore, store_capabilities
+from lkap_api.kb.store import KbStoreRouter, VectorHit, VectorStore, kb_capabilities
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -183,6 +201,7 @@ class KnowledgeService:
         rerank: RerankMode = "none",
         mode: SearchMode = "vector",
         workspace_id: str | None = None,
+        purpose: KbSearchPurpose | None = None,
     ) -> KnowledgeSearchResponse:
         """Return the top ``k`` chunks across ``kb_ids`` for ``query``, best first.
 
@@ -196,6 +215,7 @@ class KnowledgeService:
             workspace_id: Restrict to this workspace's knowledge bases (admin
                 path); ``None`` reads across workspaces (the worker's ids come
                 from a resolved agent config).
+            purpose: ``auto_inject`` refuses a hosted re-ranker (V5-20).
 
         Returns:
             The hits plus the dropped count, the warnings and stage timings.
@@ -216,7 +236,8 @@ class KnowledgeService:
             return self._finish(response, started)
 
         retrieve_started = time.perf_counter()
-        native_hybrid = mode == "hybrid" and store_capabilities(self._store).hybrid
+        # --- V5-20: native hybrid only when every searched knowledge base's store has it.
+        native_hybrid = mode == "hybrid" and await self._all_native_hybrid(searchable)
         lexical_task = (
             self._lexical(searchable, query, response.warnings)
             if mode == "hybrid" and not native_hybrid
@@ -236,6 +257,12 @@ class KnowledgeService:
             rerank_started = time.perf_counter()
             ranked = await self._rerank(query, ranked, response.warnings)
             response.timings_ms["rerank"] = _ms(rerank_started)
+        # --- V5-20: a hosted re-ranker (`connection:<id>`), never on the auto-inject path.
+        elif (connection_id := connection_rerank_id(rerank)) is not None:
+            rerank_started = time.perf_counter()
+            ranked = await self._hosted_rerank(query, ranked, connection_id, searchable, purpose, response)
+            response.timings_ms["rerank"] = _ms(rerank_started)
+        # --- end V5-20
 
         top = ranked[:k]
         kept = [c for c in top if min_score is None or c.score >= min_score]
@@ -451,6 +478,82 @@ class KnowledgeService:
             candidate.source = "rerank"
         return sorted(pool, key=lambda c: -(c.rerank_score or 0.0))
 
+    # ------------------------------------------------------------------- V5-20: connections
+    async def _all_native_hybrid(self, kb_ids: list[str]) -> bool:
+        """Whether every knowledge base's store fuses keyword and vector matches itself."""
+        return all([(await kb_capabilities(self._store, kb_id)).hybrid for kb_id in kb_ids])
+
+    async def _hosted_rerank(
+        self,
+        query: str,
+        ranked: list[_Candidate],
+        connection_id: str,
+        kb_ids: list[str],
+        purpose: KbSearchPurpose | None,
+        response: KnowledgeSearchResponse,
+    ) -> list[_Candidate]:
+        """Rescore with the connection's hosted re-ranker; any failure keeps the fused order."""
+        pool = ranked[:RERANK_POOL]
+        if not pool:
+            return ranked
+        if purpose == "auto_inject":
+            response.warnings.append(
+                KnowledgeSearchWarning(
+                    code="rerank_refused",
+                    message="automatic knowledge never uses a re-ranking service; order not reranked",
+                )
+            )
+            return ranked
+        if not isinstance(self._store, KbStoreRouter):
+            response.warnings.append(
+                KnowledgeSearchWarning(
+                    code="rerank_failed", message="re-ranking services are unavailable here"
+                )
+            )
+            return ranked
+        try:
+            reranker: HostedReranker = await self._store.runtime.reranker(connection_id, kb_ids=kb_ids)
+            scores, usage = await reranker.rerank_with_usage(query, [c.chunk.text for c in pool])
+        except Exception as exc:  # noqa: BLE001 - rerank is an optional stage; keep the fused order
+            message = getattr(exc, "message", None) or type(exc).__name__
+            log.warning("kb_hosted_rerank_failed", error_type=type(exc).__name__)
+            response.warnings.append(
+                KnowledgeSearchWarning(
+                    code="rerank_failed", message=f"re-ranking failed ({message}); order not reranked"
+                )
+            )
+            return ranked
+        if len(scores) != len(pool):
+            response.warnings.append(
+                KnowledgeSearchWarning(code="rerank_failed", message="the re-ranker returned the wrong count")
+            )
+            return ranked
+        normalized = scores_are_normalized(reranker)
+        for candidate, score in zip(pool, scores, strict=True):
+            candidate.rerank_score = min(1.0, max(0.0, score)) if normalized else sigmoid(score)
+            candidate.source = "rerank"
+        quote = pricing.quote(usage.provider_id, usage.model, usage.unit)
+        cost = float(quote.usd_per_unit * Decimal(str(usage.quantity))) if quote is not None else None
+        response.rerank_usage = KbRerankUsage(
+            connection_id=connection_id,
+            provider_id=usage.provider_id,
+            model=usage.model,
+            unit=usage.unit,
+            quantity=usage.quantity,
+            cost_usd=cost,
+            note=None if cost is not None else "no price",
+        )
+        log.info(
+            "kb_hosted_rerank",
+            provider_id=usage.provider_id,
+            model=usage.model,
+            unit=usage.unit,
+            quantity=usage.quantity,
+            cost_usd=cost,
+        )
+        return sorted(pool, key=lambda c: -(c.rerank_score or 0.0))
+
+    # ------------------------------------------------------------------- end V5-20
     def _finish(self, response: KnowledgeSearchResponse, started: float) -> KnowledgeSearchResponse:
         response.timings_ms["total"] = _ms(started)
         log.debug(

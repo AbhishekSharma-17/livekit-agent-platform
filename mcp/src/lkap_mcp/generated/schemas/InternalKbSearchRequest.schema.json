@@ -42,6 +42,23 @@
       "title": "Mode",
       "type": "string"
     },
+    "purpose": {
+      "anyOf": [
+        {
+          "enum": [
+            "tool",
+            "auto_inject"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`auto_inject` never uses a hosted re-ranking service (D-V5-19): the api refuses it and searches without; `tool` (the search tool) may.",
+      "title": "Purpose"
+    },
     "query": {
       "maxLength": 2000,
       "minLength": 1,
@@ -50,11 +67,9 @@
     },
     "rerank": {
       "default": "none",
-      "description": "`local` rescores the top candidates with the local cross-encoder.",
-      "enum": [
-        "none",
-        "local"
-      ],
+      "description": "`local` rescores the top candidates with the local cross-encoder; `connection:<id>` with the hosted re-ranking service of that knowledge connection.",
+      "maxLength": 75,
+      "pattern": "^(none|local|connection:[A-Za-z0-9_-]{1,64})$",
       "title": "Rerank",
       "type": "string"
     },

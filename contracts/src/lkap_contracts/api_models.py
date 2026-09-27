@@ -541,6 +541,139 @@ class McpOauthStatusOut(BaseModel):
     worker_supported: bool = False
 
 
+# ------------------------------------------------------------------ knowledge connections (V5-20)
+#: Where a knowledge base's vectors live, or which hosted service re-ranks search results
+#: (knowledge-and-memory §3.2/§3.3, D-V5-16, D-V5-19). One registry entry (provider kind
+#: ``knowledge``) per kind: :data:`KNOWLEDGE_CONNECTION_PROVIDER_IDS`.
+KnowledgeConnectionKind = Literal["qdrant", "pinecone", "weaviate", "cohere_rerank", "voyage_rerank"]
+#: The kinds a knowledge base can store its vectors in (``knowledge_bases.connection_id``).
+VECTOR_STORE_CONNECTION_KINDS: frozenset[str] = frozenset({"qdrant", "pinecone", "weaviate"})
+#: The kinds ``KnowledgeConfig.rerank = "connection:<id>"`` may name (the search tool only).
+RERANKER_CONNECTION_KINDS: frozenset[str] = frozenset({"cohere_rerank", "voyage_rerank"})
+#: The registry entry (and credential home) of each kind.
+KNOWLEDGE_CONNECTION_PROVIDER_IDS: dict[str, str] = {
+    "qdrant": "qdrant",
+    "pinecone": "pinecone",
+    "weaviate": "weaviate",
+    "cohere_rerank": "cohere-rerank",
+    "voyage_rerank": "voyage-rerank",
+}
+#: ``unverified`` until the first test; ``error`` carries ``last_error``.
+KnowledgeConnectionStatus = Literal["unverified", "ok", "error"]
+#: The prefix of a hosted re-ranker in ``KnowledgeConfig.rerank`` / ``KbSearchOptions.rerank``.
+CONNECTION_RERANK_PREFIX = "connection:"
+#: The ``connection:<id>`` form, as a regular expression over the whole value.
+CONNECTION_RERANK_PATTERN = r"^connection:[A-Za-z0-9_-]{1,64}$"
+#: What a knowledge base is: LKAP ingests it (``managed``) or a vendor does (``external``, V5-45).
+KnowledgeBaseKind = Literal["managed", "external"]
+
+
+def connection_rerank_id(value: str | None) -> str | None:
+    """The connection id of a well-formed ``connection:<id>`` re-rank value, else ``None``."""
+    if value is None or re.fullmatch(CONNECTION_RERANK_PATTERN, value) is None:
+        return None
+    return value.removeprefix(CONNECTION_RERANK_PREFIX)
+
+
+class KnowledgeConnectionCapabilities(BaseModel):
+    """What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``)."""
+
+    hybrid: bool = Field(
+        default=False,
+        description="Keyword and vector matches are fused inside the store (else the platform fuses them).",
+    )
+    filters: bool = False
+    stores_text: bool = False
+    namespaces: bool = Field(default=False, description="Each knowledge base is its own namespace or tenant.")
+    rerank: bool = Field(default=False, description="A re-ranking service (not a vector store).")
+    dimension: int | None = Field(
+        default=None, description="The vector width the collection or index holds; null when not fixed."
+    )
+    version: str | None = Field(default=None, description="The service's version, when it reports one.")
+
+
+class KnowledgeConnectionCreate(BaseModel):
+    """``POST /v1/knowledge-connections``.
+
+    ``settings`` holds the non-secret fields of the kind's registry entry
+    (``fields``: url, collection or index name, cloud, region, model); the key
+    is a vault credential of the kind's provider, referenced by id.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    kind: KnowledgeConnectionKind
+    settings: dict[str, Any] = Field(default_factory=dict)
+    credential_id: str | None = Field(default=None, max_length=32)
+
+
+class KnowledgeConnectionUpdate(BaseModel):
+    """``PUT /v1/knowledge-connections/{id}``: only the fields sent change (the kind never does).
+
+    ``credential_id: null`` sent explicitly removes the key; leaving it out keeps it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    settings: dict[str, Any] | None = None
+    credential_id: str | None = Field(default=None, max_length=32)
+
+
+class KnowledgeConnectionOut(BaseModel):
+    """A knowledge connection; the key is never returned, only its fingerprint."""
+
+    id: str
+    name: str
+    kind: KnowledgeConnectionKind
+    provider_id: str
+    settings: dict[str, Any]
+    credential_id: str | None = None
+    credential_fingerprint: str | None = Field(
+        default=None, description="The fingerprint of the key in use; null without a key."
+    )
+    status: KnowledgeConnectionStatus
+    last_checked_at: datetime | None = None
+    last_error: str | None = None
+    capabilities: KnowledgeConnectionCapabilities
+    knowledge_base_count: int = Field(
+        default=0, description="Knowledge bases stored through this connection."
+    )
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeConnectionPage(BaseModel):
+    """``GET /v1/knowledge-connections``."""
+
+    items: list[KnowledgeConnectionOut]
+    total: int
+
+
+class KnowledgeConnectionTestOut(BaseModel):
+    """``POST /v1/knowledge-connections/{id}/test``: what the service answered.
+
+    For a vector store, ``collections`` lists the collections or indexes the key
+    can see and the dimension check compares the one the connection uses with
+    the embedding width knowledge bases are built with; a mismatch is
+    ``ok=false`` with a message naming the collection or index.
+    """
+
+    ok: bool
+    status: KnowledgeConnectionStatus
+    message: str
+    collections: list[str] = Field(default_factory=list)
+    target: str | None = Field(default=None, description="The collection or index this connection uses.")
+    target_exists: bool | None = None
+    dimension_expected: int | None = Field(
+        default=None, description="The embedding width new knowledge bases are built with."
+    )
+    dimension_found: int | None = Field(default=None, description="The width the collection or index holds.")
+    capabilities: KnowledgeConnectionCapabilities
+    checked_at: datetime
+
+
 # ------------------------------------------------------------------ knowledge bases
 class KbCreate(BaseModel):
     """``POST /v1/knowledge-bases``."""
@@ -548,6 +681,12 @@ class KbCreate(BaseModel):
     name: str = Field(max_length=200)
     description: str = Field(default="", max_length=4000)
     embedder_id: str = "fastembed-embedding"
+    connection_id: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Store the vectors through this knowledge connection (a vector store of the same "
+        "workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists.",
+    )
 
 
 class KbOut(BaseModel):
@@ -569,6 +708,14 @@ class KbOut(BaseModel):
     )
     chunking: dict[str, int] | None = Field(
         default=None, description="`{max_tokens, overlap}` of the chunker; null means the defaults."
+    )
+    connection_id: str | None = Field(
+        default=None, description="The knowledge connection holding the vectors; null = the platform's store."
+    )
+    kind: KnowledgeBaseKind = Field(default="managed", description="`managed`: the platform ingests it.")
+    external_ref: str | None = Field(
+        default=None,
+        description="Where the vectors live in the connection (collection, index and namespace, or tenant).",
     )
 
 
@@ -678,13 +825,24 @@ class KbImportIn(BaseModel):
 
 #: How a knowledge search ranks chunks (V5-04): embedding similarity, or keyword matches fused with it.
 KbSearchMode = Literal["vector", "hybrid"]
-#: Whether the candidates are rescored by the local cross-encoder (V5-04).
-KbRerankMode = Literal["none", "local"]
+#: Whether and how the candidates are rescored: ``none``, ``local`` (the local cross-encoder,
+#: V5-04) or ``connection:<id>`` (a hosted re-ranking service, V5-20; the search tool only).
+KbRerankMode = Annotated[
+    str, StringConstraints(pattern=r"^(none|local|connection:[A-Za-z0-9_-]{1,64})$", max_length=75)
+]
+#: Who asked for a search: the ``search_knowledge`` tool or the automatic per-turn injection.
+KbSearchPurpose = Literal["tool", "auto_inject"]
 #: Which stage decided a hit's ``score``.
 KbScoreSource = Literal["vector", "fused", "rerank"]
 #: Why a search skipped or degraded part of its work.
 KbSearchWarningCode = Literal[
-    "kb_not_found", "kb_embedder_mismatch", "kb_timeout", "kb_error", "lexical_unavailable", "rerank_failed"
+    "kb_not_found",
+    "kb_embedder_mismatch",
+    "kb_timeout",
+    "kb_error",
+    "lexical_unavailable",
+    "rerank_failed",
+    "rerank_refused",
 ]
 
 
@@ -696,7 +854,9 @@ class KbSearchOptions(BaseModel):
         description="`vector` (embedding similarity) or `hybrid` (keyword matches fused with it by rank).",
     )
     rerank: KbRerankMode = Field(
-        default="none", description="`local` rescores the top candidates with the local cross-encoder."
+        default="none",
+        description="`local` rescores the top candidates with the local cross-encoder; `connection:<id>` "
+        "with the hosted re-ranking service of that knowledge connection.",
     )
     min_score: float | None = Field(
         default=None,
@@ -763,6 +923,18 @@ class KbSearchWarning(BaseModel):
     kb_id: str | None = None
 
 
+class KbRerankUsage(BaseModel):
+    """One hosted re-rank call and its cost line (D-V5-19; an unknown price is never zero)."""
+
+    connection_id: str
+    provider_id: str
+    model: str
+    unit: Unit
+    quantity: float = Field(description="Searches (Cohere) or tokens (Voyage) the vendor billed.")
+    cost_usd: float | None = Field(default=None, description="Null when the price table has no row.")
+    note: str | None = Field(default=None, description="`no price` when the price is unknown.")
+
+
 class KbSearchResponse(BaseModel):
     """Search results, best first, with what was dropped or skipped on the way."""
 
@@ -772,6 +944,9 @@ class KbSearchResponse(BaseModel):
     min_score: float | None = None
     dropped: int = Field(default=0, description="Hits of the top `k` removed by `min_score`.")
     warnings: list[KbSearchWarning] = Field(default_factory=list)
+    rerank_usage: KbRerankUsage | None = Field(
+        default=None, description="The hosted re-ranking call this search made, with its cost line."
+    )
     timings_ms: dict[str, float] = Field(
         default_factory=dict, description="`embed`, `retrieve`, `rerank` and `total`, in milliseconds."
     )
@@ -1459,6 +1634,11 @@ class InternalKbSearchRequest(KbSearchOptions):
         max_length=64,
         description="The session searching; when set, only knowledge bases of that session's "
         "workspace are searched (S5-29). Null from a pre-V5-27 worker.",
+    )
+    purpose: KbSearchPurpose | None = Field(
+        default=None,
+        description="`auto_inject` never uses a hosted re-ranking service (D-V5-19): the api refuses it "
+        "and searches without; `tool` (the search tool) may.",
     )
 
 

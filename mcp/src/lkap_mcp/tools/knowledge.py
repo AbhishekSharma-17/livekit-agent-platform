@@ -7,6 +7,13 @@ this process never fetches a user-supplied url (R-V3-14).
 V5-05 adds the eval harness: ``kb_evals_set`` replaces a knowledge base's
 golden questions, ``kb_evaluate`` runs them (a job; waits for the result by
 default) and ``kb_evaluate_result`` reads a run back.
+
+V5-20 adds knowledge connections (bring-your-own Qdrant, Pinecone or Weaviate
+for a knowledge base's vectors; Cohere or Voyage AI to re-rank the search
+tool's results): ``kb_connection_list``, ``kb_connection_create``,
+``kb_connection_update``, ``kb_connection_test``, and ``connection_id`` on
+``kb_create``. Keys are never arguments here: they are provider keys (a
+``provider_key_*`` tool) referenced by id.
 """
 
 from __future__ import annotations
@@ -85,10 +92,19 @@ def register(registry: Registry) -> None:
 
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="KbOut")
     async def kb_create(
-        name: str, description: str = "", embedder_id: str = "fastembed-embedding", plan: bool = False
+        name: str,
+        description: str = "",
+        embedder_id: str = "fastembed-embedding",
+        connection_id: Annotated[
+            str | None,
+            Field(description="Store the vectors in this knowledge connection (a vector store); fixed later"),
+        ] = None,
+        plan: bool = False,
     ) -> ToolResult:
-        """Create an empty knowledge base."""
-        body = {"name": name, "description": description, "embedder_id": embedder_id}
+        """Create an empty knowledge base (in the platform's store, or a knowledge connection's)."""
+        body: dict[str, Any] = {"name": name, "description": description, "embedder_id": embedder_id}
+        if connection_id is not None:
+            body["connection_id"] = connection_id
         if plan:
             return planned(request("POST", "/v1/knowledge-bases", body))
         created = await client.post("/v1/knowledge-bases", body)
@@ -152,6 +168,72 @@ def register(registry: Registry) -> None:
                 "ingest_failed", str(document.get("error") or "ingestion failed"), data=document
             )
         return ToolResult.success(document, warnings=warnings)
+
+    # ------------------------------------------------------------------ knowledge connections (V5-20)
+    @registry.tool(scopes={"providers:read"}, annotations=READ, data="KnowledgeConnectionOut[]")
+    async def kb_connection_list() -> ToolResult:
+        """List knowledge connections (vector stores, re-ranking services): status, key fingerprint."""
+        return ToolResult.success(await client.items("/v1/knowledge-connections"))
+
+    @registry.tool(scopes={"providers:write"}, annotations=WRITE, data="KnowledgeConnectionOut")
+    async def kb_connection_create(
+        name: str,
+        kind: Literal["qdrant", "pinecone", "weaviate", "cohere_rerank", "voyage_rerank"],
+        settings: Annotated[
+            dict[str, Any] | None,
+            Field(description="The kind's non-secret fields (url, collection, index, cloud, region, model)"),
+        ] = None,
+        credential_id: Annotated[
+            str | None, Field(description="A provider key of the kind's provider (qdrant, pinecone, ...)")
+        ] = None,
+        test: bool = True,
+        plan: bool = False,
+    ) -> ToolResult:
+        """Create a knowledge connection, then test it (the test result is in `data.test`)."""
+        body = {"name": name, "kind": kind, "settings": settings or {}, "credential_id": credential_id}
+        if plan:
+            return planned(request("POST", "/v1/knowledge-connections", body))
+        created = await client.post("/v1/knowledge-connections", body)
+        data: dict[str, Any] = {"connection": created}
+        if test:
+            data["test"] = await client.post(
+                f"/v1/knowledge-connections/{seg(str(created.get('id')))}/test", {}
+            )
+        steps = (
+            [f'Create a knowledge base in it: kb_create(name=..., connection_id="{created.get("id")}").']
+            if kind in ("qdrant", "pinecone", "weaviate")
+            else [f'Use it from the search tool: agent knowledge.rerank = "connection:{created.get("id")}".']
+        )
+        return ToolResult.success(data, next_steps=steps)
+
+    @registry.tool(scopes={"providers:write"}, annotations=IDEMPOTENT_WRITE, data="KnowledgeConnectionOut")
+    async def kb_connection_update(
+        connection_id: str,
+        name: str | None = None,
+        settings: dict[str, Any] | None = None,
+        credential_id: str | None = None,
+        plan: bool = False,
+    ) -> ToolResult:
+        """Rename a knowledge connection or change its settings or key (the kind never changes)."""
+        body = {
+            key: value
+            for key, value in (("name", name), ("settings", settings), ("credential_id", credential_id))
+            if value is not None
+        }
+        path = f"/v1/knowledge-connections/{seg(connection_id)}"
+        if plan:
+            return planned(request("PUT", path, body))
+        return ToolResult.success(await client.request("PUT", path, json=body))
+
+    @registry.tool(scopes={"providers:write"}, annotations=WRITE, data="KnowledgeConnectionTestOut")
+    async def kb_connection_test(connection_id: str) -> ToolResult:
+        """Test a knowledge connection: lists collections or indexes and checks the vector width."""
+        result = await client.post(f"/v1/knowledge-connections/{seg(connection_id)}/test", {})
+        if not result.get("ok"):
+            return ToolResult.fail(
+                "connection_test_failed", str(result.get("message") or "the test failed"), data=result
+            )
+        return ToolResult.success(result)
 
     @registry.tool(scopes={"agents:write"}, annotations=READ, data="KbHit[]")
     async def kb_search(kb_id: str, query: str, top_k: Annotated[int, Field(ge=1, le=20)] = 5) -> ToolResult:

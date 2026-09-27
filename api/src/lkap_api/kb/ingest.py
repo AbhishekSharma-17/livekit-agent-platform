@@ -825,8 +825,10 @@ async def ingest_into_session(
         ]
         if rows:
             records = [
-                VectorRecord(id=row.id, vector=vector, document_id=document_id)
-                for row, vector in zip(rows, vectors, strict=True)
+                # V5-20 (ask #180): the embedded text too, for a knowledge connection with its own
+                # keyword index (Qdrant BM25, Weaviate); every other store ignores it.
+                VectorRecord(id=row.id, vector=vector, document_id=document_id, text=text)
+                for row, vector, text in zip(rows, vectors, texts, strict=True)
             ]
             vectors_written = True
             await store.upsert(kb_id, records)

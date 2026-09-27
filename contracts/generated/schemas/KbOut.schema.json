@@ -23,6 +23,19 @@
       "description": "`{max_tokens, overlap}` of the chunker; null means the defaults.",
       "title": "Chunking"
     },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The knowledge connection holding the vectors; null = the platform's store.",
+      "title": "Connection Id"
+    },
     "created_at": {
       "format": "date-time",
       "title": "Created At",
@@ -66,8 +79,31 @@
       "description": "Embedding model recorded at creation; null for a KB created before V5-01.",
       "title": "Embedder Model"
     },
+    "external_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where the vectors live in the connection (collection, index and namespace, or tenant).",
+      "title": "External Ref"
+    },
     "id": {
       "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "default": "managed",
+      "description": "`managed`: the platform ingests it.",
+      "enum": [
+        "managed",
+        "external"
+      ],
+      "title": "Kind",
       "type": "string"
     },
     "name": {

@@ -50,6 +50,7 @@ TENANT_TABLES: frozenset[str] = frozenset(
         "mcp_oauth_clients",  # V5-14
         "mcp_oauth_flows",  # V5-14 (the callback's lookup by state is a marked cross-workspace read)
         "session_assets",  # V5-19
+        "knowledge_connections",  # V5-20
         "agent_test_runs",  # V5-29
         "agent_test_results",  # V5-29
     }

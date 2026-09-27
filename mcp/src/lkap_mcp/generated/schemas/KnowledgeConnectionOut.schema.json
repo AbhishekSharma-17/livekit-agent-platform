@@ -1,0 +1,189 @@
+{
+  "$defs": {
+    "KnowledgeConnectionCapabilities": {
+      "description": "What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``).",
+      "properties": {
+        "dimension": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vector width the collection or index holds; null when not fixed.",
+          "title": "Dimension"
+        },
+        "filters": {
+          "default": false,
+          "title": "Filters",
+          "type": "boolean"
+        },
+        "hybrid": {
+          "default": false,
+          "description": "Keyword and vector matches are fused inside the store (else the platform fuses them).",
+          "title": "Hybrid",
+          "type": "boolean"
+        },
+        "namespaces": {
+          "default": false,
+          "description": "Each knowledge base is its own namespace or tenant.",
+          "title": "Namespaces",
+          "type": "boolean"
+        },
+        "rerank": {
+          "default": false,
+          "description": "A re-ranking service (not a vector store).",
+          "title": "Rerank",
+          "type": "boolean"
+        },
+        "stores_text": {
+          "default": false,
+          "title": "Stores Text",
+          "type": "boolean"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's version, when it reports one.",
+          "title": "Version"
+        }
+      },
+      "title": "KnowledgeConnectionCapabilities",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KnowledgeConnectionOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A knowledge connection; the key is never returned, only its fingerprint.",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/KnowledgeConnectionCapabilities"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "credential_fingerprint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The fingerprint of the key in use; null without a key.",
+      "title": "Credential Fingerprint"
+    },
+    "credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "qdrant",
+        "pinecone",
+        "weaviate",
+        "cohere_rerank",
+        "voyage_rerank"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "knowledge_base_count": {
+      "default": 0,
+      "description": "Knowledge bases stored through this connection.",
+      "title": "Knowledge Base Count",
+      "type": "integer"
+    },
+    "last_checked_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Checked At"
+    },
+    "last_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Error"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "settings": {
+      "additionalProperties": true,
+      "title": "Settings",
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "unverified",
+        "ok",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "kind",
+    "provider_id",
+    "settings",
+    "status",
+    "capabilities",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "KnowledgeConnectionOut",
+  "type": "object"
+}

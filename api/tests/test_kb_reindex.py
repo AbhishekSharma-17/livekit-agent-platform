@@ -37,6 +37,7 @@ from lkap_api.kb.store import (
     VectorRecord,
     VectorStoreConfigError,
     get_lancedb_store,
+    platform_store,
     resolve_store,
     store_capabilities,
     vector_store_kind,
@@ -161,7 +162,8 @@ async def test_vector_store_kind_follows_the_database_unless_forced(
             store = resolve_store(settings, session)
     finally:
         await engine.dispose()
-    assert isinstance(store, PgVectorStore if expected == "pgvector" else LanceDBStore)
+    # V5-20: with a session the store is a router over the platform store.
+    assert isinstance(platform_store(store), PgVectorStore if expected == "pgvector" else LanceDBStore)
 
 
 async def test_pgvector_on_sqlite_is_refused(settings: Settings) -> None:

@@ -35,12 +35,17 @@ export function ProviderRow({ provider, connections }: { provider: ProviderOut; 
   // that means nothing here, so this reads like `tool_provider`: read-only,
   // pointing at where it's actually turned on.
   if (provider.kind === "web_search" || provider.kind === "sms") {
-    return <NetworkToolProviderRow provider={provider} />;
+    return <NetworkToolProviderRow provider={provider} where="Picked per agent, in its Tools tab." />;
+  }
+  // V5-20: a knowledge connection's key is used from Settings → Knowledge connections, not per
+  // LiveKit connection either, so it gets the same read-only row.
+  if (provider.kind === "knowledge") {
+    return <NetworkToolProviderRow provider={provider} where="Used through Settings → Knowledge connections." />;
   }
   return <GenericProviderRow provider={provider} connections={connections} />;
 }
 
-function NetworkToolProviderRow({ provider }: { provider: ProviderOut }) {
+function NetworkToolProviderRow({ provider, where }: { provider: ProviderOut; where: string }) {
   const { data: credentials } = useCredentials(provider.id);
   const hasKey = (credentials?.items.length ?? 0) > 0;
   const verification = verificationMeta(provider);
@@ -62,7 +67,7 @@ function NetworkToolProviderRow({ provider }: { provider: ProviderOut }) {
         </div>
       </div>
       <p className="shrink-0 text-xs text-muted-foreground sm:text-right">
-        Picked per agent, in its Tools tab.
+        {where}
       </p>
     </div>
   );

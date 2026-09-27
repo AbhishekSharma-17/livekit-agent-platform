@@ -37,6 +37,10 @@ from lkap_contracts.pricing import PriceQuote, Unit
 #: ``quote(provider_id, model, unit)``: a price, or ``None`` when no source knows it.
 QuoteFn = Callable[[str, str | None, Unit], PriceQuote | None]
 
+#: ``unpriced_note(provider_id, model)``: why a model has no price, when that is known
+#: (an optional attribute of a ``QuoteFn``; :class:`lkap_api.costs.prices.PriceBook` has it).
+UnpricedNoteFn = Callable[[str, str | None], str | None]
+
 Bound = Literal["low", "mid", "high"]
 BOUNDS: tuple[Bound, ...] = ("low", "mid", "high")
 
@@ -142,6 +146,9 @@ class _Builder:
         self.a = assumptions
         self.quote = quote
         self.lines: list[_Line] = []
+        # A PriceBook also says why a model is unpriced ("no price (unit unknown)", D-V6-9).
+        why = getattr(quote, "unpriced_note", None)
+        self.why: UnpricedNoteFn | None = why if callable(why) else None
 
     def n(self, key: str, bound: Bound) -> Decimal:
         return _num(self.a, key, bound)
@@ -166,7 +173,7 @@ class _Builder:
         line = _Line(slot, ref_id, model, unit, per_minute, quote=found, label_suffix=label_suffix)
         line.qty = {bound: qty(bound) for bound in BOUNDS}
         if found is None:
-            line.note = note or "no price"
+            line.note = note or (self.why(ref_id, model) if self.why is not None else None) or "no price"
         elif note:
             line.note = note
         self.lines.append(line)
@@ -196,6 +203,9 @@ class _Builder:
     def agent_chars_per_min(self, b: Bound) -> Decimal:
         return self.n("speech_wpm", b) * self.n("chars_per_word", b) * self.n("agent_talk_ratio", b)
 
+    def caller_chars_per_min(self, b: Bound) -> Decimal:
+        return self.n("speech_wpm", b) * self.n("chars_per_word", b) * self.n("caller_talk_ratio", b)
+
     def stt_seconds_per_min(self, b: Bound) -> Decimal:
         if self.a["stt_billing"].value == "segments":
             return Decimal(60) * self.n("caller_talk_ratio", b)
@@ -204,7 +214,39 @@ class _Builder:
 
 def _stt(b: _Builder, ref: ProviderRef) -> None:
     model = _model(ref)
-    b.add("stt", ref.provider_id, model, "audio_s_in", b.stt_seconds_per_min)
+    pid = ref.provider_id
+    if b.quote(pid, model, "audio_s_in") is None and b.quote(pid, model, "audio_tokens_in") is not None:
+        # Token-billed speech-to-text (D-V6-9): the audio heard, and the transcript written.
+        if b.has("audio_tokens_in_per_s"):
+            b.add(
+                "stt",
+                pid,
+                model,
+                "audio_tokens_in",
+                lambda bd: b.stt_seconds_per_min(bd) * b.n("audio_tokens_in_per_s", bd),
+                label_suffix=" (audio heard)",
+            )
+        else:
+            b.add(
+                "stt",
+                pid,
+                model,
+                "audio_tokens_in",
+                lambda bd: Decimal(0),
+                priced=False,
+                note="audio-token rate unknown",
+                label_suffix=" (audio heard)",
+            )
+        b.add(
+            "stt",
+            pid,
+            model,
+            "tokens_out",
+            lambda bd: b.caller_chars_per_min(bd) / pricing_chars_per_token(),
+            label_suffix=" (text written)",
+        )
+        return
+    b.add("stt", pid, model, "audio_s_in", b.stt_seconds_per_min)
 
 
 def _llm(b: _Builder, ref: ProviderRef, slot: EstimateSlot = "llm") -> None:

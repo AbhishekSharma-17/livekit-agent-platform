@@ -28,6 +28,7 @@ from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.auth.audit import ActorType, record
+from lkap_api.costs.vendors.openrouter import openrouter_credential
 from lkap_api.db.models import Credential, ProviderCatalogCache, Workspace, utcnow
 from lkap_api.logging import get_logger
 
@@ -185,14 +186,20 @@ async def load_live_sheets(
 
     Returns:
         ``(provider_id, model) -> LiveSheet`` for the ids found in the cache.
+
+    A ref without a ``credential_id`` (every picker quote, and any slot that relies on
+    the workspace's key) reads the rows cached under the credential the catalogue itself
+    would use for that provider: the workspace's default, else its only OpenRouter
+    credential (D-V6-9 defect A; resolved like the reconcile job's key, R-V4-7).
     """
     wanted: dict[str, set[str]] = {}
     credentials: set[str] = set()
+    bare: set[str] = set()
     for ref in refs:
+        credential_id: str | None = None
         if isinstance(ref, ProviderRef):
             provider_id, model = ref.provider_id, ref.model
-            if ref.credential_id:
-                credentials.add(ref.credential_id)
+            credential_id = ref.credential_id
             if model is None:
                 try:
                     model = providers.get(provider_id).default_model
@@ -202,8 +209,19 @@ async def load_live_sheets(
             provider_id, model = ref
         if model and _is_openrouter(provider_id):
             wanted.setdefault(provider_id, set()).add(model)
+            if credential_id:
+                credentials.add(credential_id)
+            else:
+                bare.add(provider_id)
     if not wanted:
         return {}
+    if workspace_id is not None:
+        for provider_id in sorted(bare):
+            row = await openrouter_credential(
+                db, workspace_id=workspace_id, ref=ProviderRef(provider_id=provider_id)
+            )
+            if row is not None:
+                credentials.add(row.id)
     if credentials and workspace_id is not None:
         credentials = set(
             (
@@ -268,6 +286,11 @@ class PriceBook:
             catalog_ttl_s=sheet.ttl_s if sheet else providers.TTL_OPENROUTER_S,
             now=self.now,
         )
+
+    def unpriced_note(self, provider_id: str, model: str | None) -> str | None:
+        """Why a model has no price when the reason is known ("no price (unit unknown)"), else ``None``."""
+        sheet = self.live.get((provider_id, model)) if model else None
+        return pricing.live_unpriced_note(provider_id, sheet.meta if sheet else None)
 
 
 async def load_price_book(

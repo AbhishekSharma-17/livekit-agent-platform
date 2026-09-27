@@ -20,10 +20,12 @@ import statistics
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
+from lkap_contracts import providers
 from lkap_contracts.agent_config import AgentConfig
 from lkap_contracts.api_models import Assumption, AssumptionSource
+from lkap_contracts.common import ProviderRef
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +57,32 @@ AUDIO_TOKENS_PER_S: dict[str, tuple[float, float, str]] = {
     "google-tts": (25.0, 25.0, _GOOGLE_PRICING),
     "openai-realtime": (10.0, 20.0, _OPENAI_REALTIME_COSTS),
 }
+
+_OPENAI_PRICING = "https://developers.openai.com/api/docs/pricing"
+
+#: Audio tokens per second for OpenRouter's token-billed speech models, by the model id's
+#: vendor prefix (D-V6-9): ``prefix -> ((heard, url), (spoken, url))``, ``None`` when unknown.
+#: Gemini: 25/s both ways (as above). OpenAI's transcription models: 40/s heard, derived from
+#: OpenAI's own per-minute estimates on its pricing page ($0.003/min for gpt-4o-mini-transcribe
+#: at $1.25 per 1M audio tokens, $0.006/min for gpt-4o-transcribe at $2.50: both 2,400 tokens a
+#: minute); spoken: the realtime guide's 20/s. Other vendors: unknown, the lines stay unpriced.
+OPENROUTER_AUDIO_TOKENS_PER_S: dict[str, tuple[tuple[float, str] | None, tuple[float, str] | None]] = {
+    "google/": ((25.0, _GOOGLE_PRICING), (25.0, _GOOGLE_PRICING)),
+    "openai/": ((40.0, _OPENAI_PRICING), (20.0, _OPENAI_REALTIME_COSTS)),
+}
+
+_OPENROUTER_SPEECH_IDS = ("openrouter-stt", "openrouter-tts")
+
+
+def _openrouter_rate(ref: ProviderRef | None, direction: Literal[0, 1]) -> tuple[float, str] | None:
+    """An OpenRouter speech model's audio-token rate heard (``0``) or spoken (``1``), if documented."""
+    if ref is None or ref.provider_id not in _OPENROUTER_SPEECH_IDS:
+        return None
+    model = ref.model or providers.get(ref.provider_id).default_model
+    for prefix, rates in OPENROUTER_AUDIO_TOKENS_PER_S.items():
+        if model and model.startswith(prefix):
+            return rates[direction]
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,23 +201,32 @@ def default_assumptions(config: AgentConfig | None = None) -> dict[str, Assumpti
         source="default",
         label="Instructions and tools the agent reads every reply",
     )
+    rates: dict[str, tuple[float, str]] = {}
     audio_ref = config.pipeline.realtime if config.pipeline.mode != "cascaded" else config.pipeline.tts
     if audio_ref is not None and audio_ref.provider_id in AUDIO_TOKENS_PER_S:
         rate_in, rate_out, url = AUDIO_TOKENS_PER_S[audio_ref.provider_id]
-        for key, rate, label in (
-            ("audio_tokens_in_per_s", rate_in, "Audio tokens per second heard"),
-            ("audio_tokens_out_per_s", rate_out, "Audio tokens per second spoken"),
-        ):
-            out[key] = Assumption(
-                key=key,
-                value=rate,
-                low=rate,
-                high=rate,
-                unit="tokens/s",
-                source="default",
-                label=label,
-                source_url=url,
-            )
+        rates = {"audio_tokens_in_per_s": (rate_in, url), "audio_tokens_out_per_s": (rate_out, url)}
+    if config.pipeline.mode == "cascaded":
+        # OpenRouter's token-billed speech (D-V6-9): the rate follows the model's vendor.
+        if (heard := _openrouter_rate(config.pipeline.stt, 0)) is not None:
+            rates["audio_tokens_in_per_s"] = heard
+        if (spoken := _openrouter_rate(config.pipeline.tts, 1)) is not None:
+            rates["audio_tokens_out_per_s"] = spoken
+    labels = {
+        "audio_tokens_in_per_s": "Audio tokens per second heard",
+        "audio_tokens_out_per_s": "Audio tokens per second spoken",
+    }
+    for key, (rate, url) in rates.items():
+        out[key] = Assumption(
+            key=key,
+            value=rate,
+            low=rate,
+            high=rate,
+            unit="tokens/s",
+            source="default",
+            label=labels[key],
+            source_url=url,
+        )
     return out
 
 

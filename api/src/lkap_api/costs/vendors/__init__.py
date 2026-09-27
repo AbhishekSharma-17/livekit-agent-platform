@@ -5,7 +5,8 @@ charged. It is used **only** where a regular (non-admin) key returns a charge
 per request, and only when the workspace opted in:
 
 * :mod:`lkap_api.costs.vendors.openrouter` — built: ``GET /api/v1/generation?id=``
-  per ``gen-…`` id the worker reported.
+  per ``gen-…`` id the worker reported, for the LLM, STT and TTS slots that are
+  OpenRouter entries (the speech slots only when the worker reports ``gen-`` ids).
 * :mod:`lkap_api.costs.vendors.deepgram` — designed, not built: the per-request
   lookup needs a project id the credential form does not collect (ask #94).
 
@@ -25,10 +26,13 @@ from lkap_api.db.models import SessionEvent, Workspace
 
 __all__ = [
     "BUILT_VENDORS",
+    "GENERATION_ID_PREFIX",
     "PROVIDER_REQUESTS_KIND",
     "RECONCILE_KEY",
+    "RECONCILE_KINDS",
     "RECONCILE_VENDORS",
     "ReconcileSettingError",
+    "generation_ids",
     "provider_requests_of",
     "reconcile_vendors",
     "request_ids",
@@ -124,3 +128,20 @@ def request_ids(data: Mapping[str, Any] | None, kind: str) -> list[str]:
         return []
     ids = (row.get("request_id") for row in rows if isinstance(row, Mapping))
     return list(dict.fromkeys(i for i in ids if isinstance(i, str) and i))
+
+
+#: The slots whose per-request ids the reconcile job looks up, in order (D-V6-9).
+RECONCILE_KINDS: Final = ("llm", "stt", "tts")
+
+#: OpenRouter's generation ids start with this. A speech request's id counts only when it
+#: does: LKAP's OpenRouter TTS reports the ``x-generation-id`` header when OpenRouter sends
+#: one and the SDK's own request id otherwise, which ``/generation`` would never know.
+GENERATION_ID_PREFIX: Final = "gen-"
+
+
+def generation_ids(data: Mapping[str, Any] | None, kind: str) -> list[str]:
+    """The ids of one kind the reconcile job looks up (the LLM's as reported; speech ``gen-`` ids only)."""
+    ids = request_ids(data, kind)
+    if kind == "llm":
+        return ids
+    return [i for i in ids if i.startswith(GENERATION_ID_PREFIX)]

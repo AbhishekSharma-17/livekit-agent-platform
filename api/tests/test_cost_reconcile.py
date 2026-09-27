@@ -492,3 +492,147 @@ async def test_the_resolved_config_carries_the_opt_in(
 
     assert before["cost_reconcile"] == []
     assert after["cost_reconcile"] == ["openrouter"]
+
+
+# ---------------------------------------------------------- speech slots (V6-01, D-V6-9)
+TTS_MODEL = "deepgram/aura-2"
+SPEECH_COSTS = {"gen-tts-1": 0.0004, "gen-tts-2": 0.0002}
+
+
+def _speech_by_id(request: httpx.Request) -> httpx.Response:
+    gen_id = request.url.params["id"]
+    if gen_id in SPEECH_COSTS:
+        return httpx.Response(
+            200, json={"data": {"id": gen_id, "model": TTS_MODEL, "total_cost": SPEECH_COSTS[gen_id]}}
+        )
+    return _gen(gen_id)
+
+
+async def _openrouter_voice_session(admin_client: httpx.AsyncClient, database: Database) -> str:
+    """An agent whose LLM and voice are OpenRouter entries on the same key, both with live prices."""
+    credential_id = await _credential(admin_client, "openrouter-llm", {"api_key": SECRET})
+    async with database.session() as db:
+        for provider_id, item_id, item_pricing in (
+            ("openrouter-llm", MODEL, {"prompt": "0.0000004", "completion": "0.0000016"}),
+            ("openrouter-tts", TTS_MODEL, {"prompt": "0.00003", "completion": "0"}),
+        ):
+            db.add(
+                ProviderCatalogCache(
+                    provider_id=provider_id,
+                    credential_id=credential_id,
+                    kind="models",
+                    items=[{"id": item_id, "label": item_id, "meta": {"pricing": item_pricing}}],
+                    ttl_s=21600,
+                )
+            )
+    base = inference_config()
+    config = base.model_copy(
+        update={
+            "pipeline": base.pipeline.model_copy(
+                update={
+                    "llm": ProviderRef(
+                        provider_id="openrouter-llm", credential_id=credential_id, model=MODEL
+                    ),
+                    "tts": ProviderRef(
+                        provider_id="openrouter-tts", credential_id=credential_id, model=TTS_MODEL
+                    ),
+                }
+            )
+        }
+    )
+    session_id, _ = await _session_for(admin_client, json.loads(config.model_dump_json()))
+    return session_id
+
+
+async def _finish_with_speech(
+    service_client: httpx.AsyncClient, session_id: str, *, llm: list[str], tts: list[str]
+) -> None:
+    resolved = await service_client.get(f"/internal/v1/sessions/{session_id}/resolved")
+    assert resolved.status_code == 200, resolved.text
+    event = _provider_requests_event(llm)
+    event["payload"]["data"]["tts"] = [
+        {"request_id": i, "provider": "openrouter.ai", "model": TTS_MODEL} for i in tts
+    ]
+    posted = await service_client.post(f"/internal/v1/sessions/{session_id}/events", json={"events": [event]})
+    assert posted.status_code == 202, posted.text
+    summary = await service_client.put(
+        f"/internal/v1/sessions/{session_id}/summary",
+        json={
+            "status": "ended",
+            "usage": {
+                "model_usage": [
+                    {"type": "llm_usage", "model": MODEL, "input_tokens": 3000, "output_tokens": 600},
+                    {"type": "tts_usage", "model": TTS_MODEL, "characters_count": 400},
+                ]
+            },
+            "transcript": [],
+        },
+    )
+    assert summary.status_code == 204, summary.text
+
+
+async def _voice_lines(database: Database, session_id: str) -> dict[str, SessionCostRow]:
+    async with database.session() as db:
+        rows = (
+            (await db.execute(select(SessionCostRow).where(SessionCostRow.session_id == session_id)))
+            .scalars()
+            .all()
+        )
+    return {row.unit: row for row in rows if row.provider_id == "openrouter-tts"}
+
+
+async def test_voice_generation_ids_are_summed_onto_the_voice_line(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    await _opt_in(admin_client, ["openrouter"])
+    session_id = await _openrouter_voice_session(admin_client, database)
+
+    with respx.mock(assert_all_called=True) as mock:
+        route = mock.get(GEN_URL).mock(side_effect=_speech_by_id)
+        # `local-3f9a` stands for an SDK request id (no `x-generation-id` came back): never looked up.
+        await _finish_with_speech(
+            service_client, session_id, llm=IDS, tts=["gen-tts-1", "gen-tts-2", "local-3f9a"]
+        )
+
+    looked_up = {call.request.url.params["id"] for call in route.calls}
+    assert looked_up == {*IDS, "gen-tts-1", "gen-tts-2"}
+    assert all(call.request.headers["authorization"] == f"Bearer {SECRET}" for call in route.calls)
+    voice = await _voice_lines(database, session_id)
+    assert Decimal(str(voice["chars"].vendor_usd)) == Decimal("0.0006")
+    assert voice["chars"].vendor_ref == "2 generations"
+    llm = await _lines(database, session_id)
+    assert Decimal(str(llm["tokens_in"].vendor_usd)) == Decimal("0.00204")
+    assert Decimal(str((await _session(database, session_id)).reconciled_usd)) == Decimal("0.00264")
+    audits = await _audits(database, session_id)
+    assert len(audits) == 1 and audits[0].payload["slots"] == ["llm", "tts"]
+    assert audits[0].payload["generations"] == 5
+
+
+async def test_voice_ids_alone_are_enough_to_reconcile(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    await _opt_in(admin_client, ["openrouter"])
+    session_id = await _openrouter_voice_session(admin_client, database)
+
+    with respx.mock(assert_all_called=True) as mock:
+        route = mock.get(GEN_URL).mock(side_effect=_speech_by_id)
+        await _finish_with_speech(service_client, session_id, llm=[], tts=["gen-tts-1"])
+
+    assert route.call_count == 1
+    assert Decimal(str((await _session(database, session_id)).reconciled_usd)) == Decimal("0.0004")
+    assert (await _lines(database, session_id))["tokens_in"].vendor_usd is None
+
+
+async def test_speech_ids_that_are_not_generation_ids_start_no_job(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    await _opt_in(admin_client, ["openrouter"])
+    session_id = await _openrouter_voice_session(admin_client, database)
+
+    with respx.mock:
+        route = respx.get(GEN_URL).mock(side_effect=_speech_by_id)
+        await _finish_with_speech(service_client, session_id, llm=[], tts=["local-3f9a"])
+
+    assert route.call_count == 0
+    async with database.session() as db:
+        assert (await db.execute(select(Job).where(Job.kind == COST_RECONCILE))).all() == []

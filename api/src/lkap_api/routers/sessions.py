@@ -16,28 +16,43 @@ as _qa`).
 V5-30 adds the post-call fields (`QaOut.fields`, the CSV export's columns), the
 privacy scrub (`scrubbed_at`, `POST .../scrub`) and, on delete, the removal of
 the session's stored files and recording (S5-36).
+
+V5-37 adds the supervisor listen-in: ``POST .../listen-token`` (a hidden,
+subscribe-only room token) and ``POST .../whisper`` (written guidance sent to
+the room's agent with the server API, never to the caller). Both need the
+``sessions:listen`` scope (``builder``+; ``sessions:write`` implies it) and
+each call writes its own audit row (``session.listen`` / ``session.whisper``).
 """
 
 from __future__ import annotations
 
 import csv
 import datetime as dt
+import hashlib
 import io
 from decimal import Decimal
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, BackgroundTasks, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from fastapi.responses import RedirectResponse
+from livekit.api import ListParticipantsRequest, SendDataRequest
+from livekit.protocol.models import DataPacket, ParticipantInfo
 from lkap_contracts.agent_config import AgentConfig
 from lkap_contracts.api_models import (
+    MAX_SUPERVISOR_LABEL_CHARS,
+    SUPERVISOR_TOPIC,
     QaOut,
     RecordingOut,
     SessionDetailOut,
     SessionEventOut,
     SessionEventPage,
+    SessionListenTokenOut,
     SessionOut,
     SessionPage,
     SessionScrubOut,
+    SessionWhisperIn,
+    SessionWhisperOut,
+    SupervisorWhisperPacket,
     TranscriptTurn,
 )
 from lkap_contracts.api_models import SessionLatency as SessionLatencyOut
@@ -51,25 +66,33 @@ from lkap_api import (
     recordings,  # registers egress_ended/recording_finalize handlers; resolve_storage_row below
 )
 from lkap_api import qa as _qa  # noqa: F401 - registers the qa_scoring job handler
-from lkap_api.auth.deps import WorkspaceContext
+from lkap_api.auth import audit
+from lkap_api.auth.deps import WorkspaceContext, require
+from lkap_api.connections.clients import ClientFactoryDep
+from lkap_api.connections.service import get_connection
 from lkap_api.costs import config_for_session, cost_context, render_cost
-from lkap_api.db.models import Agent, LiveKitConnection, SessionEvent, SessionQa, utcnow
+from lkap_api.db.models import Agent, LiveKitConnection, SessionEvent, SessionQa, new_id, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import SessionCost as SessionCostRow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import ApiError, ConflictError, NotFoundError
 from lkap_api.jobs.deps import JobsDep
+from lkap_api.livekit_tokens import LISTEN_TOKEN_TTL, mint_listener_token, supervisor_identity
 from lkap_api.logging import get_logger
 from lkap_api.privacy.fields import csv_cell, qa_fields
 from lkap_api.qa.job import enqueue_for_session
 from lkap_api.qa.resolve import resolve_judge
 from lkap_api.settings import Settings
 from lkap_api.storage.resolve import storage_from_config
+from lkap_api.telephony.common import raise_upstream
 from lkap_api.vault import Vault
 
 log = get_logger(__name__)
 
 router = APIRouter(prefix="/v1/sessions", tags=["sessions"])
+
+#: V5-37: listening in and whispering (`auth/roles.py::ROUTE_POLICY` has the same rule).
+ListenCtxDep = Annotated[WorkspaceContext, Depends(require("builder", "sessions:listen"))]
 
 #: How long a freshly-minted recording playback URL is valid for.
 _RECORDING_URL_TTL_S = 3600
@@ -594,3 +617,181 @@ async def list_session_events(
         items=[SessionEventOut(id=r.id, ts=r.ts, type=r.type, payload=r.payload) for r in rows],
         total=total,
     )
+
+
+# ------------------------------------------------------------ listen-in (V5-37)
+class SessionNotLiveError(ApiError):
+    """409 — the session has no live room to listen to (not active, or no connection)."""
+
+    status_code = 409
+    code = "not_live"
+
+
+class NoAgentInRoomError(ApiError):
+    """409 — no agent participant is in the session's room to receive a whisper."""
+
+    status_code = 409
+    code = "no_agent"
+
+
+async def _live_connection(db: AsyncSession, row: SessionRow) -> LiveKitConnection:
+    """The connection of an active session.
+
+    Raises:
+        SessionNotLiveError: The session is not ``active`` or has no connection.
+    """
+    if row.status != "active":
+        raise SessionNotLiveError(
+            "the session is not live", details={"session_id": row.id, "status": row.status}
+        )
+    if not row.connection_id:
+        raise SessionNotLiveError(
+            "the session has no LiveKit connection", details={"session_id": row.id, "status": row.status}
+        )
+    return await get_connection(db, row.workspace_id, row.connection_id)
+
+
+def _supervisor_label(ctx: WorkspaceContext) -> str:
+    """A display label for the caller: a member's name, an API key's name, else ``Supervisor``."""
+    actor = ctx.actor
+    name = ""
+    if actor.user is not None:
+        name = actor.user.name
+    elif actor.api_key is not None:
+        name = actor.api_key.name
+    return (name.strip() or "Supervisor")[:MAX_SUPERVISOR_LABEL_CHARS]
+
+
+def _audit_listen(
+    db: AsyncSession, ctx: WorkspaceContext, action: str, row: SessionRow, **payload: Any
+) -> None:
+    """One audit row per listen or whisper; identifiers only, never the whisper's text."""
+    audit.record(
+        db,
+        workspace_id=ctx.workspace_id,
+        actor_type=ctx.actor.actor_type,
+        actor_id=ctx.actor.id,
+        action=action,
+        target_type="session",
+        target_id=row.id,
+        payload={"room": row.room_name, **payload},
+    )
+
+
+@router.post(
+    "/{session_id}/listen-token",
+    response_model=SessionListenTokenOut,
+    summary="Listen in to a live session",
+    description=(
+        "Mints a LiveKit token that joins only this session's room, hidden from the caller and the "
+        "agent, able to hear the room but never to publish audio, video or data; it expires after 15 "
+        "minutes. Needs the `sessions:listen` scope (`builder` or above; `sessions:write` implies it). "
+        "409 `not_live` unless the session is active. Every call is audit-logged (`session.listen`)."
+    ),
+)
+async def listen_token(
+    session_id: str, db: DbDep, ctx: ListenCtxDep, factory: ClientFactoryDep
+) -> SessionListenTokenOut:
+    """Mint a hidden, listen-only token for the session's room.
+
+    Raises:
+        NotFoundError: Unknown session (or another workspace's).
+        SessionNotLiveError: The session is not active or has no connection.
+    """
+    row = await _load_scoped(db, ctx, session_id)
+    conn = await _live_connection(db, row)
+    creds = factory.credentials(conn)
+    identity = supervisor_identity(ctx.actor.id)
+    label = _supervisor_label(ctx)
+    token = mint_listener_token(
+        api_key=creds.api_key,
+        api_secret=creds.api_secret,
+        room_name=row.room_name,
+        identity=identity,
+        participant_name=label,
+        ttl=LISTEN_TOKEN_TTL,
+    )
+    expires_at = utcnow() + LISTEN_TOKEN_TTL
+    _audit_listen(db, ctx, "session.listen", row, identity=identity, expires_at=expires_at.isoformat())
+    await db.flush()
+    log.info("session_listen_token_minted", session_id=row.id, identity=identity)
+    return SessionListenTokenOut(
+        serverUrl=creds.url,
+        participantToken=token,
+        roomName=row.room_name,
+        participantName=label,
+        identity=identity,
+        sessionId=row.id,
+        expiresAt=expires_at,
+    )
+
+
+@router.post(
+    "/{session_id}/whisper",
+    response_model=SessionWhisperOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Whisper to a live session's agent",
+    description=(
+        "Sends written guidance to the agent of a live session. Only the agent receives it (the "
+        "caller never hears or sees it); the agent treats it as a supervisor's note that shapes its "
+        "next reply, or speaks at once with `reply_now`. Needs `sessions:listen`. 409 `not_live` "
+        "unless the session is active, 409 `no_agent` when no agent is in the room. Audit-logged "
+        "(`session.whisper`, without the text); the worker records a `supervisor_whisper` event."
+    ),
+)
+async def whisper(
+    session_id: str, body: SessionWhisperIn, db: DbDep, ctx: ListenCtxDep, factory: ClientFactoryDep
+) -> SessionWhisperOut:
+    """Hand a whisper to the room's agent participants with the server API.
+
+    Raises:
+        NotFoundError: Unknown session (or another workspace's).
+        SessionNotLiveError: The session is not active or has no connection.
+        NoAgentInRoomError: No agent participant is in the room.
+    """
+    row = await _load_scoped(db, ctx, session_id)
+    conn = await _live_connection(db, row)
+    packet = SupervisorWhisperPacket(
+        id=new_id(), session_id=row.id, text=body.text, reply_now=body.reply_now, by=_supervisor_label(ctx)
+    )
+    agents: list[str] = []
+    try:
+        async with factory.api(conn) as lk:
+            listing = await lk.room.list_participants(ListParticipantsRequest(room=row.room_name))
+            agents = [p.identity for p in listing.participants if p.kind == ParticipantInfo.Kind.AGENT]
+            if agents:
+                await lk.room.send_data(
+                    SendDataRequest(
+                        room=row.room_name,
+                        data=packet.model_dump_json().encode(),
+                        kind=DataPacket.Kind.RELIABLE,
+                        topic=SUPERVISOR_TOPIC,
+                        destination_identities=agents,
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001 - mapped to an api error
+        raise_upstream(exc, action="sending the whisper")
+    if not agents:
+        raise NoAgentInRoomError(
+            "no agent is in the room to receive the whisper", details={"session_id": row.id}
+        )
+    _audit_listen(
+        db,
+        ctx,
+        "session.whisper",
+        row,
+        whisper_id=packet.id,
+        chars=len(body.text),
+        sha256=hashlib.sha256(body.text.encode()).hexdigest()[:16],
+        reply_now=body.reply_now,
+    )
+    await db.flush()
+    log.info(
+        "session_whisper_sent",
+        session_id=row.id,
+        whisper_id=packet.id,
+        chars=len(body.text),
+        agents=len(agents),
+        reply_now=body.reply_now,
+    )
+    return SessionWhisperOut(id=packet.id, delivered_to=len(agents))

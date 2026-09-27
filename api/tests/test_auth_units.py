@@ -253,3 +253,40 @@ async def test_set_password_force_replaces_and_unknown_user_fails(
         user = (await session.execute(select(User).where(User.email == "force@example.com"))).scalar_one()
     assert (forced, unknown) == (0, 1)
     assert verify_password(user.password_hash, "replacement password")
+
+
+# ------------------------------------------------------------------ V5-37: sessions:listen
+@pytest.mark.parametrize(
+    ("scopes", "allowed"),
+    [
+        (["sessions:listen"], True),
+        (["sessions:write"], True),
+        (["*"], True),
+        (["sessions:read"], False),
+        (["agents:write"], False),
+        ([], False),
+    ],
+)
+def test_scope_allows_sessions_listen_implied_by_sessions_write(scopes: list[str], allowed: bool) -> None:
+    from lkap_api.auth.roles import SCOPES, scope_allows
+
+    assert "sessions:listen" in SCOPES
+    assert scope_allows(scopes, "sessions:listen") is allowed
+
+
+def test_scope_allows_sessions_listen_does_not_grant_sessions_write_or_read() -> None:
+    from lkap_api.auth.roles import scope_allows
+
+    assert scope_allows(["sessions:listen"], "sessions:write") is False
+    assert scope_allows(["sessions:listen"], "sessions:read") is False
+
+
+@pytest.mark.parametrize(
+    "route", ["/v1/sessions/{session_id}/listen-token", "/v1/sessions/{session_id}/whisper"]
+)
+def test_policy_for_listen_routes_needs_builder_and_sessions_listen(route: str) -> None:
+    from lkap_api.auth.roles import Requirement, policy_for
+
+    assert policy_for("POST", route) == Requirement("builder", "sessions:listen")
+    # The other session routes keep their rule.
+    assert policy_for("POST", "/v1/sessions/{session_id}/qa") == Requirement("builder", "sessions:write")

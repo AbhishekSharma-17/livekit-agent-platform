@@ -168,9 +168,22 @@ describe("McpToolEditorDialog", () => {
  * `definition.auth`, never the deprecated `headers`/`credential_id` mirrors,
  * and never echoes `cached_tools` back.
  */
+// `window.location` isn't a stubGlobal target (`vi.unstubAllGlobals()` won't touch it),
+// so the two `window.open` tests below restore the original descriptor themselves.
+let originalLocationDescriptor: PropertyDescriptor | undefined;
+
+function stubLocationAssign(assign: (url: string) => void) {
+  originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+  Object.defineProperty(window, "location", { value: { ...window.location, assign }, writable: true, configurable: true });
+}
+
 describe("McpToolEditorDialog — auth (docs/v5/_asks.md #66)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    if (originalLocationDescriptor) {
+      Object.defineProperty(window, "location", originalLocationDescriptor);
+      originalLocationDescriptor = undefined;
+    }
   });
 
   it("posts auth: {kind: 'header', ...} and no top-level headers/credential_id/cached_tools", async () => {
@@ -253,7 +266,7 @@ describe("McpToolEditorDialog — auth (docs/v5/_asks.md #66)", () => {
     const openMock = vi.fn().mockReturnValue({ opener: "not-null-yet" });
     vi.stubGlobal("open", openMock);
     const assignMock = vi.fn();
-    Object.defineProperty(window, "location", { value: { ...window.location, assign: assignMock }, writable: true });
+    stubLocationAssign(assignMock);
 
     renderWithClient(
       <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,
@@ -284,7 +297,7 @@ describe("McpToolEditorDialog — auth (docs/v5/_asks.md #66)", () => {
     );
     vi.stubGlobal("open", vi.fn().mockReturnValue(null));
     const assignMock = vi.fn();
-    Object.defineProperty(window, "location", { value: { ...window.location, assign: assignMock }, writable: true });
+    stubLocationAssign(assignMock);
 
     renderWithClient(
       <McpToolEditorDialog agentId={null} tool={tool} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>Edit</button>} />,

@@ -552,9 +552,9 @@ export function McpToolEditorDialog({
                 {draft.authKind === "own_oauth" ? (
                   <>
                     <p className="rounded-md bg-muted/50 px-3 py-2 text-[0.8125rem] text-muted-foreground">
-                      Register an app with the vendor first — its return address is this deployment&apos;s own
-                      address with <code className="font-mono">/v1/oauth/mcp/callback</code> appended. Once you
-                      have a client id, save this server, then use Sign in below.
+                      Register an app with the vendor first — its return address is the api&apos;s own address
+                      (not this console&apos;s) with <code className="font-mono">/v1/oauth/mcp/callback</code>{" "}
+                      appended. Once you have a client id, save this server, then use Sign in below.
                     </p>
                     <Field
                       label="Client id"

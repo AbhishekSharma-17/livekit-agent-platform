@@ -6,14 +6,39 @@ import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field, fieldIds } from "@/components/shared/field";
-import { useCredentials } from "@/components/console/lib/api-hooks";
+import { useCredentials, useCredentialsAcrossHomes } from "@/components/console/lib/api-hooks";
 import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { CredentialTestResultView, useCredentialTest } from "@/components/console/registry/credential-test";
 import { credentialDisplay } from "@/components/console/registry/provider-meta";
 import { errorMessage } from "@/components/console/shared/error-banner";
-import type { ProviderSpec } from "@/contracts/lkap-contracts";
+import type { CredentialOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 const NONE = "__none__";
+
+/**
+ * Every registry id that is its own OpenAI credential home (ask #297):
+ * `api/src/lkap_api/config_service.py::OPENAI_KEY_HOMES`, computed there as
+ * every registry entry whose `vendor == "OpenAI"`, `credential_provider is
+ * None` and which declares an `api_key` secret field — eight entries at
+ * `contracts/generated/providers.json`'s current contents (the ask itself
+ * names six; `openai-responses-llm` and `openai-gptlive-realtime` are two
+ * more that fit the same rule — `price_ref` groups pricing, not credential
+ * homes, so `openai-responses-llm`'s `price_ref: "openai-llm"` does not
+ * make it share `openai-llm`'s credential row). Mirrored here as a fixed
+ * list — the console has no runtime access to that computation — kept
+ * honest by `tests/console-credential-picker.test.tsx`'s check against the
+ * generated export.
+ */
+export const OPENAI_KEY_HOME_IDS = [
+  "openai-llm",
+  "openai-stt",
+  "openai-tts",
+  "openai-realtime",
+  "openai-image-gen",
+  "openai-embedding",
+  "openai-responses-llm",
+  "openai-gptlive-realtime",
+] as const;
 
 export interface CredentialPickerProps {
   spec: ProviderSpec;
@@ -143,6 +168,129 @@ function SelectedKeyTest({ credentialId }: { credentialId: string }) {
         </Button>
       </div>
       {pending || last ? <CredentialTestResultView record={last} pending={pending} /> : null}
+    </div>
+  );
+}
+
+export interface MultiHomeCredentialPickerProps {
+  /** Every registry id whose stored keys are all acceptable here (e.g. `OPENAI_KEY_HOME_IDS`). */
+  providerIds: readonly string[];
+  /** One `ProviderSpec` per id in `providerIds` (order doesn't matter), for "Add key" and each key's home label. */
+  specs: readonly ProviderSpec[];
+  value: string | null | undefined;
+  onChange: (credentialId: string | null) => void;
+  id?: string;
+  label?: string;
+  required?: boolean;
+  error?: string;
+}
+
+/**
+ * A `CredentialPicker` that lists keys from *several* credential homes at
+ * once (ask #297) — a Moderation service rule's OpenAI key, which the api
+ * accepts from any of `OPENAI_KEY_HOME_IDS`, not only `openai-llm`. Reads
+ * every home with `useCredentialsAcrossHomes` and shows each key's own home
+ * next to its label ("My prod key · OpenAI Whisper") so two keys of the
+ * same name in different homes stay distinguishable.
+ *
+ * "Add key" always saves the new key under `providerIds[0]`'s home (the
+ * first of `OPENAI_KEY_HOME_IDS`, `openai-llm`) — the same single home
+ * `CredentialPicker` always used before this — since the api resolves the
+ * rule's own credential by id, not by which home it happened to save under,
+ * a fresh key from here always works; choosing the *matching* home for a
+ * brand-new key is a smaller, separate nicety (flagged as an ask).
+ */
+export function MultiHomeCredentialPicker({
+  providerIds,
+  specs,
+  value,
+  onChange,
+  id,
+  label = "Key",
+  required = true,
+  error,
+}: MultiHomeCredentialPickerProps) {
+  const autoId = React.useId();
+  const selectId = id ?? `credential-${autoId}`;
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const queries = useCredentialsAcrossHomes(providerIds);
+  const specById = React.useMemo(() => new Map(specs.map((spec) => [spec.id, spec])), [specs]);
+  const addKeySpec = specById.get(providerIds[0] ?? "") ?? specs[0];
+
+  const isLoading = queries.some((query) => query.isLoading);
+  const failedEvery = queries.length > 0 && queries.every((query) => query.isError);
+  const items: CredentialOut[] = queries.flatMap((query) => query.data?.items ?? []);
+  const selected = items.find((item) => item.id === value);
+
+  function homeLabel(providerId: string): string {
+    return specById.get(providerId)?.label ?? providerId;
+  }
+
+  let hint: React.ReactNode;
+  if (failedEvery) {
+    hint = (
+      <>
+        Couldn&apos;t load keys.{" "}
+        <button
+          type="button"
+          className="rounded-xs font-medium text-foreground underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => queries.forEach((query) => void query.refetch())}
+        >
+          Try again
+        </button>
+      </>
+    );
+  } else if (!isLoading && items.length === 0) {
+    hint = "No OpenAI keys yet. Add one to use this provider.";
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Field label={label} htmlFor={selectId} required={required} hint={hint} error={error}>
+        <div className="flex items-center gap-2">
+          <Select value={value ?? NONE} onValueChange={(next) => onChange(next === NONE ? null : next)} disabled={isLoading}>
+            <SelectTrigger
+              id={selectId}
+              className="w-full min-w-0 flex-1"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={
+                [required || hint ? fieldIds(selectId).hint : null, error ? fieldIds(selectId).error : null]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
+            >
+              <SelectValue placeholder={isLoading ? "Loading keys…" : "Choose a key"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>No key selected</SelectItem>
+              {items.map((credential) => (
+                <SelectItem key={credential.id} value={credential.id}>
+                  {credential.label} · {homeLabel(credential.provider_id)} ·{" "}
+                  <span className="font-mono">{credential.fingerprint}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {addKeySpec ? (
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(true)} className="shrink-0">
+              <PlusIcon aria-hidden="true" />
+              Add key
+            </Button>
+          ) : null}
+        </div>
+      </Field>
+      {selected ? <SelectedKeyTest credentialId={selected.id} /> : null}
+      {addKeySpec ? (
+        <CredentialDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          spec={addKeySpec}
+          onSaved={(credential) => {
+            onChange(credential.id);
+            queries.forEach((query) => void query.refetch());
+          }}
+        />
+      ) : null}
     </div>
   );
 }

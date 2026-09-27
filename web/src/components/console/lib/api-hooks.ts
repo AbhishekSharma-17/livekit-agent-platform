@@ -4,6 +4,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
@@ -374,6 +375,23 @@ export function useCredentials(providerId?: string) {
   return useQuery({
     queryKey: keys.credentials(providerId),
     queryFn: () => api.get<CredentialPage>("credentials", providerId ? { provider_id: providerId } : undefined),
+  });
+}
+
+/**
+ * `useCredentials` across several credential homes at once — `providerIds`
+ * is a fixed-length, constant-order list (e.g. `OPENAI_KEY_HOME_IDS`,
+ * `registry/credential-picker.tsx`), so `useQueries` (not a loop of
+ * `useCredentials` calls, which the rules of hooks forbid for a dynamic
+ * count) is the one query per id, cached the same way `useCredentials`
+ * caches its own.
+ */
+export function useCredentialsAcrossHomes(providerIds: readonly string[]) {
+  return useQueries({
+    queries: providerIds.map((providerId) => ({
+      queryKey: keys.credentials(providerId),
+      queryFn: () => api.get<CredentialPage>("credentials", { provider_id: providerId }),
+    })),
   });
 }
 

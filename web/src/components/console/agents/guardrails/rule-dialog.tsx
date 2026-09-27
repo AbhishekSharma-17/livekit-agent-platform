@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useProviders } from "@/components/console/lib/api-hooks";
-import { CredentialPicker } from "@/components/console/registry/credential-picker";
+import { MultiHomeCredentialPicker, OPENAI_KEY_HOME_IDS } from "@/components/console/registry/credential-picker";
 import { MODERATION_CATEGORY_VALUES, type GuardrailRuleForm } from "@/components/console/lib/schemas";
 
 import { CATEGORY_LABELS } from "./kinds";
@@ -94,7 +94,13 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
     draft.kind === "classifier" && attempted && draft.prompt.trim() === "" ? "Instruction is required" : undefined;
   const canSave = trimmedName !== "" && !nameError && !patternError && !promptError;
 
-  const openaiSpec = providersQuery.data?.providers.find((provider) => provider.id === "openai-llm");
+  // Ask #297: every OpenAI credential home, not just `openai-llm` — a key
+  // saved while setting up STT, TTS, the realtime pipeline, image
+  // generation or embeddings is just as acceptable here (the api's
+  // `_check_openai_key` on save takes a key from any of them).
+  const openaiKeySpecs = (providersQuery.data?.providers ?? []).filter((provider) =>
+    (OPENAI_KEY_HOME_IDS as readonly string[]).includes(provider.id),
+  );
 
   function handleSave() {
     setAttempted(true);
@@ -234,9 +240,10 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
                   })}
                 </div>
               </fieldset>
-              {openaiSpec ? (
-                <CredentialPicker
-                  spec={openaiSpec}
+              {openaiKeySpecs.length > 0 ? (
+                <MultiHomeCredentialPicker
+                  providerIds={OPENAI_KEY_HOME_IDS}
+                  specs={openaiKeySpecs}
                   value={draft.credential_id}
                   onChange={(credentialId) =>
                     setDraft((prev) => (prev.kind === "provider" ? { ...prev, credential_id: credentialId } : prev))

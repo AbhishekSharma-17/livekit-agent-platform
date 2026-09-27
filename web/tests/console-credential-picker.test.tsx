@@ -1,10 +1,12 @@
 import * as React from "react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { CredentialPicker } from "@/components/console/registry/credential-picker";
+import { CredentialPicker, MultiHomeCredentialPicker, OPENAI_KEY_HOME_IDS } from "@/components/console/registry/credential-picker";
 import { CredentialDialog } from "@/components/console/registry/credential-dialog";
 import { ProviderRow } from "@/components/console/providers/provider-row";
 import type { CredentialOut, CredentialPage, Me, ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
@@ -341,5 +343,162 @@ describe("ProviderRow — the key badge for an alias (V4-04)", () => {
     const provider: ProviderOut = { ...deepgramStt, enabled: true, installed_on: [] };
     renderWithClient(<ProviderRow provider={provider} connections={[]} />);
     expect(await screen.findByText("Key required")).toBeTruthy();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* MultiHomeCredentialPicker — every OpenAI credential home (ask #297)         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `OPENAI_KEY_HOME_IDS` must keep pace with `api/src/lkap_api/config_service
+ * .py::OPENAI_KEY_HOMES`, which the console cannot compute at runtime (it
+ * has no access to `secret_fields`/`vendor` across the whole registry
+ * outside a fetch). `tool-names-parity.test.ts` is the same pattern: pin a
+ * hand-written constant against the generated registry export.
+ */
+describe("OPENAI_KEY_HOME_IDS parity with the registry (ask #297)", () => {
+  const REGISTRY_EXPORT = path.resolve(__dirname, "../../contracts/generated/providers.json");
+  const exported = JSON.parse(readFileSync(REGISTRY_EXPORT, "utf8")) as { providers: ProviderSpec[] };
+
+  it("is exactly the set of OpenAI-vendor providers that are their own credential home with an api_key field", () => {
+    const computed = exported.providers
+      .filter(
+        (provider) =>
+          provider.vendor === "OpenAI" &&
+          !provider.credential_provider &&
+          (provider.secret_fields ?? []).some((field) => field.name === "api_key"),
+      )
+      .map((provider) => provider.id)
+      .sort();
+    expect(computed).toEqual([...OPENAI_KEY_HOME_IDS].sort());
+  });
+});
+
+const OPENAI_KEY_FIELD = { name: "api_key", label: "OpenAI API key", type: "secret", required: true } as const;
+
+const openaiLlmSpec: ProviderSpec = {
+  v: 2,
+  id: "openai-llm",
+  kind: "llm",
+  label: "OpenAI",
+  vendor: "OpenAI",
+  package: "livekit-plugins-openai",
+  python_class: "livekit.plugins.openai.LLM",
+  secret_fields: [OPENAI_KEY_FIELD],
+  fields: [],
+  models: [],
+  default_model: "gpt-4o-mini",
+};
+
+const openaiTtsSpec: ProviderSpec = {
+  ...openaiLlmSpec,
+  id: "openai-tts",
+  kind: "tts",
+  label: "OpenAI TTS",
+  python_class: "livekit.plugins.openai.TTS",
+  default_model: "tts-1",
+};
+
+const OPENAI_LLM_KEY: CredentialOut = {
+  id: "cred_llm",
+  provider_id: "openai-llm",
+  label: "Prod key",
+  fingerprint: "…aaa1",
+  created_at: "2026-09-25T00:00:00Z",
+  updated_at: "2026-09-25T00:00:00Z",
+};
+
+const OPENAI_TTS_KEY: CredentialOut = {
+  id: "cred_tts",
+  provider_id: "openai-tts",
+  label: "Voice key",
+  fingerprint: "…bbb2",
+  created_at: "2026-09-25T00:00:00Z",
+  updated_at: "2026-09-25T00:00:00Z",
+};
+
+/** One `/credentials?provider_id=X` row set per home; every unlisted home answers empty. */
+function stubMultiHomeApi(byHome: Record<string, CredentialOut[]> = { "openai-llm": [OPENAI_LLM_KEY], "openai-tts": [OPENAI_TTS_KEY] }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      const respond = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body }) as Response;
+      if (url.includes("/providers")) return respond({ providers: [openaiLlmSpec, openaiTtsSpec] });
+      if (url.includes("/credentials") && method === "GET") {
+        const match = /provider_id=([^&]+)/.exec(url);
+        const providerId = match ? decodeURIComponent(match[1]) : undefined;
+        const items = providerId ? (byHome[providerId] ?? []) : [];
+        const page: CredentialPage = { items, total: items.length };
+        return respond(page);
+      }
+      if (url.includes("/credentials") && method === "POST") {
+        const body = JSON.parse(String(init?.body)) as { provider_id: string; label: string };
+        const created: CredentialOut = {
+          id: "cred_new",
+          provider_id: body.provider_id,
+          label: body.label,
+          fingerprint: "…new1",
+          created_at: "2026-09-25T00:00:00Z",
+          updated_at: "2026-09-25T00:00:00Z",
+        };
+        byHome[body.provider_id] = [...(byHome[body.provider_id] ?? []), created];
+        return respond(created, 201);
+      }
+      if (url.includes("/credentials/") && (method === "PUT" || url.endsWith("/test"))) {
+        return respond({ ok: true, message: "ok" });
+      }
+      throw new Error(`Unhandled fetch: ${method} ${url}`);
+    }),
+  );
+}
+
+describe("MultiHomeCredentialPicker — every OpenAI home at once (ask #297)", () => {
+  it("resolves a key stored under a different home than the first (openai-tts), proving it queried every home", async () => {
+    stubMultiHomeApi();
+    renderWithClient(
+      <MultiHomeCredentialPicker
+        providerIds={OPENAI_KEY_HOME_IDS}
+        specs={[openaiLlmSpec, openaiTtsSpec]}
+        value={OPENAI_TTS_KEY.id}
+        onChange={vi.fn()}
+        label="OpenAI key"
+      />,
+    );
+    // Same technique the OpenRouter suite uses: `SelectedKeyTest` only
+    // renders once the fetched items for *some* home actually contain the
+    // already-selected id — proof the openai-tts home's own query resolved.
+    expect(await screen.findByRole("button", { name: "Test key" })).toBeTruthy();
+  });
+
+  it("shows the empty hint only once every home comes back with nothing", async () => {
+    stubMultiHomeApi({});
+    renderWithClient(
+      <MultiHomeCredentialPicker
+        providerIds={OPENAI_KEY_HOME_IDS}
+        specs={[openaiLlmSpec, openaiTtsSpec]}
+        value={null}
+        onChange={vi.fn()}
+        label="OpenAI key"
+      />,
+    );
+    expect(await screen.findByText(/No OpenAI keys yet/)).toBeTruthy();
+  });
+
+  it("Add key always saves under the first home (openai-llm), regardless of which home's key is selected", async () => {
+    stubMultiHomeApi();
+    renderWithClient(
+      <MultiHomeCredentialPicker
+        providerIds={OPENAI_KEY_HOME_IDS}
+        specs={[openaiLlmSpec, openaiTtsSpec]}
+        value={OPENAI_TTS_KEY.id}
+        onChange={vi.fn()}
+        label="OpenAI key"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Add key/ }));
+    expect(await screen.findByRole("heading", { name: "Add OpenAI key" })).toBeTruthy();
   });
 });

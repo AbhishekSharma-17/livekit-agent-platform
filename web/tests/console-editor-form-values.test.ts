@@ -206,32 +206,40 @@ describe("unappliedFields", () => {
   });
 });
 
-describe("config.telephony (R-V2-21, V5-28)", () => {
+describe("config.telephony (R-V2-21, V5-28, V5-36)", () => {
   const TELEPHONY = {
     transfer_targets: [
       { label: "Front desk", to: "+15550003333" },
       { label: "PBX", to: "sip:desk@pbx.example.com" },
     ],
   };
+  // V5-36 (docs/v5/_asks.md #237): `amd` now loads into the form the same way
+  // `transfer_targets`/`sms_targets` always have, so the Voicemail card's fields
+  // have a concrete default and a save never resets a stored `amd` to this default.
+  const DEFAULT_AMD = { enabled: false, on_machine: "hangup" as const, message: null, ivr_detection: false };
 
   it("an unrelated editor save round-trips a stored telephony block byte-identical", () => {
     const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
     const body = buildAgentUpdate(a, submitted(a, (v) => (v.config.instructions = "Something else.")));
 
-    expect(body.config?.telephony).toEqual({ ...TELEPHONY, sms_targets: [] });
+    expect(body.config?.telephony).toEqual({ ...TELEPHONY, sms_targets: [], amd: DEFAULT_AMD });
   });
 
   it("an agent without a telephony block gets empty lists, not dropped ones", () => {
     const a = agent();
-    expect(toFormValues(a).config.telephony).toEqual({ transfer_targets: [], sms_targets: [] });
-    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({ transfer_targets: [], sms_targets: [] });
+    expect(toFormValues(a).config.telephony).toEqual({ transfer_targets: [], sms_targets: [], amd: DEFAULT_AMD });
+    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({
+      transfer_targets: [],
+      sms_targets: [],
+      amd: DEFAULT_AMD,
+    });
   });
 
   it("loads stored SMS contacts into the form and keeps them on an unrelated save (V5-25, V5-28)", () => {
     const sms = { transfer_targets: [], sms_targets: [{ label: "Claims desk", to: "+15550002222" }] };
     const a = agent({ config: { ...agent().config, telephony: sms } });
-    expect(toFormValues(a).config.telephony).toEqual(sms);
-    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual(sms);
+    expect(toFormValues(a).config.telephony).toEqual({ ...sms, amd: DEFAULT_AMD });
+    expect(buildAgentUpdate(a, submitted(a)).config?.telephony).toEqual({ ...sms, amd: DEFAULT_AMD });
   });
 
   it("sends edited destinations", () => {
@@ -244,6 +252,7 @@ describe("config.telephony (R-V2-21, V5-28)", () => {
     expect(body.config?.telephony).toEqual({
       transfer_targets: [{ label: "Sales", to: "+15550001111" }],
       sms_targets: [],
+      amd: DEFAULT_AMD,
     });
   });
 
@@ -257,6 +266,32 @@ describe("config.telephony (R-V2-21, V5-28)", () => {
     expect(body.config?.telephony).toEqual({
       ...TELEPHONY,
       sms_targets: [{ label: "Claims desk", to: "+15550002222" }],
+      amd: DEFAULT_AMD,
+    });
+  });
+
+  it("loads a stored amd config into the form and keeps it on an unrelated save (V5-32, V5-36)", () => {
+    const amd = { enabled: true, on_machine: "leave_message" as const, message: "Please call back.", ivr_detection: true };
+    const a = agent({ config: { ...agent().config, telephony: { ...TELEPHONY, amd } } });
+
+    expect(toFormValues(a).config.telephony.amd).toEqual(amd);
+    const body = buildAgentUpdate(a, submitted(a, (v) => (v.config.instructions = "Something else.")));
+    expect(body.config?.telephony?.amd).toEqual(amd);
+  });
+
+  it("sends an edited amd config without touching the transfer destinations", () => {
+    const a = agent({ config: { ...agent().config, telephony: TELEPHONY } });
+    const body = buildAgentUpdate(
+      a,
+      submitted(a, (v) => {
+        v.config.telephony.amd = { enabled: true, on_machine: "hangup", message: null, ivr_detection: false };
+      }),
+    );
+
+    expect(body.config?.telephony).toEqual({
+      ...TELEPHONY,
+      sms_targets: [],
+      amd: { enabled: true, on_machine: "hangup", message: null, ivr_detection: false },
     });
   });
 });

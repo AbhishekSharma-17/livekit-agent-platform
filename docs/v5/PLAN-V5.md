@@ -654,7 +654,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-20 | Opus | 4 | merged | 9b75adf | deferred (needs store keys) | |
 | V5-21 | Sonnet | 5 | merged | | needs a Linear account | |
 | V5-23 | Sonnet | 5 | merged | | | |
-| V5-24 | Sonnet | 5 | planned | | | |
+| V5-24 | Sonnet | 5 | merged | 703ef69 | | |
 | V5-25 | Opus | 5 | merged | | partly deferred (search, SMS, Cal.com keys) | |
 | V5-26 | Opus + Fable | 6 | done (review) | | | |
 | V5-27 | Opus | 6 | merged | | | |
@@ -666,7 +666,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-33 | Sonnet | 8 | merged | 6642f5d | | |
 | V5-34 | Sonnet | 8 | merged | 6642f5d | | |
 | V5-35 | Sonnet | 8 | merged | 6642f5d | | |
-| V5-36 | Sonnet | 8 | planned | | deferred (telephony offline) | |
+| V5-36 | Sonnet | 8 | merged | be14db3 | deferred (telephony offline) | |
 | V5-37 | Opus | 8 | planned | | | |
 | V5-38 | Sonnet | 9 | planned | | | |
 | V5-39 | Opus | 9 | planned | | | |

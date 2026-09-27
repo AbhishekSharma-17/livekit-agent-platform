@@ -29,6 +29,29 @@ export function isOpenCall(call: Pick<CallOut, "status">): boolean {
   return status === "dialing" || status === "ringing" || status === "answered";
 }
 
+/**
+ * `CallOut.amd_result` in plain words (V5-32/36, `lkap_contracts.telephony.AmdResult`):
+ * what answered an outbound call when answering-machine detection ran. `null` = detection
+ * did not run (the call row omits the "Answered by" line entirely).
+ */
+export type AmdResult = NonNullable<CallOut["amd_result"]>;
+
+export const AMD_RESULT_LABEL: Record<AmdResult, string> = {
+  human: "a person",
+  "machine-vm": "voicemail",
+  "machine-unavailable": "a full mailbox",
+  "machine-ivr": "a phone menu",
+  uncertain: "not sure",
+};
+
+/** `CallOut.transfer_mode` in plain words (V5-32/36): how a call was handed over. */
+export type TransferMode = NonNullable<CallOut["transfer_mode"]>;
+
+export const TRANSFER_MODE_LABEL: Record<TransferMode, string> = {
+  cold: "Transferred directly",
+  warm: "Introduced first",
+};
+
 /** A connection reports SIP after its capability probe (`Test connection`). */
 export function sipEnabled(connection: ConnectionOut | undefined): boolean {
   return Boolean(connection?.capabilities?.sip_enabled);

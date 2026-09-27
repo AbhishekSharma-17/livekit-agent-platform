@@ -9,7 +9,7 @@ import { toFormValues } from "@/components/console/agents/editor/form-values";
 import { KnowledgeTab } from "@/components/console/agents/tabs/knowledge-tab";
 import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
 import { zodResolver } from "@/components/console/lib/zod-resolver";
-import type { AgentOut, KbPage } from "@/contracts/lkap-contracts";
+import type { AgentOut, KbPage, KnowledgeConnectionOut, KnowledgeConnectionPage } from "@/contracts/lkap-contracts";
 
 /**
  * V5-10 acceptance (`docs/v5/PLAN-V5.md`): the Knowledge tab posts the seven
@@ -51,15 +51,34 @@ const KBS: KbPage = {
   total: 1,
 } as unknown as KbPage;
 
-function stubFetch() {
+function stubFetch(connections: KnowledgeConnectionOut[] = []) {
+  const page: KnowledgeConnectionPage = { items: connections, total: connections.length };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       if (url.includes("/knowledge-bases")) return jsonResponse(KBS);
+      if (url.includes("/knowledge-connections")) return jsonResponse(page);
       return jsonResponse({});
     }),
   );
 }
+
+const VOYAGE_CONNECTION: KnowledgeConnectionOut = {
+  id: "kc1",
+  name: "Voyage reranker",
+  kind: "voyage_rerank",
+  provider_id: "voyage-rerank",
+  settings: { model: "rerank-2.5-lite" },
+  credential_id: "cred1",
+  credential_fingerprint: "…ab12",
+  status: "ok",
+  last_checked_at: "2026-09-20T00:00:00Z",
+  last_error: null,
+  capabilities: { hybrid: false, filters: false, stores_text: false, namespaces: false, rerank: true, dimension: null, version: null },
+  knowledge_base_count: 0,
+  created_at: "2026-09-01T00:00:00Z",
+  updated_at: "2026-09-01T00:00:00Z",
+};
 
 function agent(overrides: Partial<AgentOut> = {}): AgentOut {
   return {
@@ -192,5 +211,58 @@ describe("KnowledgeTab retrieval settings (V5-10)", () => {
     expect(screen.queryByText(/RRF|tsvector|FTS|rerank_score/i)).toBeNull();
     expect(container.querySelector("details")).toBeTruthy();
     expect(screen.getByText("How this works")).toBeTruthy();
+  });
+});
+
+describe("KnowledgeTab re-rank picker gains connection re-rankers (V5-24)", () => {
+  it("lists a re-ranker connection under 'Hosted re-rankers' and selecting it sets connection:<id>", async () => {
+    stubFetch([VOYAGE_CONNECTION]);
+    render(<Harness agent={agent()} />);
+    await screen.findByText("Policy handbook");
+
+    fireEvent.click(screen.getByLabelText("Re-rank results"));
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByText("Hosted re-rankers")).toBeTruthy();
+    fireEvent.click(within(listbox).getByText("Voyage reranker"));
+
+    await waitFor(() => expect(latest?.config.knowledge.rerank).toBe("connection:kc1"));
+    // Exact-string match: a regex substring test would also hit the `Field`
+    // wrapper (label + control + hint concatenated), giving a false
+    // "multiple elements" failure.
+    expect(
+      screen.getByText(
+        "Calls a hosted service over the network to rescore results — usually adds 100–300 ms to the search tool's reply.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("disables the hosted re-ranker once automatic knowledge is on with a knowledge base attached (the api's own rule)", async () => {
+    stubFetch([VOYAGE_CONNECTION]);
+    render(<Harness agent={agent()} />);
+    await screen.findByText("Policy handbook");
+
+    // Attach the one knowledge base; `auto_inject` defaults to on.
+    fireEvent.click(screen.getByLabelText("Policy handbook"));
+    await waitFor(() => expect(latest?.config.knowledge.kb_ids).toEqual(["kb-1"]));
+
+    fireEvent.click(screen.getByLabelText("Re-rank results"));
+    const listbox = await screen.findByRole("listbox");
+    const option = within(listbox).getByText("Voyage reranker").closest('[role="option"]');
+    expect(option?.getAttribute("data-disabled")).not.toBeNull();
+    expect(
+      screen.getByText(
+        'A hosted re-ranker works only with the search tool — turn off "Add the best matches to every turn" above to use one.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not show the 'Hosted re-rankers' group when the workspace has none", async () => {
+    stubFetch([]);
+    render(<Harness agent={agent()} />);
+    await screen.findByText("Policy handbook");
+
+    fireEvent.click(screen.getByLabelText("Re-rank results"));
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).queryByText("Hosted re-rankers")).toBeNull();
   });
 });

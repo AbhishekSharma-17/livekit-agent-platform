@@ -256,4 +256,18 @@ describe("SettingsTabs", () => {
       expect(workspacePutBodies[0].settings).toEqual({ locale: { timezone: null } });
     });
   });
+
+  // V5-42 (ask #263): "Delete all caller memories" — full component tests
+  // (role gating, the typed-confirmation flow, the purge POST) are in
+  // `console-memory.test.tsx`; this just proves the Danger zone tab renders
+  // the real action through the whole `SettingsTabs` page, not a placeholder.
+  describe("Danger zone tab — Delete all caller memories (V5-42)", () => {
+    it("renders the purge action, named after this workspace", async () => {
+      searchParams = new URLSearchParams("tab=danger");
+      renderSettings();
+
+      const button = (await screen.findByRole("button", { name: "Delete all caller memories" })) as HTMLButtonElement;
+      await waitFor(() => expect(button.disabled).toBe(false));
+    });
+  });
 });

@@ -5,6 +5,7 @@ import type {
   DisclosureConfig,
   KnowledgeConfig,
   LocaleConfig,
+  MemoryConfig,
   PrivacyConfig,
   PublishGate,
   RecordingConfig,
@@ -119,6 +120,16 @@ export const DEFAULT_PRIVACY: Required<PrivacyConfig> = {
 export const DEFAULT_PUBLISH_GATE: Required<PublishGate> = {
   require_tests: false,
   min_pass_ratio: 1,
+};
+
+/** `MemoryConfig` defaults (V5-40): off, per-agent, 90 days, no consent line, a bounded recall. */
+export const DEFAULT_MEMORY: Required<MemoryConfig> = {
+  enabled: false,
+  scope: "agent",
+  retention_days: 90,
+  consent_line: null,
+  max_recall_tokens: 400,
+  verbatim: false,
 };
 
 /** `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar card). */

@@ -1,8 +1,20 @@
-import { ArrowRightLeftIcon, AudioLinesIcon, CoinsIcon, GaugeIcon, GridIcon, HashIcon, PhoneForwardedIcon, ShieldIcon } from "lucide-react";
+import {
+  ArrowRightLeftIcon,
+  AudioLinesIcon,
+  BrainIcon,
+  CoinsIcon,
+  GaugeIcon,
+  GridIcon,
+  HashIcon,
+  PhoneForwardedIcon,
+  ShieldIcon,
+  UserXIcon,
+} from "lucide-react";
 
 import type { SessionDetailExtension, TimelineEventKind } from "@/components/console/sessions/detail/types";
 import { RecordingTab } from "./recording-tab";
 import { CostTab } from "./cost-tab";
+import { MemoryTab } from "./memory-tab";
 import { QaTab } from "./qa-tab";
 
 /**
@@ -87,6 +99,55 @@ const EVENT_KINDS: TimelineEventKind[] = [
       return total > 0 ? `${total} detail${total === 1 ? "" : "s"} masked` : null;
     },
   },
+  // V5-42 (ask #263): the three caller-memory events (`MemoryRecalledEvent`,
+  // `MemoryStoredEvent`, `MemoryForgottenEvent`, `lkap_contracts.api_models`).
+  // Titles never show the memory text itself (R-V5-15: third-party data) —
+  // just what happened; the full recalled/stored text is on the Memory tab.
+  {
+    type: "memory_recalled",
+    filter: "other",
+    tone: "info",
+    icon: BrainIcon,
+    title: (p) => {
+      const status = String(p.status ?? "empty");
+      const count = Number(p.count ?? 0);
+      if (status === "recalled") return `Recalled ${count} caller ${count === 1 ? "memory" : "memories"}`;
+      if (status === "no_identity") return "No caller id to recall memories for";
+      if (status === "disabled") return "Memory was off";
+      if (status === "unavailable") return "Memory wasn't installed on the server";
+      if (status === "failed") return "Recalling memories failed";
+      return "Nothing to recall (first call)";
+    },
+    summary: (p) => (p.forgotten ? "This caller has since been forgotten" : null),
+  },
+  {
+    type: "memory_stored",
+    filter: "other",
+    tone: "success",
+    icon: BrainIcon,
+    title: (p) => {
+      const status = String(p.status ?? "skipped");
+      const count = Number(p.count ?? 0);
+      if (status === "stored") return `Stored ${count} caller ${count === 1 ? "memory" : "memories"}`;
+      if (status === "nothing_new") return "Nothing new to store";
+      if (status === "failed") return "Storing memory failed";
+      return "Memory not stored";
+    },
+    summary: (p) => (p.reason ? String(p.reason) : p.forgotten ? "This caller has since been forgotten" : null),
+  },
+  {
+    type: "memory_forgotten",
+    filter: "other",
+    tone: "warning",
+    icon: UserXIcon,
+    title: () => "Caller forgotten",
+    summary: (p) => {
+      const reason = String(p.reason ?? "caller");
+      if (reason === "workspace") return "The whole workspace's memories were purged";
+      if (reason === "retention") return "Removed automatically after its retention period";
+      return "Forgotten by an admin";
+    },
+  },
 ];
 
 export const sessionsV2Extension: SessionDetailExtension = {
@@ -106,6 +167,9 @@ export const sessionsV2Extension: SessionDetailExtension = {
     },
     { id: "cost", label: "Cost", icon: CoinsIcon, order: 40, Component: CostTab },
     { id: "qa", label: "QA", icon: GaugeIcon, order: 50, Component: QaTab },
+    // V5-42: always shown (like Cost/QA) — the tab itself explains an
+    // off/anonymous/unavailable state rather than being hidden for it.
+    { id: "memory", label: "Memory", icon: BrainIcon, order: 55, Component: MemoryTab },
   ],
   eventKinds: EVENT_KINDS,
 };

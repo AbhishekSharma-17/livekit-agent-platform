@@ -1,0 +1,32 @@
+{
+  "$id": "lkap-contracts/MemoryRecallIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/memory/recall`` (worker only, V5-40): once, at session start.\n\nThe api resolves the caller from the session row (the phone number of a call, the\nparticipant identity an embedding site chose) and computes the pseudonymous subject id\nitself; the worker never sees it. ``caller_e164`` is the caller's number when the worker\nalready knows it and the session row does not (an inbound call before its leg is reported).",
+  "properties": {
+    "caller_e164": {
+      "anyOf": [
+        {
+          "maxLength": 16,
+          "pattern": "^\\+[1-9]\\d{6,14}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Caller E164"
+    },
+    "session_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id"
+  ],
+  "title": "MemoryRecallIn",
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/MemoryForgetOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``DELETE /v1/memory/subjects/{subject_id}`` (V5-40): one caller forgotten.",
+  "properties": {
+    "forgotten": {
+      "title": "Forgotten",
+      "type": "boolean"
+    },
+    "sessions_updated": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Sessions Updated",
+      "type": "integer"
+    },
+    "subject_id": {
+      "title": "Subject Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "subject_id",
+    "forgotten"
+  ],
+  "title": "MemoryForgetOut",
+  "type": "object"
+}

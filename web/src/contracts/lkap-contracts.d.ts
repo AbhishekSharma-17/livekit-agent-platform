@@ -177,6 +177,15 @@ export interface LkapContracts {
   McpTestResult?: McpTestResult;
   McpToolSnapshot?: McpToolSnapshot;
   Me?: Me;
+  MemoryConfig?: MemoryConfig;
+  MemoryForgetOut?: MemoryForgetOut;
+  MemoryForgottenEvent?: MemoryForgottenEvent;
+  MemoryPurgeIn?: MemoryPurgeIn;
+  MemoryPurgeOut?: MemoryPurgeOut;
+  MemoryRecallIn?: MemoryRecallIn;
+  MemoryRecallOut?: MemoryRecallOut;
+  MemoryRecalledEvent?: MemoryRecalledEvent;
+  MemoryStoredEvent?: MemoryStoredEvent;
   ModelCapabilities?: ModelCapabilities;
   ModelIdRules?: ModelIdRules;
   ModelTestRequest?: ModelTestRequest;
@@ -237,6 +246,7 @@ export interface LkapContracts {
   SessionEventPage?: SessionEventPage;
   SessionEventsIn?: SessionEventsIn;
   SessionLatency?: SessionLatency;
+  SessionMemoryOut?: SessionMemoryOut;
   SessionMetricsIn?: SessionMetricsIn;
   SessionOut?: SessionOut;
   SessionPage?: SessionPage;
@@ -390,6 +400,7 @@ export interface AgentConfig {
   instructions: string;
   knowledge?: KnowledgeConfig;
   locale?: LocaleConfig;
+  memory?: MemoryConfig;
   pack_settings?: {
     [k: string]: unknown;
   };
@@ -678,6 +689,42 @@ export interface LocaleConfig {
    * `detect` uses the caller's own timezone (from the browser, else the phone number, else the business timezone); `business` always uses the business timezone.
    */
   caller_timezone?: "detect" | "business";
+}
+/**
+ * What the agent remembers about a returning caller (V5-40, D-V5-17). Off by default.
+ *
+ * Callers are identified by a pseudonymous id (a keyed hash of their phone number or of
+ * the identity the embedding site passed), never by the number itself. The memories are
+ * read once when the session starts and written once after it ends, never during the call.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryConfig".
+ */
+export interface MemoryConfig {
+  /**
+   * A sentence the agent says early in the call when the session will be remembered (for example that the conversation is remembered to help next time). `None`: no line.
+   */
+  consent_line?: string | null;
+  /**
+   * Remember callers across sessions. Nothing is read or written while this is off.
+   */
+  enabled?: boolean;
+  /**
+   * The most text (in tokens, about four characters each) of recalled memories added to the agent's instructions at the start of a session.
+   */
+  max_recall_tokens?: number;
+  /**
+   * Days a caller's memories are kept after their last session; then they are deleted.
+   */
+  retention_days?: number;
+  /**
+   * `agent`: only this agent reads and writes its memories of a caller; `workspace`: the memories are shared with every agent of the workspace that also uses `workspace`.
+   */
+  scope?: "agent" | "workspace";
+  /**
+   * Store what the caller said as it was, without a model picking out the facts (no model call; the masking of `privacy.storage_tier` still applies). Off: the agent's language model extracts short facts after the call.
+   */
+  verbatim?: boolean;
 }
 /**
  * Which panel renders the session, and (for ``composite``) its blocks.
@@ -4566,6 +4613,109 @@ export interface WorkspaceMembership {
   slug: string;
 }
 /**
+ * ``DELETE /v1/memory/subjects/{subject_id}`` (V5-40): one caller forgotten.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryForgetOut".
+ */
+export interface MemoryForgetOut {
+  forgotten: boolean;
+  sessions_updated?: number;
+  subject_id: string;
+}
+/**
+ * Payload of the ``memory_forgotten`` session event (api-written, V5-40).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryForgottenEvent".
+ */
+export interface MemoryForgottenEvent {
+  reason: "caller" | "workspace" | "retention";
+}
+/**
+ * ``POST /v1/memory/purge`` (V5-40): delete every caller memory of the workspace.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryPurgeIn".
+ */
+export interface MemoryPurgeIn {
+  /**
+   * Must be true: purging cannot be undone (422 otherwise).
+   */
+  confirm?: boolean;
+}
+/**
+ * ``POST /v1/memory/purge`` (V5-40).
+ *
+ * The pseudonymous ids and the workspace's memory key are gone when this returns, so
+ * nothing stored can be tied to a caller again; the backend entries are deleted by the
+ * ``memory_purge`` job (``job_id``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryPurgeOut".
+ */
+export interface MemoryPurgeOut {
+  job_id?: string | null;
+  status: "queued" | "nothing_to_purge";
+  subjects: number;
+}
+/**
+ * ``POST /internal/v1/memory/recall`` (worker only, V5-40): once, at session start.
+ *
+ * The api resolves the caller from the session row (the phone number of a call, the
+ * participant identity an embedding site chose) and computes the pseudonymous subject id
+ * itself; the worker never sees it. ``caller_e164`` is the caller's number when the worker
+ * already knows it and the session row does not (an inbound call before its leg is reported).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryRecallIn".
+ */
+export interface MemoryRecallIn {
+  caller_e164?: string | null;
+  session_id: string;
+}
+/**
+ * What the worker adds to the instructions (V5-40), newest memory first.
+ *
+ * ``memories`` is third-party text (derived from what callers said): the worker fences it
+ * before the model sees it. ``remember`` is true when the session will be written after
+ * it ends (memory on and a caller identity known), which is when the agent's
+ * ``memory.consent_line`` is spoken.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryRecallOut".
+ */
+export interface MemoryRecallOut {
+  memories?: string[];
+  remember?: boolean;
+  status: "recalled" | "empty" | "disabled" | "no_identity" | "unavailable" | "failed";
+}
+/**
+ * Payload of the ``memory_recalled`` session event (api-written, V5-40).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryRecalledEvent".
+ */
+export interface MemoryRecalledEvent {
+  count?: number;
+  forgotten?: boolean;
+  memories?: string[];
+  status: "recalled" | "empty" | "disabled" | "no_identity" | "unavailable" | "failed";
+}
+/**
+ * Payload of the ``memory_stored`` session event (api-written after the call, V5-40).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "MemoryStoredEvent".
+ */
+export interface MemoryStoredEvent {
+  count?: number;
+  forgotten?: boolean;
+  memories?: string[];
+  reason?: string | null;
+  status: "stored" | "nothing_new" | "skipped" | "failed";
+}
+/**
  * What one model can do, as far as the platform knows (D-V4-24, R-V4-23).
  *
  * ``None`` means unknown. Resolved per field from, in order: the admin's
@@ -5853,6 +6003,26 @@ export interface SessionEventPage {
  */
 export interface SessionEventsIn {
   events: SessionEventIn[];
+}
+/**
+ * ``GET /v1/sessions/{id}/memory`` (V5-40): what this session recalled and stored.
+ *
+ * ``subject_id`` is the caller's pseudonymous id (a hex keyed hash, never the phone number),
+ * the value ``DELETE /v1/memory/subjects/{subject_id}`` takes; ``None`` when the session had
+ * no caller identity or memory was off.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionMemoryOut".
+ */
+export interface SessionMemoryOut {
+  enabled: boolean;
+  forgotten_at?: string | null;
+  recall_status?: ("recalled" | "empty" | "disabled" | "no_identity" | "unavailable" | "failed") | null;
+  recalled?: string[];
+  store_reason?: string | null;
+  store_status?: ("stored" | "nothing_new" | "skipped" | "failed") | null;
+  stored?: string[];
+  subject_id?: string | null;
 }
 /**
  * ``POST /internal/v1/sessions/{id}/metrics``.

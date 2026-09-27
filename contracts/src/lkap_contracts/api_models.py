@@ -1479,6 +1479,145 @@ class SessionScrubOut(BaseModel):
     scrubbed_at: datetime | None = None
 
 
+# ------------------------------------------------------------------ caller memory (V5-40)
+
+#: The session event the api records when the worker asked for the caller's memories.
+MEMORY_RECALLED_EVENT = "memory_recalled"
+#: The session event the api records once the session's memories were written (or skipped).
+MEMORY_STORED_EVENT = "memory_stored"
+#: The session event the api records on every session whose memories were forgotten.
+MEMORY_FORGOTTEN_EVENT = "memory_forgotten"
+
+#: Longest single memory the api hands out or records, in characters.
+MAX_MEMORY_CHARS = 500
+#: Most memories one recall returns.
+MAX_RECALL_MEMORIES = 20
+
+#: What a recall found. ``recalled``: memories came back; ``empty``: the caller is known to the
+#: memory but nothing is stored yet (a first call); ``disabled``: the agent's ``memory.enabled`` is
+#: off; ``no_identity``: the session has no stable caller identity (an anonymous web visitor, or a
+#: phone number the api does not know yet); ``unavailable``: the memory backend is not installed or
+#: not reachable; ``failed``: the backend raised (the session runs without memories).
+MemoryRecallStatus = Literal["recalled", "empty", "disabled", "no_identity", "unavailable", "failed"]
+
+#: What the write after the call did. ``stored``: at least one memory was written; ``nothing_new``:
+#: the extraction found nothing worth keeping; ``skipped``: nothing was written on purpose
+#: (``reason`` says why: no identity, no transcript, no model the api can call); ``failed``: the
+#: backend or the model failed (``reason``).
+MemoryStoreStatus = Literal["stored", "nothing_new", "skipped", "failed"]
+
+#: Why memories were forgotten: an admin forgot one caller, purged the workspace, or the
+#: retention elapsed.
+MemoryForgetReason = Literal["caller", "workspace", "retention"]
+
+MemoryText = Annotated[str, StringConstraints(max_length=MAX_MEMORY_CHARS)]
+
+
+class MemoryRecallIn(BaseModel):
+    """``POST /internal/v1/memory/recall`` (worker only, V5-40): once, at session start.
+
+    The api resolves the caller from the session row (the phone number of a call, the
+    participant identity an embedding site chose) and computes the pseudonymous subject id
+    itself; the worker never sees it. ``caller_e164`` is the caller's number when the worker
+    already knows it and the session row does not (an inbound call before its leg is reported).
+    """
+
+    session_id: str = Field(min_length=1, max_length=64)
+    caller_e164: str | None = Field(default=None, max_length=16, pattern=E164_PATTERN)
+
+
+class MemoryRecallOut(BaseModel):
+    """What the worker adds to the instructions (V5-40), newest memory first.
+
+    ``memories`` is third-party text (derived from what callers said): the worker fences it
+    before the model sees it. ``remember`` is true when the session will be written after
+    it ends (memory on and a caller identity known), which is when the agent's
+    ``memory.consent_line`` is spoken.
+    """
+
+    status: MemoryRecallStatus
+    memories: list[MemoryText] = []
+    """At most :data:`MAX_RECALL_MEMORIES` (the api caps it; no ``maxItems``, which the TS
+    generator would expand into a tuple union)."""
+    remember: bool = False
+
+
+class MemoryRecalledEvent(BaseModel):
+    """Payload of the ``memory_recalled`` session event (api-written, V5-40)."""
+
+    status: MemoryRecallStatus
+    count: int = Field(default=0, ge=0)
+    memories: list[MemoryText] = []
+    forgotten: bool = False
+    """True once the caller's memories were forgotten: ``memories`` is then empty."""
+
+
+class MemoryStoredEvent(BaseModel):
+    """Payload of the ``memory_stored`` session event (api-written after the call, V5-40)."""
+
+    status: MemoryStoreStatus
+    count: int = Field(default=0, ge=0)
+    memories: list[MemoryText] = []
+    reason: str | None = None
+    forgotten: bool = False
+    """True once the caller's memories were forgotten: ``memories`` is then empty."""
+
+
+class MemoryForgottenEvent(BaseModel):
+    """Payload of the ``memory_forgotten`` session event (api-written, V5-40)."""
+
+    reason: MemoryForgetReason
+
+
+class SessionMemoryOut(BaseModel):
+    """``GET /v1/sessions/{id}/memory`` (V5-40): what this session recalled and stored.
+
+    ``subject_id`` is the caller's pseudonymous id (a hex keyed hash, never the phone number),
+    the value ``DELETE /v1/memory/subjects/{subject_id}`` takes; ``None`` when the session had
+    no caller identity or memory was off.
+    """
+
+    enabled: bool
+    subject_id: str | None = None
+    recall_status: MemoryRecallStatus | None = None
+    recalled: list[MemoryText] = []
+    store_status: MemoryStoreStatus | None = None
+    store_reason: str | None = None
+    stored: list[MemoryText] = []
+    forgotten_at: datetime | None = None
+
+
+class MemoryForgetOut(BaseModel):
+    """``DELETE /v1/memory/subjects/{subject_id}`` (V5-40): one caller forgotten."""
+
+    subject_id: str
+    forgotten: bool
+    """False when the workspace had no memories for this id (nothing to delete)."""
+    sessions_updated: int = Field(default=0, ge=0)
+    """Sessions whose recorded memories were blanked."""
+
+
+class MemoryPurgeIn(BaseModel):
+    """``POST /v1/memory/purge`` (V5-40): delete every caller memory of the workspace."""
+
+    confirm: bool = Field(
+        default=False, description="Must be true: purging cannot be undone (422 otherwise)."
+    )
+
+
+class MemoryPurgeOut(BaseModel):
+    """``POST /v1/memory/purge`` (V5-40).
+
+    The pseudonymous ids and the workspace's memory key are gone when this returns, so
+    nothing stored can be tied to a caller again; the backend entries are deleted by the
+    ``memory_purge`` job (``job_id``).
+    """
+
+    status: Literal["queued", "nothing_to_purge"]
+    subjects: int = Field(ge=0)
+    job_id: str | None = None
+
+
 class SessionAssetOut(BaseModel):
     """One stored file of a session (``session_assets``, V5-19): an upload, a pinned frame, a copied document.
 

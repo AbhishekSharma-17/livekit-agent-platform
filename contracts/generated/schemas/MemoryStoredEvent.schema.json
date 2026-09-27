@@ -1,0 +1,54 @@
+{
+  "$id": "lkap-contracts/MemoryStoredEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``memory_stored`` session event (api-written after the call, V5-40).",
+  "properties": {
+    "count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Count",
+      "type": "integer"
+    },
+    "forgotten": {
+      "default": false,
+      "title": "Forgotten",
+      "type": "boolean"
+    },
+    "memories": {
+      "default": [],
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "title": "Memories",
+      "type": "array"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "enum": [
+        "stored",
+        "nothing_new",
+        "skipped",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "MemoryStoredEvent",
+  "type": "object"
+}

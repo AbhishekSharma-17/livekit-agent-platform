@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/MemoryRecallOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the worker adds to the instructions (V5-40), newest memory first.\n\n``memories`` is third-party text (derived from what callers said): the worker fences it\nbefore the model sees it. ``remember`` is true when the session will be written after\nit ends (memory on and a caller identity known), which is when the agent's\n``memory.consent_line`` is spoken.",
+  "properties": {
+    "memories": {
+      "default": [],
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "title": "Memories",
+      "type": "array"
+    },
+    "remember": {
+      "default": false,
+      "title": "Remember",
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "recalled",
+        "empty",
+        "disabled",
+        "no_identity",
+        "unavailable",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "MemoryRecallOut",
+  "type": "object"
+}

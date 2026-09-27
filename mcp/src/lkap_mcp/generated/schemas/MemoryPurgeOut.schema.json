@@ -1,0 +1,38 @@
+{
+  "$id": "lkap-contracts/MemoryPurgeOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/memory/purge`` (V5-40).\n\nThe pseudonymous ids and the workspace's memory key are gone when this returns, so\nnothing stored can be tied to a caller again; the backend entries are deleted by the\n``memory_purge`` job (``job_id``).",
+  "properties": {
+    "job_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "nothing_to_purge"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "subjects": {
+      "minimum": 0,
+      "title": "Subjects",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "status",
+    "subjects"
+  ],
+  "title": "MemoryPurgeOut",
+  "type": "object"
+}

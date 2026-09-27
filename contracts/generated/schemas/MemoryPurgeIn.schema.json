@@ -1,0 +1,15 @@
+{
+  "$id": "lkap-contracts/MemoryPurgeIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/memory/purge`` (V5-40): delete every caller memory of the workspace.",
+  "properties": {
+    "confirm": {
+      "default": false,
+      "description": "Must be true: purging cannot be undone (422 otherwise).",
+      "title": "Confirm",
+      "type": "boolean"
+    }
+  },
+  "title": "MemoryPurgeIn",
+  "type": "object"
+}

@@ -1,0 +1,109 @@
+{
+  "$id": "lkap-contracts/SessionMemoryOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/sessions/{id}/memory`` (V5-40): what this session recalled and stored.\n\n``subject_id`` is the caller's pseudonymous id (a hex keyed hash, never the phone number),\nthe value ``DELETE /v1/memory/subjects/{subject_id}`` takes; ``None`` when the session had\nno caller identity or memory was off.",
+  "properties": {
+    "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "forgotten_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Forgotten At"
+    },
+    "recall_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "recalled",
+            "empty",
+            "disabled",
+            "no_identity",
+            "unavailable",
+            "failed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recall Status"
+    },
+    "recalled": {
+      "default": [],
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "title": "Recalled",
+      "type": "array"
+    },
+    "store_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Store Reason"
+    },
+    "store_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "stored",
+            "nothing_new",
+            "skipped",
+            "failed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Store Status"
+    },
+    "stored": {
+      "default": [],
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "title": "Stored",
+      "type": "array"
+    },
+    "subject_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subject Id"
+    }
+  },
+  "required": [
+    "enabled"
+  ],
+  "title": "SessionMemoryOut",
+  "type": "object"
+}

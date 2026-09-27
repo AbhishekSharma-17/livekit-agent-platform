@@ -57,6 +57,17 @@
             "caller_timezone": "detect"
           }
         },
+        "memory": {
+          "$ref": "#/$defs/MemoryConfig",
+          "default": {
+            "consent_line": null,
+            "enabled": false,
+            "max_recall_tokens": 400,
+            "retention_days": 90,
+            "scope": "agent",
+            "verbatim": false
+          }
+        },
         "pack_settings": {
           "additionalProperties": true,
           "default": {},
@@ -1819,6 +1830,65 @@
         "name"
       ],
       "title": "McpToolSnapshot",
+      "type": "object"
+    },
+    "MemoryConfig": {
+      "description": "What the agent remembers about a returning caller (V5-40, D-V5-17). Off by default.\n\nCallers are identified by a pseudonymous id (a keyed hash of their phone number or of\nthe identity the embedding site passed), never by the number itself. The memories are\nread once when the session starts and written once after it ends, never during the call.",
+      "properties": {
+        "consent_line": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A sentence the agent says early in the call when the session will be remembered (for example that the conversation is remembered to help next time). `None`: no line.",
+          "title": "Consent Line"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Remember callers across sessions. Nothing is read or written while this is off.",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_recall_tokens": {
+          "default": 400,
+          "description": "The most text (in tokens, about four characters each) of recalled memories added to the agent's instructions at the start of a session.",
+          "maximum": 2000,
+          "minimum": 50,
+          "title": "Max Recall Tokens",
+          "type": "integer"
+        },
+        "retention_days": {
+          "default": 90,
+          "description": "Days a caller's memories are kept after their last session; then they are deleted.",
+          "maximum": 3650,
+          "minimum": 1,
+          "title": "Retention Days",
+          "type": "integer"
+        },
+        "scope": {
+          "default": "agent",
+          "description": "`agent`: only this agent reads and writes its memories of a caller; `workspace`: the memories are shared with every agent of the workspace that also uses `workspace`.",
+          "enum": [
+            "agent",
+            "workspace"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "verbatim": {
+          "default": false,
+          "description": "Store what the caller said as it was, without a model picking out the facts (no model call; the masking of `privacy.storage_tier` still applies). Off: the agent's language model extracts short facts after the call.",
+          "title": "Verbatim",
+          "type": "boolean"
+        }
+      },
+      "title": "MemoryConfig",
       "type": "object"
     },
     "ModelCapabilities": {

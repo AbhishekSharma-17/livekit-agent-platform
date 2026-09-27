@@ -28,6 +28,7 @@ from lkap_contracts.agent_config import (
     AvatarOptions,
     DisclosureConfig,
     LocaleConfig,
+    MemoryConfig,
     NotifyTeamConfig,
     PanelLayout,
     PrivacyConfig,
@@ -159,6 +160,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PublishGateRefusal": PublishGateRefusal,
     "QaConfig": QaConfig,
     "PrivacyConfig": PrivacyConfig,  # V5-30
+    "MemoryConfig": MemoryConfig,  # V5-40
     "ResolvedAgentConfig": ResolvedAgentConfig,
     "DispatchMetadata": DispatchMetadata,
     "Issue": Issue,
@@ -314,6 +316,16 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SessionOut": api_models.SessionOut,
     "SessionDetailOut": api_models.SessionDetailOut,
     "SessionScrubOut": api_models.SessionScrubOut,  # V5-30
+    # V5-40: caller memory
+    "MemoryRecallIn": api_models.MemoryRecallIn,
+    "MemoryRecallOut": api_models.MemoryRecallOut,
+    "MemoryRecalledEvent": api_models.MemoryRecalledEvent,
+    "MemoryStoredEvent": api_models.MemoryStoredEvent,
+    "MemoryForgottenEvent": api_models.MemoryForgottenEvent,
+    "SessionMemoryOut": api_models.SessionMemoryOut,
+    "MemoryForgetOut": api_models.MemoryForgetOut,
+    "MemoryPurgeIn": api_models.MemoryPurgeIn,
+    "MemoryPurgeOut": api_models.MemoryPurgeOut,
     "LocaleEvent": api_models.LocaleEvent,
     "LanguageSwitchedEvent": api_models.LanguageSwitchedEvent,  # V5-31
     "VoicemailEvent": api_models.VoicemailEvent,  # V5-32

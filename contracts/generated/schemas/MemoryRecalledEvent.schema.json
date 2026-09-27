@@ -1,0 +1,44 @@
+{
+  "$id": "lkap-contracts/MemoryRecalledEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``memory_recalled`` session event (api-written, V5-40).",
+  "properties": {
+    "count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Count",
+      "type": "integer"
+    },
+    "forgotten": {
+      "default": false,
+      "title": "Forgotten",
+      "type": "boolean"
+    },
+    "memories": {
+      "default": [],
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "title": "Memories",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "recalled",
+        "empty",
+        "disabled",
+        "no_identity",
+        "unavailable",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "MemoryRecalledEvent",
+  "type": "object"
+}

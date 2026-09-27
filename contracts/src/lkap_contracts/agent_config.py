@@ -55,6 +55,8 @@ BuiltinProviderSlot = Literal["web_search", "sms", "notify_team"]
 __all__ = [
     "KNOWLEDGE_RERANK_VALUES",
     "MAX_AGENT_LANGUAGES",
+    "MAX_MEMORY_CONSENT_CHARS",
+    "MAX_MEMORY_RETENTION_DAYS",
     "AgentConfig",
     "AgentLimits",
     "AppsMode",
@@ -73,6 +75,8 @@ __all__ = [
     "McpOAuthAccess",
     "McpOAuthTokenIn",
     "McpOAuthTokenOut",
+    "MemoryConfig",
+    "MemoryScope",
     "NotifyTeamConfig",
     "NotifyTeamStyle",
     "PanelLayout",
@@ -473,6 +477,69 @@ class PrivacyConfig(BaseModel):
         return list(dict.fromkeys(values))
 
 
+#: ``MemoryConfig.scope``: whose memories an agent reads and writes. ``agent`` keeps what this
+#: agent learnt about a caller to itself; ``workspace`` shares one memory of the caller with every
+#: agent of the workspace that also uses the ``workspace`` scope.
+MemoryScope = Literal["agent", "workspace"]
+
+#: Longest ``MemoryConfig.retention_days`` (ten years).
+MAX_MEMORY_RETENTION_DAYS = 3650
+#: Longest ``MemoryConfig.consent_line``.
+MAX_MEMORY_CONSENT_CHARS = 500
+
+
+class MemoryConfig(BaseModel):
+    """What the agent remembers about a returning caller (V5-40, D-V5-17). Off by default.
+
+    Callers are identified by a pseudonymous id (a keyed hash of their phone number or of
+    the identity the embedding site passed), never by the number itself. The memories are
+    read once when the session starts and written once after it ends, never during the call.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Remember callers across sessions. Nothing is read or written while this is off.",
+    )
+    scope: MemoryScope = Field(
+        default="agent",
+        description="`agent`: only this agent reads and writes its memories of a caller; `workspace`: "
+        "the memories are shared with every agent of the workspace that also uses `workspace`.",
+    )
+    retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=MAX_MEMORY_RETENTION_DAYS,
+        description="Days a caller's memories are kept after their last session; then they are deleted.",
+    )
+    consent_line: str | None = Field(
+        default=None,
+        max_length=MAX_MEMORY_CONSENT_CHARS,
+        description="A sentence the agent says early in the call when the session will be remembered "
+        "(for example that the conversation is remembered to help next time). `None`: no line.",
+    )
+    max_recall_tokens: int = Field(
+        default=400,
+        ge=50,
+        le=2000,
+        description="The most text (in tokens, about four characters each) of recalled memories added "
+        "to the agent's instructions at the start of a session.",
+    )
+    verbatim: bool = Field(
+        default=False,
+        description="Store what the caller said as it was, without a model picking out the facts "
+        "(no model call; the masking of `privacy.storage_tier` still applies). Off: the agent's "
+        "language model extracts short facts after the call.",
+    )
+
+    @field_validator("consent_line")
+    @classmethod
+    def _blank_line_is_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = " ".join(value.split())
+        return stripped or None
+
+
 class PanelLayout(BaseModel):
     """Which panel renders the session, and (for ``composite``) its blocks."""
 
@@ -543,6 +610,8 @@ class AgentConfig(BaseModel):
     """The AI disclosure (V5-15). On by default: agents saved before it now open with the line."""
     privacy: PrivacyConfig = PrivacyConfig()
     """Redaction, storage tier and telemetry (V5-30); agents saved before it keep everything."""
+    memory: MemoryConfig = MemoryConfig()
+    """Caller memory across sessions (V5-40); off for every agent saved before it."""
     tests: list[AgentTest] = Field(
         default=[],
         max_length=MAX_AGENT_TESTS,

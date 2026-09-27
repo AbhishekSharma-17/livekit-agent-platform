@@ -1,0 +1,21 @@
+{
+  "$id": "lkap-contracts/MemoryForgottenEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``memory_forgotten`` session event (api-written, V5-40).",
+  "properties": {
+    "reason": {
+      "enum": [
+        "caller",
+        "workspace",
+        "retention"
+      ],
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "MemoryForgottenEvent",
+  "type": "object"
+}

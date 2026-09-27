@@ -78,14 +78,30 @@ Languages and captions (V5-31, docs/v5/PLAN-V5.md):
   TextOutputOptions(next_in_chain=tap)`, livekit-agents 1.8.3 `room_io/types.py`), so
   the agent's captions are timed like the browser's transcription. The agent binds
   it to the session's caption stream (`caption_tap_for`). No tap on the text channel.
+
+Caller memory (V5-40, docs/v5/PLAN-V5.md):
+
+* :func:`apply_memory_recall` asks the api once, before the session is built, what
+  the memory knows about the caller (``POST /internal/v1/memory/recall``; the api
+  resolves the caller and the pseudonymous id, the worker never sees either). It is
+  a no-op, with no call at all, while ``memory.enabled`` is off.
+* The memories are **appended** to ``AgentConfig.instructions`` (like the languages
+  rule and the compliance notes, so a prompt agent and every flow node compose
+  them, and the instructions' own prefix stays byte-identical for provider prompt
+  caching) as a fixed heading plus the memories inside the ``<untrusted
+  source="memory">`` fence (R-V5-15), bounded by ``memory.max_recall_tokens``
+  (about four characters a token) and cut at whole memories.
+* ``memory.consent_line``, when set and the session will be remembered, becomes an
+  instruction to say it early in the call.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, cast
+from typing import Any, Final, Protocol, cast
 
 from livekit.agents import NOT_GIVEN, AgentSession, TurnHandlingOptions
 from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions, TextOutputOptions
@@ -100,6 +116,7 @@ from lkap_contracts.agent_config import (
     ThinkingSound,
     effective_languages,
 )
+from lkap_contracts.api_models import MemoryRecallIn, MemoryRecallOut
 from lkap_contracts.providers import ModelCapabilities, ProviderSpec, by_kind
 from lkap_contracts.providers import get as get_spec
 from lkap_contracts.turn_handling import resolve_turn_handling
@@ -108,6 +125,7 @@ from lkap_agent.languages import apply_stt_detection, language_rule
 from lkap_agent.logging import get_logger
 from lkap_agent.providers.factory import BuiltProviders, telephony_noise_cancellation, turn_detector_kwargs
 from lkap_agent.telephony import is_sip_channel
+from lkap_agent.tools.untrusted import fence, fence_overhead
 from lkap_agent.ui.channel import CaptionsTextOutput, register_caption_tap
 
 __all__ = [
@@ -116,19 +134,25 @@ __all__ = [
     "AVATAR_OPTION_KWARGS",
     "SessionBuilder",
     "DISCLOSURE_PLACEHOLDER",
+    "MEMORY_HEADING",
+    "MEMORY_SOURCE",
+    "MemoryRecallApi",
     "SessionPlan",
     "apply_compliance",
+    "apply_memory_recall",
     "auto_inject_active",
     "build_turn_handling",
     "has_captions_block",
     "factory_view",
     "is_text_channel",
     "llm_capabilities_of",
+    "memory_block",
     "prepare_resolved",
     "recording_needs_consent",
     "start_background_audio",
     "start_thinking_sound",
     "with_language_rule",
+    "with_memory",
 ]
 
 logger = get_logger(__name__)
@@ -909,3 +933,109 @@ def apply_compliance(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
     )
     resolved_recording = resolved.recording.model_copy(update={"consent_text": consent_text})
     return resolved.model_copy(update={"config": updated, "recording": resolved_recording})
+
+
+# ---------------------------------------------------------------------- caller memory (V5-40)
+
+#: The heading in front of the recalled memories (outside the fence: it is the platform's words).
+MEMORY_HEADING: Final[str] = (
+    "What we know about this caller from earlier conversations (it may be out of date; confirm "
+    "anything important with them before relying on it):"
+)
+#: The fence's ``source`` for recalled memories.
+MEMORY_SOURCE: Final[str] = "memory"
+#: ``memory.max_recall_tokens`` becomes a character budget at about four characters a token.
+_CHARS_PER_TOKEN: Final[int] = 4
+
+
+class MemoryRecallApi(Protocol):
+    """The one api call the recall needs (``ConfigClient.memory_recall``)."""
+
+    async def memory_recall(self, request: MemoryRecallIn) -> MemoryRecallOut:
+        """``POST /internal/v1/memory/recall``; never raises."""
+        ...
+
+
+def memory_block(memories: Sequence[str], *, max_tokens: int) -> str:
+    """The recalled memories as a fenced instruction block, or ``""`` when none fit.
+
+    Each memory is one ``- `` line; lines are added newest first until the next
+    one would pass the budget (``max_tokens`` x 4 characters, the fence included),
+    so a memory is never cut in half.
+    """
+    budget = max_tokens * _CHARS_PER_TOKEN - fence_overhead(MEMORY_SOURCE)
+    lines: list[str] = []
+    used = 0
+    for memory in memories:
+        text = " ".join(str(memory).split())
+        if not text:
+            continue
+        line = f"- {text}"
+        cost = len(line) + (1 if lines else 0)
+        if used + cost > budget:
+            break
+        lines.append(line)
+        used += cost
+    if not lines:
+        return ""
+    fenced = fence("\n".join(lines), source=MEMORY_SOURCE, max_chars=budget)
+    return f"{MEMORY_HEADING}\n{fenced}"
+
+
+def with_memory(config: AgentConfig, recall: MemoryRecallOut) -> AgentConfig:
+    """``config`` with the recalled memories and the memory notice appended to its instructions."""
+    notes: list[str] = []
+    block = memory_block(recall.memories, max_tokens=config.memory.max_recall_tokens)
+    if block:
+        notes.append(block)
+    consent_line = (config.memory.consent_line or "").strip()
+    if recall.remember and consent_line:
+        notes.append(f'Memory notice: early in the call, tell the caller: "{consent_line}"')
+    if not notes:
+        return config
+    base = config.instructions.rstrip()
+    instructions = "\n\n".join([base, *notes]) if base else "\n\n".join(notes)
+    return config.model_copy(update={"instructions": instructions})
+
+
+async def apply_memory_recall(
+    resolved: ResolvedAgentConfig,
+    api: object,
+    *,
+    caller_e164: str | None = None,
+    timeout_s: float = 6.0,
+) -> ResolvedAgentConfig:
+    """Add what the memory knows about the caller to the session's instructions (V5-40).
+
+    Called once, after `apply_compliance` and before the session is assembled. With
+    ``memory.enabled`` off (every agent saved before V5-40) it returns ``resolved``
+    unchanged without calling the api. Never raises: a failed recall starts the
+    session without memories.
+
+    Args:
+        resolved: The prepared config.
+        api: The worker's api client; anything without ``memory_recall`` (a test
+            fake of the older client) is skipped.
+        caller_e164: The caller's number when the worker already knows it and the
+            api may not (an inbound call before its leg is reported).
+        timeout_s: The most the recall may hold up the start.
+
+    Returns:
+        A copy with the memories appended, or ``resolved`` itself.
+    """
+    if not resolved.config.memory.enabled:
+        return resolved
+    if not callable(getattr(api, "memory_recall", None)):
+        logger.debug("memory recall skipped: the api client has no memory_recall")
+        return resolved
+    request = MemoryRecallIn(session_id=resolved.session_id, caller_e164=caller_e164)
+    try:
+        result = await asyncio.wait_for(cast(MemoryRecallApi, api).memory_recall(request), timeout=timeout_s)
+    except Exception as exc:  # noqa: BLE001 - memory is an enhancement, never a precondition
+        logger.warning("memory recall failed", error_type=type(exc).__name__)
+        return resolved
+    logger.info("memory recalled", status=result.status, count=len(result.memories), remember=result.remember)
+    config = with_memory(resolved.config, result)
+    if config is resolved.config:
+        return resolved
+    return resolved.model_copy(update={"config": config})

@@ -33,6 +33,8 @@ from lkap_contracts.api_models import (
     KbHit,
     KbSearchOptions,
     KbSearchResponse,
+    MemoryRecallIn,
+    MemoryRecallOut,
     RecordingStartOut,
     SessionAssetFromDocumentIn,
     SessionAssetOut,
@@ -70,6 +72,9 @@ _SERVICE_TOKEN_HEADER = "X-Service-Token"
 _TRANSFER_TIMEOUT_S = 60.0
 #: Storing or reading a session file moves up to 25 MB.
 _ASSET_TIMEOUT_S = 60.0
+#: V5-40: the session-start memory recall runs before the greeting; the api gives the backend
+#: 3 s, so a slower answer means the session starts without memories.
+_MEMORY_RECALL_TIMEOUT_S = 5.0
 
 
 class ConfigUnavailableError(RuntimeError):
@@ -493,6 +498,26 @@ class ConfigClient:
         except ValueError:
             logger.warning("kb search returned an unparseable payload", kb_ids=kb_ids)
             return []
+
+    async def memory_recall(self, request: MemoryRecallIn) -> MemoryRecallOut:
+        """Post `POST /internal/v1/memory/recall` (V5-40), once at session start.
+
+        Never raises: any failure (the api unreachable, a timeout, an unexpected
+        payload) returns ``status="failed"`` and the session starts without
+        memories. The response carries caller-derived text and is never logged.
+        """
+        try:
+            response = await self._client.post(
+                self._url("/internal/v1/memory/recall"),
+                content=request.model_dump_json(),
+                headers={"content-type": "application/json"},
+                timeout=_MEMORY_RECALL_TIMEOUT_S,
+            )
+            response.raise_for_status()
+            return MemoryRecallOut.model_validate_json(response.content)
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("memory recall failed", error_type=type(exc).__name__)
+            return MemoryRecallOut(status="failed")
 
     async def report_call(self, report: CallReportIn) -> None:
         """Post `POST /internal/v1/telephony/calls/report`, swallowing failures."""

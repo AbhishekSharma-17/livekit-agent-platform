@@ -35,6 +35,7 @@ import type {
   KnowledgeConnectionCreate,
   KnowledgeConnectionOut,
   KnowledgeConnectionTestOut,
+  KnowledgeConnectionUpdate,
   ProviderSpec,
 } from "@/contracts/lkap-contracts";
 
@@ -210,10 +211,21 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
         toast.success(`"${created.name}" added.`);
         setSaved(created);
       } else {
-        await updateMutation.mutateAsync({
-          id: connection!.id,
-          body: { name: name.trim(), settings, credential_id: credentialId },
-        });
+        // Only the fields the person actually changed: `update_connection`
+        // (api) resets `status` to `unverified` whenever `settings` or
+        // `credential_id` is present in the payload at all — even to the
+        // same value — so a bare rename must never carry them along and
+        // silently drop a working connection back to "Not tested yet".
+        const body: KnowledgeConnectionUpdate = {};
+        const trimmedName = name.trim();
+        if (trimmedName !== connection!.name) body.name = trimmedName;
+        const storedSettings = (connection!.settings ?? {}) as Record<string, unknown>;
+        if (Object.entries(settings).some(([key, value]) => storedSettings[key] !== value)) {
+          body.settings = settings;
+        }
+        const storedCredentialId = connection!.credential_id ?? null;
+        if (credentialId !== storedCredentialId) body.credential_id = credentialId;
+        await updateMutation.mutateAsync({ id: connection!.id, body });
         toast.success("Connection updated.");
         setOpen(false);
       }

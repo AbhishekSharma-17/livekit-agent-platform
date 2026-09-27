@@ -2,10 +2,11 @@ import * as React from "react";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KbDocuments } from "@/components/console/knowledge/kb-documents";
 import { KbDetail } from "@/components/console/knowledge/kb-detail";
+import { CreateKbDialog } from "@/components/console/knowledge/create-kb-dialog";
 import { KB_UPLOAD_MAX_BYTES } from "@/components/console/lib/upload";
 import type { KbDocumentOut, KbDocumentPage, KbOut, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
 
@@ -228,5 +229,126 @@ describe("KbDetail — 'Stored in' (V5-24: read-only, fixed once the knowledge b
     // Fixed once created: it's a plain description-list value, not a button or a link.
     expect(storedIn.closest("dd")).toBeTruthy();
     expect(storedIn.querySelector("button, a")).toBeNull();
+  });
+});
+
+describe("CreateKbDialog — 'Where is this knowledge stored?' (V5-24)", () => {
+  const QDRANT_CONNECTION: KnowledgeConnectionOut = {
+    id: "kc1",
+    name: "Prod Qdrant",
+    kind: "qdrant",
+    provider_id: "qdrant",
+    settings: { url: "https://cluster.example:6333", collection: "lkap_knowledge", native_hybrid: false },
+    credential_id: null,
+    credential_fingerprint: null,
+    status: "ok",
+    last_checked_at: null,
+    last_error: null,
+    capabilities: { hybrid: false, filters: true, stores_text: false, namespaces: true, rerank: false, dimension: 768, version: null },
+    knowledge_base_count: 0,
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
+  interface Call {
+    url: string;
+    method: string;
+    body: unknown;
+  }
+
+  function mockCreateKbFetch(connections: KnowledgeConnectionOut[]) {
+    const calls: Call[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input).split("?")[0];
+        const method = init?.method ?? "GET";
+        const call: Call = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined };
+        calls.push(call);
+        if (url.endsWith("/knowledge-connections")) return jsonResponse({ items: connections, total: connections.length });
+        if (url.endsWith("/knowledge-bases") && method === "POST") {
+          const created: KbOut = {
+            id: "kb-new",
+            name: (call.body as { name: string }).name,
+            description: "",
+            embedder_id: "fastembed-embedding",
+            chunk_count: 0,
+            document_count: 0,
+            created_at: "2026-09-01T00:00:00Z",
+            updated_at: "2026-09-01T00:00:00Z",
+          };
+          return jsonResponse(created, 201);
+        }
+        if (url.endsWith("/auth/me")) {
+          return jsonResponse({
+            user: { id: "u1", email: "admin@example.test" },
+            workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+          });
+        }
+        return jsonResponse({});
+      }),
+    );
+    return calls;
+  }
+
+  /** The trigger starts `disabled` until `useWriteAccess()`'s `/auth/me` resolves. */
+  async function openDialog() {
+    const trigger = await screen.findByRole("button", { name: /New knowledge base/i });
+    await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(trigger);
+    return screen.findByRole("dialog");
+  }
+
+  it("posts connection_id when 'A knowledge connection' is picked (auto-selects the only one)", async () => {
+    const calls = mockCreateKbFetch([QDRANT_CONNECTION]);
+    renderWithClient(<CreateKbDialog />);
+
+    const dialog = await openDialog();
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Claims policies" } });
+    fireEvent.click(await within(dialog).findByLabelText(/A knowledge connection/));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))).toBe(true));
+    const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))!;
+    expect(post.body).toMatchObject({ name: "Claims policies", connection_id: "kc1" });
+  });
+
+  it("posts connection_id: null when Platform default is left selected", async () => {
+    const calls = mockCreateKbFetch([QDRANT_CONNECTION]);
+    renderWithClient(<CreateKbDialog />);
+
+    const dialog = await openDialog();
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Claims policies" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))).toBe(true));
+    const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/knowledge-bases"))!;
+    expect(post.body).toMatchObject({ connection_id: null });
+  });
+
+  it("disables the connection radio and points at Settings when the workspace has no knowledge connections", async () => {
+    mockCreateKbFetch([]);
+    renderWithClient(<CreateKbDialog />);
+
+    const dialog = await openDialog();
+    const connectionRadio = await within(dialog).findByLabelText(/A knowledge connection/);
+    expect(connectionRadio.hasAttribute("disabled")).toBe(true);
+    expect(within(dialog).getByRole("link", { name: "Add one in Settings" }).getAttribute("href")).toBe(
+      "/console/settings?tab=knowledge-connections",
+    );
   });
 });

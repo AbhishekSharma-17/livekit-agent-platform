@@ -22,6 +22,7 @@ import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { SkeletonRows } from "@/components/shared/loading-state";
+import { RequireWrite } from "@/components/shared/require-write";
 import {
   useDeleteKnowledgeConnection,
   useKnowledgeConnections,
@@ -51,6 +52,14 @@ import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut } from "@/contr
  * like the vault keys they use (`knowledge_connections/router.py`).
  */
 export function KnowledgeConnectionsTab() {
+  return (
+    <RequireWrite min="builder" title="Only builders, admins and owners can see knowledge connections">
+      <KnowledgeConnectionsTabInner />
+    </RequireWrite>
+  );
+}
+
+function KnowledgeConnectionsTabInner() {
   const query = useKnowledgeConnections();
   const providersQuery = useProviders();
   const providers = providersQuery.data?.providers ?? [];
@@ -140,36 +149,7 @@ export function KnowledgeConnectionsTab() {
       align: "end",
       interactive: true,
       cell: (connection) => (
-        <div className="flex items-center justify-end gap-1">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setTesting(connection)}>
-            Test
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => canWrite && setEditing(connection)}
-            disabled={!canWrite}
-            title={canWrite ? undefined : writeReason}
-          >
-            Edit
-          </Button>
-          <ConfirmDialog
-            trigger={
-              <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-                Delete
-              </Button>
-            }
-            title={`Delete "${connection.name}"?`}
-            description={
-              (connection.knowledge_base_count ?? 0) > 0
-                ? `${connection.knowledge_base_count} knowledge base(s) still store their vectors here — delete those first, or move them.`
-                : "The data stays in your own account; only the connection is removed here."
-            }
-            confirmLabel="Delete connection"
-            onConfirm={() => onDelete(connection)}
-          />
-        </div>
+        <RowActions connection={connection} canWrite={canWrite} writeReason={writeReason} onTest={setTesting} onEdit={setEditing} onDelete={onDelete} />
       ),
     },
   ];
@@ -207,16 +187,26 @@ export function KnowledgeConnectionsTab() {
             renderCard={(connection) => {
               const meta = knowledgeConnectionStatusMeta(connection.status);
               return (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-foreground">{connection.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {knowledgeConnectionKindLabel(connection.kind, providers)}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-foreground">{connection.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {knowledgeConnectionKindLabel(connection.kind, providers)}
+                      </div>
                     </div>
+                    <StatusChip tone={meta.tone} size="sm">
+                      {meta.label}
+                    </StatusChip>
                   </div>
-                  <StatusChip tone={meta.tone} size="sm">
-                    {meta.label}
-                  </StatusChip>
+                  <RowActions
+                    connection={connection}
+                    canWrite={canWrite}
+                    writeReason={writeReason}
+                    onTest={setTesting}
+                    onEdit={setEditing}
+                    onDelete={onDelete}
+                  />
                 </div>
               );
             }}
@@ -230,6 +220,71 @@ export function KnowledgeConnectionsTab() {
       ) : null}
       {testing ? <TestConnectionDialog connection={testing} onClose={() => setTesting(null)} /> : null}
     </Section>
+  );
+}
+
+/**
+ * Test / Edit / Delete, shared by the desktop table's actions column and the
+ * mobile card (both are in the DOM — `ResponsiveTable` switches by CSS — so
+ * the phone-width view stays actionable, not read-only). `Test` needs
+ * `admin` server-side too (`knowledge_connections/router.py::test_connection`
+ * uses the same `WriteCtx` as create/update/delete), so it is gated exactly
+ * like the other two rather than left open to a builder who would only get
+ * a 403.
+ */
+function RowActions({
+  connection,
+  canWrite,
+  writeReason,
+  onTest,
+  onEdit,
+  onDelete,
+}: {
+  connection: KnowledgeConnectionOut;
+  canWrite: boolean;
+  writeReason: string;
+  onTest: (connection: KnowledgeConnectionOut) => void;
+  onEdit: (connection: KnowledgeConnectionOut) => void;
+  onDelete: (connection: KnowledgeConnectionOut) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => canWrite && onTest(connection)}
+        disabled={!canWrite}
+        title={canWrite ? undefined : writeReason}
+      >
+        Test
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => canWrite && onEdit(connection)}
+        disabled={!canWrite}
+        title={canWrite ? undefined : writeReason}
+      >
+        Edit
+      </Button>
+      <ConfirmDialog
+        trigger={
+          <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+            Delete
+          </Button>
+        }
+        title={`Delete "${connection.name}"?`}
+        description={
+          (connection.knowledge_base_count ?? 0) > 0
+            ? `${connection.knowledge_base_count} knowledge base(s) still store their vectors here — delete those first, or move them.`
+            : "The data stays in your own account; only the connection is removed here."
+        }
+        confirmLabel="Delete connection"
+        onConfirm={() => onDelete(connection)}
+      />
+    </div>
   );
 }
 

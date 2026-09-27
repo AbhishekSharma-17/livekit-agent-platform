@@ -224,6 +224,27 @@ describe("KnowledgeConnectionsTab", () => {
     expect(within(dialog).getByRole("button", { name: "Test connection" })).toBeTruthy();
   });
 
+  it("editing only the name sends just {name} — never resets a working connection to 'Not tested yet'", async () => {
+    // `update_connection` (api) sets `status` back to `unverified` whenever
+    // `settings` or `credential_id` is present in the PUT body at all, even
+    // unchanged — so a bare rename must omit both.
+    const calls = renderTab([QDRANT_CONNECTION]);
+    await screen.findAllByText("Prod Qdrant");
+    const table = within(await screen.findByRole("table", { name: "Knowledge connections" }));
+
+    fireEvent.click(table.getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    const nameInput = await within(dialog).findByLabelText("Name");
+    expect((nameInput as HTMLInputElement).value).toBe("Prod Qdrant");
+    fireEvent.change(nameInput, { target: { value: "Prod Qdrant (renamed)" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    const put = calls.find((c) => c.method === "PUT")!;
+    expect(put.url).toContain("/knowledge-connections/kc1");
+    expect(put.body).toEqual({ name: "Prod Qdrant (renamed)" });
+  });
+
   it("Test connection renders the fixture's collections and a dimension mismatch message", async () => {
     const message =
       "Qdrant collection 'lkap_knowledge' holds 384-dimension vectors, but knowledge bases here are built with 768-dimension vectors";
@@ -246,8 +267,12 @@ describe("KnowledgeConnectionsTab", () => {
         : undefined,
     );
     await screen.findAllByText("Prod Qdrant");
+    // `ResponsiveTable` puts Test/Edit/Delete in both the table and the
+    // mobile card (so a phone-width view stays actionable) — scope to the
+    // table so each action button resolves to exactly one match.
+    const table = within(await screen.findByRole("table", { name: "Knowledge connections" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    fireEvent.click(table.getByRole("button", { name: "Test" }));
     // Exact-string matches only (not a regex substring test): each of these
     // texts sits alone in its own element, so an exact match can't also hit
     // a wrapping element that carries extra sibling text (the status chip).
@@ -272,8 +297,9 @@ describe("KnowledgeConnectionsTab", () => {
         : undefined,
     );
     await screen.findAllByText("Prod Qdrant");
+    const table = within(await screen.findByRole("table", { name: "Knowledge connections" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(table.getByRole("button", { name: "Delete" }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete connection" }));
 
     await waitFor(() =>
@@ -286,9 +312,11 @@ describe("KnowledgeConnectionsTab", () => {
   it("hides write actions for a builder (server needs admin for add/edit/delete/test)", async () => {
     renderTab([QDRANT_CONNECTION], undefined, "builder");
     await screen.findAllByText("Prod Qdrant");
+    const table = within(await screen.findByRole("table", { name: "Knowledge connections" }));
 
     expect(screen.getByRole("button", { name: "Add connection" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Edit" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Delete" }).hasAttribute("disabled")).toBe(true);
+    expect(table.getByRole("button", { name: "Test" }).hasAttribute("disabled")).toBe(true);
+    expect(table.getByRole("button", { name: "Edit" }).hasAttribute("disabled")).toBe(true);
+    expect(table.getByRole("button", { name: "Delete" }).hasAttribute("disabled")).toBe(true);
   });
 });

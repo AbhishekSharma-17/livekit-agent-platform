@@ -3109,8 +3109,12 @@ async def test_toolkits_refresh_is_rate_limited_per_workspace(
     app: FastAPI, admin_client: httpx.AsyncClient, world: ComposioWorld, key_id: str, database: Database
 ) -> None:
     """S5-44: forced re-reads are rate limited; a Viewer's refresh=true reads the cache."""
+    from lkap_api.auth.ratelimit import InMemoryRateLimiter
     from lkap_api.tool_providers.router import VENDOR_REFRESH_PER_MIN
 
+    # A frozen clock: on a slow runner the bucket would otherwise refill (one token per 2 s)
+    # before the last request and let it through.
+    app.state.rate_limiter = InMemoryRateLimiter(clock=lambda: 0.0)
     statuses = [
         (await admin_client.get(f"{BASE}/toolkits", params={"refresh": "true"})).status_code
         for _ in range(VENDOR_REFRESH_PER_MIN + 1)

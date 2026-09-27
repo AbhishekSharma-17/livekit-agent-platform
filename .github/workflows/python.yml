@@ -140,4 +140,4 @@ jobs:
 
       - name: Run the api suite against Postgres
         working-directory: api
-        run: uv run pytest -q -m "not live" --durations=20
+        run: uv run pytest -q -m "not live" --durations=20 --timeout=300

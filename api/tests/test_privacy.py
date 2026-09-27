@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from lkap_api import privacy
 from lkap_api.config_service import validate_agent_config
-from lkap_api.db.models import Credential, SessionAsset, SessionEvent, SessionQa, WebhookDelivery
+from lkap_api.db.models import Call, Credential, SessionAsset, SessionEvent, SessionQa, WebhookDelivery
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.jobs import kinds as jobs_kinds
@@ -251,6 +251,41 @@ async def test_basic_drops_the_tool_payloads(database: Database, settings: Setti
     ended = next(e for e in events if e.type == "tool_call_ended")
     assert started.payload == {"call_id": "call_4111111111111111", "tool": "lookup_policy"}
     assert ended.payload == {"call_id": "call_4111111111111111", "tool": "lookup_policy", "status": "ok"}
+
+
+@pytest.mark.parametrize("tier", ["redacted", "basic"])
+async def test_the_scrub_reaches_the_transfer_summary(
+    database: Database, settings: Settings, tier: str
+) -> None:
+    """Ask #209: a warm transfer's summary is masked (`redacted`) or cleared (`basic`)."""
+    session_id = await _make_session(database, inference_config(privacy=PrivacyConfig(storage_tier=tier)))
+    async with database.session() as session:
+        row, _ = await _load(database, session_id)
+        session.add(
+            Call(
+                session_id=session_id,
+                workspace_id=row.workspace_id,
+                direction="inbound",
+                status="transferred",
+                transfer_mode="warm",
+                transfer_summary="Ada, jane.roe@example.com, card 4111 1111 1111 1111, wants a callback.",
+            )
+        )
+        await session.commit()
+
+    async with httpx.AsyncClient() as http:
+        await privacy.scrub_session(_ctx(database, settings, http), session_id)
+
+    async with database.session() as session:
+        call = (
+            await session.execute(
+                select(Call).where(Call.session_id == session_id).execution_options(lkap_cross_workspace=True)
+            )
+        ).scalar_one()
+    if tier == "basic":
+        assert call.transfer_summary is None
+    else:
+        assert call.transfer_summary == f"Ada, {EMAIL_TOKEN}, card {CARD_TOKEN}, wants a callback."
 
 
 async def test_full_tier_and_unfinished_sessions_are_left_alone(

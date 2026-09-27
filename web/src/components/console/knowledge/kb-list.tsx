@@ -25,6 +25,7 @@ import { useWriteAccess } from "@/components/console/lib/roles";
 import { Icon } from "@/components/shared/icon";
 import { pluralize } from "@/lib/format";
 import { RelativeTime } from "@/components/shared/relative-time";
+import { StatusChip } from "@/components/shared/status-chip";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import type { KbOut } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
@@ -60,7 +61,14 @@ export function KbList() {
       header: "Name",
       cell: (kb) => (
         <div className="min-w-0">
-          <div className="font-medium text-foreground">{kb.name}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground">{kb.name}</span>
+            {kb.kind === "external" ? (
+              <StatusChip tone="info" size="sm">
+                Managed search
+              </StatusChip>
+            ) : null}
+          </div>
           {kb.description ? (
             <div className="truncate text-xs text-muted-foreground">{kb.description}</div>
           ) : null}
@@ -75,12 +83,18 @@ export function KbList() {
     {
       id: "chunks",
       header: "Chunks",
-      cell: (kb) => <span className="tabular-nums">{kb.chunk_count}</span>,
+      // No local vectors for a managed search (Ragie) knowledge base — nothing to count.
+      cell: (kb) => (kb.kind === "external" ? <span className="text-muted-foreground">—</span> : <span className="tabular-nums">{kb.chunk_count}</span>),
     },
     {
       id: "embedder",
       header: "Embedder",
-      cell: (kb) => <span className="text-muted-foreground">{embedderLabel(kb.embedder_id)}</span>,
+      cell: (kb) =>
+        kb.kind === "external" ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <span className="text-muted-foreground">{embedderLabel(kb.embedder_id)}</span>
+        ),
     },
     {
       id: "updated",
@@ -107,14 +121,22 @@ export function KbList() {
         <div className="flex flex-col gap-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="font-medium text-foreground">{kb.name}</div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium text-foreground">{kb.name}</span>
+                {kb.kind === "external" ? (
+                  <StatusChip tone="info" size="sm">
+                    Managed search
+                  </StatusChip>
+                ) : null}
+              </div>
               {kb.description ? <div className="text-xs text-muted-foreground">{kb.description}</div> : null}
             </div>
             <KbRowActions kb={kb} />
           </div>
           <div className="text-xs text-muted-foreground">
-            {pluralize(kb.document_count, "document", "documents")} · {pluralize(kb.chunk_count, "chunk", "chunks")} ·{" "}
-            {embedderLabel(kb.embedder_id)}
+            {kb.kind === "external"
+              ? pluralize(kb.document_count, "document", "documents")
+              : `${pluralize(kb.document_count, "document", "documents")} · ${pluralize(kb.chunk_count, "chunk", "chunks")} · ${embedderLabel(kb.embedder_id)}`}
           </div>
         </div>
       )}

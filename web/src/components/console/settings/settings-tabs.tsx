@@ -13,6 +13,7 @@ import { AiAgentsTab } from "./ai-agents-tab";
 import { WebhooksTab } from "./webhooks-tab";
 import { StorageTab } from "./storage-tab";
 import { ComplianceTab } from "./compliance-tab";
+import { KnowledgeConnectionsTab } from "./knowledge-connections-tab";
 import { DangerTab } from "./danger-tab";
 
 /**
@@ -29,6 +30,9 @@ import { DangerTab } from "./danger-tab";
  * V3-04's "Connect an AI agent" tab, between `api-keys` and `webhooks`.
  * `compliance` (V5-15/V5-17, D-V5-22) is the workspace's jurisdiction and its
  * AI disclosure / recording wording, between `webhooks` and `storage`.
+ * `knowledge-connections` (V5-24, K §5.3) is BYO Qdrant/Pinecone/Weaviate and
+ * hosted re-rankers, between `compliance` and `storage` (the research doc's
+ * "next to Storage and LiveKit connections").
  */
 interface TabDef {
   id: string;
@@ -44,6 +48,7 @@ const TABS: TabDef[] = [
   { id: "ai-agents", label: "AI agents", content: <AiAgentsTab /> },
   { id: "webhooks", label: "Webhooks", content: <WebhooksTab /> },
   { id: "compliance", label: "Compliance", content: <ComplianceTab /> },
+  { id: "knowledge-connections", label: "Knowledge connections", content: <KnowledgeConnectionsTab /> },
   { id: "storage", label: "Storage", content: <StorageTab /> },
   { id: "environment", label: "Environment", content: <EnvironmentTab /> },
   { id: "danger", label: "Danger zone", content: <DangerTab /> },

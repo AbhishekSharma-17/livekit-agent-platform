@@ -32,6 +32,7 @@ from lkap_contracts.api_models import (
     InternalTransferOut,
     KbHit,
     KbSearchOptions,
+    KbSearchPurpose,
     KbSearchResponse,
     MemoryRecallIn,
     MemoryRecallOut,
@@ -198,6 +199,7 @@ class ConfigClientProtocol(Protocol):
         *,
         options: KbSearchOptions | None = None,
         session_id: str | None = None,
+        purpose: KbSearchPurpose | None = None,
     ) -> list[KbHit]:
         """Search the agent's knowledge bases through the api (`options`: mode, rerank, floor).
 
@@ -457,6 +459,7 @@ class ConfigClient:
         *,
         options: KbSearchOptions | None = None,
         session_id: str | None = None,
+        purpose: KbSearchPurpose | None = None,
     ) -> list[KbHit]:
         """Post `POST /internal/v1/kb/search`.
 
@@ -468,6 +471,9 @@ class ConfigClient:
                 `None` sends the api's defaults (vector, no rerank, no floor).
             session_id: The session searching (S5-29): the api then searches only
                 knowledge bases of that session's workspace. `None` omits it.
+            purpose: `auto_inject` for automatic knowledge, `tool` for a model's search (ask
+                #326): the api skips hosted re-rankers and managed-search knowledge bases
+                for `auto_inject`. `None` omits it.
 
         Returns:
             The hits, best first. An empty list when the search fails — retrieval
@@ -481,6 +487,7 @@ class ConfigClient:
             query=query[:MAX_KB_QUERY_CHARS],
             k=k,
             session_id=session_id or None,
+            purpose=purpose,
             **(options.model_dump() if options is not None else {}),
         )
         try:
@@ -700,12 +707,21 @@ class ApiKbClient:
         *,
         options: KbSearchOptions | None = None,
         session_id: str | None = None,
+        purpose: KbSearchPurpose | None = None,
     ) -> None:
         self._client = client
         self._kb_ids = list(kb_ids)
         self._options = options
         # S5-29: sent with every search so the api stays inside this session's workspace.
         self._session_id = session_id or None
+        # Ask #326: what the searches are for (`None` = the api's default, a model's search).
+        self._purpose = purpose
+
+    def with_purpose(self, purpose: KbSearchPurpose) -> ApiKbClient:
+        """The same client, its searches marked with `purpose` (automatic knowledge: `auto_inject`)."""
+        return ApiKbClient(
+            self._client, self._kb_ids, options=self._options, session_id=self._session_id, purpose=purpose
+        )
 
     @property
     def options(self) -> KbSearchOptions | None:
@@ -715,6 +731,10 @@ class ApiKbClient:
     async def search(self, query: str, k: int = 4, kb_ids: list[str] | None = None) -> list[KbHit]:
         """Search the agent's knowledge bases (or `kb_ids` when given) for `k` hits."""
         targets = kb_ids if kb_ids is not None else self._kb_ids
+        if self._purpose is not None:
+            return await self._client.kb_search(
+                targets, query, k, options=self._options, session_id=self._session_id, purpose=self._purpose
+            )
         if self._session_id is not None:
             return await self._client.kb_search(
                 targets, query, k, options=self._options, session_id=self._session_id

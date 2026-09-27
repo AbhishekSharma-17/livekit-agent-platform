@@ -207,6 +207,10 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_MCP_ALLOWED_HOSTS` | opt | opt | — | comma list of MCP server hosts (V5-09, D-V5-4); empty = any public `https` host that passes the network guard, non-empty = a ceiling, `@http` = reuse `LKAP_HTTP_TOOL_ALLOWED_HOSTS` (then empty allows nothing). Set the same value on both |
 | `LKAP_LOG_LEVEL` / `LKAP_LOG_JSON` | opt | opt | — | `INFO` / `false` |
 | `LKAP_EMBEDDER` | opt | — | — | `fastembed` (default) or `openai:<credential_id>` |
+| `LKAP_EMBED_MODEL` / `LKAP_RERANK_MODEL` | opt | — | — | the local fastembed embedder and cross-encoder (V5-01, V5-04); defaults `BAAI/bge-small-en-v1.5` / `Xenova/ms-marco-MiniLM-L-6-v2` |
+| `LKAP_VECTOR_STORE` | opt | — | — | unset = follow the database (pgvector on Postgres, LanceDB on SQLite); `lancedb` forces LanceDB (V5-13) |
+| `LKAP_MCP_OAUTH_ALLOW_UNBOUND` | opt | — | — | default `false`; `true` accepts an MCP sign-in callback without the start's binder cookie (R-V5-14) |
+| `LKAP_SELF_HOSTED_ALLOWED_NETWORKS` | opt | — | — | CIDRs a self-hosted LiveKit connection may reach (R-V5-17); unset = loopback, RFC 1918, ULA, CGNAT |
 | `LKAP_VISION_MAX_FRAME_AGE_S` | — | opt | — | default `8` |
 | `LKAP_IDLE_HANGUP_S` | — | opt | — | default `120`; worker hangs up a session that stays `away` this long while the agent is listening/idle; `None`/`0` disables (REVIEW-FINAL.md F-02) |
 | `LKAP_SESSION_SWEEP_INTERVAL_S` | opt | — | — | default `60`; how often the stale-session sweep runs (D-W2-2b) |
@@ -216,6 +220,8 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_ADMIN_TOKEN` (web server) | — | — | req | used by Next server actions/route handlers proxying console calls; never exposed to the client bundle |
 | `PORT` | 8080 | — | 3000 | |
 
+Every setting v5 added, with defaults, is also in `docs/RUNBOOK.md` §9.7.
+
 Vendor keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, ...) are **not** read from env by the platform; they live in the credential vault. Exception for convenience: the api accepts `LKAP_BOOTSTRAP_CREDENTIALS_JSON` (JSON `{provider_id: {field: value}}`) at startup to seed credentials in dev.
 
 ### Apps (Composio, V5-18)
@@ -224,8 +230,8 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
 
 - **Key.** Registry entry `composio` (`kind: "tool_provider"`, one secret field `api_key`, no `test`/`catalog`); a normal provider-key row. `POST /v1/credentials/{id}/test` checks it through `lkap_api.credential_tests` (Composio's session-info call, then the app count). `POST /v1/tool-providers/composio/key/test` checks a pasted key without storing it (10 per workspace per minute). Rotate is `PUT /v1/credentials/{id}` on the same row. Enablement is the `workspace_providers` row of `composio` (`POST …/enable`, `POST …/disable`; disable switches off the tools bound to the key or to a connection).
 - **Connections.** One `credentials` row per connected app with `provider_id = "tool-provider-account"` (not a registry id, so `POST /v1/credentials` cannot create one). The encrypted bag holds references only: `toolkit`, `method`, `subject` (`ws:<workspace_id>` or `agent:<agent_id>`), `auth_config_id`, `connected_account_id`, status, picked actions, and while a sign-in is pending the SHA-256 of its single-use nonce and its expiry. `last_test_message` mirrors the status (`initiated|active|expired|failed|inactive|unknown`, transiently `verifying`), `last_test_ok` = active, `last_test_at` = last checked. The sessions sweep marks sign-ins unfinished after 10 minutes `expired`.
-- **Routes** (`lkap_api/tool_providers/router.py`, reads `viewer` + `providers:read`, writes `admin` + `providers:write`): `GET …/status`, `POST …/key/test`, `POST …/enable`, `POST …/disable`, `GET …/toolkits`, `GET …/toolkits/{slug}`, `GET …/toolkits/{slug}/actions`, `POST …/connections`, `GET …/connections`, `GET …/connections/{id}` (refreshes from Composio), `POST …/connections/{id}/reconnect`, `DELETE …/connections/{id}[?purge=true]`, `POST …/materialise` (stores the picks and creates one `provider` tool per action, attached to `agent_id` when given — V5-47), `POST …/tools/{id}/refresh-schema[?apply=true]` (diffs a `provider` tool's pinned inputs with Composio's current ones; V5-47), and the unauthenticated `GET …/callback?flow=<row id>.<nonce>&status&connected_account_id` (302 to `/console/tools?tab=apps&connect=ok|error`). Prefix `…` = `/v1/tool-providers/composio`.
-- **Models** (`lkap_contracts.tool_providers`, exported with an `App`/`Toolkit` prefix because `ConnectionOut` is taken): `ToolkitOut`, `ToolkitPage`, `AppAuthField`, `AppActionOut`, `AppActionPage`, `AppConnectIn`, `AppConnectOut`, `AppConnectionOut`, `AppConnectionPage`, `AppReconnectIn`, `AppKeyTestIn`, `AppKeyTestOut`, `AppsStatusOut`, `AppActionsPickIn`, `AppActionsPickOut`.
+- **Routes** (`lkap_api/tool_providers/router.py`, reads `viewer` + `providers:read`, writes `admin` + `providers:write`): `GET …/status`, `POST …/key/test`, `POST …/enable`, `POST …/disable`, `GET …/toolkits`, `GET …/toolkits/{slug}`, `GET …/toolkits/{slug}/actions`, `GET …/categories` (every toolkit category; cached 10 minutes, `refresh=true` re-reads for writers, rate limited), `POST …/connections`, `GET …/connections`, `GET …/connections/{id}` (refreshes from Composio), `PATCH …/connections/{id}` (`ConnectionRenameIn {label?, is_default?}`: rename an account or make it the app's default; R-V5-13), `POST …/connections/{id}/reconnect`, `DELETE …/connections/{id}[?purge=true]`, `POST …/materialise` (stores the picks and creates one `provider` tool per action, attached to `agent_id` when given — V5-47), `POST …/tools/{id}/refresh-schema[?apply=true]` (diffs a `provider` tool's pinned inputs with Composio's current ones; V5-47), and the unauthenticated `GET …/callback?flow=<row id>.<nonce>&status&connected_account_id` (302 to `/console/tools?tab=apps&connect=ok|error`). Prefix `…` = `/v1/tool-providers/composio`.
+- **Models** (`lkap_contracts.tool_providers`, exported with an `App`/`Toolkit` prefix because `ConnectionOut` is taken): `ToolkitOut`, `ToolkitPage`, `AppAuthField`, `AppActionOut`, `AppActionPage`, `AppConnectIn`, `AppConnectOut`, `AppConnectionOut`, `AppConnectionPage`, `AppReconnectIn`, `AppKeyTestIn`, `AppKeyTestOut`, `AppsStatusOut`, `AppActionsPickIn`, `AppActionsPickOut`, `ConnectionRenameIn`.
 - **Tool bindings.** `_check_payload` lets a `composio` key bind only to an `mcp` definition tagged `origin.provider == "composio"` whose url is `https://backend.composio.dev/…`, or to a `provider` definition (V5-47), which also binds a connection row as `connection_id` with the connection's own `subject` (an app connected for one agent serves only that agent's tools); an `http` tool can never bind the key, and a connection row is never a tool credential.
 
 ### Apps on agents (V5-47)
@@ -235,15 +241,19 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
 
 - **`provider` tools.** `ProviderToolDefinition` (`kind: "provider"`, `provider`, `name`, `description`,
   pinned `parameters`, `tool_slug`, `toolkit`, `connection_id`, `credential_id`, `subject`,
-  `connected_account_id` (normally `None`: Composio picks the subject's account for the app), `headers`
+  `connected_account_id` (the account the tool is pinned to; set at materialisation and when the
+  connection's account changes, R-V5-13), `headers`
   (default `{"x-api-key": "{{ secret.api_key }}"}`), `timeout_s`, `max_result_chars` (1500), `result_path`
   (`"data"`), `silent_reply`, `execution`, `schema_version`, `risk`) joins the `ToolDefinition` union and
   `ToolCreate.kind`. Materialisation names it `<toolkit>_<action>` (≤ 64 characters), reads run `auto`
   with an announcement, writes and destructive actions block and are not cancellable, 20 s. The api
   substitutes the key into `headers` at resolve time; the worker (`lkap_agent.tools.provider`) posts
-  `{user_id: subject, arguments, version}` to `https://backend.composio.dev/api/v3.1/tools/execute/{slug}`.
+  `{user_id: subject, arguments, version, connected_account_id?}` to `https://backend.composio.dev/api/v3.1/tools/execute/{slug}`.
 - **`tools.apps`.** `ToolsConfig.apps: AppsMode` (`mode: actions|server|router|off = off`,
-  `allowed_toolkits`, `denied_actions`, `router: {search, execute, manage_connections=false}`).
+  `allowed_toolkits`, `denied_actions`, `reviewed_actions` (≤ 500: destructive actions the builder has
+  decided about; an unreviewed destructive action in scope is blocked, R-V5-9, via
+  `effective_denied_actions`), `router: {search, execute, manage_connections=false}`, `accounts:
+  {toolkit: [connection id]}` (≤ 20 apps × 5; an app not named uses its default account, R-V5-13)).
   `server`/`router` make the api provision a Composio Tool Router session on agent save
   (`tool_providers/provisioning.py`; the MCP server API is deprecated at Composio) and attach it as an
   agent-owned `mcp` row with `origin: McpServerOrigin{provider, kind: server|router, remote_id: <session
@@ -274,8 +284,8 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   fold into header auth; with `auth` set they are filled from it (`credential_id` also mirrors an OAuth
   credential); a value that disagrees with `auth` is a validation error. Stored rows need no data
   migration: they load as header auth and re-save with `auth` (plus the mirrors, for readers that have
-  not moved to `auth`). `kind: "oauth"` is saved from V5-14 on (below); from V5-16 the worker
-  connects with an api-issued bearer (below) and skips a server the api issued no access for.
+  not moved to `auth`). `kind: "oauth"` servers are signed in through the api (V5-14) and the worker
+  connects with an api-issued bearer (V5-16), skipping a server the api issued no access for (both below).
 - **Host policy.** At save (`_check_payload`), before a test connection, and on the worker at connect
   time, an MCP url must pass the network guard (`net_guard.check_url`; the worker's `check_url_public`),
   be `https` (the api allows plain `http` only to a loopback host in `LKAP_ENV=dev`; the worker, which
@@ -283,7 +293,7 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   The ceiling applies to provider-provisioned servers too (list the provider's host when Apps are used).
   The api answers `422 blocked_destination`; the worker skips the server with a warning and a session
   event, and the session starts with its other tools.
-- **Connection test.** `POST /v1/tools/{id}/test` (admin) → `McpTestResult{ok, tool_names, tool_count,
+- **Connection test.** `POST /v1/tools/{id}/test` (`builder` + `agents:write`, the `/v1/tools` rule) → `McpTestResult{ok, tool_names, tool_count,
   cached_at, duration_ms, reason: blocked_destination|needs_auth|unreachable|protocol_error|http_error,
   error}`. The api connects with the stored auth (secrets substituted as for a session) through the
   guarded client (no redirects), runs `initialize`, `notifications/initialized` and `tools/list` (up to
@@ -294,7 +304,9 @@ Connected third-party apps (`docs/v5/COMPOSIO.md`). No new environment variable 
   still lists tools itself at session start; the api strips `cached_tools` from the resolved config.
   For an `oauth` server the test sends `Authorization: Bearer <the access token>`, refreshed first
   when it is about to expire (V5-16); with no sign-in, or one that needs an admin, it answers
-  `needs_auth` without a request (`unreachable` when the provider cannot refresh just now).
+  `needs_auth` without a request (`unreachable` when the provider cannot refresh just now). A
+  provisioned (`origin`) server whose url is not Composio's `https` host is `422 blocked_destination`
+  (D-V5-C10).
 - **Upgrade tripwire.** `agent/tests/unit/test_sdk_tripwires.py` fails when livekit-agents'
   `MCPServerHTTP.__init__` gains `auth`, when `_create_http_client` or its two call sites change, when
   livekit-agents stops pinning `mcp<2`, or when the pinned version moves off 1.8.3; the file says what to
@@ -309,9 +321,11 @@ refresh, revoke, the internal token route and the worker bearer are V5-16 (next 
 | Route | Auth | Purpose |
 |---|---|---|
 | `POST /v1/tools/{id}/oauth/start` | admin + `providers:write` | `McpOauthStartIn{client_secret?, authorization_server?}` → `McpOauthStartOut{status: redirect\|needs_client_registration, authorization_url, expires_at, redirect_uri, issuer, registration: preregistered\|cimd\|dcr}`. Runs discovery and registration and writes a flow row. Refusals are `422` with `details.reason` (`pkce_unsupported`, `blocked_destination`, `issuer_mismatch`, `resource_mismatch`, `no_resource_metadata`, `no_authorization_server_metadata`, `oauth_not_required`, `redirect`, `registration_failed`, `client_id_required`, `not_oauth`, `unreachable`, …). |
-| `GET /v1/tools/{id}/oauth/status` | admin | `McpOauthStatusOut{status: not_connected\|connected\|needs_reauth\|revoked, issuer, scopes, expires_at, connected_at, last_refresh_at, registration, worker_supported}` (`worker_supported: true` from V5-16). |
-| `GET /v1/oauth/mcp/callback?state&code&iss?&error?` | **none** (browser redirect; bound by `state`) | `302` to `{LKAP_WEB_BASE_URL}/console/tools?oauth=ok\|error` (no id, no token material; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`); `400` when `state` names no live sign-in (unknown, used, expired, malformed). |
+| `GET /v1/tools/{id}/oauth/status` | admin + `providers:read` | `McpOauthStatusOut{status: not_connected\|connected\|needs_reauth\|revoked, issuer, scopes, expires_at, connected_at, last_refresh_at, registration, worker_supported}` (`worker_supported: true` from V5-16). |
+| `GET /v1/oauth/mcp/callback?state&code&iss?&error?` | **none** (browser redirect; bound by `state`) | `302` to `LKAP_WEB_BASE_URL` (else the first web origin) `/console/tools?oauth=ok\|error` (no id, no token material; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`); `400` when `state` names no live sign-in (unknown, used, expired, malformed); at most 30 requests per client address per minute (`429`). |
 | `GET /v1/oauth/mcp/client-metadata.json` | public | The deployment's Client ID Metadata Document, only when `LKAP_PUBLIC_BASE_URL` is a public `https` origin; `404` otherwise. |
+
+The start, status and revoke requirements are checked in the handler, on top of the `/v1/tools` route rule.
 
 - **Discovery.** Unauthenticated `initialize` → `401` → `WWW-Authenticate` (`resource_metadata`,
   `scope`) → protected resource metadata (the header's url, then `/.well-known/oauth-protected-resource/<path>`,
@@ -332,7 +346,10 @@ refresh, revoke, the internal token route and the worker bearer are V5-16 (next 
   vault ciphertext; ten minutes; single use; a new start replaces the tool's pending flow. The row
   records the workspace, the tool, the initiating actor and the issuer exactly as the metadata spelled it.
 - **Callback checks**, in order: the hashed `state` (constant-time compare) → the row is claimed and
-  committed before anything else → expiry → RFC 9207 (`iss` present: byte-equal to the recorded
+  committed before anything else → expiry → the browser binding (R-V5-14: a sign-in a person
+  started needs the `lkap_mcp_oauth` cookie `oauth/start` set, compared in constant time, else
+  `browser_mismatch`; a flow an API key started needs none; `LKAP_MCP_OAUTH_ALLOW_UNBOUND=true` turns the
+  check off for split-origin deployments) → RFC 9207 (`iss` present: byte-equal to the recorded
   issuer; absent: refused when the provider advertised `authorization_response_iss_parameter_supported`;
   on a mismatch `error` is not acted on) → `error` → `code` → the tool still exists, still uses OAuth,
   and its url is still covered by the flow's `resource` → code exchange (`authorization_code`, the
@@ -417,7 +434,7 @@ No environment variable, no table, no migration. Vendor keys live in the vault l
   `ToolsConfig.notify_team: NotifyTeamConfig | None` (`credential_id` of an `http-tool-secret` key,
   `secret_name` = `TEAM_WEBHOOK_URL`, `style: slack|generic`, `on_escalation = true`,
   `include_transcript = false`), `TelephonyConfig.sms_targets: list[SmsTarget{label, to (E.164)}]`.
-  The four registry entries have no package, class, `test` or `catalog` (a key test is an open ask).
+  The four registry entries have no package, class, `test` or `catalog` (a key test is open: ask #151).
 - **Resolution.** `ResolvedAgentConfig.builtin_providers: dict["web_search"|"sms"|"notify_team",
   ResolvedProvider]` (**contains secrets**), kept out of `resolved` (whose every slot the provider factory
   builds). `notify_team` resolves to `kwargs={"webhook_url": …}` from the named secret.
@@ -514,6 +531,8 @@ Initial `status="mvp"` entries (implementers fill labels/help from the research 
 
 **Language capabilities (V5-31).** `ProviderCapabilities.languages` holds base codes (`hi`, not `hi-IN`) from the vendor's documentation; empty means *not recorded* (validators stay silent), never "none". Three STT-only fields: `language_detection` (the value of the entry's `language` field that asks for detection: `multi` for `livekit-inference-stt` and `deepgram-stt`, `multi` for `openai-stt`/`openrouter-stt` which the worker's factory maps to `detect_language=True`, `unknown` for `sarvam-stt`), `detect_languages` (what detection covers when narrower than `languages`: Deepgram Nova-3 `multi` = en, es, fr, de, hi, ru, pt, ja, it, nl) and `language_switch` (`update_options(language=...)` on the `STT` object reaches the running transcriber in livekit-agents 1.8.3: Inference, Deepgram, OpenAI/OpenRouter, Azure, Cartesia, Clova, fal Wizper, Fireworks, Mistral, SLNG, Smallest, xAI, Baseten; Google and Gladia take `languages=`, AssemblyAI `language_codes=`, Sarvam only per stream with a `model`, Palabra on new streams only). Recorded rows: Nova-3 on Inference and Deepgram, the OpenAI transcription list (57), Sarvam STT (24 codes, 1.8.3 plugin enum) and Sarvam TTS (11). Helpers: `LANGUAGE_CODE_PATTERN` (`^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$`), `LANGUAGE_NAMES`, `base_language`, `language_name`, `declares_language` (`None` for an empty list).
 
+**Telephony variant and price note (V5-07).** `ProviderSpec.telephony_variant` (noise-cancellation entries only) is the dotted class the worker builds instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset: `legacy-noise-cancellation` → `livekit.plugins.noise_cancellation.BVCTelephony`, `krisp-noise-cancellation` → `livekit.plugins.krisp.voice_isolation_telephony`. Neither plugin is installed on the worker yet (R-V5-3, ask #208), so the preset warns instead. `ProviderSpec.price_note` is a plain-language price line the console shows for a provider metered outside the price table (LiveKit Cloud noise cancellation; also used by the V5-20/V5-25/V5-45 entries).
+
 Deferred entries (data only, `status="deferred"`): azure-openai-realtime, xai-realtime, assemblyai-stt, google-stt, openai-stt, speechmatics-stt, elevenlabs-stt, cartesia-stt, groq-stt, azure-stt, anthropic-llm, groq-llm, cerebras-llm, openai-compatible-llm, aws-bedrock-llm, google-tts, deepgram-tts, rime-tts, inworld-tts, hume-tts, azure-tts, simli-avatar, anam-avatar, bithuman-avatar, liveavatar-avatar.
 
 Export: `uv run python -m lkap_contracts.export` writes `contracts/generated/providers.json` (`{"v":1,"providers":[...]}`), JSON Schemas for `AgentConfig`, `ResolvedAgentConfig`, `DispatchMetadata`, `UiSnapshot`, `UiPatch`, `ActivityEvent`, `PackManifest`, `ToolDefinition`, all `api_models`, and runs `json-schema-to-typescript` (via `pnpm dlx` in `web/`) to produce `generated/ts/lkap-contracts.d.ts`. A contracts test fails if generated files are stale. TS types are **generated, never hand-written**. Before the TS step, `prepare_for_typescript` (DECISIONS-W2 D-W2-3) injects `tsType: "unknown"` into every property schema that is empty (a Pydantic `Any` field such as `UiPatchOp.value`), so `json-schema-to-typescript` emits `value?: unknown` instead of an indexed object type.
@@ -563,13 +582,13 @@ CREATE TABLE knowledge_bases (
 );
 -- V5-20 (v5_005): bring-your-own vector stores and hosted re-rankers. `settings` holds only the
 -- non-secret fields of the kind's registry entry (provider kind `knowledge`: `qdrant`, `pinecone`,
--- `weaviate`, `cohere-rerank`, `voyage-rerank`); the key is a vault credential by id, returned only as
+-- `weaviate`, `cohere-rerank`, `voyage-rerank`, and V5-45's `ragie`); the key is a vault credential by id, returned only as
 -- its fingerprint. A connection with knowledge bases cannot be deleted (409); its url/collection/index
 -- cannot change while they exist. The vendor stores carry `id, kb_id, document_id` (+ the text only
 -- when the store's own keyword search is on); chunk text stays in `kb_chunks` (D-V5-37).
 CREATE TABLE knowledge_connections (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  name TEXT NOT NULL, kind TEXT NOT NULL,           -- qdrant|pinecone|weaviate|cohere_rerank|voyage_rerank
+  name TEXT NOT NULL, kind TEXT NOT NULL,           -- qdrant|pinecone|weaviate|cohere_rerank|voyage_rerank|ragie (no CHECK; the api validates)
   settings JSON NOT NULL, credential_id TEXT NULL REFERENCES credentials(id) ON DELETE SET NULL,
   status TEXT NOT NULL CHECK (status IN ('unverified','ok','error')),
   last_checked_at TIMESTAMP NULL, last_error TEXT NULL, capabilities JSON NOT NULL,
@@ -648,7 +667,7 @@ class DispatchMetadata(BaseModel):
 ```
 
 ```python
-PipelineMode = Literal["realtime", "cascaded"]
+PipelineMode = Literal["realtime", "cascaded", "half_cascade"]   # half_cascade: v2
 
 
 class ProviderRef(BaseModel):
@@ -669,7 +688,15 @@ class PipelineConfig(BaseModel):
     workflow_llm: ProviderRef | None = (
         None  # None → llm (cascaded) or livekit-inference-llm default (realtime)
     )
-    turn_handling: dict = {}  # passed to TurnHandlingOptions (validated keys only)
+    # V5-07 (`lkap_contracts.turn_handling`): a typed mirror of livekit-agents 1.8.3 TurnHandlingOptions
+    # (endpointing, interruption, preemptive_generation, user_turn_limit; unknown keys pass through),
+    # stored as a plain dict of the keys that were set; a dict whose typed keys fail is kept as it is
+    turn_handling: TurnHandlingOptions | dict = {}
+    # a named preset replaces the turn-taking keys at session build (resolve_turn_handling,
+    # CONVERSATION_PRESETS); never stored expanded; `custom` uses turn_handling as saved (R-V5-4)
+    conversation_preset: Literal["patient", "balanced", "snappy", "telephony", "custom"] = "custom"
+    turn_detector: TurnDetectorSettings | None = None   # {mode: hosted|local, unlikely_threshold: 0..1}
+    # (v2 also added vad, turn_detection and noise_cancellation slots: CONTRACTS-V2)
 
 
 class VoiceConfig(BaseModel):
@@ -683,6 +710,9 @@ class VoiceConfig(BaseModel):
     languages: list[str] = []
     auto_detect: bool = False
     voices_by_language: dict[str, ProviderRef] = {}
+    # V5-07: "none", a built-in clip name lower-cased (office_ambience, city_ambience, crowded_room, ...)
+    # or "asset:<id>" (accepted; the worker does not play uploaded clips yet); never on the text channel
+    ambient_sound: str = "none"
 
 
 class CapabilitiesConfig(BaseModel):
@@ -703,10 +733,19 @@ class KnowledgeConfig(BaseModel):
     kb_ids: list[str] = []
     auto_inject: bool = True
     top_k: int = 4
+    # V5-06; the defaults retrieve at least what an agent saved before them did
+    min_score: float | None = None          # 0..1; in hybrid mode without rerank the score is rank-derived
+    prefetch: bool = True                   # start the auto-inject search on the interim transcript
+    rerank: Literal["none", "local"] | str = "none"   # or "connection:<id>" (V5-20): a hosted re-ranker,
+                                            # search tool only; refused for auto-inject (D-V5-19)
+    mode: Literal["vector", "hybrid"] = "hybrid"
+    max_inject_tokens: int = 1200           # >= 1; upper bound on the knowledge note per turn
+    skip_short_turns: bool = True           # skip backchannels, digits-only and very short turns
+    query_mode: Literal["last_turn", "conversation"] = "conversation"
 
 
 class AgentConfig(BaseModel):
-    v: Literal[1] = 1
+    v: Literal[1, 2] = 2   # 2 since v2
     instructions: str
     pipeline: PipelineConfig
     voice: VoiceConfig = VoiceConfig()
@@ -727,7 +766,7 @@ class ResolvedProvider(BaseModel):
 class ResolvedAgentConfig(BaseModel):
     """What the worker receives from /internal/v1/sessions/{id}/resolved. Contains secrets. Never logged."""
 
-    v: Literal[1] = 1
+    v: Literal[2] = 2   # 2 since v2
     session_id: str
     agent_id: str
     agent_slug: str
@@ -742,6 +781,10 @@ class ResolvedAgentConfig(BaseModel):
     kb_ids: list[str]
     participant_identity: str
 ```
+
+The listing above is the v1 shape plus the v5 fields named in it. `AgentConfig` also has the v2 sections (CONTRACTS-V2) and the v5 sections described below and in §3 (`tools.apps`, the curated built-ins), and `ResolvedAgentConfig` carries further v5 fields (`mcp_oauth`, `builtin_providers`, `tool_mocks`, `compliance`, `voices_by_language`, `business_timezone`, `locale`, …); the generated JSON Schemas in `contracts/generated/` are complete.
+
+**Languages (V5-31).** `effective_languages(voice)` is `voice.languages` or `[voice.language]`, so an agent saved before V5-31 behaves as before and registers no `switch_language`. `ResolvedAgentConfig.voices_by_language: dict[str, ResolvedProvider]` carries each voice resolved with its key (**secrets**; empty outside cascaded / half-cascade). The worker appends one fixed languages rule to `instructions` (`session_builder.with_language_rule`, so flow nodes get it too), builds the STT slot with the registry's `language_detection` value when `auto_detect` is on, and on a switch (the `switch_language` built-in, or `DETECTION_TURNS = 2` consecutive caller turns detected in another allowed language) calls `stt.update_options(language=...)` when the entry has `language_switch` and is not detecting, swaps the voice with `Agent.update_options(tts=...)` (no handoff: `on_enter` would re-run; a later flow node re-applies it) and appends a reply-language note at the tail of the chat context (on a detected switch; the tool's answer says it on a tool switch). Validators (`config_service.language_issues`): a language the STT entry does not list → error at `voice.languages`; `auto_detect` on an STT without detection, or a language detection does not cover → warning at `voice.auto_detect`; several languages on an STT that cannot switch → warning; a language with no voice that the agent's voice does not list → warning at `voice.voices_by_language`; each voice is checked like a `tts` slot at `voice.voices_by_language.<code>`.
 
 **Consent and disclosure (V5-15, D-V5-22; `lkap_contracts.compliance`).** Additive fields; an agent saved before them behaves as before except that the AI disclosure is now spoken first (intended):
 
@@ -765,11 +808,9 @@ class ComplianceSettings(BaseModel):        # workspaces.settings.compliance (ex
     counsel_note_ack: bool = False
 ```
 
-Languages (V5-31): `effective_languages(voice)` is `voice.languages` or `[voice.language]`, so an agent saved before V5-31 behaves as before and registers no `switch_language`. `ResolvedAgentConfig.voices_by_language: dict[str, ResolvedProvider]` carries each voice resolved with its key (**secrets**; empty outside cascaded / half-cascade). The worker appends one fixed languages rule to `instructions` (`session_builder.with_language_rule`, so flow nodes get it too), builds the STT slot with the registry's `language_detection` value when `auto_detect` is on, and on a switch (the `switch_language` built-in, or `DETECTION_TURNS = 2` consecutive caller turns detected in another allowed language) calls `stt.update_options(language=...)` when the entry has `language_switch` and is not detecting, swaps the voice with `Agent.update_options(tts=...)` (no handoff: `on_enter` would re-run; a later flow node re-applies it) and appends a reply-language note at the tail of the chat context (on a detected switch; the tool's answer says it on a tool switch). Validators (`config_service.language_issues`): a language the STT entry does not list → error at `voice.languages`; `auto_detect` on an STT without detection, or a language detection does not cover → warning at `voice.auto_detect`; several languages on an STT that cannot switch → warning; a language with no voice that the agent's voice does not list → warning at `voice.voices_by_language`; each voice is checked like a `tts` slot at `voice.voices_by_language.<code>`.
-
 `COMPLIANCE_PRESETS` holds the three presets (plain wording, a counsel note each; `us` says "confirm with counsel for two-party-consent states"; no state list). The worker (`session_builder.apply_compliance`, after the flow preparation) fills `disclosure.text`, `recording.consent_text` and the empty `text` of `recording`/`ai_disclosure` consent blocks from `compliance`, then puts the disclosure in front of the greeting once (or at a `{disclosure}` placeholder) when `position` is `greeting`/`both`, or `banner` on a phone call; without a spoken greeting it becomes an instruction for the first reply. `consent_text_hash(text)` is the SHA-256 of the exact UTF-8 wording, carried by every `consent` event.
 
-**Privacy and post-call fields (V5-30, P §4.2 C10/C23).** Additive; the defaults keep every agent saved before them unchanged (nothing masked, everything kept, telemetry as before, no fields):
+**Privacy and post-call fields (V5-30; `docs/research-v4/panels-and-capabilities.md` §4.2, C10 and C23).** Additive; the defaults keep every agent saved before them unchanged (nothing masked, everything kept, telemetry as before, no fields):
 
 ```python
 class PrivacyConfig(BaseModel):             # AgentConfig.privacy
@@ -869,23 +910,48 @@ POST /v1/agents/{id_or_slug}/text-sessions TextSessionCreate -> ConnectResponse 
 # Any roomConfig/agentName sent by the client is ignored.
 
 # ---- tools (admin)
-class ToolCreate(BaseModel): agent_id: str | None; kind: Literal["http","mcp"]; name: str; definition: HttpToolDefinition | McpServerDefinition; enabled: bool = True
+class ToolCreate(BaseModel): agent_id: str | None; kind: Literal["http","mcp","provider"]; name: str; definition: ToolDefinition; enabled: bool = True   # provider: V5-47
 class ToolOut(ToolCreate): id: str; created_at; updated_at
 POST/GET/PUT/DELETE /v1/tools[/{id}]     (GET list filters: agent_id, kind)
 POST /v1/tools/{id}/dry-run              { arguments: dict } -> { ok: bool; result: str; status_code: int | None; duration_ms: int }   # http only
+POST /v1/tools/{id}/test                 -> McpTestResult                       # V5-09, mcp only; see §3
+POST /v1/tools/{id}/oauth/start | GET …/oauth/status | POST …/oauth/revoke   # V5-14/V5-16; see §3
+GET  /v1/oauth/mcp/callback | GET /v1/oauth/mcp/client-metadata.json          # V5-14; see §3
+GET  /v1/tool-templates                  -> the Cal.com template set; POST /v1/tool-templates/{id}/instantiate   # V5-25; see §3
+
+# ---- apps (Composio; V5-18, V5-47, V5-53): /v1/tool-providers/composio/*, see §3 "Apps"
 
 # ---- knowledge bases (admin)
 class KbCreate(BaseModel): name: str; description: str = ""; embedder_id: str = "fastembed-embedding"
+    connection_id: str | None = None    # V5-20: store the vectors in a knowledge connection (fixed after creation)
+    kind: Literal["managed","external"] = "managed"; external_ref: str | None = None   # V5-45: external = a managed search service (needs both)
 class KbOut(BaseModel): id; name; description; embedder_id; chunk_count: int; document_count: int; created_at; updated_at
 class KbDocumentOut(BaseModel): id; kb_id; filename; mime; bytes; status; error: str | None; chunk_count; created_at
-class KbSearchRequest(BaseModel): query: str; k: int = 4
+class KbSearchOptions(BaseModel): mode: Literal["vector","hybrid"] = "vector"; rerank: str = "none"   # none|local|connection:<id>
+    min_score: float | None = None      # 0..1  (V5-04; every default is the pre-V5-04 behaviour)
+class KbSearchRequest(KbSearchOptions): query: str (1..2000); k: int = 4 (1..20)
 class KbHit(BaseModel): chunk_id: str; document_id: str; filename: str; score: float; text: str
-class KbSearchResponse(BaseModel): hits: list[KbHit]
+    kb_id: str | None; meta: dict   # V5-01 locators: filename, heading_path, page, char_start, char_end
+    vector_score: float | None; lexical_rank: int | None; fused_score: float | None; rerank_score: float | None
+    score_source: Literal["vector","fused","rerank","external"] = "vector"
+class KbSearchWarning(BaseModel): code: Literal["kb_not_found","kb_embedder_mismatch","kb_timeout","kb_error","lexical_unavailable","rerank_failed","rerank_refused"]; message: str; kb_id: str | None
+class KbSearchResponse(BaseModel): hits: list[KbHit]; mode; rerank; min_score; dropped: int = 0
+    warnings: list[KbSearchWarning]; rerank_usage: KbRerankUsage | None; timings_ms: dict[str, float]
 POST/GET/PUT/DELETE /v1/knowledge-bases[/{id}]
 POST /v1/knowledge-bases/{id}/documents  multipart file -> KbDocumentOut (202; ingestion in FastAPI BackgroundTasks; poll GET)
 GET  /v1/knowledge-bases/{id}/documents  -> Page[KbDocumentOut]
 DELETE /v1/knowledge-bases/{id}/documents/{doc_id} -> 204
 POST /v1/knowledge-bases/{id}/search     KbSearchRequest -> KbSearchResponse
+GET  /v1/knowledge-bases/{id}/source     -> KbSourceOut                         # where the vectors live (V5-20/V5-45)
+GET|PUT /v1/knowledge-bases/{id}/evals   KbEvalSetIn -> KbEvalSetOut            # V5-01/V5-05 golden questions (≤ 500)
+POST /v1/knowledge-bases/{id}/evaluate   -> KbEvalRunOut (202)                  # V5-05; job kb_evaluate
+GET  /v1/knowledge-bases/{id}/evaluate/latest | /evaluate/{job_id} -> KbEvalRunOut
+POST /v1/knowledge-bases/{id}/reindex    KbReindexIn -> KbReindexOut (202)      # V5-01: re-extract and re-chunk stored documents
+
+# ---- knowledge connections (V5-20, V5-45; reads builder + providers:read, writes admin + providers:write)
+GET|POST /v1/knowledge-connections       -> KnowledgeConnectionPage | KnowledgeConnectionCreate -> KnowledgeConnectionOut (201)
+GET|PUT|DELETE /v1/knowledge-connections/{id}   KnowledgeConnectionUpdate -> KnowledgeConnectionOut (DELETE 409 while it stores knowledge bases)
+POST /v1/knowledge-connections/{id}/test -> KnowledgeConnectionTestOut          # 10 per minute
 
 # ---- packs (admin)
 class PackOut(BaseModel): manifest: PackManifest
@@ -895,13 +961,22 @@ GET  /v1/packs                           -> { items: list[PackOut] }
 class SessionOut(BaseModel): id; agent_id; agent_name; config_version; room_name; status; pipeline_mode; created_at; started_at; ended_at; usage: dict | None; error: str | None
     caller_timezone: str | None   # R-V5-10: from the `locale` event, stored as usage["caller_timezone"] by the summary
 class SessionDetailOut(SessionOut): transcript: list[TranscriptTurn] | None; final_ui_state: UiState | None
-class TranscriptTurn(BaseModel): role: Literal["user","assistant"]; text: str; ts: float; interrupted: bool = False
+class TranscriptTurn(BaseModel): role: Literal["user","assistant"]; text: str; ts: float; interrupted: bool = False; language: str | None = None   # V5-31
 class SessionEventOut(BaseModel): id: int; ts: datetime; type: str; payload: dict
 GET  /v1/sessions?agent_id=&status=      -> Page[SessionOut]
 GET  /v1/sessions/{id}                   -> SessionDetailOut
 GET  /v1/sessions/{id}/events?after_id=  -> Page[SessionEventOut]
 POST /v1/sessions/{id}/listen-token     -> SessionListenTokenOut   # V5-37: builder+, API keys sessions:listen (sessions:write implies it)
 POST /v1/sessions/{id}/whisper          SessionWhisperIn {text ≤ 1000, reply_now=false} -> SessionWhisperOut {id, delivered_to} (202)
+class SessionAssetOut(BaseModel): id; session_id; kind: Literal["upload","frame","signature","document"]; name; mime; size; sha256; meta: dict[str,str]; created_at; url: str | None; expires_at: datetime | None
+GET  /v1/sessions/{id}/assets           -> SessionAssetPage { items }   # V5-19; viewer + sessions:read; oldest first; each item has a signed link valid 15 minutes
+GET  /v1/sessions/{id}/assets/{asset_id}/content?exp=&sig=  -> bytes   # no token: the signature (workspace, session, file, expiry) is the authorisation; 401 otherwise
+GET  /v1/sessions/export.csv            -> text/csv                     # V5-30, see below
+POST /v1/sessions/{id}/scrub            -> SessionScrubOut (202)        # V5-30, see below
+GET  /v1/sessions/{id}/memory           -> SessionMemoryOut             # V5-40, see below
+DELETE /v1/memory/subjects/{subject_id} | POST /v1/memory/purge          # V5-40, see below
+POST /v1/agents/{id}/tests/run (202); GET /v1/agents/{id}/tests/runs; GET …/tests/runs/{run_id}   # V5-29, §6
+POST /v1/hooks/link/{session_id}        LinkHookIn -> LinkHookOut (202) # V5-43, signed; §10
 
 # ---- internal (service token)
 GET  /internal/v1/sessions/{id}/resolved -> ResolvedAgentConfig   (404 if unknown; 409 if status=ended; marks status=active, started_at)
@@ -910,26 +985,34 @@ class SessionEventIn(BaseModel): ts: float; type: str; payload: dict
 POST /internal/v1/sessions/{id}/events   { events: list[SessionEventIn] } -> 202
 class SessionSummaryIn(BaseModel): status: Literal["ended","failed"]; usage: dict; transcript: list[TranscriptTurn]; final_ui_state: UiState | None; error: str | None = None
 PUT  /internal/v1/sessions/{id}/summary  SessionSummaryIn -> 204
-class InternalKbSearchRequest(BaseModel): kb_ids: list[str]; query: str; k: int = 4
+class InternalKbSearchRequest(KbSearchOptions): kb_ids: list[str]; query: str (1..2000); k: int = 4 (1..20)
+    session_id: str | None = None        # V5-27: only that session's workspace is searched
+    purpose: Literal["tool","auto_inject"] | None = None   # auto_inject never uses a hosted re-ranker (D-V5-19)
+                                                           # and skips managed search knowledge bases; the worker does not send it yet (ask #326)
 POST /internal/v1/kb/search              InternalKbSearchRequest -> KbSearchResponse
+POST /internal/v1/sessions/{id}/assets   multipart file (≤ 25 MB), kind upload|frame|signature, name?, meta? (JSON) -> SessionAssetOut (201)   # V5-19: type sniffed from the bytes, checked against the block; ≤ 50 files per session
+POST /internal/v1/sessions/{id}/assets/from-document  SessionAssetFromDocumentIn {document_id} -> SessionAssetOut (201 new, 200 already held; 404 outside the agent's knowledge bases; 415 not showable)   # R-V5-5
+GET  /internal/v1/sessions/{id}/assets/{asset_id}/content  -> bytes
+POST /internal/v1/sessions/{id}/recording/stop  -> {stopped, egress_id}   # V5-27, see below
+POST /internal/v1/memory/recall          MemoryRecallIn -> MemoryRecallOut   # V5-40, see below
 
 # ---- health (public)
 GET  /v1/health                          -> { ok: bool; version: str; livekit_url: str; packs: list[str]; db: "ok"|"error" }
 ```
 
-Event `type` values posted by the worker: `session_started`, `agent_state` (`{state}`), `user_turn` (`{text}`; V5-31 adds `language` when the transcriber reported one), `agent_turn` (`{text, interrupted}`; V5-31: may carry the reply `language` of a multilingual agent, but only when the message was stamped before the event was recorded — the stored `TranscriptTurn.language` is the reliable record), `language_switched` (`LanguageSwitchedEvent {from_language, to_language, source: tool|detected, stt_switched, voice_switched}`, V5-31), `tool_call_started` (`{call_id, tool, args_redacted}`), `tool_call_ended` (`{call_id, tool, status, duration_ms, result_preview}`), `tool_call_updated` (`{call_id, tool, message_preview}`: a background tool reported progress; its first update is the announcement, docs/v4/BACKGROUND-TOOLS.md D-V4-38), `tool_reply` (`{call_ids, status, speech_id}`: the deferred reply that voices background results; `status` is `scheduled`, `completed`, `interrupted` or `skipped`, the last meaning the model had already said it), `workflow_run` (`{name, duration_ms, status}`), `ui_state` (`{seq}` only), `asset` (`{asset_id, kind, bytes}`), `escalation` (`EscalationEvent {reason, urgency, mode}`; `mode` since V5-37, left out for `transfer` so the old payload is unchanged), `metrics` (`{kind, data}`), `error` (`{message}`), `info` (`{message}`), `session_ended` (`{reason}`), `locale` (`LocaleEvent {caller_timezone, source, business_timezone}`, once at session start, R-V5-10: `source` is `browser` (the `lkap.tz` attribute), `number` (the caller's E.164 number maps to exactly one zone), `business` (`AgentConfig.timezone`, also when `locale.caller_timezone == "business"`), `workspace` (`workspaces.settings.locale.timezone`) or `default` (UTC); the summary copies `caller_timezone` into `usage`), `consent` (`ConsentEvent {kind, accepted, method, text_hash, block_id}`, one per answer, V5-15: `kind` is `recording`, `ai_disclosure`, `terms` or `custom`, `method` is `tap` or `voice`, `text_hash` the SHA-256 of the exact wording; the api folds the latest answer per kind into `sessions.consent_state` (`ConsentState {latest: {kind: ConsentRecord}}`, migration `v5_009_consent`)), `tool_needs_reauth` (V5-47 / V5-16: `{call_id, tool}` when a tool call failed because its app or MCP sign-in needs an admin — the model heard "This app needs to be reconnected by an admin" or "This integration needs to be re-authorised by an admin"; `{mcp_server, reason}` with `reason` `needs_reauth`, `unauthorized` or `insufficient_scope` when an MCP request other than a tool call hit it, once per server and reason), `privacy_scrubbed` (V5-30, api-written, not by the worker: `{tier, replaced: {email, card, number}, model_pass: none|done|failed|unsupported, tool_payloads_dropped}`, once per session; its `ts` is `scrubbed_at`).
+Event `type` values posted by the worker: `session_started`, `agent_state` (`{state}`), `user_turn` (`{text}`; V5-31 adds `language` when the transcriber reported one), `agent_turn` (`{text, interrupted}`; V5-31: may carry the reply `language` of a multilingual agent, but only when the message was stamped before the event was recorded — the stored `TranscriptTurn.language` is the reliable record), `language_switched` (`LanguageSwitchedEvent {from_language, to_language, source: tool|detected, stt_switched, voice_switched}`, V5-31), `tool_call_started` (`{call_id, tool, args_redacted}`), `tool_call_ended` (`{call_id, tool, status, duration_ms, result_preview}`), `tool_call_updated` (`{call_id, tool, message_preview}`: a background tool reported progress; its first update is the announcement, docs/v4/BACKGROUND-TOOLS.md D-V4-38), `tool_reply` (`{call_ids, status, speech_id}`: the deferred reply that voices background results; `status` is `scheduled`, `completed`, `interrupted` or `skipped`, the last meaning the model had already said it), `workflow_run` (`{name, duration_ms, status}`), `ui_state` (`{seq}` only), `asset` (`{asset_id, kind, bytes}`), `escalation` (`EscalationEvent {reason, urgency, mode}`; `mode` since V5-37, left out for `transfer` so the old payload is unchanged), `metrics` (`{kind, data}`), `error` (`{message}`), `info` (`{message}`), `session_ended` (`{reason}`), `locale` (`LocaleEvent {caller_timezone, source, business_timezone}`, once at session start, R-V5-10: `source` is `browser` (the `lkap.tz` attribute), `number` (the caller's E.164 number maps to exactly one zone), `business` (`AgentConfig.timezone`, also when `locale.caller_timezone == "business"`), or `default` (UTC); `workspace` is in the schema but not emitted, because the api resolves the workspace default (`workspaces.settings.locale.timezone`) into `config.timezone`, which then reports as `business`; the summary copies `caller_timezone` into `usage`), `consent` (`ConsentEvent {kind, accepted, method, text_hash, block_id}`, one per answer, V5-15: `kind` is `recording`, `ai_disclosure`, `terms` or `custom`, `method` is `tap` or `voice`, `text_hash` the SHA-256 of the exact wording; the api folds the latest answer per kind into `sessions.consent_state` (`ConsentState {latest: {kind: ConsentRecord}}`, migration `v5_009_consent`)), `tool_needs_reauth` (V5-47 / V5-16: `{call_id, tool}` when a tool call failed because its app or MCP sign-in needs an admin — the model heard "This app needs to be reconnected by an admin" or "This integration needs to be re-authorised by an admin"; `{mcp_server, reason}` with `reason` `needs_reauth`, `unauthorized` or `insufficient_scope` when an MCP request other than a tool call hit it, once per server and reason), `privacy_scrubbed` (V5-30, api-written, not by the worker: `{tier, replaced: {email, card, number}, model_pass: none|done|failed|unsupported, tool_payloads_dropped}`, once per session; its `ts` is `scrubbed_at`).
 
 Consent routes (V5-15): `POST /internal/v1/sessions/{id}/recording/start` answers 409 for an agent with `recording.require_consent` until the latest `recording` answer is an acceptance (the worker holds the start back and flushes its events first). At the summary, a consent-gated voice session that was never recorded keeps `recording_status = "none"` with `recording_error` "Not recorded: consent declined" (or "Not recorded: the caller did not agree to be recorded"), returned as `SessionDetailOut.recording.error`. `PUT /v1/workspaces/{id}` accepts `settings.compliance` (`ComplianceSettings`, merged one level down, 422 when invalid); `GET /v1/workspaces/{id}/compliance` → `ComplianceOut {settings, effective: ResolvedCompliance, presets: list[CompliancePreset]}`.
 
-V5-30 (privacy and post-call fields): `QaOut.fields: dict[str, Any]` (`session_qa.raw["fields"]`, `{}` when none); `SessionDetailOut.scrubbed_at`; `GET /v1/sessions/export.csv` (the list's filters, newest first, `limit` ≤ 5000) → `text/csv` with the fixed columns `session_id, agent_id, agent_name, channel, status, created_at, ended_at, duration_s, cost_usd, disposition, qa_status, qa_score, qa_sentiment` then one column per post-call field (a field named like a fixed column is `field_<name>`; a text cell starting `= + - @` gets a leading `'`); `POST /v1/sessions/{id}/scrub` → 202 `SessionScrubOut {status: queued|already_scrubbed, job_id, scrubbed_at}`, 409 `storage_tier_full` / `not_ended`; `DELETE /v1/sessions/{id}` also removes the session's stored files and recording at once (S5-36). Knowledge (S5-28/S5-30): an upload's extension decides its type (`.md .markdown .txt .csv .json .pdf .docx .pptx .xlsx .html .htm`, else 415) and a url import's chosen filename cannot pick another extractor; 409 `quota_exceeded` past 1,000 documents per knowledge base or 2 GiB per workspace; `POST …/reindex` checks existence without reading bytes and, like `POST …/evaluate`, answers 409 while one is queued or running for that knowledge base, with a shared 20/min per-workspace limit (429). The `session.qa_completed` webhook is where the fields belong (the worker scores after `session.ended` is sent); carrying them there is ask #174.
+V5-30 (privacy and post-call fields): `QaOut.fields: dict[str, Any]` (`session_qa.raw["fields"]`, `{}` when none); `SessionDetailOut.scrubbed_at`; `GET /v1/sessions/export.csv` (the list's filters, newest first, `limit` ≤ 5000) → `text/csv` with the fixed columns `session_id, agent_id, agent_name, channel, status, created_at, ended_at, duration_s, cost_usd, disposition, qa_status, qa_score, qa_sentiment` then one column per post-call field (a field named like a fixed column is `field_<name>`; a text cell starting `= + - @` gets a leading `'`); `POST /v1/sessions/{id}/scrub` → 202 `SessionScrubOut {status: queued|already_scrubbed, job_id, scrubbed_at}`, 409 `storage_tier_full` / `not_ended`; `DELETE /v1/sessions/{id}` also removes the session's stored files and recording at once (S5-36). Knowledge (S5-28/S5-30): an upload's extension decides its type (`.md .markdown .txt .csv .json .pdf .docx .pptx .xlsx .html .htm`, else 415) and a url import's chosen filename cannot pick another extractor; 409 `quota_exceeded` past 1,000 documents per knowledge base or 2 GiB per workspace; `POST …/reindex` checks existence without reading bytes and, like `POST …/evaluate`, answers 409 while one is queued or running for that knowledge base, with a shared 20/min per-workspace limit (429). The `session.qa_completed` webhook carries them as `data.fields` (the worker scores after `session.ended` is sent, so `session.ended` has none).
 
 V5-27 (the V5-26 security fixes; `docs/v5/SECURITY-REVIEW-V5.md`): `ConsentEvent.turn_id` (a voice answer's user turn; null for a tap) and `ConsentState.withdrawn_at {kind: epoch seconds}` (an acceptance replaced by a decline) are additive; `record_consent` no longer takes `method` (always `voice`; a tap comes only from the block). `POST /internal/v1/sessions/{id}/recording/stop` (service token) → `{stopped, egress_id}` stops the session's Egress once when the caller withdraws recording consent; `recording_error` then says "Stopped early: the caller withdrew consent". `InternalKbSearchRequest` gains `session_id` (only that session's workspace is searched; unknown session → 404) and both search requests cap `query` at 1–2000 characters. `user_turn` events carry `turn_id`; the worker records `recording_stopped {reason: consent_withdrawn}`. Third-party text reaches the model as `<untrusted source="…">…</untrusted>` (R-V5-15). `PUT /v1/workspaces/{id}` accepts only `locale`, `compliance`, `cost.reconcile` and `telephony` in `settings`. Any request body over 26 MB is `413 payload_too_large`.
 
-V5-40 (caller memory, D-V5-17; opt-in): `AgentConfig.memory: MemoryConfig {enabled=false, scope: agent|workspace = agent, retention_days=90 (1..3650), consent_line ≤ 500 | null, max_recall_tokens=400 (50..2000), verbatim=false}`. `POST /internal/v1/memory/recall` (service token; `MemoryRecallIn {session_id, caller_e164: E.164 | null}` → `MemoryRecallOut {status: recalled|empty|disabled|no_identity|unavailable|failed, memories ≤ 20 × ≤ 500 chars, newest first, remember}`): the api resolves the caller from the session (phone: `caller.from` inbound / `caller.to` outbound, else the hint; other channels: `participant_identity` unless platform-generated `user-xxxxxxxx` or the `<channel>-caller` placeholder), reads the backend within 3 s, masks the texts when `privacy.storage_tier != "full"` and records `memory_recalled`; `remember` is true when the session will be written (identity known, backend installed, `verbatim` or an OpenAI/OpenRouter model with a key). The worker appends the memories to the instructions inside `<untrusted source="memory">` (bounded by `max_recall_tokens` at ~4 chars/token, whole memories only) and the consent line when `remember`. After the summary commits, `memory.enabled` enqueues the job **`memory_remember`**: the transcript (latest 200 turns; masked like the scrub's deterministic pass when the tier is not `full`; the caller's lines only when `verbatim`) goes to the backend, which extracts facts with the agent's `pipeline.llm` / `workflow_llm` (OpenAI or OpenRouter at the registry's base URL, through the platform's guarded client); once per session; records `memory_stored`. `DELETE /v1/memory/subjects/{subject_id}` → `MemoryForgetOut {subject_id, forgotten, sessions_updated}` (every scope; 404 unknown, 503 `memory_unavailable` when the backend is missing, nothing deleted); `POST /v1/memory/purge` (`MemoryPurgeIn {confirm: true}`, 422 otherwise) → `MemoryPurgeOut {status: queued|nothing_to_purge, subjects, job_id}` deletes the memory key and the subject rows at once and the backend entries in the job **`memory_purge`**; `GET /v1/sessions/{id}/memory` → `SessionMemoryOut {enabled, subject_id, recall_status, recalled, store_status, store_reason, stored, forgotten_at}`. Forget, purge and the retention sweep (the sessions sweep, `retention_until` past) blank the `memories` of the affected sessions' `memory_recalled`/`memory_stored` events (`forgotten: true`) and record `memory_forgotten {reason: caller|workspace|retention}` on each. api-written events: `memory_recalled` (`MemoryRecalledEvent {status, count, memories, forgotten}`), `memory_stored` (`MemoryStoredEvent {status: stored|nothing_new|skipped|failed, count, memories, reason, forgotten}`), `memory_forgotten`. `/v1/memory/*` has no `ROUTE_POLICY` rule yet (admin, scope `*`). Validators (warnings): memory on without the backend installed (`memory.enabled`), or not verbatim without an OpenAI/OpenRouter model with a key (`memory.verbatim`).
+V5-40 (caller memory, D-V5-17; opt-in): `AgentConfig.memory: MemoryConfig {enabled=false, scope: agent|workspace = agent, retention_days=90 (1..3650), consent_line ≤ 500 | null, max_recall_tokens=400 (50..2000), verbatim=false}`. `POST /internal/v1/memory/recall` (service token; `MemoryRecallIn {session_id, caller_e164: E.164 | null}` → `MemoryRecallOut {status: recalled|empty|disabled|no_identity|unavailable|failed, memories ≤ 20 × ≤ 500 chars, newest first, remember}`): the api resolves the caller from the session (phone: `caller.from` inbound / `caller.to` outbound, else the hint; other channels: `participant_identity` unless platform-generated `user-xxxxxxxx` or the `<channel>-caller` placeholder), reads the backend within 3 s, masks the texts when `privacy.storage_tier != "full"` and records `memory_recalled`; `remember` is true when the session will be written (identity known, backend installed, `verbatim` or an OpenAI/OpenRouter model with a key). The worker appends the memories to the instructions inside `<untrusted source="memory">` (bounded by `max_recall_tokens` at ~4 chars/token, whole memories only) and the consent line when `remember`. After the summary commits, `memory.enabled` enqueues the job **`memory_remember`**: the transcript (latest 200 turns; masked like the scrub's deterministic pass when the tier is not `full`; the caller's lines only when `verbatim`) goes to the backend, which extracts facts with the agent's `pipeline.llm` / `workflow_llm` (OpenAI or OpenRouter at the registry's base URL, through the platform's guarded client); once per session; records `memory_stored`. `DELETE /v1/memory/subjects/{subject_id}` → `MemoryForgetOut {subject_id, forgotten, sessions_updated}` (every scope; 404 unknown, 503 `memory_unavailable` when the backend is missing, nothing deleted); `POST /v1/memory/purge` (`MemoryPurgeIn {confirm: true}`, 422 otherwise) → `MemoryPurgeOut {status: queued|nothing_to_purge, subjects, job_id}` deletes the memory key and the subject rows at once and the backend entries in the job **`memory_purge`**; `GET /v1/sessions/{id}/memory` → `SessionMemoryOut {enabled, subject_id, recall_status, recalled, store_status, store_reason, stored, forgotten_at}`. Forget, purge and the retention sweep (the sessions sweep, `retention_until` past) blank the `memories` of the affected sessions' `memory_recalled`/`memory_stored` events (`forgotten: true`) and record `memory_forgotten {reason: caller|workspace|retention}` on each. api-written events: `memory_recalled` (`MemoryRecalledEvent {status, count, memories, forgotten}`), `memory_stored` (`MemoryStoredEvent {status: stored|nothing_new|skipped|failed, count, memories, reason, forgotten}`), `memory_forgotten`. `/v1/memory/*`: reads `viewer` + `sessions:read`, writes (forget, purge) `admin` + `sessions:write` (`ROUTE_POLICY`); `GET /v1/sessions/{id}/memory` follows the sessions rule (`viewer` + `sessions:read`). Validators (warnings): memory on without the backend installed (`memory.enabled`), or not verbatim without an OpenAI/OpenRouter model with a key (`memory.verbatim`).
 
 V5-32 (answering-machine detection, warm transfer, the handoff block; migration `v5_007_telephony_amd` adds the nullable `calls.amd_result`, `.transfer_mode`, `.transfer_summary`): `AgentConfig.telephony.amd: AmdConfig {enabled=false, on_machine: hangup|leave_message = hangup, message ≤ 1000, ivr_detection=false}` and `TransferTarget.mode: cold|warm = cold`. `CallOut` gains `amd_result` (`human`, `machine-ivr`, `machine-vm`, `machine-unavailable`, `uncertain` — livekit-agents 1.8.3 `AMDCategory`; `null` = no detection ran), `transfer_mode` and `transfer_summary`. `POST /internal/v1/telephony/calls/report` (`CallReportIn`) gains `status: "transferred"` and `amd_result`, `transfer_mode`, `transfer_to`, `transfer_summary`: the verdict is stored once (a later report never overwrites it) and a `machine-*` verdict queues the new webhook **`call.voicemail`** (`data` = the `call.*` fields plus `amd_result`, same `call_event` outbox as `call.started/ended`); `transferred` moves the row forward (a warm transfer never passes through the SIP REFER route) and keeps the mode, target and summary (a cold fallback keeps its summary here instead of speaking it, D-V5-21). `ResolvedAgentConfig.warm_transfer: WarmTransferRoute {trunk_id, caller_id, targets} | null` — filled only for a phone session on a LiveKit Cloud connection with exactly one synced outbound trunk, naming the `warm` targets the dialing policy allows at resolve time (the worker dials those itself; `null` = every transfer is cold). Worker events: `voicemail` (`VoicemailEvent {result, action: hangup|leave_message|navigate, message_left}`, machine verdicts only) and `transfer` (`TransferEvent`: the V2-17 `{to, ok, status, reason}` plus `mode` (what ran), `requested_mode` (the target's), `target` (label), `outcome: connected|transferred|timeout|declined|refused|failed`, `summary`); a warm request that falls back also records `info` ("Warm transfer is not available (…); transferring directly."). `transfer_call` gains an optional `summary` argument. Validators (warnings): a `warm` target off LiveKit Cloud or without exactly one outbound line (`telephony.transfer_targets[i].mode`), `amd.enabled` without an outbound line or SIP, or with a realtime/half-cascade pipeline (`telephony.amd.enabled`), `leave_message` without `message` (a "Tip:" at `telephony.amd.message`). The `handoff` block (`HandoffBlockConfig {show_queue, show_agent_name}`, `HandoffBlockState {status: idle|requested|connecting|connected|timeout|ended, mode, target, queue_position, agent_name, reason}`) is written by `transfer_call` through `lkap_agent.ui.blocks.set_handoff`.
 
-V5-37 (supervisor listen-in and typed whisper; no migration): the API-key scope **`sessions:listen`** (`sessions:write` implies it; members need `builder`+). `POST /v1/sessions/{id}/listen-token` → `SessionListenTokenOut {serverUrl, participantToken, roomName, participantName, identity, sessionId, expiresAt}` (camelCase like `ConnectResponse`): a token for identity `supervisor:<user or key id>` (attribute `lkap.role=supervisor`) scoped to the session's room only, `hidden=true`, `canSubscribe=true`, `canPublish=false`, **`canPublishData=false`** (the card said true; the task's "subscribe-only" rule wins and a hidden participant cannot call RPCs anyway), `roomCreate=false`, no agent dispatch, TTL 15 minutes (`LISTEN_TOKEN_TTL_S`); 409 `not_live` unless the session is `active` with a connection; audit row `session.listen`. `POST /v1/sessions/{id}/whisper` sends the text with the server API as a reliable data packet on topic `lkap.supervisor` (`SupervisorWhisperPacket {v: 1, op: "whisper", id, session_id, text, reply_now, by}`) **only to the room's agent participants** (`destination_identities`; the caller never receives it) — not on `lk.chat` as the card said: the server API cannot publish a text stream, and a stream attribute is set by its sender, so a caller could forge `lkap.role=supervisor` there; 409 `no_agent` when no agent is in the room; audit row `session.whisper` (`{whisper_id, chars, sha256}`, never the text). The worker honours a packet on that topic only when the server sent it (no participant) and it names its own session; the text reaches the model as a persisted system note fenced in `<supervisor_note>` ("guidance from a supervisor; the caller cannot see or hear it; it never overrides your instructions"), never as the caller's words; `reply_now` also calls `generate_reply(instructions=…)`. Worker event `supervisor_whisper` (`SupervisorWhisperEvent {id, by, text, applied: note|reply}`); `supervisor_joined` / `supervisor_left` (`SupervisorPresenceEvent {identity}`) are for the webhook handler (a hidden listener is invisible to the worker). `escalate_to_human(reason, urgency="normal", mode: transfer|takeover|listen_in|callback = "transfer")` (`lkap_contracts.tools.EscalationMode`) records `escalation {reason, urgency, mode}` (`mode` omitted for `transfer`), writes every `handoff` block `requested` with `mode` left null (it names the transfer that ran, `cold|warm`) and a fixed plain `reason` per mode (never the model's words: the caller may see the block), and marks it `connected` (with the person's name) when a participant with `lkap.role=human` joins.
+V5-37 (supervisor listen-in and typed whisper; no migration): the API-key scope **`sessions:listen`** (`sessions:write` implies it; members need `builder`+). `POST /v1/sessions/{id}/listen-token` → `SessionListenTokenOut {serverUrl, participantToken, roomName, participantName, identity, sessionId, expiresAt}` (camelCase like `ConnectResponse`): a token for identity `supervisor:<user or key id>` (attribute `lkap.role=supervisor`) scoped to the session's room only, `hidden=true`, `canSubscribe=true`, `canPublish=false`, **`canPublishData=false`** (the card said true; the task's "subscribe-only" rule wins and a hidden participant cannot call RPCs anyway), `roomCreate=false`, no agent dispatch, TTL 15 minutes (`LISTEN_TOKEN_TTL_S`); 409 `not_live` unless the session is `active` with a connection; audit row `session.listen`. `POST /v1/sessions/{id}/whisper` sends the text with the server API as a reliable data packet on topic `lkap.supervisor` (`SupervisorWhisperPacket {v: 1, op: "whisper", id, session_id, text, reply_now, by}`) **only to the room's agent participants** (`destination_identities`; the caller never receives it) — not on `lk.chat` as the card said: the server API cannot publish a text stream, and a stream attribute is set by its sender, so a caller could forge `lkap.role=supervisor` there; 409 `no_agent` when no agent is in the room; audit row `session.whisper` (`{whisper_id, chars, sha256}`, never the text). The worker honours a packet on that topic only when the server sent it (no participant) and it names its own session; the text reaches the model as a persisted system note fenced in `<supervisor_note>` ("guidance from a supervisor; the caller cannot see or hear it; it never overrides your instructions"), never as the caller's words; `reply_now` also calls `generate_reply(instructions=…)`. Worker event `supervisor_whisper` (`SupervisorWhisperEvent {id, by, text, applied: note|reply}`); `supervisor_joined` / `supervisor_left` (`SupervisorPresenceEvent {identity}`) are for the webhook handler (a hidden listener is invisible to the worker). `escalate_to_human(reason, urgency="normal", mode: transfer|takeover|listen_in|callback = "transfer")` (`lkap_contracts.tools.EscalationMode`) records `escalation {reason, urgency, mode}` (`mode` omitted for `transfer`), writes every `handoff` block `requested` with `mode` left null (it names the transfer that ran, `cold|warm`) and a fixed plain `reason` per mode (never the model's words: the caller may see the block), and marks it `connected` (with the person's name) when a participant with `lkap.role=human` joins. Late listener snapshot (ask #252, worker side only; V5-43): the worker answers `UiSnapshotRequestPacket {v: 1, op: "snapshot", session_id}` on `lkap.supervisor` (server-sent, its own session only) by republishing a full `UiSnapshot`; the api does not send it yet (ask #308), so a listener waits for the next periodic snapshot.
 
 V5-39 (guardrails; opt-in, no migration): `AgentConfig.guardrails: GuardrailsConfig {input, output, tool_output: list[Rule] (≤ 20 each, names unique per list), on_trip: interrupt|end_call|escalate = interrupt, safe_reply (≤ 500; a default line), model: ProviderRef | null, budget_ms=300 (50..2000)}` (`lkap_contracts.guardrails`); `Rule` is discriminated by `kind`: `RegexRule {kind: "regex", name ≤ 60, pattern ≤ 300, ignore_case=true}`, `ClassifierRule {kind: "classifier", name, prompt ≤ 1000}` (what the text must not do, in plain words), `ProviderRule {kind: "provider", name, provider: "openai_moderation", categories: [OpenAI moderation category] (empty = anything flagged), credential_id | null}`. Validators (`config_service.guardrails_issues`; a save with an error is refused with 422 and the issue on the field): a pattern that does not compile, or that repeats a repeated group (`(a+)+`), → error at `guardrails.<stage>[i].pattern`; a classifier rule with no `guardrails.model`, no `pipeline.workflow_llm` and no cascaded `pipeline.llm` → error at `guardrails.<stage>[i]`; a moderation rule without an OpenAI key (its own `credential_id`, else the agent's own OpenAI key) → error, one key for every moderation rule; `guardrails.model` is checked like a pipeline `llm` slot, and set with no classifier rule → warning; `on_trip=escalate` with `escalate_to_human` switched off → warning. Session resolve: `ResolvedAgentConfig.builtin_providers` gains `guardrails_llm` (`guardrails.model` resolved with its key, only with a classifier rule) and `guardrails_moderation` (`{api_key}` only; OpenAI's own endpoint). Worker: input rules in `on_user_turn_completed` (regex first; model rules overlap the knowledge and vision injection; a trip speaks the safe reply and raises `StopResponse`, so the caller's turn is neither kept nor answered), and for a realtime model with server-side turns on the committed caller message in parallel (a trip interrupts); output rules in `Agent.transcription_node`, sentence by sentence while the text streams through untouched (a trip → `session.interrupt(force=True)` while that reply still plays, then the safe reply) — not on `conversation_item_added` as the card said, which fires after playout; tool-output rules on every result of `run_with_policy` (`tools.execution.guard_tool_output`; built-in, HTTP, connected-app and opted-in pack tools; MCP toolsets are not covered yet), a trip replacing the result with a fixed "withheld" line that carries the safe reply. `end_call` ends the job once the safe reply has played; `escalate` calls `escalate_to_human(reason="A guardrail tripped (<rule>).", urgency="high")` (never the caller's words). Fail directions: regex rules cannot time out; classifier and moderation rules **fail open** past `budget_ms`, on an error or without a key. Events: `guardrail` (`GuardrailEvent {stage: input|output|tool_output, rule, kind, action: interrupt|end_call|escalate|replaced, excerpt_hash, excerpt | null, categories, tool | null, latency_ms}`; `excerpt_hash` is a keyed hash with a per-session random key, `excerpt` ≤ 120 characters only when `privacy.storage_tier == "full"`) and `guardrail_timeout` (`GuardrailTimeoutEvent {stage, rule, kind, reason: timeout|error|unavailable, budget_ms}`). The activity feed gets a row with `ActivityEvent.kind = "guardrail"` (`source="guardrail"`, `detail {stage, rule, action}`); `kind` is `null` on every other row.
 
@@ -938,7 +1021,7 @@ V5-39 (guardrails; opt-in, no migration): `AgentConfig.guardrails: GuardrailsCon
 **Emission rules (DECISIONS-W2 §D-W3-1).**
 - Platform-owned types are emitted only by the worker: `session_started`, `agent_state`, `user_turn`, `agent_turn`, `tool_call_started/updated/ended`, `tool_reply`, `workflow_run`, `metrics`, `error`, `info`, `session_ended`. A pack must not emit them.
 - Packs and tools may emit `escalation` (`{reason: str, urgency: "low"|"normal"|"high"}`) and `info` (`{message: str}`) via `PackSessionContext.record_event(event_type, payload)` (§8). Any other type is stored as-is by the api (`SessionEventIn.type` is a plain `str`) and rendered generically by the console; packs should prefix custom types with their pack id (`insurance_claim.route_changed`) so they never collide with platform types.
-- `escalate_to_human` emits `escalation{reason, urgency}` right after `set_status("Escalated", "warning")`.
+- `escalate_to_human` emits `escalation{reason, urgency, mode?}` (`mode` since V5-37, left out for `transfer`) right after `set_status("Escalated", "warning")`.
 - The insurance pack emits `escalation` on the route transition into `emergency_escalation` (not on every subsequent run), payload `{"reason": "claim routed to emergency_escalation", "urgency": "high", "route": <route>}`.
 
 ---
@@ -1076,23 +1159,55 @@ class HttpToolDefinition(BaseModel):
     silent_reply: bool = False
 
 
+class McpNoAuth(BaseModel):
+    kind: Literal["none"] = "none"
+
+
+class McpHeaderAuth(BaseModel):
+    kind: Literal["header"] = "header"
+    headers: dict[str, str] = {}  # {{ secret.NAME }} allowed
+    credential_id: str | None = None  # an http-tool-secret bag
+
+
+class McpOAuthAuth(BaseModel):  # V5-14
+    kind: Literal["oauth"] = "oauth"
+    credential_id: str | None = None  # the mcp-oauth credential once signed in
+    registration: Literal["auto", "preregistered"] = "auto"
+    client_id: str | None = None  # pre-registered clients only
+    client_secret_ref: str | None = None  # accepted and ignored (ask #112)
+    scopes: list[str] | None = None
+    subject: Literal["workspace", "agent"] = "workspace"
+
+
+McpAuth = Annotated[McpNoAuth | McpHeaderAuth | McpOAuthAuth, Field(discriminator="kind")]  # V5-09
+
+
 class McpServerDefinition(BaseModel):
     kind: Literal["mcp"] = "mcp"
     name: str
-    url: str  # streamable HTTP endpoint
-    headers: dict[str, str] = {}  # {{ secret.NAME }} allowed
-    credential_id: str | None = None
+    url: str  # streamable HTTP endpoint; host policy in §3 (V5-09)
+    auth: McpAuth = McpNoAuth()
+    headers: dict[str, str] = {}  # deprecated mirror of auth.headers
+    credential_id: str | None = None  # deprecated mirror of auth.credential_id
     allowed_tools: list[str] | None = None
     timeout_s: float = 5
     sse_read_timeout_s: float = 300
+    tool_options: dict[str, ToolExecution] = {}  # per MCP tool (keys within allowed_tools when set); V4-12
+    origin: McpServerOrigin | None = None  # {provider, kind: server|router, remote_id, config_hash}; V5-47
+    cached_tools: list[McpToolSnapshot] | None = None  # <= 200; stored by POST /v1/tools/{id}/test (V5-09)
+    cached_at: datetime | None = None
 
 
-ToolDefinition = Annotated[HttpToolDefinition | McpServerDefinition, Field(discriminator="kind")]
+ToolDefinition = Annotated[
+    HttpToolDefinition | McpServerDefinition | ProviderToolDefinition, Field(discriminator="kind")
+]
 ```
 
-Note on tool secrets: `ProviderKind` includes `"secret_bag"`; the registry entry `http-tool-secret` (`kind="secret_bag"`, `requires_credential=true`, free-form `NAME=value` secret pairs in the console) is what `credential_id` points to for HTTP/MCP tools. The api substitutes `{{ secret.NAME }}` in `headers`/`url`/`body_template` when building `ResolvedAgentConfig.tools`, so the worker never sees credential ids or the vault.
+`ProviderToolDefinition` (V5-47, a connected app's action) is described in §3 "Apps on agents".
 
-Agent-side construction (`lkap_agent.tools.declarative`): `function_tool(_http_handler_for(defn), raw_schema={"name": defn.name, "description": defn.description, "parameters": defn.parameters})` where `async def handler(raw_arguments: dict[str, object], context: RunContext) -> str`. MCP: `mcp.MCPServerHTTP(url=..., headers=..., transport_type="streamable_http", allowed_tools=..., timeout=..., sse_read_timeout=...)`.
+Note on tool secrets: `ProviderKind` includes `"secret_bag"`; the registry entry `http-tool-secret` (`kind="secret_bag"`, `requires_credential=true`, free-form `NAME=value` secret pairs in the console) is what `credential_id` points to for HTTP/MCP tools. The api substitutes `{{ secret.NAME }}` in an HTTP tool's `headers`/`url`/`body_template`, in an MCP server's `auth.headers` (mirrored in `headers`) and in a provider tool's `headers` when it builds `ResolvedAgentConfig.tools`, so the worker never sees credential ids or the vault. An `oauth` MCP server's `mcp-oauth` credential is never put into `tools`: the worker gets a short-lived access token through `ResolvedAgentConfig.mcp_oauth` and the internal token route (§3, V5-16).
+
+Agent-side construction (`lkap_agent.tools.declarative`): `function_tool(_http_handler_for(defn), raw_schema={"name": defn.name, "description": defn.description, "parameters": defn.parameters})` where `async def handler(raw_arguments: dict[str, object], context: RunContext) -> str`. MCP: one `MCPToolset(id=f"mcp_{defn.name}", mcp_server=GuardedMCPServerHTTP(url=..., transport_type="streamable_http", allowed_tools=..., headers=<resolved header auth>, timeout=..., sse_read_timeout=..., transport_factory=<the guarded transport, wrapped in ApiIssuedBearer for an oauth server>), tool_options={name: MCPToolOptions(...)})` per server (`lkap_agent.tools.mcp_client`, `.mcp_auth`), passed in `Agent(tools=[...])`; results are fenced as `mcp:<server>`. Provider tools: `lkap_agent.tools.provider` (§3).
 
 ---
 
@@ -1238,8 +1353,6 @@ export function useAgentRpc(): { perform: (action: AgentAction) => Promise<Agent
 export function useUiRequests(handler: (req: UiRequest) => Promise<UiRequestResult>): void;            // useRpc("lkap.ui.request", handler)
 ```
 
----
-
 ### Live captions and per-turn language (V5-31)
 
 `TranscriptTurn.language: str | None` (the caller's detected language on a user turn, the reply language on an assistant turn; `null` when unknown) is stored with the summary and returned by `GET /v1/sessions/{id}`. `BlockType` gains `captions` (`CaptionsBlockConfig {show_user=true, show_agent=true, target_language: str|null (reserved for translation), position: block|bottom}`, `CaptionsBlockState {language, target_language}`). While the panel has a `captions` block the worker streams `CaptionSegment {v:1, id, speaker: user|agent, text, final, language, ts}` JSON on the text-stream topic `lkap.captions` (`TOPIC_UI_CAPTIONS`): an utterance keeps its `id` from the first interim to its final; the agent's words come from a text output after RoomIO's transcription (`TextOutputOptions(next_in_chain=...)`), so they are timed to the audio; interim agent captions at most every 0.25 s. Captions are never stored in `UiState`.
@@ -1262,9 +1375,7 @@ export function useUiRequests(handler: (req: UiRequest) => Promise<UiRequestResu
 
 **`describe_panel`** (registered with any block): one entry per block — `id`, `type`, `title`, `status` and a type summary (counts and at most eight short labels; a link's site, never its URL; never bytes) — as JSON inside `<untrusted source="panel">`, at most 4000 characters (details dropped first, then trailing blocks, with a note).
 
-**Late listener snapshot (asks #252).** `UiSnapshotRequestPacket {v: 1, op: "snapshot", session_id}` on the supervisor topic, server-sent, makes the worker republish a full `UiSnapshot`.
-
-#### The AG-UI state adapter (`lkap_contracts.ui_agui`)
+### The AG-UI state adapter (`lkap_contracts.ui_agui`)
 
 Our wire protocol is unchanged; the adapter maps it to AG-UI's state events (`STATE_SNAPSHOT {snapshot}`, `STATE_DELTA {delta: RFC 6902 ops}`; docs.ag-ui.com concepts/state, concepts/events and the Python SDK's `EventType`, checked 2026-09-27). Each LKAP op is mapped against the state before it:
 
@@ -1278,6 +1389,8 @@ Our wire protocol is unchanged; the adapter maps it to AG-UI's state events (`ST
 | `upsert` | `replace <path>/<i>` on a match, else `add <path>/-` |
 
 `/activity` overflow past 30 rows becomes `remove /activity/0`. Inbound, `agui_delta_to_patch(delta, state)` accepts only `/blocks/<id>/…` paths (and `from` paths), checks every op against the state the previous ops left (a failed `test` or a missing target refuses the whole delta), and maps `add`/`replace` on a member → `set`, `add …/-` → `append`, `remove` → `remove`, `replace` at an index → `set`, and an insert at an index, `move` and `copy` → `set` of the changed container. `AgentAction {action: "state_delta", payload: StateDeltaPayload {type?: "STATE_DELTA", delta (1–100 ops)}}` is **opt-in**: the worker refuses it unless the agent's `PanelLayout.accept_state_delta` is on (default off; ruling on ask #309; the refusal is logged once per session). When on, it applies such a delta from the caller's page to blocks `update_block` may write **except `kb_citations` and `custom`** (the worker's `STATE_DELTA_BLOCK_TYPES`): every touched block is validated before one `UiPatch` is sent; a requestable block, a link, consent, upload, captions or handoff block is refused. Round trips (`LKAP → AG-UI → LKAP` and `AG-UI → LKAP → AG-UI`) are pinned on the web fixture layout (`contracts/tests/test_ui_agui.py`).
+
+---
 
 ## 11. Frontend panel registry (`web/src/panels/registry.ts`)
 

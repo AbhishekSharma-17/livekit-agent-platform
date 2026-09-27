@@ -33,7 +33,7 @@ Base URL `https://backend.composio.dev/api/v3.1`; header `x-api-key` (or `x-user
 
 Not on any page read: the query parameters appended on a **failed** callback (assume `status=error` plus a message; handle any non-`success` value as failure), whether the MCP server URL accepts a `user_id` that has no connected account yet (expect a tool-side auth error), and the shape of `tool_router/session.tools` / `execute` filters (allow/deny lists). Each is a one-line check in V5-18's brief.
 
-## 2. Decisions (D-V5-C1 … D-V5-C12)
+## 2. Decisions (D-V5-C1 … D-V5-C13)
 
 - **D-V5-C1 — Composio is a `tool_provider` registry entry and a vault credential, like any provider.** `providers.json` gains `composio` (`kind: "tool_provider"`, `secret_fields: [api_key]`, `test_call: GET /api/v3.1/toolkits?limit=1`, `docs_url`, `notes` naming the managed-app surcharge). The key is a `Credential` row; `POST /v1/credentials/{id}/test` works unchanged; workspace enablement through `workspace_providers`. One key per workspace (a second key is allowed but the console says which one is default).
 - **D-V5-C2 — Subject per workspace by default: `user_id = "ws:<workspace_id>"`; per agent (`agent:<agent_id>`) is a checkbox in the Connect dialog.** Rationale: on a call the systems belong to the business (research T §2.2). Per-end-user is out of v5 (D-V5-5). The subject is stored on the connection row and every execute, MCP URL and Tool Router session uses it verbatim. *Amended by R-V5-13 (V5-53):* a subject may hold several accounts of one app; each connection row carries a `label` and `is_default` (exactly one per subject and app), and its Composio `alias` is the label's slug (unique per subject and app, a counter on a collision).

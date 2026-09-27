@@ -333,6 +333,22 @@ describe("PanelComposer", () => {
     expect(latest?.config.panel.blocks.map((b) => b.id)).toEqual(["status", "notes", "activity"]);
   });
 
+  it("the 'let the page update the panel' switch (#315) is off by default, writes accept_state_delta on, and drops the key entirely off (no jargon in the copy)", () => {
+    stubFetch();
+    render(<Harness agent={agent()} />);
+    const toggle = screen.getByRole("switch", { name: "Let the page update the panel" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect("accept_state_delta" in (latest?.config.panel ?? {})).toBe(false);
+    // Plain wording only — never the mechanism's own vocabulary.
+    expect(screen.queryByText(/AG-UI|RFC|delta/i)).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(latest?.config.panel.accept_state_delta).toBe(true);
+
+    fireEvent.click(toggle);
+    expect("accept_state_delta" in (latest?.config.panel ?? {})).toBe(false);
+  });
+
   it("edits a block's title, id and config from the generated form", async () => {
     stubFetch();
     const a = agent({
@@ -435,6 +451,33 @@ describe("PanelComposer", () => {
     // Unticking the last remaining type is refused (the schema needs at least one).
     fireEvent.click(anyPhoto);
     expect(latest?.config.panel.blocks[0].config).toMatchObject({ accept: ["image/*"] });
+  });
+
+  it("edits a link block's allowed sites (the hosts config field, V5-44)", () => {
+    stubFetch();
+    const a = agent({
+      config: {
+        instructions: "Hi",
+        pipeline: { mode: "cascaded" },
+        panel: { panel_id: "composite", layout: "side", blocks: [{ id: "payment", type: "link", config: {}, order: 0 }] },
+      },
+    });
+    render(<Harness agent={a} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Link/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add site" }));
+    fireEvent.change(screen.getByLabelText("Site 1"), { target: { value: "example.com" } });
+    expect(latest?.config.panel.blocks[0].config).toEqual({ allowed_hosts: ["example.com"] });
+    expect(screen.queryByText(/Write it like example.com/)).toBeNull();
+
+    // A malformed entry still saves as typed (a save-time 422 is the signal,
+    // ask #310) but shows an inline hint while it stands.
+    fireEvent.change(screen.getByLabelText("Site 1"), { target: { value: "not a host" } });
+    expect(latest?.config.panel.blocks[0].config).toEqual({ allowed_hosts: ["not a host"] });
+    expect(screen.getByText(/Write it like example.com or \*\.example.com/)).toBeTruthy();
+
+    // Removing the only site drops the key entirely (empty = "nothing set").
+    fireEvent.click(screen.getByRole("button", { name: "Remove site 1" }));
+    expect(latest?.config.panel.blocks[0].config).toEqual({});
   });
 
   it("switches the layout and the panel, keeping ui_panel_id in step", () => {

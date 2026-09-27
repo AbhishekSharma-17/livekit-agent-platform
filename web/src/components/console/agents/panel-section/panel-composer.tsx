@@ -148,6 +148,41 @@ function PanelChoice({ value, onChange }: { value: string; onChange: (id: string
   );
 }
 
+/**
+ * `PanelLayout.accept_state_delta` (V5-43, ask #309's ruling; the switch is
+ * ask #315): off by default, and lets the caller's own web page (embedded
+ * outside a call, or a custom front end) change what some display blocks
+ * show — the AG-UI `STATE_DELTA` mechanism underneath is never named in the
+ * copy (§0.1: no "AG-UI", "RFC" or "delta"). Turning it off removes the key
+ * entirely rather than writing `false`, so a form that never touched this
+ * switch still saves byte-identical to one with no `accept_state_delta` at
+ * all (`tests/panel-state-delta-flag.test.ts`'s "stays absent" case).
+ */
+function StateDeltaSwitch({ panel, onChange }: { panel: PanelLayoutForm; onChange: (next: PanelLayoutForm) => void }) {
+  const id = React.useId();
+  const checked = panel.accept_state_delta === true;
+  return (
+    <Field
+      inline
+      label="Let the page update the panel"
+      htmlFor={id}
+      hint="Lets your web page change what the details, text, steps, table, document, gallery, video and cards blocks show."
+    >
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={(next) => {
+          if (next) {
+            onChange({ ...panel, accept_state_delta: true });
+            return;
+          }
+          onChange({ panel_id: panel.panel_id, layout: panel.layout, blocks: panel.blocks });
+        }}
+      />
+    </Field>
+  );
+}
+
 function LayoutChoice({ value, onChange }: { value: "side" | "wide"; onChange: (layout: "side" | "wide") => void }) {
   const name = React.useId();
   const options = [
@@ -529,6 +564,7 @@ export function PanelComposer({ agent }: { agent: AgentOut }) {
                 <p className="text-sm font-medium leading-5">Layout</p>
                 <LayoutChoice value={panel.layout} onChange={(layout) => update({ ...panel, layout })} />
               </div>
+              <StateDeltaSwitch panel={panel} onChange={update} />
             </SectionRow>
             <SectionRow className="flex flex-col gap-4" data-issue-path="panel.blocks">
               <BlockList panel={panel} onChange={update} idErrors={idErrors} />

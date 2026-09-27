@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { BlockSpecForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import type { TableColumn } from "@/contracts/lkap-contracts";
 import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, LANGUAGE_OPTIONS, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
+import { normalizeHost } from "@/panels/blocks/types";
 
 import { setBlockConfig, updateBlock } from "./composer-model";
 
@@ -267,6 +268,73 @@ function MultiselectEditor({
   );
 }
 
+/**
+ * A site allowlist (`link.allowed_hosts`, `cards.image_hosts`, V5-43;
+ * ask #310): one row per site, `example.com` or `*.example.com`, validated
+ * with the same `normalizeHost` the renderers re-check against
+ * (`@/panels/blocks/types`, a TS port of `ui_protocol.normalize_host`). An
+ * empty list is allowed here — `setBlockConfig` drops the key entirely, and
+ * a `link` block with no `allowed_hosts` at all 422s at save
+ * (`panel.blocks[i].config.allowed_hosts`) until at least one is added,
+ * which is the save-time signal ask #310 asks for rather than a client-side
+ * "add one to save" block.
+ */
+function HostsEditor({
+  idBase,
+  value,
+  onChange,
+}: {
+  idBase: string;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2" data-slot="hosts-editor">
+      {value.map((host, index) => {
+        const trimmed = host.trim();
+        const invalid = trimmed !== "" && normalizeHost(trimmed) === null;
+        return (
+          <div key={index} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Input
+                aria-label={`Site ${index + 1}`}
+                aria-invalid={invalid ? true : undefined}
+                placeholder="example.com"
+                value={host}
+                onChange={(event) => onChange(value.map((h, i) => (i === index ? event.target.value : h)))}
+                className="max-w-64 font-mono text-sm"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove site ${index + 1}`}
+                onClick={() => onChange(value.filter((_, i) => i !== index))}
+              >
+                <Icon as={Trash2Icon} size="sm" />
+              </Button>
+            </div>
+            {invalid && (
+              <p className="text-danger-text text-[0.75rem]">Write it like example.com or *.example.com</p>
+            )}
+          </div>
+        );
+      })}
+      <Button
+        id={`${idBase}-add-site`}
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start"
+        onClick={() => onChange([...value, ""])}
+      >
+        <Icon as={PlusIcon} size="sm" />
+        Add site
+      </Button>
+    </div>
+  );
+}
+
 function ConfigFieldControl({
   field,
   id,
@@ -355,6 +423,7 @@ function ConfigFieldControl({
       );
     case "columns":
     case "multiselect":
+    case "hosts":
       return null; // rendered as a fieldset by `BlockConfigForm`
   }
 }
@@ -458,6 +527,28 @@ export function BlockConfigForm({
                 idBase={id}
                 options={field.options}
                 value={isStringArray(value) ? value : [...field.default]}
+                onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+              />
+              {field.hint ? (
+                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                  {field.hint}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        }
+        if (field.kind === "hosts") {
+          return (
+            <fieldset
+              key={field.key}
+              className="flex flex-col gap-1.5"
+              aria-describedby={`${id}-hint`}
+              data-issue-path={`panel.blocks.${index}.config.${field.key}`}
+            >
+              <legend className="mb-1.5 text-sm leading-5 font-medium">{field.label}</legend>
+              <HostsEditor
+                idBase={id}
+                value={isStringArray(value) ? value : []}
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (

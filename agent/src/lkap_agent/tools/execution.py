@@ -64,18 +64,21 @@ __all__ = [
     "ResolvedExecution",
     "ToolActivityFeed",
     "ToolKind",
+    "ToolOutputGuard",
     "ToolPolicy",
     "attach_policy",
     "bind_agent_policy",
     "blocking_policy",
     "cancel_running",
     "flow_mode_of",
+    "guard_tool_output",
     "policies_for",
     "policy_of",
     "register_policies",
     "resolve_execution",
     "run_with_policy",
     "sdk_version_at_least",
+    "set_tool_output_guard",
     "tool_flags",
     "tool_label",
     "wrap_tool",
@@ -441,6 +444,42 @@ async def _fillers(context: RunContext[Any], resolved: ResolvedExecution) -> Asy
         yield
 
 
+#: A session's tool-output guardrail (V5-39): ``(tool name, result) -> result to hand the model``.
+ToolOutputGuard = Callable[[str, Any], Awaitable[Any]]
+
+#: Per session: the tool-output guardrail :func:`guard_tool_output` applies.
+_OUTPUT_GUARDS: weakref.WeakKeyDictionary[Any, ToolOutputGuard] = weakref.WeakKeyDictionary()
+
+
+def set_tool_output_guard(session: Any, guard: ToolOutputGuard | None) -> None:
+    """Register (or with ``None`` remove) ``session``'s tool-output guardrail (V5-39)."""
+    try:
+        if guard is None:
+            _OUTPUT_GUARDS.pop(session, None)
+        else:
+            _OUTPUT_GUARDS[session] = guard
+    except TypeError:
+        logger.debug("tool-output guard not registered: the session cannot be weakly referenced")
+
+
+async def guard_tool_output(context: RunContext[Any], result: Any) -> Any:
+    """The tool-output hook of :func:`run_with_policy` (V5-39): the result the model should read.
+
+    Without a guard for the call's session (every agent without ``guardrails.tool_output``
+    rules) the result is returned as it is, with no await on anything else. The guard never
+    raises (``guardrails.SessionGuardrails.guard_tool_output`` fails open).
+    """
+    session = getattr(context, "session", None)
+    try:
+        guard = _OUTPUT_GUARDS.get(session) if session is not None else None
+    except TypeError:
+        guard = None
+    if guard is None:
+        return result
+    name = getattr(getattr(context, "function_call", None), "name", None)
+    return await guard(name if isinstance(name, str) else "tool", result)
+
+
 async def run_with_policy(
     context: RunContext[Any],
     resolved: ResolvedExecution,
@@ -457,7 +496,9 @@ async def run_with_policy(
     * Fillers (any mode) are spoken on the idle timer, only when the session has a TTS.
 
     Every non-fast-path run is bounded by ``max_duration_s`` (a ``ToolError`` naming
-    the label); cancelling the call cancels the inner work task.
+    the label); cancelling the call cancels the inner work task. Every result, on
+    every path, goes through :func:`guard_tool_output` (V5-39's tool-output
+    guardrail; a no-op for a session without one).
 
     Args:
         context: The call's ``RunContext``.
@@ -471,7 +512,7 @@ async def run_with_policy(
         ToolError: The work ran longer than ``max_duration_s``, or raised one itself.
     """
     if resolved.mode == "blocking" and not resolved.fillers:
-        return await work()
+        return await guard_tool_output(context, await work())
 
     loop = asyncio.get_running_loop()
     deadline = loop.time() + resolved.max_duration_s
@@ -487,11 +528,12 @@ async def run_with_policy(
         if resolved.mode == "auto":
             done, _ = await asyncio.wait({task}, timeout=resolved.auto_threshold_ms / 1000)
             if done:
-                return task.result()
+                return await guard_tool_output(context, task.result())
         if resolved.mode != "blocking":
             await context.update(resolved.announce)
         async with _fillers(context, resolved):
-            return await asyncio.wait_for(task, timeout=max(0.0, deadline - loop.time()))
+            result = await asyncio.wait_for(task, timeout=max(0.0, deadline - loop.time()))
+        return await guard_tool_output(context, result)
     except TimeoutError as exc:
         raise ToolError(f"{resolved.label} took longer than {resolved.max_duration_s:g} seconds") from exc
     except asyncio.CancelledError:

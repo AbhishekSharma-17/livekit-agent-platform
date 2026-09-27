@@ -45,7 +45,17 @@
   also asks for a reply at once. Each whisper is logged and recorded as a
   `supervisor_whisper` event. A listener joins hidden and cannot publish, so
   it is invisible here and RoomIO (linked to the caller's identity) never
-  takes a turn from it.
+  takes a turn from it,
+* runs the agent's guardrails (V5-39, :mod:`lkap_agent.guardrails`) at three
+  hook points: the caller's turn in :meth:`PlatformAgent.on_user_turn_completed`
+  (regex first; model checks overlap the knowledge and vision injection; a
+  trip speaks the safe reply and raises `StopResponse`) and, for a realtime
+  model with server-side turns, the committed message in
+  :meth:`PlatformAgent.on_conversation_item`; the agent's reply in
+  :meth:`PlatformAgent.transcription_node` (sentence by sentence, the text
+  passing through untouched; a trip interrupts with `interrupt(force=True)`);
+  and a tool's result through `tools.execution.guard_tool_output`. An agent
+  without rules takes none of these paths.
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -57,7 +67,7 @@ import asyncio
 import contextlib
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal
 
@@ -69,6 +79,7 @@ from livekit.agents import (
     ChatMessage,
     ConversationItemAddedEvent,
     FunctionToolsExecutedEvent,
+    ModelSettings,
     StopResponse,
     ToolExecutionUpdatedEvent,
 )
@@ -95,6 +106,7 @@ from packs.base import (
     UiChannel,
 )
 
+from lkap_agent.guardrails import SessionGuardrails, Trip, ensure_session_guardrails
 from lkap_agent.knowledge import (
     INJECT_TIMEOUT_S,
     KNOWLEDGE_STATE_KEY,
@@ -129,6 +141,7 @@ from lkap_agent.tools.execution import (
     register_policies,
     resolve_execution,
     sdk_version_at_least,
+    set_tool_output_guard,
     wrap_tool,
 )
 from lkap_agent.tools.untrusted import UNTRUSTED_RULE, strip_control
@@ -446,6 +459,7 @@ class PlatformAgent(Agent):
         self._init_blocks()
         self._init_languages()
         self._wire_supervisor()
+        self._guardrails = self._init_guardrails()
 
     # ------------------------------------------------------------- tool policy
 
@@ -695,6 +709,53 @@ class PlatformAgent(Agent):
             return
         if released:
             logger.debug("barge-in cancelled pending requests", block_ids=released)
+
+    # ------------------------------------------------------------- guardrails (V5-39)
+
+    def _init_guardrails(self) -> SessionGuardrails | None:
+        """The session's guardrails (created once; flow nodes share them), or `None` without rules.
+
+        Registers the tool-output guard on the session when there are `tool_output` rules.
+        Never raises: a guardrail that cannot be set up leaves the agent as it was.
+        """
+        try:
+            guard = ensure_session_guardrails(self._ctx)
+        except Exception:
+            logger.warning("guardrails could not be set up", exc_info=True)
+            return None
+        if guard is not None and guard.has("tool_output"):
+            set_tool_output_guard(self._ctx.session, guard.guard_tool_output)
+        return guard
+
+    @property
+    def guardrails(self) -> SessionGuardrails | None:
+        """The session's guardrails (`None` when the agent has no rules)."""
+        return self._guardrails
+
+    def _speaking_agent(self) -> Any:
+        """The agent now in charge of the session (a flow's current node), else this one."""
+        try:
+            current = self.session.current_agent
+        except Exception:
+            return self
+        return current if current is not None else self
+
+    async def _stop_turn(self, guard: SessionGuardrails, trip: Trip) -> None:
+        """An input trip: speak the safe reply (and `on_trip`), then drop the turn (`StopResponse`)."""
+        await guard.respond(self, trip, interrupt=False)
+        raise StopResponse()
+
+    def transcription_node(self, text: AsyncIterable[Any], model_settings: ModelSettings) -> Any:
+        """The SDK's transcription node, with the output guardrail watching the text (V5-39).
+
+        livekit-agents 1.8.3 calls it for every reply (pipeline, `say()`, realtime). The
+        text is passed through unchanged; without `output` rules the SDK default runs on
+        the original stream, exactly as before.
+        """
+        guard = self._guardrails
+        if guard is None or not guard.has("output"):
+            return Agent.default.transcription_node(self, text, model_settings)
+        return Agent.default.transcription_node(self, guard.watch_output(self, text), model_settings)
 
     # ------------------------------------------------------ supervisor whisper (V5-37)
 
@@ -1071,10 +1132,31 @@ class PlatformAgent(Agent):
         pattern LiveKit recommends for RAG), the frame is attached to
         `new_message` so the model sees it alongside what the user just said,
         and the pack hook runs last with both already in place.
+
+        Input guardrails (V5-39) come first: regex rules before anything else; model
+        rules start as a task that overlaps the injection and is awaited before the
+        time note and the pack hook. A trip speaks the safe reply and raises
+        `StopResponse`, so the SDK neither keeps the caller's message nor replies.
         """
-        await self._detect_language(turn_ctx, new_message)
-        await self._inject_knowledge(turn_ctx, new_message)
-        await self._inject_vision(turn_ctx, new_message)
+        guard = self._guardrails
+        pending: asyncio.Task[Trip | None] | None = None
+        if guard is not None and guard.has("input"):
+            text = new_message.text_content or ""
+            trip = guard.check_input_regex(text, new_message.id)
+            if trip is not None:
+                await self._stop_turn(guard, trip)
+            pending = guard.start_input_models(text)
+        try:
+            await self._detect_language(turn_ctx, new_message)
+            await self._inject_knowledge(turn_ctx, new_message)
+            await self._inject_vision(turn_ctx, new_message)
+            if pending is not None and guard is not None:
+                trip = await pending
+                if trip is not None:
+                    await self._stop_turn(guard, trip)
+        finally:
+            if pending is not None and not pending.done():
+                pending.cancel()
         await self._refresh_time(turn_ctx)
         try:
             await self._pack.on_user_turn_completed(self._ctx, turn_ctx, new_message)
@@ -1093,6 +1175,9 @@ class PlatformAgent(Agent):
         and empty (e.g. tool-only) assistant messages are ignored.
         """
         item = ev.item
+        if isinstance(item, ChatMessage) and item.role == "user":
+            self._guard_committed_input(item)
+            return
         if not isinstance(item, ChatMessage) or item.role != "assistant":
             return
         state = session_languages(self._ctx)
@@ -1105,6 +1190,16 @@ class PlatformAgent(Agent):
         task = asyncio.create_task(self._run_agent_turn_hook(text, bool(item.interrupted)))
         self._hook_tasks.add(task)
         task.add_done_callback(self._hook_tasks.discard)
+
+    def _guard_committed_input(self, item: ChatMessage) -> None:
+        """Check a caller's message the turn hook did not see (realtime server-side turns), in parallel."""
+        guard = self._guardrails
+        if guard is None or not guard.has("input"):
+            return
+        try:
+            guard.watch_committed_input(self._speaking_agent(), item.text_content or "", item.id)
+        except Exception:
+            logger.debug("committed input not checked", exc_info=True)
 
     async def _run_agent_turn_hook(self, text: str, interrupted: bool) -> None:
         try:
@@ -1348,6 +1443,9 @@ class PlatformAgent(Agent):
         state = self._ctx.userdata.get(KNOWLEDGE_STATE_KEY)
         if isinstance(state, KnowledgeState):
             state.close()
+        if self._guardrails is not None:
+            with contextlib.suppress(Exception):
+                await self._guardrails.aclose()
         try:
             await self._pack.on_session_end(self._ctx, reason)
         except Exception:

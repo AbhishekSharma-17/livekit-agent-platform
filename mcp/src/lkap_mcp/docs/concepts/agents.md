@@ -199,6 +199,32 @@ options: ["auto", "home"]}` and `{name: "injury", type: "boolean"}`. They need
 `qa.enabled` (`agent_validate` warns otherwise); a field the conversation did
 not settle is `null`.
 
+## Guardrails
+
+`config.guardrails` checks what the caller says (`input`), what the agent
+says (`output`, sentence by sentence as it speaks) and what a tool returns
+(`tool_output`). No rules by default: nothing is checked. Up to 20 rules per
+list, of three kinds:
+
+- `{"kind": "regex", "name": "Card numbers", "pattern": "\\b(?:\\d[ -]?){13,19}\\b"}`
+  — microseconds; a pattern that does not compile, or repeats a group that
+  already repeats, is refused on save with the reason on its `pattern`.
+- `{"kind": "classifier", "name": "No medical advice", "prompt": "Gives
+  medical advice."}` — judged by `guardrails.model` (a small, fast model),
+  else the workflow model; required when the agent has neither.
+- `{"kind": "provider", "name": "Harmful", "provider": "openai_moderation",
+  "categories": ["violence"]}` — OpenAI moderation with the rule's
+  `credential_id`, else the agent's own OpenAI key; empty `categories` trips
+  on anything flagged.
+
+`on_trip`: `interrupt` (default) stops the agent and says `safe_reply`;
+`end_call` also hangs up after it; `escalate` also calls `escalate_to_human`.
+A tripped tool result is replaced by a line that withholds it. Model checks
+get `budget_ms` (300); past it, or on a failure, the text goes through and a
+`guardrail_timeout` event says so — keep hard lines in regex rules. Each trip
+is a `guardrail` event (stage, rule, action, a hash; the text only on the
+`full` storage tier) and an activity row. MCP results are not checked yet.
+
 ## Prompt vs. flow
 
 A **prompt** agent is one system prompt (`config.instructions`) plus tools
@@ -218,4 +244,5 @@ checks structure and references without writing anything.
 
 `AgentConfig`, `AgentCreate`, `AgentUpdate`, `AgentOut`, `AgentPublicOut`,
 `AgentLimits`, `ConfigVersionOut`, `ValidationResult`, `PackManifest`,
-`StarterTemplate`, `TemplateOut`, `TemplatesResponse`, `Issue`.
+`StarterTemplate`, `TemplateOut`, `TemplatesResponse`, `Issue`, `GuardrailsConfig`,
+`GuardrailEvent`, `GuardrailTimeoutEvent`.

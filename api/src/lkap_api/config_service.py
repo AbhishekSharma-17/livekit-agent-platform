@@ -83,8 +83,16 @@ from lkap_contracts.compliance import (
     Jurisdiction,
 )
 from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
+from lkap_contracts.guardrails import (
+    ClassifierRule,
+    GuardrailsConfig,
+    GuardrailStage,
+    ProviderRule,
+    RegexRule,
+)
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import (
+    REGISTRY,
     ProviderKind,
     ProviderSpec,
     WorkerImage,
@@ -518,6 +526,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(language_issues(ctx))
     findings.extend(agent_test_issues(ctx))
     findings.extend(amd_and_transfer_issues(ctx))
+    findings.extend(guardrails_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1672,6 +1681,7 @@ def builtin_credential_ids(config: AgentConfig) -> set[str]:
             ids.add(ref.credential_id)
     if config.tools.notify_team is not None:
         ids.add(config.tools.notify_team.credential_id)
+    ids |= guardrail_credential_ids(config)
     return ids
 
 
@@ -1703,6 +1713,273 @@ def resolve_builtin_providers(
                 python_class="",
                 model=None,
                 kwargs={"webhook_url": webhook_url},
+            )
+    resolved.update(resolve_guardrail_providers(config, secrets_by_credential))
+    return resolved
+
+
+# ------------------------------------------------------------------------ guardrails (V5-39)
+
+#: The registry homes whose keys are OpenAI keys (a moderation rule can use any of them).
+OPENAI_KEY_HOMES: Final[frozenset[str]] = frozenset(
+    credential_home(spec)
+    for spec in REGISTRY
+    if spec.vendor == "OpenAI"
+    and spec.credential_provider is None
+    and any(field.name == "api_key" for field in spec.secret_fields)
+)
+
+#: The provider a moderation key is resolved as (``kwargs["api_key"]``).
+MODERATION_KEY_PROVIDER: Final[str] = "openai-llm"
+
+#: An unbounded repeat inside a group: ``+``, ``*`` or ``{n,}``.
+_UNBOUNDED_RE: Final[re.Pattern[str]] = re.compile(r"[+*]|\{\d*,\}")
+
+CLASSIFIER_NEEDS_MODEL_MESSAGE = (
+    "A rule judged by a language model needs a model: choose one for the guardrails, or set the "
+    "agent's workflow model."
+)
+MODERATION_NEEDS_KEY_MESSAGE = (
+    "The moderation service needs an OpenAI key: pick one on the rule, or give the agent an OpenAI model."
+)
+ESCALATE_DISABLED_MESSAGE = (
+    "Guardrails escalate to a person, but 'escalate_to_human' is switched off; a trip will only stop "
+    "the agent and say the safe reply."
+)
+SLOW_PATTERN_MESSAGE = (
+    "This pattern repeats a group that already repeats, which can take very long on long text; "
+    "simplify it (for example, drop the outer repeat)."
+)
+_STAGES: Final[tuple[GuardrailStage, ...]] = ("input", "output", "tool_output")
+
+
+def nested_repeat(pattern: str) -> bool:
+    """Whether ``pattern`` repeats a group that holds an unbounded repeat (``(a+)+``, ``(\\w*\\s)*``).
+
+    Such a pattern can backtrack for a very long time on a long text, and Python's ``re``
+    has no timeout. A small scanner, not a full parser: it tracks groups, skips escapes
+    and character classes, and flags a group containing ``+``, ``*`` or ``{n,}`` that is
+    itself followed by ``+``, ``*`` or ``{``.
+    """
+    stack: list[bool] = []
+    index = 0
+    in_class = False
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "\\":
+            index += 2
+            continue
+        if in_class:
+            in_class = char != "]"
+        elif char == "[":
+            in_class = True
+        elif char == "(":
+            stack.append(False)
+        elif char == ")" and stack:
+            inner = stack.pop()
+            if inner and pattern[index + 1 : index + 2] in ("+", "*", "{"):
+                return True
+            if stack:
+                stack[-1] = stack[-1] or inner
+        elif stack and _UNBOUNDED_RE.match(pattern, index):
+            stack[-1] = True
+        index += 1
+    return False
+
+
+def _classifier_has_model(config: AgentConfig) -> bool:
+    pipeline = config.pipeline
+    return (
+        config.guardrails.model is not None
+        or pipeline.workflow_llm is not None
+        or (pipeline.mode == "cascaded" and pipeline.llm is not None)
+    )
+
+
+def _agent_openai_key(config: AgentConfig, credential_providers: Mapping[str, str] | None) -> str | None:
+    """The credential id of the agent's own OpenAI key (``guardrails.model`` or a pipeline slot)."""
+    pipeline = config.pipeline
+    refs = [
+        config.guardrails.model,
+        pipeline.llm,
+        pipeline.workflow_llm,
+        pipeline.realtime,
+        pipeline.stt,
+        pipeline.tts,
+    ]
+    for ref in refs:
+        if ref is None or not ref.credential_id:
+            continue
+        if credential_providers is not None:
+            home = credential_providers.get(ref.credential_id)
+        else:
+            home = credential_home(ref.provider_id)
+        if home in OPENAI_KEY_HOMES:
+            return ref.credential_id
+    return None
+
+
+def _moderation_key(config: AgentConfig, credential_providers: Mapping[str, str] | None = None) -> str | None:
+    """The one OpenAI key the moderation rules use: the first rule's own key, else the agent's."""
+    for stage in _STAGES:
+        for rule in config.guardrails.rules(stage):
+            if isinstance(rule, ProviderRule) and rule.credential_id:
+                return rule.credential_id
+    return _agent_openai_key(config, credential_providers)
+
+
+def _has_rule(guardrails: GuardrailsConfig, kind: type[RegexRule | ClassifierRule | ProviderRule]) -> bool:
+    return any(isinstance(rule, kind) for stage in _STAGES for rule in guardrails.rules(stage))
+
+
+def guardrails_issues(ctx: ValidationContext) -> list[Issue]:
+    """The checks of ``guardrails`` (V5-39). A built-in check called from :func:`validate`.
+
+    * A regex rule whose pattern does not compile → error at its ``pattern``, with the
+      reason; one that repeats a repeated group (slow on long text) → error.
+    * A classifier rule when neither ``guardrails.model``, ``pipeline.workflow_llm`` nor a
+      cascaded ``pipeline.llm`` is set → error (the workflow model would otherwise fall back
+      to LiveKit Inference, which not every connection has).
+    * A moderation rule without an OpenAI key (its own, else the agent's) → error; a rule
+      key that is unknown or not an OpenAI key → error; rules naming two different keys →
+      error (one key per agent).
+    * ``guardrails.model``: an unknown provider, not a language model, not offered, not
+      installed, switched off, or a key problem → error, as for a pipeline slot; set
+      without any classifier rule → warning (unused).
+    * ``on_trip == "escalate"`` with ``escalate_to_human`` switched off → warning.
+
+    Returns:
+        Issues at ``guardrails.<stage>[i].pattern``, ``guardrails.<stage>[i]``,
+        ``guardrails.<stage>[i].credential_id``, ``guardrails``, ``guardrails.model`` and
+        ``guardrails.on_trip``.
+    """
+    config = ctx.config
+    guardrails = config.guardrails
+    findings = _Findings()
+    if not guardrails.active and guardrails.model is None:
+        return []
+    rule_keys: set[str] = set()
+    moderation_paths: list[str] = []
+    for stage in _STAGES:
+        for index, rule in enumerate(guardrails.rules(stage)):
+            path = f"guardrails.{stage}[{index}]"
+            if isinstance(rule, RegexRule):
+                try:
+                    re.compile(rule.pattern, re.IGNORECASE if rule.ignore_case else 0)
+                except re.error as exc:
+                    findings.add("error", f"{path}.pattern", f"the pattern does not compile: {exc}")
+                    continue
+                if nested_repeat(rule.pattern):
+                    findings.add("error", f"{path}.pattern", SLOW_PATTERN_MESSAGE)
+            elif isinstance(rule, ClassifierRule):
+                if not _classifier_has_model(config):
+                    findings.add("error", path, CLASSIFIER_NEEDS_MODEL_MESSAGE)
+            else:
+                moderation_paths.append(path)
+                if rule.credential_id:
+                    _check_openai_key(ctx, f"{path}.credential_id", rule.credential_id, findings)
+                    rule_keys.add(rule.credential_id)
+    if len(rule_keys) > 1:
+        findings.add(
+            "error",
+            "guardrails",
+            "every moderation rule must use the same OpenAI key; pick one key for all of them",
+        )
+    if moderation_paths and _moderation_key(config, ctx.credential_providers) is None:
+        for path in moderation_paths:
+            findings.add("error", path, MODERATION_NEEDS_KEY_MESSAGE)
+    if guardrails.model is not None:
+        _check_guardrails_model(ctx, guardrails.model, findings)
+        if not _has_rule(guardrails, ClassifierRule):
+            findings.add(
+                "warning",
+                "guardrails.model",
+                "no rule is judged by a language model, so this model is unused",
+            )
+    if (
+        guardrails.active
+        and guardrails.on_trip == "escalate"
+        and "escalate_to_human" in config.tools.builtin_disabled
+    ):
+        findings.add("warning", "guardrails.on_trip", ESCALATE_DISABLED_MESSAGE)
+    return findings.issues
+
+
+def _check_openai_key(ctx: ValidationContext, path: str, credential_id: str, findings: _Findings) -> None:
+    owner = ctx.credential_providers.get(credential_id)
+    if owner is None:
+        findings.add("error", path, f"unknown credential '{credential_id}'")
+    elif owner not in OPENAI_KEY_HOMES:
+        findings.add("error", path, f"credential '{credential_id}' is a '{owner}' key, not an OpenAI key")
+
+
+def _check_guardrails_model(ctx: ValidationContext, model: ProviderRef, findings: _Findings) -> None:
+    path = "guardrails.model"
+    spec = _spec_or_none(model.provider_id)
+    if spec is None:
+        findings.add("error", path, f"unknown provider '{model.provider_id}'")
+        return
+    if spec.kind != "llm":
+        findings.add("error", path, f"provider '{spec.id}' is a {spec.kind} provider, expected llm")
+        return
+    if spec.availability != "available":
+        findings.add(
+            "error", path, f"provider '{spec.id}' is not available yet (availability={spec.availability})"
+        )
+    elif not installed_on(spec, ctx.connection):
+        findings.add("error", path, _not_installed_message(spec, ctx.connection))
+    if spec.id in ctx.disabled_provider_ids:
+        findings.add("error", path, f"provider '{spec.id}' is switched off for this workspace")
+    _validate_credential(path, model, spec, ctx.credential_providers, findings)
+    _validate_fields(path, model, spec, findings)
+
+
+def guardrail_credential_ids(config: AgentConfig) -> set[str]:
+    """The credential ids the guardrails need at session time: the model's and the moderation key."""
+    guardrails = config.guardrails
+    ids: set[str] = set()
+    if not guardrails.active:
+        return ids
+    model = guardrails.model
+    if model is not None and model.credential_id and _has_rule(guardrails, ClassifierRule):
+        ids.add(model.credential_id)
+    if _has_rule(guardrails, ProviderRule):
+        key = _moderation_key(config)
+        if key:
+            ids.add(key)
+    return ids
+
+
+def resolve_guardrail_providers(
+    config: AgentConfig, secrets_by_credential: Mapping[str, dict[str, str]]
+) -> dict[BuiltinProviderSlot, ResolvedProvider]:
+    """``builtin_providers["guardrails_llm"]`` / ``["guardrails_moderation"]`` (V5-39). **Contains secrets.**
+
+    ``guardrails_llm`` resolves ``guardrails.model`` like a pipeline slot, only when a
+    classifier rule uses it. ``guardrails_moderation`` is the moderation key resolved as an
+    ``openai-llm`` provider (its ``api_key`` only; OpenAI's own endpoint), only when a
+    moderation rule exists. A missing key leaves the slot out: the worker then lets the
+    text through and records ``guardrail_timeout`` (fail open).
+    """
+    guardrails = config.guardrails
+    resolved: dict[BuiltinProviderSlot, ResolvedProvider] = {}
+    if not guardrails.active:
+        return resolved
+    model = guardrails.model
+    if (
+        model is not None
+        and _has_rule(guardrails, ClassifierRule)
+        and _spec_or_none(model.provider_id) is not None
+    ):
+        resolved["guardrails_llm"] = resolve_provider_ref(
+            model, secrets_by_credential.get(model.credential_id or "", {})
+        )
+    if _has_rule(guardrails, ProviderRule):
+        key = _moderation_key(config)
+        api_key = secrets_by_credential.get(key or "", {}).get("api_key")
+        if api_key:
+            resolved["guardrails_moderation"] = ResolvedProvider(
+                provider_id=MODERATION_KEY_PROVIDER, python_class="", model=None, kwargs={"api_key": api_key}
             )
     return resolved
 

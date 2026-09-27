@@ -12,13 +12,16 @@ import httpx
 import pytest
 from conftest import create_agent, inference_config
 from lkap_contracts.agent_config import (
+    AgentConfig,
     KnowledgeConfig,
     NotifyTeamConfig,
+    PipelineConfig,
     ProviderRef,
     ResolvedAgentConfig,
     ToolsConfig,
 )
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
+from lkap_contracts.guardrails import GuardrailsConfig
 from lkap_contracts.providers import get
 from lkap_contracts.telephony import SmsTarget, TelephonyConfig, TransferTarget
 from lkap_contracts.tools import (
@@ -29,12 +32,19 @@ from lkap_contracts.tools import (
 )
 
 from lkap_api.config_service import (
+    CLASSIFIER_NEEDS_MODEL_MESSAGE,
+    ESCALATE_DISABLED_MESSAGE,
+    MODERATION_NEEDS_KEY_MESSAGE,
     ValidationContext,
     apps_issues,
     builtin_credential_ids,
     curated_tool_issues,
+    guardrail_credential_ids,
+    guardrails_issues,
+    nested_repeat,
     register_validator,
     resolve_builtin_providers,
+    resolve_guardrail_providers,
     resolve_tool_definition,
     validate,
     validate_agent_config,
@@ -1259,3 +1269,189 @@ async def test_the_resolved_session_carries_the_builtin_providers(
     assert "web_search" not in resolved.resolved
     agent_view = await admin_client.get(f"/v1/agents/{agent['id']}")
     assert "tvly-resolved-only" not in agent_view.text
+
+
+# ------------------------------------------------------------------------ guardrails (V5-39)
+
+_GUARD_CREDENTIALS = {"k-openai": "openai-llm", "k-tts": "openai-tts", "k-tavily": "tavily-search"}
+_CARD = {"kind": "regex", "name": "Card numbers", "pattern": r"\b(?:\d[ -]?){13,19}\b"}
+_MEDICAL = {"kind": "classifier", "name": "No medical advice", "prompt": "Gives medical advice."}
+
+
+def _guard_config(mode: str = "cascaded", **guardrails: Any) -> AgentConfig:
+    config = inference_config()
+    if mode == "realtime":
+        config.pipeline = PipelineConfig(mode="realtime", realtime=ProviderRef(provider_id="openai-realtime"))
+    config.guardrails = GuardrailsConfig.model_validate(guardrails)
+    return config
+
+
+def _guard_issues(config: AgentConfig) -> list[tuple[str, str, str]]:
+    ctx = ValidationContext(config=config, credential_providers=_GUARD_CREDENTIALS)
+    return [(i.severity, i.path, i.message) for i in guardrails_issues(ctx)]
+
+
+def test_guardrails_unset_raise_nothing_and_resolve_nothing() -> None:
+    config = inference_config()
+
+    assert _guard_issues(config) == []
+    assert guardrail_credential_ids(config) == set()
+    assert resolve_guardrail_providers(config, {}) == {}
+
+
+def test_a_valid_regex_and_classifier_on_a_cascaded_agent_pass() -> None:
+    assert _guard_issues(_guard_config(input=[_CARD], output=[_MEDICAL])) == []
+
+
+@pytest.mark.parametrize(
+    ("pattern", "fragment"),
+    [("(unclosed", "does not compile"), ("[a-", "does not compile"), (r"(\d+)+$", "repeats a group")],
+)
+def test_a_bad_pattern_is_an_error_on_its_field(pattern: str, fragment: str) -> None:
+    issues = _guard_issues(_guard_config(input=[{"kind": "regex", "name": "x", "pattern": pattern}]))
+
+    assert [(severity, path) for severity, path, _ in issues] == [("error", "guardrails.input[0].pattern")]
+    assert fragment in issues[0][2]
+
+
+@pytest.mark.parametrize(
+    ("pattern", "slow"),
+    [
+        (r"(a+)+", True),
+        (r"(\w*\s)*", True),
+        (r"(?:x{2,})+", True),
+        (r"((ab)+c)*", True),
+        (r"\b(?:\d[ -]?){13,19}\b", False),
+        (r"\d{3}-\d{2}-\d{4}", False),
+        (r"(ab){2,}", False),
+        (r"[(+]+", False),
+        (r"\(a+\)+", False),
+    ],
+)
+def test_nested_repeat_flags_only_repeated_unbounded_groups(pattern: str, slow: bool) -> None:
+    assert nested_repeat(pattern) is slow
+
+
+def test_a_classifier_without_a_model_is_an_error() -> None:
+    issues = _guard_issues(_guard_config(mode="realtime", output=[_MEDICAL]))
+
+    assert issues == [("error", "guardrails.output[0]", CLASSIFIER_NEEDS_MODEL_MESSAGE)]
+
+
+def test_a_classifier_on_a_realtime_agent_passes_with_a_guardrails_model() -> None:
+    config = _guard_config(
+        mode="realtime",
+        output=[_MEDICAL],
+        model={"provider_id": "openai-llm", "credential_id": "k-openai", "model": "gpt-4.1-mini"},
+    )
+
+    assert _guard_issues(config) == []
+
+
+@pytest.mark.parametrize(
+    ("model", "fragment"),
+    [
+        ({"provider_id": "nope-llm"}, "unknown provider"),
+        ({"provider_id": "openai-tts", "credential_id": "k-tts"}, "expected llm"),
+        ({"provider_id": "openai-llm"}, "requires a credential"),
+        ({"provider_id": "openai-llm", "credential_id": "k-tavily"}, "belongs to provider"),
+    ],
+)
+def test_a_bad_guardrails_model_is_an_error(model: dict[str, Any], fragment: str) -> None:
+    issues = _guard_issues(_guard_config(output=[_MEDICAL], model=model))
+
+    assert any(
+        severity == "error" and path == "guardrails.model" and fragment in message
+        for severity, path, message in issues
+    ), issues
+
+
+def test_an_unused_guardrails_model_is_a_warning() -> None:
+    config = _guard_config(input=[_CARD], model={"provider_id": "openai-llm", "credential_id": "k-openai"})
+
+    assert _guard_issues(config) == [
+        ("warning", "guardrails.model", "no rule is judged by a language model, so this model is unused")
+    ]
+
+
+def test_a_moderation_rule_needs_an_openai_key() -> None:
+    rule = {"kind": "provider", "name": "Harmful"}
+
+    assert _guard_issues(_guard_config(input=[rule])) == [
+        ("error", "guardrails.input[0]", MODERATION_NEEDS_KEY_MESSAGE)
+    ]
+    assert _guard_issues(_guard_config(input=[{**rule, "credential_id": "k-tts"}])) == []
+    wrong = _guard_issues(_guard_config(input=[{**rule, "credential_id": "k-tavily"}]))
+    assert ("error", "guardrails.input[0].credential_id") in [(s, p) for s, p, _ in wrong]
+
+
+def test_a_moderation_rule_uses_the_agents_own_openai_key() -> None:
+    config = _guard_config(input=[{"kind": "provider", "name": "Harmful"}])
+    config.pipeline.llm = ProviderRef(provider_id="openai-llm", credential_id="k-openai", model="gpt-4.1")
+
+    assert _guard_issues(config) == []
+    assert guardrail_credential_ids(config) == {"k-openai"}
+
+
+def test_moderation_rules_must_share_one_key() -> None:
+    config = _guard_config(
+        input=[{"kind": "provider", "name": "A", "credential_id": "k-openai"}],
+        output=[{"kind": "provider", "name": "B", "credential_id": "k-tts"}],
+    )
+
+    assert ("error", "guardrails") in [(s, p) for s, p, _ in _guard_issues(config)]
+
+
+def test_escalate_with_the_tool_switched_off_warns() -> None:
+    config = _guard_config(input=[_CARD], on_trip="escalate")
+    config.tools = ToolsConfig(builtin_disabled=["escalate_to_human"])
+
+    assert _guard_issues(config) == [("warning", "guardrails.on_trip", ESCALATE_DISABLED_MESSAGE)]
+
+
+def test_validate_runs_the_guardrail_checks() -> None:
+    config = _guard_config(input=[{"kind": "regex", "name": "x", "pattern": "(bad"}])
+
+    result = validate_agent_config(config, credential_providers={})
+
+    assert not result.ok
+    assert any(issue.path == "guardrails.input[0].pattern" for issue in result.issues)
+
+
+def test_guardrail_keys_are_resolved_as_builtin_providers() -> None:
+    config = _guard_config(
+        output=[_MEDICAL],
+        tool_output=[{"kind": "provider", "name": "Harmful", "credential_id": "k-mod"}],
+        model={"provider_id": "openai-llm", "credential_id": "k-model", "model": "gpt-4.1-mini"},
+    )
+
+    assert guardrail_credential_ids(config) == {"k-model", "k-mod"}
+    assert builtin_credential_ids(config) >= {"k-model", "k-mod"}
+    resolved = resolve_builtin_providers(
+        config, {"k-model": {"api_key": "sk-model-not-real"}, "k-mod": {"api_key": "sk-mod-not-real"}}
+    )
+
+    assert resolved["guardrails_llm"].model == "gpt-4.1-mini"
+    assert resolved["guardrails_llm"].kwargs["api_key"] == "sk-model-not-real"
+    assert resolved["guardrails_moderation"].kwargs == {"api_key": "sk-mod-not-real"}
+
+
+def test_a_missing_moderation_key_leaves_the_slot_out() -> None:
+    config = _guard_config(tool_output=[{"kind": "provider", "name": "Harmful", "credential_id": "k-gone"}])
+
+    assert "guardrails_moderation" not in resolve_builtin_providers(config, {})
+
+
+async def test_saving_a_bad_pattern_is_refused_with_the_issue_on_its_field(
+    admin_client: httpx.AsyncClient,
+) -> None:
+    config = _guard_config(input=[{"kind": "regex", "name": "Cards", "pattern": "(unclosed"}])
+
+    response = await admin_client.post(
+        "/v1/agents", json={"name": "Guarded", "config": json.loads(config.model_dump_json())}
+    )
+
+    assert response.status_code == 422, response.text
+    issues = response.json()["error"]["details"]["issues"]
+    assert [issue["path"] for issue in issues] == ["guardrails.input[0].pattern"]
+    assert "does not compile" in issues[0]["message"]

@@ -28,6 +28,7 @@ from lkap_contracts.agent_config import (
 )
 from lkap_contracts.migrate import default_panel_for
 from lkap_contracts.packs import PackManifest
+from sqlalchemy import text
 
 from lkap_api.bootstrap import bootstrap
 from lkap_api.db.guard import tenant_scope_guard
@@ -162,8 +163,26 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
         yield db
     finally:
         if postgres_url():
+            await _end_other_connections(db)
             await db.drop_all()
         await db.dispose()
+
+
+async def _end_other_connections(db: Database) -> None:
+    """End every other connection to the test database before `drop_all` (Postgres only).
+
+    A connection a test leaks while it is still inside a transaction keeps its locks, and
+    `DROP TABLE` then waits for it forever: the CI Postgres job hung for 75 min in the
+    teardown of `test_import_document_accepted_content_types_are_201[application/pdf]`.
+    """
+    async with db.engine.connect() as conn:
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+            )
+        )
+        await conn.commit()
 
 
 @pytest.fixture(autouse=True, scope="session")

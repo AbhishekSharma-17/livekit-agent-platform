@@ -68,7 +68,11 @@ whose `send_dtmf` / `transfer_call` tools join the tool pool and whose
 the callee to answer (`sip.callStatus == "active"`) right after
 `ctx.connect()`; a dial that fails (the api deletes the room) or outlasts
 `LKAP_SIP_ANSWER_TIMEOUT_S` ends the job with a `failed` summary and no spoken
-line. `TelephonySession.start()` runs once the session is up and `aclose()` in
+line. With `telephony.amd.enabled` (V5-32) an outbound job instead starts the
+session once the leg has *joined*, enters the answering-machine detector
+(`telephony.AmdRunner`, which holds the agent's speech), then waits for the
+answer; the verdict is acted on in a task after the start.
+`TelephonySession.start()` runs once the session is up and `aclose()` in
 the shutdown callback before the summary (bounded to 5 s). A phone leg never
 rejoins, so SIP jobs get no reconnect grace.
 """
@@ -131,12 +135,19 @@ from lkap_agent.session_builder import (
 )
 from lkap_agent.settings import DEFAULT_AGENT_NAME, Settings, get_settings
 from lkap_agent.telephony import (
+    AMD_USERDATA_KEY,
+    AmdRunner,
     TelephonySession,
+    amd_config_for,
+    amd_supported,
     apply_call_variables,
+    default_amd_factory,
+    hang_up,
     is_sip_channel,
     seed_variables,
     session_for,
     wait_for_answer,
+    wait_for_sip_participant,
 )
 from lkap_agent.text_mode import handle_agent_action as handle_text_mode_action
 from lkap_agent.tools.mcp_auth import McpOAuthBinding
@@ -505,6 +516,9 @@ class Deps:
     sleep: Callable[[float], Awaitable[None]] = _sleep
     #: Reads an Egress's state from LiveKit at shutdown; `None` disables the poll.
     egress_status: Callable[[str], Awaitable[EgressSnapshot | None]] | None = None
+    #: V5-32: builds the answering-machine detector of an outbound call (livekit-agents
+    #: `AMD` on the session's own LLM and transcripts); tests pass a fake.
+    amd_factory: Callable[..., Any] = default_amd_factory
 
     @classmethod
     def from_env(cls, proc_userdata: dict[Any, Any] | None = None) -> Deps:
@@ -775,6 +789,7 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         return
     if telephony is not None:
         telephony.start()
+    _run_amd_in_background(agent)
     # V4-12 / V5-07: one background player for `voice.thinking_sound` (blocking tool waits) and
     # `voice.ambient_sound` (the whole call); never on the text channel or without audio out.
     # The player is closed in the shutdown path.
@@ -1659,8 +1674,11 @@ async def _start(
         CalleeNotAnsweredError: The outbound callee never answered.
     """
     await ctx.connect()
+    amd = _amd_runner(ctx, plan, agent, deps, resolved)
     if resolved.channel == "sip_out":
-        answered = await wait_for_answer(ctx.room, timeout_s=deps.settings.sip_answer_timeout_s)
+        # V5-32: detection must listen before the answer, so wait only for the leg to join.
+        waiter = wait_for_sip_participant if amd is not None else wait_for_answer
+        answered = await waiter(ctx.room, timeout_s=deps.settings.sip_answer_timeout_s)
         if answered is None:
             raise CalleeNotAnsweredError("the callee never answered")
     _activate(agent)
@@ -1669,6 +1687,54 @@ async def _start(
     await deps.session_starter(
         session=plan.session, agent=agent, room=ctx.room, room_options=plan.room_options
     )
+    if amd is not None:
+        await amd.start()
+        if await wait_for_answer(ctx.room, timeout_s=deps.settings.sip_answer_timeout_s) is None:
+            await amd.aclose()
+            raise CalleeNotAnsweredError("the callee never answered")
+        agent.context.userdata[AMD_USERDATA_KEY] = amd
+
+
+def _amd_runner(
+    ctx: JobContextLike, plan: SessionPlan, agent: PlatformAgent, deps: Deps, resolved: ResolvedAgentConfig
+) -> AmdRunner | None:
+    """The answering-machine detector of an outbound call that asked for one (V5-32).
+
+    ``None`` on every other job, and on a pipeline whose LLM cannot classify a
+    greeting (a realtime model): the call then starts as before, with an event.
+    """
+    config = amd_config_for(resolved)
+    if config is None:
+        return None
+    if resolved.config.pipeline.mode != "cascaded" or not amd_supported(plan.session):
+        agent.context.record_event(
+            "info",
+            {"message": "Answering-machine detection needs a speech-to-text and language-model pipeline."},
+        )
+        return None
+
+    async def _hang_up(reason: str) -> None:
+        await hang_up(ctx, reason)
+
+    return AmdRunner(
+        session=plan.session,
+        config=config,
+        session_id=resolved.session_id,
+        participant_identity=resolved.participant_identity,
+        api=deps.config_client,
+        record_event=agent.context.record_event,
+        hang_up=_hang_up,
+        factory=deps.amd_factory,
+    )
+
+
+def _run_amd_in_background(agent: PlatformAgent) -> None:
+    """Act on the detector's verdict without holding up the rest of the start (V5-32)."""
+    amd = agent.context.userdata.get(AMD_USERDATA_KEY)
+    if not isinstance(amd, AmdRunner):
+        return
+    task = asyncio.ensure_future(amd.run())
+    agent.context.userdata[f"{AMD_USERDATA_KEY}.task"] = task  # keeps a reference until the job ends
 
 
 async def _start_avatar_or_degrade(

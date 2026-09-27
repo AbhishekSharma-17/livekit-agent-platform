@@ -463,7 +463,8 @@ def test_transfer_call_schema_lists_the_destinations() -> None:
     schema = build_legacy_openai_schema(_tools(session, ctx)["transfer_call"], internally_tagged=True)
 
     assert "Sales" in schema["description"]
-    assert set(schema["parameters"]["properties"]) == {"destination", "announcement"}
+    # V5-32: `summary` (the note for the person taking the call; warm briefing or the call row).
+    assert set(schema["parameters"]["properties"]) == {"destination", "announcement", "summary"}
 
 
 async def test_transfer_call_tool_announces_transfers_through_api_and_ends_job() -> None:
@@ -486,7 +487,19 @@ async def test_transfer_call_tool_announces_transfers_through_api_and_ends_job()
     assert ctx.session.said == ["Please hold while I transfer your call."]  # type: ignore[attr-defined]
     assert api.transfers == [("sess-1", "+15550001111", "sip_+15557654321")]
     assert ended == ["call transferred"]
-    assert ("transfer", {"to": "+15550001111", "ok": True, "status": "transferred", "reason": None}) in events
+    transfer = next(payload for kind, payload in events if kind == "transfer")
+    # The V2-17 keys stay; V5-32 adds how it ran (a cold target, run cold).
+    assert transfer == {
+        "to": "+15550001111",
+        "ok": True,
+        "status": "transferred",
+        "reason": None,
+        "mode": "cold",
+        "requested_mode": "cold",
+        "target": "Sales",
+        "outcome": "transferred",
+        "summary": None,
+    }
 
 
 async def test_transfer_call_tool_unknown_destination_is_refused_without_api_call() -> None:
@@ -538,7 +551,14 @@ async def test_transfer_call_tool_policy_refusal_tells_model_and_keeps_call() ->
     assert refusal in result
     assert ended == []
     assert api.transfers == [("sess-1", "+19005550100", "sip_+15557654321")]
-    assert ("transfer", {"to": "+19005550100", "ok": False, "status": "refused", "reason": refusal}) in events
+    transfer = next(payload for kind, payload in events if kind == "transfer")
+    assert {k: transfer[k] for k in ("to", "ok", "status", "reason", "outcome")} == {
+        "to": "+19005550100",
+        "ok": False,
+        "status": "refused",
+        "reason": refusal,
+        "outcome": "refused",
+    }
 
 
 # ------------------------------------------------------------------ assembly wiring

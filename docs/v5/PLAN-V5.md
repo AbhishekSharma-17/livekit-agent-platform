@@ -659,7 +659,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-26 | Opus + Fable | 6 | done (review) | | | |
 | V5-27 | Opus | 6 | merged | | | |
 | V5-28 | Sonnet | 6 | merged | | with V5-25's deferred keys (dev-stack walk not run in this session) | |
-| V5-29 | Opus | 7 | planned | | | |
+| V5-29 | Opus | 7 | merged | cdd5855 | | |
 | V5-30 | Opus | 7 | merged | 983faf7 | STT redaction deferred | |
 | V5-31 | Opus | 7 | planned | | Inference `multi` to confirm | |
 | V5-32 | Opus | 7 | planned | | deferred (telephony offline) | |

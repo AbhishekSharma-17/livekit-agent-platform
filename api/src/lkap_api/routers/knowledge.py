@@ -65,11 +65,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
-from lkap_api.db.models import KbDocument, KbEval, KnowledgeBase, utcnow
+from lkap_api.auth.ratelimit import RateLimiterDep, enforce
+from lkap_api.db.models import Job, KbDocument, KbEval, KnowledgeBase, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, ServiceDep, SettingsDep, VaultDep
-from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
+from lkap_api.errors import ApiError, ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.jobs.deps import JobsDep
-from lkap_api.jobs.kinds import KB_INGEST
+from lkap_api.jobs.kinds import KB_EVALUATE, KB_INGEST
 from lkap_api.jobs.service import JobsService
 from lkap_api.kb.embed import Embedder, check_kb_embedder, record_kb_embedder, resolve_embedder
 from lkap_api.kb.evals import (
@@ -84,6 +85,7 @@ from lkap_api.kb.evals import (
 from lkap_api.kb.ingest import (
     IMPORT_SUFFIX,
     ChunkingConfig,
+    UnsupportedMediaTypeError,
     fetch_import_source,
     import_policy,
     upload_storage_key,
@@ -126,6 +128,64 @@ MAX_EVAL_TEXT = KB_MAX_EVAL_TEXT
 
 #: The file types an upload is ingested as (the rest decode as UTF-8 text).
 SUPPORTED_UPLOADS = ".md, .txt, .csv, .json, .pdf, .docx, .pptx, .xlsx and .html"
+
+#: V5-30 (S5-30): the extensions an upload may have, and the media type each is stored and
+#: extracted as. The client's declared content type is never trusted; anything else is a 415.
+UPLOAD_MEDIA_TYPES: dict[str, str] = {
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".html": "text/html",
+    ".htm": "text/html",
+}
+
+#: V5-30 (S5-30): the extensions a url import's stored name may keep for each fetched media type.
+#: A user-chosen `filename` whose extension would pick another extractor (`x.docx` over a text
+#: body) gets the media type's own suffix appended instead.
+_IMPORT_EXTENSIONS: dict[str, frozenset[str]] = {
+    "application/pdf": frozenset({".pdf"}),
+    "application/json": frozenset({".json"}),
+    "text/html": frozenset({".html", ".htm"}),
+}
+#: Any other `text/*` body is read as text: these extensions (or none) keep it on the text path.
+_TEXT_IMPORT_EXTENSIONS: frozenset[str] = frozenset({"", ".md", ".markdown", ".txt", ".csv", ".json"})
+
+#: V5-30 (S5-30): storage quotas. Most documents one knowledge base holds ...
+MAX_DOCUMENTS_PER_KB = 1000
+#: ... and most stored bytes across every knowledge base of one workspace (2 GiB).
+MAX_WORKSPACE_KB_BYTES = 2 * 1024 * 1024 * 1024
+
+#: V5-30 (S5-28): re-index and evaluation runs one workspace may start per minute.
+KB_JOBS_PER_MIN = 20
+
+
+class KbQuotaExceededError(ApiError):
+    """409 — the knowledge base or the workspace is full (V5-30, S5-30)."""
+
+    status_code = 409
+    code = "quota_exceeded"
+
+
+def upload_media_type(filename: str) -> str:
+    """The media type an upload is stored and extracted as, from its extension alone (S5-30).
+
+    Raises:
+        UnsupportedMediaTypeError: 415 for an extension the knowledge base cannot ingest.
+    """
+    extension = PurePosixPath(filename.lower()).suffix
+    media = UPLOAD_MEDIA_TYPES.get(extension)
+    if media is None:
+        raise UnsupportedMediaTypeError(
+            f"cannot ingest a {extension or 'file without an extension'}; accepted: {SUPPORTED_UPLOADS}",
+            details={"extension": extension[:16] or None},
+        )
+    return media
 
 
 # --------------------------------------------------------------------------- response models (V5-01)
@@ -321,7 +381,55 @@ def import_filename(url: str, filename: str | None, mime: str) -> str:
     name = upload_basename(filename if filename else unquote(urlsplit(url).path))
     if "." not in name.strip("."):
         name += IMPORT_SUFFIX.get(mime, "")
+    # S5-30: the extension picks the extractor, so it must agree with what was fetched.
+    allowed = _IMPORT_EXTENSIONS.get(mime, _TEXT_IMPORT_EXTENSIONS)
+    if PurePosixPath(name.lower()).suffix not in allowed:
+        name += IMPORT_SUFFIX.get(mime, ".txt")
     return name
+
+
+async def _check_quota(db: AsyncSession, kb: KnowledgeBase, size: int) -> None:
+    """Refuse a document past the knowledge base's count or the workspace's byte quota (S5-30).
+
+    Raises:
+        KbQuotaExceededError: 409 with the limit in ``details``.
+    """
+    documents = (
+        await db.execute(select(func.count()).select_from(KbDocument).where(KbDocument.kb_id == kb.id))
+    ).scalar_one()
+    if documents >= MAX_DOCUMENTS_PER_KB:
+        raise KbQuotaExceededError(
+            f"this knowledge base already holds {MAX_DOCUMENTS_PER_KB} documents; delete some first",
+            details={"limit": "documents_per_kb", "max": MAX_DOCUMENTS_PER_KB},
+        )
+    used = (
+        await db.execute(
+            select(func.coalesce(func.sum(KbDocument.bytes), 0))
+            .join(KnowledgeBase, KnowledgeBase.id == KbDocument.kb_id)
+            .where(KnowledgeBase.workspace_id == kb.workspace_id)
+        )
+    ).scalar_one()
+    if int(used) + size > MAX_WORKSPACE_KB_BYTES:
+        raise KbQuotaExceededError(
+            "the workspace's knowledge bases are full; delete documents first",
+            details={"limit": "workspace_bytes", "max_bytes": MAX_WORKSPACE_KB_BYTES},
+        )
+
+
+async def _check_no_run_pending(db: AsyncSession, kb_id: str, *, kind: str, what: str) -> None:
+    """409 while a job of ``kind`` for this knowledge base is still queued or running (S5-28)."""
+    query = select(Job.id).where(
+        Job.kind == kind,
+        Job.status.in_(("pending", "running")),
+        Job.payload["kb_id"].as_string() == kb_id,
+    )
+    if kind == KB_INGEST:
+        query = query.where(Job.payload["reindex"].as_boolean().is_(True))
+    if (await db.execute(query.limit(1))).first() is not None:
+        raise ConflictError(
+            f"{what} of this knowledge base is already running; wait for it to finish",
+            details={"kb_id": kb_id},
+        )
 
 
 async def _store_and_enqueue(
@@ -338,7 +446,11 @@ async def _store_and_enqueue(
     """Create the ``pending`` document row, store the bytes and enqueue ingestion.
 
     Shared by the multipart upload and the url import.
+
+    Raises:
+        KbQuotaExceededError: 409 past the document or byte quota (S5-30).
     """
+    await _check_quota(db, kb, len(data))
     document = KbDocument(
         kb_id=kb.id, filename=filename, mime=mime, bytes=len(data), status="pending", progress=0.0
     )
@@ -504,6 +616,8 @@ async def upload_document(
 
     Raises:
         UploadTooLargeError: 413 when the file exceeds `MAX_UPLOAD_BYTES` (F-29).
+        UnsupportedMediaTypeError: 415 for an extension outside :data:`UPLOAD_MEDIA_TYPES`.
+        KbQuotaExceededError: 409 past the document or byte quota.
     """
     kb = await _load_kb(db, ctx, kb_id)
     content_length = file.size
@@ -511,9 +625,10 @@ async def upload_document(
         raise UploadTooLargeError(
             f"upload exceeds the {MAX_UPLOAD_BYTES} byte limit", details={"max_bytes": MAX_UPLOAD_BYTES}
         )
-    data = await _read_capped(file, max_bytes=MAX_UPLOAD_BYTES)
     filename = upload_basename(file.filename)
-    mime = file.content_type or "application/octet-stream"
+    # S5-30: the extension decides (never the declared content type), before any byte is read.
+    mime = upload_media_type(filename)
+    data = await _read_capped(file, max_bytes=MAX_UPLOAD_BYTES)
 
     document = await _store_and_enqueue(
         db, storage, jobs, background_tasks, kb=kb, filename=filename, mime=mime, data=data
@@ -761,17 +876,27 @@ async def evaluate_kb(
     jobs: JobsDep,
     background_tasks: BackgroundTasks,
     ctx: AdminCtxDep,
+    limiter: RateLimiterDep,
     payload: KbEvaluateIn | None = None,
 ) -> KbEvalRunOut:
     """Enqueue an evaluation run of the knowledge base's evaluation set.
 
     Raises:
         UnprocessableEntityError: The evaluation set is empty, or the embedder does not match.
+        ConflictError: 409 while another evaluation of this knowledge base is queued or running.
+        RateLimitedError: 429 past :data:`KB_JOBS_PER_MIN` re-index/evaluation starts per workspace.
     """
     options = payload or KbEvaluateIn()
     _check_k(options.k)
     kb = await _load_kb(db, ctx, kb_id)
     check_kb_embedder(kb, embedder)
+    await _check_no_run_pending(db, kb_id, kind=KB_EVALUATE, what="an evaluation")
+    await enforce(
+        limiter,
+        f"kb_jobs:{ctx.workspace_id}",
+        capacity=KB_JOBS_PER_MIN,
+        what="knowledge re-index and evaluation runs",
+    )
     count_query = select(func.count()).select_from(KbEval).where(KbEval.kb_id == kb_id)
     count = (await db.execute(count_query)).scalar_one()
     if count == 0:
@@ -852,14 +977,24 @@ async def reindex_kb(
     jobs: JobsDep,
     background_tasks: BackgroundTasks,
     ctx: AdminCtxDep,
+    limiter: RateLimiterDep,
     payload: KbReindexIn | None = None,
 ) -> KbReindexOut:
     """Queue a re-ingest of every (or the listed) stored document of a knowledge base.
 
     Raises:
         NotFoundError: A listed document is not in this knowledge base.
+        ConflictError: 409 while an earlier re-index of this knowledge base is still queued or running.
+        RateLimitedError: 429 past :data:`KB_JOBS_PER_MIN` re-index/evaluation starts per workspace.
     """
     kb = await _load_kb(db, ctx, kb_id)
+    await _check_no_run_pending(db, kb_id, kind=KB_INGEST, what="a re-index")
+    await enforce(
+        limiter,
+        f"kb_jobs:{ctx.workspace_id}",
+        capacity=KB_JOBS_PER_MIN,
+        what="knowledge re-index and evaluation runs",
+    )
     query = select(KbDocument).where(KbDocument.kb_id == kb_id).order_by(KbDocument.created_at)
     wanted = payload.document_ids if payload is not None else None
     if wanted is not None:
@@ -877,9 +1012,8 @@ async def reindex_kb(
             skipped.append(_skipped(document, "ingest_in_progress"))
             continue
         key = upload_storage_key(kb.id, document.id, document.filename)
-        try:
-            await storage.get(key)
-        except FileNotFoundError:
+        # S5-28: an existence check, never a read of up to 25 MB per document.
+        if not await storage.exists(key):
             skipped.append(_skipped(document, "source_not_stored"))
             continue
         document.status = "pending"
@@ -897,6 +1031,8 @@ async def reindex_kb(
                 "storage_key": key,
                 "filename": document.filename,
                 "mime": document.mime,
+                # S5-28: marks a re-index job, so a second re-index waits for it (409).
+                "reindex": True,
             },
             background_tasks=background_tasks,
         )

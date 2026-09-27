@@ -730,6 +730,28 @@ class ComplianceSettings(BaseModel):        # workspaces.settings.compliance (ex
 
 `COMPLIANCE_PRESETS` holds the three presets (plain wording, a counsel note each; `us` says "confirm with counsel for two-party-consent states"; no state list). The worker (`session_builder.apply_compliance`, after the flow preparation) fills `disclosure.text`, `recording.consent_text` and the empty `text` of `recording`/`ai_disclosure` consent blocks from `compliance`, then puts the disclosure in front of the greeting once (or at a `{disclosure}` placeholder) when `position` is `greeting`/`both`, or `banner` on a phone call; without a spoken greeting it becomes an instruction for the first reply. `consent_text_hash(text)` is the SHA-256 of the exact UTF-8 wording, carried by every `consent` event.
 
+**Test cases and the publish gate (V5-29, D-V5-29; `lkap_contracts.agent_tests`).** Additive; both default off, so an agent saved before them validates, resolves and publishes exactly as before:
+
+```python
+class AgentTest(BaseModel):                 # AgentConfig.tests: list[AgentTest] (max 50, unique ids)
+    id: str                                 # ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$
+    name: str
+    persona_instructions: str               # who the simulated caller is (played by an LLM)
+    scenario: str = ""                      # what the caller wants
+    expectations: list[str] = []            # what must hold for the agent's side (≤ 20, ≤ 500 chars each)
+    mocks: dict[str, Any] = {}              # tool name → fixture (HTTP tools and app actions only)
+    max_turns: int = 12                     # 1..40 caller turns
+
+class PublishGate(BaseModel):               # AgentConfig.publish_gate
+    require_tests: bool = False             # opt-in
+    min_pass_ratio: float = 1.0             # 0..1 share of cases that must pass
+
+class ResolvedAgentConfig(BaseModel):       # addition
+    tool_mocks: dict[str, Any] = {}         # a test case's scratch session only; {} for every real session
+```
+
+A run (`AgentTestRun`, `POST /v1/agents/{id}/tests/run`, job `agent_tests_run`) is pinned to the `config_version` it was queued on; the api plays each case's persona with the agent's `workflow_llm` (else `llm`) over a scratch `channel="text"` session and judges the transcript with `qa.model` (else `workflow_llm`, else `llm`) through its OpenAI-compatible client — five judges (`task_completion`, `tool_use`, `safety`, `relevancy`, `accuracy`), each `{verdict: pass|fail|inconclusive, score 0..1, reason}`, one repair retry for a non-JSON answer. Transcripts and tool output reach the persona and the judges inside the `<untrusted>` fence (R-V5-15). Run `status`: `queued`, `running`, `passed`, `failed`, `inconclusive`, `error` (did not run — never a test failure). The worker honours `tool_mocks` in `tools/declarative.py`: a mocked HTTP tool or app action returns its fixture (a string as-is, else JSON), fenced like a real result, with no request. Publishing (`PUT /v1/agents/{id}` with `published: true` on an unpublished agent) with `require_tests` on answers `422 tests_failing` with `details: PublishGateRefusal {reason: missing|running|failing|error, config_version, min_pass_ratio, run_id?, run_status?, pass_ratio?, error?}` unless the latest run on the version being published passed at least `min_pass_ratio` of its cases. Validation: a mock naming none of the agent's HTTP tools or app actions is an error (a warning when an MCP server is attached); `require_tests` with no cases is a warning. Tables: `agent_test_runs`, `agent_test_results` (`v5_006_agent_tests`).
+
 Validation rules (api, at save): every `ProviderRef.provider_id` exists and matches the slot kind; `credential_id` present iff required and credential's `provider_id` matches; `model` in `spec.models` **or** free text (warn, not error — Inference lists churn); a realtime provider whose `spec.capabilities.video_input` is false combined with `capabilities.camera`/`screen_share` = warning (the model will not see frames; frames still reach the UI/pin path); avatar works with both modes.
 
 ---

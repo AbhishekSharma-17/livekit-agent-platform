@@ -5,6 +5,7 @@ This runbook covers running the LiveKit Agent Platform, operating it (sign-in, L
 - Sections 1–11 are v2, written by V2-19 on 2026-09-23.
 - Sections 12–19 are the v1 runbook, from live runs on 2026-09-18 and 2026-09-19. They still hold, except where a v2 section replaces them.
 - Section 20 is v3 (Remote MCP, the `lkap-mcp` service, V3-06).
+- Sections 9.2–9.7 are v5. §9.7 lists every setting, optional extra and migration v5 added in one place; the design is `docs/v5/ARCHITECTURE-V5.md`.
 
 **Binding references:**
 - **v2:** `docs/v2/README.md`, which gives the precedence order: ARCHITECTURE-V2, CONTRACTS-V2, PLAN-V2 §8 rulings.
@@ -60,6 +61,7 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `LKAP_EMBEDDER` | ✓ | | | | the knowledge-base embedder, platform-wide: `fastembed` (default, local), `<provider_id>:<credential_id>` for an OpenAI-shaped embedding entry (`openai-embedding`, `openrouter-embedding`; the credential must be stored under that entry's credential home), or the legacy `openai:<credential_id>`. |
 | `LKAP_EMBED_MODEL` | ✓ | | | | the local fastembed model `LKAP_EMBEDDER=fastembed` runs; default `BAAI/bge-small-en-v1.5` (384 dimensions). Every knowledge base records its model and width when it is created, and a search from a different model is refused (`422 kb_embedder_mismatch`, naming the knowledge base), so change it only for new knowledge bases or re-create the old ones. Knowledge bases created before V5-01 are not recorded and are never refused. |
 | `LKAP_RERANK_MODEL` | ✓ | | | | the local cross-encoder knowledge search reranks with (fastembed `TextCrossEncoder`, used from V5-04); default `Xenova/ms-marco-MiniLM-L-6-v2`. |
+| `LKAP_VECTOR_STORE` | optional | | | | where knowledge-base vectors live (V5-13). Unset = follow the database (pgvector on Postgres, LanceDB on SQLite); `lancedb` forces LanceDB; `pgvector` on SQLite is refused. Changing it needs a re-embed (§9.2). |
 | `LKAP_NET_ALLOW_PRIVATE_HOSTS` | ✓ | | | | comma list of host names, IPs or CIDRs the outbound network guard may reach although they are private. Unset = `localhost,127.0.0.1,::1` in `dev`, nothing in `prod` (§5.1). |
 | `LKAP_SELF_HOSTED_ALLOWED_NETWORKS` | optional | | | | comma list of CIDRs a **self-hosted** LiveKit connection may reach (V5-27, R-V5-17). Unset = loopback, RFC 1918, ULA and CGNAT (the reach before V5-27, so a local install is unchanged); an empty value = none (a self-hosted connection then reaches only what `LKAP_NET_ALLOW_PRIVATE_HOSTS` allows); a list, e.g. `100.64.0.0/10,10.20.0.0/16`, is the ceiling. Metadata, link-local, multicast and reserved addresses stay refused whatever is listed; `localhost` works only when a loopback network is allowed. Set it on a host where workspace admins are not the operator (§5.1). |
 | `LKAP_MCP_OAUTH_ALLOW_UNBOUND` | optional | | | | `true` lets an MCP sign-in finish in a browser that does not hold the start's binder cookie (V5-27, R-V5-14). Default `false`. Only for a deployment whose console and `/v1/oauth/mcp/` are on different sites; neither shipped layout is (§9.3). |
@@ -74,7 +76,7 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `NEXT_PUBLIC_API_BASE_URL` | | | | ✓ | `http://localhost:8080` |
 | `LKAP_WEB_ADMIN_BYPASS` | | | | ✓ | unset = on outside `NODE_ENV=production` (§2) |
 
-The full v2 variable list is in CONTRACTS-V2 §6.
+The full v2 variable list is in CONTRACTS-V2 §6. Everything v5 added (settings, optional extras, new dependencies, migrations) is collected in §9.7.
 
 ### One-time setup
 
@@ -307,21 +309,10 @@ Migration `v5_004_mcp_oauth` adds `mcp_oauth_flows` (sign-ins in progress: ten m
 - **Return address.** The provider sends the browser back to `{LKAP_PUBLIC_BASE_URL}/v1/oauth/mcp/callback`, falling back to the api's own url (`LKAP_API_BASE_URL`, then `http://127.0.0.1:<PORT>`). It must be `https`, or `http` on `localhost`/`127.0.0.1` (the only plain-http form providers accept). With neither, **Start sign-in** answers `422 redirect_uri_not_https`. In local dev the loopback address works as it is; register exactly that address when a provider needs a pre-registered app.
 - **Public origin and the client metadata document.** When `LKAP_PUBLIC_BASE_URL` is a public `https` origin, `GET /v1/oauth/mcp/client-metadata.json` serves LKAP's client metadata document and providers that support it sign in with no registration at all. Behind a private network (or with no public origin) the document is `404` and LKAP falls back to dynamic registration or a pre-registered app. If the console is private but the api must be reachable by providers, expose only `/v1/oauth/mcp/*` through the proxy.
 - **Pre-registered apps.** For providers without automatic registration, **Start sign-in** answers "needs client registration" with the return address to paste into the vendor's app settings. Save the server with `auth.registration = "preregistered"` and the app's client id, then start again, sending the client secret (if the vendor issued one) in the start request. The secret is stored encrypted and never shown again.
-- **Where the tokens live.** A finished sign-in writes an `mcp-oauth` credential (the Fernet vault, like every key) and points the tool's `auth.credential_id` at it. `GET /v1/tools/{id}/oauth/status` shows whether it is connected and when the access token expires. Until V5-16 sessions do not use these servers yet (the status says `worker_supported: false`) and an expired token needs a new sign-in; **Test** reports `needs_auth` then.
+- **Where the tokens live.** A finished sign-in writes an `mcp-oauth` credential (the Fernet vault, like every key) and points the tool's `auth.credential_id` at it. `GET /v1/tools/{id}/oauth/status` shows whether it is connected and when the access token expires. Since V5-16 sessions use these servers: the worker asks the api for a short-lived access token over `/internal/v1` (the refresh token never leaves the api), the api refreshes it under a lock, and a refused refresh (`invalid_grant`) marks the sign-in `needs_reauth` (a `tool.needs_reauth` webhook and a `tool_needs_reauth` session event), after which an admin signs in again. Deleting the tool revokes the sign-in at the provider.
 - **Logs.** The callback's query (the one-time code and `state`) is removed from uvicorn's access log; no api log line carries a token, code or `state`. Since V5-27 the redaction also runs as a structlog processor on every record, the access-log filter also covers the Apps callback and signed session-file links (and matches under a `--root-path`), and `deploy/Caddyfile` deletes `code`, `state`, `iss`, `flow`, `connected_account_id` and `sig` from the uris it logs.
 - **Browser binding (V5-27, R-V5-14).** **Start sign-in** sets an `lkap_mcp_oauth` cookie (HttpOnly, SameSite=Lax, `Secure` outside `LKAP_ENV=dev`, ten minutes, path `/v1/oauth/mcp/`); the callback of a sign-in a person started requires it, so the sign-in must finish in the same browser profile. Opening the address in another browser (or sending it to someone) ends with `oauth=error` and a `browser_mismatch` audit row. Sign-ins started with an API key need no cookie (their audit row says `browser_bound: false`). The console proxy forwards `Set-Cookie` unchanged and the shipped layouts serve the console and `/v1/*` on one site; a split-origin deployment sets `LKAP_MCP_OAUTH_ALLOW_UNBOUND=true` and accepts that the sign-in is not bound. Both sign-in callbacks allow 30 requests per client address per minute.
 - **Pre-registered app without a client id yet.** Saving the server with `auth.registration = "preregistered"` and no client id is allowed; **Start sign-in** then answers "needs client registration" with the return address to register (ask #166).
-
-### 9.4 Security hardening from the V5-26 review (V5-27)
-
-No migration. What an operator notices:
-
-- **Request size.** The api refuses a request body over 26 MB with `413 payload_too_large` before authentication or parsing, and `deploy/Caddyfile` caps `/v1`, `/hooks` and `/internal` at 26 MB too (a 25 MB upload plus multipart overhead).
-- **Office documents.** A `.docx`/`.pptx`/`.xlsx` whose parts would decompress past 200 MB, that has more than 2,000 parts, or a part of 1 MB or more compressed beyond 200:1, is refused before extraction; extraction and splitting each stop after 60 s. The document shows `failed` with the reason.
-- **Knowledge search.** A query longer than 2,000 characters is a `422`.
-- **Recording consent.** When a caller withdraws recording consent after the recording started, the worker stops the Egress (`POST /internal/v1/sessions/{id}/recording/stop`); the session's recording shows "Stopped early: the caller withdrew consent".
-- **Apps.** Turning on an app server or tool finder, reviewing a destructive action, naming accounts or letting the agent connect apps through an agent save needs an admin (`providers:write` for keys); "let the agent connect apps for callers" (`router.manage_connections`) is refused at save until the Composio live check (`docs/v5/_briefs/v5-47-live.md` step 8). An app whose catalogue is too large to scan for destructive actions cannot be used with the tool finder. `refresh=true` on the Apps catalogue works for admins only, 30 re-reads per workspace per minute.
-- **Workspace settings.** `PUT /v1/workspaces/{id}` accepts only `locale`, `compliance`, `cost.reconcile` and `telephony` in `settings`; prices go through `PUT /v1/workspace/prices`.
 
 ### 9.4 Knowledge connections (V5-20)
 
@@ -344,6 +335,55 @@ Migration `v5_008_memory` adds `memory_subjects` and `memory_events` (new tables
 - **The memory key.** Each workspace gets a random key on first use, stored in the vault as a `memory-key` credential. Callers are known only by a keyed hash of their number or identity. Deleting that credential (or Purge) makes every existing memory of the workspace unreachable; do not delete it by hand.
 - **Erasure.** Forget one caller from the session's Memory tab or `DELETE /v1/memory/subjects/{subject_id}`; purge a workspace with `POST /v1/memory/purge` (`{"confirm": true}`); memories older than the agent's `retention_days` are deleted by the sessions sweep. All three also blank the memories recorded on sessions.
 - **Returning web callers.** Only a caller with a stable identity is remembered: a phone number, or a `participant_identity` a trusted caller passes to `POST /v1/agents/{id}/connect` (an API key with `sessions:write`, or the console). Anonymous visitors get a random identity and are never remembered.
+
+### 9.6 Security hardening from the V5-26 review (V5-27)
+
+No migration. What an operator notices:
+
+- **Request size.** The api refuses a request body over 26 MB with `413 payload_too_large` before authentication or parsing, and `deploy/Caddyfile` caps `/v1`, `/hooks` and `/internal` at 26 MB too (a 25 MB upload plus multipart overhead).
+- **Office documents.** A `.docx`/`.pptx`/`.xlsx` whose parts would decompress past 200 MB, that has more than 2,000 parts, or a part of 1 MB or more compressed beyond 200:1, is refused before extraction; extraction and splitting each stop after 60 s. The document shows `failed` with the reason.
+- **Knowledge search.** A query longer than 2,000 characters is a `422`.
+- **Recording consent.** When a caller withdraws recording consent after the recording started, the worker stops the Egress (`POST /internal/v1/sessions/{id}/recording/stop`); the session's recording shows "Stopped early: the caller withdrew consent".
+- **Apps.** Turning on an app server or tool finder, reviewing a destructive action, naming accounts or letting the agent connect apps through an agent save needs an admin (`providers:write` for keys); "let the agent connect apps for callers" (`router.manage_connections`) is refused at save until the Composio live check (`docs/v5/_briefs/v5-47-live.md` step 8). An app whose catalogue is too large to scan for destructive actions cannot be used with the tool finder. `refresh=true` on the Apps catalogue works for admins only, 30 re-reads per workspace per minute.
+- **Workspace settings.** `PUT /v1/workspaces/{id}` accepts only `locale`, `compliance`, `cost.reconcile` and `telephony` in `settings`; prices go through `PUT /v1/workspace/prices`.
+
+### 9.7 v5 at a glance: settings, optional extras, migrations
+
+**Settings added or given a new job in v5.** Every one is optional; with none set, a local install behaves as before v5. Api settings are read by `api/src/lkap_api/settings.py`, worker settings by `agent/src/lkap_agent/settings.py`.
+
+| Variable / install | Read by | Default | What it does | Since | More |
+|---|---|---|---|---|---|
+| `LKAP_EMBED_MODEL` | api | `BAAI/bge-small-en-v1.5` | The local fastembed model `LKAP_EMBEDDER=fastembed` runs. Each knowledge base records its model and width at creation; a search from another model is refused (`422 kb_embedder_mismatch`). Memory (§9.5) embeds with the same model. | V5-01 | §1, §9.2 |
+| `LKAP_RERANK_MODEL` | api | `Xenova/ms-marco-MiniLM-L-6-v2` | The local cross-encoder knowledge search re-ranks with when a search asks for `rerank="local"`. | V5-01, used from V5-04 | §1 |
+| `LKAP_VECTOR_STORE` | api | unset | Where the platform's own knowledge-base vectors live. Unset follows the database: pgvector (`kb_vectors`) on Postgres, LanceDB files under `LKAP_DATA_DIR` on SQLite. `lancedb` forces LanceDB; `pgvector` on SQLite is refused when a store is resolved. Knowledge bases on a knowledge connection (§9.4) are not affected. | V5-13 | §9.2 |
+| `LKAP_MCP_ALLOWED_HOSTS` | api and worker | empty | Hosts MCP servers may live on. Empty = any public `https` host that passes the network guard; a list = a ceiling (checked at save and test on the api, at connect on the worker); `@http` = reuse `LKAP_HTTP_TOOL_ALLOWED_HOSTS`, and then an empty list allows no MCP server. Set the same value everywhere and include the Apps provider's host when agents use an app server or tool finder. | V5-09, V5-27 | §1 |
+| `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | worker; api since V5-09 | empty | Unchanged meaning for HTTP tools on the worker. The api now reads it too, only to resolve `LKAP_MCP_ALLOWED_HOSTS=@http`. | V5-09 | §1 |
+| `LKAP_MCP_OAUTH_ALLOW_UNBOUND` | api | `false` | `true` lets an MCP sign-in finish in a browser that does not hold the start's binder cookie. Only for a deployment whose console and `/v1/oauth/mcp/` are on different sites. | V5-27 (R-V5-14) | §9.3 |
+| `LKAP_SELF_HOSTED_ALLOWED_NETWORKS` | api | unset | CIDRs a self-hosted LiveKit connection may reach. Unset = loopback, RFC 1918, ULA and CGNAT; empty = only what `LKAP_NET_ALLOW_PRIVATE_HOSTS` allows; a list = the ceiling. | V5-27 (R-V5-17) | §1, §5.1 |
+| `LKAP_PUBLIC_BASE_URL` | api | unset | Existing setting with new uses: the MCP sign-in return address `{base}/v1/oauth/mcp/callback` and the client metadata document (served only when this is a public `https` origin), the Apps connect return address `{base}/v1/tool-providers/composio/callback`, and the base of signed session-file links. Unset, the first two fall back to the api's own url (`LKAP_API_BASE_URL`, then `http://127.0.0.1:<PORT>`) and file links to the request's own host. **Set it to the api's public `https` origin in `prod`** (S5-36): the api does not enforce this at start. | V5-14, V5-18, V5-19 | §9.3 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` (or `_TRACES_` / `_LOGS_`) | worker | unset | Not new, but when one is set the worker now sets `LIVEKIT_TELEMETRY_ALLOW_PII` from the agent's `privacy.telemetry_pii` (default `true`), once per worker process. Do not set `LIVEKIT_TELEMETRY_ALLOW_PII` by hand. | V5-30 | — |
+| `MEM0_TELEMETRY`, `MEM0_DIR` | api (set by the api itself) | `False`, `LKAP_DATA_DIR/memory/mem0` | Set by the memory backend before Mem0 is imported. Do not override. | V5-40 | §9.5 |
+| `lkap-api[memory]` extra | api | not installed | Caller memory: `mem0ai`, `psycopg[binary]`, `psycopg-pool` (and their dependencies). `cd api && uv sync --extra memory`. Without it memory reports `unavailable` and stores nothing. | V5-40 | §9.5 |
+
+**New required dependencies** (installed by `uv sync`; nothing to configure): on the api `markitdown[docx,pptx,xlsx]` (office and HTML documents, V5-01), `pgvector` (V5-13) and `mcp` (the MCP sign-in helpers, V5-14); on the worker `phonenumbers` (the caller's timezone from their number, V5-51). The Qdrant keyword model for a knowledge connection with native hybrid search is downloaded into `LKAP_DATA_DIR/models` on first use (V5-20). Postgres needs the `vector` extension from `v5_003` on: the compose files use `pgvector/pgvector:pg16` (§9.2). No other vendor key is an environment variable: Composio, knowledge-connection, web-search, SMS, Cal.com, Ragie and moderation keys are stored in the vault through the console or `POST /v1/credentials`.
+
+**Migration chain.** `cd api && uv run alembic heads` prints `v5_008_memory`. The revision ids do not follow the chain order (ids were reserved in the plan's ledger and re-chained as packages merged); the chain, oldest first, is:
+
+| Order | Revision | Package | Adds |
+|---|---|---|---|
+| — | `v4_003_session_estimates` | V4-15 | The v4 parent: cost estimate and reconciliation columns. |
+| 1 | `v5_001_knowledge_p0` | V5-01 | `knowledge_bases.dimension`, `.embedder_model`, `.chunking`; `kb_documents.progress`; the lexical index (SQLite FTS5 `kb_chunks_fts` with triggers, or Postgres `kb_chunks.tsv` + GIN); `kb_evals`. |
+| 2 | `v5_010_tool_provider_kind` | V5-47 | Widens the `tools.kind` check to `http`, `mcp`, `provider`. |
+| 3 | `v5_003_pgvector` | V5-13 | Postgres only: the `vector` extension and `kb_vectors`; a no-op on SQLite. |
+| 4 | `v5_009_consent` | V5-15 | `sessions.consent_state` (JSON, nullable). |
+| 5 | `v5_004_mcp_oauth` | V5-14 | `mcp_oauth_clients`, `mcp_oauth_flows`. |
+| 6 | `v5_002_session_uploads` | V5-19 | `session_assets` (uploads, pinned frames, signatures, copied documents; bytes in the storage backend). |
+| 7 | `v5_006_agent_tests` | V5-29 | `agent_test_runs`, `agent_test_results` (the test cases live in the agent's configuration). |
+| 8 | `v5_005_knowledge_connections` | V5-20 | `knowledge_connections`; `knowledge_bases.connection_id`, `.kind`, `.external_ref`. |
+| 9 | `v5_007_telephony_amd` | V5-32 | `calls.amd_result`, `.transfer_mode`, `.transfer_summary`. |
+| 10 | `v5_008_memory` | V5-40 | `memory_subjects`, `memory_events` (the memories themselves live in the memory backend). |
+
+None of the ten drops a column or table in its upgrade: they add tables, columns and indexes, and `v5_010` widens a check constraint (a table rebuild on SQLite). Apply them as in §9 (back up first). The rehearsals are in `docs/v5/_briefs/migration-rehearsal-v5.md`.
 
 ## 10. Smoke test
 

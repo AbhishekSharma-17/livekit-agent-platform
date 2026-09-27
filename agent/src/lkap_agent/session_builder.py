@@ -137,8 +137,10 @@ __all__ = [
     "MEMORY_HEADING",
     "MEMORY_SOURCE",
     "MemoryRecallApi",
+    "STT_TURN_DETECTION",
     "SessionPlan",
     "apply_compliance",
+    "stt_decides_turns",
     "apply_memory_recall",
     "auto_inject_active",
     "build_turn_handling",
@@ -162,6 +164,10 @@ logger = get_logger(__name__)
 _TURN_HANDLING_KEYS: frozenset[str] = frozenset(
     {"turn_detection", "endpointing", "interruption", "preemptive_generation", "user_turn_limit"}
 )
+
+#: The `TurnDetectionMode` that lets the transcriber end the caller's turn (livekit-agents 1.8.3
+#: `voice/turn.py:95`; `audio_recognition.py` commits the turn on the STT's end-of-speech event).
+STT_TURN_DETECTION: Final[str] = "stt"
 
 #: Slots that only make sense with audio; a text-channel session drops them.
 _AUDIO_SLOTS: Final[tuple[str, ...]] = ("stt", "tts", "vad", "turn_detection", "noise_cancellation", "avatar")
@@ -323,6 +329,24 @@ def has_captions_block(resolved: ResolvedAgentConfig) -> bool:
     """Whether the session's panel shows a `captions` block (the agent's config or the effective layout)."""
     blocks = [*resolved.config.panel.blocks, *resolved.panel.blocks]
     return any(spec.type == "captions" for spec in blocks)
+
+
+def stt_decides_turns(resolved: ResolvedAgentConfig) -> bool:
+    """Whether the session's transcriber ends the caller's turns itself (V6-02, D-V6-5).
+
+    True when the resolved `stt` slot's registry entry declares
+    `capabilities.end_of_turn` (Deepgram Flux). `SessionBuilder.build` then runs
+    the session with `turn_detection="stt"` unless an explicit `turn_detection`
+    slot was configured.
+    """
+    stt = resolved.resolved.get("stt")
+    if stt is None:
+        return False
+    try:
+        spec = get_spec(stt.provider_id)
+    except KeyError:
+        return False
+    return spec.kind == "stt" and spec.capabilities.end_of_turn
 
 
 def _client_side_turns(resolved: ResolvedAgentConfig) -> bool:
@@ -589,6 +613,14 @@ class SessionBuilder:
             if uses_realtime_model and detector is not None and self._keeps_server_side_turns(model):
                 logger.info("realtime model keeps server-side turn detection; no client turn detector")
                 detector = None
+            if stt is not None and stt_decides_turns(resolved):
+                # V6-02 (D-V6-5): the transcriber's end-of-turn replaces the platform's default
+                # detector; an explicitly configured `turn_detection` slot still wins.
+                if providers.turn_detection is None:
+                    logger.info("the transcriber decides when the caller's turn ends", turn_detection="stt")
+                    detector = STT_TURN_DETECTION
+                else:
+                    logger.info("the configured turn detector overrides the transcriber's end-of-turn")
         else:
             if providers.vad is not None or providers.turn_detection is not None:
                 logger.warning(

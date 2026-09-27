@@ -102,6 +102,7 @@ from lkap_contracts.providers import (
     declares_language,
     get,
     language_name,
+    speech_streams,
     validate_model_id,
 )
 from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT, action_risk
@@ -630,7 +631,10 @@ def _validate_slot(ctx: ValidationContext, slot: ProviderSlot, ref: ProviderRef,
             "error", label, f"provider '{spec.id}' is a {spec.kind} provider, expected {SLOT_KIND[slot]}"
         )
         return
-    if spec.availability != "available":
+    if spec.availability == "removed":
+        # V6-02 (D-V6-6): a vendor withdrew it; the entry's note says what happened and what to do.
+        findings.add("error", label, spec.notes or f"provider '{spec.id}' was withdrawn by its vendor")
+    elif spec.availability != "available":
         findings.add(
             "error", label, f"provider '{spec.id}' is not available yet (availability={spec.availability})"
         )
@@ -761,6 +765,13 @@ def _validate_credential(
             )
 
 
+#: Deepgram's Flux models run on another class (``STTv2``), so ``deepgram-stt`` refuses them (V6-02, D-V6-5).
+DEEPGRAM_FLUX_PREFIX: Final[str] = "flux-"
+DEEPGRAM_FLUX_MOVED_MESSAGE: Final[str] = (
+    "Flux models run on the 'Deepgram Flux' transcriber, which also decides when the caller has "
+    "finished speaking; pick 'Deepgram Flux' instead (the same Deepgram key works)"
+)
+
 #: How long a passing "Test model" run silences the unknown-model warning (R-V4-24).
 TESTED_WINDOW_S = 30 * 24 * 3600
 
@@ -780,7 +791,16 @@ def _validate_model(
     model = ref.model
     if not model or validate_model_id(model) is not None:
         return
-    if model == spec.default_model or model in {m.id for m in spec.models}:
+    if spec.id == "deepgram-stt" and model.startswith(DEEPGRAM_FLUX_PREFIX):
+        findings.add("error", label, DEEPGRAM_FLUX_MOVED_MESSAGE)
+        return
+    listed = {m.id: m for m in spec.models}
+    if model in listed and listed[model].deprecated:
+        # V6-02 (D-V6-4a): the id is the registry's own, so naming it here leaks nothing.
+        replacement = f"; pick '{spec.default_model}'" if spec.default_model else ""
+        findings.add("warning", label, f"'{model}' is deprecated by the vendor{replacement}")
+        return
+    if model == spec.default_model or model in listed:
         return
     if ctx.catalog_item(spec.id, model) is not None:
         return
@@ -1158,17 +1178,49 @@ _ISO_639_1_STT_CLASSES: Final[frozenset[str]] = frozenset({"livekit.plugins.open
 _ISO_639_1: Final[re.Pattern[str]] = re.compile(r"^[a-z]{2}$")
 
 
+#: V6-02 (D-V6-1, D-V6-2): the tip for a transcriber that does not stream (``stt_not_streaming``).
+STT_NOT_STREAMING_TIP: Final[str] = (
+    "Tip: '{label}' transcribes each turn in one request after the caller stops speaking, which slows "
+    "every reply on a live call; pick a transcriber that streams, such as LiveKit Inference or Deepgram"
+)
+#: The tip for a voice that does not stream (``tts_not_streaming``).
+TTS_NOT_STREAMING_TIP: Final[str] = (
+    "Tip: '{label}' waits for the whole sentence before it starts speaking, which slows every reply on "
+    "a live call; pick a voice that streams, such as LiveKit Inference, Cartesia or Deepgram"
+)
+#: The tip when a field turns streaming on (``openai-stt``, ``rime-tts``).
+STREAMING_FIELD_TIP: Final[str] = (
+    "Tip: '{label}' is not streaming, which slows every reply on a live call; turn on '{field}'"
+)
+
+
+def _not_streaming_tip(slot: str, spec: ProviderSpec) -> str:
+    """The plain-words tip for a speech slot that does not stream (V6-02)."""
+    capabilities = spec.capabilities
+    field = next((f for f in spec.fields if f.name == capabilities.streaming_field), None)
+    if field is not None:
+        message = STREAMING_FIELD_TIP.format(label=spec.label, field=field.label)
+    else:
+        template = STT_NOT_STREAMING_TIP if slot == "stt" else TTS_NOT_STREAMING_TIP
+        message = template.format(label=spec.label)
+    note = capabilities.streaming_note
+    return f"{message} ({note.rstrip('.')})" if note else message
+
+
 def speech_latency_issues(ctx: ValidationContext) -> list[Issue]:
-    """Warn about batch-only speech providers and language codes they cannot take.
+    """Warn about speech providers that do not stream and language codes they cannot take.
 
     Only the slots a voice session actually uses are checked: ``stt`` in cascaded
-    mode, ``tts`` in cascaded and half-cascade mode.
+    mode, ``tts`` in cascaded and half-cascade mode. OpenRouter keeps its own,
+    measured message (:data:`BATCH_SPEECH_MESSAGES`); every other entry the
+    registry records as not streaming (``speech_streams`` is ``False`` for the
+    stored fields) gets a ``Tip:`` warning (V6-02), never an error.
 
     Args:
         ctx: The validation context.
 
     Returns:
-        A warning per batch-only speech slot, plus one at ``pipeline.stt.fields.language``
+        A warning per non-streaming speech slot, plus one at ``pipeline.stt.fields.language``
         when an OpenAI-style transcriber is given a code it would reject.
     """
     pipeline = ctx.config.pipeline
@@ -1182,9 +1234,12 @@ def speech_latency_issues(ctx: ValidationContext) -> list[Issue]:
         if ref is None:
             continue
         message = BATCH_SPEECH_MESSAGES.get(ref.provider_id)
+        spec = _spec_or_none(ref.provider_id)
+        if message is None and spec is not None and spec.kind == slot:
+            if speech_streams(spec, dict(ref.fields)) is False:
+                message = _not_streaming_tip(slot, spec)
         if message is not None:
             issues.append(Issue(path=f"pipeline.{slot}", message=message, severity="warning"))
-        spec = _spec_or_none(ref.provider_id)
         if slot != "stt" or spec is None or spec.python_class not in _ISO_639_1_STT_CLASSES:
             continue
         language = ref.fields.get("language")

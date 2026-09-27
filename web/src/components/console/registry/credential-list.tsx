@@ -51,6 +51,11 @@ import { LoadingRegion } from "@/components/shared/loading-state";
  */
 const COMPOSIO_PROVIDER_ID = "composio";
 const TOOL_PROVIDER_ACCOUNT = "tool-provider-account";
+//: `lkap_contracts.providers.MCP_OAUTH_PROVIDER_ID` — same reasoning as `TOOL_PROVIDER_ACCOUNT`
+//: below (docs/v5/_asks.md #108, V5-14/V5-21): written only by the MCP sign-in callback, no
+//: secret fields, no generic Test/Rotate/Delete story. The api doesn't refuse a hand-made row
+//: yet (that's V5-27's), so this list hides it client-side in the meantime.
+const MCP_OAUTH_PROVIDER_ID = "mcp-oauth";
 
 /** How long the inline test result stays as a chip before it settles to "Tested … ago" (§4.5). */
 export const TEST_CHIP_MS = 10_000;
@@ -143,13 +148,16 @@ export function CredentialList() {
   );
 
   const rows = React.useMemo(() => {
-    // Composio's connected apps (`provider_id: "tool-provider-account"`) are
-    // not vault keys a builder manages here — they carry no secret and have
-    // no generic Test/Rotate/Delete story (docs/v5/_asks.md #4: the api
-    // route doesn't refuse them yet, so this list hides them client-side
-    // until it does). The workspace's own Composio key (`provider_id:
-    // "composio"`) is an ordinary row, just with extra actions below.
-    const items = (credentialsQuery.data?.items ?? []).filter((c) => c.provider_id !== TOOL_PROVIDER_ACCOUNT);
+    // Composio's connected apps (`provider_id: "tool-provider-account"`) and an MCP
+    // server's sign-in (`provider_id: "mcp-oauth"`) are not vault keys a builder
+    // manages here — they carry no secret and have no generic Test/Rotate/Delete
+    // story (docs/v5/_asks.md #4, #108: the api routes don't refuse hand-made rows
+    // of either kind yet, so this list hides them client-side until they do). The
+    // workspace's own Composio key (`provider_id: "composio"`) is an ordinary row,
+    // just with extra actions below.
+    const items = (credentialsQuery.data?.items ?? []).filter(
+      (c) => c.provider_id !== TOOL_PROVIDER_ACCOUNT && c.provider_id !== MCP_OAUTH_PROVIDER_ID,
+    );
     const titleFor = (spec: ProviderSpec | undefined, providerId: string) =>
       spec ? credentialDisplay(spec, registry).title : providerId;
     return items.sort((a, b) => {

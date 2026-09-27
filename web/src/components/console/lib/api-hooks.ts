@@ -45,6 +45,10 @@ import type {
   KbPage,
   KbSearchRequest,
   KbSearchResponse,
+  McpOauthStartIn,
+  McpOauthStartOut,
+  McpOauthStatusOut,
+  McpTestResult,
   ModelCapabilities,
   ModelTestRequest,
   ModelTestResult,
@@ -85,6 +89,8 @@ const keys = {
   tools: (agentId?: string) => ["tools", agentId ?? "all"] as const,
   /** V5-25/V5-28: `GET /v1/tool-templates` (the Cal.com booking set). */
   toolTemplates: ["tool-templates"] as const,
+  /** Nested under `["tools", ...]` so `invalidateQueries({queryKey: ["tools"]})` (delete, test, revoke) reaches it too. */
+  mcpOauthStatus: (toolId: string) => ["tools", toolId, "oauth-status"] as const,
   kbs: ["knowledge-bases"] as const,
   kb: (id: string) => ["knowledge-bases", id] as const,
   kbDocuments: (id: string) => ["knowledge-bases", id, "documents"] as const,
@@ -419,6 +425,57 @@ export function useInstantiateToolTemplate() {
     onSuccess: (_result, { body }) => {
       void queryClient.invalidateQueries({ queryKey: keys.tools(body.agent_id ?? undefined) });
       void queryClient.invalidateQueries({ queryKey: keys.tools(undefined) });
+    },
+  });
+}
+
+// ---- MCP test + sign-in (V5-21) ----
+
+/** `POST /v1/tools/{id}/test` — connects once, stores `cached_tools` on the definition. */
+export function useTestMcpTool() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<McpTestResult>(`tools/${id}/test`),
+    onSuccess: () => {
+      // The api stores `cached_tools`/`cached_at` on the row it just tested.
+      void queryClient.invalidateQueries({ queryKey: ["tools"] });
+    },
+  });
+}
+
+/** `GET /v1/tools/{id}/oauth/status` — `null` id means "not saved yet" (no request). */
+export function useMcpOauthStatus(toolId: string | null, options?: { poll?: boolean }) {
+  return useQuery({
+    queryKey: keys.mcpOauthStatus(toolId ?? "unsaved"),
+    queryFn: () => api.get<McpOauthStatusOut>(`tools/${toolId}/oauth/status`),
+    enabled: toolId !== null,
+    refetchInterval: options?.poll ? 2500 : false,
+  });
+}
+
+/** `POST /v1/tools/{id}/oauth/start` — opens the vendor's page (R-V5-14: same browser, never a copyable link). */
+export function useStartMcpOauth() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body?: McpOauthStartIn }) =>
+      api.post<McpOauthStartOut>(`tools/${id}/oauth/start`, body),
+    onSuccess: (_result, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: keys.mcpOauthStatus(id) });
+    },
+  });
+}
+
+/** `POST /v1/tools/{id}/oauth/revoke` — best-effort at the provider, then deletes the sign-in. */
+export function useRevokeMcpOauth() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<McpOauthStatusOut>(`tools/${id}/oauth/revoke`),
+    onSuccess: () => {
+      // Prefix match: also covers `keys.mcpOauthStatus(id)` (nested under `["tools", ...]`).
+      // The revoke clears `auth.credential_id` on the tool row too, so the list needs
+      // refreshing, not just the status sub-key — otherwise a Save right after Disconnect
+      // could post a credential id for a bag that no longer exists.
+      void queryClient.invalidateQueries({ queryKey: ["tools"] });
     },
   });
 }

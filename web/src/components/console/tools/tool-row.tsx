@@ -11,11 +11,22 @@ import { useDeleteTool } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
+import { mcpAuthChip } from "@/components/console/tools/mcp-oauth-status";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import type { ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
+import type { McpHeaderAuth, McpNoAuth, McpOAuthAuth, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
+
+/** "No auth" / "Header" / "Sign in" chip (V5-21 acceptance: "Tool rows show the auth mode chip"). */
+function McpAuthTag({ auth }: { auth: McpNoAuth | McpHeaderAuth | McpOAuthAuth | undefined }) {
+  const { label, tone } = mcpAuthChip(auth ?? {});
+  return (
+    <StatusChip tone={tone} size="sm">
+      {label}
+    </StatusChip>
+  );
+}
 
 /** `method + host` per docs/UI_UX_SPEC.md §7.6 item 4 ("method + host"), not the full URL template. */
 export function requestSummary(tool: ToolOut): string {
@@ -72,6 +83,7 @@ export function ToolRow({
           <span className="truncate font-mono text-sm">{tool.name}</span>
           {!tool.enabled ? <StatusChip tone="neutral">disabled</StatusChip> : null}
           {tool.agent_id === null ? <StatusChip tone="info">shared</StatusChip> : null}
+          {tool.definition.kind === "mcp" ? <McpAuthTag auth={tool.definition.auth} /> : null}
         </div>
         <p className="truncate text-xs text-muted-foreground">{requestSummary(tool)}</p>
       </div>

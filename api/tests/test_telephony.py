@@ -1353,8 +1353,13 @@ async def test_saving_allowed_targets_round_trips_and_duplicate_labels_are_422(
     )
 
     assert saved.status_code == 200, saved.text
-    # V5-25: `sms_targets` joins `TelephonyConfig` with an empty default.
-    assert saved.json()["config"]["telephony"] == {**targets, "sms_targets": []}
+    # V5-25: `sms_targets` joins `TelephonyConfig` with an empty default; V5-32: `amd` (off) and
+    # each target's `mode` (cold).
+    assert saved.json()["config"]["telephony"] == {
+        "transfer_targets": [{**target, "mode": "cold"} for target in targets["transfer_targets"]],
+        "sms_targets": [],
+        "amd": {"enabled": False, "on_machine": "hangup", "message": None, "ivr_detection": False},
+    }
     assert duplicate.status_code == 422
     assert _issue_paths(duplicate) == ["telephony.transfer_targets[1].label"]
 

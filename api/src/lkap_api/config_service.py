@@ -116,7 +116,7 @@ from lkap_contracts.turn_handling import (
     turn_handling_dict,
 )
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.connections.probe import effective_capabilities
@@ -264,6 +264,9 @@ class ValidationContext:
     V5-18 mirrors into ``credentials.last_test_message`` (``active``, ``expired`` …)."""
     jurisdiction: Jurisdiction = DEFAULT_JURISDICTION
     """The workspace's ``settings.compliance.jurisdiction`` (V5-15), named by the disclosure warning."""
+    outbound_trunks: int | None = None
+    """How many synced outbound trunks the agent's connection has (V5-32: answering-machine
+    detection and warm transfer need one); ``None`` skips those checks."""
 
     def fingerprint_for(self, ref: ProviderRef) -> str | None:
         """The fingerprint of the credential ``ref`` uses, if it uses one."""
@@ -514,9 +517,88 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(curated_tool_issues(ctx))
     findings.extend(language_issues(ctx))
     findings.extend(agent_test_issues(ctx))
+    findings.extend(amd_and_transfer_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
+
+
+#: V5-32 (D-V5-21): a warm target where the worker cannot run a warm transfer.
+WARM_NEEDS_CLOUD_MESSAGE = (
+    "Warm transfer needs a LiveKit Cloud connection; on this connection it falls back to a standard "
+    "transfer (the summary is kept on the call)."
+)
+WARM_NEEDS_ONE_LINE_MESSAGE = (
+    "Warm transfer needs exactly one outbound phone line on this connection; until then it falls back "
+    "to a standard transfer."
+)
+AMD_NEEDS_OUTBOUND_MESSAGE = (
+    "Answering-machine detection only runs on outbound calls, and this agent's connection has no "
+    "outbound phone line."
+)
+AMD_NEEDS_CASCADED_MESSAGE = (
+    "Answering-machine detection needs a speech-to-text and language-model pipeline; with a realtime "
+    "model it is skipped."
+)
+AMD_DEFAULT_MESSAGE_TIP = "Tip: no voicemail message is set, so the agent leaves a short call-back request."
+
+
+def amd_and_transfer_issues(ctx: ValidationContext) -> list[Issue]:
+    """Answering-machine detection and warm transfer where they cannot run (V5-32). Warnings only.
+
+    * A ``warm`` transfer target on a connection that is not LiveKit Cloud, or whose
+      connection does not have exactly one synced outbound trunk → warning at
+      ``telephony.transfer_targets[i].mode`` (the call is transferred the standard way).
+    * ``telephony.amd.enabled`` with a connection that has no outbound trunk (or no SIP)
+      → warning; with a realtime or half-cascade pipeline → warning (skipped).
+    * ``on_machine="leave_message"`` without ``message`` → a tip (a default line is used).
+    """
+    config = ctx.config
+    issues: list[Issue] = []
+
+    def warn(path: str, message: str) -> None:
+        issues.append(Issue(path=path, message=message, severity="warning"))
+
+    connection = ctx.connection
+    for index, target in enumerate(config.telephony.transfer_targets):
+        if target.mode != "warm":
+            continue
+        path = f"telephony.transfer_targets[{index}].mode"
+        if connection is not None and connection.deployment_type != "cloud":
+            warn(path, WARM_NEEDS_CLOUD_MESSAGE)
+        elif ctx.outbound_trunks is not None and ctx.outbound_trunks != 1:
+            warn(path, WARM_NEEDS_ONE_LINE_MESSAGE)
+    amd = config.telephony.amd
+    if amd.enabled:
+        no_sip = connection is not None and not connection.capabilities.sip_enabled
+        if no_sip or ctx.outbound_trunks == 0:
+            warn("telephony.amd.enabled", AMD_NEEDS_OUTBOUND_MESSAGE)
+        if config.pipeline.mode != "cascaded":
+            warn("telephony.amd.enabled", AMD_NEEDS_CASCADED_MESSAGE)
+        if amd.on_machine == "leave_message" and not (amd.message or "").strip():
+            warn("telephony.amd.message", AMD_DEFAULT_MESSAGE_TIP)
+    return issues
+
+
+async def _outbound_trunk_count(db: AsyncSession, workspace_id: str, connection_id: str | None) -> int | None:
+    """Synced outbound trunks of the connection (V5-32); ``None`` when there is no connection."""
+    if connection_id is None:
+        return None
+    from lkap_api.db.models import (
+        SipTrunk,  # noqa: PLC0415 - keeps the telephony tables out of the hot import
+    )
+
+    count = await db.scalar(
+        select(func.count())
+        .select_from(SipTrunk)
+        .where(
+            SipTrunk.workspace_id == workspace_id,
+            SipTrunk.connection_id == connection_id,
+            SipTrunk.direction == "outbound",
+            SipTrunk.lk_trunk_id.is_not(None),
+        )
+    )
+    return int(count or 0)
 
 
 def _slot_path(slot: ProviderSlot) -> str:
@@ -1992,10 +2074,14 @@ async def validation_context_for(
             )
         ).scalars()
     )
+    connection = await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id)
     return ValidationContext(
         config=config,
         credential_providers=credential_providers,
-        connection=await connection_context_for(db, workspace_id=workspace_id, connection_id=connection_id),
+        connection=connection,
+        outbound_trunks=await _outbound_trunk_count(
+            db, workspace_id, connection.connection_id if connection is not None else None
+        ),
         workspace_id=workspace_id,
         disabled_provider_ids=disabled,
         known_tool_ids=tool_ids,

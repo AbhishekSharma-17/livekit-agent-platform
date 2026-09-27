@@ -14,6 +14,11 @@ RECORDING_READY = "recording.ready"
 CALL_STARTED = "call.started"
 CALL_ENDED = "call.ended"
 
+#: V5-32: an outbound call was answered by a machine (voicemail, a full mailbox or a phone
+#: menu). `data` is the `call.*` fields plus `amd_result`; queued by
+#: `telephony.calls.apply_amd_result` through the same `call_event` outbox.
+CALL_VOICEMAIL = "call.voicemail"
+
 #: V5-16: an MCP server's sign-in can no longer be refreshed (the provider answered
 #: `invalid_grant`, or the token expired with no refresh token); an admin must sign in
 #: again from the console. `data` is `{tool_id, reason}` — never a token. Delivered to
@@ -31,5 +36,6 @@ KNOWN_EVENTS: tuple[str, ...] = (
     RECORDING_READY,
     CALL_STARTED,
     CALL_ENDED,
+    CALL_VOICEMAIL,
     TOOL_NEEDS_REAUTH,
 )

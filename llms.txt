@@ -1,10 +1,11 @@
 # LKAP (LiveKit Agent Platform)
 
 > A configurable voice/video agent platform on LiveKit: connections, agents
-> (prompt or flow), providers and keys, knowledge bases, HTTP/MCP tools,
-> panels, telephony, sessions and QA — all reachable by a coding agent
-> through one MCP server, `lkap` (package name lkap-mcp, `mcp/`). There is
-> no CLI.
+> (prompt or flow), providers and keys, knowledge bases (with evaluations
+> and bring-your-own stores), HTTP/MCP tools, connected apps through
+> Composio, panels, telephony, sessions, QA, simulated-caller tests, caller
+> memory, guardrails and costs — all reachable by a coding agent through one
+> MCP server, `lkap` (package name lkap-mcp, `mcp/`). There is no CLI.
 
 Start with the platform guide, then the reference docs below. A coding agent
 should call `lkap_guide()` (an MCP tool the server exposes) rather than
@@ -30,6 +31,10 @@ exist for Codex, generic agents, and anyone browsing the checkout.
   mechanisms, remote mode.
 - [docs/v2/HANDOFF.md](docs/v2/HANDOFF.md): the platform itself (connections,
   agents, packs, panels, telephony) below the agent-access layer.
+- [docs/v5/ARCHITECTURE-V5.md](docs/v5/ARCHITECTURE-V5.md): what v5 added —
+  the knowledge service, connected apps, MCP sign-in, caller files, consent,
+  privacy, languages, tests, telephony, listen-in, guardrails, memory, panel
+  blocks — with an index of every v5 decision and ruling.
 
 ## Optional
 

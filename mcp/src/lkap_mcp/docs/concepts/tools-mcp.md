@@ -9,18 +9,26 @@ other MCP server, at conversation time.
 
 ## Creating one
 
-`tool_create_mcp(name, url, headers={}, allowed_tools=None, secret_key_id=
-None, timeout_s=5, agent_id=None)`. `allowed_tools` restricts which of the
+`tool_create_mcp(name, url, auth=None, allowed_tools=None, timeout_s=5,
+agent_id=None, tool_options=None)`. `allowed_tools` restricts which of the
 downstream server's tools the model may see; omit it to expose all of them.
-`secret_key_id` is the same `http-tool-secret` credential family as an HTTP
-tool, referenced in `headers` as `{{ secret.NAME }}` for an auth header the
-downstream server needs.
+`auth` says how the worker authenticates, by `kind`:
+`{"kind": "none"}` (the default); `{"kind": "header", "headers": {...},
+"credential_id": ...}`, where header values may use `{{ secret.NAME }}` from
+an `http-tool-secret` key; or `{"kind": "oauth", ...}` for a server that
+signs in with the vendor (below). The older spelling — top-level `headers`
+and `secret_key_id` — still works as header auth; do not combine it with
+`auth`. The worker connects only to `https` on a public host, and the
+operator may limit MCP servers to a list of hosts; a save outside it is
+refused.
 
-There is no probe route for an MCP server in v3 — unlike `tool_create_http`,
-`tool_create_mcp` cannot dry-run the connection at save time. Verify it
-works with a real `chat_start`/`chat_send` test after attaching: if the
-worker cannot reach the server, the tool simply does not appear to the model
-that session, and `session_events` (or the chat's own events) shows why.
+After saving, `tool_test(tool_id)` connects once, lists the server's tools
+and stores that list for the console (`McpTestResult`: `ok`, `tool_names`,
+or a `reason` such as `needs_auth` or `unreachable` and an `error`). Tool names and errors come from the other server, so
+they come back as untrusted content. Then attach the tool and run a
+`chat_start`/`chat_send` pass: if the worker cannot reach the server during
+a session, the tools simply do not appear to the model that session, and
+`session_events` (or the chat's own events) say why.
 
 ## Connected services (servers that sign in)
 
@@ -61,9 +69,10 @@ the server's `timeout_s`. The rest is as for HTTP tools
 
 ## Related tools
 
-`tool_list`, `tool_get`, `tool_create_mcp`, `tool_update`, `agent_attach`,
-`chat_start`, `chat_send`.
+`tool_list`, `tool_get`, `tool_create_mcp`, `tool_test`, `tool_update`,
+`agent_attach`, `chat_start`, `chat_send`.
 
 ## Related schemas
 
-`McpServerDefinition`, `ToolExecution`, `ToolCreate`, `ToolOut`.
+`McpServerDefinition`, `McpTestResult`, `ToolExecution`, `ToolCreate`,
+`ToolOut`.

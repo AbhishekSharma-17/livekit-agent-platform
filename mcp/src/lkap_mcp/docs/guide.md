@@ -21,13 +21,20 @@ self-hosted server; `connection_create`, `connection_list`) → **agents**
 `generic` or `insurance_claim`) → each
 agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 `half_cascade` — see `lkap_explain("pipeline-modes")`), **providers and keys**
-(`provider_list`, `provider_key_create` — the registry has 127 provider
-entries), **tools** (`tool_create_http`, `tool_create_mcp`, plus built-ins like
-`search_knowledge`; third-party **apps** through Composio: `apps_list`, `apps_connect`), **knowledge bases** (`kb_create`, `kb_add_document`), a
+(`provider_list`, `provider_key_create` — 138 registry entries), **tools**
+(`tool_create_http`, `tool_create_mcp` then `tool_test`,
+`tool_create_from_template`, built-ins like `search_knowledge`; Composio
+**apps**: `apps_connect`, `apps_add_tools`, `agent_apps_mode` picks actions,
+an app server or a tool finder — recipe `attach-app-actions`), **knowledge
+bases** (`kb_create`, `kb_add_document`; own stores `kb_connection_create`;
+golden questions `kb_evals_set`, `kb_evaluate`), a
 **panel** (composite blocks, or a pack's own UI) and, optionally, a **flow**
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
-...})`). Agents produce **sessions** (`session_list`, `session_get`), which
-carry a transcript, QA score, cost lines and (if enabled) a recording.
+...})`). Agents produce **sessions** (`session_list`, `session_get`,
+`session_memory`), which carry a transcript, QA score, cost lines and (if
+enabled) a recording. Guardrails, languages, caller memory, privacy,
+disclosure and conversation presets are agent config sections:
+`lkap_describe("schema", "AgentConfig")`.
 
 ## Workflow
 
@@ -43,8 +50,10 @@ carry a transcript, QA score, cost lines and (if enabled) a recording.
 4. **Validate.** `agent_validate` before every save that matters; a flow gets
    `agent_flow_validate` first.
 5. **Test.** `chat_start` / `chat_send` / `chat_end` run a real text session
-   against your worker, no browser needed.
-6. **Publish.** `agent_publish` makes the session URL live.
+   against your worker, no browser needed. Save test cases, then
+   `agent_tests_run` (a simulated caller and judges; `agent_tests_result`).
+6. **Publish.** `agent_publish` makes the session URL live; the publish gate
+   can require passing tests.
 
 Start with `lkap_explain("agents")` and `lkap_describe("recipe",
 "start-from-template")`, `lkap_describe("recipe", "insurance-intake-agent")`
@@ -71,7 +80,8 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
   record tool arguments too, so a reference is the safer default.
 - **Ask before anything destructive.** `lkap_delete`, `connection_rotate`,
   `connection_fleet(stop|restart)`, `agent_archive`, `agent_versions(restore=
-  ...)`, `call_place` and `call_control` need `confirm=true`; without it they
+  ...)`, `apps_disconnect`, `memory_forget`, `memory_purge`, `session_whisper`,
+  `call_place` and `call_control` need `confirm=true`; without it they
   return `needs_confirmation` and do nothing. Every write tool takes
   `plan=true` to preview the exact request(s) it would send, without sending
   them — use it when you are unsure.
@@ -92,8 +102,9 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `connect-livekit`, `start-from-template`, `insurance-intake-agent`, `generic-assistant`,
 `add-http-tool`, `attach-mcp-server`, `knowledge-from-text`,
 `switch-to-flow`, `composite-panel`, `test-and-publish`,
-`test-a-custom-model`, `diagnose-a-session`, `connect-an-app`, `add-booking-tool` — each is a numbered,
-copy-pasteable tool sequence
+`test-a-custom-model`, `diagnose-a-session`, `connect-an-app`,
+`attach-app-actions`, `add-booking-tool`, `estimate-agent-cost` — each is a
+numbered, copy-pasteable tool sequence
 (`lkap_describe("recipe", name)`).
 
 ## Concepts
@@ -101,4 +112,5 @@ copy-pasteable tool sequence
 `agents`, `pipeline-modes`, `providers-and-keys`, `connections-and-pools`,
 `knowledge`, `tools-http`, `tools-mcp`, `panels-and-blocks`, `flows`,
 `telephony`, `qa-and-evals`, `recordings-and-cost`, `webhooks`,
-`sessions-and-test-chat`, `roles-and-scopes`, `apps`, `tools` (`lkap_explain(topic)`).
+`sessions-and-test-chat`, `roles-and-scopes`, `apps`, `tools`, `testing`,
+`memory` (`lkap_explain(topic)`).

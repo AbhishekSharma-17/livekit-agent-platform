@@ -95,6 +95,7 @@ RECIPE_NAMES: Final[tuple[str, ...]] = (
     "connect-an-app",  # V5-18
     "estimate-agent-cost",  # V4-15
     "add-booking-tool",  # V5-25
+    "attach-app-actions",  # V5-47 (registered by V5-46, ask #23)
 )
 
 #: The 7 prompts of AGENT-ACCESS.md §3.2.

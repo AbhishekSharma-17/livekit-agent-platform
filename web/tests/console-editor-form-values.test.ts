@@ -90,7 +90,7 @@ describe("buildAgentUpdate", () => {
     expect(body.config?.v).toBe(2);
     expect(body.config?.instructions).toBe("New.");
     expect(body.config?.panel).toEqual({ panel_id: "insurance_notebook", layout: "wide", blocks: [] });
-    expect(body.config?.qa).toEqual({ enabled: true, rubric_prompt: "Score empathy", model: null });
+    expect(body.config?.qa).toEqual({ enabled: true, rubric_prompt: "Score empathy", model: null, fields: [] });
     expect(body.config?.flow).toBeNull();
     expect(body.config?.pipeline.vad).toEqual(ref("silero-vad"));
     // avatar_options is now an editable form field (V2-13's providers section): the form always carries all

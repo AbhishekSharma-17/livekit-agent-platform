@@ -1,9 +1,10 @@
-import { FlaskConicalIcon, MessageCircleIcon } from "lucide-react";
+import { FlaskConicalIcon, MessageCircleIcon, ShieldIcon } from "lucide-react";
 
 import { BUILTIN_SECTIONS } from "./builtin-sections";
 import { EDITOR_EXTENSIONS } from "./extensions";
 import { resolveEditorSections, resolveEditorSlots } from "./registry";
 import { ConversationSection } from "./sections/conversation-section";
+import { PrivacySection } from "./sections/privacy-section";
 import { TestsSection } from "./sections/tests-section";
 import type { EditorExtension } from "./types";
 
@@ -64,14 +65,38 @@ const testsSectionExtension: EditorExtension = {
 };
 
 /**
+ * V5-34: the Privacy section (what to hide in transcripts, what to keep,
+ * analytics, the cleanup model, the post-call fields editor). Same rationale
+ * as V5-11's/V5-33's own extensions above. `order: 72` sits right after
+ * "Recording" (70) — the two are the call's other privacy-adjacent settings
+ * — and before "Limits" (80).
+ */
+const privacySectionExtension: EditorExtension = {
+  id: "V5-34",
+  sections: [
+    {
+      id: "privacy",
+      label: "Privacy",
+      icon: ShieldIcon,
+      order: 72,
+      Component: PrivacySection,
+      issuePaths: ["privacy", "qa.fields"],
+      issueKeywords: /\b(redact|privacy|storage tier|personal details|analytics|scrub|cleanup model|post-call field)/i,
+      issueKeywordPriority: 20,
+    },
+  ],
+};
+
+/**
  * The editor's section registry (docs/UI_UX_SPEC.md §7.4 item 3): built-ins
- * plus `EDITOR_EXTENSIONS` plus V5-11's and V5-33's own extensions above,
- * resolved once at module load.
+ * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's and V5-34's own extensions
+ * above, resolved once at module load.
  */
 export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   ...EDITOR_EXTENSIONS,
   conversationSectionExtension,
   testsSectionExtension,
+  privacySectionExtension,
 ]);
 export const EDITOR_SLOTS = resolveEditorSlots(EDITOR_EXTENSIONS);
 

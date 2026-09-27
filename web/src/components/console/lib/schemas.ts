@@ -383,6 +383,58 @@ export const publishGateSchema = z.object({
 });
 export type PublishGateForm = z.infer<typeof publishGateSchema>;
 
+/**
+ * `PrivacyConfig` (V5-30, `lkap_contracts.agent_config`): what the platform
+ * hides in transcripts, keeps after a call, and shares with third-party
+ * analytics. Optional on `agentConfigFormSchema` like `disclosureConfigSchema`
+ * above — `toFormValues` always supplies a concrete value from `DEFAULT_PRIVACY`.
+ */
+export const privacyConfigSchema = z.object({
+  stt_redact: z.array(z.enum(["pci", "pii", "phi", "numbers"])),
+  storage_tier: z.enum(["full", "redacted", "basic"]),
+  telemetry_pii: z.boolean(),
+  scrub_model: providerRefSchema.nullable(),
+});
+export type PrivacyConfigForm = z.infer<typeof privacyConfigSchema>;
+
+/**
+ * `QaField` (V5-30): one post-call field the judge fills in. `name` mirrors
+ * the contract's lowercase-identifier pattern so a bad name is caught before
+ * save rather than as a 422.
+ */
+export const qaFieldSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Name is required")
+      .regex(/^[a-z][a-z0-9_]{0,47}$/, "Lowercase letters, numbers, underscore; must start with a letter"),
+    type: z.enum(["text", "number", "boolean", "select"]),
+    options: z.array(z.string().min(1, "Can't be empty").max(100, "100 characters max")).max(50, "50 max"),
+    description: z.string().max(500, "500 characters max"),
+  })
+  .superRefine((val, ctx) => {
+    if (val.type === "select" && val.options.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["options"], message: "A select field needs at least one option" });
+    }
+    if (val.type !== "select" && val.options.length > 0) {
+      ctx.addIssue({ code: "custom", path: ["options"], message: "Only a select field takes options" });
+    }
+  });
+export type QaFieldForm = z.infer<typeof qaFieldSchema>;
+
+/**
+ * `QaConfig` (post-call scoring). Only `fields` is bound to an input here
+ * (the Post-call fields editor, V5-34); `enabled`/`rubric_prompt`/`model`
+ * have no console editor yet and must still round-trip a save, hence
+ * `.catchall(z.unknown())` — without it `z.object`'s resolver parse would
+ * silently drop them (this file's header warning), turning QA back off on
+ * the next save of any agent that had it on.
+ */
+export const qaConfigSchema = z
+  .object({ fields: z.array(qaFieldSchema).max(20, "20 fields max") })
+  .catchall(z.unknown());
+export type QaConfigForm = z.infer<typeof qaConfigSchema>;
+
 /** `AgentLimits` (CONTRACTS-V2 §3.3) — top-level on the agent, not in `config`. */
 export const agentLimitsSchema = z.object({
   max_concurrent_sessions: wholeNumber("Whole numbers only").min(1, "At least 1"),
@@ -549,6 +601,13 @@ export const agentConfigFormSchema = z
      */
     tests: z.array(agentTestSchema).max(50, "50 cases max").optional(),
     publish_gate: publishGateSchema.optional(),
+    /**
+     * V5-34's Privacy card and the post-call fields editor: `config.privacy`
+     * (optional, like `disclosure` above) and `config.qa` (the `.catchall`
+     * keeps `enabled`/`rubric_prompt`/`model`; only `fields` is edited here).
+     */
+    privacy: privacyConfigSchema.optional(),
+    qa: qaConfigSchema.optional(),
     panel: panelLayoutSchema,
     /**
      * `config.flow`, edited by the flow builder (V2-16). Lax on purpose: the
@@ -572,6 +631,14 @@ export const agentConfigFormSchema = z
         ctx.addIssue({ code: "custom", path: ["tests", index, "id"], message: "Two cases can't share an id." });
       }
       seenTestIds.add(testCase.id);
+    });
+    // V5-34: two post-call fields can't share a name (`lkap_contracts.agent_config.QaConfig._unique_field_names`).
+    const seenFieldNames = new Set<string>();
+    (val.qa?.fields ?? []).forEach((field, index) => {
+      if (seenFieldNames.has(field.name)) {
+        ctx.addIssue({ code: "custom", path: ["qa", "fields", index, "name"], message: "Two fields can't share a name." });
+      }
+      seenFieldNames.add(field.name);
     });
   });
 export type AgentConfigForm = z.infer<typeof agentConfigFormSchema>;

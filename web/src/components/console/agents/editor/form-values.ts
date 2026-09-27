@@ -5,14 +5,15 @@ import {
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
   DEFAULT_LOCALE,
+  DEFAULT_PRIVACY,
   DEFAULT_PUBLISH_GATE,
   DEFAULT_RECORDING,
   DEFAULT_TOOLS,
   DEFAULT_VOICE,
 } from "@/components/console/agents/defaults";
-import type { AgentEditorForm, AgentTestForm, PanelLayoutForm } from "@/components/console/lib/schemas";
+import type { AgentEditorForm, AgentTestForm, PanelLayoutForm, QaFieldForm } from "@/components/console/lib/schemas";
 import { panelMeta } from "@/components/shared/panel-meta";
-import type { AgentConfig, AgentLimits, AgentOut, AgentTest, AgentUpdate, PipelineConfig } from "@/contracts/lkap-contracts";
+import type { AgentConfig, AgentLimits, AgentOut, AgentTest, AgentUpdate, PipelineConfig, QaField } from "@/contracts/lkap-contracts";
 
 /**
  * `AgentTest` <-> the form's plain-array shape (V5-33): the generated
@@ -36,6 +37,16 @@ function testFormValue(test: AgentTest): AgentTestForm {
 
 function testPayload(test: AgentTestForm): AgentTest {
   return { ...test, expectations: test.expectations as AgentTest["expectations"] };
+}
+
+/** `QaField` <-> the form's shape (V5-34): `type` is optional on the contract, always concrete in the form. */
+function qaFieldFormValue(field: QaField): QaFieldForm {
+  return {
+    name: field.name,
+    type: field.type ?? "text",
+    options: [...(field.options ?? [])],
+    description: field.description ?? "",
+  };
 }
 
 /**
@@ -105,6 +116,11 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       // V5-33's Tests section: cases and the publish gate.
       tests: (config.tests ?? []).map(testFormValue),
       publish_gate: { ...DEFAULT_PUBLISH_GATE, ...config.publish_gate },
+      // V5-34's Privacy card and post-call fields editor. `qa` keeps every stored key
+      // (`enabled`/`rubric_prompt`/`model` have no editor here yet) through the spread;
+      // `qaConfigSchema`'s `.catchall` is what stops the resolver parse from dropping them.
+      privacy: { ...DEFAULT_PRIVACY, ...config.privacy },
+      qa: { ...config.qa, fields: (config.qa?.fields ?? []).map(qaFieldFormValue) },
       panel: panelFormValue(agent),
       flow: config.flow ?? null,
       // R-V2-21 / V5-28: the Tools section's "Phone calls" card edits both lists —
@@ -182,6 +198,10 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
   // V5-33: the Tests section owns `config.tests` and `config.publish_gate`.
   if (edited.tests !== undefined) config.tests = edited.tests.map(testPayload);
   if (edited.publish_gate !== undefined) config.publish_gate = { ...stored.publish_gate, ...edited.publish_gate };
+  // V5-34: the Privacy section owns `config.privacy`; `config.qa` merges over the stored
+  // value so `enabled`/`rubric_prompt`/`model` (no editor yet) survive untouched.
+  if (edited.privacy !== undefined) config.privacy = { ...stored.privacy, ...edited.privacy };
+  if (edited.qa !== undefined) config.qa = { ...stored.qa, ...edited.qa };
   // R-V2-21: the Tools section edits `config.telephony` (the transfer destinations).
   if (edited.telephony !== undefined) config.telephony = { ...stored.telephony, ...edited.telephony };
   // The flow builder (V2-16) owns `config.flow`; the api derives `mode` from it (R-V2-12).

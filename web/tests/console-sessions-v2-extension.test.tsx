@@ -71,6 +71,15 @@ describe("sessionsV2Extension registration", () => {
     }
     expect(kinds.get("handoff")?.title({ to: "Billing", from: "Intake" })).toBe("Moved to Billing");
   });
+
+  // V5-34 (ask #178(10)): the post-call privacy scrub's own timeline row.
+  it("shows the privacy scrub as 'Transcript cleaned', with a count of masked details", () => {
+    const kinds = resolveEventKinds(BUILTIN_EVENT_KINDS, [sessionsV2Extension]);
+    const kind = kinds.get("privacy_scrubbed");
+    expect(kind?.title({})).toBe("Transcript cleaned");
+    expect(kind?.summary?.({ tier: "redacted", replaced: { email: 2, card_number: 1 } })).toBe("3 details masked");
+    expect(kind?.summary?.({ tier: "redacted", replaced: {} })).toBeNull();
+  });
 });
 
 function renderWithClient(ui: React.ReactElement) {
@@ -195,5 +204,43 @@ describe("QaTab", () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(String(fetchMock.mock.calls[0][0])).toBe("/api/console/sessions/s1/qa");
+  });
+
+  // V5-34: the post-call fields the judge filled in (`QaOut.fields`).
+  it("renders a fixture's post-call fields", async () => {
+    const { QaTab } = await import("@/components/console/sessions-v2/qa-tab");
+    const session = baseSession({
+      qa: { status: "done", score: 8, fields: { claim_type: "water_damage", injury: false, notes: null } },
+    });
+    renderWithClient(<QaTab session={session} />);
+
+    expect(screen.getByText("Claim type")).toBeTruthy();
+    expect(screen.getByText("water_damage")).toBeTruthy();
+    expect(screen.getByText("Injury")).toBeTruthy();
+    expect(screen.getByText("No")).toBeTruthy();
+    expect(screen.getByText("Notes")).toBeTruthy();
+    expect(screen.getByText("Not mentioned")).toBeTruthy();
+  });
+
+  // V5-34: the manual privacy cleanup action, and the already-cleaned state.
+  it("offers 'Clean up now' for an uncleaned session, and posts /sessions/{id}/scrub", async () => {
+    const { QaTab } = await import("@/components/console/sessions-v2/qa-tab");
+    const session = baseSession({ qa: { status: "done", score: 7 } });
+    renderWithClient(<QaTab session={session} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Clean up now" }));
+
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(String(fetchMock.mock.calls[0][0])).toBe("/api/console/sessions/s1/scrub");
+  });
+
+  it("shows when a session was already cleaned up, with no button", async () => {
+    const { QaTab } = await import("@/components/console/sessions-v2/qa-tab");
+    const session = baseSession({ qa: { status: "done", score: 7 }, scrubbed_at: "2026-09-27T00:00:00Z" });
+    renderWithClient(<QaTab session={session} />);
+
+    expect(screen.getByText(/Personal details cleaned up/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Clean up now" })).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import type {
   DisclosureConfig,
   KnowledgeConfig,
   LocaleConfig,
+  PrivacyConfig,
   PublishGate,
   RecordingConfig,
   TelephonyConfig,
@@ -104,6 +105,14 @@ export const DEFAULT_DISCLOSURE: Required<DisclosureConfig> = {
   enabled: true,
   position: "both",
   text: null,
+};
+
+/** `PrivacyConfig` defaults (V5-30): nothing masked, kept in full, analytics gets the conversation. */
+export const DEFAULT_PRIVACY: Required<PrivacyConfig> = {
+  stt_redact: [],
+  storage_tier: "full",
+  telemetry_pii: true,
+  scrub_model: null,
 };
 
 /** `PublishGate` defaults (V5-29): off, and every case must pass once turned on. */

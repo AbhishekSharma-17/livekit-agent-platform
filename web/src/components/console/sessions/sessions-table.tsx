@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeftIcon, ChevronRightIcon, HistoryIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, HistoryIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -21,7 +22,7 @@ import { StatusChip } from "@/components/shared/status-chip";
 import { useAgents } from "@/components/console/lib/api-hooks";
 import { formatUsd } from "@/components/console/lib/cost-hooks";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import type { SessionOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, QaField, SessionOut } from "@/contracts/lkap-contracts";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ import {
   PAGE_SIZE,
   pipelineModeLabel,
   RANGE_OPTIONS,
+  rangeStart,
   SESSION_STATUS_LABEL,
   sentenceCase,
   sessionDurationMs,
@@ -135,8 +137,19 @@ export function SessionsTable() {
   const agentsQuery = useAgents();
   const connectionsQuery = useConnectionNames();
   const { filters, page, setFilter, clear, goTo } = useListState();
+  // V5-34: optional post-call field columns (a single filtered agent's own fields).
+  const [fieldColumns, setFieldColumns] = React.useState<string[]>([]);
 
   const sessions = React.useMemo(() => data?.items ?? [], [data]);
+
+  const availableFields = React.useMemo(
+    () => fieldsOfFilteredAgent(agentsQuery.data?.items ?? [], filters.agentId),
+    [agentsQuery.data, filters.agentId],
+  );
+  // Switching agent (or clearing the filter) drops columns the new field set doesn't have.
+  React.useEffect(() => {
+    setFieldColumns((prev) => prev.filter((name) => availableFields.some((f) => f.name === name)));
+  }, [availableFields]);
 
   const agentOptions = React.useMemo(() => {
     const names = new Map<string, string>();
@@ -229,6 +242,13 @@ export function SessionsTable() {
       align: "end",
       cell: (session) => <CostCell session={session} />,
     },
+    ...fieldColumns.map(
+      (name): ResponsiveTableColumn<SessionOut> => ({
+        id: `field-${name}`,
+        header: fieldLabel(name),
+        cell: (session) => <span className="text-muted-foreground">{fieldCellText(fieldCellValue(session, name))}</span>,
+      }),
+    ),
   ];
 
   const first = filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
@@ -285,6 +305,27 @@ export function SessionsTable() {
             onChange={(value) => setFilter("connectionId", value)}
             className="sm:w-44"
           />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+          {availableFields.length > 0 ? (
+            <SearchableSelect
+              aria-label="Columns"
+              multiple
+              values={fieldColumns}
+              onValuesChange={setFieldColumns}
+              options={availableFields.map((f) => ({ value: f.name, label: fieldLabel(f.name) }))}
+              placeholder="Columns"
+              triggerClassName="w-auto sm:w-40"
+              value={null}
+              onValueChange={() => {}}
+            />
+          ) : null}
+          <Button asChild variant="outline" size="sm">
+            <a href={exportCsvHref(filters)} download="sessions.csv">
+              <Icon as={DownloadIcon} size="sm" />
+              Export CSV
+            </a>
+          </Button>
         </div>
       </div>
 
@@ -350,6 +391,62 @@ export function SessionsTable() {
 function durationText(session: SessionOut): string {
   const ms = sessionDurationMs(session);
   return ms === null ? "—" : formatDuration(ms);
+}
+
+/**
+ * `GET /v1/sessions/export.csv` (V5-34, ask #178(7) — new, not an extension
+ * of an existing button): the same filters as the list, so "Export CSV"
+ * downloads exactly what's on screen. A plain link, not a fetch + blob: the
+ * console proxy already carries the admin token, and the browser handles the
+ * `Content-Disposition: attachment` response on its own.
+ */
+export function exportCsvHref(filters: SessionFilters): string {
+  const params = new URLSearchParams();
+  if (filters.agentId) params.set("agent_id", filters.agentId);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.channel) params.set("channel", filters.channel);
+  if (filters.connectionId) params.set("connection_id", filters.connectionId);
+  const since = rangeStart(filters.range);
+  if (since !== null) params.set("from", new Date(since).toISOString());
+  const qs = params.toString();
+  return `/api/console/sessions/export.csv${qs ? `?${qs}` : ""}`;
+}
+
+/** "claim_type" -> "Claim type", for the post-call field columns below. */
+function fieldLabel(name: string): string {
+  const spaced = name.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * The post-call fields a single filtered agent defines, for the "Columns"
+ * picker — the api's `_field_columns` (`routers/sessions.py`) uses the same
+ * source (the agent's *current* `config.qa.fields`) for the CSV export's own
+ * columns, so picking one here previews exactly what that column exports.
+ * Ambiguous (no agent filter, or several agents) offers nothing: there's no
+ * single field set to offer.
+ */
+function fieldsOfFilteredAgent(agents: AgentOut[], agentId: string): QaField[] {
+  if (!agentId) return [];
+  return agents.find((agent) => agent.id === agentId)?.config?.qa?.fields ?? [];
+}
+
+/**
+ * `SessionOut` (the list row) doesn't carry `qa` yet — only `GET
+ * /v1/sessions/{id}` and the CSV export compute a session's post-call field
+ * values (`docs/v5/_asks.md`, an ask is filed for the list route to carry
+ * them too). Until then this column always reads "—": the toggle and the
+ * column itself are real, and start showing values the day that ask lands.
+ */
+function fieldCellValue(session: SessionOut, name: string): unknown {
+  return (session as unknown as { qa?: { fields?: Record<string, unknown> } }).qa?.fields?.[name];
+}
+
+function fieldCellText(value: unknown): string {
+  if (value === undefined) return "—";
+  if (value === null) return "Not mentioned";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
 }
 
 /**

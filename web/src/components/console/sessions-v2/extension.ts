@@ -1,4 +1,4 @@
-import { ArrowRightLeftIcon, AudioLinesIcon, CoinsIcon, GaugeIcon, GridIcon, HashIcon, PhoneForwardedIcon } from "lucide-react";
+import { ArrowRightLeftIcon, AudioLinesIcon, CoinsIcon, GaugeIcon, GridIcon, HashIcon, PhoneForwardedIcon, ShieldIcon } from "lucide-react";
 
 import type { SessionDetailExtension, TimelineEventKind } from "@/components/console/sessions/detail/types";
 import { RecordingTab } from "./recording-tab";
@@ -70,6 +70,22 @@ const EVENT_KINDS: TimelineEventKind[] = [
     icon: AudioLinesIcon,
     title: (p) => `Recording ${String(p.status ?? "updated")}`,
     summary: (p) => (p.error ? String(p.error) : null),
+  },
+  // V5-34 (ask #178(10)): the post-call privacy scrub's own event
+  // (`api/src/lkap_api/privacy/scrub.py::PRIVACY_SCRUBBED_EVENT`) had no
+  // Timeline row; `SessionDetailOut.scrubbed_at` (the QA tab's own "Personal
+  // details cleaned up" line) reads its `ts`, this is the Timeline's copy.
+  {
+    type: "privacy_scrubbed",
+    filter: "other",
+    tone: "info",
+    icon: ShieldIcon,
+    title: () => "Transcript cleaned",
+    summary: (p) => {
+      const replaced = p.replaced as Record<string, number> | undefined;
+      const total = replaced ? Object.values(replaced).reduce((sum, n) => sum + (typeof n === "number" ? n : 0), 0) : 0;
+      return total > 0 ? `${total} detail${total === 1 ? "" : "s"} masked` : null;
+    },
   },
 ];
 

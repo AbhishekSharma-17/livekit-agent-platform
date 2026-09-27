@@ -1,0 +1,65 @@
+{
+  "$id": "lkap-contracts/AgentTest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One simulated conversation: who the caller is, what they want, what must happen.",
+  "properties": {
+    "expectations": {
+      "default": [],
+      "description": "What must be true of the agent's side, one statement each (the accuracy and task-completion judges check them).",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Expectations",
+      "type": "array"
+    },
+    "id": {
+      "description": "Stable case id, unique in the agent.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "max_turns": {
+      "default": 12,
+      "description": "Caller turns before the conversation is stopped.",
+      "maximum": 40,
+      "minimum": 1,
+      "title": "Max Turns",
+      "type": "integer"
+    },
+    "mocks": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "Tool name → the result the tool returns in this case instead of calling out (HTTP tools and connected-app actions). A string is returned as-is; anything else as JSON.",
+      "title": "Mocks",
+      "type": "object"
+    },
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "persona_instructions": {
+      "description": "Who the simulated caller is and how they talk (played by an LLM).",
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Persona Instructions",
+      "type": "string"
+    },
+    "scenario": {
+      "default": "",
+      "description": "What the caller wants in this conversation; the persona pursues it.",
+      "maxLength": 4000,
+      "title": "Scenario",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "persona_instructions"
+  ],
+  "title": "AgentTest",
+  "type": "object"
+}

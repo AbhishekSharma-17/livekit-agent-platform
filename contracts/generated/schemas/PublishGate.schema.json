@@ -1,0 +1,23 @@
+{
+  "$id": "lkap-contracts/PublishGate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Whether publishing needs a passing test run on the version being published (opt-in).",
+  "properties": {
+    "min_pass_ratio": {
+      "default": 1.0,
+      "description": "The share of cases that must pass (1.0 = every case).",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Min Pass Ratio",
+      "type": "number"
+    },
+    "require_tests": {
+      "default": false,
+      "description": "Refuse to publish unless the latest test run on this version passed.",
+      "title": "Require Tests",
+      "type": "boolean"
+    }
+  },
+  "title": "PublishGate",
+  "type": "object"
+}

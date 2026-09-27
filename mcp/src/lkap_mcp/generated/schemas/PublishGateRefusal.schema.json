@@ -1,0 +1,88 @@
+{
+  "$id": "lkap-contracts/PublishGateRefusal.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``details`` of the ``422 tests_failing`` publish refusal.",
+  "properties": {
+    "config_version": {
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "min_pass_ratio": {
+      "title": "Min Pass Ratio",
+      "type": "number"
+    },
+    "pass_ratio": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pass Ratio"
+    },
+    "reason": {
+      "enum": [
+        "missing",
+        "running",
+        "failing",
+        "error"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "run_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "queued",
+            "running",
+            "passed",
+            "failed",
+            "inconclusive",
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Status"
+    }
+  },
+  "required": [
+    "reason",
+    "config_version",
+    "min_pass_ratio"
+  ],
+  "title": "PublishGateRefusal",
+  "type": "object"
+}

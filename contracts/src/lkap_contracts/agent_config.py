@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from lkap_contracts.agent_tests import MAX_AGENT_TESTS, AgentTest, PublishGate
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, DisclosurePosition, ResolvedCompliance
 from lkap_contracts.connections import ConnectionInfo
@@ -406,6 +407,24 @@ class AgentConfig(BaseModel):
     """How the caller's timezone is chosen (R-V5-10); agents saved before it behave as ``detect``."""
     disclosure: DisclosureConfig = DisclosureConfig()
     """The AI disclosure (V5-15). On by default: agents saved before it now open with the line."""
+    tests: list[AgentTest] = Field(
+        default=[],
+        max_length=MAX_AGENT_TESTS,
+        description="Simulated conversations the agent is tested with (V5-29); they version with the config.",
+    )
+    publish_gate: PublishGate = PublishGate()
+    """V5-29: opt-in; when on, publishing needs a passing test run on the version being published."""
+
+    @field_validator("tests")
+    @classmethod
+    def _unique_test_ids(cls, value: list[AgentTest]) -> list[AgentTest]:
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for case in value:
+            (duplicates if case.id in seen else seen).add(case.id)
+        if duplicates:
+            raise ValueError(f"test ids must be unique: {', '.join(sorted(duplicates))}")
+        return value
 
 
 class ResolvedProvider(BaseModel):
@@ -518,6 +537,10 @@ class ResolvedAgentConfig(BaseModel):
     #: ``kwargs={"webhook_url": ...}``). **Contains secrets.** Empty (an api before V5-25) = those
     #: tools are not registered.
     builtin_providers: dict[BuiltinProviderSlot, ResolvedProvider] = {}
+    #: V5-29: tool name → the fixture a mocked tool returns instead of calling out, for a test
+    #: case's scratch session only (``AgentTest.mocks``). The worker honours it for HTTP tools
+    #: and connected-app actions. Empty (every real session, and an api before V5-29) = no mocks.
+    tool_mocks: dict[str, Any] = {}
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

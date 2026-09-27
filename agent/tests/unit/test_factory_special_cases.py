@@ -17,7 +17,12 @@ import pytest
 from lkap_contracts.agent_config import ResolvedProvider
 from lkap_contracts.providers import get as get_spec
 
-from lkap_agent.providers.factory import ProviderFactory, telephony_noise_cancellation, turn_detector_kwargs
+from lkap_agent.providers.factory import (
+    ProviderFactory,
+    stt_redact_kwargs,
+    telephony_noise_cancellation,
+    turn_detector_kwargs,
+)
 from lkap_agent.providers.special_cases import (
     ProviderBuildError,
     apply_pipeline_mode,
@@ -465,3 +470,61 @@ def test_turn_detector_kwargs(
     assert (
         turn_detector_kwargs(mode=mode, unlikely_threshold=threshold, connection_mode=connection) == expected
     )
+
+
+# ---------------------------------------------------------------------------- V5-30 speech-to-text redaction
+
+
+def test_the_deepgram_factory_receives_the_redact_classes(fake_plugin_module: Any) -> None:
+    """V5-30 acceptance: `privacy.stt_redact=["pci"]` reaches `deepgram.STT(redact=["pci"])`."""
+    fake_plugin_module("livekit.plugins.deepgram", STT=_Recorder)
+    provider = ResolvedProvider(
+        provider_id="deepgram-stt",
+        python_class="livekit.plugins.deepgram.STT",
+        model="nova-3",
+        kwargs={"api_key": "test-key", "language": "en-US"},
+    )
+
+    built = ProviderFactory().build("stt", provider, stt_redact=["pci"])
+
+    assert isinstance(built, _Recorder)
+    assert built.kwargs["redact"] == ["pci"]
+    assert built.kwargs["model"] == "nova-3"
+
+
+def test_build_all_threads_the_agents_stt_redact_to_the_stt_slot(fake_plugin_module: Any) -> None:
+    from fakes.fake_api import resolved_config
+
+    fake_plugin_module("livekit.plugins.deepgram", STT=_Recorder)
+    resolved = resolved_config()
+    config = resolved.config.model_copy(
+        update={"privacy": resolved.config.privacy.model_copy(update={"stt_redact": ["pci", "numbers"]})}
+    )
+    stt = ResolvedProvider(
+        provider_id="deepgram-stt",
+        python_class="livekit.plugins.deepgram.STT",
+        model="nova-3",
+        kwargs={"api_key": "test-key"},
+    )
+    resolved = resolved.model_copy(update={"config": config, "resolved": {"stt": stt}})
+
+    built = ProviderFactory().build_all(resolved)
+
+    assert built.stt.kwargs["redact"] == ["pci", "numbers"]
+
+
+def test_a_provider_without_the_capability_ignores_stt_redact() -> None:
+    """V5-30 acceptance: a provider without `capabilities.redaction` ignores the field (logged)."""
+    spec = get_spec("livekit-inference-stt")
+    kwargs: dict[str, Any] = {"model": "deepgram/nova-3", "language": "en"}
+
+    assert stt_redact_kwargs(spec, kwargs, ["pci"]) is kwargs
+
+
+def test_stt_redact_keeps_only_the_supported_classes_and_is_a_noop_when_empty() -> None:
+    spec = get_spec("deepgram-stt")
+    assert stt_redact_kwargs(spec, {}, []) == {}
+    assert stt_redact_kwargs(spec, {"model": "nova-3"}, ["phi", "pii"]) == {
+        "model": "nova-3",
+        "redact": ["phi", "pii"],
+    }

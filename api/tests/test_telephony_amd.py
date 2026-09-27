@@ -484,7 +484,12 @@ def test_v5_007_is_the_single_head() -> None:
 
     config = Config(str(API_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(API_ROOT / "alembic"))
-    assert ScriptDirectory.from_config(config).get_heads() == [REVISION]
+    # V5-40: a later migration now chains after this one; there is still exactly one head and
+    # v5_007 is on its path.
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert REVISION in {rev.revision for rev in script.walk_revisions("base", heads[0])}
 
 
 async def test_rows_saved_before_v5_007_read_as_none(world: World, database: Database) -> None:

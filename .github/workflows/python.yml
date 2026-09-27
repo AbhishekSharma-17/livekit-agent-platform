@@ -37,7 +37,8 @@ jobs:
   # a Docker build context).
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The api suite reached ~2800 tests in V5 and ran past 20 min on the hosted runners.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -85,7 +86,8 @@ jobs:
   # env var names kept verbatim from the V2-01 stub this replaces.
   test-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The Postgres run took ~18 min at V5-27 and passed 45 min by V5-31 on the hosted runners.
+    timeout-minutes: 75
 
     services:
       postgres:
@@ -138,4 +140,4 @@ jobs:
 
       - name: Run the api suite against Postgres
         working-directory: api
-        run: uv run pytest -q -m "not live"
+        run: uv run pytest -q -m "not live" --durations=20

@@ -21,6 +21,10 @@ Rules the routes rely on:
   on the row. Re-rankers check the key (Cohere's free key check; one tiny
   Voyage re-rank). Every test and change writes an audit row carrying the
   service's host, never the key.
+* **Managed search (V5-45).** A Ragie connection's test lists the partitions
+  the key can see (the first 100) in ``collections``; a knowledge base of
+  ``kind="external"`` binds to it with a partition (:func:`bind_for_kb`), and a
+  managed knowledge base can never be stored through it.
 """
 
 from __future__ import annotations
@@ -29,7 +33,9 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 from lkap_contracts.api_models import (
+    EXTERNAL_RETRIEVER_CONNECTION_KINDS,
     KNOWLEDGE_CONNECTION_PROVIDER_IDS,
     RERANKER_CONNECTION_KINDS,
     VECTOR_STORE_CONNECTION_KINDS,
@@ -48,17 +54,25 @@ from lkap_api.auth import audit
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.db.models import Credential, KnowledgeBase, KnowledgeConnection, utcnow
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
+from lkap_api.kb.external.ragie import RagieApi
 from lkap_api.kb.rerankers.cohere import CohereReranker
 from lkap_api.kb.rerankers.voyage import VoyageReranker
 from lkap_api.kb.stores.pinecone import PineconeStore
 from lkap_api.kb.stores.qdrant import QdrantStore, dense_config
 from lkap_api.kb.stores.weaviate import WeaviateStore
 from lkap_api.knowledge_connections.http import ConnectorError
-from lkap_api.knowledge_connections.runtime import build_reranker, build_store, http_client, load_connection
+from lkap_api.knowledge_connections.runtime import (
+    LoadedConnection,
+    build_reranker,
+    build_store,
+    http_client,
+    load_connection,
+)
 from lkap_api.knowledge_connections.settings import (
     KEY_REQUIRED,
     LOCATION_FIELDS,
     AnySettings,
+    check_external_ref,
     external_ref,
     load_settings,
     parse_settings,
@@ -183,6 +197,11 @@ def _declared_capabilities(kind: str, settings: AnySettings) -> KnowledgeConnect
     """What the connection does before any test (a test adds the dimension and version)."""
     if kind in RERANKER_CONNECTION_KINDS:
         return KnowledgeConnectionCapabilities(rerank=True)
+    if kind in EXTERNAL_RETRIEVER_CONNECTION_KINDS:
+        # Ragie fuses keyword and meaning matches, filters on metadata and returns the text itself.
+        return KnowledgeConnectionCapabilities(
+            managed_search=True, hybrid=True, filters=True, stores_text=True, namespaces=True
+        )
     native = bool(getattr(settings, "native_hybrid", False))
     return KnowledgeConnectionCapabilities(
         hybrid=native, filters=True, stores_text=False, namespaces=kind in {"pinecone", "weaviate"}
@@ -397,6 +416,18 @@ async def _probe_store(store: object, expected: int | None) -> _Probe:
     return probe
 
 
+async def _probe_ragie(loaded: LoadedConnection, client: httpx.AsyncClient) -> _Probe:
+    if not loaded.api_key:
+        raise ConnectorError("this Ragie connection has no key", auth=True)
+    partitions, total = await RagieApi(client, api_key=loaded.api_key).list_partitions()
+    names = [str(item["name"]) for item in partitions if isinstance(item.get("name"), str)]
+    count = total if total is not None else len(names)
+    if not names:
+        return _Probe("Connected. The key works; Ragie has no partitions yet.", [])
+    shown = "" if count <= len(names) else f" (showing the first {len(names)})"
+    return _Probe(f"Connected. Ragie has {count} partition(s){shown}: {', '.join(names[:10])}.", names)
+
+
 async def test_connection(
     db: AsyncSession,
     vault: Vault,
@@ -419,6 +450,8 @@ async def test_connection(
             probe = await _probe_store(build_store(loaded, client), expected_dimension)
             capabilities.dimension = probe.dimension_found
             capabilities.version = probe.version
+        elif row.kind in EXTERNAL_RETRIEVER_CONNECTION_KINDS:  # V5-45
+            probe = await _probe_ragie(loaded, client)
         else:
             reranker = build_reranker(loaded, client)
             assert isinstance(reranker, CohereReranker | VoyageReranker)
@@ -440,7 +473,7 @@ async def test_connection(
         collections=probe.collections,
         target=probe.target if probe.target is not None else target_name(parsed),
         target_exists=probe.target_exists,
-        dimension_expected=expected_dimension,
+        dimension_expected=expected_dimension if row.kind in VECTOR_STORE_CONNECTION_KINDS else None,
         dimension_found=probe.dimension_found,
         capabilities=capabilities,
         checked_at=checked_at,
@@ -456,11 +489,24 @@ class KbBinding:
     external_ref: str | None
 
 
-async def bind_for_kb(db: AsyncSession, workspace_id: str, connection_id: str, kb_id: str) -> KbBinding:
+async def bind_for_kb(
+    db: AsyncSession,
+    workspace_id: str,
+    connection_id: str,
+    kb_id: str,
+    *,
+    kb_kind: str = "managed",
+    requested_ref: str | None = None,
+) -> KbBinding:
     """Check that a knowledge base of ``workspace_id`` may be stored through ``connection_id``.
 
+    A ``managed`` knowledge base needs a vector store (its location is derived
+    here); an ``external`` one (V5-45) needs a managed search service and names
+    where it reads (``requested_ref``, a Ragie partition).
+
     Raises:
-        UnprocessableEntityError: Unknown connection (in this workspace) or not a vector store.
+        UnprocessableEntityError: Unknown connection (in this workspace), the wrong
+            kind of connection, or an invalid or missing partition.
     """
     row = (
         await db.execute(
@@ -472,6 +518,20 @@ async def bind_for_kb(db: AsyncSession, workspace_id: str, connection_id: str, k
     if row is None:
         raise UnprocessableEntityError(
             f"unknown knowledge connection '{connection_id}'", details={"field": "connection_id"}
+        )
+    if kb_kind == "external":
+        if row.kind not in EXTERNAL_RETRIEVER_CONNECTION_KINDS:
+            raise UnprocessableEntityError(
+                f"knowledge connection '{row.name}' is not a managed search service; a managed search "
+                "knowledge base needs a Ragie connection",
+                details={"field": "connection_id"},
+            )
+        return KbBinding(connection_id=row.id, external_ref=check_external_ref(row.kind, requested_ref))
+    if row.kind in EXTERNAL_RETRIEVER_CONNECTION_KINDS:
+        raise UnprocessableEntityError(
+            f"knowledge connection '{row.name}' is a managed search service: it holds its own documents. "
+            "Create the knowledge base as managed search (kind 'external') with a partition instead",
+            details={"field": "connection_id"},
         )
     if row.kind not in VECTOR_STORE_CONNECTION_KINDS:
         raise UnprocessableEntityError(

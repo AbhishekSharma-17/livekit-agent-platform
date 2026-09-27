@@ -70,6 +70,15 @@ const CaptionsBlock = lazy(() => import("./captions"));
 // fallback there is the traded cost).
 const TranscriptBlock = lazy(() => import("./transcript"));
 
+/** A block type this web build has no renderer for yet. */
+function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
+  return (
+    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
+      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
+    </BlockFrame>
+  );
+}
+
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -91,6 +100,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   consent: ConsentBlock as AnyBlockComponent,
   upload: UploadBlock as AnyBlockComponent,
   captions: CaptionsBlock as AnyBlockComponent,
+  // V5-32 added this type to the contract; its renderer comes with V5-36.
+  handoff: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

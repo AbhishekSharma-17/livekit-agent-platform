@@ -111,6 +111,47 @@
       "title": "AgentNode",
       "type": "object"
     },
+    "AmdConfig": {
+      "description": "Answering-machine detection on outbound calls (``TelephonyConfig.amd``, V5-32).\n\nWhen ``enabled``, the worker listens to how an outbound call is answered and\nclassifies it with the agent's own speech-to-text and language model before\nthe agent speaks. A person (or an unsure result) → the conversation goes on as\nusual. A voicemail greeting → ``on_machine``: ``leave_message`` speaks\n``message`` after the greeting and hangs up; ``hangup`` hangs up at once. A\nmailbox that cannot take a message is always hung up. A phone menu is\nnavigated by the agent when ``ivr_detection`` is on, else treated as a machine.\nInbound calls and web sessions ignore this setting.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "ivr_detection": {
+          "default": false,
+          "description": "Let the agent navigate a phone menu instead of hanging up on it.",
+          "title": "Ivr Detection",
+          "type": "boolean"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the agent says to a voicemail (leave_message). Empty: a short call-back request.",
+          "title": "Message"
+        },
+        "on_machine": {
+          "default": "hangup",
+          "enum": [
+            "hangup",
+            "leave_message"
+          ],
+          "title": "On Machine",
+          "type": "string"
+        }
+      },
+      "title": "AmdConfig",
+      "type": "object"
+    },
     "AvatarOptions": {
       "description": "Publisher-side options applied to whichever avatar plugin is selected.",
       "properties": {
@@ -215,7 +256,8 @@
             "steps",
             "consent",
             "upload",
-            "captions"
+            "captions",
+            "handoff"
           ],
           "title": "Type",
           "type": "string"
@@ -1598,6 +1640,10 @@
     "TelephonyConfig": {
       "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
       "properties": {
+        "amd": {
+          "$ref": "#/$defs/AmdConfig",
+          "description": "Answering-machine detection on outbound calls (V5-32)."
+        },
         "sms_targets": {
           "description": "Numbers the agent may text by label, besides the caller of a phone call (send_sms).",
           "items": {
@@ -1862,6 +1908,16 @@
           "maxLength": 64,
           "minLength": 1,
           "title": "Label",
+          "type": "string"
+        },
+        "mode": {
+          "default": "cold",
+          "description": "cold: hand the call over at once. warm: the agent calls the person first and briefs them while the caller is on hold, then joins them (LiveKit Cloud only; elsewhere the transfer is cold and the summary is kept on the call).",
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "title": "Mode",
           "type": "string"
         },
         "to": {

@@ -3438,6 +3438,42 @@ _NEW: list[ProviderSpec] = [
         docs_url="https://docs.voyageai.com/docs/reranker",
         get_key_url="https://dashboard.voyageai.com",
     ),
+    # V5-45: the first managed search service (K §7). Ragie ingests and ranks its own documents;
+    # a knowledge base of kind `external` names one of its partitions and is searched there. The
+    # key is checked by the connection's `Test connection`, which lists the partitions.
+    _full(
+        "ragie",
+        "knowledge",
+        "Ragie",
+        "Ragie",
+        "",
+        "",
+        secret_fields=[_api_key("Ragie API key", help_text="From the Ragie dashboard's API keys page.")],
+        fields=[
+            FieldSpec(
+                name="rerank",
+                label="Re-rank in Ragie",
+                type="boolean",
+                default=False,
+                help="Ragie keeps only the passages it judges relevant. More accurate, but slower on "
+                "every search; off answers fastest.",
+            ),
+            FieldSpec(
+                name="recency_bias",
+                label="Prefer recent documents",
+                type="boolean",
+                default=False,
+                help="Ragie ranks newer documents higher.",
+            ),
+        ],
+        capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
+        notes="Searches documents you keep in Ragie (uploaded there or synced from your apps); the "
+        "platform stores none of them. Each knowledge base reads one Ragie partition.",
+        price_note="Ragie's free Developer plan includes a monthly allowance of pages and searches; every "
+        "search an agent makes counts against it. Paid plans are billed by Ragie.",
+        docs_url="https://docs.ragie.ai/docs/retrievals-guide",
+        get_key_url="https://secure.ragie.ai",
+    ),
 ]
 
 

@@ -1,0 +1,20 @@
+{
+  "$id": "lkap-contracts/BlockConfig_handoff.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``handoff``: where the hand-off of the caller to a person stands (V5-32).\n\nThe worker writes ``HandoffBlockState`` as ``transfer_call`` runs\n(``requested → connecting → connected | timeout | ended``). ``show_queue`` shows the\ncaller's place in a queue when one is known; ``show_agent_name`` shows the person's\nname once they are on the call.",
+  "properties": {
+    "show_agent_name": {
+      "default": true,
+      "title": "Show Agent Name",
+      "type": "boolean"
+    },
+    "show_queue": {
+      "default": true,
+      "title": "Show Queue",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_handoff",
+  "type": "object"
+}

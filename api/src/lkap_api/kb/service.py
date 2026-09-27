@@ -61,6 +61,27 @@ attaches the call's cost line (``rerank_usage``, priced from the price table;
 an unknown price is "no price", never zero). A search whose ``purpose`` is
 ``auto_inject`` never calls a hosted re-ranker (D-V5-19): it is refused with a
 ``rerank_refused`` warning and the fused order is kept.
+
+**Managed search (V5-45).** A knowledge base of ``kind="external"`` has no
+vectors, chunks or embedder here: stage 1 sets it aside (no embedder check),
+and its managed search service (:class:`~lkap_api.kb.external.ExternalRetriever`,
+Ragie first) is asked for ``k`` passages concurrently with stages 2–7 over
+the managed knowledge bases, within :data:`EXTERNAL_TIMEOUT_S`; a slow or
+failing service is skipped with a ``kb_timeout`` / ``kb_error`` warning like
+any knowledge base. When only external knowledge bases are searched nothing is
+embedded. **The merge is by rank, not by score**
+(:func:`~lkap_api.kb.external.merge_by_rank`): a vendor's score is relative to
+its own retrieval and is not comparable with a cosine, fused or re-ranked
+score, so the lists are interleaved position by position (the managed list
+first on a tie) and each hit keeps its own ``score`` (``score_source`` =
+``external`` for a vendor hit). ``min_score`` and ``rerank`` apply to the
+managed knowledge bases only (the vendor has its own re-rank setting on the
+connection); ``mode`` is irrelevant to a vendor (Ragie is always hybrid).
+Automatic knowledge (``purpose="auto_inject"``) skips external knowledge bases
+(ruling on ask #236): the worker waits ~400 ms for the automatic note while a
+vendor search may take seconds, so most calls would be billed against the
+vendor's plan and then discarded. They answer through the search tool only,
+like V5-20's hosted re-rankers.
 """
 
 from __future__ import annotations
@@ -92,6 +113,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import KbChunk, KbDocument, KnowledgeBase
 from lkap_api.kb.embed import Embedder, KbEmbedderMismatchError, kb_embedder_mismatch
+from lkap_api.kb.external import ExternalRetriever, merge_by_rank
 from lkap_api.kb.lexical import LexicalResult, lexical_search
 from lkap_api.kb.rerankers.base import HostedReranker, Reranker, scores_are_normalized, sigmoid
 from lkap_api.kb.search import QUERY_CACHE, QueryEmbeddingCache, fuse_rrf
@@ -112,6 +134,9 @@ CANDIDATES: Final = 20
 RERANK_POOL: Final = 20
 #: How long one knowledge base's vector query may take before it is skipped.
 PER_KB_TIMEOUT_S: Final = 2.0
+#: How long a managed search service (V5-45) may take: a network call to the vendor, a
+#: little above its own request timeout (``kb/external/ragie.py``) so the vendor's error wins.
+EXTERNAL_TIMEOUT_S: Final = 3.5
 
 
 # --------------------------------------------------------------------------- response models
@@ -173,6 +198,7 @@ class KnowledgeService:
         reranker: Reranker | None = None,
         query_cache: QueryEmbeddingCache | None = None,
         per_kb_timeout_s: float = PER_KB_TIMEOUT_S,
+        external_timeout_s: float = EXTERNAL_TIMEOUT_S,
     ) -> None:
         """Bind the service to a session and its collaborators.
 
@@ -183,6 +209,7 @@ class KnowledgeService:
             reranker: Used only when a search asks for ``rerank="local"``.
             query_cache: The query-embedding LRU; defaults to the process-wide one.
             per_kb_timeout_s: The per-knowledge-base vector query timeout.
+            external_timeout_s: How long a managed search service may take (V5-45).
         """
         self._session = session
         self._store = store
@@ -190,6 +217,7 @@ class KnowledgeService:
         self._reranker = reranker
         self._cache = query_cache if query_cache is not None else QUERY_CACHE
         self._timeout = per_kb_timeout_s
+        self._external_timeout = external_timeout_s
 
     async def search(
         self,
@@ -226,14 +254,39 @@ class KnowledgeService:
         if not ids or not query.strip() or k <= 0:
             return response
 
-        searchable = await self._searchable(ids, workspace_id, response.warnings)
+        external: list[str] = []
+        searchable = await self._searchable(ids, workspace_id, response.warnings, external=external)
+        if purpose == "auto_inject":
+            external = []  # ask #236: managed search answers through the search tool only
+        # --- V5-45: managed search knowledge bases answer beside the pipeline, merged by rank.
+        if external:
+            return await self._search_with_external(
+                searchable, external, query, k, min_score, rerank, mode, purpose, response, started
+            )
+        # --- end V5-45
         if not searchable:
             return self._finish(response, started)
+        ranked = await self._ranked(searchable, query, rerank, mode, purpose, response, started)
+        if ranked is None:
+            return self._finish(response, started)
+        response.hits = self._floor(ranked, k, min_score, response)
+        return self._finish(response, started)
 
+    async def _ranked(
+        self,
+        searchable: list[str],
+        query: str,
+        rerank: RerankMode,
+        mode: SearchMode,
+        purpose: KbSearchPurpose | None,
+        response: KnowledgeSearchResponse,
+        started: float,
+    ) -> list[_Candidate] | None:
+        """Stages 2–6 over the managed knowledge bases: the ranked candidates (``None``: no embedding)."""
         vector = await self._cache.embed(self._embedder, query)
         response.timings_ms["embed"] = _ms(started)
         if vector is None:
-            return self._finish(response, started)
+            return None
 
         retrieve_started = time.perf_counter()
         # --- V5-20: native hybrid only when every searched knowledge base's store has it.
@@ -263,17 +316,28 @@ class KnowledgeService:
             ranked = await self._hosted_rerank(query, ranked, connection_id, searchable, purpose, response)
             response.timings_ms["rerank"] = _ms(rerank_started)
         # --- end V5-20
+        return ranked
 
+    @staticmethod
+    def _floor(
+        ranked: list[_Candidate], k: int, min_score: float | None, response: KnowledgeSearchResponse
+    ) -> list[KnowledgeHit]:
+        """Stage 7: the top ``k`` cut at ``min_score`` (``dropped`` counts the rest)."""
         top = ranked[:k]
         kept = [c for c in top if min_score is None or c.score >= min_score]
         response.dropped = len(top) - len(kept)
-        response.hits = [c.hit() for c in kept]
-        return self._finish(response, started)
+        return [c.hit() for c in kept]
 
     # ------------------------------------------------------------------- stages
     async def _searchable(
-        self, ids: list[str], workspace_id: str | None, warnings: list[KnowledgeSearchWarning]
+        self,
+        ids: list[str],
+        workspace_id: str | None,
+        warnings: list[KnowledgeSearchWarning],
+        *,
+        external: list[str] | None = None,
     ) -> list[str]:
+        """The managed knowledge bases to search; external ones (V5-45) are appended to ``external``."""
         statement = select(KnowledgeBase).where(KnowledgeBase.id.in_(ids))
         if workspace_id is not None:
             statement = statement.where(KnowledgeBase.workspace_id == workspace_id)
@@ -289,6 +353,10 @@ class KnowledgeService:
                         code="kb_not_found", kb_id=kb_id, message=f"unknown knowledge base '{kb_id}'"
                     )
                 )
+                continue
+            if row.kind == "external":  # V5-45: no embedder of ours; the service ranks it
+                if external is not None:
+                    external.append(kb_id)
                 continue
             reason = kb_embedder_mismatch(row, self._embedder)
             if reason is not None:
@@ -554,6 +622,105 @@ class KnowledgeService:
         return sorted(pool, key=lambda c: -(c.rerank_score or 0.0))
 
     # ------------------------------------------------------------------- end V5-20
+
+    # ------------------------------------------------------------------- V5-45: managed search
+    async def _search_with_external(
+        self,
+        searchable: list[str],
+        external: list[str],
+        query: str,
+        k: int,
+        min_score: float | None,
+        rerank: RerankMode,
+        mode: SearchMode,
+        purpose: KbSearchPurpose | None,
+        response: KnowledgeSearchResponse,
+        started: float,
+    ) -> KnowledgeSearchResponse:
+        """Search the managed knowledge bases and the external ones at once; merge by rank."""
+        retrievers = await self._retrievers(external, response.warnings)
+        external_started = time.perf_counter()
+        external_task = asyncio.ensure_future(self._external_fan_out(retrievers, query, k, response.warnings))
+        try:
+            managed: list[KnowledgeHit] = []
+            if searchable:  # no managed knowledge base: nothing is embedded
+                ranked = await self._ranked(searchable, query, rerank, mode, purpose, response, started)
+                managed = self._floor(ranked, k, min_score, response) if ranked is not None else []
+            external_lists = await external_task
+        finally:
+            if not external_task.done():
+                external_task.cancel()
+        response.timings_ms["external"] = _ms(external_started)
+        response.hits = merge_by_rank([managed, *external_lists], k)
+        return self._finish(response, started)
+
+    async def _retrievers(
+        self, kb_ids: list[str], warnings: list[KnowledgeSearchWarning]
+    ) -> list[tuple[str, ExternalRetriever]]:
+        """Each external knowledge base's retriever, built one after another (they read the session)."""
+        if not isinstance(self._store, KbStoreRouter):
+            for kb_id in kb_ids:
+                warnings.append(
+                    KnowledgeSearchWarning(
+                        code="kb_error", kb_id=kb_id, message="managed search is unavailable here"
+                    )
+                )
+            return []
+        built: list[tuple[str, ExternalRetriever]] = []
+        for kb_id in kb_ids:
+            try:
+                built.append((kb_id, await self._store.runtime.retriever_for_kb(kb_id)))
+            except Exception as exc:  # noqa: BLE001 - one knowledge base must not fail the search
+                message = getattr(exc, "message", None) or type(exc).__name__
+                log.warning("kb_external_unavailable", kb_id=kb_id, error_type=type(exc).__name__)
+                warnings.append(
+                    KnowledgeSearchWarning(
+                        code="kb_error",
+                        kb_id=kb_id,
+                        message=f"knowledge base '{kb_id}' cannot be searched ({message})",
+                    )
+                )
+        return built
+
+    async def _external_fan_out(
+        self,
+        retrievers: list[tuple[str, ExternalRetriever]],
+        query: str,
+        k: int,
+        warnings: list[KnowledgeSearchWarning],
+    ) -> list[list[KnowledgeHit]]:
+        """Ask every managed search service at once, each within :data:`EXTERNAL_TIMEOUT_S`."""
+
+        async def one(kb_id: str, retriever: ExternalRetriever) -> list[KnowledgeHit]:
+            try:
+                hits = await asyncio.wait_for(retriever.search(query, k=k), self._external_timeout)
+                return [
+                    hit if hit.kb_id == kb_id else hit.model_copy(update={"kb_id": kb_id}) for hit in hits[:k]
+                ]
+            except TimeoutError:
+                log.warning("kb_external_timeout", kb_id=kb_id, timeout_s=self._external_timeout)
+                warnings.append(
+                    KnowledgeSearchWarning(
+                        code="kb_timeout",
+                        kb_id=kb_id,
+                        message=f"knowledge base '{kb_id}' did not answer in {self._external_timeout:g} s",
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 - one knowledge base must not fail the search
+                message = getattr(exc, "message", None) or type(exc).__name__
+                log.warning("kb_external_failed", kb_id=kb_id, error_type=type(exc).__name__)
+                warnings.append(
+                    KnowledgeSearchWarning(
+                        code="kb_error",
+                        kb_id=kb_id,
+                        message=f"knowledge base '{kb_id}' could not be searched ({message})",
+                    )
+                )
+            return []
+
+        return list(await asyncio.gather(*(one(kb_id, retriever) for kb_id, retriever in retrievers)))
+
+    # ------------------------------------------------------------------- end V5-45
     def _finish(self, response: KnowledgeSearchResponse, started: float) -> KnowledgeSearchResponse:
         response.timings_ms["total"] = _ms(started)
         log.debug(

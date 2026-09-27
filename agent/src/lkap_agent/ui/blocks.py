@@ -21,6 +21,7 @@ from lkap_contracts.packs import PackManifest
 from lkap_contracts.ui_protocol import (
     BlockSpec,
     BlockType,
+    CaptionsBlockState,
     ChoicesBlockState,
     ConsentBlockState,
     DetailsBlockState,
@@ -28,6 +29,8 @@ from lkap_contracts.ui_protocol import (
     DocumentHighlight,
     FormBlockState,
     GalleryBlockState,
+    HandoffBlockState,
+    HandoffStatus,
     KbCitation,
     KbCitationsBlockState,
     MarkdownBlockState,
@@ -62,6 +65,7 @@ __all__ = [
     "flow_steps_state",
     "open_citation",
     "pick_block",
+    "set_handoff",
     "session_block_specs",
     "initial_block_state",
     "initial_block_states",
@@ -96,6 +100,9 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "steps": StepsBlockState,
     "consent": ConsentBlockState,
     "upload": UploadBlockState,
+    # asks #202 (V5-31): seeded from the config and validated on every patch.
+    "captions": CaptionsBlockState,
+    "handoff": HandoffBlockState,
 }
 
 #: Session channels with no screen: panel blocks are invisible there (V5-08).
@@ -197,10 +204,15 @@ def initial_block_state(spec: BlockSpec) -> dict[str, Any]:
                 if isinstance(f, dict)
             ]
     try:
-        return _dump(model.model_validate(seed))
+        state = _dump(model.model_validate(seed))
     except ValidationError as exc:
         logger.warning("block config does not seed a valid state", block_id=spec.id, error=str(exc))
-        return _dump(model())
+        state = _dump(model())
+    if spec.type == "captions" and state.get("language") is None:
+        # The conversation's language is not in the config: `PlatformAgent._init_captions`
+        # fills it with `setdefault` before the first snapshot, so an empty key is left out.
+        state.pop("language", None)
+    return state
 
 
 def initial_block_states(specs: Iterable[BlockSpec]) -> dict[str, Any]:
@@ -451,6 +463,56 @@ async def open_citation(ui: UiChannel, block_id: str, data: Mapping[str, Any]) -
     await ui.set_block(target, state.model_dump(mode="json"))
     ui.show_block(target)
     return {"opened": "document", "block_id": target, "page": page}
+
+
+async def set_handoff(
+    ui: Any,
+    panel: PanelLayout,
+    status: HandoffStatus,
+    *,
+    mode: str | None = None,
+    target: str | None = None,
+    agent_name: str | None = None,
+    reason: str | None = None,
+) -> list[str]:
+    """Write the hand-off state into every `handoff` block of the session (V5-32).
+
+    `transfer_call` drives it `requested -> connecting -> connected | timeout |
+    ended`; a panel without a `handoff` block is a no-op. A block that cannot be
+    written (a channel without block support) is skipped with a debug line: the
+    transfer itself must never fail on the panel.
+
+    Args:
+        ui: The session's `UiChannel`.
+        panel: The agent's panel layout (fallback when the channel holds no specs).
+        status: The new status.
+        mode: The transfer that runs (`cold` / `warm`).
+        target: The destination's label (never its number).
+        agent_name: The person's name once connected, when known.
+        reason: A short plain-words line (`timeout`).
+
+    Returns:
+        The ids of the blocks written.
+    """
+    ids = block_ids_of_type(session_block_specs(ui, panel), "handoff")
+    if not ids:
+        return []
+    state = HandoffBlockState(
+        status=status,
+        mode=mode if mode in ("cold", "warm") else None,
+        target=target,
+        agent_name=agent_name,
+        reason=reason,
+    )
+    written: list[str] = []
+    for block_id in ids:
+        try:
+            await ui.set_block(block_id, _dump(state))
+        except Exception:  # noqa: BLE001 - the panel is advisory; the transfer goes on
+            logger.debug("handoff block not written", block_id=block_id, exc_info=True)
+            continue
+        written.append(block_id)
+    return written
 
 
 def _dump(instance: BaseModel) -> dict[str, Any]:

@@ -20,6 +20,7 @@
     { "id": "progress", "type": "steps", "title": "Progress", "config": { "source": "flow" }, "order": 15 },
     { "id": "recording_consent", "type": "consent", "title": null, "config": { "kind": "recording" }, "order": 16 },
     { "id": "documents", "type": "upload", "title": "Send a file", "config": { "camera_capture": true }, "order": 17 },
-    { "id": "live_captions", "type": "captions", "title": "Captions", "config": { "position": "block" }, "order": 18 }
+    { "id": "live_captions", "type": "captions", "title": "Captions", "config": { "position": "block" }, "order": 18 },
+    { "id": "handoff", "type": "handoff", "title": "Talking to a person", "config": { "show_queue": true }, "order": 19 }
   ]
 }

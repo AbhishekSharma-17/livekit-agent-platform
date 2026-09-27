@@ -662,7 +662,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-29 | Opus | 7 | merged | cdd5855 | | |
 | V5-30 | Opus | 7 | merged | 983faf7 | STT redaction deferred | |
 | V5-31 | Opus | 7 | merged | 8c7331f | Inference `multi` to confirm | |
-| V5-32 | Opus | 7 | planned | | deferred (telephony offline) | |
+| V5-32 | Opus | 7 | merged | ea2a094 | deferred (telephony offline) | |
 | V5-33 | Sonnet | 8 | planned | | | |
 | V5-34 | Sonnet | 8 | planned | | | |
 | V5-35 | Sonnet | 8 | planned | | | |
@@ -675,7 +675,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V5-42 | Sonnet | 10 | planned | | | |
 | V5-43 | Opus | 10 | planned | | | |
 | V5-44 | Sonnet | 10 | planned | | | |
-| V5-45 | Opus | 10 | planned | | deferred (needs a Ragie key) | |
+| V5-45 | Opus | 10 | merged | f3f060f | deferred (needs a Ragie key) | |
 | V5-46 | Opus + Fable | 11 | planned | | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v4_003_session_estimates`, `v5_001_knowledge_p0`, `v5_010_tool_provider_kind` · 2026-09-26 (user-approved) · backup `lkap.db.pre-v4_003-v5_010.<ts>` in the session scratchpad; row counts unchanged, FTS 154/154, integrity and FK checks clean. Rehearsed on `integ-db`: `v4_002 → v4_003 → v5_001 → v5_010` (`v5_010_tool_provider_kind`, V5-47's `Tool.kind` check constraint, added to the ledger).

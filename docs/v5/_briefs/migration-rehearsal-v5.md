@@ -318,3 +318,35 @@ cd api && uv run alembic upgrade head      # v5_002_session_uploads -> v5_005_kn
 ```
 
 Instant on the dev database (a small table rebuild of `knowledge_bases`). **Order:** backup → `upgrade head` → restart the api (it mounts `/v1/knowledge-connections` and reads the new columns; an api on this code against an unmigrated database fails on every knowledge-base query). The worker needs no restart for V5-20.
+
+
+## v5_007_telephony_amd (V5-32)
+
+Rehearsed on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session scratchpad only
+(`api/data/lkap.db` was not read or touched), chained after `v5_005_knowledge_connections` (the head
+when V5-32 started; `alembic heads` → `v5_005_knowledge_connections`).
+
+```
+upgrade head:                    ... -> v5_005_knowledge_connections -> v5_007_telephony_amd
+downgrade v5_005_knowledge_connections: v5_007_telephony_amd -> v5_005_knowledge_connections
+upgrade head:                    v5_005_knowledge_connections -> v5_007_telephony_amd
+check:                           No new upgrade operations detected.
+```
+
+Three nullable `ADD COLUMN`s on `calls` (`amd_result VARCHAR(32)`, `transfer_mode VARCHAR(8)`,
+`transfer_summary TEXT`); no rebuild, `status_valid` / `direction_valid` untouched (the downgrade uses
+SQLite's native `DROP COLUMN`, and `tests/test_telephony_amd.py` pins that the CHECKs survive
+up/down/up). **Postgres: rendered, not executed**: `upgrade v5_005_knowledge_connections:v5_007_telephony_amd
+--sql` emits exactly the three `ALTER TABLE calls ADD COLUMN`, the downgrade the three `DROP COLUMN`.
+
+### To apply (coordinator)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_007.db"
+cd api && uv run alembic upgrade head      # v5_005_knowledge_connections -> v5_007_telephony_amd
+```
+
+Instant. **Order:** backup → `upgrade head` → restart the api (it reads and writes the new `calls`
+columns on every call list, report and `/resolved` of a phone session; an api on this code against an
+unmigrated database fails on those) → restart the worker (the AMD start path, `transfer_call`'s `summary`
+and the warm path). Nothing else changes for existing agents: `amd` is off and every target is `cold`.

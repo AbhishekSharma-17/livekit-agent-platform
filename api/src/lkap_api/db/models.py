@@ -1281,6 +1281,12 @@ class Call(Base):
     ended_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     hangup_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
     transfer_to: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: V5-32 (`v5_007_telephony_amd`): what answered an outbound call when answering-machine
+    #: detection ran (`lkap_contracts.telephony.AmdResult`); the transfer that ran and the
+    #: agent's summary for the person the caller was handed to.
+    amd_result: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    transfer_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    transfer_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint("direction IN ('inbound','outbound')", name="direction_valid"),

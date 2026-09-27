@@ -102,6 +102,7 @@ from lkap_api.recordings.service import RecordingStopOut
 from lkap_api.recordings.service import stop_recording as stop_egress_recording
 from lkap_api.routers.workspaces import workspace_compliance, workspace_default_timezone
 from lkap_api.settings import Settings
+from lkap_api.telephony.calls import warm_transfer_route
 from lkap_api.tool_providers.provisioning import apply_denied_actions
 from lkap_api.vault import Vault
 from lkap_api.webhooks import events as webhook_events
@@ -427,6 +428,8 @@ async def _build_resolved(
         voices_by_language=resolve_language_voices(config, secrets),
         # V5-29 (ask #190): a running test case's fixtures; `{}` for every real session.
         tool_mocks=await tool_mocks_for_session(db, session),
+        # V5-32 (D-V5-21): the warm-transfer route (Cloud, one outbound trunk, policy-vetted targets).
+        warm_transfer=await warm_transfer_route(db, session, connection, config),
     )
 
 

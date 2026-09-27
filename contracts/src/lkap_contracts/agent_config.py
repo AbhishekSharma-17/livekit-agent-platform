@@ -12,7 +12,7 @@ from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language
 from lkap_contracts.qa import MAX_QA_FIELDS, QaField
-from lkap_contracts.telephony import TelephonyConfig
+from lkap_contracts.telephony import TelephonyConfig, WarmTransferRoute
 from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
 from lkap_contracts.turn_handling import (
@@ -681,6 +681,11 @@ class ResolvedAgentConfig(BaseModel):
     #: case's scratch session only (``AgentTest.mocks``). The worker honours it for HTTP tools
     #: and connected-app actions. Empty (every real session, and an api before V5-29) = no mocks.
     tool_mocks: dict[str, Any] = {}
+    #: V5-32 (D-V5-21): how the worker places a warm transfer's private consult call: the
+    #: connection's outbound trunk and the ``warm`` targets the dialing policy allows today.
+    #: ``None`` (not a LiveKit Cloud connection, no single synced outbound trunk, no allowed warm
+    #: target, not a phone call, or an api before V5-32) = every transfer runs cold.
+    warm_transfer: WarmTransferRoute | None = None
 
 
 #: Slots each pipeline mode requires, in the order the console renders them.

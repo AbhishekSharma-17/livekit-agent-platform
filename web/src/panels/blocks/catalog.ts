@@ -41,6 +41,7 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "consent",
   "upload",
   "captions",
+  "handoff",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -527,6 +528,19 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       },
     ],
     filledBy: "the conversation",
+  },
+  // V5-32: minimal entry (PLAN-V5 §0.1, R-V5-7); the renderer and previews come with V5-36.
+  handoff: {
+    type: "handoff",
+    label: "Handoff",
+    description: "Shows the caller when they are being put through to a person, and when that person joins.",
+    defaultTitle: "Talking to a person",
+    idStem: "handoff",
+    configFields: [
+      { key: "show_queue", label: "Show the caller's place in the queue", kind: "boolean", default: true },
+      { key: "show_agent_name", label: "Show the person's name", kind: "boolean", default: true },
+    ],
+    filledBy: "transfer_call",
   },
 };
 

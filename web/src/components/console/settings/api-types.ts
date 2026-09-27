@@ -214,6 +214,8 @@ export const KNOWN_WEBHOOK_EVENTS: string[] = [
   "recording.ready",
   "call.started",
   "call.ended",
+  // V5-32: an outbound call reached an answering machine.
+  "call.voicemail",
   "tool.needs_reauth",
 ];
 
@@ -224,5 +226,6 @@ export const WEBHOOK_EVENT_LABEL: Record<string, string> = {
   "recording.ready": "Recording ready",
   "call.started": "Call answered",
   "call.ended": "Call ended",
+  "call.voicemail": "Call reached voicemail",
   "tool.needs_reauth": "Integration needs sign-in",
 };

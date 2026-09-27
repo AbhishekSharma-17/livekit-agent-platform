@@ -719,3 +719,50 @@ async def test_a_choices_answer_that_is_not_an_option_is_not_stored() -> None:
     assert result.ok
     assert channel.state.blocks["pick"]["selected"] == []
     assert channel.state.blocks["pick"]["status"] == "submitted"
+
+
+# ------------------------------------------------------------------ V5-32: handoff, captions (#202)
+def test_handoff_and_captions_blocks_have_state_models() -> None:
+    from lkap_agent.ui.blocks import BLOCK_STATE_MODELS  # noqa: PLC0415
+
+    assert {"handoff", "captions"} <= set(BLOCK_STATE_MODELS)
+    handoff = BlockSpec(id="handoff", type="handoff", config={"show_queue": False})
+    assert initial_block_state(handoff) == {
+        "status": "idle",
+        "mode": None,
+        "target": None,
+        "queue_position": None,
+        "agent_name": None,
+        "reason": None,
+    }
+    # asks #202: the config seeds `target_language`; the conversation's language is left for
+    # `PlatformAgent._init_captions` to fill (it uses `setdefault`).
+    captions = BlockSpec(id="cap", type="captions", config={"target_language": "hi", "position": "bottom"})
+    assert initial_block_state(captions) == {"target_language": "hi"}
+
+
+def test_a_captions_or_handoff_state_is_now_validated() -> None:
+    assert validate_block_state("captions", {"language": "hi"}) == {"language": "hi", "target_language": None}
+    with pytest.raises(ValidationError):
+        validate_block_state("captions", {"language": ["hi"]})
+    with pytest.raises(ValidationError):
+        validate_block_state("handoff", {"status": "ringing"})
+
+
+async def test_set_handoff_writes_every_handoff_block_and_skips_panels_without_one() -> None:
+    from lkap_agent.ui.blocks import set_handoff  # noqa: PLC0415
+
+    channel = UiChannel(FakeRoom(), "sess-1")  # type: ignore[arg-type]
+    panel = PanelLayout(
+        blocks=[BlockSpec(id="handoff", type="handoff"), BlockSpec(id="handoff_2", type="handoff")]
+    )
+    channel.init_blocks(panel.blocks)
+
+    written = await set_handoff(channel, panel, "connecting", mode="warm", target="Claims desk")
+
+    assert written == ["handoff", "handoff_2"]
+    assert channel.state.blocks["handoff"]["status"] == "connecting"
+    assert channel.state.blocks["handoff_2"]["target"] == "Claims desk"
+    plain = UiChannel(FakeRoom(), "sess-2")  # type: ignore[arg-type]
+    plain.init_blocks([BlockSpec(id="notes", type="notes")])
+    assert await set_handoff(plain, PanelLayout(blocks=[]), "ended") == []

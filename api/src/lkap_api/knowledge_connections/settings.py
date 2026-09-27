@@ -27,11 +27,18 @@ here from the connection and the knowledge base id, never taken from a client:
 
 Settings that decide that location (url, collection, index) cannot change while
 knowledge bases are stored through the connection (the service answers 409).
+
+**Managed search (V5-45).** A Ragie connection holds no location setting: each
+knowledge base of ``kind="external"`` names its own partition, which the
+client chooses at creation (:func:`check_external_ref`) and which is then
+fixed. Its settings are Ragie's per-search options (``rerank``,
+``recency_bias``), which may change at any time.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import re
 from typing import Annotated, Any, Final, Literal
 from urllib.parse import urlsplit, urlunsplit
 
@@ -40,6 +47,9 @@ from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
 from lkap_api.errors import UnprocessableEntityError
 from lkap_api.net_guard import NetPolicy, check_url
+
+#: A Ragie partition name (V5-45; mirrored in ``kb/external/ragie.py``).
+RAGIE_PARTITION_PATTERN: Final = r"^[a-z0-9_-]{1,100}$"
 
 #: Model ids: the registry's id alphabet, short.
 ModelId = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9._\-]{1,100}$")]
@@ -85,8 +95,20 @@ class VoyageRerankSettings(_Settings):
     model: ModelId = "rerank-2.5-lite"
 
 
+class RagieSettings(_Settings):
+    """Ragie's per-search options (V5-45); the partition is each knowledge base's."""
+
+    rerank: bool = False
+    recency_bias: bool = False
+
+
 AnySettings = (
-    QdrantSettings | PineconeSettings | WeaviateSettings | CohereRerankSettings | VoyageRerankSettings
+    QdrantSettings
+    | PineconeSettings
+    | WeaviateSettings
+    | CohereRerankSettings
+    | VoyageRerankSettings
+    | RagieSettings
 )
 
 SETTINGS_MODELS: Final[dict[str, type[_Settings]]] = {
@@ -95,6 +117,7 @@ SETTINGS_MODELS: Final[dict[str, type[_Settings]]] = {
     "weaviate": WeaviateSettings,
     "cohere_rerank": CohereRerankSettings,
     "voyage_rerank": VoyageRerankSettings,
+    "ragie": RagieSettings,
 }
 
 #: Settings that decide where a knowledge base's vectors are; frozen while knowledge bases exist.
@@ -104,10 +127,11 @@ LOCATION_FIELDS: Final[dict[str, frozenset[str]]] = {
     "weaviate": frozenset({"url", "collection"}),
     "cohere_rerank": frozenset(),
     "voyage_rerank": frozenset(),
+    "ragie": frozenset(),
 }
 
 #: Kinds that need a key; Qdrant and Weaviate may run without one (a local or private cluster).
-KEY_REQUIRED: Final[frozenset[str]] = frozenset({"pinecone", "cohere_rerank", "voyage_rerank"})
+KEY_REQUIRED: Final[frozenset[str]] = frozenset({"pinecone", "cohere_rerank", "voyage_rerank", "ragie"})
 
 
 def _http_allowed(host: str, policy: NetPolicy) -> bool:
@@ -197,6 +221,25 @@ def external_ref(kind: str, settings: AnySettings, kb_id: str) -> str | None:
             return f"{settings.collection}/{kb_namespace(kb_id)}"
         case _:
             return None
+
+
+def check_external_ref(kind: str, raw: str | None) -> str:
+    """Validate where an external knowledge base lives in a managed search service (V5-45).
+
+    Raises:
+        UnprocessableEntityError: Missing, or not a name the service accepts
+            (a Ragie partition: lower-case letters, digits, ``_`` and ``-``).
+    """
+    value = (raw or "").strip()
+    details = {"field": "external_ref"}
+    if not value:
+        raise UnprocessableEntityError("name the partition this knowledge base reads", details=details)
+    if kind == "ragie" and re.fullmatch(RAGIE_PARTITION_PATTERN, value) is None:
+        raise UnprocessableEntityError(
+            "a Ragie partition name uses lower-case letters, digits, '_' and '-' (at most 100 characters)",
+            details=details,
+        )
+    return value
 
 
 def target_name(settings: AnySettings) -> str | None:

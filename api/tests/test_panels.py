@@ -97,7 +97,8 @@ async def test_connect_returns_an_explicit_panel_verbatim(admin_client: httpx.As
     response = await admin_client.post(f"/v1/agents/{agent['id']}/connect", json={})
 
     assert response.status_code == 200, response.text
-    assert response.json()["agent"]["panel"] == custom
+    # V5-43: the stored panel reads back with `accept_state_delta` at its default (off).
+    assert response.json()["agent"]["panel"] == {**custom, "accept_state_delta": False}
 
 
 async def test_resolve_and_connect_layouts_are_byte_identical(

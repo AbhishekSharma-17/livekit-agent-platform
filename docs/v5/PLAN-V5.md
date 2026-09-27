@@ -716,7 +716,7 @@ Closed by V5-46 on 2026-09-28 against `git log main` at `86d0f3b`: every package
 | V5-43 | Opus | 10 | merged | 3a4ceed (ff; noted in fb1d8f7) | deferred (needs a coordinator walk after a worker restart) | #314 |
 | V5-44 | Sonnet | 10 | merged | 7af0056 (ff; noted in 58c377d) | deferred (with V5-43; one production web build, #319) | #319 |
 | V5-45 | Opus | 10 | merged | f3f060f (ff; noted in e1d04d6) | deferred (needs a Ragie key) | #235 |
-| V5-46 | Opus (docs) + Fable | 11 | review done: the docs half and Fable's final review (R-V5-19, §7) are committed on the package branch; the coordinator sets `merged` and fills the commit at merge | | none (card) | |
+| V5-46 | Opus (docs) + Fable | 11 | merged | 11ac738 (docs), 08ff2e3 (review) | none (card) | |
 
 Status corrections made at close: V5-01, V5-02, V5-03 and V5-18 named branch commits that are not on `main` (`cf293e3`, `753d0c9`/`d128e20`, `5f3c540`/`aa6c81f`, `bd5f198`); they now name the commits that landed. The Live column said nothing for most packages; every blank now says whether the check ran. V5-25's "partly deferred" and V5-30's "STT redaction deferred" implied the rest had run; their briefs say nothing ran. V5-18's "needs the Composio key (present)" did not say the check never ran. V5-46 was `planned`.
 

@@ -636,6 +636,17 @@
                   "caller_timezone": "detect"
                 }
               },
+              "memory": {
+                "$ref": "#/$defs/MemoryConfig",
+                "default": {
+                  "consent_line": null,
+                  "enabled": false,
+                  "max_recall_tokens": 400,
+                  "retention_days": 90,
+                  "scope": "agent",
+                  "verbatim": false
+                }
+              },
               "pack_settings": {
                 "additionalProperties": true,
                 "default": {},
@@ -1786,6 +1797,65 @@
               }
             },
             "title": "LocaleConfig",
+            "type": "object"
+          },
+          "MemoryConfig": {
+            "description": "What the agent remembers about a returning caller (V5-40, D-V5-17). Off by default.\n\nCallers are identified by a pseudonymous id (a keyed hash of their phone number or of\nthe identity the embedding site passed), never by the number itself. The memories are\nread once when the session starts and written once after it ends, never during the call.",
+            "properties": {
+              "consent_line": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A sentence the agent says early in the call when the session will be remembered (for example that the conversation is remembered to help next time). `None`: no line.",
+                "title": "Consent Line"
+              },
+              "enabled": {
+                "default": false,
+                "description": "Remember callers across sessions. Nothing is read or written while this is off.",
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "max_recall_tokens": {
+                "default": 400,
+                "description": "The most text (in tokens, about four characters each) of recalled memories added to the agent's instructions at the start of a session.",
+                "maximum": 2000,
+                "minimum": 50,
+                "title": "Max Recall Tokens",
+                "type": "integer"
+              },
+              "retention_days": {
+                "default": 90,
+                "description": "Days a caller's memories are kept after their last session; then they are deleted.",
+                "maximum": 3650,
+                "minimum": 1,
+                "title": "Retention Days",
+                "type": "integer"
+              },
+              "scope": {
+                "default": "agent",
+                "description": "`agent`: only this agent reads and writes its memories of a caller; `workspace`: the memories are shared with every agent of the workspace that also uses `workspace`.",
+                "enum": [
+                  "agent",
+                  "workspace"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "verbatim": {
+                "default": false,
+                "description": "Store what the caller said as it was, without a model picking out the facts (no model call; the masking of `privacy.storage_tier` still applies). Off: the agent's language model extracts short facts after the call.",
+                "title": "Verbatim",
+                "type": "boolean"
+              }
+            },
+            "title": "MemoryConfig",
             "type": "object"
           },
           "NotifyTeamConfig": {
@@ -4483,6 +4553,17 @@
                   "caller_timezone": "detect"
                 }
               },
+              "memory": {
+                "$ref": "#/$defs/MemoryConfig",
+                "default": {
+                  "consent_line": null,
+                  "enabled": false,
+                  "max_recall_tokens": 400,
+                  "retention_days": 90,
+                  "scope": "agent",
+                  "verbatim": false
+                }
+              },
               "pack_settings": {
                 "additionalProperties": true,
                 "default": {},
@@ -5633,6 +5714,65 @@
               }
             },
             "title": "LocaleConfig",
+            "type": "object"
+          },
+          "MemoryConfig": {
+            "description": "What the agent remembers about a returning caller (V5-40, D-V5-17). Off by default.\n\nCallers are identified by a pseudonymous id (a keyed hash of their phone number or of\nthe identity the embedding site passed), never by the number itself. The memories are\nread once when the session starts and written once after it ends, never during the call.",
+            "properties": {
+              "consent_line": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A sentence the agent says early in the call when the session will be remembered (for example that the conversation is remembered to help next time). `None`: no line.",
+                "title": "Consent Line"
+              },
+              "enabled": {
+                "default": false,
+                "description": "Remember callers across sessions. Nothing is read or written while this is off.",
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "max_recall_tokens": {
+                "default": 400,
+                "description": "The most text (in tokens, about four characters each) of recalled memories added to the agent's instructions at the start of a session.",
+                "maximum": 2000,
+                "minimum": 50,
+                "title": "Max Recall Tokens",
+                "type": "integer"
+              },
+              "retention_days": {
+                "default": 90,
+                "description": "Days a caller's memories are kept after their last session; then they are deleted.",
+                "maximum": 3650,
+                "minimum": 1,
+                "title": "Retention Days",
+                "type": "integer"
+              },
+              "scope": {
+                "default": "agent",
+                "description": "`agent`: only this agent reads and writes its memories of a caller; `workspace`: the memories are shared with every agent of the workspace that also uses `workspace`.",
+                "enum": [
+                  "agent",
+                  "workspace"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "verbatim": {
+                "default": false,
+                "description": "Store what the caller said as it was, without a model picking out the facts (no model call; the masking of `privacy.storage_tier` still applies). Off: the agent's language model extracts short facts after the call.",
+                "title": "Verbatim",
+                "type": "boolean"
+              }
+            },
+            "title": "MemoryConfig",
             "type": "object"
           },
           "NotifyTeamConfig": {
@@ -8857,6 +8997,17 @@
                   "caller_timezone": "detect"
                 }
               },
+              "memory": {
+                "$ref": "#/$defs/MemoryConfig",
+                "default": {
+                  "consent_line": null,
+                  "enabled": false,
+                  "max_recall_tokens": 400,
+                  "retention_days": 90,
+                  "scope": "agent",
+                  "verbatim": false
+                }
+              },
               "pack_settings": {
                 "additionalProperties": true,
                 "default": {},
@@ -10007,6 +10158,65 @@
               }
             },
             "title": "LocaleConfig",
+            "type": "object"
+          },
+          "MemoryConfig": {
+            "description": "What the agent remembers about a returning caller (V5-40, D-V5-17). Off by default.\n\nCallers are identified by a pseudonymous id (a keyed hash of their phone number or of\nthe identity the embedding site passed), never by the number itself. The memories are\nread once when the session starts and written once after it ends, never during the call.",
+            "properties": {
+              "consent_line": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A sentence the agent says early in the call when the session will be remembered (for example that the conversation is remembered to help next time). `None`: no line.",
+                "title": "Consent Line"
+              },
+              "enabled": {
+                "default": false,
+                "description": "Remember callers across sessions. Nothing is read or written while this is off.",
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "max_recall_tokens": {
+                "default": 400,
+                "description": "The most text (in tokens, about four characters each) of recalled memories added to the agent's instructions at the start of a session.",
+                "maximum": 2000,
+                "minimum": 50,
+                "title": "Max Recall Tokens",
+                "type": "integer"
+              },
+              "retention_days": {
+                "default": 90,
+                "description": "Days a caller's memories are kept after their last session; then they are deleted.",
+                "maximum": 3650,
+                "minimum": 1,
+                "title": "Retention Days",
+                "type": "integer"
+              },
+              "scope": {
+                "default": "agent",
+                "description": "`agent`: only this agent reads and writes its memories of a caller; `workspace`: the memories are shared with every agent of the workspace that also uses `workspace`.",
+                "enum": [
+                  "agent",
+                  "workspace"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "verbatim": {
+                "default": false,
+                "description": "Store what the caller said as it was, without a model picking out the facts (no model call; the masking of `privacy.storage_tier` still applies). Off: the agent's language model extracts short facts after the call.",
+                "title": "Verbatim",
+                "type": "boolean"
+              }
+            },
+            "title": "MemoryConfig",
             "type": "object"
           },
           "NotifyTeamConfig": {
@@ -12482,7 +12692,8 @@
               "roles-and-scopes",
               "apps",
               "tools",
-              "testing"
+              "testing",
+              "memory"
             ],
             "title": "Topic",
             "type": "string"
@@ -12590,6 +12801,86 @@
       "kind": "read",
       "mixed": false,
       "scopes": [],
+      "write_scopes": []
+    },
+    "memory_forget": {
+      "_meta": {
+        "lkap/data": [
+          "MemoryForgetOut"
+        ],
+        "lkap/scopes": [
+          "sessions:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "MemoryForgetOut",
+      "description": "Forget one caller: deletes everything every agent remembers about them (needs confirm).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "subject_id": {
+            "description": "The caller's pseudonymous id (session_memory's subject_id)",
+            "title": "Subject Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_id"
+        ],
+        "title": "memory_forgetArguments",
+        "type": "object"
+      },
+      "kind": "destructive",
+      "mixed": false,
+      "scopes": [
+        "sessions:write"
+      ],
+      "write_scopes": []
+    },
+    "memory_purge": {
+      "_meta": {
+        "lkap/data": [
+          "MemoryPurgeOut"
+        ],
+        "lkap/scopes": [
+          "sessions:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "MemoryPurgeOut",
+      "description": "Purge every caller memory of the workspace (needs confirm; cannot be undone).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "title": "memory_purgeArguments",
+        "type": "object"
+      },
+      "kind": "destructive",
+      "mixed": false,
+      "scopes": [
+        "sessions:write"
+      ],
       "write_scopes": []
     },
     "pricing_quote": {
@@ -13598,6 +13889,44 @@
           }
         },
         "title": "session_listArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "sessions:read"
+      ],
+      "write_scopes": []
+    },
+    "session_memory": {
+      "_meta": {
+        "lkap/data": [
+          "SessionMemoryOut"
+        ],
+        "lkap/scopes": [
+          "sessions:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "SessionMemoryOut",
+      "description": "What a session recalled and stored about its caller (memories untrusted), and the caller's pseudonymous id for memory_forget.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "session_memoryArguments",
         "type": "object"
       },
       "kind": "read",
@@ -15165,6 +15494,8 @@
       "lkap_guide",
       "lkap_search_docs",
       "me",
+      "memory_forget",
+      "memory_purge",
       "pricing_quote",
       "provider_catalog",
       "provider_key_list",
@@ -15173,6 +15504,7 @@
       "session_events",
       "session_get",
       "session_list",
+      "session_memory",
       "session_rescore",
       "telephony_overview",
       "tool_create_from_template",
@@ -15244,6 +15576,8 @@
       "lkap_guide",
       "lkap_search_docs",
       "me",
+      "memory_forget",
+      "memory_purge",
       "pricing_quote",
       "provider_catalog",
       "provider_key_create",
@@ -15256,6 +15590,7 @@
       "session_events",
       "session_get",
       "session_list",
+      "session_memory",
       "session_rescore",
       "telephony_overview",
       "tool_create_from_template",
@@ -15308,6 +15643,7 @@
       "session_events",
       "session_get",
       "session_list",
+      "session_memory",
       "telephony_overview",
       "tool_get",
       "tool_list",
@@ -15374,6 +15710,8 @@
       "lkap_guide",
       "lkap_search_docs",
       "me",
+      "memory_forget",
+      "memory_purge",
       "pricing_quote",
       "provider_catalog",
       "provider_key_create",
@@ -15386,6 +15724,7 @@
       "session_events",
       "session_get",
       "session_list",
+      "session_memory",
       "session_rescore",
       "telephony_overview",
       "tool_create_from_template",
@@ -15461,6 +15800,8 @@
       "lkap_guide",
       "lkap_search_docs",
       "me",
+      "memory_forget",
+      "memory_purge",
       "pricing_quote",
       "provider_catalog",
       "provider_key_create",
@@ -15473,6 +15814,7 @@
       "session_events",
       "session_get",
       "session_list",
+      "session_memory",
       "session_rescore",
       "telephony_overview",
       "tool_create_from_template",
@@ -15525,6 +15867,7 @@
       "session_events",
       "session_get",
       "session_list",
+      "session_memory",
       "telephony_overview",
       "tool_get",
       "tool_list",

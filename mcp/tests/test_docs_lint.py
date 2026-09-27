@@ -364,6 +364,10 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/cost-estimates/assumptions",
     "/v1/pricing/quotes",
     "/v1/workspace/prices",
+    # V5-40: caller memory (`lkap_api/memory/router.py`).
+    "/v1/memory/subjects/{subject_id}",
+    "/v1/memory/purge",
+    "/v1/sessions/{session_id}/memory",
 )
 
 
@@ -566,6 +570,10 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "session_get": frozenset({"session_id", "include_transcript", "include_recording_url"}),
     "session_events": frozenset({"session_id", "after_id", "types", "limit"}),
     "session_rescore": frozenset({"session_id", "confirm"}),
+    # V5-40 caller memory
+    "session_memory": frozenset({"session_id"}),
+    "memory_forget": frozenset({"subject_id", "confirm"}),
+    "memory_purge": frozenset({"confirm"}),
     # V4-15 costs (docs/v4/COSTS.md §6)
     "cost_estimate": frozenset(
         {

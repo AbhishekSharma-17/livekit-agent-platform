@@ -1,4 +1,4 @@
-"""Session, transcript and QA tools (``AGENT-ACCESS.md`` §4.8).
+"""Session, transcript, QA and caller-memory tools (``AGENT-ACCESS.md`` §4.8, V5-40).
 
 Transcript turns and event payloads came from callers and models, so they are
 returned inside the ``Untrusted`` envelope (R-V3-12). The time filters are
@@ -125,3 +125,37 @@ def register(registry: Registry) -> None:
                     )
                 return result
             raise
+
+    @registry.tool(scopes={"sessions:read"}, annotations=READ, data="SessionMemoryOut")
+    async def session_memory(session_id: str) -> ToolResult:
+        """What a session recalled and stored about its caller (memories untrusted), and the caller's
+        pseudonymous id for memory_forget.
+        """
+        out = await client.get(f"/v1/sessions/{seg(session_id)}/memory")
+        source = f"memory:{session_id}"
+        for key in ("recalled", "stored"):
+            out[key] = [untrusted(text, source) for text in out.get(key) or []]
+        return ToolResult.success(out)
+
+    @registry.tool(scopes={"sessions:write"}, annotations=DESTRUCTIVE, data="MemoryForgetOut")
+    async def memory_forget(
+        subject_id: Annotated[
+            str, Field(description="The caller's pseudonymous id (session_memory's subject_id)")
+        ],
+        confirm: bool = False,
+    ) -> ToolResult:
+        """Forget one caller: deletes everything every agent remembers about them (needs confirm)."""
+        if not confirm:
+            return ToolResult.needs_confirmation(
+                f"delete every memory of caller {subject_id} in this workspace (cannot be undone)"
+            )
+        return ToolResult.success(await client.delete(f"/v1/memory/subjects/{seg(subject_id)}"))
+
+    @registry.tool(scopes={"sessions:write"}, annotations=DESTRUCTIVE, data="MemoryPurgeOut")
+    async def memory_purge(confirm: bool = False) -> ToolResult:
+        """Purge every caller memory of the workspace (needs confirm; cannot be undone)."""
+        if not confirm:
+            return ToolResult.needs_confirmation(
+                "delete every caller memory of this workspace, for every agent (cannot be undone)"
+            )
+        return ToolResult.success(await client.post("/v1/memory/purge", json={"confirm": True}))

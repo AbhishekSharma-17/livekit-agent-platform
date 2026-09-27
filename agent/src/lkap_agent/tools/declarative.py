@@ -39,11 +39,12 @@ from lkap_contracts.tools import (
 from lkap_agent.logging import get_logger
 from lkap_agent.settings import get_settings
 from lkap_agent.tools._http_safety import (
+    MAX_RESPONSE_BYTES,
     HttpToolSecurityError,
     check_url_allowed,
     check_url_public,
     guarded_transport,
-    truncate,
+    read_bounded,
 )
 from lkap_agent.tools.execution import (
     ResolvedExecution,
@@ -54,8 +55,12 @@ from lkap_agent.tools.execution import (
     tool_flags,
 )
 from lkap_agent.tools.mcp_auth import McpOAuthBinding, ServerToken, bearer_transport_factory
+from lkap_agent.tools.untrusted import fence
 
 _log = get_logger(__name__)
+
+#: At most this much of an HTTP tool's response body is read (V5-27).
+MAX_HTTP_RESPONSE_BYTES: Final = MAX_RESPONSE_BYTES
 
 #: Matches `{{ arg_name }}`-style placeholders only (not `{{ secret.NAME }}`,
 #: whose dot the identifier pattern excludes — those are left untouched here
@@ -197,12 +202,16 @@ def _request_for(
             request_headers["User-Agent"] = user_agent
 
         try:
-            async with httpx.AsyncClient(
-                follow_redirects=False, timeout=definition.timeout_s, transport=guarded_transport()
-            ) as client:
-                response = await client.request(definition.method, url, content=body, headers=request_headers)
+            async with (
+                httpx.AsyncClient(
+                    follow_redirects=False, timeout=definition.timeout_s, transport=guarded_transport()
+                ) as client,
+                client.stream(definition.method, url, content=body, headers=request_headers) as response,
+            ):
+                raw, cut = await read_bounded(response, MAX_HTTP_RESPONSE_BYTES)
         except httpx.HTTPError as exc:
-            raise ToolError(f"HTTP request failed: {exc}") from exc
+            # V5-27: the exception text can carry the url, and the api substituted secrets into it.
+            raise ToolError(f"HTTP request failed ({type(exc).__name__})") from exc
 
         _log.debug(
             "declarative_tool.http_call",
@@ -211,17 +220,19 @@ def _request_for(
             method=definition.method,
             host=httpx.URL(url).host,
             status=response.status_code,
+            truncated=cut,
         )
 
-        result_text = response.text
+        result_text = raw.decode(response.encoding or "utf-8", errors="replace")
         if definition.result_path:
             try:
-                payload = response.json()
+                payload = json.loads(result_text)
                 result_text = json.dumps(_resolve_json_pointer(payload, definition.result_path))
             except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
                 raise ToolError(f"could not extract result_path {definition.result_path!r}: {exc}") from exc
 
-        return truncate(result_text, definition.max_result_chars)
+        # V5-27 (S5-6, R-V5-15): a third-party body is data, never instructions.
+        return fence(result_text, source=f"http:{definition.name}", max_chars=definition.max_result_chars)
 
     return handler
 
@@ -638,6 +649,7 @@ def _guarded_mcp_servers(
                     timeout=definition.timeout_s,
                     sse_read_timeout=definition.sse_read_timeout_s,
                     transport_factory=factory,
+                    server_name=definition.name,
                 ),
             )
         )

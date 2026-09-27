@@ -545,8 +545,8 @@ class McpOauthStatusOut(BaseModel):
 class KbCreate(BaseModel):
     """``POST /v1/knowledge-bases``."""
 
-    name: str
-    description: str = ""
+    name: str = Field(max_length=200)
+    description: str = Field(default="", max_length=4000)
     embedder_id: str = "fastembed-embedding"
 
 
@@ -706,10 +706,14 @@ class KbSearchOptions(BaseModel):
     )
 
 
+#: The longest search query (characters) the api embeds (S5-13).
+MAX_KB_QUERY_CHARS = 2000
+
+
 class KbSearchRequest(KbSearchOptions):
     """``POST /v1/knowledge-bases/{id}/search``."""
 
-    query: str
+    query: str = Field(min_length=1, max_length=MAX_KB_QUERY_CHARS)
     k: int = Field(4, ge=1, le=20)
 
 
@@ -1291,7 +1295,9 @@ class CostEstimateRequest(BaseModel):
     template_id: str | None = None
     config: AgentConfig | None = Field(default=None, description="An unsaved draft; validated, never stored.")
     assumptions: dict[str, float | str] | None = Field(
-        default=None, description="Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`)."
+        default=None,
+        max_length=50,
+        description="Overrides by assumption key (see `GET /v1/cost-estimates/assumptions`); at most 50.",
     )
     channel: EstimateChannel = "web"
     workspace_averages: bool = Field(
@@ -1403,8 +1409,14 @@ class InternalKbSearchRequest(KbSearchOptions):
     """``POST /internal/v1/kb/search`` (service token)."""
 
     kb_ids: list[str]
-    query: str
+    query: str = Field(min_length=1, max_length=MAX_KB_QUERY_CHARS)
     k: int = Field(4, ge=1, le=20)
+    session_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="The session searching; when set, only knowledge bases of that session's "
+        "workspace are searched (S5-29). Null from a pre-V5-27 worker.",
+    )
 
 
 # --------------------------------------------------------------------------- health

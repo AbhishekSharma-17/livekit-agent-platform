@@ -1369,8 +1369,8 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
 
     * ``tools.apps.mode`` other than ``off`` without a Composio key, or with Composio turned off
       for the workspace → error at ``tools.apps.mode``.
-    * The tool finder with ``manage_connections`` on → warning: a phone caller cannot open a
-      sign-in link (it only helps text and web chats).
+    * The tool finder with ``manage_connections`` on → error (S5-41, fail closed until the
+      Composio live check; it was a warning before V5-27).
     * An attached ``provider`` tool whose connection is gone, or expired, failed or disconnected
       → error naming the app; one whose key is not a Composio key → error.
     * The app server or tool finder with destructive actions in scope that are not in
@@ -1408,12 +1408,13 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
                 )
             )
     if apps.mode == "router" and apps.router.manage_connections:
+        # S5-41 (R-V5-16 amended): fail closed until the Composio live check shows where a
+        # caller-initiated sign-in lands (it may be shared with the next caller's session).
         issues.append(
             Issue(
                 path="tools.apps.router.manage_connections",
-                message="a phone caller cannot open a sign-in link: letting the agent connect apps only "
-                "helps text and web chats",
-                severity="warning",
+                message="letting the agent connect apps for callers is not available yet: turn it off "
+                "(connect apps under Tools, Apps instead)",
             )
         )
     definitions = ctx.tool_definitions_by_id

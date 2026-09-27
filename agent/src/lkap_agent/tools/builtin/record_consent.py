@@ -22,16 +22,27 @@ the answer settles it exactly once:
 With a request still waiting on the block (a realtime `request_consent`), the
 answer is handed to that request (`UiChannel.submit_block`) and the waiter
 settles it; otherwise this tool settles it itself.
+
+V5-27 (S5-3, S5-4): the hashed wording is always the worker's own (the block's
+config text, else the workspace preset), never the block's state, which a
+browser answer could have touched. The model records only what it *heard*:
+`record_consent` has no `method` (a tap is settled by the channel's submit,
+never by the model) and needs a user turn after the question; that turn's id
+(the `ChatMessage` id the observer puts on the `user_turn` event) is stored
+as the event's `turn_id`. What this session recorded is kept on a
+:class:`ConsentLedger`, which "already agreed" reads.
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import time
 from collections.abc import Callable
-from typing import Any, Final, Literal, cast
+from dataclasses import dataclass, field
+from typing import Any, Final, cast
 
-from livekit.agents import FunctionTool, RunContext, ToolError, function_tool, get_job_context
+from livekit.agents import FunctionTool, RunContext, ToolError, function_tool, get_job_context, llm
 from lkap_contracts.blocks import ConsentBlockConfig
 from lkap_contracts.compliance import (
     COMPLIANCE_PRESETS,
@@ -50,11 +61,18 @@ from lkap_agent.ui.blocks import describe_blocks, session_block_specs
 
 __all__ = [
     "CONSENT_GOODBYE",
+    "CONSENT_LEDGER_KEY",
+    "NO_ANSWER_HEARD",
+    "USER_TURN_WAIT_S",
     "VIA_VOICE",
+    "ConsentLedger",
     "ConsentOutcome",
     "build_record_consent_tool",
     "consent_block_config",
     "consent_block_text",
+    "consent_ledger",
+    "heard_turn_id",
+    "ledger_key",
     "outcome_message",
     "recording_consent_text",
     "settle_consent",
@@ -75,6 +93,94 @@ ConsentOutcome = dict[str, Any]
 #: `kind` values `record_consent` accepts (empty = the only block, or recording).
 _KINDS: Final[frozenset[str]] = frozenset({"", "recording", "ai_disclosure", "terms", "custom"})
 
+#: What the model is told when no caller answer was heard after the question (S5-4).
+NO_ANSWER_HEARD: Final[str] = (
+    "No answer from the caller has been heard since the question. Ask it, wait for their answer, "
+    "then call record_consent."
+)
+#: How long `record_consent` waits for the caller's words to reach the history on a realtime
+#: pipeline, where the user transcript can land after the model's function call.
+USER_TURN_WAIT_S: Final[float] = 2.0
+_USER_TURN_POLL_S: Final[float] = 0.1
+_REALTIME_MODES: Final[frozenset[str]] = frozenset({"realtime", "half_cascade"})
+#: `ConsentEvent.turn_id`'s longest value.
+_MAX_TURN_ID_CHARS: Final[int] = 64
+#: `SessionContext.userdata` key of the session's :class:`ConsentLedger` (platform-private,
+#: like `knowledge.KNOWLEDGE_STATE_KEY`).
+CONSENT_LEDGER_KEY: Final[str] = "_lkap_consent"
+
+
+@dataclass
+class ConsentLedger:
+    """What one session recorded about consent (S5-3, S5-4).
+
+    `answers` holds the latest recorded answer per consent (a block id, or
+    ``kind:<kind>`` without a block), written only by :func:`settle_consent`
+    right after the `consent` event: a browser writing `accepted` on a block
+    never counts as agreement. `asked_at` is when `request_consent` last asked
+    each block's question; a spoken answer must come after it.
+    """
+
+    answers: dict[str, bool] = field(default_factory=dict)
+    asked_at: dict[str, float] = field(default_factory=dict)
+
+
+def consent_ledger(ctx: PackSessionContext) -> ConsentLedger:
+    """The session's :class:`ConsentLedger`, created on first use (in `ctx.userdata`)."""
+    ledger = ctx.userdata.get(CONSENT_LEDGER_KEY)
+    if not isinstance(ledger, ConsentLedger):
+        ledger = ConsentLedger()
+        ctx.userdata[CONSENT_LEDGER_KEY] = ledger
+    return ledger
+
+
+def ledger_key(spec: BlockSpec | None, kind: str) -> str:
+    """The ledger key of a consent: its block id, or ``kind:<kind>`` without a block."""
+    return spec.id if spec is not None else f"kind:{kind}"
+
+
+def _latest_user_turn(ctx: PackSessionContext, asked_at: float | None) -> str | None:
+    """The id of the newest user message after the question, or `None`.
+
+    With `asked_at` (the question was put by `request_consent`) the message must
+    be newer than it; without it (the model asked out loud) it must follow an
+    assistant message, the question.
+    """
+    history = getattr(getattr(ctx, "session", None), "history", None)
+    items = getattr(history, "items", None) or []
+    after_question = asked_at is not None
+    found: str | None = None
+    for item in items:
+        if not isinstance(item, llm.ChatMessage):
+            continue
+        if item.role == "assistant":
+            after_question = True
+        elif (
+            item.role == "user"
+            and after_question
+            and item.text_content
+            and (asked_at is None or item.created_at >= asked_at)
+        ):
+            found = item.id
+    return found[:_MAX_TURN_ID_CHARS] if found else None
+
+
+async def heard_turn_id(ctx: PackSessionContext, asked_at: float | None) -> str | None:
+    """The user turn a spoken consent answer was heard in (S5-4); `None` when there is none.
+
+    On a realtime pipeline the caller's words can reach the history after the
+    model called the tool, so this waits up to :data:`USER_TURN_WAIT_S` there.
+    """
+    turn = _latest_user_turn(ctx, asked_at)
+    if turn is not None or ctx.pipeline_mode not in _REALTIME_MODES:
+        return turn
+    waited = 0.0
+    while turn is None and waited < USER_TURN_WAIT_S:
+        await asyncio.sleep(_USER_TURN_POLL_S)
+        waited += _USER_TURN_POLL_S
+        turn = _latest_user_turn(ctx, asked_at)
+    return turn
+
 
 def consent_block_config(spec: BlockSpec | None) -> ConsentBlockConfig:
     """The block's `ConsentBlockConfig`, or the defaults when it does not validate (or there is no block)."""
@@ -93,11 +199,13 @@ def recording_consent_text(ctx: PackSessionContext) -> str:
 
 
 def consent_block_text(ctx: PackSessionContext, spec: BlockSpec) -> str:
-    """The exact wording of a consent block: its state's `text`, else its config's (both set at start)."""
-    state = ctx.ui.state.blocks.get(spec.id) or {}
-    text = state.get("text") if isinstance(state, dict) else None
-    if isinstance(text, str) and text.strip():
-        return text
+    """The exact wording of a consent block, computed by the worker (S5-3).
+
+    The block's config `text` (`apply_compliance` fills an empty `recording`
+    or `ai_disclosure` one from the workspace wording at session start), else
+    the preset for its kind. Never the block's state: `request_consent` writes
+    this wording there, and the hash must not depend on what else could.
+    """
     config_text = consent_block_config(spec).text
     if config_text.strip():
         return config_text
@@ -145,6 +253,7 @@ async def settle_consent(
     accepted: bool,
     method: ConsentMethod,
     text: str,
+    turn_id: str | None = None,
 ) -> ConsentOutcome:
     """Record one consent answer: the block, the `consent` event and a decline's end of call.
 
@@ -154,7 +263,9 @@ async def settle_consent(
         kind: What the consent covers.
         accepted: The caller's answer.
         method: `tap` or `voice`.
-        text: The exact wording the caller was shown or read; hashed as is.
+        text: The exact wording the caller was shown or read, computed by the
+            worker (:func:`consent_block_text`); hashed as is.
+        turn_id: The user turn a `voice` answer was heard in (S5-4); ignored for a tap.
 
     Returns:
         What was settled; `ending` is true when the call is being ended.
@@ -184,8 +295,10 @@ async def settle_consent(
         method=method,
         text_hash=digest,
         block_id=spec.id if spec is not None else None,
+        turn_id=turn_id if method == "voice" else None,
     )
     ctx.record_event(CONSENT_EVENT, event.model_dump())
+    consent_ledger(ctx).answers[ledger_key(spec, kind)] = accepted
     config = consent_block_config(spec)
     ending = bool(
         not accepted and spec is not None and config.required and config.decline_action == "end_call"
@@ -249,36 +362,37 @@ def build_record_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
     async def record_consent(
         context: RunContext[Any],
         accepted: bool,
-        method: Literal["voice", "tap"] = "voice",
         block_id: str = "",
         kind: str = "",
     ) -> str:
-        """Record the caller's yes or no to a consent question, such as agreeing to be recorded.
+        """Record the caller's spoken yes or no to a consent question, such as agreeing to be recorded.
 
         Args:
             accepted: True when the caller agreed, false when they said no.
-            method: voice when they answered out loud; tap when you were told they answered on screen.
             block_id: The consent block; leave empty when there is only one.
             kind: What they answered about (recording when there is no consent block).
         """
-        if method not in ("voice", "tap"):
-            raise ToolError("method must be voice or tap.")
         if kind not in _KINDS:
             raise ToolError("kind must be recording, ai_disclosure, terms or custom, or empty.")
         specs = _consent_specs(ctx)
         spec = _pick_consent_block(specs, block_id, kind)
         call_id = context.function_call.call_id
+        answered_kind: ConsentKind = "recording" if spec is None else consent_block_config(spec).kind
+        # S5-4: a spoken answer needs a caller turn after the question; its id is the audit anchor.
+        asked_at = consent_ledger(ctx).asked_at.get(ledger_key(spec, answered_kind))
+        turn_id = await heard_turn_id(ctx, asked_at)
+        if turn_id is None:
+            ctx.log.debug("builtin_tool.record_consent", call_id=call_id, refused="no user turn")
+            raise ToolError(NO_ANSWER_HEARD)
         if spec is None:
-            answered_kind: ConsentKind = "recording"
             text = recording_consent_text(ctx)
         else:
-            answered_kind = consent_block_config(spec).kind
             text = consent_block_text(ctx, spec)
             submit = getattr(ctx.ui, "submit_block", None)
             pending = getattr(ctx.ui, "pending_requests", {}) or {}
             if callable(submit) and spec.id in pending:
                 # A request_consent is still waiting (realtime): it settles the answer.
-                await submit(spec.id, {"accepted": accepted, "via": method})
+                await submit(spec.id, {"accepted": accepted, "via": VIA_VOICE, "turn_id": turn_id})
                 ctx.log.debug(
                     "builtin_tool.record_consent", call_id=call_id, block_id=spec.id, handed_over=True
                 )
@@ -286,7 +400,13 @@ def build_record_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
                     "Recorded the caller's agreement." if accepted else "Recorded that the caller declined."
                 )
         outcome = await settle_consent(
-            ctx, spec=spec, kind=answered_kind, accepted=accepted, method=method, text=text
+            ctx,
+            spec=spec,
+            kind=answered_kind,
+            accepted=accepted,
+            method="voice",
+            text=text,
+            turn_id=turn_id,
         )
         ctx.log.debug(
             "builtin_tool.record_consent",
@@ -301,8 +421,8 @@ def build_record_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         record_consent,
         description=(
             "Record the caller's yes or no to a consent question (for example, agreeing to be recorded) "
-            "when they answer out loud, or when you are told they answered a consent block on screen "
-            "(method tap). Only record what the caller actually said. "
+            "when they answer out loud. Only record what the caller actually said, after you asked; "
+            "an answer tapped on screen is recorded by itself. "
             f"Consent blocks: {inventory}."
         ),
     )

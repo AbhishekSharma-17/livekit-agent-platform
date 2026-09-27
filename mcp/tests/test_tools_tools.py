@@ -237,7 +237,11 @@ async def test_tool_test_reports_a_failed_listing_as_a_warning(key: Any, mcp_ses
         result = await mcp.call("tool_test", tool_id=tool_id)
 
     assert result["data"]["reason"] == "needs_auth"
-    assert any("401" in warning for warning in result["warnings"])
+    assert any("needs_auth" in warning for warning in result["warnings"])
+    # V5-27 (S5-20): the error text is wrapped as untrusted data, never a bare warning.
+    assert result["data"]["error"]["source"] == f"mcp:{tool_id}"
+    assert "401" in result["data"]["error"]["content"]
+    assert not any("401" in warning for warning in result["warnings"])
 
 
 # ------------------------------------------------------------------ V5-25 tool templates

@@ -275,6 +275,20 @@ async def test_a_lying_declared_size_is_caught_while_reading() -> None:
     assert _block(ui)["rejected"][0]["reason"] == "too_large"
 
 
+async def test_a_stream_shorter_than_its_declared_size_is_discarded() -> None:
+    """S5-46: a caller cancelling mid-send closes the stream cleanly; the partial file is not kept."""
+    _ctx, ui, _room, api = _setup()
+    await _request(ui)
+    reader = FakeReader(PNG, size=len(PNG) + 100)
+    assert await ui.receive_upload(reader, CALLER) is None
+    assert api.posted == [] and reader.closed
+    assert _block(ui)["files"] == []
+    assert _block(ui)["rejected"][0]["reason"] == "failed"
+    # Without a declared size (0), today's behaviour stands: the file is stored.
+    assert await ui.receive_upload(FakeReader(PNG, size=0), CALLER) is not None
+    assert len(api.posted) == 1
+
+
 @pytest.mark.parametrize(("data", "name"), [(PDF, "claim.pdf"), (HTML, "photo.png"), (b"GIF8", "x.gif")])
 async def test_a_type_outside_accept_is_refused_whatever_the_name(data: bytes, name: str) -> None:
     _ctx, ui, _room, api = _setup()

@@ -158,6 +158,19 @@ ASSET_CACHE_BYTES: Final[int] = 48 * 1024 * 1024
 #: How many refused files an upload block lists (the newest).
 _MAX_REJECTIONS: Final[int] = 10
 
+#: The state fields a browser answer may write, per requestable block type (S5-3). A
+#: `form` answer lands in `values` (its keys limited to the schema's properties); an
+#: `upload` block's `files` are written by the worker only (V5-19); any other state
+#: field (a consent block's `text`, `text_hash`, `method`, `at`, ...) is the agent's.
+ANSWER_KEYS: Final[dict[str, frozenset[str]]] = {
+    "consent": frozenset({"accepted"}),
+    "choices": frozenset({"selected"}),
+}
+#: Answer keys only the agent side (`submit_block`) may set: `via: "voice"` marks an answer
+#: heard out loud, `turn_id` the user turn it was heard in (S5-3, S5-4). A browser's copy
+#: is dropped.
+AGENT_ONLY_ANSWER_KEYS: Final[frozenset[str]] = frozenset({"via", "turn_id"})
+
 
 def rejection_message(reason: UploadRejectReason, *, max_bytes: int = 0, max_files: int = 0) -> str:
     """The line an upload block shows for a refused file (plain words, no jargon)."""
@@ -923,6 +936,13 @@ class UiChannel:
         if data is None:
             await self._reject_upload(block_id, name, "too_large", target=target)
             return None
+        if declared > 0 and len(data) < declared:
+            # S5-46: a cancel mid-send still closes the stream cleanly; a file shorter than the
+            # size the browser declared (`ByteStreamInfo.size`, the stream's `total_length`) is
+            # a truncated file, never stored. No declared size keeps the old behaviour.
+            self._log.debug("upload shorter than its declared size", received=len(data), declared=declared)
+            await self._reject_upload(block_id, name, "failed", target=target)
+            return None
         if not data:
             await self._reject_upload(block_id, name, "empty", target=target)
             return None
@@ -989,13 +1009,18 @@ class UiChannel:
         return file
 
     def _verified_form_values(self, block_id: str, values: dict[str, Any]) -> dict[str, Any]:
-        """A form answer whose `file` fields keep only asset ids this session stored for that field."""
+        """A form answer limited to the schema's fields, whose `file` fields keep only stored asset ids.
+
+        S5-3: a key the form's schema does not declare is dropped (a schema
+        without `properties` keeps the answer as is). V5-19: a `file` field
+        keeps only the asset ids this session stored for that field.
+        """
         state = self.state.blocks.get(block_id)
         schema = state.get("schema") if isinstance(state, dict) else None
         properties = schema.get("properties") if isinstance(schema, dict) else None
-        if not isinstance(properties, dict):
+        if not isinstance(properties, dict) or not properties:
             return values
-        cleaned = dict(values)
+        cleaned = {key: value for key, value in values.items() if key in properties}
         for field, prop in properties.items():
             if not (isinstance(prop, dict) and prop.get(FORM_WIDGET_KEY) == "file") or field not in cleaned:
                 continue
@@ -1313,6 +1338,11 @@ class UiChannel:
     # --- lkap.agent.action dispatch (UI -> agent) ------------------------------
 
     async def _handle_agent_action(self, data: rtc.RpcInvocationData) -> str:
+        if not self._is_caller(data.caller_identity):
+            # S5-23: only the session's caller answers blocks or drives the panel (an avatar
+            # worker or anyone else in the room is dropped), as uploads already are.
+            self._log.debug("agent_action_dropped: not the caller", caller_identity=data.caller_identity)
+            return AgentActionResult(ok=False, error="not the session's caller").model_dump_json()
         try:
             action = AgentAction.model_validate_json(data.payload)
             result = await self._dispatch_agent_action(action)
@@ -1406,8 +1436,12 @@ class UiChannel:
         """Route an answer (`None` = the user cancelled) by the pending request's method.
 
         With nothing pending, a `form` block keeps the legacy form handling and
-        every other block the generic one.
+        every other block the generic one. Every caller of this method is a
+        browser answer, so the keys only the agent side may set
+        (:data:`AGENT_ONLY_ANSWER_KEYS`) are dropped here (S5-3).
         """
+        if values is not None:
+            values = {key: value for key, value in values.items() if key not in AGENT_ONLY_ANSWER_KEYS}
         entry = self._pending.get(block_id)
         method: RequestMethod
         if entry is not None:
@@ -1453,6 +1487,8 @@ class UiChannel:
         in `selected`); anything else is left to the requesting tool.
         """
         values = jsonable(values)
+        if self._block_type(block_id) == "form":
+            values = self._verified_form_values(block_id, values)
         ops: list[UiPatchOp] = []
         if self._stores_values(block_id):
             ops.append(UiPatchOp(op="set", path=block_path(block_id, "values"), value=values))
@@ -1475,16 +1511,19 @@ class UiChannel:
         await self._deliver(block_id, values, notify=notify)
 
     def _answer_field_ops(self, block_id: str, values: dict[str, Any]) -> list[UiPatchOp]:
-        """`set` ops for the keys of `values` that name state fields (status fields excluded).
+        """`set` ops for the keys of `values` the block type lists as answer keys (:data:`ANSWER_KEYS`).
 
-        Returns nothing when the block is untyped or the answer would not
+        S5-3: only a type's own answer keys are written (`consent` → `accepted`,
+        `choices` → `selected`); every other key, including another state field
+        such as a consent block's `text` or `method`, is ignored. Returns nothing
+        when the block is untyped, has no answer keys (`upload`: V5-19, its
+        `files` are written by the worker only) or the answer would not
         validate against the block's state model.
         """
         block_type = self._block_type(block_id)
         model = BLOCK_STATE_MODELS.get(block_type)
-        if model is None or block_type == "upload":
-            # V5-19: an upload block's `files` are written by the worker only, from what it
-            # received and stored; a browser answer never replaces them.
+        allowed = ANSWER_KEYS.get(block_type, frozenset()) if isinstance(block_type, str) else frozenset()
+        if model is None or not allowed:
             return []
         if block_type == "choices" and "selected" in values:
             error = choice_selection_error(self.state.blocks.get(block_id) or {}, values["selected"])
@@ -1495,7 +1534,7 @@ class UiChannel:
         ops = [
             UiPatchOp(op="set", path=key, value=value)
             for key, value in values.items()
-            if key in model.model_fields and key not in protected
+            if key in allowed and key in model.model_fields and key not in protected
         ]
         if not ops:
             return []

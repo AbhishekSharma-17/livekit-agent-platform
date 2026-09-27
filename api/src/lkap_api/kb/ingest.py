@@ -44,6 +44,7 @@ import asyncio
 import functools
 import io
 import re
+import zipfile
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -106,6 +107,28 @@ MARKITDOWN_MEDIA_TYPES: Final[dict[str, str]] = {
 
 #: Called with (chunks embedded so far, total chunks) after every embedding batch.
 ProgressCallback = Callable[[int, int], Awaitable[None]]
+
+# S5-1: DOCX/PPTX/XLSX are zip archives; the upload cap counts compressed bytes only, so the
+# archive is checked before MarkItDown decompresses anything.
+#: The largest total uncompressed size of an Office archive's members.
+MAX_ZIP_UNCOMPRESSED_BYTES: Final = 200 * 1024 * 1024
+#: The most members an Office archive may have.
+MAX_ZIP_MEMBERS: Final = 2000
+#: The highest compression ratio a member may have ...
+MAX_ZIP_RATIO: Final = 200
+#: ... once it is at least this large uncompressed (tiny, very regular XML parts compress
+#: past 200:1 legitimately and cannot hurt).
+ZIP_RATIO_MIN_BYTES: Final = 1024 * 1024
+#: Extensions that are zip archives MarkItDown opens.
+ZIP_EXTENSIONS: Final[frozenset[str]] = frozenset({".docx", ".pptx", ".xlsx"})
+#: Extraction and chunking each give up after this many seconds and fail the document (S5-1/S5-2).
+EXTRACT_TIMEOUT_S: float = 60.0
+#: A line longer than this is never a Markdown heading (S5-2: the heading match stays cheap).
+MAX_HEADING_LINE_CHARS: Final = 10_000
+
+
+class DocumentRejectedError(ValueError):
+    """A document the ingest path refuses to process; the message is stored on the row."""
 
 
 # --------------------------------------------------------------------------- chunking config
@@ -206,6 +229,8 @@ def extract_document(*, filename: str, mime: str, data: bytes) -> ExtractedDocum
     if kind == "pdf":
         return _extract_pdf(data)
     if kind == "markitdown":
+        if extension in ZIP_EXTENSIONS:
+            check_zip_archive(data)
         return _extract_with_markitdown(data, extension=extension)
     return ExtractedDocument(text=data.decode("utf-8", errors="replace"))
 
@@ -233,12 +258,52 @@ def _extract_pdf(data: bytes) -> ExtractedDocument:
     return ExtractedDocument(text="".join(parts), pages=tuple(pages))
 
 
+def check_zip_archive(data: bytes) -> None:
+    """Refuse an Office archive whose members would decompress past the limits (S5-1).
+
+    Reads only the central directory (no member is decompressed): the total
+    uncompressed size, the member count and each large member's compression ratio.
+
+    Args:
+        data: The raw ``.docx`` / ``.pptx`` / ``.xlsx`` bytes.
+
+    Raises:
+        DocumentRejectedError: The archive is unreadable or over a limit.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = archive.infolist()
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, ValueError, OSError) as exc:
+        raise DocumentRejectedError("the file is not a readable Office document") from exc
+    if len(members) > MAX_ZIP_MEMBERS:
+        raise DocumentRejectedError(f"the document has more than {MAX_ZIP_MEMBERS} parts")
+    total = 0
+    for member in members:
+        total += member.file_size
+        if total > MAX_ZIP_UNCOMPRESSED_BYTES:
+            raise DocumentRejectedError("the document is too large once decompressed")
+        if member.file_size >= ZIP_RATIO_MIN_BYTES and member.file_size > MAX_ZIP_RATIO * max(
+            member.compress_size, 1
+        ):
+            raise DocumentRejectedError("the document is compressed suspiciously well")
+
+
 @functools.cache
 def _markitdown() -> Any:
-    """One MarkItDown converter per process (built lazily: its import is heavy)."""
-    from markitdown import MarkItDown
+    """One MarkItDown converter per process (built lazily: its import is heavy).
 
-    return MarkItDown(enable_plugins=False)
+    Only the converters the ingest path needs are registered (S5-1): no zip,
+    image (exiftool), audio, Outlook, EPUB, PDF, RSS, notebook or plain-text converter.
+    """
+    from markitdown import PRIORITY_GENERIC_FILE_FORMAT, MarkItDown
+    from markitdown.converters import DocxConverter, HtmlConverter, PptxConverter, XlsxConverter
+
+    converter = MarkItDown(enable_builtins=False, enable_plugins=False)
+    converter.register_converter(HtmlConverter(), priority=PRIORITY_GENERIC_FILE_FORMAT)
+    converter.register_converter(DocxConverter())  # type: ignore[no-untyped-call]
+    converter.register_converter(XlsxConverter())  # type: ignore[no-untyped-call]
+    converter.register_converter(PptxConverter())  # type: ignore[no-untyped-call]
+    return converter
 
 
 _SLIDE_MARKER_RE = re.compile(r"<!--\s*Slide number:\s*(\d+)\s*-->[ \t]*\n?")
@@ -333,7 +398,9 @@ class _Segment:
 
 
 _LINE_RE = re.compile(r"[^\n]*\n?")
-_HEADING_RE = re.compile(r"^[ ]{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
+#: A heading's opening: up to three spaces, one to six hashes, then a space or tab. The title
+#: is cut in :func:`_heading` without a backtracking pattern, so the match is linear (S5-2).
+_HEADING_OPEN_RE = re.compile(r"[ ]{0,3}(#{1,6})[ \t]+")
 _FENCE_RE = re.compile(r"^[ ]{0,3}(```|~~~)")
 _BLANK_LINE_RE = re.compile(r"\n[ \t]*\n")
 #: A list item or a table row (matched at a line start inside the text, hence MULTILINE).
@@ -391,13 +458,9 @@ def _segments(document: ExtractedDocument) -> list[_Segment]:
             continue
         if in_fence:
             continue
-        match = _HEADING_RE.match(content)
-        if match:
-            headings[line.start()] = (
-                line.start() + len(content),
-                len(match.group(1)),
-                match.group(2).strip(),
-            )
+        found = _heading(content)
+        if found is not None:
+            headings[line.start()] = (line.start() + len(content), *found)
     cuts = sorted({0, *headings, *(page.start for page in document.pages)} - {len(text)})
     cuts = [cut for cut in cuts if cut < len(text)]
 
@@ -422,6 +485,29 @@ def _segments(document: ExtractedDocument) -> list[_Segment]:
             )
         )
     return segments
+
+
+def _heading(line: str) -> tuple[int, str] | None:
+    """A Markdown ATX heading's level and title, or ``None`` (linear time, S5-2).
+
+    ``# Title`` and ``### Title ###`` (a closing run of hashes is dropped when a space
+    or tab precedes it and a title remains), up to three leading spaces; a line longer
+    than :data:`MAX_HEADING_LINE_CHARS` is never a heading.
+    """
+    if len(line) > MAX_HEADING_LINE_CHARS:
+        return None
+    opening = _HEADING_OPEN_RE.match(line)
+    if opening is None:
+        return None
+    title = line[opening.end() :].rstrip(" \t")
+    if not title:
+        # Only whitespace after the hashes: a heading with an empty title when there are at
+        # least two whitespace characters (the pre-V5-27 pattern's reading, kept as it was).
+        return (len(opening.group(1)), "") if len(line) - opening.end(1) >= 2 else None
+    body = title.rstrip("#")
+    if body != title and body[-1:] in (" ", "\t") and body.strip():
+        title = body
+    return len(opening.group(1)), title.strip()
 
 
 def _split_units(text: str, segment: _Segment, count_tokens: TokenCounter) -> None:
@@ -492,10 +578,14 @@ def _sentences(text: str, start: int, end: int) -> list[tuple[int, int]]:
 
 
 def _is_sentence_end(text: str, mark: int, boundary: int, end: int) -> bool:
-    following = text[boundary:end].lstrip()
-    if not following:
+    # Scan to the next non-space character instead of slicing the rest of the paragraph
+    # for every mark (that slice made a long paragraph quadratic, S5-2).
+    position = boundary
+    while position < end and text[position].isspace():
+        position += 1
+    if position >= end:
         return False
-    head = following[0]
+    head = text[position]
     if not (head.isupper() or head.isdigit() or head in "\"'“‘([*_#>"):
         return False
     if text[mark] == ".":
@@ -703,9 +793,15 @@ async def ingest_into_session(
         if kb is not None:
             check_kb_embedder(kb, embedder)
         config = ChunkingConfig.from_json(kb.chunking if kb is not None else None)
-        document = await asyncio.to_thread(extract_document, filename=filename, mime=mime, data=data)
+        document = await _bounded(
+            "extracting the text",
+            asyncio.to_thread(extract_document, filename=filename, mime=mime, data=data),
+        )
         count_tokens = await token_counter_for(embedder)
-        chunks = await asyncio.to_thread(chunk_document, document, config=config, count_tokens=count_tokens)
+        chunks = await _bounded(
+            "splitting the text",
+            asyncio.to_thread(chunk_document, document, config=config, count_tokens=count_tokens),
+        )
 
         vectors: list[list[float]] = []
         texts = [chunk.embed_text for chunk in chunks]
@@ -744,7 +840,7 @@ async def ingest_into_session(
             "kb_ingest_failed",
             kb_id=kb_id,
             document_id=document_id,
-            filename=filename,
+            extension=PurePosixPath(filename.lower()).suffix[:16],
             error_type=type(exc).__name__,
         )
         if vectors_written:
@@ -772,6 +868,18 @@ async def ingest_into_session(
         chunk_count=outcome.chunk_count,
     )
     return outcome
+
+
+async def _bounded[T](step: str, work: Awaitable[T]) -> T:
+    """Await ``work`` for at most :data:`EXTRACT_TIMEOUT_S`, else fail the document (S5-1/S5-2).
+
+    A worker thread cannot be killed; the size and linear-time limits above bound what it
+    may still be doing, and the document is marked ``failed`` at once.
+    """
+    try:
+        return await asyncio.wait_for(work, timeout=EXTRACT_TIMEOUT_S)
+    except TimeoutError as exc:
+        raise DocumentRejectedError(f"{step} took longer than {EXTRACT_TIMEOUT_S:g} seconds") from exc
 
 
 async def _drop_orphan_vectors(store: VectorStore, *, kb_id: str, document_id: str) -> None:

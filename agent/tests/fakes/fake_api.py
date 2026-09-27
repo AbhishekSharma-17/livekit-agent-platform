@@ -175,6 +175,12 @@ class FakeApi:
         self.kb_queries: list[tuple[list[str], str, int]] = []
         #: The search options of each `kb_search` (V5-06; `None` when the caller sent none).
         self.kb_options: list[KbSearchOptions | None] = []
+        #: The `session_id` of each `kb_search` (S5-29; `None` when the caller sent none).
+        self.kb_session_ids: list[str | None] = []
+        #: Every `POST /internal/v1/sessions/{id}/recording/stop` (S5-5): the session ids.
+        self.recording_stops: list[str] = []
+        #: Raised by `stop_recording` when set (the api's 404 for an unknown session, ...).
+        self.stop_recording_error: Exception | None = None
         #: Telephony (R-V2-20): every call report, and every transfer request.
         self.call_reports: list[CallReportIn] = []
         self.transfers: list[tuple[str, str, str | None]] = []
@@ -202,6 +208,13 @@ class FakeApi:
             raise self.recording_error
         return self.egress_id
 
+    async def stop_recording(self, session_id: str) -> None:
+        """Record the stop request (the route is idempotent), or raise the configured error."""
+        self.recording_stops.append(session_id)
+        self.call_log.append("recording_stop")
+        if self.stop_recording_error is not None:
+            raise self.stop_recording_error
+
     async def post_recording(self, session_id: str, recording: SessionRecordingIn) -> None:
         """Record the posted recording state."""
         self.recordings.append(recording)
@@ -227,11 +240,18 @@ class FakeApi:
         self.call_log.append("summary")
 
     async def kb_search(
-        self, kb_ids: list[str], query: str, k: int = 4, *, options: KbSearchOptions | None = None
+        self,
+        kb_ids: list[str],
+        query: str,
+        k: int = 4,
+        *,
+        options: KbSearchOptions | None = None,
+        session_id: str | None = None,
     ) -> list[KbHit]:
-        """Record the query (and its options) and return the canned hits."""
+        """Record the query (its options and session) and return the canned hits."""
         self.kb_queries.append((list(kb_ids), query, k))
         self.kb_options.append(options)
+        self.kb_session_ids.append(session_id)
         return self.hits[:k]
 
     async def report_call(self, report: CallReportIn) -> None:

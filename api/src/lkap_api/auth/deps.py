@@ -405,6 +405,10 @@ def _route_path(request: Request) -> str:
     return path if isinstance(path, str) else request.url.path
 
 
+#: ``request.state`` attribute a v1 handler sets to add payload to its generic audit row.
+AUDIT_PAYLOAD_STATE = "lkap_audit_payload"
+
+
 def record_route_mutation(request: Request, db: AsyncSession, ctx: WorkspaceContext) -> None:
     """Record a generic audit row for a successful mutating v1 admin request.
 
@@ -418,6 +422,8 @@ def record_route_mutation(request: Request, db: AsyncSession, ctx: WorkspaceCont
         return
     route_path = _route_path(request)
     target_type, target_id = route_target(route_path, dict(request.path_params))
+    # A handler may add value-free detail to this one row (V5-27, S5-14: the destination host).
+    extra = getattr(request.state, AUDIT_PAYLOAD_STATE, None)
     record(
         db,
         workspace_id=ctx.workspace_id,
@@ -426,6 +432,7 @@ def record_route_mutation(request: Request, db: AsyncSession, ctx: WorkspaceCont
         action=f"{request.method.upper()} {route_path}",
         target_type=target_type,
         target_id=target_id,
+        payload=dict(extra) if isinstance(extra, dict) else None,
     )
 
 

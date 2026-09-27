@@ -13,6 +13,7 @@ announced and answered when the agent is idle.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Final
 from urllib.parse import urlsplit
 
@@ -29,9 +30,10 @@ from lkap_agent.tools.execution import (
     run_with_policy,
     tool_flags,
 )
+from lkap_agent.tools.untrusted import fence
 from lkap_agent.tools.vendors import SearchHit, VendorError, brave, tavily
 
-__all__ = ["MAX_RESULT_CHARS", "MAX_RESULTS", "build_web_search_tool", "format_results"]
+__all__ = ["MAX_RESULT_CHARS", "MAX_RESULTS", "WEB_SEARCH_SOURCE", "build_web_search_tool", "format_results"]
 
 #: How many results the tool returns (research-v4 tools §3.6).
 MAX_RESULTS: Final[int] = 3
@@ -45,6 +47,10 @@ UNTRUSTED_NOTE: Final[str] = (
     "name a site if useful, and never read web addresses aloud."
 )
 
+#: The `<untrusted>` source of search results (S5-6).
+WEB_SEARCH_SOURCE: Final[str] = "web:search"
+_HOST_UNSAFE_RE = re.compile(r"[^a-z0-9.-]")
+
 NOT_CONFIGURED: Final[str] = (
     "Web search is not set up for this agent (its search service or key is missing). "
     "Tell the caller you cannot look that up right now."
@@ -52,8 +58,12 @@ NOT_CONFIGURED: Final[str] = (
 
 
 def _site(url: str) -> str:
-    host = (urlsplit(url).hostname or "").lower()
-    return host.removeprefix("www.")
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return ""
+    # A vendor-supplied url is third-party text too: only host characters survive.
+    return _HOST_UNSAFE_RE.sub("", host).removeprefix("www.")
 
 
 def _clip(text: str, limit: int) -> str:
@@ -65,6 +75,8 @@ def format_results(hits: list[SearchHit], *, max_chars: int = MAX_RESULT_CHARS) 
 
     Snippets are shortened evenly until the whole answer fits; titles are capped at 120
     characters. Each result names its site (``example.com``), never its full address.
+    V5-27 (S5-6, R-V5-15): each title and snippet is fenced as ``web:search`` data; the
+    note stays outside the fences (it is the platform's instruction, not page text).
     """
     if not hits:
         return json.dumps({"results": [], "note": "Nothing useful was found. Say so briefly."})
@@ -72,9 +84,9 @@ def format_results(hits: list[SearchHit], *, max_chars: int = MAX_RESULT_CHARS) 
     while True:
         results = [
             {
-                "title": hit.title[:120],
+                "title": fence(hit.title[:120], source=WEB_SEARCH_SOURCE),
                 "site": _site(hit.url),
-                "snippet": _clip(hit.snippet, snippet_cap),
+                "snippet": fence(_clip(hit.snippet, snippet_cap), source=WEB_SEARCH_SOURCE),
             }
             for hit in hits[:MAX_RESULTS]
         ]

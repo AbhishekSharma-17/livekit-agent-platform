@@ -458,7 +458,40 @@ TOOL_PROVIDER_MODELS: dict[str, type[BaseModel]] = {
 
 #: Action slugs whose name marks them destructive (D-V5-7): never picked without
 #: an explicit confirmation, always blocking.
-DESTRUCTIVE_MARKERS: Final[tuple[str, ...]] = ("DELETE", "REMOVE", "DESTROY", "PURGE", "SEND_MONEY", "REFUND")
+DESTRUCTIVE_MARKERS: Final[tuple[str, ...]] = (
+    "DELETE",
+    "REMOVE",
+    "DESTROY",
+    "PURGE",
+    "SEND_MONEY",
+    "REFUND",
+    # R-V5-16 (S5-9): the wider list. A marker with an underscore matches anywhere in the
+    # slug; a plain word matches a whole slug word only (so ``PAY`` never matches ``PAYPAL``).
+    "TRASH",
+    "ARCHIVE",
+    "CANCEL",
+    "REVOKE",
+    "TRANSFER",
+    "PAYOUT",
+    "CHARGE",
+    "WIPE",
+    "TRUNCATE",
+    "DROP",
+    "BAN",
+    "KICK",
+    "TERMINATE",
+    "FORCE",
+    "RESET",
+    "DEACTIVATE",
+    "UNSUBSCRIBE",
+    "SEND_PAYMENT",
+    "MOVE_MONEY",
+    "PAY",
+)
+
+#: Tags (compared case-insensitively) a vendor uses to mark an action destructive; they win
+#: over every slug rule and over a read-only tag (R-V5-16).
+DESTRUCTIVE_TAGS: Final[frozenset[str]] = frozenset({"destructivehint", "destructive"})
 
 #: Slug words and tags that mark an action as a read (runs without blocking the call).
 READ_MARKERS: Final[tuple[str, ...]] = ("GET", "LIST", "FIND", "SEARCH", "FETCH", "READ", "RETRIEVE", "QUERY")
@@ -467,8 +500,9 @@ READ_MARKERS: Final[tuple[str, ...]] = ("GET", "LIST", "FIND", "SEARCH", "FETCH"
 def action_risk(slug: str, tags: list[str] | None = None) -> ActionRisk:
     """Classify an action by its slug and tags (D-V5-C7).
 
-    Destructive markers win over read markers, so ``LIST_AND_DELETE_X`` is
-    destructive. A tag of ``readOnlyHint`` (or ``read``) marks a read.
+    A ``destructiveHint`` (or ``destructive``) tag wins over everything (R-V5-16). Then
+    destructive markers win over read markers, so ``LIST_AND_DELETE_X`` is destructive.
+    A tag of ``readOnlyHint`` (or ``read``) marks a read.
 
     Args:
         slug: The Composio tool slug, e.g. ``GOOGLECALENDAR_FIND_FREE_SLOTS``.
@@ -477,11 +511,13 @@ def action_risk(slug: str, tags: list[str] | None = None) -> ActionRisk:
     Returns:
         ``destructive``, ``read`` or ``write``.
     """
-    words = set(slug.upper().replace("-", "_").split("_"))
-    upper = slug.upper()
+    lowered = {tag.lower() for tag in tags or []}
+    if lowered & DESTRUCTIVE_TAGS:
+        return "destructive"
+    upper = slug.upper().replace("-", "_")
+    words = set(upper.split("_"))
     if any(marker in upper if "_" in marker else marker in words for marker in DESTRUCTIVE_MARKERS):
         return "destructive"
-    lowered = {tag.lower() for tag in tags or []}
     if lowered & {"readonlyhint", "read", "readonly", "read-only"}:
         return "read"
     if words & set(READ_MARKERS):
@@ -493,6 +529,7 @@ __all__ = [
     "COMPOSIO_HOST",
     "COMPOSIO_PROVIDER_ID",
     "DESTRUCTIVE_MARKERS",
+    "DESTRUCTIVE_TAGS",
     "MAX_ACCOUNTS_PER_APP",
     "MAX_ACCOUNT_APPS",
     "MAX_ACCOUNT_LABEL",

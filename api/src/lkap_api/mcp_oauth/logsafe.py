@@ -3,9 +3,8 @@
 The sign-in code never passes a token, code, ``state``, verifier or client secret to
 a logger. This processor is the belt to those braces: any event field whose name is
 one of :data:`OAUTH_SECRET_FIELDS` (or ends in ``_token``) is replaced with
-``"[redacted]"``. The api's ``lkap_api.logging.configure_logging`` does not run it
-yet (that file belongs to another package; docs/v5/_asks.md asks for it to join
-``shared_processors``); :func:`redact_oauth_fields` is pinned by a test and ready.
+``"[redacted]"``. ``lkap_api.logging.configure_logging`` runs it in ``shared_processors``
+for every structlog and stdlib record (V5-27, S5-32; asks #111).
 """
 
 from __future__ import annotations

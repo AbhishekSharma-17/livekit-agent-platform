@@ -19,7 +19,9 @@ hostile server must not be able to grow that row without bound.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
@@ -40,6 +42,12 @@ MAX_DESCRIPTION_CHARS: Final[int] = 1000
 MAX_SCHEMA_BYTES: Final[int] = 16_000
 #: An event-stream answer longer than this is refused.
 MAX_STREAM_BYTES: Final[int] = 2_000_000
+#: A JSON answer longer than this is refused (S5-10), counted in raw bytes as they arrive.
+MAX_JSON_BYTES: Final[int] = 1_000_000
+#: One event-stream line longer than this is refused (a newline-free stream, S5-10).
+MAX_LINE_BYTES: Final[int] = 1_000_000
+#: The best-effort session ``DELETE`` gives up after this many seconds, wall clock (S5-10).
+SESSION_DELETE_TIMEOUT_S: Final[float] = 5.0
 #: The whole test (every request) gives up after this many per-request timeouts.
 TOTAL_TIMEOUT_FACTOR: Final[int] = 3
 
@@ -106,13 +114,44 @@ def _match(message: object, request_id: int) -> dict[str, Any] | None:
     return None
 
 
-async def _read_event_stream(response: httpx.Response, request_id: int) -> dict[str, Any] | None:
-    data: list[str] = []
+async def _capped_lines(response: httpx.Response) -> AsyncIterator[str]:
+    """The event stream's lines, counting raw bytes as they arrive (S5-10).
+
+    ``aiter_lines`` buffers until a newline, so a newline-free stream grew without bound
+    before its cap was ever checked; this refuses past :data:`MAX_STREAM_BYTES` in total
+    or :data:`MAX_LINE_BYTES` in one line, whatever the line breaks.
+    """
     size = 0
-    async for line in response.aiter_lines():
-        size += len(line) + 1
+    pending = b""
+    async for chunk in response.aiter_bytes():
+        size += len(chunk)
         if size > MAX_STREAM_BYTES:
             raise McpTestError("protocol_error", "the server's event stream is too large")
+        pending += chunk
+        *lines, pending = pending.split(b"\n")
+        if len(pending) > MAX_LINE_BYTES:
+            raise McpTestError("protocol_error", "the server's event stream is too large")
+        for line in lines:
+            yield line.removesuffix(b"\r").decode("utf-8", errors="replace")
+    if pending:
+        yield pending.removesuffix(b"\r").decode("utf-8", errors="replace")
+
+
+async def _read_capped(response: httpx.Response, limit: int) -> bytes:
+    """The whole body, refused as soon as it passes ``limit`` bytes (S5-10)."""
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in response.aiter_bytes():
+        size += len(chunk)
+        if size > limit:
+            raise McpTestError("protocol_error", "the server's answer is too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def _read_event_stream(response: httpx.Response, request_id: int) -> dict[str, Any] | None:
+    data: list[str] = []
+    async for line in _capped_lines(response):
         if line.startswith("data:"):
             data.append(line[5:].removeprefix(" "))
             continue
@@ -148,17 +187,19 @@ async def _call(session: _Session, method: str, params: dict[str, Any] | None = 
         if content_type == "text/event-stream":
             message = await _read_event_stream(response, request_id)
         else:
-            raw = await response.aread()
+            raw = await _read_capped(response, MAX_JSON_BYTES)
             try:
                 message = _match(json.loads(raw), request_id)
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
                 message = None
     if message is None:
         raise McpTestError("protocol_error", f"the server sent no answer to {method}")
     if "error" in message:
         error = message["error"] if isinstance(message["error"], dict) else {}
         code = error.get("code")
-        raise McpTestError("protocol_error", f"the server refused {method} (JSON-RPC error {code})")
+        # S5-20: the code is server-controlled; only an integer is echoed (never text).
+        shown = f" {code}" if isinstance(code, int) and not isinstance(code, bool) else ""
+        raise McpTestError("protocol_error", f"the server refused {method} (JSON-RPC error{shown})")
     result = message.get("result")
     if not isinstance(result, dict):
         raise McpTestError("protocol_error", f"the server's answer to {method} is not an object")
@@ -166,13 +207,15 @@ async def _call(session: _Session, method: str, params: dict[str, Any] | None = 
 
 
 async def _notify(session: _Session, method: str) -> None:
-    response = await session.client.post(
+    # Streamed and never read: a notification's answer carries nothing (S5-10).
+    async with session.client.stream(
+        "POST",
         session.url,
         headers=session.request_headers(),
         json={"jsonrpc": "2.0", "method": method},
         timeout=session.timeout_s,
-    )
-    _check_status(response)
+    ) as response:
+        _check_status(response)
 
 
 def _snapshot(tool: object) -> McpToolSnapshot | None:
@@ -250,6 +293,9 @@ async def list_mcp_tools(
         raise McpTestError("unreachable", "the server did not finish answering in time") from exc
     except httpx.TimeoutException as exc:
         raise McpTestError("unreachable", "the server did not answer in time") from exc
+    except httpx.InvalidURL as exc:
+        # Not an HTTPError: a url that resolved to something unusable was a 500 (S5-17).
+        raise McpTestError("protocol_error", "the server address is not a valid url") from exc
     except httpx.HTTPError as exc:
         blocked = blocked_cause(exc)
         if blocked is not None:
@@ -257,14 +303,25 @@ async def list_mcp_tools(
         raise McpTestError("unreachable", f"could not reach the server ({type(exc).__name__})") from exc
     finally:
         if session.session_id is not None:
-            try:
-                await client.delete(url, headers=session.request_headers(), timeout=session.timeout_s)
-            except httpx.HTTPError:
+            await _end_session(session)
+
+
+async def _end_session(session: _Session) -> None:
+    """Best-effort session ``DELETE``, bounded in wall-clock time and never read (S5-10)."""
+    with contextlib.suppress(httpx.HTTPError, TimeoutError):
+        async with asyncio.timeout(SESSION_DELETE_TIMEOUT_S):
+            async with session.client.stream(
+                "DELETE", session.url, headers=session.request_headers(), timeout=session.timeout_s
+            ):
                 pass
 
 
 __all__ = [
+    "MAX_JSON_BYTES",
+    "MAX_LINE_BYTES",
+    "MAX_STREAM_BYTES",
     "MAX_TOOLS",
+    "SESSION_DELETE_TIMEOUT_S",
     "PROTOCOL_VERSION",
     "McpTestError",
     "McpTestReason",

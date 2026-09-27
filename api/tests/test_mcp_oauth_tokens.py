@@ -593,6 +593,96 @@ async def test_deleting_the_tool_revokes_and_deletes_its_sign_in(
     assert row.payload["trigger"] == "tool_delete"
 
 
+async def test_deleting_a_sign_in_through_the_credentials_route_revokes_it(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    """Ask #139: the Keys page's Delete disconnects like the tool's Disconnect."""
+    tool_id, credential_id = await _signed_in(admin_client, client, world)
+
+    response = await admin_client.delete(f"/v1/credentials/{credential_id}")
+
+    assert response.status_code == 204, response.text
+    assert [kind for kind, _ in world.revocations] == ["refresh_token", "access_token"]
+    assert [r for r in await _rows(database, Credential) if r.id == credential_id] == []
+    assert (await _definition(database, tool_id)).auth.credential_id is None  # type: ignore[union-attr]
+    (row,) = [a for a in await _audits(database) if a.action == "mcp_oauth.revoked"]
+    assert row.payload["revocation"] == "ok"
+
+
+async def test_deleting_an_orphaned_sign_in_through_the_credentials_route_revokes_it(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: OAuthWorld, database: Database
+) -> None:
+    tool_id, credential_id = await _signed_in(admin_client, client, world)
+    async with database.session() as session:
+        tool = await session.get(Tool, tool_id)
+        assert tool is not None
+        await session.delete(tool)  # the tool is gone, its sign-in row is left behind
+
+    response = await admin_client.delete(f"/v1/credentials/{credential_id}")
+
+    assert response.status_code == 204, response.text
+    assert [kind for kind, _ in world.revocations] == ["refresh_token", "access_token"]
+    assert [r for r in await _rows(database, Credential) if r.id == credential_id] == []
+    (row,) = [a for a in await _audits(database) if a.action == "mcp_oauth.revoked"]
+    assert row.payload["trigger"] == "credential_delete"
+
+
+async def test_create_credential_mcp_oauth_provider_is_refused(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    response = await admin_client.post(
+        "/v1/credentials",
+        json={"provider_id": "mcp-oauth", "label": "hand", "secrets": {"access_token": "t", "tool_id": "x"}},
+    )
+    assert response.status_code == 422
+    assert "signing in" in response.json()["error"]["message"]
+    assert [r for r in await _rows(database, Credential) if r.provider_id == "mcp-oauth"] == []
+
+
+async def test_update_credential_mcp_oauth_bag_is_refused(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: OAuthWorld,
+    database: Database,
+    settings: Settings,
+) -> None:
+    tool_id, credential_id = await _signed_in(admin_client, client, world)
+    before = await _bag(database, settings, credential_id)
+
+    replaced = await admin_client.put(
+        f"/v1/credentials/{credential_id}",
+        json={"secrets": {**before, "token_endpoint": "https://169.254.169.254/token"}},
+    )
+    renamed = await admin_client.put(f"/v1/credentials/{credential_id}", json={"label": "renamed"})
+
+    assert replaced.status_code == 422
+    assert renamed.status_code == 200
+    assert await _bag(database, settings, credential_id) == before
+
+
+async def test_a_forged_bag_with_the_right_tool_id_cannot_be_bound(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    # Before S5-15 this bag passed `binds_tool` (right tool id and resource) and the test
+    # route sent its forged bearer; now the row can never be created through the api.
+    tool_id = await _tool(admin_client)
+    forged = await admin_client.post(
+        "/v1/credentials",
+        json={
+            "provider_id": "mcp-oauth",
+            "label": "forged",
+            "secrets": {
+                "tool_id": tool_id,
+                "resource": MCP_URL,
+                "access_token": "forged",
+                "status": "active",
+            },
+        },
+    )
+    assert forged.status_code == 422
+    assert [r for r in await _rows(database, Credential) if r.provider_id == "mcp-oauth"] == []
+
+
 async def test_revoke_needs_an_admin_with_providers_write(
     app: FastAPI,
     admin_client: httpx.AsyncClient,

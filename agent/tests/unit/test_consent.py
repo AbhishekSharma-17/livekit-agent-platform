@@ -19,6 +19,8 @@ from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_ctx import FakeBackgroundRunner, FakePackSessionContext, default_agent_config
 from fakes.fake_room import FakeRemoteParticipant, FakeRoom
 from livekit.agents import RunContext, ToolError
+from livekit.agents.llm import ChatContext
+from livekit.agents.llm.utils import build_legacy_openai_schema
 from lkap_contracts.agent_config import (
     DisclosureConfig,
     PanelLayout,
@@ -28,7 +30,7 @@ from lkap_contracts.agent_config import (
 )
 from lkap_contracts.compliance import COMPLIANCE_PRESETS, CONSENT_EVENT, ResolvedCompliance
 from lkap_contracts.dispatch import DispatchMetadata
-from lkap_contracts.ui_protocol import RPC_AGENT_ACTION, RPC_UI_REQUEST, AgentAction, BlockSpec
+from lkap_contracts.ui_protocol import RPC_AGENT_ACTION, RPC_UI_REQUEST, AgentAction, BlockSpec, UiPatchOp
 from test_main import FakeJobContext, RoomlessStarter, _deps
 
 from lkap_agent.main import RecordingConsentGate, run_session
@@ -225,6 +227,15 @@ async def _until(predicate: Any) -> None:
     raise AssertionError("condition never became true")
 
 
+def _heard(ctx: FakePackSessionContext, answer: str = "Yes, that's fine.") -> str:
+    """Put the agent's question and the caller's spoken `answer` in the history; the answer's id."""
+    session = cast(Any, ctx.session)
+    if getattr(session, "history", None) is None:
+        session.history = ChatContext.empty()
+    session.history.add_message(role="assistant", content="May we record this call?")
+    return str(session.history.add_message(role="user", content=answer).id)
+
+
 def _consent_events(ctx: FakePackSessionContext) -> list[dict[str, Any]]:
     return [payload for kind, payload in ctx.events if kind == CONSENT_EVENT]
 
@@ -272,6 +283,7 @@ async def test_a_tap_accept_settles_the_block_and_records_the_hash_of_the_exact_
             "method": "tap",
             "text_hash": _sha(RECORDING_QUESTION),
             "block_id": "rec",
+            "turn_id": None,
         }
     ]
     assert shutdowns == []
@@ -313,12 +325,14 @@ async def test_a_barge_in_withdraws_the_question_and_a_spoken_yes_is_recorded_as
     assert await task == NOT_ANSWERED
     await _until(lambda: channel.state.blocks["rec"]["status"] == "cancelled")
 
+    turn_id = _heard(ctx)
     result = await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=True)
     assert "agreed" in result
     state = channel.state.blocks["rec"]
     assert (state["status"], state["accepted"], state["method"]) == ("submitted", True, "voice")
     (event,) = _consent_events(ctx)
     assert (event["method"], event["text_hash"]) == ("voice", _sha(RECORDING_QUESTION))
+    assert event["turn_id"] == turn_id
 
 
 async def test_a_timeout_is_a_not_answered_line(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -350,11 +364,12 @@ async def test_realtime_spoken_answer_is_handed_to_the_waiting_request_and_not_a
     background = cast(FakeBackgroundRunner, ctx.background)
     await build_request_consent_tool(ctx)(context=_run_ctx())
     await _until(lambda: channel.pending_requests == {"rec": "request"})
+    turn_id = _heard(ctx)
     assert "agreement" in await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=True)
     await background.wait_idle()
     assert background.urgent_events == [] and background.routine_notes == []
     (event,) = _consent_events(ctx)
-    assert (event["accepted"], event["method"]) == (True, "voice")
+    assert (event["accepted"], event["method"], event["turn_id"]) == (True, "voice", turn_id)
     assert channel.state.blocks["rec"]["method"] == "voice"
 
 
@@ -376,6 +391,7 @@ async def test_on_the_text_channel_the_question_is_asked_in_the_chat() -> None:
 
 async def test_an_accepted_consent_is_not_asked_again() -> None:
     ctx, channel, _room, _ = _ctx()
+    _heard(ctx)
     await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=True)
     result = await build_request_consent_tool(ctx)(context=_run_ctx())
     assert "already agreed" in result
@@ -385,6 +401,7 @@ async def test_an_accepted_consent_is_not_asked_again() -> None:
 async def test_record_consent_without_a_block_hashes_the_recording_question() -> None:
     gated = RecordingConfig(enabled=True, require_consent=True, consent_text="May we record this call?")
     ctx, _channel, _room, _ = _ctx([], recording=gated)
+    turn_id = _heard(ctx)
     result = await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=True)
     assert "recording starts now" in result
     assert _consent_events(ctx) == [
@@ -394,6 +411,7 @@ async def test_record_consent_without_a_block_hashes_the_recording_question() ->
             "method": "voice",
             "text_hash": _sha("May we record this call?"),
             "block_id": None,
+            "turn_id": turn_id,
         }
     ]
 
@@ -412,11 +430,159 @@ async def test_record_consent_needs_a_block_id_when_several_blocks_are_ambiguous
         BlockSpec(id="terms", type="consent", config={"kind": "terms", "text": "Terms?"}),
     ]
     ctx, channel, _room, _ = _ctx(blocks)
+    _heard(ctx)
     with pytest.raises(ToolError):
         await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=True)
     await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=True, kind="terms")
     assert channel.state.blocks["terms"]["accepted"] is True
     assert channel.state.blocks["rec"]["accepted"] is None
+
+
+# ================================================================ V5-27: browser-proof consent (S5-3, S5-4)
+
+_FORGED_FIELDS: dict[str, Any] = {
+    "text": "FORGED",
+    "text_hash": "0" * 64,
+    "method": "voice",
+    "at": 1.0,
+    "kind": "terms",
+    "required": False,
+}
+
+
+async def test_a_tap_answer_cannot_change_the_wording_that_is_hashed() -> None:
+    ctx, channel, room, _ = _ctx()
+    # Before the question too: an unsolicited answer cannot plant wording for the hash to read.
+    await _block_submit(room, "rec", {"text": "PLANTED"})
+    task = asyncio.create_task(build_request_consent_tool(ctx)(context=_run_ctx()))
+    await _until(lambda: channel.state.blocks["rec"]["status"] == "requested")
+    await _block_submit(room, "rec", {"accepted": True, **_FORGED_FIELDS})
+    assert "agreed" in await task
+    (event,) = _consent_events(ctx)
+    assert event["text_hash"] == _sha(RECORDING_QUESTION)
+    state = channel.state.blocks["rec"]
+    assert (state["text"], state["text_hash"], state["kind"]) == (
+        RECORDING_QUESTION,
+        _sha(RECORDING_QUESTION),
+        "recording",
+    )
+    # Whatever the block's state says later, the hash is of the worker's own wording.
+    await channel.patch_block("rec", [UiPatchOp(op="set", path="/text", value="EDITED")])
+    _heard(ctx, "No, actually.")
+    await build_record_consent_tool(ctx)(context=_run_ctx(), accepted=False)
+    assert [event["text_hash"] for event in _consent_events(ctx)] == [_sha(RECORDING_QUESTION)] * 2
+
+
+async def test_a_browser_cannot_claim_a_voice_answer() -> None:
+    ctx, channel, room, _ = _ctx()
+    task = asyncio.create_task(build_request_consent_tool(ctx)(context=_run_ctx()))
+    await _until(lambda: channel.state.blocks["rec"]["status"] == "requested")
+    await _block_submit(room, "rec", {"accepted": True, "via": "voice", "turn_id": "item_forged"})
+    await task
+    (event,) = _consent_events(ctx)
+    assert (event["method"], event["turn_id"]) == ("tap", None)
+    assert channel.state.blocks["rec"]["method"] == "tap"
+
+
+async def test_an_unsolicited_accept_does_not_count_as_already_agreed() -> None:
+    ctx, channel, room, _ = _ctx()
+    await _block_submit(room, "rec", {"accepted": True})
+    assert _consent_events(ctx) == []
+    task = asyncio.create_task(build_request_consent_tool(ctx)(context=_run_ctx()))
+    await _until(lambda: channel.pending_requests == {"rec": "request"})
+    assert channel.state.blocks["rec"]["status"] == "requested"
+    await _block_submit(room, "rec", {"accepted": True})
+    assert "already agreed" not in await task
+    assert len(_consent_events(ctx)) == 1
+    assert "already agreed" in await build_request_consent_tool(ctx)(context=_run_ctx())
+
+
+async def test_block_answers_write_only_the_listed_answer_keys() -> None:
+    choices = BlockSpec(id="pick", type="choices")
+    ctx, channel, room, _ = _ctx(
+        [
+            BlockSpec(id="rec", type="consent", config={"kind": "recording", "text": RECORDING_QUESTION}),
+            choices,
+            BlockSpec(id="intake", type="form"),
+            BlockSpec(id="loose", type="form"),
+        ]
+    )
+    await channel.patch_block(
+        "pick",
+        [
+            UiPatchOp(op="set", path="/prompt", value="Which one?"),
+            UiPatchOp(
+                op="set", path="/options", value=[{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]
+            ),
+        ],
+    )
+    consent_before = dict(channel.state.blocks["rec"])
+    await _block_submit(room, "rec", {"accepted": False, **_FORGED_FIELDS})
+    consent_after = channel.state.blocks["rec"]
+    changed = {key for key in consent_after if consent_after.get(key) != consent_before.get(key)}
+    assert changed == {"accepted", "status", "submitted_at"}
+
+    await _block_submit(
+        room, "pick", {"selected": ["b"], "prompt": "FORGED", "options": [{"id": "x", "label": "X"}]}
+    )
+    pick = channel.state.blocks["pick"]
+    assert (pick["selected"], pick["prompt"], [o["id"] for o in pick["options"]]) == (
+        ["b"],
+        "Which one?",
+        ["a", "b"],
+    )
+    assert _consent_events(ctx) == []
+
+    # A form's answer keeps only its schema's fields; a schema without properties keeps it all.
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    await channel.patch_block("intake", [UiPatchOp(op="set", path="/schema", value=schema)])
+    forged = {"name": "x", "schema": {"type": "object"}, "values": {"a": 1}, "extra": 1}
+    await _block_submit(room, "intake", forged)
+    intake = channel.state.blocks["intake"]
+    assert (intake["values"], intake["schema"]) == ({"name": "x"}, schema)
+    await _block_submit(room, "loose", {"name": "x", "extra": 1})
+    assert channel.state.blocks["loose"]["values"] == {"name": "x", "extra": 1}
+
+
+async def test_record_consent_cannot_claim_a_tap_without_a_submit() -> None:
+    ctx, channel, _room, _ = _ctx()
+    tool = build_record_consent_tool(ctx)
+    schema = build_legacy_openai_schema(tool, internally_tagged=True)
+    assert set(schema["parameters"]["properties"]) == {"accepted", "block_id", "kind"}
+    with pytest.raises(TypeError):
+        await tool(context=_run_ctx(), accepted=True, method="tap")
+    assert _consent_events(ctx) == []
+
+    _heard(ctx)
+    await tool(context=_run_ctx(), accepted=True)
+    assert [event["method"] for event in _consent_events(ctx)] == ["voice"]
+    assert channel.state.blocks["rec"]["method"] == "voice"
+
+
+@pytest.mark.parametrize("channel_name", ["web", "sip_in"])
+async def test_a_voice_consent_carries_the_turn_it_was_heard_in(
+    channel_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lkap_agent.tools.builtin import record_consent as module  # noqa: PLC0415
+
+    monkeypatch.setattr(module, "USER_TURN_WAIT_S", 0.0)
+    ctx, channel, _room, _ = _ctx()
+    ctx.channel = channel_name  # type: ignore[attr-defined]
+    _heard(ctx, "Earlier words, before the question.")
+    task = asyncio.create_task(build_request_consent_tool(ctx)(context=_run_ctx()))
+    if channel_name == "web":
+        await _until(lambda: channel.pending_requests == {"rec": "request"})
+        channel.cancel_pending(BARGE_IN, methods=["request"])
+    await task
+    record = build_record_consent_tool(ctx)
+    with pytest.raises(ToolError, match="No answer from the caller"):
+        await record(context=_run_ctx(), accepted=True)
+    assert _consent_events(ctx) == []
+
+    turn_id = _heard(ctx, "Yes, you can record it.")
+    await record(context=_run_ctx(), accepted=True)
+    (event,) = _consent_events(ctx)
+    assert (event["method"], event["turn_id"]) == ("voice", turn_id)
 
 
 # ================================================================ the recording gate
@@ -520,3 +686,35 @@ async def test_a_declined_recording_is_never_started() -> None:
     await ctx.fire_shutdown("done")
     assert api.recording_starts == []
     assert [e.payload["accepted"] for e in api.events_of(CONSENT_EVENT)] == [False]
+
+
+@pytest.mark.usefixtures("_inference_env")
+async def test_a_withdrawn_recording_consent_stops_the_egress() -> None:
+    """S5-5: accept → Egress starts; a later decline stops it through the api, once."""
+    api = FakeApi(_gated_config(), egress_id="EG_1")
+    ctx = FakeJobContext(_meta())
+    starter = RoomlessStarter()
+    await run_session(ctx, _deps(api, session_starter=starter))
+    record = starter.agent._ctx.record_event
+    consent = {"kind": "recording", "method": "voice", "text_hash": _sha("x")}
+    record(CONSENT_EVENT, {**consent, "accepted": True})
+    await _until(lambda: api.recording_starts == ["sess-1"])
+    assert api.recording_stops == []
+
+    record(CONSENT_EVENT, {**consent, "accepted": False})
+    record(CONSENT_EVENT, {**consent, "accepted": False})
+    await _until(lambda: api.recording_stops == ["sess-1"])
+    await ctx.fire_shutdown("done")
+    assert api.recording_stops == ["sess-1"]
+    assert [e.payload for e in api.events_of("recording_stopped")] == [{"reason": "consent_withdrawn"}]
+    assert api.recording_starts == ["sess-1"]
+
+
+def test_a_decline_before_the_start_cancels_a_waiting_acceptance() -> None:
+    gate = RecordingConsentGate()
+    record = gate.wrap(lambda *_: None)
+    record(CONSENT_EVENT, {"kind": "recording", "accepted": True})
+    record(CONSENT_EVENT, {"kind": "recording", "accepted": False})
+    starts: list[int] = []
+    gate.when_accepted(lambda: starts.append(1))
+    assert starts == [] and not gate.withdrawn

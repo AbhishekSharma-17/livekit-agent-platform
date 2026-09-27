@@ -254,3 +254,32 @@ async def test_no_caller_timezone_without_a_valid_locale_event(
 
     assert detail["caller_timezone"] is None
     assert "caller_timezone" not in detail["usage"]
+
+
+# ------------------------------------------------------------------ V5-27 (S5-25, S5-26)
+async def test_workspace_settings_cost_prices_go_through_price_validation(
+    admin_client: httpx.AsyncClient,
+) -> None:
+    """S5-26: the settings merge no longer writes prices (or any unknown key) past validation."""
+    junk = [{"provider_id": "no-such-provider", "unit": "minutes", "price_usd": "1"}] * 150
+
+    prices = await admin_client.put("/v1/workspaces/default", json={"settings": {"cost": {"prices": junk}}})
+    top_level = await admin_client.put("/v1/workspaces/default", json={"settings": {"junk": {"a": 1}}})
+    reconcile = await admin_client.put(
+        "/v1/workspaces/default", json={"settings": {"cost": {"reconcile": []}}}
+    )
+
+    assert prices.status_code == 422 and "/v1/workspace/prices" in prices.json()["error"]["message"]
+    assert top_level.status_code == 422
+    assert reconcile.status_code == 200, reconcile.text
+    stored = (await admin_client.get("/v1/workspace/prices")).json()["prices"]
+    assert stored == []
+
+
+@pytest.mark.parametrize(
+    "prefix", ["lk.publish_on_behalf", "lk.agent.state", "sip.phoneNumber", "sip.callID"]
+)
+def test_connect_never_forwards_livekit_or_sip_reserved_attributes(prefix: str) -> None:
+    """S5-25: a web caller cannot carry LiveKit's or SIP's own attribute names as server-signed ones."""
+    attributes = participant_attributes({prefix: "forged", "plan": "gold"}, timezone=None)
+    assert attributes == {"plan": "gold"}

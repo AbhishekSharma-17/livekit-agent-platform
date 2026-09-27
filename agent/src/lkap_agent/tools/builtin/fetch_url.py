@@ -38,8 +38,9 @@ from lkap_agent.tools.execution import (
     run_with_policy,
     tool_flags,
 )
+from lkap_agent.tools.untrusted import fence
 
-__all__ = ["MAX_BYTES", "MAX_TEXT_CHARS", "build_fetch_url_tool", "extract_text"]
+__all__ = ["FETCH_URL_SOURCE", "MAX_BYTES", "MAX_TEXT_CHARS", "build_fetch_url_tool", "extract_text"]
 
 MAX_BYTES: Final[int] = 1_000_000
 MAX_TEXT_CHARS: Final[int] = 2000
@@ -60,6 +61,9 @@ _MAIN_TAGS: Final[frozenset[str]] = frozenset({"main", "article"})
 _VOID_TAGS: Final[frozenset[str]] = frozenset({"br", "img", "hr", "input", "meta", "link", "source", "wbr"})
 _TEXT_TYPES: Final[tuple[str, ...]] = ("text/html", "application/xhtml+xml", "text/plain")
 _SPACE_RE = re.compile(r"[ \t\r\f\v ]+")
+
+#: The `<untrusted>` source of a fetched page (S5-6).
+FETCH_URL_SOURCE: Final[str] = "web:fetch_url"
 
 EMPTY_NOTE: Final[str] = "The page has no readable text."
 UNTRUSTED_NOTE: Final[str] = (
@@ -241,10 +245,17 @@ def build_fetch_url_tool(
             status=response.status_code,
             chars=len(text),
         )
+        # V5-27 (S5-6, R-V5-15): the page's words are fenced as data; the note stays outside.
+        page_title = fence(title[:200], source=FETCH_URL_SOURCE)
         if not text:
-            return json.dumps({"title": title, "site": site, "text": "", "note": EMPTY_NOTE})
+            return json.dumps({"title": page_title, "site": site, "text": "", "note": EMPTY_NOTE})
         return json.dumps(
-            {"title": title[:200], "site": site, "text": _cut(text, MAX_TEXT_CHARS), "note": UNTRUSTED_NOTE},
+            {
+                "title": page_title,
+                "site": site,
+                "text": fence(_cut(text, MAX_TEXT_CHARS), source=FETCH_URL_SOURCE),
+                "note": UNTRUSTED_NOTE,
+            },
             ensure_ascii=False,
         )
 

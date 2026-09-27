@@ -36,7 +36,8 @@ from lkap_contracts.tool_providers import (
 )
 
 from lkap_api.auth.deps import WorkspaceContext, require
-from lkap_api.auth.ratelimit import RateLimiterDep, enforce
+from lkap_api.auth.ratelimit import RateLimiter, RateLimiterDep, enforce
+from lkap_api.auth.roles import Requirement
 from lkap_api.deps import DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import NotFoundError
 from lkap_api.logging import get_logger
@@ -75,6 +76,31 @@ def get_catalog_cache(request: Request) -> service.CatalogCache:
 FactoryDep = Annotated[AdapterFactory, Depends(get_adapter_factory)]
 CacheDep = Annotated[service.CatalogCache, Depends(get_catalog_cache)]
 
+#: Vendor reads a workspace may force per minute (``refresh=true``, a connection check), S5-44.
+VENDOR_REFRESH_PER_MIN = 30
+#: Sign-in callbacks one client address may make per minute (S5-21).
+CALLBACK_PER_MIN = 30
+#: Forcing a catalogue re-read spends the workspace key's vendor quota: writers only (S5-44).
+_REFRESH_CATALOGUE = Requirement("admin", "providers:write")
+
+
+async def _vendor_refresh(limiter: RateLimiter, ctx: WorkspaceContext, refresh: bool) -> bool:
+    """Whether this request may bypass the catalogue cache (S5-44).
+
+    A Viewer gets the cache whatever it asks; a writer's forced re-reads are rate limited
+    per workspace, so nobody can loop the vendor until it rate-limits the key live agents use.
+    """
+    if not refresh or not ctx.allows(_REFRESH_CATALOGUE):
+        return False
+    await enforce(
+        limiter,
+        f"apps_vendor_refresh:{ctx.workspace_id}",
+        capacity=VENDOR_REFRESH_PER_MIN,
+        per_seconds=60,
+        what=f"{VENDOR_REFRESH_PER_MIN} Composio re-reads per minute",
+    )
+    return True
+
 
 # ------------------------------------------------------------------------------ key
 @router.get(
@@ -103,6 +129,7 @@ async def get_status(db: DbDep, vault: VaultDep, ctx: ReadCtx) -> AppsStatusOut:
 )
 async def post_key_test(
     payload: AppKeyTestIn,
+    db: DbDep,
     ctx: WriteCtx,
     factory: FactoryDep,
     limiter: RateLimiterDep,
@@ -118,6 +145,8 @@ async def post_key_test(
     api_key = payload.api_key.strip()
     result = await service.test_key(factory(api_key), api_key=api_key)
     log.info("apps_key_tested", ok=result.ok)
+    # S5-43: a row per key test (the outcome only; never the key).
+    service.record(db, ctx, "apps.key_test", None, ok=result.ok)
     return result
 
 
@@ -163,6 +192,7 @@ async def get_toolkits(
     ctx: ReadCtx,
     factory: FactoryDep,
     cache: CacheDep,
+    limiter: RateLimiterDep,
     query: Annotated[str | None, Query(max_length=100, description="Search app names")] = None,
     category: Annotated[str | None, Query(max_length=64, description="A category slug")] = None,
     cursor: Annotated[
@@ -173,6 +203,7 @@ async def get_toolkits(
     refresh: bool = False,
 ) -> ToolkitPage:
     """A page of apps."""
+    refresh = await _vendor_refresh(limiter, ctx, refresh)
     return await service.list_toolkits(
         db,
         vault,
@@ -204,9 +235,11 @@ async def get_categories(
     ctx: ReadCtx,
     factory: FactoryDep,
     cache: CacheDep,
+    limiter: RateLimiterDep,
     refresh: bool = False,
 ) -> service.ToolProviderCategoryPage:
     """Every category, aggregated across the vendor's own pages."""
+    refresh = await _vendor_refresh(limiter, ctx, refresh)
     return await service.list_categories(db, vault, factory, cache, ctx, refresh=refresh)
 
 
@@ -226,9 +259,11 @@ async def get_toolkit(
     ctx: ReadCtx,
     factory: FactoryDep,
     cache: CacheDep,
+    limiter: RateLimiterDep,
     refresh: bool = False,
 ) -> ToolkitOut:
     """One app's detail."""
+    refresh = await _vendor_refresh(limiter, ctx, refresh)
     return await service.get_toolkit(db, vault, factory, cache, ctx, slug.lower(), refresh=refresh)
 
 
@@ -248,6 +283,7 @@ async def get_actions(
     ctx: ReadCtx,
     factory: FactoryDep,
     cache: CacheDep,
+    limiter: RateLimiterDep,
     query: Annotated[str | None, Query(max_length=100)] = None,
     important: bool = False,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
@@ -255,6 +291,7 @@ async def get_actions(
     refresh: bool = False,
 ) -> AppActionPage:
     """A page of one app's actions."""
+    refresh = await _vendor_refresh(limiter, ctx, refresh)
     return await service.list_actions(
         db,
         vault,
@@ -319,9 +356,21 @@ async def get_connections(db: DbDep, vault: VaultDep, ctx: ReadCtx) -> AppConnec
     ),
 )
 async def get_connection(
-    connection_id: str, db: DbDep, vault: VaultDep, ctx: ReadCtx, factory: FactoryDep
+    connection_id: str,
+    db: DbDep,
+    vault: VaultDep,
+    ctx: ReadCtx,
+    factory: FactoryDep,
+    limiter: RateLimiterDep,
 ) -> AppConnectionOut:
     """Refresh and return one connection."""
+    await enforce(
+        limiter,
+        f"apps_vendor_refresh:{ctx.workspace_id}",
+        capacity=VENDOR_REFRESH_PER_MIN,
+        per_seconds=60,
+        what=f"{VENDOR_REFRESH_PER_MIN} Composio re-reads per minute",
+    )
     return await service.refresh_connection(db, vault, factory, ctx, connection_id)
 
 
@@ -402,21 +451,32 @@ async def delete_connection(
     description=(
         "Where Composio sends the browser after a sign-in. Not for API clients: it checks the "
         "single-use `flow` value, confirms the connection with Composio and redirects to the console's "
-        "Apps tab with `connect=ok` or `connect=error`."
+        "Apps tab with `connect=ok` or `connect=error`. At most "
+        f"{CALLBACK_PER_MIN} requests per client address per minute."
     ),
     response_class=RedirectResponse,
     status_code=status.HTTP_302_FOUND,
 )
 async def get_callback(
+    request: Request,
     db: DbDep,
     vault: VaultDep,
     settings: SettingsDep,
     factory: FactoryDep,
+    limiter: RateLimiterDep,
     flow: Annotated[str | None, Query(max_length=256)] = None,
     status_: Annotated[str | None, Query(alias="status", max_length=32)] = None,
     connected_account_id: Annotated[str | None, Query(max_length=128)] = None,
 ) -> RedirectResponse:
     """Finish a hosted sign-in and send the browser back to the console."""
+    client = request.client.host if request.client is not None else "unknown"
+    await enforce(
+        limiter,
+        f"apps_callback:{client}",
+        capacity=CALLBACK_PER_MIN,
+        per_seconds=60,
+        what=f"{CALLBACK_PER_MIN} sign-in callbacks per minute",
+    )
     outcome = await service.handle_callback(
         db, vault, factory, flow=flow, status=status_, connected_account_id=connected_account_id
     )
@@ -485,6 +545,11 @@ async def post_refresh_schema(
     conn = next((c for c in records if c.id == definition.get("connection_id")), None)
     account = service.account_naming(records, conn) if conn is not None else None
     result = materialise.refresh_result(tool, action, apply=apply, account=account)
+    if apply:
+        # S5-43: rewriting a tool's inputs and description is audited.
+        service.record(
+            db, ctx, "apps.tool.schema_refresh", tool_id, changed=result.changed, applied=result.applied
+        )
     await db.flush()
     log.info("apps_schema_refreshed", tool_id=tool_id, changed=result.changed, applied=result.applied)
     return result

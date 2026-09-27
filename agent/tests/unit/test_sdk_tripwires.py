@@ -51,6 +51,8 @@ def test_mcp_server_http_init_has_no_auth_parameter() -> None:
         "timeout",
         "sse_read_timeout",
         "client_session_timeout_seconds",
+        # V5-27 (S5-6): the `<untrusted>` fence of every MCP result goes in through this.
+        "tool_result_resolver",
     ):
         assert name in parameters, f"MCPServerHTTP.__init__ lost `{name}`: {SHRINK}"
 

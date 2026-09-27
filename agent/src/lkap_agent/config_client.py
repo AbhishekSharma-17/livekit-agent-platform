@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Protocol, Self
 import httpx
 from lkap_contracts.agent_config import McpOAuthTokenIn, McpOAuthTokenOut, ResolvedAgentConfig
 from lkap_contracts.api_models import (
+    MAX_KB_QUERY_CHARS,
     CallReportIn,
     InternalKbSearchRequest,
     InternalTransferIn,
@@ -160,6 +161,10 @@ class ConfigClientProtocol(Protocol):
         """Ask the api to start the session's Egress recording; returns the egress id."""
         ...
 
+    async def stop_recording(self, session_id: str) -> None:
+        """Ask the api to stop the session's Egress (the caller withdrew consent, S5-5)."""
+        ...
+
     async def post_recording(self, session_id: str, recording: SessionRecordingIn) -> None:
         """Report the recording's state from the worker (best effort)."""
         ...
@@ -181,9 +186,18 @@ class ConfigClientProtocol(Protocol):
         ...
 
     async def kb_search(
-        self, kb_ids: list[str], query: str, k: int = 4, *, options: KbSearchOptions | None = None
+        self,
+        kb_ids: list[str],
+        query: str,
+        k: int = 4,
+        *,
+        options: KbSearchOptions | None = None,
+        session_id: str | None = None,
     ) -> list[KbHit]:
-        """Search the agent's knowledge bases through the api (`options`: mode, rerank, floor)."""
+        """Search the agent's knowledge bases through the api (`options`: mode, rerank, floor).
+
+        `session_id` (S5-29) lets the api keep the search inside that session's workspace.
+        """
         ...
 
     async def report_call(self, report: CallReportIn) -> None:
@@ -354,6 +368,24 @@ class ConfigClient:
         except ValueError as exc:
             raise RecordingUnavailableError("recording/start returned an unparseable payload") from exc
 
+    async def stop_recording(self, session_id: str) -> None:
+        """Post `POST /internal/v1/sessions/{id}/recording/stop` (V5-27, S5-5).
+
+        The caller withdrew their recording consent: the api stops the session's
+        Egress (idempotent; the finalize path handles `egress_ended`).
+
+        Raises:
+            RecordingUnavailableError: On any failure, including the 404 for an
+                unknown session.
+        """
+        url = self._url(f"/internal/v1/sessions/{session_id}/recording/stop")
+        try:
+            response = await self._client.post(url)
+        except httpx.HTTPError as exc:
+            raise RecordingUnavailableError(f"api unreachable ({type(exc).__name__})") from exc
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            raise RecordingUnavailableError(f"recording/stop answered HTTP {response.status_code}")
+
     async def post_recording(self, session_id: str, recording: SessionRecordingIn) -> None:
         """Post `POST /internal/v1/sessions/{id}/recording`, swallowing failures."""
         await self._post_best_effort(
@@ -413,7 +445,13 @@ class ConfigClient:
             logger.warning("failed to put session summary", session_id=session_id, error=str(exc))
 
     async def kb_search(
-        self, kb_ids: list[str], query: str, k: int = 4, *, options: KbSearchOptions | None = None
+        self,
+        kb_ids: list[str],
+        query: str,
+        k: int = 4,
+        *,
+        options: KbSearchOptions | None = None,
+        session_id: str | None = None,
     ) -> list[KbHit]:
         """Post `POST /internal/v1/kb/search`.
 
@@ -423,6 +461,8 @@ class ConfigClient:
             k: How many hits.
             options: `mode`, `rerank` and `min_score` (V5-06, from `KnowledgeConfig`);
                 `None` sends the api's defaults (vector, no rerank, no floor).
+            session_id: The session searching (S5-29): the api then searches only
+                knowledge bases of that session's workspace. `None` omits it.
 
         Returns:
             The hits, best first. An empty list when the search fails — retrieval
@@ -431,7 +471,12 @@ class ConfigClient:
         if not kb_ids or not query.strip():
             return []
         request = InternalKbSearchRequest(
-            kb_ids=kb_ids, query=query, k=k, **(options.model_dump() if options is not None else {})
+            kb_ids=kb_ids,
+            # S5-13: the api refuses a longer query; a long utterance still searches on its start.
+            query=query[:MAX_KB_QUERY_CHARS],
+            k=k,
+            session_id=session_id or None,
+            **(options.model_dump() if options is not None else {}),
         )
         try:
             response = await self._client.post(
@@ -624,11 +669,18 @@ class ApiKbClient:
     """
 
     def __init__(
-        self, client: ConfigClientProtocol, kb_ids: list[str], *, options: KbSearchOptions | None = None
+        self,
+        client: ConfigClientProtocol,
+        kb_ids: list[str],
+        *,
+        options: KbSearchOptions | None = None,
+        session_id: str | None = None,
     ) -> None:
         self._client = client
         self._kb_ids = list(kb_ids)
         self._options = options
+        # S5-29: sent with every search so the api stays inside this session's workspace.
+        self._session_id = session_id or None
 
     @property
     def options(self) -> KbSearchOptions | None:
@@ -638,6 +690,10 @@ class ApiKbClient:
     async def search(self, query: str, k: int = 4, kb_ids: list[str] | None = None) -> list[KbHit]:
         """Search the agent's knowledge bases (or `kb_ids` when given) for `k` hits."""
         targets = kb_ids if kb_ids is not None else self._kb_ids
+        if self._session_id is not None:
+            return await self._client.kb_search(
+                targets, query, k, options=self._options, session_id=self._session_id
+            )
         if self._options is None:
             return await self._client.kb_search(targets, query, k)
         return await self._client.kb_search(targets, query, k, options=self._options)

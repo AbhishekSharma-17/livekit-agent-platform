@@ -22,10 +22,11 @@ from lkap_contracts.ui_protocol import BlockSpec
 from sqlalchemy import select
 
 from lkap_api.config_service import CONSENT_BLOCK_MISSING_MESSAGE, ValidationContext, consent_issues, validate
+from lkap_api.db.models import Agent, AgentConfigVersion, AuditLog, SessionEvent, StorageConfig
 from lkap_api.db.models import Session as SessionRow
-from lkap_api.db.models import SessionEvent, StorageConfig
 from lkap_api.db.session import Database
 from lkap_api.recordings.consent import NOT_RECORDED_DECLINED, NOT_RECORDED_NO_ANSWER
+from lkap_api.recordings.service import RECORDING_STOPPED_NOTE
 from lkap_api.settings import Settings
 from lkap_api.vault import Vault
 
@@ -107,6 +108,60 @@ async def test_a_consent_gated_recording_starts_only_after_the_caller_agrees(
         started = await service_client.post(start)
         assert started.status_code == 200, started.text
         assert len(fake.calls) == 1
+
+
+# ------------------------------------------------------------------ V5-27 (S5-5, S5-24)
+async def test_recording_stop_route_stops_the_stored_egress_once(
+    service_client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    """S5-5: a withdrawn consent stops the running Egress; a second stop is a no-op."""
+    async with fake_livekit() as (fake, url):
+        session_id = await _gated_session(database, settings, url)
+        base = f"/internal/v1/sessions/{session_id}"
+        before = await service_client.post(f"{base}/recording/stop")
+        await service_client.post(f"{base}/events", json={"events": [_consent(True)]})
+        assert (await service_client.post(f"{base}/recording/start")).status_code == 200
+        await service_client.post(f"{base}/events", json={"events": [_consent(False, ts=1758000005.0)]})
+
+        first = await service_client.post(f"{base}/recording/stop")
+        second = await service_client.post(f"{base}/recording/stop")
+
+        stops = [call for call in fake.calls if call.endswith("/StopEgress")]
+    assert before.status_code == 200 and before.json()["stopped"] is False
+    assert first.status_code == 200 and first.json()["stopped"] is True
+    assert second.status_code == 200 and second.json()["stopped"] is False
+    assert len(stops) == 1
+    async with database.session() as session:
+        row = await session.get(SessionRow, session_id)
+        assert row is not None
+        assert row.consent_state["withdrawn_at"] == {"recording": 1758000005.0}  # type: ignore[index]
+        assert row.recording_error == RECORDING_STOPPED_NOTE
+
+
+async def test_recording_stop_route_needs_the_service_token(client: httpx.AsyncClient) -> None:
+    response = await client.post(f"/internal/v1/sessions/{'c' * 32}/recording/stop")
+    assert response.status_code == 401
+
+
+async def test_recording_start_checks_the_sessions_pinned_config(
+    service_client: httpx.AsyncClient, database: Database, settings: Settings
+) -> None:
+    """S5-24: turning consent off in a later save does not lift a live session's gate."""
+    async with fake_livekit() as (fake, url):
+        session_id = await _gated_session(database, settings, url)
+        async with database.session() as session:
+            row = await session.get(SessionRow, session_id)
+            assert row is not None
+            agent = await session.get(Agent, row.agent_id)
+            assert agent is not None
+            session.add(
+                AgentConfigVersion(agent_id=agent.id, config_version=row.config_version, config=agent.config)
+            )
+            ungated = inference_config(recording=RecordingConfig(enabled=True, require_consent=False))
+            agent.config = json.loads(ungated.model_dump_json())
+        response = await service_client.post(f"/internal/v1/sessions/{session_id}/recording/start")
+    assert response.status_code == 409, response.text
+    assert fake.calls == []
 
 
 # ------------------------------------------------------------------ consent_state
@@ -322,6 +377,30 @@ def test_terms_and_custom_consent_blocks_need_their_own_wording() -> None:
     assert _issues(panel=PanelLayout(blocks=blocks)) == [
         ("panel.blocks[0].config.text", "error", "a terms or custom consent block needs its own wording")
     ]
+
+
+async def test_workspace_update_compliance_audit_names_keys_and_text_hash(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    """S5-43: a wording change is told apart from any other settings change, by its hash."""
+    response = await admin_client.put(
+        "/v1/workspaces/default",
+        json={"settings": {"compliance": {"jurisdiction": "eu", "recording_text": "May we record?"}}},
+    )
+    assert response.status_code == 200, response.text
+
+    async with database.session() as session:
+        rows = (
+            (await session.execute(select(AuditLog).where(AuditLog.action == "workspace.update")))
+            .scalars()
+            .all()
+        )
+    [row] = rows
+    assert row.payload["fields"] == ["settings.compliance"]
+    compliance = row.payload["compliance"]
+    assert compliance["jurisdiction"] == "eu"
+    assert compliance["recording_text_sha256"] == hashlib.sha256(b"May we record?").hexdigest()
+    assert "May we record?" not in json.dumps(row.payload)
 
 
 def test_validate_runs_the_consent_checks() -> None:

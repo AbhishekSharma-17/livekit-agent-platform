@@ -420,6 +420,7 @@ async def test_request_form_survives_a_failed_form_rpc() -> None:
     await _until(lambda: channel.state.blocks["intake"]["status"] == "requested")
     await asyncio.sleep(0)
     assert not task.done()
+    room.add_remote_participant(FakeRemoteParticipant("web-ui"))  # the browser joins and answers
     await _action(room, "form_submit", {"block_id": "intake", "values": {"policy_number": "X"}})
     assert await task == {"policy_number": "X"}
 

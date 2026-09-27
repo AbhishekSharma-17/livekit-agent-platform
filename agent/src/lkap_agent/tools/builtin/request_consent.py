@@ -26,6 +26,7 @@ required consent with `decline_action="end_call"` is declined).
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
@@ -39,6 +40,7 @@ from lkap_agent.tools.builtin.record_consent import (
     ConsentOutcome,
     consent_block_config,
     consent_block_text,
+    consent_ledger,
     outcome_message,
     settle_consent,
 )
@@ -61,8 +63,14 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
     """Build the `request_consent` tool bound to `ctx`."""
     inventory = describe_blocks(session_block_specs(ctx.ui, ctx.config.panel), ["consent"])
 
-    async def wait_for_consent(target: str) -> ConsentOutcome | None:
-        """Wait for the caller's tap and settle it; `None` when nobody answered."""
+    async def wait_for_consent(target: str, text: str) -> ConsentOutcome | None:
+        """Wait for the caller's answer and settle it with `text`; `None` when nobody answered.
+
+        `text` is the wording the worker computed and showed (S5-3): the hash never
+        reads the block's state. `via: "voice"` (and its `turn_id`) can only come from
+        `record_consent`'s agent-side `submit_block`: the channel drops both from a
+        browser answer, so a browser answer is always a tap.
+        """
         values = await ctx.ui.request_block(target, timeout_s=CONSENT_TIMEOUT_S)
         if values is None:
             return None
@@ -70,8 +78,9 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
         if not isinstance(accepted, bool):
             ctx.log.warning("builtin_tool.request_consent.bad_answer", block_id=target)
             return None
-        via = values.get("via")
-        method: ConsentMethod = "voice" if via == VIA_VOICE else "tap"
+        voice = values.get("via") == VIA_VOICE
+        method: ConsentMethod = "voice" if voice else "tap"
+        turn_id = values.get("turn_id") if voice else None
         spec = next(s for s in session_block_specs(ctx.ui, ctx.config.panel) if s.id == target)
         return await settle_consent(
             ctx,
@@ -79,7 +88,8 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
             kind=consent_block_config(spec).kind,
             accepted=accepted,
             method=method,
-            text=consent_block_text(ctx, spec),
+            text=text,
+            turn_id=turn_id if isinstance(turn_id, str) else None,
         )
 
     async def request_consent(context: RunContext[Any], block_id: str = "") -> str | None:
@@ -97,10 +107,14 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
         text = consent_block_text(ctx, spec)
         if not text.strip():
             raise ToolError(f"The {target} block has no wording to show; ask out loud instead.")
-        state = ctx.ui.state.blocks.get(target) or {}
         call_id = context.function_call.call_id
-        if isinstance(state, dict) and state.get("accepted") is True:
+        ledger = consent_ledger(ctx)
+        # S5-3: agreement is what this session recorded (a `consent` event), never the
+        # block's `accepted`, which an unsolicited browser answer can set.
+        if ledger.answers.get(target) is True:
             return "The caller has already agreed to this; do not ask again."
+        # S5-4: a spoken answer recorded later must come after this question.
+        ledger.asked_at[target] = time.time()
         channel = getattr(ctx, "channel", "web")
         if channel in VOICE_ONLY_CHANNELS:
             ctx.log.debug("builtin_tool.request_consent", call_id=call_id, block_id=target, voice_only=True)
@@ -144,7 +158,7 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
         if background:
             ctx.background.submit(
                 name="request_consent",
-                coro=wait_for_consent(target),
+                coro=wait_for_consent(target, text),
                 urgent=lambda outcome: (
                     outcome is not None and outcome.get("method") != "voice" and not outcome.get("ending")
                 ),
@@ -161,7 +175,7 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
             )
             return None
 
-        outcome = await wait_for_consent(target)
+        outcome = await wait_for_consent(target, text)
         if outcome is None:
             return NOT_ANSWERED
         return outcome_message(ctx, outcome)

@@ -99,6 +99,24 @@ def require_url(url: object, policy: UrlPolicy, *, field: str) -> str:
     return url
 
 
+#: A token lifetime is clamped to at most this (S5-18: a huge ``expires_in`` overflows).
+MAX_EXPIRES_IN_S: Final[int] = 10 * 365 * 24 * 3600
+
+
+def token_lifetime(expires_in: int | None) -> int | None:
+    """A provider's ``expires_in`` clamped to 1 s … 10 years; ``None`` when it sent none.
+
+    Raises:
+        McpOauthError: ``invalid_token_answer`` for zero or a negative lifetime (a token
+            that is already expired must never be stored as one that never expires).
+    """
+    if expires_in is None:
+        return None
+    if expires_in <= 0:
+        raise McpOauthError("invalid_token_answer", "the sign-in provider sent an expired token")
+    return min(int(expires_in), MAX_EXPIRES_IN_S)
+
+
 def host_of(url: str) -> str:
     """The host of ``url`` (for audit rows and fingerprints; never the path or query)."""
     return (urlsplit(url).hostname or "").lower()
@@ -116,7 +134,8 @@ class Fetched:
         """The body as a JSON object, or ``None`` when it is not one."""
         try:
             parsed = json.loads(self.body)
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError, ValueError):
+            # RecursionError: 64 KB of `[[[[` nests past the parser's limit (S5-18).
             return None
         return parsed if isinstance(parsed, dict) else None
 
@@ -171,6 +190,7 @@ async def fetch(
 
 __all__ = [
     "MAX_BODY_BYTES",
+    "MAX_EXPIRES_IN_S",
     "REQUEST_TIMEOUT_S",
     "Fetched",
     "McpOauthError",
@@ -179,5 +199,6 @@ __all__ = [
     "host_of",
     "loopback_host",
     "require_url",
+    "token_lifetime",
     "url_problem",
 ]

@@ -306,6 +306,7 @@
               "items": {
                 "$ref": "#/$defs/McpToolSnapshot"
               },
+              "maxItems": 200,
               "type": "array"
             },
             {
@@ -436,6 +437,7 @@
         "description": {
           "anyOf": [
             {
+              "maxLength": 1000,
               "type": "string"
             },
             {

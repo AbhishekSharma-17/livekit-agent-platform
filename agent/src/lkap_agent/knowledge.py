@@ -46,11 +46,14 @@ from lkap_contracts.agent_config import KNOWLEDGE_RERANK_VALUES, KnowledgeConfig
 from lkap_contracts.api_models import KbHit, KbSearchOptions
 
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.untrusted import fence, fence_overhead
 
 __all__ = [
     "BACKCHANNEL_PHRASES",
     "INJECT_TIMEOUT_S",
+    "KNOWLEDGE_SOURCE",
     "KNOWLEDGE_STATE_KEY",
+    "MAX_FILENAME_CHARS",
     "KnowledgePrefetch",
     "KnowledgeState",
     "RecentChunks",
@@ -62,6 +65,7 @@ __all__ = [
     "knowledge_state",
     "last_sentence",
     "prefetch_listener",
+    "safe_filename",
     "search_options",
     "skip_reason",
     "words",
@@ -94,6 +98,13 @@ CHARS_PER_TOKEN: Final[int] = 4
 
 #: A truncated hit keeps at least this many tokens, or it is left out.
 MIN_TRUNCATED_TOKENS: Final[int] = 24
+
+#: The `<untrusted>` source of retrieved passages (S5-6, R-V5-15).
+KNOWLEDGE_SOURCE: Final[str] = "knowledge"
+#: Longest filename a note label keeps (S5-6).
+MAX_FILENAME_CHARS: Final[int] = 120
+#: What a note label never keeps: brackets, angle brackets and control characters (newlines too).
+_FILENAME_UNSAFE_RE = re.compile(r"[\[\]<>\x00-\x1f\x7f-\x9f]")
 
 #: At most this many flow variables, and this many characters of them, join the query.
 MAX_QUERY_VARIABLES: Final[int] = 8
@@ -301,12 +312,26 @@ def _truncate(text: str, max_chars: int) -> str:
     return cut.rstrip() + "…"
 
 
+def safe_filename(name: str) -> str:
+    """A hit's filename as the note labels it (S5-6): one line, no brackets, ≤ 120 characters.
+
+    An imported document's name is the uploader's (or a URL's, unquoted), so it
+    may hold newlines, control characters or brackets that would forge a new
+    label or line in the note.
+    """
+    cleaned = _FILENAME_UNSAFE_RE.sub(" ", name)
+    cleaned = " ".join(cleaned.split())[:MAX_FILENAME_CHARS].strip()
+    return cleaned or "document"
+
+
 def compose_note(hits: Sequence[KbHit], *, prefix: str, max_tokens: int) -> tuple[str, list[KbHit]]:
     """Frame `hits` for the model within `max_tokens`.
 
     Hits are kept best first while they fit; the first one that does not is
     truncated when at least :data:`MIN_TRUNCATED_TOKENS` of room is left, and
-    the rest are dropped.
+    the rest are dropped. V5-27 (S5-6, R-V5-15): the hits go inside one
+    ``<untrusted source="knowledge">`` fence after the prefix, each labelled
+    with its :func:`safe_filename`; the fence counts against the budget.
 
     Args:
         hits: The retrieved chunks, best first.
@@ -319,9 +344,9 @@ def compose_note(hits: Sequence[KbHit], *, prefix: str, max_tokens: int) -> tupl
     budget = max_tokens * CHARS_PER_TOKEN
     lines: list[str] = []
     used: list[KbHit] = []
-    length = len(prefix)
+    length = len(prefix) + fence_overhead(KNOWLEDGE_SOURCE)
     for hit in hits:
-        label = f"[{hit.filename}] "
+        label = f"[{safe_filename(hit.filename)}] "
         separator = 1 if not lines else 2  # "\n" after the prefix, "\n\n" between hits
         room = budget - length - separator - len(label)
         if room <= 0:
@@ -338,7 +363,7 @@ def compose_note(hits: Sequence[KbHit], *, prefix: str, max_tokens: int) -> tupl
             break
     if not lines:
         return "", []
-    return prefix + "\n" + "\n\n".join(lines), used
+    return prefix + "\n" + fence("\n\n".join(lines), source=KNOWLEDGE_SOURCE), used
 
 
 # --------------------------------------------------------------------------- dedupe

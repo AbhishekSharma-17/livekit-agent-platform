@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from lkap_api.kb.store import LanceDBStore, VectorRecord
+from lkap_api.kb.stores import check_safe_id
 
 
 async def test_upsert_then_query_returns_the_closest_vector(tmp_path: Path) -> None:
@@ -54,6 +57,19 @@ async def test_delete_kb_drops_the_table(tmp_path: Path) -> None:
     await store.upsert("kb1", [VectorRecord(id="c1", vector=[1.0, 0.0], document_id="d1")])
     await store.delete_kb("kb1")
     assert await store.query("kb1", [1.0, 0.0], k=5) == []
+
+
+@pytest.mark.parametrize("value", ["abc\n", "abc\nOR 1=1", "", "a b", "a'b"])
+def test_check_safe_id_uses_a_full_match(value: str) -> None:
+    # S5-38: `re.match` with `$` let a trailing newline through.
+    with pytest.raises(ValueError):
+        check_safe_id(value)
+
+
+async def test_lancedb_table_name_refuses_an_unsafe_kb_id(tmp_path: Path) -> None:
+    store = LanceDBStore(tmp_path)
+    with pytest.raises(ValueError):
+        await store.upsert("kb1\n", [VectorRecord(id="c1", vector=[1.0], document_id="d1")])
 
 
 async def test_upsert_rejects_unsafe_ids(tmp_path: Path) -> None:

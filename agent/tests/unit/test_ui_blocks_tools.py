@@ -440,7 +440,9 @@ async def test_search_knowledge_with_a_v1_fake_channel_still_answers() -> None:
         kb=FakeKbClient([hit]),
     )
     result = await build_search_knowledge_tool(ctx)(context=_run_ctx(), query="q")
-    assert json.loads(result)[0]["source"] == "policy.pdf"
+    # V5-27 (S5-6): the passages come fenced as untrusted knowledge.
+    fenced = result.removeprefix('<untrusted source="knowledge">').removesuffix("</untrusted>")
+    assert json.loads(fenced)[0]["source"] == "policy.pdf"
 
 
 # ================================================================ V5-08: the block quartet

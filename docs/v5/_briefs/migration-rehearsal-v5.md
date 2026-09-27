@@ -350,3 +350,33 @@ Instant. **Order:** backup → `upgrade head` → restart the api (it reads and 
 columns on every call list, report and `/resolved` of a phone session; an api on this code against an
 unmigrated database fails on those) → restart the worker (the AMD start path, `transfer_call`'s `summary`
 and the warm path). Nothing else changes for existing agents: `amd` is off and every target is `cold`.
+
+## v5_008_memory (V5-40)
+
+Rehearsed on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session scratchpad only
+(`api/data/lkap.db` was not read or touched), chained after `v5_007_telephony_amd` (`alembic heads` →
+`v5_007_telephony_amd` when V5-40 started; V5-37 may add one in parallel, the coordinator re-chains).
+
+```
+upgrade head:                    ... -> v5_007_telephony_amd -> v5_008_memory
+downgrade v5_007_telephony_amd:  v5_008_memory -> v5_007_telephony_amd
+upgrade head:                    v5_007_telephony_amd -> v5_008_memory
+check:                           No new upgrade operations detected.
+```
+
+Two new tables (`memory_subjects` with a unique `(workspace_id, subject_id, scope_key)` and an index on
+`retention_until`; `memory_events` with a `kind` CHECK and two indexes); nothing existing is altered.
+`tests/test_memory.py::test_v5_008_upgrade_downgrade_upgrade` pins up/down/up. **Postgres: rendered,
+not executed** (`upgrade v5_007_telephony_amd:v5_008_memory --sql`: two `CREATE TABLE`, three
+`CREATE INDEX`).
+
+### To apply (coordinator)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_008.db"
+cd api && uv run alembic upgrade head      # v5_007_telephony_amd -> v5_008_memory
+```
+
+Instant. **Order:** backup → `upgrade head` → restart the api (the summary route reads the new
+tables for memory-enabled agents, and `test_db_guard` lists them as tenant tables) → restart the worker
+(the recall client). Nothing changes for existing agents: memory is off.

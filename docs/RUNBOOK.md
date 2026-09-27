@@ -334,6 +334,17 @@ Migration `v5_005_knowledge_connections` adds `knowledge_connections` and three 
 - **Moving a knowledge base** between the platform's store and a connection (either way) re-embeds its stored chunks into the target, switches the knowledge base, then deletes the old vectors: `python -m lkap_api.kb.jobs reindex --kb <id> --to-connection <connection id>` or `--to-platform`. The same command without a destination re-indexes a knowledge base where it is (for a connection with `native_hybrid` on, that is what indexes its keywords in the store for documents ingested before).
 - **Deleting.** A connection that still stores knowledge bases cannot be deleted; delete or move them first. Deleting a knowledge base removes its vectors from the vendor's service; deleting the connection leaves the vendor's collection or index in place.
 
+### 9.5 Caller memory (V5-40)
+
+Migration `v5_008_memory` adds `memory_subjects` and `memory_events` (new tables only). Memory is off for every agent until a builder turns it on (`AgentConfig.memory.enabled`).
+
+- **Install the extra.** The backend is Mem0 OSS (Apache-2.0), an optional dependency: `cd api && uv sync --extra memory` (adds `mem0ai`, `qdrant-client`, `psycopg`, `psycopg-pool`, `posthog` and their dependencies; the shared lock pins `protobuf` 6.x because `mem0ai` needs `<7`). Without it the api runs, the recall answers `unavailable` and nothing is stored; the agent editor warns.
+- **Where the memories live.** Postgres (`LKAP_DATABASE_URL`): Mem0's `lkap_memory` table in the platform's database (it runs `CREATE EXTENSION IF NOT EXISTS vector` itself). SQLite: a local Qdrant folder under `LKAP_DATA_DIR/memory/qdrant`. Local Qdrant locks its folder for **one process**: keep `LKAP_JOBS_BACKEND=inline` on SQLite (the api runs the memory jobs itself); use Postgres with `arq`. Back up that folder with the database.
+- **Nothing leaves by accident.** Mem0's telemetry and remote notices are switched off before it is imported (`MEM0_TELEMETRY=False`, `MEM0_DIR=LKAP_DATA_DIR/memory/mem0`); its history database is replaced by a stub that keeps nothing; embeddings use the knowledge model already on disk (`LKAP_EMBED_MODEL`); the only outbound call is the fact extraction, to the agent's own OpenAI or OpenRouter model at the registry's address, through the outbound network guard.
+- **The memory key.** Each workspace gets a random key on first use, stored in the vault as a `memory-key` credential. Callers are known only by a keyed hash of their number or identity. Deleting that credential (or Purge) makes every existing memory of the workspace unreachable; do not delete it by hand.
+- **Erasure.** Forget one caller from the session's Memory tab or `DELETE /v1/memory/subjects/{subject_id}`; purge a workspace with `POST /v1/memory/purge` (`{"confirm": true}`); memories older than the agent's `retention_days` are deleted by the sessions sweep. All three also blank the memories recorded on sessions.
+- **Returning web callers.** Only a caller with a stable identity is remembered: a phone number, or a `participant_identity` a trusted caller passes to `POST /v1/agents/{id}/connect` (an API key with `sessions:write`, or the console). Anonymous visitors get a random identity and are never remembered.
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:

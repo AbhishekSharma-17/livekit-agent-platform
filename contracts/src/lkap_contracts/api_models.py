@@ -545,11 +545,14 @@ class McpOauthStatusOut(BaseModel):
 #: Where a knowledge base's vectors live, or which hosted service re-ranks search results
 #: (knowledge-and-memory §3.2/§3.3, D-V5-16, D-V5-19). One registry entry (provider kind
 #: ``knowledge``) per kind: :data:`KNOWLEDGE_CONNECTION_PROVIDER_IDS`.
-KnowledgeConnectionKind = Literal["qdrant", "pinecone", "weaviate", "cohere_rerank", "voyage_rerank"]
+KnowledgeConnectionKind = Literal["qdrant", "pinecone", "weaviate", "cohere_rerank", "voyage_rerank", "ragie"]
 #: The kinds a knowledge base can store its vectors in (``knowledge_bases.connection_id``).
 VECTOR_STORE_CONNECTION_KINDS: frozenset[str] = frozenset({"qdrant", "pinecone", "weaviate"})
 #: The kinds ``KnowledgeConfig.rerank = "connection:<id>"`` may name (the search tool only).
 RERANKER_CONNECTION_KINDS: frozenset[str] = frozenset({"cohere_rerank", "voyage_rerank"})
+#: The managed-search kinds (V5-45): the service ingests and ranks its own documents; a knowledge
+#: base of ``kind="external"`` is searched there (``external_ref`` = where in it, a Ragie partition).
+EXTERNAL_RETRIEVER_CONNECTION_KINDS: frozenset[str] = frozenset({"ragie"})
 #: The registry entry (and credential home) of each kind.
 KNOWLEDGE_CONNECTION_PROVIDER_IDS: dict[str, str] = {
     "qdrant": "qdrant",
@@ -557,6 +560,7 @@ KNOWLEDGE_CONNECTION_PROVIDER_IDS: dict[str, str] = {
     "weaviate": "weaviate",
     "cohere_rerank": "cohere-rerank",
     "voyage_rerank": "voyage-rerank",
+    "ragie": "ragie",
 }
 #: ``unverified`` until the first test; ``error`` carries ``last_error``.
 KnowledgeConnectionStatus = Literal["unverified", "ok", "error"]
@@ -586,6 +590,11 @@ class KnowledgeConnectionCapabilities(BaseModel):
     stores_text: bool = False
     namespaces: bool = Field(default=False, description="Each knowledge base is its own namespace or tenant.")
     rerank: bool = Field(default=False, description="A re-ranking service (not a vector store).")
+    managed_search: bool = Field(
+        default=False,
+        description="A managed search service (V5-45): it holds and ranks its own documents; knowledge "
+        "bases of kind `external` are searched there.",
+    )
     dimension: int | None = Field(
         default=None, description="The vector width the collection or index holds; null when not fixed."
     )
@@ -663,7 +672,11 @@ class KnowledgeConnectionTestOut(BaseModel):
     ok: bool
     status: KnowledgeConnectionStatus
     message: str
-    collections: list[str] = Field(default_factory=list)
+    collections: list[str] = Field(
+        default_factory=list,
+        description="The collections or indexes the key can see; for a managed search service, its "
+        "partitions (the first 100).",
+    )
     target: str | None = Field(default=None, description="The collection or index this connection uses.")
     target_exists: bool | None = None
     dimension_expected: int | None = Field(
@@ -685,8 +698,52 @@ class KbCreate(BaseModel):
         default=None,
         max_length=32,
         description="Store the vectors through this knowledge connection (a vector store of the same "
-        "workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists.",
+        "workspace); null keeps them in the platform's own store. Fixed once the knowledge base exists. "
+        "For `kind=external`, the managed search service (a Ragie connection) that holds the documents.",
     )
+    kind: KnowledgeBaseKind = Field(
+        default="managed",
+        description="`managed`: the platform ingests uploaded documents. `external` (V5-45): a managed "
+        "search service holds and searches the documents (`connection_id` and `external_ref` required; "
+        "no uploads). Fixed once the knowledge base exists; a PUT that leaves it out keeps it.",
+    )
+    external_ref: str | None = Field(
+        default=None,
+        max_length=200,
+        description="`kind=external` only: where the documents live in the service (a Ragie partition: "
+        "lower-case letters, digits, `_` and `-`). Fixed once the knowledge base exists.",
+    )
+
+    @model_validator(mode="after")
+    def _external_needs_a_source(self) -> "KbCreate":
+        if self.kind == "external":
+            if self.connection_id is None:
+                raise ValueError("a knowledge base of kind 'external' needs connection_id")
+            if not (self.external_ref or "").strip():
+                raise ValueError("a knowledge base of kind 'external' needs external_ref (the partition)")
+        elif self.external_ref is not None:
+            raise ValueError("external_ref is only for a knowledge base of kind 'external'")
+        return self
+
+
+class KbSourceOut(BaseModel):
+    """``GET /v1/knowledge-bases/{id}/source`` (V5-45): what the managed search service reports.
+
+    A vendor failure is ``ok=false`` with a plain ``message``, never an error status.
+    """
+
+    kind: str = Field(description="The service kind (`ragie`).")
+    external_ref: str | None = Field(default=None, description="Where in the service (the partition).")
+    ok: bool
+    message: str | None = None
+    document_count: int | None = Field(
+        default=None, description="Documents the service holds; null when unknown."
+    )
+    last_synced_at: datetime | None = Field(
+        default=None, description="When the service last synced its sources; null when it does not say."
+    )
+    sources: list[str] = Field(default_factory=list, description="Source names (partitions, sites, drives).")
+    checked_at: datetime
 
 
 class KbOut(BaseModel):
@@ -712,10 +769,15 @@ class KbOut(BaseModel):
     connection_id: str | None = Field(
         default=None, description="The knowledge connection holding the vectors; null = the platform's store."
     )
-    kind: KnowledgeBaseKind = Field(default="managed", description="`managed`: the platform ingests it.")
+    kind: KnowledgeBaseKind = Field(
+        default="managed",
+        description="`managed`: the platform ingests it. `external`: a managed search service holds and "
+        "searches it (no uploads).",
+    )
     external_ref: str | None = Field(
         default=None,
-        description="Where the vectors live in the connection (collection, index and namespace, or tenant).",
+        description="Where the vectors live in the connection (collection, index and namespace, or tenant); "
+        "for `kind=external`, where the documents live in the service (the Ragie partition).",
     )
 
 
@@ -832,8 +894,8 @@ KbRerankMode = Annotated[
 ]
 #: Who asked for a search: the ``search_knowledge`` tool or the automatic per-turn injection.
 KbSearchPurpose = Literal["tool", "auto_inject"]
-#: Which stage decided a hit's ``score``.
-KbScoreSource = Literal["vector", "fused", "rerank"]
+#: Which stage decided a hit's ``score``; ``external``: a managed search service's own score (V5-45).
+KbScoreSource = Literal["vector", "fused", "rerank", "external"]
 #: Why a search skipped or degraded part of its work.
 KbSearchWarningCode = Literal[
     "kb_not_found",
@@ -896,7 +958,8 @@ class KbHit(BaseModel):
     meta: dict[str, Any] = Field(
         default_factory=dict,
         description="The chunk's locators: `filename`, and for chunks ingested since V5-01 "
-        "`heading_path`, `page`, `char_start`, `char_end`.",
+        "`heading_path`, `page`, `char_start`, `char_end`. A managed-search hit (V5-45) carries "
+        "`document_name`, `source` (`ragie`), `chunk_index` and, when the service knows it, `url`.",
     )
     vector_score: float | None = Field(
         default=None, description="Cosine similarity to the query; null when not in the vector list."
@@ -911,7 +974,9 @@ class KbHit(BaseModel):
         default=None, description="Cross-encoder relevance through a sigmoid, (0, 1); reranked hits only."
     )
     score_source: KbScoreSource = Field(
-        default="vector", description="Which stage `score` is: `vector`, `fused` or `rerank`."
+        default="vector",
+        description="Which stage `score` is: `vector`, `fused` or `rerank`; `external` is a managed search "
+        "service's own relevance, relative to that one search and not comparable with the others.",
     )
 
 

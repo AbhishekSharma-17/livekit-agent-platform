@@ -14,6 +14,13 @@ for free) and answers two questions:
 * **Which hosted re-ranker is ``connection:<id>``?** :meth:`ConnectionRuntime.reranker`
   builds it, refusing a connection of another workspace than the knowledge
   bases being searched.
+* **Which managed search service answers this external knowledge base?**
+  (V5-45) :meth:`ConnectionRuntime.retriever_for_kb` builds the
+  :class:`~lkap_api.kb.external.ExternalRetriever` of a ``kind="external"``
+  knowledge base (its connection, its partition), failing closed like the
+  stores. An external knowledge base has no store: :meth:`store_for_kb` for
+  one raises, so nothing is ever ingested into (or searched in) the platform
+  store on its behalf.
 
 Keys are decrypted from the vault only here, only when a store or re-ranker is
 built, and never logged. Every vendor call goes through one guarded
@@ -32,12 +39,18 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from lkap_contracts.api_models import RERANKER_CONNECTION_KINDS, VECTOR_STORE_CONNECTION_KINDS
+from lkap_contracts.api_models import (
+    EXTERNAL_RETRIEVER_CONNECTION_KINDS,
+    RERANKER_CONNECTION_KINDS,
+    VECTOR_STORE_CONNECTION_KINDS,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Credential, KnowledgeBase, KnowledgeConnection
+from lkap_api.kb.external import ExternalRetriever
+from lkap_api.kb.external.ragie import RagieApi, RagieRetriever
 from lkap_api.kb.rerankers.base import HostedReranker
 from lkap_api.kb.rerankers.cohere import CohereReranker
 from lkap_api.kb.rerankers.voyage import VoyageReranker
@@ -50,6 +63,7 @@ from lkap_api.knowledge_connections.settings import (
     CohereRerankSettings,
     PineconeSettings,
     QdrantSettings,
+    RagieSettings,
     VoyageRerankSettings,
     WeaviateSettings,
     load_settings,
@@ -210,11 +224,35 @@ def build_reranker(loaded: LoadedConnection, client: httpx.AsyncClient) -> Hoste
             raise ConnectorError(f"a '{loaded.kind}' connection is not a re-ranking service")
 
 
+def build_retriever(
+    loaded: LoadedConnection, client: httpx.AsyncClient, *, kb_id: str, external_ref: str
+) -> ExternalRetriever:
+    """The managed search retriever of one external knowledge base (V5-45).
+
+    Raises:
+        ConnectorError: The connection is not a managed search service, or has no key.
+    """
+    settings = loaded.settings
+    if loaded.kind not in EXTERNAL_RETRIEVER_CONNECTION_KINDS or not isinstance(settings, RagieSettings):
+        raise ConnectorError(f"a '{loaded.kind}' connection is not a managed search service")
+    if not loaded.api_key:
+        raise ConnectorError("this Ragie connection has no key", auth=True)
+    return RagieRetriever(
+        RagieApi(client, api_key=loaded.api_key),
+        kb_id=kb_id,
+        partition=external_ref,
+        rerank=settings.rerank,
+        recency_bias=settings.recency_bias,
+    )
+
+
 # ------------------------------------------------------------------------------ the runtime
 @dataclass(slots=True, frozen=True)
 class _KbBinding:
     workspace_id: str
     connection_id: str | None
+    kind: str = "managed"
+    external_ref: str | None = None
 
 
 class ConnectionRuntime:
@@ -227,6 +265,7 @@ class ConnectionRuntime:
         self._vault = vault
         self._bindings: dict[str, _KbBinding | None] = {}
         self._stores: dict[str, KnowledgeStore] = {}
+        self._retrievers: dict[str, ExternalRetriever] = {}
 
     @property
     def vault(self) -> Vault:
@@ -242,13 +281,25 @@ class ConnectionRuntime:
     async def _binding(self, kb_id: str) -> _KbBinding | None:
         if kb_id not in self._bindings:
             statement = (
-                select(KnowledgeBase.workspace_id, KnowledgeBase.connection_id)
+                select(
+                    KnowledgeBase.workspace_id,
+                    KnowledgeBase.connection_id,
+                    KnowledgeBase.kind,
+                    KnowledgeBase.external_ref,
+                )
                 .where(KnowledgeBase.id == kb_id)
                 .execution_options(**{CROSS_WORKSPACE_OPTION: True})
             )
             row = (await self._session.execute(statement)).first()
             self._bindings[kb_id] = (
-                _KbBinding(workspace_id=str(row[0]), connection_id=row[1]) if row is not None else None
+                _KbBinding(
+                    workspace_id=str(row[0]),
+                    connection_id=row[1],
+                    kind=str(row[2] or "managed"),
+                    external_ref=row[3],
+                )
+                if row is not None
+                else None
             )
         return self._bindings[kb_id]
 
@@ -280,9 +331,41 @@ class ConnectionRuntime:
                 cannot be used (fail closed; never the platform store instead).
         """
         binding = await self._binding(kb_id)
+        if binding is not None and binding.kind == "external":
+            raise ConnectorError(
+                f"knowledge base '{kb_id}' is searched in a managed search service; it has no vector store"
+            )
         if binding is None or binding.connection_id is None:
             return None
         return await self.store_for_connection(binding.connection_id, workspace_id=binding.workspace_id)
+
+    async def is_external(self, kb_id: str) -> bool:
+        """Whether ``kb_id`` is a managed-search (``kind="external"``) knowledge base (V5-45)."""
+        binding = await self._binding(kb_id)
+        return binding is not None and binding.kind == "external"
+
+    async def retriever_for_kb(self, kb_id: str) -> ExternalRetriever:
+        """The managed search retriever of an external knowledge base (V5-45; built once per runtime).
+
+        Raises:
+            ConnectorError: Not an external knowledge base, or its connection is
+                gone, of another workspace, not a managed search service or keyless
+                (fail closed).
+        """
+        retriever = self._retrievers.get(kb_id)
+        if retriever is not None:
+            return retriever
+        binding = await self._binding(kb_id)
+        if binding is None or binding.kind != "external":
+            raise ConnectorError(f"knowledge base '{kb_id}' is not searched in a managed search service")
+        if binding.connection_id is None or not binding.external_ref:
+            raise ConnectorError(f"knowledge base '{kb_id}' has no managed search connection or partition")
+        loaded = await load_connection(
+            self._session, self.vault, binding.connection_id, workspace_id=binding.workspace_id
+        )
+        retriever = build_retriever(loaded, self.client(), kb_id=kb_id, external_ref=binding.external_ref)
+        self._retrievers[kb_id] = retriever
+        return retriever
 
     async def reranker(self, connection_id: str, *, kb_ids: list[str]) -> HostedReranker:
         """The hosted re-ranker ``connection:<id>`` names, for a search over ``kb_ids``.
@@ -303,4 +386,8 @@ class ConnectionRuntime:
 
     def snapshot(self) -> dict[str, Any]:
         """What is cached (tests and the debug log)."""
-        return {"bindings": len(self._bindings), "stores": sorted(self._stores)}
+        return {
+            "bindings": len(self._bindings),
+            "stores": sorted(self._stores),
+            "retrievers": sorted(self._retrievers),
+        }

@@ -1,0 +1,88 @@
+{
+  "$id": "lkap-contracts/KbSourceOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/knowledge-bases/{id}/source`` (V5-45): what the managed search service reports.\n\nA vendor failure is ``ok=false`` with a plain ``message``, never an error status.",
+  "properties": {
+    "checked_at": {
+      "format": "date-time",
+      "title": "Checked At",
+      "type": "string"
+    },
+    "document_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Documents the service holds; null when unknown.",
+      "title": "Document Count"
+    },
+    "external_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where in the service (the partition).",
+      "title": "External Ref"
+    },
+    "kind": {
+      "description": "The service kind (`ragie`).",
+      "title": "Kind",
+      "type": "string"
+    },
+    "last_synced_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the service last synced its sources; null when it does not say.",
+      "title": "Last Synced At"
+    },
+    "message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "sources": {
+      "description": "Source names (partitions, sites, drives).",
+      "items": {
+        "type": "string"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "kind",
+    "ok",
+    "checked_at"
+  ],
+  "title": "KbSourceOut",
+  "type": "object"
+}

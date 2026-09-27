@@ -56,7 +56,7 @@
     },
     "meta": {
       "additionalProperties": true,
-      "description": "The chunk's locators: `filename`, and for chunks ingested since V5-01 `heading_path`, `page`, `char_start`, `char_end`.",
+      "description": "The chunk's locators: `filename`, and for chunks ingested since V5-01 `heading_path`, `page`, `char_start`, `char_end`. A managed-search hit (V5-45) carries `document_name`, `source` (`ragie`), `chunk_index` and, when the service knows it, `url`.",
       "title": "Meta",
       "type": "object"
     },
@@ -79,11 +79,12 @@
     },
     "score_source": {
       "default": "vector",
-      "description": "Which stage `score` is: `vector`, `fused` or `rerank`.",
+      "description": "Which stage `score` is: `vector`, `fused` or `rerank`; `external` is a managed search service's own relevance, relative to that one search and not comparable with the others.",
       "enum": [
         "vector",
         "fused",
-        "rerank"
+        "rerank",
+        "external"
       ],
       "title": "Score Source",
       "type": "string"

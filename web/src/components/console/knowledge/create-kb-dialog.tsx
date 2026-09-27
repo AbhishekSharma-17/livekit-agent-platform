@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -24,22 +23,75 @@ import { errorMessage } from "@/components/console/shared/error-banner";
 import { Field } from "@/components/shared/field";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { EMBEDDER_CHOICES, embedderHelp, embedderLabel } from "@/components/console/knowledge/embedder-label";
-import { VECTOR_STORE_CONNECTION_KINDS } from "@/components/console/settings/knowledge-connection-dialog";
+import {
+  MANAGED_SEARCH_CONNECTION_KINDS,
+  VECTOR_STORE_CONNECTION_KINDS,
+} from "@/components/console/settings/knowledge-connection-dialog";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { cn } from "@/lib/utils";
+import type { KbCreate, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
 
 const DEFAULT_EMBEDDER_ID = "fastembed-embedding";
-const PLATFORM = "__platform__";
+
+/** Where a knowledge base's documents live. `connection` and `managed_search` both name a `KnowledgeConnectionOut`; `platform` needs none. */
+type Storage = "platform" | "connection" | "managed_search";
+
+/** A Ragie partition name (mirrors the api's check): lower-case letters, digits, `_` and `-`. */
+const PARTITION_PATTERN = /^[a-z0-9_-]{1,100}$/;
+
+function ChoiceCard({
+  id,
+  value,
+  selected,
+  title,
+  hint,
+  children,
+}: {
+  id: string;
+  value: string;
+  selected: boolean;
+  title: string;
+  hint?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Label
+      htmlFor={id}
+      className={cn(
+        "flex cursor-pointer flex-col gap-1.5 rounded-md border border-border p-3 text-sm font-normal",
+        selected && "border-primary bg-muted/50",
+      )}
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="font-medium text-foreground">{title}</span>
+        <RadioGroupItem id={id} value={value} />
+      </span>
+      <span className="text-xs text-muted-foreground">{hint}</span>
+      {children}
+    </Label>
+  );
+}
 
 /**
  * `create-kb-dialog.tsx` (docs/UI_UX_SPEC.md §7.7 item 4): "stays a dialog (2
  * fields) with embedder choice as radio cards" — Name, then the embedder.
- * V5-24 adds "Where is this knowledge stored?" (K §5.3): the platform's own
- * store (LanceDB/pgvector), or an existing knowledge connection — a vector
- * database of the workspace's own account. This is fixed once the knowledge
- * base exists (`KbCreate.connection_id`; `update_kb` refuses a change, 409),
- * so there is no edit affordance for it later — only the read-only line on
- * `kb-detail.tsx`.
+ *
+ * "Where is this knowledge stored?" (V5-24, K §5.3; V5-45 added the third
+ * choice) offers three storage kinds, one radio group:
+ * - **Platform default** — the platform's own store (LanceDB/pgvector); no
+ *   connection needed.
+ * - **A knowledge connection** — a vector database of the workspace's own
+ *   account (Qdrant/Pinecone/Weaviate, `KbCreate.connection_id`).
+ * - **Managed search (Ragie)** — the documents stay in Ragie and this
+ *   knowledge base reads one Ragie partition (`kind: "external"`,
+ *   `connection_id`, `external_ref`); nothing is uploaded, so the embedder
+ *   choice is hidden for it.
+ *
+ * All three are fixed once the knowledge base exists (`update_kb` refuses a
+ * change, 409), so there is no edit affordance for them later — only the
+ * read-only line on `kb-detail.tsx`. The connections list is fetched lazily
+ * (only once a connection-backed choice is picked), so creating a plain
+ * platform-default knowledge base never calls `/v1/knowledge-connections`.
  *
  * Description isn't a create-time field (`KbCreate.description` is optional
  * and there's no update-knowledge-base hook in WP-6's scope to edit it
@@ -50,13 +102,43 @@ export function CreateKbDialog() {
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
   const [embedderId, setEmbedderId] = React.useState(DEFAULT_EMBEDDER_ID);
-  const [connectionId, setConnectionId] = React.useState(PLATFORM);
+  const [storage, setStorage] = React.useState<Storage>("platform");
+  const [connectionId, setConnectionId] = React.useState("");
+  const [partition, setPartition] = React.useState("");
   const createKb = useCreateKb();
   const { canWrite } = useWriteAccess();
-  const connectionsQuery = useKnowledgeConnections();
-  const storeConnections = (connectionsQuery.data?.items ?? []).filter((c) =>
-    VECTOR_STORE_CONNECTION_KINDS.includes(c.kind),
+
+  const connectionsQuery = useKnowledgeConnections({ enabled: open && storage !== "platform" });
+  const allConnections = connectionsQuery.data?.items ?? [];
+  const storeConnections = React.useMemo(
+    () => allConnections.filter((c) => VECTOR_STORE_CONNECTION_KINDS.includes(c.kind)),
+    [allConnections],
   );
+  const ragieConnections = React.useMemo(
+    () => allConnections.filter((c) => MANAGED_SEARCH_CONNECTION_KINDS.includes(c.kind)),
+    [allConnections],
+  );
+  const choices = storage === "connection" ? storeConnections : storage === "managed_search" ? ragieConnections : [];
+
+  // The only choice (the usual case) is picked for the user.
+  React.useEffect(() => {
+    if (storage !== "platform" && connectionId === "" && choices.length === 1) {
+      setConnectionId(choices[0].id);
+    }
+  }, [storage, connectionId, choices]);
+
+  function reset() {
+    setName("");
+    setEmbedderId(DEFAULT_EMBEDDER_ID);
+    setStorage("platform");
+    setConnectionId("");
+    setPartition("");
+  }
+
+  function chooseStorage(next: Storage) {
+    setStorage(next);
+    setConnectionId("");
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -64,15 +146,28 @@ export function CreateKbDialog() {
       toast.error("Name is required.");
       return;
     }
+    let body: KbCreate = { name: name.trim(), embedder_id: embedderId };
+    if (storage === "connection") {
+      if (connectionId === "") {
+        toast.error("Pick a knowledge connection, or add one first.");
+        return;
+      }
+      body = { name: name.trim(), embedder_id: embedderId, connection_id: connectionId };
+    } else if (storage === "managed_search") {
+      if (connectionId === "") {
+        toast.error("Pick the Ragie connection to search.");
+        return;
+      }
+      const ref = partition.trim();
+      if (!PARTITION_PATTERN.test(ref)) {
+        toast.error("Enter the Ragie partition: lower-case letters, digits, _ and -.");
+        return;
+      }
+      body = { name: name.trim(), kind: "external", connection_id: connectionId, external_ref: ref };
+    }
     try {
-      const kb = await createKb.mutateAsync({
-        name: name.trim(),
-        embedder_id: embedderId,
-        connection_id: connectionId === PLATFORM ? null : connectionId,
-      });
-      setName("");
-      setEmbedderId(DEFAULT_EMBEDDER_ID);
-      setConnectionId(PLATFORM);
+      const kb = await createKb.mutateAsync(body);
+      reset();
       setOpen(false);
       toast.success(`"${kb.name}" created.`);
     } catch (error) {
@@ -91,7 +186,11 @@ export function CreateKbDialog() {
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>New knowledge base</DialogTitle>
-            <DialogDescription>Documents are chunked and embedded on upload.</DialogDescription>
+            <DialogDescription>
+              {storage === "managed_search"
+                ? "The documents stay in Ragie; agents search them there."
+                : "Documents are chunked and embedded on upload."}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-5 py-2">
             <Field label="Name" htmlFor={`${uid}-name`} required>
@@ -105,93 +204,113 @@ export function CreateKbDialog() {
             </Field>
 
             <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Embedder</span>
+              <span className="text-sm font-medium" id={`${uid}-storage-label`}>
+                Where is this knowledge stored?
+              </span>
               <RadioGroup
-                value={embedderId}
-                onValueChange={setEmbedderId}
-                aria-label="Embedder"
-                className="grid gap-2 sm:grid-cols-2"
+                value={storage}
+                onValueChange={(value) => chooseStorage(value as Storage)}
+                aria-labelledby={`${uid}-storage-label`}
+                className="grid gap-2 sm:grid-cols-3"
               >
-                {EMBEDDER_CHOICES.map((id) => {
-                  const inputId = `${uid}-embedder-${id}`;
-                  const selected = embedderId === id;
-                  return (
-                    <Label
+                <ChoiceCard
+                  id={`${uid}-storage-platform`}
+                  value="platform"
+                  selected={storage === "platform"}
+                  title="Platform default"
+                  hint="No setup needed."
+                />
+                <ChoiceCard
+                  id={`${uid}-storage-connection`}
+                  value="connection"
+                  selected={storage === "connection"}
+                  title="A knowledge connection"
+                  hint="Keep the vectors in your own Qdrant, Pinecone or Weaviate account."
+                />
+                <ChoiceCard
+                  id={`${uid}-storage-managed`}
+                  value="managed_search"
+                  selected={storage === "managed_search"}
+                  title="Managed search (Ragie)"
+                  hint="Your documents stay in Ragie. Nothing is uploaded here."
+                />
+              </RadioGroup>
+            </div>
+
+            {storage === "connection" ? (
+              <ConnectionPicker
+                idPrefix={`${uid}-connection`}
+                loading={connectionsQuery.isLoading}
+                connections={storeConnections}
+                connectionId={connectionId}
+                onChange={setConnectionId}
+                emptyMessage="No knowledge connections yet."
+              />
+            ) : null}
+
+            {storage === "managed_search" ? (
+              <>
+                <ConnectionPicker
+                  idPrefix={`${uid}-ragie`}
+                  label="Ragie connection"
+                  loading={connectionsQuery.isLoading}
+                  connections={ragieConnections}
+                  connectionId={connectionId}
+                  onChange={setConnectionId}
+                  emptyMessage="No Ragie connection yet. An admin adds your Ragie key, then a Ragie connection under knowledge connections."
+                  connectionHint={(connection) =>
+                    connection.status === "ok"
+                      ? "Tested and working."
+                      : connection.status === "error"
+                        ? "The last test failed; check the key."
+                        : "Not tested yet."
+                  }
+                />
+                <Field
+                  label="Ragie partition"
+                  htmlFor={`${uid}-partition`}
+                  required
+                  hint="The partition to search, exactly as in Ragie: lower-case letters, digits, _ and -. The connection test lists them."
+                >
+                  <Input
+                    id={`${uid}-partition`}
+                    value={partition}
+                    onChange={(e) => setPartition(e.target.value)}
+                    placeholder="policies"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+              </>
+            ) : (
+              // Both "platform" and "connection" still embed the uploaded documents — only "managed_search"
+              // (Ragie holds and searches its own) has no embedder to choose.
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Embedder</span>
+                <RadioGroup
+                  value={embedderId}
+                  onValueChange={setEmbedderId}
+                  aria-label="Embedder"
+                  className="grid gap-2 sm:grid-cols-2"
+                >
+                  {EMBEDDER_CHOICES.map((id) => (
+                    <ChoiceCard
                       key={id}
-                      htmlFor={inputId}
-                      className={cn(
-                        "flex cursor-pointer flex-col gap-1.5 rounded-md border border-border p-3 text-sm font-normal",
-                        selected && "border-primary bg-muted/50",
-                      )}
+                      id={`${uid}-embedder-${id}`}
+                      value={id}
+                      selected={embedderId === id}
+                      title={embedderLabel(id)}
+                      hint={embedderHelp(id)}
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-foreground">{embedderLabel(id)}</span>
-                        <RadioGroupItem id={inputId} value={id} />
-                      </span>
-                      <span className="text-xs text-muted-foreground">{embedderHelp(id)}</span>
                       <CapabilityBadge
                         kind={id === "fastembed-embedding" ? "no-key" : "key-required"}
                         className="self-start"
                       />
-                    </Label>
-                  );
-                })}
-              </RadioGroup>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Where is this knowledge stored?</span>
-              <RadioGroup
-                value={connectionId === PLATFORM ? PLATFORM : "connection"}
-                onValueChange={(next) => setConnectionId(next === PLATFORM ? PLATFORM : (storeConnections[0]?.id ?? PLATFORM))}
-                aria-label="Where is this knowledge stored?"
-                className="gap-2"
-              >
-                <label htmlFor={`${uid}-store-platform`} className="flex items-start gap-2 text-sm">
-                  <RadioGroupItem id={`${uid}-store-platform`} value={PLATFORM} className="mt-0.5" />
-                  <span>
-                    Platform default
-                    <span className="block text-[0.8125rem] text-muted-foreground">No setup needed.</span>
-                  </span>
-                </label>
-                <label htmlFor={`${uid}-store-connection`} className="flex items-start gap-2 text-sm">
-                  <RadioGroupItem
-                    id={`${uid}-store-connection`}
-                    value="connection"
-                    className="mt-0.5"
-                    disabled={storeConnections.length === 0}
-                  />
-                  <span>
-                    A knowledge connection
-                    <span className="block text-[0.8125rem] text-muted-foreground">
-                      Keep the vectors in your own Qdrant, Pinecone or Weaviate account. Fixed once created.
-                    </span>
-                  </span>
-                </label>
-              </RadioGroup>
-              {connectionId !== PLATFORM ? (
-                <Select value={connectionId} onValueChange={setConnectionId}>
-                  <SelectTrigger id={`${uid}-connection`} className="w-full sm:w-72" aria-label="Knowledge connection">
-                    <SelectValue placeholder="Choose a connection" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {storeConnections.map((connection) => (
-                      <SelectItem key={connection.id} value={connection.id}>
-                        {connection.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : storeConnections.length === 0 ? (
-                <p className="text-[0.8125rem] text-muted-foreground">
-                  No knowledge connections yet.{" "}
-                  <Link href="/console/settings?tab=knowledge-connections" className="font-medium text-foreground underline underline-offset-2">
-                    Add one in Settings
-                  </Link>
-                  .
-                </p>
-              ) : null}
-            </div>
+                    </ChoiceCard>
+                  ))}
+                </RadioGroup>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -204,5 +323,66 @@ export function CreateKbDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The connection-backed choices' shared body: a loading line, an empty
+ * state naming where to add one, or a radio card per connection (auto-picked
+ * by the caller when there is exactly one).
+ */
+function ConnectionPicker({
+  idPrefix,
+  label = "Connection",
+  loading,
+  connections,
+  connectionId,
+  onChange,
+  emptyMessage,
+  connectionHint,
+}: {
+  idPrefix: string;
+  label?: string;
+  loading: boolean;
+  connections: KnowledgeConnectionOut[];
+  connectionId: string;
+  onChange: (id: string) => void;
+  emptyMessage: string;
+  connectionHint?: (connection: KnowledgeConnectionOut) => string;
+}) {
+  const labelId = `${idPrefix}-label`;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium" id={labelId}>
+        {label}
+      </span>
+      {loading ? (
+        <p className="text-xs text-muted-foreground">Loading connections…</p>
+      ) : connections.length === 0 ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          {emptyMessage}{" "}
+          <Link
+            href="/console/settings?tab=knowledge-connections"
+            className="font-medium text-foreground underline underline-offset-2"
+          >
+            Add one in Settings
+          </Link>
+          .
+        </p>
+      ) : (
+        <RadioGroup value={connectionId} onValueChange={onChange} aria-labelledby={labelId} className="grid gap-2">
+          {connections.map((connection) => (
+            <ChoiceCard
+              key={connection.id}
+              id={`${idPrefix}-${connection.id}`}
+              value={connection.id}
+              selected={connectionId === connection.id}
+              title={connection.name}
+              hint={connectionHint?.(connection)}
+            />
+          ))}
+        </RadioGroup>
+      )}
+    </div>
   );
 }

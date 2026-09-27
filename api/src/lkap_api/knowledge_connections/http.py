@@ -156,6 +156,27 @@ class VendorHttp:
         self._base = base_url.rstrip("/")
         self._headers = {"accept": "application/json", **(headers or {})}
         self._timeout = timeout_s
+        # V5-45: the exact header secrets, removed from any vendor message (a short key would
+        # slip past `scrub`'s key-shaped pattern when a vendor echoes it back).
+        self._secrets = sorted(
+            {
+                part
+                for value in (headers or {}).values()
+                for part in (value, value.removeprefix("Bearer ").strip())
+                if len(part) >= 8
+            },
+            key=len,
+            reverse=True,
+        )
+
+    def _redact(self, error: ConnectorError) -> ConnectorError:
+        message = error.message
+        for secret in self._secrets:
+            message = message.replace(secret, "[redacted]")
+        if message != error.message:
+            error.message = message
+            error.args = (message,)
+        return error
 
     async def call(
         self,
@@ -218,7 +239,7 @@ class VendorHttp:
                         raise ConnectorError(
                             f"{self.vendor} answered with something that is not JSON"
                         ) from exc
-                error = error_for(self.vendor, response)
+                error = self._redact(error_for(self.vendor, response))
             if error.retryable and attempt < retries:
                 await asyncio.sleep(_retry_after(response, attempt))
                 attempt += 1

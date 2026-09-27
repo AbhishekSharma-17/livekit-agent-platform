@@ -66,7 +66,14 @@ from lkap_contracts.agent_config import (
     VoiceConfig,
     effective_qa,
 )
-from lkap_contracts.api_models import CatalogItem, Issue, ProviderModelOut, Severity, ValidationResult
+from lkap_contracts.api_models import (
+    CatalogItem,
+    Issue,
+    ProviderModelOut,
+    Severity,
+    ValidationResult,
+    connection_rerank_id,
+)
 from lkap_contracts.compliance import (
     COMPLIANCE_KEY,
     COMPLIANCE_PRESETS,
@@ -901,11 +908,24 @@ def knowledge_retrieval_issues(ctx: ValidationContext) -> list[Issue]:
                 severity="error",
             )
         )
-    if knowledge.rerank not in KNOWLEDGE_RERANK_VALUES:
+    # --- V5-20: `connection:<id>` names a hosted re-ranking service (the search tool only, D-V5-19).
+    hosted = connection_rerank_id(knowledge.rerank)
+    if hosted is not None:
+        if knowledge.auto_inject and knowledge.kb_ids:
+            issues.append(
+                Issue(
+                    path="knowledge.rerank",
+                    message="a re-ranking service is used only by the search tool, never by automatic "
+                    "knowledge; turn automatic knowledge off or re-rank on this server instead",
+                    severity="error",
+                )
+            )
+    # --- end V5-20
+    elif knowledge.rerank not in KNOWLEDGE_RERANK_VALUES:
         issues.append(
             Issue(
                 path="knowledge.rerank",
-                message=f"unknown rerank '{knowledge.rerank}'; use 'none' or 'local'",
+                message=f"unknown rerank '{knowledge.rerank}'; use 'none', 'local' or 'connection:<id>'",
                 severity="error",
             )
         )

@@ -10583,6 +10583,241 @@
       ],
       "write_scopes": []
     },
+    "kb_connection_create": {
+      "_meta": {
+        "lkap/data": [
+          "KnowledgeConnectionOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "KnowledgeConnectionOut",
+      "description": "Create a knowledge connection, then test it (the test result is in `data.test`).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A provider key of the kind's provider (qdrant, pinecone, ...)",
+            "title": "Credential Id"
+          },
+          "kind": {
+            "enum": [
+              "qdrant",
+              "pinecone",
+              "weaviate",
+              "cohere_rerank",
+              "voyage_rerank"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The kind's non-secret fields (url, collection, index, cloud, region, model)",
+            "title": "Settings"
+          },
+          "test": {
+            "default": true,
+            "title": "Test",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "kb_connection_createArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
+    "kb_connection_list": {
+      "_meta": {
+        "lkap/data": [
+          "KnowledgeConnectionOut[]"
+        ],
+        "lkap/scopes": [
+          "providers:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "KnowledgeConnectionOut[]",
+      "description": "List knowledge connections (vector stores, re-ranking services): status, key fingerprint.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {},
+        "title": "kb_connection_listArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "providers:read"
+      ],
+      "write_scopes": []
+    },
+    "kb_connection_test": {
+      "_meta": {
+        "lkap/data": [
+          "KnowledgeConnectionTestOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "KnowledgeConnectionTestOut",
+      "description": "Test a knowledge connection: lists collections or indexes and checks the vector width.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "connection_id": {
+            "title": "Connection Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "kb_connection_testArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
+    "kb_connection_update": {
+      "_meta": {
+        "lkap/data": [
+          "KnowledgeConnectionOut"
+        ],
+        "lkap/scopes": [
+          "providers:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "KnowledgeConnectionOut",
+      "description": "Rename a knowledge connection or change its settings or key (the kind never changes).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "connection_id": {
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Credential Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Settings"
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "kb_connection_updateArguments",
+        "type": "object"
+      },
+      "kind": "idempotent_write",
+      "mixed": false,
+      "scopes": [
+        "providers:write"
+      ],
+      "write_scopes": []
+    },
     "kb_create": {
       "_meta": {
         "lkap/data": [
@@ -10599,10 +10834,23 @@
         "readOnlyHint": false
       },
       "data": "KbOut",
-      "description": "Create an empty knowledge base.",
+      "description": "Create an empty knowledge base (in the platform's store, or a knowledge connection's).",
       "gate": null,
       "inputSchema": {
         "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Store the vectors in this knowledge connection (a vector store); fixed later",
+            "title": "Connection Id"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -11672,7 +11920,8 @@
                   "secret_bag",
                   "tool_provider",
                   "web_search",
-                  "sms"
+                  "sms",
+                  "knowledge"
                 ],
                 "type": "string"
               },
@@ -13845,6 +14094,7 @@
       "cost_estimate",
       "cost_summary",
       "kb_add_document",
+      "kb_connection_list",
       "kb_create",
       "kb_evals_set",
       "kb_evaluate",
@@ -13918,6 +14168,10 @@
       "cost_estimate",
       "cost_summary",
       "kb_add_document",
+      "kb_connection_create",
+      "kb_connection_list",
+      "kb_connection_test",
+      "kb_connection_update",
       "kb_create",
       "kb_evals_set",
       "kb_evaluate",
@@ -13978,6 +14232,7 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "kb_connection_list",
       "kb_evaluate_result",
       "kb_get",
       "kb_list",
@@ -14040,6 +14295,10 @@
       "cost_estimate",
       "cost_summary",
       "kb_add_document",
+      "kb_connection_create",
+      "kb_connection_list",
+      "kb_connection_test",
+      "kb_connection_update",
       "kb_create",
       "kb_evals_set",
       "kb_evaluate",
@@ -14121,6 +14380,10 @@
       "cost_estimate",
       "cost_summary",
       "kb_add_document",
+      "kb_connection_create",
+      "kb_connection_list",
+      "kb_connection_test",
+      "kb_connection_update",
       "kb_create",
       "kb_evals_set",
       "kb_evaluate",
@@ -14181,6 +14444,7 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "kb_connection_list",
       "kb_evaluate_result",
       "kb_get",
       "kb_list",

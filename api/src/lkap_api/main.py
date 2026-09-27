@@ -32,6 +32,7 @@ from lkap_api.db.session import Database
 from lkap_api.errors import ApiError
 from lkap_api.jobs.handlers import load_all_handlers
 from lkap_api.kb.embed import warm_default_embedder
+from lkap_api.knowledge_connections.router import router as knowledge_connections_router
 from lkap_api.logging import configure_logging, get_logger
 from lkap_api.mcp_oauth.router import router as mcp_oauth_router
 from lkap_api.packs import router as packs_router
@@ -187,6 +188,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(mcp_oauth_router)  # V5-14: MCP server sign-in (OAuth)
     app.include_router(costs.router)
     app.include_router(session_assets_router)  # V5-19: stored session files
+    app.include_router(knowledge_connections_router)  # V5-20: bring-your-own stores, hosted re-rankers
     _include_knowledge_router(app)
 
 

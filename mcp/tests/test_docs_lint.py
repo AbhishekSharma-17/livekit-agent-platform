@@ -493,7 +493,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     # 4.5 knowledge bases
     "kb_list": frozenset(),
     "kb_get": frozenset({"kb_id", "include_documents"}),
-    "kb_create": frozenset({"name", "description", "embedder_id", "plan"}),
+    "kb_create": frozenset({"name", "description", "embedder_id", "connection_id", "plan"}),
     "kb_add_document": frozenset(
         {"kb_id", "text", "filename", "file_path", "url", "wait", "timeout_s", "plan"}
     ),
@@ -501,6 +501,11 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "kb_evals_set": frozenset({"kb_id", "items", "plan"}),
     "kb_evaluate": frozenset({"kb_id", "mode", "rerank", "min_score", "k", "wait", "timeout_s", "plan"}),
     "kb_evaluate_result": frozenset({"kb_id", "job_id"}),
+    # V5-20 knowledge connections
+    "kb_connection_list": frozenset(),
+    "kb_connection_create": frozenset({"name", "kind", "settings", "credential_id", "test", "plan"}),
+    "kb_connection_update": frozenset({"connection_id", "name", "settings", "credential_id", "plan"}),
+    "kb_connection_test": frozenset({"connection_id"}),
     # 4.6 tools
     "tool_list": frozenset({"agent_id", "kind"}),
     "tool_get": frozenset({"tool_id"}),

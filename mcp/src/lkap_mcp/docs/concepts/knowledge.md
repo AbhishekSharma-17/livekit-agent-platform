@@ -85,12 +85,55 @@ Tag questions (`["hi-Latn"]` for transliterated Hindi, `["identifier"]` for
 policy or form numbers) to see where a mode helps. Starter templates and
 packs that seed knowledge bases ship a small evaluation set with them.
 
+## Knowledge connections (your own vector database, a re-ranking service)
+
+By default a knowledge base's vectors live in the platform's own store. A
+**knowledge connection** keeps them in a vector database the workspace
+already runs instead — Qdrant, Pinecone or Weaviate — or adds a hosted
+re-ranking service (Cohere or Voyage AI) for the search tool. The chunk text
+always stays on the platform; the vector database holds only the vectors and
+their ids.
+
+1. Store the vendor key first (`provider_key_create(provider_id="pinecone",
+   ...)`; ids `qdrant`, `pinecone`, `weaviate`, `cohere-rerank`,
+   `voyage-rerank`). A local Qdrant or Weaviate may run without one.
+2. `kb_connection_create(name, kind="qdrant", settings={"url": ...},
+   credential_id=...)` stores the connection and runs its test. `settings`
+   are the kind's non-secret fields: `url`, `collection` and
+   `native_hybrid` (Qdrant, Weaviate), `index`, `cloud` and `region`
+   (Pinecone), `model` (the re-rankers). A url must be https and pass the
+   api's outbound network guard.
+3. `kb_connection_test(connection_id)` lists the collections or indexes the
+   key can see and checks the vector width of the one the connection uses
+   against the width knowledge bases are built with; a mismatch fails with a
+   message naming the collection or index.
+4. `kb_create(name, connection_id=...)` creates a knowledge base whose vectors
+   live there (one Pinecone namespace or one Weaviate tenant per knowledge
+   base; in Qdrant every point carries the knowledge base and workspace it
+   belongs to). Where a knowledge base lives is fixed once it exists.
+
+`kb_connection_list()` shows every connection with its status, last error and
+the key's fingerprint (never the key); `kb_connection_update(connection_id,
+...)` renames it or changes its settings or key. The url, collection or index
+cannot change while knowledge bases are stored through it, and a connection
+with knowledge bases cannot be deleted (the error names them).
+
+Re-ranking services: set `config.knowledge.rerank = "connection:<id>"`. Only
+the `search_knowledge` tool uses it, never automatic knowledge, so
+`agent_validate` refuses it while `auto_inject` is on. Each re-ranked search
+reports what it used and its price (`rerank_usage`; "no price" when the
+price is unknown).
+
 ## Related tools
 
 `kb_list`, `kb_get`, `kb_create`, `kb_add_document`, `kb_search`,
-`kb_evals_set`, `kb_evaluate`, `kb_evaluate_result`, `agent_attach`.
+`kb_evals_set`, `kb_evaluate`, `kb_evaluate_result`, `agent_attach`,
+`kb_connection_list`, `kb_connection_create`, `kb_connection_update`,
+`kb_connection_test`.
 
 ## Related schemas
 
 `KbCreate`, `KbOut`, `KbDocumentOut`, `KbImportIn`, `KbSearchRequest`,
-`KbHit`, `KbSearchResponse`, `KbSeed`, `KbEvalIn`, `KbEvalSetOut`.
+`KbHit`, `KbSearchResponse`, `KbSeed`, `KbEvalIn`, `KbEvalSetOut`,
+`KnowledgeConnectionCreate`, `KnowledgeConnectionOut`,
+`KnowledgeConnectionTestOut`.

@@ -308,6 +308,17 @@ Migration `v5_004_mcp_oauth` adds `mcp_oauth_flows` (sign-ins in progress: ten m
 - **Where the tokens live.** A finished sign-in writes an `mcp-oauth` credential (the Fernet vault, like every key) and points the tool's `auth.credential_id` at it. `GET /v1/tools/{id}/oauth/status` shows whether it is connected and when the access token expires. Until V5-16 sessions do not use these servers yet (the status says `worker_supported: false`) and an expired token needs a new sign-in; **Test** reports `needs_auth` then.
 - **Logs.** The callback's query (the one-time code and `state`) is removed from uvicorn's access log; no api log line carries a token, code or `state`.
 
+### 9.4 Knowledge connections (V5-20)
+
+Migration `v5_005_knowledge_connections` adds `knowledge_connections` and three nullable/defaulted columns on `knowledge_bases` (`connection_id`, `kind`, `external_ref`); existing knowledge bases keep using the platform's store unchanged. Apply it like the others (§9).
+
+- **No extra install.** The api speaks the Qdrant, Pinecone, Weaviate, Cohere and Voyage AI REST APIs itself, through the outbound network guard, so there is no optional dependency to install. Qdrant's own keyword search (the connection's `native_hybrid` setting) uses fastembed's BM25 model, downloaded into `LKAP_DATA_DIR/models` on first use.
+- **Keys.** Add the vendor key under Keys (provider ids `qdrant`, `pinecone`, `weaviate`, `cohere-rerank`, `voyage-rerank`), then create the connection under Settings → Knowledge connections (or `POST /v1/knowledge-connections`) and run **Test connection**. A local Qdrant or Weaviate may have no key.
+- **Where they may point.** A cluster url must be `https` and a public host. A cluster on your own network needs its host (or network) in `LKAP_NET_ALLOW_PRIVATE_HOSTS`, which then also allows plain `http` for it; in `LKAP_ENV=dev` `localhost` is allowed by default, so a local `docker run -p 6333:6333 qdrant/qdrant` works as `http://localhost:6333`. Knowledge connections never get the self-hosted LiveKit widening.
+- **Dimensions.** A Qdrant collection or Pinecone index has a fixed vector width; it must match the embedder knowledge bases are built with (384 for the default). **Test connection** reports a mismatch naming the collection or index. The platform creates a missing collection, index or Weaviate collection on first use (Pinecone: serverless, cosine, in the connection's cloud and region).
+- **Moving a knowledge base** between the platform's store and a connection (either way) re-embeds its stored chunks into the target, switches the knowledge base, then deletes the old vectors: `python -m lkap_api.kb.jobs reindex --kb <id> --to-connection <connection id>` or `--to-platform`. The same command without a destination re-indexes a knowledge base where it is (for a connection with `native_hybrid` on, that is what indexes its keywords in the store for documents ingested before).
+- **Deleting.** A connection that still stores knowledge bases cannot be deleted; delete or move them first. Deleting a knowledge base removes its vectors from the vendor's service; deleting the connection leaves the vendor's collection or index in place.
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:

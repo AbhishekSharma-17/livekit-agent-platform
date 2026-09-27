@@ -64,7 +64,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
-from lkap_api.db.models import KbDocument, KbEval, KnowledgeBase, utcnow
+from lkap_api.db.models import KbDocument, KbEval, KnowledgeBase, new_id, utcnow
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, ServiceDep, SettingsDep, VaultDep
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.jobs.deps import JobsDep
@@ -91,6 +91,7 @@ from lkap_api.kb.jobs import enqueue_kb_delete
 from lkap_api.kb.rerank import Reranker, get_local_reranker
 from lkap_api.kb.service import KnowledgeSearchResponse, KnowledgeService
 from lkap_api.kb.store import VectorStore, resolve_store
+from lkap_api.knowledge_connections.service import bind_for_kb
 from lkap_api.logging import get_logger
 from lkap_api.storage.base import StorageBackend, UploadTooLargeError
 from lkap_api.storage.deps import StorageDep
@@ -223,6 +224,9 @@ async def _kb_out(db: AsyncSession, row: KnowledgeBase) -> KnowledgeBaseOut:
         dimension=row.dimension,
         embedder_model=row.embedder_model,
         chunking=ChunkingConfig.from_json(row.chunking).to_json() if row.chunking is not None else None,
+        connection_id=row.connection_id,  # V5-20
+        kind="external" if row.kind == "external" else "managed",
+        external_ref=row.external_ref,
     )
 
 
@@ -364,7 +368,8 @@ async def _store_and_enqueue(
         "Creates an empty knowledge base; documents are uploaded and ingested separately. The "
         "configured embedder's model and vector width are recorded on it (`embedder_model`, "
         "`dimension`), and a later query from a different embedder is refused with 422 "
-        "`kb_embedder_mismatch`."
+        "`kb_embedder_mismatch`. With `connection_id` (a vector-store knowledge connection of the "
+        "workspace) the vectors live in that service, fixed for the knowledge base's life."
     ),
 )
 async def create_kb(
@@ -373,12 +378,19 @@ async def create_kb(
     """Create a knowledge base row in the caller's workspace, recording the active embedder."""
     _check_embedder_id(payload.embedder_id)
     row = KnowledgeBase(
+        id=new_id(),
         workspace_id=ctx.workspace_id,
         name=payload.name,
         description=payload.description,
         embedder_id=payload.embedder_id,
         chunking=ChunkingConfig().to_json(),
     )
+    # --- V5-20: store through a knowledge connection (validated: same workspace, a vector store).
+    if payload.connection_id is not None:
+        binding = await bind_for_kb(db, ctx.workspace_id, payload.connection_id, row.id)
+        row.connection_id = binding.connection_id
+        row.external_ref = binding.external_ref
+    # --- end V5-20
     record_kb_embedder(row, embedder)
     db.add(row)
     await db.flush()
@@ -435,6 +447,8 @@ async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) 
         raise ConflictError(
             "embedder_id cannot change once the knowledge base holds chunks; delete and recreate it instead"
         )
+    if payload.connection_id is not None and payload.connection_id != row.connection_id:  # V5-20
+        raise ConflictError("where a knowledge base is stored is fixed when it is created")
     row.name = payload.name
     row.description = payload.description
     row.embedder_id = payload.embedder_id
@@ -456,11 +470,12 @@ async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) 
 async def delete_kb(kb_id: str, db: DbDep, jobs: JobsDep, ctx: AdminCtxDep) -> Response:
     """Delete a knowledge base's rows, then enqueue its vector cleanup (D-V5-12: single writer)."""
     row = await _load_kb(db, ctx, kb_id)
+    connection_id = row.connection_id  # V5-20: the job cleans the connection's store after the row is gone
     await db.delete(row)
     # Durable before the job runs on its own connection (and before the
     # response): a failed cleanup job leaves only invisible vectors behind.
     await db.commit()
-    await enqueue_kb_delete(jobs, kb_id)
+    await enqueue_kb_delete(jobs, kb_id, connection_id=connection_id, workspace_id=ctx.workspace_id)
     log.info("kb_deleted", kb_id=kb_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -922,4 +937,5 @@ async def internal_search_kb(
         min_score=payload.min_score,
         rerank=payload.rerank,
         mode=payload.mode,
+        purpose=payload.purpose,  # V5-20: auto-inject never uses a hosted re-ranker
     )

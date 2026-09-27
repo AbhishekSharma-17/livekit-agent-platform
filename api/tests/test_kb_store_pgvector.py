@@ -42,6 +42,7 @@ from lkap_api.kb.store import (
     VectorHit,
     VectorRecord,
     get_lancedb_store,
+    platform_store,
     resolve_store,
     store_capabilities,
     vector_store_kind,
@@ -114,7 +115,7 @@ async def test_the_store_follows_the_database_and_reports_healthy(pg: Database, 
     assert vector_store_kind(settings) == "pgvector"
     async with pg.session() as session:
         store = resolve_store(settings, session)
-        assert isinstance(store, PgVectorStore)
+        assert isinstance(platform_store(store), PgVectorStore)  # V5-20: a router over it
         assert store_capabilities(store) == StoreCapabilities(
             hybrid=True, filters=True, stores_text=False, namespaces=True
         )

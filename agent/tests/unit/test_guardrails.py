@@ -568,6 +568,7 @@ async def test_escalate_calls_escalate_to_human() -> None:
         await agent.on_user_turn_completed(
             ChatContext(), llm.ChatMessage(role="user", content=["4111111111111111"])
         )
+    await _settle()
 
     (call,) = calls
     assert call["urgency"] == "high" and "Card numbers" in call["reason"]
@@ -736,3 +737,33 @@ async def test_a_card_number_across_a_window_edge_in_a_long_tool_result_trips() 
     trip = await engine.check("tool_output", text)
 
     assert trip is not None and trip.rule.name == "Card numbers"
+
+
+async def test_a_caller_repeating_the_words_on_a_realtime_agent_trips_again() -> None:
+    agent, ctx, events = _agent(_config(input=[CARD_RULE]))
+
+    for _ in range(2):
+        message = llm.ChatMessage(role="user", content=["card 4111 1111 1111 1111"])
+        agent.on_conversation_item(ConversationItemAddedEvent(item=message))
+        await _settle()
+
+    calls = cast(FakeSession, ctx.session).calls
+    assert calls.count(("interrupt", {"force": True})) == 2
+    assert _kinds(events).count(GUARDRAIL_EVENT) == 2
+
+
+async def test_the_realtime_transcript_of_a_turn_the_hook_checked_is_skipped_once() -> None:
+    agent, ctx, events = _agent(_config(input=[CARD_RULE]))
+    await agent.on_user_turn_completed(ChatContext(), llm.ChatMessage(role="user", content=["hello there"]))
+
+    # The realtime model's own transcript of the same turn: a new message, same words.
+    agent.on_conversation_item(
+        ConversationItemAddedEvent(item=llm.ChatMessage(role="user", content=["hello there"]))
+    )
+    await _settle()
+    agent.on_conversation_item(
+        ConversationItemAddedEvent(item=llm.ChatMessage(role="user", content=["card 4111 1111 1111 1111"]))
+    )
+    await _settle()
+
+    assert cast(FakeSession, ctx.session).calls == [("interrupt", {"force": True}), ("say", SAFE)]

@@ -689,11 +689,17 @@ class SessionGuardrails:
     def watch_committed_input(self, agent: Any, text: str, message_id: str | None) -> None:
         """Check a caller's message the turn hook never saw (realtime server-side turns), in parallel.
 
-        A trip interrupts whatever the model started saying and speaks the safe reply.
+        A trip interrupts whatever the model started saying and speaks the safe reply. A text
+        the turn hook checked is skipped once (the realtime transcript of that same turn); this
+        path marks messages by id only, so a caller who repeats the words trips again.
         """
-        if not text.strip() or self.was_checked(message_id, text):
+        if not text.strip() or (message_id and message_id in self._checked_messages):
             return
-        self.mark_checked(message_id, text)
+        digest = self.excerpt_hash(text)
+        if digest in self._checked_texts:
+            self._checked_texts.remove(digest)
+            return
+        self.mark_checked(message_id)
 
         async def _run() -> None:
             trip = await self._check_quietly("input", text)
@@ -781,7 +787,7 @@ class SessionGuardrails:
             if action == "end_call":
                 self._spawn(self._end_call_after(speech))
             elif action == "escalate":
-                await self._escalate(agent, trip)
+                self._spawn(self._escalate(agent, trip))
         finally:
             self._responding = False
 

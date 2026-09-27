@@ -575,6 +575,7 @@ async def test_state_delta_writes_display_blocks_all_or_nothing() -> None:
             }
         ],
         [{"op": "add", "path": "/status", "value": {"label": "x"}}],
+        [{"op": "add", "path": "/blocks/invented", "value": {"markdown": "x"}}],
         [{"op": "add", "path": "/blocks/claim/items/-", "value": {"label": "no key"}}],
         [
             {"op": "add", "path": "/blocks/claim/items/-", "value": {"key": "k2", "label": "ok"}},

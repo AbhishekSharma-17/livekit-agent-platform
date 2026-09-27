@@ -191,7 +191,7 @@ def build_send_link_tool(
         where = "texted to the caller's phone" if sent_by == "sms" else "on the caller's screen"
         return (
             f"The link is {where}. Tell the caller in one sentence what it is for; you will be told when "
-            "it is completed, fails or expires. Never read the link out."
+            "the business's system reports it completed, failed or expired. Never read the link out."
         )
 
     return function_tool(

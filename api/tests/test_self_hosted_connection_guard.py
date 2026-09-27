@@ -389,13 +389,16 @@ async def test_connection_test_route_audits_the_destination_host(
 
     async with database.session() as session:
         rows = (
-            (await session.execute(select(AuditLog).where(AuditLog.action.like("connection.%"))))
+            (await session.execute(select(AuditLog).where(AuditLog.action.like("POST /v1/connections%"))))
             .scalars()
             .all()
         )
+    # The one generic route row of each request carries the destination (no second row).
     by_action = {row.action: row.payload for row in rows}
-    assert by_action["connection.test_destination"] == {"host": TAILNET_IP, "deployment_type": "self_hosted"}
-    assert by_action["connection.create"] == {"host": TAILNET_IP, "deployment_type": "self_hosted"}
+    expected = {"host": TAILNET_IP, "deployment_type": "self_hosted"}
+    assert by_action["POST /v1/connections/test"] == expected
+    assert by_action["POST /v1/connections"] == expected
+    assert len(rows) == 2
 
 
 def test_process_policy_is_never_self_hosted(settings: Settings) -> None:

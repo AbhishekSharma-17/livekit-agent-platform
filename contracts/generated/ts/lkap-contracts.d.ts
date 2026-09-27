@@ -193,6 +193,7 @@ export interface LkapContracts {
   PriceQuoteItemIn?: PriceQuoteItemIn;
   PriceQuotesRequest?: PriceQuotesRequest;
   PriceQuotesResponse?: PriceQuotesResponse;
+  PrivacyConfig?: PrivacyConfig;
   ProbeResult?: ProbeResult;
   ProviderModelDeclare?: ProviderModelDeclare;
   ProviderModelOut?: ProviderModelOut;
@@ -203,6 +204,7 @@ export interface LkapContracts {
   ProviderToolDefinition?: ProviderToolDefinition;
   ProvidersResponse?: ProvidersResponse;
   QaConfig?: QaConfig;
+  QaField?: QaField;
   QaNode?: QaNode;
   QaOut?: QaOut;
   QaVerdict?: QaVerdict;
@@ -228,6 +230,7 @@ export interface LkapContracts {
   SessionPage?: SessionPage;
   SessionQaIn?: SessionQaIn;
   SessionRecordingIn?: SessionRecordingIn;
+  SessionScrubOut?: SessionScrubOut;
   SessionStartIn?: SessionStartIn;
   SessionSummaryIn?: SessionSummaryIn;
   SmsTarget?: SmsTarget;
@@ -377,6 +380,7 @@ export interface AgentConfig {
   };
   panel?: PanelLayout;
   pipeline: PipelineConfig;
+  privacy?: PrivacyConfig;
   qa?: QaConfig;
   recording?: RecordingConfig;
   telephony?: TelephonyConfig;
@@ -822,6 +826,33 @@ export interface UserTurnLimitOptions {
   [k: string]: unknown;
 }
 /**
+ * What the platform keeps and shares about a caller (V5-30, P §4.2 C10).
+ *
+ * The defaults keep today's behaviour: nothing is masked, every session is
+ * kept in full and third-party telemetry receives the conversation.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PrivacyConfig".
+ */
+export interface PrivacyConfig {
+  /**
+   * An LLM that also masks names, addresses and other personal details after the call when `storage_tier` is not `full`. Only an OpenAI-compatible provider with a key (OpenAI, OpenRouter) can run from the api; others are skipped with a warning.
+   */
+  scrub_model?: ProviderRef | null;
+  /**
+   * What is kept after the call: `full` everything; `redacted` the transcript and events with card numbers, emails, phone numbers and long numbers masked (and the `scrub_model` pass when set); `basic` also drops tool arguments and results.
+   */
+  storage_tier?: "full" | "redacted" | "basic";
+  /**
+   * Classes the speech-to-text provider masks as it transcribes (`pci` card numbers, `pii` personal details, `phi` health details, `numbers` every number). Only providers that support it apply it; others ignore it with a validation warning.
+   */
+  stt_redact?: ("pci" | "pii" | "phi" | "numbers")[];
+  /**
+   * Whether a third-party OpenTelemetry exporter configured on the worker (an `OTEL_EXPORTER_OTLP_*` endpoint) receives the conversation text and tool payloads (`LIVEKIT_TELEMETRY_ALLOW_PII`). It does not change what LiveKit Cloud Insights receives (that is the project's setting in the LiveKit Cloud dashboard). The worker applies it once per process: the first session's setting holds for later sessions that reuse the same process.
+   */
+  telemetry_pii?: boolean;
+}
+/**
  * Post-call scoring of the session by an LLM judge.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -829,8 +860,39 @@ export interface UserTurnLimitOptions {
  */
 export interface QaConfig {
   enabled?: boolean;
+  /**
+   * Post-call fields (V5-30, at most 20): the judge fills each from the finished conversation into `session_qa.raw['fields']`; they run only when QA is on.
+   */
+  fields?: QaField[];
   model?: ProviderRef | null;
   rubric_prompt?: string | null;
+}
+/**
+ * One post-call field the judge fills from the finished conversation (V5-30, P §4.2 C23).
+ *
+ * Results land in ``session_qa.raw["fields"]`` as ``{name: value}``; a value
+ * the conversation does not state is ``null``. ``select`` takes exactly one of
+ * ``options``; the other types take no ``options``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "QaField".
+ */
+export interface QaField {
+  /**
+   * What the field means, in words the judge reads (e.g. 'the kind of claim the caller reports').
+   */
+  description?: string;
+  /**
+   * Lowercase identifier (letters, digits, underscores); the JSON key and CSV column.
+   */
+  name: string;
+  /**
+   * The choices of a `select` field (one is picked); empty for the other types.
+   *
+   * @maxItems 50
+   */
+  options?: string[];
+  type?: "text" | "number" | "boolean" | "select";
 }
 /**
  * Whether and where the session is recorded through Egress.
@@ -4575,6 +4637,7 @@ export interface ProviderCapabilities {
   cloud_only?: boolean;
   languages?: string[];
   platforms?: string[];
+  redaction?: string[];
   silent_tool_reply?: boolean;
   text_modality?: boolean;
   tool_calling?: boolean;
@@ -4783,6 +4846,12 @@ export interface ProvidersResponse {
  * via the `definition` "QaOut".
  */
 export interface QaOut {
+  /**
+   * Post-call fields (V5-30, `QaConfig.fields`): `{name: value}` as the judge filled them, `null` for a field the conversation did not state; empty when none are defined.
+   */
+  fields?: {
+    [k: string]: unknown;
+  };
   model?: string | null;
   score?: number | null;
   scored_at?: string | null;
@@ -5049,6 +5118,10 @@ export interface SessionDetailOut {
   recording?: RecordingOut;
   recording_status?: "none" | "requested" | "active" | "ready" | "failed";
   room_name: string;
+  /**
+   * When the post-call privacy scrub (V5-30, `privacy.storage_tier`) rewrote this session's transcript and events; `None` when it has not run.
+   */
+  scrubbed_at?: string | null;
   started_at?: string | null;
   status: "created" | "active" | "ended" | "failed";
   transcript?: TranscriptTurn[] | null;
@@ -5311,6 +5384,17 @@ export interface SessionRecordingIn {
   egress_id?: string;
   error?: string | null;
   status: "none" | "requested" | "active" | "ready" | "failed";
+}
+/**
+ * ``POST /v1/sessions/{id}/scrub`` (V5-30): the privacy scrub was queued, or had already run.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SessionScrubOut".
+ */
+export interface SessionScrubOut {
+  job_id?: string | null;
+  scrubbed_at?: string | null;
+  status: "queued" | "already_scrubbed";
 }
 /**
  * ``POST /internal/v1/sessions/start`` — the worker creates the session row.

@@ -459,6 +459,10 @@ class ProviderCapabilities(BaseModel):
     voices_dynamic: bool = False
     cloud_only: bool = False
     platforms: list[str] = []
+    redaction: list[str] = []
+    """STT only (V5-30): the ``PrivacyConfig.stt_redact`` classes the plugin's ``redact`` argument
+    accepts. Empty = the provider cannot mask while transcribing; the setting is then ignored
+    with a validation warning."""
 
 
 class ProviderSpec(BaseModel):
@@ -917,6 +921,8 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(id="flux-general-en", label="Flux (general, en)"),
         ],
         default_model="nova-3",
+        # V5-30: `livekit.plugins.deepgram.STT(redact=[...])` (plugin signature snapshot).
+        capabilities=ProviderCapabilities(redaction=["pci", "pii", "phi", "numbers"]),
         # Public list (R-V4-9): a catalog, never the credential test.
         catalog=CatalogSpec(adapter="deepgram_stt_models", kinds=["models"], ttl_s=TTL_PUBLIC_LIST_S),
         docs_url="https://docs.livekit.io/agents/models/stt/deepgram/",

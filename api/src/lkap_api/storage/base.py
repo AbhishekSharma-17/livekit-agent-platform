@@ -33,6 +33,10 @@ class StorageBackend(Protocol):
         """Remove the object at `key`; a missing object is not an error."""
         ...
 
+    async def exists(self, key: str) -> bool:
+        """Whether an object exists at `key`, without reading its bytes (V5-30, S5-28)."""
+        ...
+
     async def signed_url(self, key: str, *, expires_in_s: int = 3600) -> str:
         """Return a time-limited URL a browser can fetch `key` from directly."""
         ...

@@ -74,6 +74,11 @@ class LocalStorage(StorageBackend):
         path = self._path(key)
         await anyio.to_thread.run_sync(_unlink_if_exists, path)
 
+    async def exists(self, key: str) -> bool:
+        """Whether `<root>/<key>` is a file (a stat, never a read)."""
+        path = self._path(key)
+        return await anyio.to_thread.run_sync(path.is_file)
+
     async def signed_url(self, key: str, *, expires_in_s: int = 3600) -> str:
         """Return `{public_base_url}/internal/v1/storage/local/{key}?exp=&sig=`.
 

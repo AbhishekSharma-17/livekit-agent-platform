@@ -92,6 +92,20 @@ class S3Storage(StorageBackend):
     def _delete_sync(self, key: str) -> None:
         self._client.delete_object(Bucket=self._bucket, Key=self._full_key(key))
 
+    async def exists(self, key: str) -> bool:
+        """Whether the object at `key` exists (a `HEAD`, never a download)."""
+        return await anyio.to_thread.run_sync(self._exists_sync, key)
+
+    def _exists_sync(self, key: str) -> bool:
+        try:
+            self._client.head_object(Bucket=self._bucket, Key=self._full_key(key))
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in ("NoSuchKey", "404", "NotFound"):
+                return False
+            raise
+        return True
+
     async def signed_url(self, key: str, *, expires_in_s: int = 3600) -> str:
         """Return a real S3 presigned GET URL for `key`."""
         return await anyio.to_thread.run_sync(self._signed_url_sync, key, expires_in_s)

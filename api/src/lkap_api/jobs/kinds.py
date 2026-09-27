@@ -45,6 +45,14 @@ KB_REINDEX = "kb_reindex"
 #: workspace opted in; handler in `jobs/reconcile.py`.
 COST_RECONCILE = "cost_reconcile"
 
+#: V5-30 (P §4.2 C10): the post-call privacy scrub. Masks emails, card numbers and long
+#: numbers (plus the optional `privacy.scrub_model` LLM pass) in a finished session's
+#: transcript, event payloads and final UI state, and drops tool payloads for the `basic`
+#: tier; records a `privacy_scrubbed` session event. Enqueued once the summary commits when
+#: `privacy.storage_tier != "full"`, or by `POST /v1/sessions/{id}/scrub`; handler in
+#: `privacy/scrub.py`.
+SESSION_SCRUB = "session_scrub"
+
 #: Reserved for other packages' handlers (PLAN-V2 §"V2-08" scope line); this
 #: package never enqueues these itself.
 CONNECTION_PROBE = "connection_probe"

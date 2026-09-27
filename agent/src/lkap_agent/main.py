@@ -689,6 +689,8 @@ async def run_session(ctx: JobContextLike, deps: Deps) -> None:
         client=deps.config_client,
         # V4-17 (D-V4-45): the workspace's reconciliation opt-in; empty collects no ids.
         cost_reconcile=resolved.cost_reconcile,
+        # V5-30 (ask #175): lets LiveKit's OTLP telemetry carry PII only when the agent opts in.
+        telemetry_pii=resolved.config.privacy.telemetry_pii,
     )
     # V5-15: sees every `consent` event the session records; starts a consent-gated recording.
     consent_gate = RecordingConsentGate()

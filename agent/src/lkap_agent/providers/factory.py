@@ -32,11 +32,17 @@ failing the call.
 variant (the registry's ``telephony_variant``), and :func:`turn_detector_kwargs`
 turns ``PipelineConfig.turn_detector`` into constructor kwargs for the LiveKit
 turn detector. ``session_builder.prepare_resolved`` decides when to apply them.
+
+**Speech-to-text redaction (V5-30)**: ``AgentConfig.privacy.stt_redact`` becomes
+the STT plugin's ``redact`` kwarg (:func:`stt_redact_kwargs`) when the registry
+entry lists the classes in ``capabilities.redaction`` (Deepgram); any other STT
+ignores it with a log line (the api's validator already warned at save).
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from typing import Any, Final
@@ -66,6 +72,7 @@ __all__ = [
     "AUTO_DETECT_LANGUAGE_CODES",
     "OPENAI_TRANSCRIPTION_STT_CLASS",
     "openai_transcription_language_kwargs",
+    "stt_redact_kwargs",
     "TELEPHONY_VARIANT_DROPPED_KWARGS",
     "telephony_noise_cancellation",
     "turn_detector_kwargs",
@@ -125,6 +132,36 @@ _INFERENCE_FORBIDDEN_KWARGS: Final[tuple[str, ...]] = ("api_key", "api_secret")
 TELEPHONY_VARIANT_DROPPED_KWARGS: Final[dict[str, tuple[str, ...]]] = {
     "krisp-noise-cancellation": ("mode", "model_path"),
 }
+
+
+def stt_redact_kwargs(
+    spec: ProviderSpec, kwargs: dict[str, Any], stt_redact: Sequence[str]
+) -> dict[str, Any]:
+    """Add ``redact=[...]`` to an STT's kwargs for the classes its registry entry supports (V5-30).
+
+    Args:
+        spec: The STT's registry entry.
+        kwargs: The constructor kwargs built so far.
+        stt_redact: ``AgentConfig.privacy.stt_redact``.
+
+    Returns:
+        ``kwargs`` unchanged when nothing is asked or the provider cannot redact
+        (logged; the api's validator warned at save), else a copy with ``redact``
+        holding the supported classes in the configured order.
+    """
+    if not stt_redact:
+        return kwargs
+    supported = [value for value in stt_redact if value in spec.capabilities.redaction]
+    ignored = [value for value in stt_redact if value not in spec.capabilities.redaction]
+    if ignored:
+        logger.warning(
+            "speech-to-text redaction not supported by this provider; ignored",
+            provider_id=spec.id,
+            ignored=ignored,
+        )
+    if not supported:
+        return kwargs
+    return {**kwargs, "redact": supported}
 
 
 def telephony_noise_cancellation(provider: ResolvedProvider) -> ResolvedProvider | None:
@@ -239,7 +276,12 @@ class ProviderFactory:
     """Builds plugin instances from resolved provider entries."""
 
     def build(
-        self, slot: ProviderSlot, provider: ResolvedProvider, *, mode: PipelineMode = "cascaded"
+        self,
+        slot: ProviderSlot,
+        provider: ResolvedProvider,
+        *,
+        mode: PipelineMode = "cascaded",
+        stt_redact: Sequence[str] = (),
     ) -> Any:
         """Construct the plugin object for one slot.
 
@@ -249,6 +291,8 @@ class ProviderFactory:
             mode: The agent's pipeline mode; only affects `kind="realtime"`
                 providers (`special_cases.apply_pipeline_mode`), selecting an
                 audio-native vs. text-only (half-cascade) construction.
+            stt_redact: ``AgentConfig.privacy.stt_redact`` (V5-30); applied to
+                the ``stt`` slot only, through :func:`stt_redact_kwargs`.
 
         Returns:
             The constructed provider object.
@@ -273,6 +317,8 @@ class ProviderFactory:
             python_class = spec.python_class
         target = import_target(python_class)
         kwargs = self._constructor_kwargs(spec, provider, mode)
+        if slot == "stt":
+            kwargs = stt_redact_kwargs(spec, kwargs, stt_redact)
         positional, kwargs = extract_positional_arg(spec, kwargs)
         args = (positional,) if positional is not None else ()
         logger.debug(
@@ -311,10 +357,14 @@ class ProviderFactory:
         """
         lenient = optional if optional is not None else DEFAULT_OPTIONAL_SLOTS
         mode = resolved.config.pipeline.mode
+        stt_redact = resolved.config.privacy.stt_redact
         built: dict[str, Any] = {}
         for slot, provider in resolved.resolved.items():
             try:
-                built[slot] = self.build(slot, provider, mode=mode)
+                if slot == "stt" and stt_redact:
+                    built[slot] = self.build(slot, provider, mode=mode, stt_redact=stt_redact)
+                else:
+                    built[slot] = self.build(slot, provider, mode=mode)
             except ProviderBuildError:
                 if slot not in lenient:
                     raise

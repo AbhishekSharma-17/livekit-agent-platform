@@ -1244,3 +1244,75 @@ class Call(Base):
         ),
         Index("ix_calls_workspace", "workspace_id"),
     )
+
+
+# ------------------------------------------------------------------ agent tests (V5-29)
+class AgentTestRun(Base):
+    """One run of an agent's test cases (V5-29, `v5_006_agent_tests`, D-V5-29).
+
+    The cases themselves live in the agent's configuration (`AgentConfig.tests`) so
+    they version with it; a run is pinned to the `config_version` it was started on.
+    `summary` holds the run's totals (`case_ids`, `passed`, `failed`,
+    `inconclusive`, `errored`, `pass_ratio`, `persona_model`, `judge_model`);
+    `error` says why a run could not run (`status="error"`).
+    """
+
+    __tablename__ = "agent_test_runs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    agent_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    started_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    summary: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','running','passed','failed','inconclusive','error')", name="status_valid"
+        ),
+        Index("ix_agent_test_runs_agent", "agent_id", "created_at"),
+        Index("ix_agent_test_runs_workspace", "workspace_id"),
+    )
+
+
+class AgentTestResult(Base):
+    """One case of a test run: its scratch session, mocks and verdict (V5-29).
+
+    `session_id` is indexed: the session's resolve looks its tool mocks up by it
+    (`agent_tests.service.tool_mocks_for_session`). `verdict` is an
+    `AgentTestVerdict` document once the case finished.
+    """
+
+    __tablename__ = "agent_test_results"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agent_test_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = workspace_fk()
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    session_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    mocks: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    verdict: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','running','passed','failed','inconclusive','error')", name="status_valid"
+        ),
+        Index("ix_agent_test_results_run", "run_id", "ordinal"),
+        Index("ix_agent_test_results_session", "session_id"),
+        Index("ix_agent_test_results_workspace", "workspace_id"),
+    )

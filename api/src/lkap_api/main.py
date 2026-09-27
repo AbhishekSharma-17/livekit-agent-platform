@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from lkap_api import __version__
+from lkap_api.agent_tests.router import router as agent_tests_router
 from lkap_api.body_limit import BodySizeLimitMiddleware, RequestBodyTooLargeError, error_body
 from lkap_api.bootstrap import bootstrap
 from lkap_api.custom_models.router import router as model_test_router
@@ -194,6 +195,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(mcp_oauth_router)  # V5-14: MCP server sign-in (OAuth)
     app.include_router(costs.router)
     app.include_router(session_assets_router)  # V5-19: stored session files
+    app.include_router(agent_tests_router)  # V5-29: test runs and verdicts
     _include_knowledge_router(app)
 
 

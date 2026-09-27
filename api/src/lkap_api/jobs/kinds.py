@@ -45,6 +45,12 @@ KB_REINDEX = "kb_reindex"
 #: workspace opted in; handler in `jobs/reconcile.py`.
 COST_RECONCILE = "cost_reconcile"
 
+#: V5-29 (D-V5-29): plays an agent's test cases (a simulated caller per case over a
+#: scratch text session) and judges each transcript; verdicts land in
+#: ``agent_test_results``, the totals on ``agent_test_runs``. Enqueued by
+#: ``POST /v1/agents/{id}/tests/run``; handler in `agent_tests/runner.py`.
+AGENT_TESTS_RUN = "agent_tests_run"
+
 #: Reserved for other packages' handlers (PLAN-V2 §"V2-08" scope line); this
 #: package never enqueues these itself.
 CONNECTION_PROBE = "connection_probe"

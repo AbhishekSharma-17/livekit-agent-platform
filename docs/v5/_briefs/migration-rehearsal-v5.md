@@ -228,3 +228,53 @@ worker. The api mounts the new routes and starts the retention loop at boot; an 
 against an unmigrated database fails only on the new routes and in that loop (logged, retried), not
 on existing ones. An old worker never posts files, so the order between the two restarts does not
 matter otherwise.
+
+## `v5_006_agent_tests` (V5-29)
+
+### What the revision does
+
+Creates `agent_test_runs` (`id`, `workspace_id` → `workspaces` ON DELETE CASCADE, `agent_id` →
+`agents` ON DELETE CASCADE, `config_version`, `status` with the CHECK
+`status IN ('queued','running','passed','failed','inconclusive','error')`, `created_by`,
+`created_at`, `started_at`, `finished_at`, `summary` JSON, `error`) and `agent_test_results`
+(`id`, `run_id` → `agent_test_runs` ON DELETE CASCADE, `workspace_id`, `case_id`, `ordinal`,
+`session_id` → `sessions` ON DELETE SET NULL, `status` with its CHECK, `mocks` JSON, `verdict` JSON,
+`created_at`, `finished_at`), with indexes `ix_agent_test_runs_agent (agent_id, created_at)`,
+`ix_agent_test_runs_workspace`, `ix_agent_test_results_run (run_id, ordinal)`,
+`ix_agent_test_results_session`, `ix_agent_test_results_workspace`. New tables only; nothing
+existing is touched. `down_revision = v5_002_session_uploads` (the head when V5-29 started).
+Ledger deviation: the ledger names `agent_tests` and `agent_test_runs`; the card rules the test
+cases live in the agent config (no cases table), so the second table holds per-case **results**
+(`agent_test_results`), named so it cannot be mistaken for a cases table. Both are tenant tables
+(`db/guard.py::TENANT_TABLES`).
+
+### Rehearsal on a scratch database (V5-29, 2026-09-27)
+
+A fresh SQLite file in the session scratchpad (the live database was not read or copied), alembic
+CLI with `-x url=`: `heads` = `v5_006_agent_tests (head)`; `upgrade head` ran every revision to
+`v5_006_agent_tests`; both tables present; `downgrade v5_002_session_uploads` dropped both; `upgrade
+head` again; `alembic check` = "No new upgrade operations detected"; `alembic_version` =
+`v5_006_agent_tests`.
+
+### Tests
+
+- `api/tests/test_agent_tests.py::test_v5_006_upgrades_downgrades_and_upgrades` (SQLite): up, down,
+  up; the tables exist only when they should.
+- `api/tests/test_migrations.py` (existing): a fresh `upgrade head` matches the models
+  (`AgentTestRun`, `AgentTestResult`), no drift.
+
+**Postgres: not executed** (no Postgres here). Only `op.create_table` / `op.create_index` /
+`op.drop_*` with portable types; the CI `test-postgres` job's up/down/up step runs it.
+
+### To apply (coordinator)
+
+```
+sqlite3 api/data/lkap.db ".backup <scratchpad>/lkap-before-v5_006.db"
+cd api && uv run alembic upgrade head      # v5_002_session_uploads -> v5_006_agent_tests
+```
+
+Instant on the dev database. **Order:** backup → `upgrade head` → restart the api (mounts
+`/v1/agents/{id}/tests/*`, registers the `agent_tests_run` job). The worker needs a restart only for
+the `tool_mocks` branch, and only once asks #174 (`internal.py`) and #175 (`main.py`) are applied. An api on this code
+against an unmigrated database fails on the new routes and on **publishing an agent whose
+`publish_gate.require_tests` is on** (no agent has it on before this package), nowhere else.

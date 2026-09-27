@@ -43,6 +43,7 @@ from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.agent_tests.service import check_publish_gate  # V5-29
 from lkap_api.auth.deps import OptionalWorkspaceCtxDep, WorkspaceContext, require
 from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import connection_context_for, validate_in_db
@@ -823,7 +824,10 @@ async def get_agent(
     summary="Update an agent",
     description=(
         "Partial update. Saving a changed `config` validates it and bumps `config_version`. `mode` is "
-        "derived from `config.flow` (nodes ⇒ `flow`); a `mode` that disagrees is a 422."
+        "derived from `config.flow` (nodes ⇒ `flow`); a `mode` that disagrees is a 422. Publishing "
+        "(`published: true` on an unpublished agent) with `config.publish_gate.require_tests` on "
+        "needs a passing test run on the version being published, else 422 `tests_failing` "
+        "(`details.reason`: `missing`, `running`, `failing` or `error` — the tests could not run)."
     ),
 )
 async def update_agent(
@@ -870,6 +874,9 @@ async def update_agent(
             row.config_version += 1
             _snapshot_version(db, row, created_by=ctx.actor.id)
     if payload.published is not None:
+        if payload.published and not row.published:
+            # V5-29: the opt-in publish gate, on the version being published (after the save above).
+            await check_publish_gate(db, row, agent_config_of(row))
         row.published = payload.published
     row.updated_at = utcnow()
     await db.flush()

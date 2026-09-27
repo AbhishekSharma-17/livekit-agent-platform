@@ -15,6 +15,7 @@ import pytest
 from conftest import captured_text
 from fastapi import FastAPI
 
+from lkap_api.db.session import Database
 from lkap_api.kb.embed import FakeEmbedder
 from lkap_api.routers.knowledge import MAX_UPLOAD_BYTES, get_embedder, import_filename, upload_basename
 
@@ -141,6 +142,26 @@ async def test_upload_ingests_synchronously_under_the_asgi_transport(admin_clien
     kb_after = await admin_client.get(f"/v1/knowledge-bases/{kb_id}")
     assert kb_after.json()["chunk_count"] == stored["chunk_count"]
     assert kb_after.json()["document_count"] == 1
+
+
+async def test_upload_failed_ingest_returns_every_connection_to_the_pool(
+    admin_client: httpx.AsyncClient, database: Database, log_capture: pytest.LogCaptureFixture
+) -> None:
+    # A document that fails before touching the vector store left the store router's
+    # knowledge-base lookup for the post-ingest compaction, which then ran on the closed
+    # ingest session: it began a new transaction on a fresh connection nobody returned
+    # (on Postgres `idle in transaction`, blocking the next `DROP TABLE` until GC). Under
+    # the `database` fixture's closed-session guard that lookup raises instead, and the
+    # compaction is skipped with `kb_optimize_failed`.
+    created = await admin_client.post("/v1/knowledge-bases", json={"name": "Broken PDFs"})
+    kb_id = created.json()["id"]
+
+    await _upload(admin_client, kb_id, "broken.pdf", b'{"a": 1}', "application/pdf")
+
+    [stored] = (await admin_client.get(f"/v1/knowledge-bases/{kb_id}/documents")).json()["items"]
+    assert stored["status"] == "failed"
+    assert database.engine.pool.checkedout() == 0  # type: ignore[attr-defined]
+    assert "kb_optimize_failed" not in captured_text(log_capture)
 
 
 async def test_search_returns_the_matching_chunk(admin_client: httpx.AsyncClient) -> None:

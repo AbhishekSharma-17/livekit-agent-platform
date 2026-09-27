@@ -71,7 +71,7 @@ from lkap_api.kb.embed import (
     resolve_embedder,
     token_counter_for,
 )
-from lkap_api.kb.store import VectorRecord, VectorStore, resolve_store
+from lkap_api.kb.store import KbStoreRouter, VectorRecord, VectorStore, resolve_store
 from lkap_api.logging import get_logger
 from lkap_api.storage.base import UploadTooLargeError
 from lkap_api.storage.resolve import default_storage
@@ -1040,8 +1040,11 @@ async def run_ingestion_job(ctx: JobContext, payload: dict[str, Any]) -> None:
             on_progress=progress_writer(ctx.database, document_id),
         )
         await _audit_seed_ingest(session, origin, kb_id=kb_id, document_id=document_id, status=outcome.status)
-    # V5-04: compact the table the ingest just appended to (and index it once large).
-    await _optimize_after_ingest(store, kb_id)
+        compact = await _store_to_optimize(store, kb_id)
+    # V5-04: compact the table the ingest just appended to (and index it once large), outside
+    # the transaction: compaction can be slow and must not hold the database's write lock.
+    if compact is not None:
+        await _optimize_after_ingest(compact, kb_id)
 
 
 async def warm_embedder(embedder: Embedder) -> None:
@@ -1072,6 +1075,25 @@ async def _audit_seed_ingest(
         target_id=document_id,
         payload={"origin": origin, "kb_id": kb_id, "status": status},
     )
+
+
+async def _store_to_optimize(store: VectorStore, kb_id: str) -> VectorStore | None:
+    """The store holding ``kb_id``, resolved on the ingest session while it is still open.
+
+    A :class:`KbStoreRouter` looks the knowledge base up on its session (unless an
+    earlier write already did). Asked after that session closed, the lookup would
+    silently begin a new transaction on a fresh pooled connection that nothing
+    commits or returns: on Postgres it stays ``idle in transaction`` holding a lock
+    on ``knowledge_bases`` until garbage collection. ``None`` (logged) when the
+    knowledge base's connection cannot be used; compaction is best effort.
+    """
+    if not isinstance(store, KbStoreRouter):
+        return store
+    try:
+        return await store.store_for(kb_id)
+    except Exception as exc:  # noqa: BLE001 - maintenance only; the next ingest retries it
+        log.warning("kb_optimize_failed", kb_id=kb_id, error_type=type(exc).__name__)
+        return None
 
 
 async def _optimize_after_ingest(store: VectorStore, kb_id: str) -> None:

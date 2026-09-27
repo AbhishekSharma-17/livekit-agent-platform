@@ -156,6 +156,10 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
     if (url := postgres_url()) is not None:
         settings.database_url = url
     db = Database(settings.resolved_database_url)
+    # A session used after its `async with` closed it raises here instead of quietly opening
+    # a new transaction on a fresh connection that nothing returns (on Postgres that one sits
+    # `idle in transaction` and blocks the `drop_all` below; on SQLite it goes unnoticed).
+    db.sessionmaker.configure(close_resets_only=False)
     await db.create_all()
     await bootstrap(db, settings)
     try:

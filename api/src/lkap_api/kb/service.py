@@ -77,10 +77,11 @@ first on a tie) and each hit keeps its own ``score`` (``score_source`` =
 ``external`` for a vendor hit). ``min_score`` and ``rerank`` apply to the
 managed knowledge bases only (the vendor has its own re-rank setting on the
 connection); ``mode`` is irrelevant to a vendor (Ragie is always hybrid).
-Automatic knowledge (``purpose="auto_inject"``) does search external knowledge
-bases: they are the knowledge itself, unlike a hosted re-ranker, and the
-worker's short-turn gate limits the calls; each search counts against the
-vendor's plan (ask #236 asks for a ruling).
+Automatic knowledge (``purpose="auto_inject"``) skips external knowledge bases
+(ruling on ask #236): the worker waits ~400 ms for the automatic note while a
+vendor search may take seconds, so most calls would be billed against the
+vendor's plan and then discarded. They answer through the search tool only,
+like V5-20's hosted re-rankers.
 """
 
 from __future__ import annotations
@@ -255,6 +256,8 @@ class KnowledgeService:
 
         external: list[str] = []
         searchable = await self._searchable(ids, workspace_id, response.warnings, external=external)
+        if purpose == "auto_inject":
+            external = []  # ask #236: managed search answers through the search tool only
         # --- V5-45: managed search knowledge bases answer beside the pipeline, merged by rank.
         if external:
             return await self._search_with_external(

@@ -155,8 +155,9 @@ merged **by rank**: the best passage of each knowledge base first, then the
 second of each, and so on. A Ragie hit has `score_source: "external"`,
 `meta.document_name`, `meta.source: "ragie"` and, when Ragie knows the
 document's address, `meta.url`. `min_score`, `mode` and the platform's
-re-rankers apply to the platform's own knowledge bases only. Every search,
-automatic ones included, counts against the Ragie plan; a slow or failing
+re-rankers apply to the platform's own knowledge bases only. Automatic
+knowledge skips Ragie knowledge bases — they answer through the agent's search
+tool only — and every search counts against the Ragie plan; a slow or failing
 Ragie is skipped with a `kb_timeout` or `kb_error` warning and the other
 knowledge bases still answer. Passages reach the model inside the same
 untrusted-content fence as every other knowledge result.

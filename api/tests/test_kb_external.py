@@ -373,6 +373,29 @@ async def test_merging_with_a_managed_kb_keeps_both_by_rank(
     assert {hit["score_source"] for hit in result["hits"] if hit["kb_id"] == managed["id"]} == {"vector"}
 
 
+async def test_automatic_knowledge_skips_managed_search(
+    admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, ragie: respx.MockRouter
+) -> None:
+    """Ask #236 ruling: the automatic note never calls the vendor; the search tool does."""
+    connection = await _ragie_connection(admin_client)
+    external = await _external_kb(admin_client, connection["id"])
+    managed = await _managed_kb(admin_client)
+
+    result = (
+        await service_client.post(
+            "/internal/v1/kb/search",
+            json={
+                "kb_ids": [managed["id"], external["id"]],
+                "query": "flood damage",
+                "purpose": "auto_inject",
+            },
+        )
+    ).json()
+
+    assert result["hits"] and {hit["kb_id"] for hit in result["hits"]} == {managed["id"]}
+    assert _sent(ragie, "retrieve") == []
+
+
 async def test_a_failing_service_is_skipped_and_managed_hits_still_answer(
     admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, ragie: respx.MockRouter
 ) -> None:

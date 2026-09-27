@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from livekit.agents import FunctionTool
-from lkap_contracts.agent_config import ResolvedProvider
+from lkap_contracts.agent_config import ResolvedProvider, effective_languages
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     BLOCK_TOOL_NAMES,
@@ -54,6 +54,7 @@ from .set_steps import build_set_steps_tool, manual_steps_blocks
 from .show_document import build_show_document_tool
 from .show_text import build_show_text_tool
 from .spell_back import build_spell_back_tool
+from .switch_language import build_switch_language_tool
 from .table_append import build_table_append_tool
 from .update_block import UPDATABLE_BLOCK_TYPES, build_update_block_tool
 from .web_search import build_web_search_tool
@@ -90,6 +91,7 @@ __all__ = [
     "build_show_document_tool",
     "build_show_text_tool",
     "build_spell_back_tool",
+    "build_switch_language_tool",
     "build_table_append_tool",
     "build_update_block_tool",
     "build_web_search_tool",
@@ -177,6 +179,8 @@ def build_builtin_tools(
         non-empty `tools.fetch_url_allowed_hosts`, `send_sms` only with
         `tools.sms`, `notify_team` only with `tools.notify_team` (a configured
         tool whose key did not resolve answers "not set up" when called).
+        V5-31: `switch_language` only when the agent lists more than one language
+        (`voice.languages`; empty = the single `voice.language`).
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -271,6 +275,9 @@ def build_builtin_tools(
         )
     if getattr(tools_config, "sms", None) is not None and _want("send_sms"):
         tools.append(build_send_sms_tool(ctx, resolved_providers.get("sms"), execution=_policy("send_sms")))
+    voice = getattr(ctx.config, "voice", None)
+    if voice is not None and len(effective_languages(voice)) > 1 and _want("switch_language"):
+        tools.append(build_switch_language_tool(ctx))
     if notify_settings is not None and _want("notify_team"):
         tools.append(
             build_notify_team_tool(

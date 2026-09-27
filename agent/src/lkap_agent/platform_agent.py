@@ -25,7 +25,17 @@
   timezone is resolved on enter (:mod:`lkap_agent.locale`), one stamp line
   joins the composed prompt, and a short "Time now" note is appended at the
   tail of the chat context after 15 minutes or a day change — the system
-  prompt itself is never rewritten per turn.
+  prompt itself is never rewritten per turn,
+* speaks more than one language (V5-31, :mod:`lkap_agent.languages`): the
+  session's language state is created with the first agent; `switch_language`
+  and detection (a caller turn's language, with hysteresis, before the reply)
+  swap the transcriber's language, the voice (`Agent.update_options(tts=...)`)
+  and add a reply-language note at the tail of the chat context; each turn's
+  language is stamped on its chat message (`ChatMessage.extra`) for the
+  stored transcript,
+* streams live captions (V5-31) while the panel has a `captions` block: the
+  caller's transcripts and the agent's timed words go to `lkap.captions`
+  (:class:`~lkap_agent.ui.channel.CaptionStream`).
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -57,7 +67,7 @@ from lkap_contracts.api_models import KbHit
 from lkap_contracts.common import SessionChannel
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import ModelCapabilities, vision_support
-from lkap_contracts.ui_protocol import ActivityEvent
+from lkap_contracts.ui_protocol import ActivityEvent, UiPatchOp
 from packs.base import (
     BackgroundRunner,
     FrameBufferProto,
@@ -77,6 +87,17 @@ from lkap_agent.knowledge import (
     compose_note,
     knowledge_state,
     skip_reason,
+)
+from lkap_agent.languages import (
+    LANGUAGE_EXTRA_KEY,
+    SessionLanguages,
+    SwitchResult,
+    SwitchSource,
+    apply_voice,
+    ensure_session_languages,
+    reply_note,
+    session_languages,
+    switch_language_on,
 )
 from lkap_agent.locale import SessionLocale, ensure_session_locale, session_locale
 from lkap_agent.logging import get_logger
@@ -100,7 +121,7 @@ from lkap_agent.ui.blocks import (
     initial_block_states,
     resolve_block_specs,
 )
-from lkap_agent.ui.channel import BARGE_IN
+from lkap_agent.ui.channel import BARGE_IN, CaptionStream, caption_tap_for
 from lkap_agent.vision import encode_jpeg_data_url
 
 __all__ = [
@@ -173,6 +194,13 @@ _BARGE_IN_KEY: Final[str] = "_lkap_barge_in_wired"
 
 #: `SessionContext.userdata` key: the flow-node downgrade was already recorded (R-V4-39).
 _FLOW_DOWNGRADE_KEY: Final[str] = "_lkap_flow_background_downgrade_reported"
+
+#: `SessionContext.userdata` key: the `user_input_transcribed` handler for languages and captions
+#: is registered (once per session, V5-31).
+_TRANSCRIBED_KEY: Final[str] = "_lkap_transcribed_wired"
+
+#: `SessionContext.userdata` key of the session's :class:`~lkap_agent.ui.channel.CaptionStream`.
+CAPTIONS_USERDATA_KEY: Final[str] = "lkap.captions"
 
 
 def compose_instructions(
@@ -360,6 +388,7 @@ class PlatformAgent(Agent):
             **(agent_options or {}),
         )
         self._init_blocks()
+        self._init_languages()
 
     # ------------------------------------------------------------- tool policy
 
@@ -610,6 +639,186 @@ class PlatformAgent(Agent):
         if released:
             logger.debug("barge-in cancelled pending requests", block_ids=released)
 
+    # --------------------------------------------------- languages and captions (V5-31)
+
+    def _init_languages(self) -> None:
+        """Create the session's language state and caption stream (once), and wire the listener.
+
+        Runs in the constructor, after the blocks, so the seq-1 snapshot already
+        shows each `captions` block's language. Never raises.
+        """
+        try:
+            state = ensure_session_languages(self._ctx)
+            self._init_captions(state)
+            self._wire_transcribed()
+        except Exception:
+            logger.warning("languages and captions could not be set up", exc_info=True)
+
+    def _caption_block_ids(self) -> list[str]:
+        specs = getattr(self._ctx.ui, "block_specs", None)
+        values = specs.values() if isinstance(specs, dict) else self._ctx.config.panel.blocks
+        return block_ids_of_type(values, "captions")
+
+    def _init_captions(self, state: SessionLanguages | None) -> None:
+        """Seed the `captions` blocks' language and create the session's caption stream."""
+        userdata = getattr(self._ctx, "userdata", None)
+        if not isinstance(userdata, dict) or CAPTIONS_USERDATA_KEY in userdata:
+            return
+        specs = getattr(self._ctx.ui, "block_specs", None)
+        caption_specs = [
+            spec
+            for spec in (specs.values() if isinstance(specs, dict) else self._ctx.config.panel.blocks)
+            if spec.type == "captions"
+        ]
+        if not caption_specs:
+            userdata[CAPTIONS_USERDATA_KEY] = None
+            return
+        language = state.current if state is not None else effective_default_language(self._ctx.config)
+        blocks = getattr(getattr(self._ctx.ui, "state", None), "blocks", None)
+        if isinstance(blocks, dict):
+            for spec in caption_specs:
+                current = blocks.get(spec.id)
+                seeded = dict(current) if isinstance(current, dict) else {}
+                seeded.setdefault("language", language)
+                seeded.setdefault("target_language", spec.config.get("target_language"))
+                blocks[spec.id] = seeded
+        caption = getattr(self._ctx.ui, "caption", None)
+        channel = getattr(self._ctx, "channel", "web")
+        # No captions on a typed chat (nothing is spoken) or a phone call (no screen).
+        if not callable(caption) or channel == "text" or channel in VOICE_ONLY_CHANNELS:
+            userdata[CAPTIONS_USERDATA_KEY] = None
+            return
+        ctx = self._ctx
+        userdata[CAPTIONS_USERDATA_KEY] = CaptionStream(
+            caption,
+            show_user=any(spec.config.get("show_user", True) for spec in caption_specs),
+            show_agent=any(spec.config.get("show_agent", True) for spec in caption_specs),
+            agent_language=lambda: _current_language(ctx),
+        )
+
+    def caption_stream(self) -> CaptionStream | None:
+        """The session's caption stream (a panel with a `captions` block, not the text channel)."""
+        userdata = getattr(self._ctx, "userdata", None)
+        stream = userdata.get(CAPTIONS_USERDATA_KEY) if isinstance(userdata, dict) else None
+        return stream if isinstance(stream, CaptionStream) else None
+
+    def _wire_transcribed(self) -> None:
+        """Register :meth:`on_user_input_transcribed` once per session (flow nodes share it)."""
+        if self.caption_stream() is None and session_languages(self._ctx) is None:
+            return
+        userdata = getattr(self._ctx, "userdata", None)
+        on = getattr(self._ctx.session, "on", None)
+        if not isinstance(userdata, dict) or userdata.get(_TRANSCRIBED_KEY) or not callable(on):
+            return
+        userdata[_TRANSCRIBED_KEY] = True
+        on("user_input_transcribed", self.on_user_input_transcribed)
+
+    def on_user_input_transcribed(self, ev: Any) -> None:
+        """The caller's words: a caption, and (on a final) a vote for the turn's language.
+
+        Synchronous (SDK contract); reads the shared session state, so it stays
+        correct after a flow handoff. Never raises.
+        """
+        try:
+            text = str(getattr(ev, "transcript", "") or "")
+            final = bool(getattr(ev, "is_final", False))
+            raw_language = getattr(ev, "language", None)
+            language = str(raw_language) if raw_language else None
+            stream = self.caption_stream()
+            if stream is not None:
+                stream.user(text, final=final, language=language)
+            state = session_languages(self._ctx)
+            if state is not None and final:
+                state.vote(language, text)
+        except Exception:
+            logger.debug("transcript not handled for captions or languages", exc_info=True)
+
+    def _bind_captions(self) -> None:
+        """Point the session's captions tap at the caption stream (on enter; the session runs)."""
+        stream = self.caption_stream()
+        if stream is None:
+            return
+        try:
+            tap = caption_tap_for(self.session)
+        except Exception:
+            return
+        if tap is not None and not tap.bound:
+            tap.bind(stream)
+
+    def _reapply_voice(self) -> None:
+        """A flow node entered after a switch speaks with the current language's voice."""
+        state = session_languages(self._ctx)
+        if state is None or state.current == state.default:
+            return
+        with contextlib.suppress(Exception):
+            apply_voice(self, state, state.current)
+
+    async def switch_language(
+        self, requested: str, *, source: SwitchSource = "tool", turn_ctx: ChatContext | None = None
+    ) -> SwitchResult | None:
+        """Switch the conversation to one of the agent's languages.
+
+        Args:
+            requested: A language code, base code or English name (`hi`, `hi-IN`, `Hindi`).
+            source: `tool` (the model asked) or `detected` (the caller spoke it).
+            turn_ctx: The turn being answered (detection): the reply note goes into it
+                and into the agent's chat context, so this very reply is in the new
+                language. The tool path needs no note: its answer says it.
+
+        Returns:
+            What changed, or `None` when `requested` is not one of the agent's languages
+            (or the agent speaks one language).
+        """
+        state = session_languages(self._ctx)
+        if state is None:
+            return None
+        code = state.match(requested)
+        if code is None:
+            return None
+        result = await switch_language_on(
+            self, state, code, source=source, record_event=self._ctx.record_event
+        )
+        if not result.changed:
+            return result
+        if turn_ctx is not None:
+            note = reply_note(code)
+            turn_ctx.add_message(role="system", content=note)
+            try:
+                persisted = self.chat_ctx.copy()
+                persisted.add_message(role="system", content=note)
+                await self.update_chat_ctx(persisted)
+            except Exception:
+                logger.debug("could not persist the language note", exc_info=True)
+        await self._show_language(code)
+        return result
+
+    async def _show_language(self, code: str) -> None:
+        patch = getattr(self._ctx.ui, "patch_block", None)
+        if not callable(patch):
+            return
+        for block_id in self._caption_block_ids():
+            try:
+                await patch(block_id, [UiPatchOp(op="set", path="/language", value=code)])
+            except Exception:
+                logger.debug(
+                    "could not show the language on the captions block", block_id=block_id, exc_info=True
+                )
+
+    async def _detect_language(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
+        """Close the caller's turn: stamp its language, and switch when detection says so."""
+        state = session_languages(self._ctx)
+        if state is None:
+            return
+        turn_language, due = state.close_turn(new_message.text_content or "")
+        if turn_language is not None:
+            with contextlib.suppress(Exception):
+                new_message.extra[LANGUAGE_EXTRA_KEY] = turn_language
+        if due is not None:
+            try:
+                await self.switch_language(due, source="detected", turn_ctx=turn_ctx)
+            except Exception:
+                logger.warning("could not follow the caller's language", exc_info=True)
+
     async def _on_block_action(self, block_id: str, name: str, data: dict[str, Any]) -> dict[str, Any]:
         """`block_action` → the pack's optional `on_block_action` (default no-op).
 
@@ -660,6 +869,8 @@ class PlatformAgent(Agent):
         at the same seq (harmless); if it sent nothing, this one is seq 1.
         """
         await self._apply_locale()
+        self._bind_captions()
+        self._reapply_voice()
         self._speak_greeting()
         await self._publish_initial_ui()
 
@@ -702,6 +913,7 @@ class PlatformAgent(Agent):
         `new_message` so the model sees it alongside what the user just said,
         and the pack hook runs last with both already in place.
         """
+        await self._detect_language(turn_ctx, new_message)
         await self._inject_knowledge(turn_ctx, new_message)
         await self._inject_vision(turn_ctx, new_message)
         await self._refresh_time(turn_ctx)
@@ -724,6 +936,10 @@ class PlatformAgent(Agent):
         item = ev.item
         if not isinstance(item, ChatMessage) or item.role != "assistant":
             return
+        state = session_languages(self._ctx)
+        if state is not None:
+            with contextlib.suppress(Exception):
+                item.extra.setdefault(LANGUAGE_EXTRA_KEY, state.current)
         text = item.text_content
         if not text:
             return
@@ -1096,3 +1312,17 @@ def _warn_missing_claim_once() -> None:
     logger.warning(
         "AgentSession._claim_user_turn is missing; typed turns run without the user-state pin (SDK upgrade?)"
     )
+
+
+def effective_default_language(config: AgentConfig) -> str:
+    """The agent's default language (`voice.languages[0]`, else `voice.language`)."""
+    return config.voice.languages[0] if config.voice.languages else config.voice.language
+
+
+def _current_language(ctx: Any) -> str | None:
+    """The conversation's current language, for the agent's captions."""
+    state = session_languages(ctx)
+    if state is not None:
+        return state.current
+    config = getattr(ctx, "config", None)
+    return effective_default_language(config) if config is not None else None

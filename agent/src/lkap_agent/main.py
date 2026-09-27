@@ -1530,6 +1530,8 @@ def _assemble(
         session_ctx.userdata[TELEPHONY_USERDATA_KEY] = telephony
     # V5-25: the network built-ins' vendors with their keys; `build_builtin_tools` reads them here.
     session_ctx.userdata["lkap.builtin_providers"] = dict(resolved.builtin_providers)
+    # V5-31: the per-language voices with their keys; `languages.ensure_session_languages` reads them.
+    session_ctx.userdata["lkap.language_voices"] = dict(resolved.voices_by_language)
 
     tools: list[lk_llm.Tool | lk_llm.Toolset] = [
         *deps.builtin_tools_builder(

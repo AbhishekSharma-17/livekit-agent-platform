@@ -42,21 +42,37 @@ block's `files` and, for an image, to every gallery; a refused one becomes a
 `rejected` row with the reason. The worker keeps the bytes of recent files in
 memory for `describe_asset` and reads older ones back from the api. The file's
 name and content never reach a log line.
+
+Live captions (V5-31): while the panel has a ``captions`` block, both sides of
+the conversation stream on ``lkap.captions`` as `CaptionSegment` JSON (one
+message per update; an utterance keeps its ``id`` from its first interim to
+its final). :class:`CaptionStream` builds the segments: the caller's from
+`user_input_transcribed` (interim and final, with the transcriber's language),
+the agent's from :class:`CaptionsTextOutput`, a text output the session builder
+puts after RoomIO's transcription output
+(`TextOutputOptions(next_in_chain=...)`), so the agent's words arrive already
+in step with its audio (after the `TranscriptSynchronizer`), as deltas.
+Interim agent captions are sent at most every :data:`CAPTION_INTERIM_INTERVAL_S`;
+the final one always goes. A caption that cannot be sent is dropped (debug
+log): captions never hold the conversation up.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import mimetypes
 import time
 import uuid
+import weakref
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
 from livekit import rtc
+from livekit.agents.voice.io import TextOutput
 from lkap_contracts.api_models import KbHit, SessionAssetOut
 from lkap_contracts.blocks import UploadBlockConfig, accept_allows, safe_filename, sniff_mime
 from lkap_contracts.ui_protocol import (
@@ -68,6 +84,7 @@ from lkap_contracts.ui_protocol import (
     SNAPSHOT_EVERY_N_PATCHES,
     TOPIC_UI_ACTIVITY,
     TOPIC_UI_ASSET,
+    TOPIC_UI_CAPTIONS,
     TOPIC_UI_STATE,
     TOPIC_UI_UPLOAD,
     ActivityEvent,
@@ -77,6 +94,8 @@ from lkap_contracts.ui_protocol import (
     BlockRequestPayload,
     BlockSpec,
     BlockSubmitPayload,
+    CaptionSegment,
+    CaptionSpeaker,
     ChecklistItem,
     FormBlockState,
     FormUploadSpec,
@@ -114,6 +133,11 @@ from lkap_agent.ui.blocks import (
 __all__ = [
     "ASSET_CACHE_BYTES",
     "BARGE_IN",
+    "CAPTION_INTERIM_INTERVAL_S",
+    "CaptionStream",
+    "CaptionsTextOutput",
+    "caption_tap_for",
+    "register_caption_tap",
     "REQUEST_ACK_TIMEOUT_S",
     "RequestMethod",
     "UiChannel",
@@ -1037,6 +1061,10 @@ class UiChannel:
         await self._room.local_participant.send_text(event.model_dump_json(), topic=TOPIC_UI_ACTIVITY)
         await self.patch([UiPatchOp(op="upsert", path="/activity", value=event, key=event.id)])
 
+    async def caption(self, segment: CaptionSegment) -> None:
+        """Send one live caption on `lkap.captions` (V5-31); never stored in the state."""
+        await self._room.local_participant.send_text(segment.model_dump_json(), topic=TOPIC_UI_CAPTIONS)
+
     async def request_ui(
         self, method: str, payload: dict[str, Any], *, response_timeout: float | None = None
     ) -> dict[str, Any]:
@@ -1685,3 +1713,180 @@ def _normalize_block_op(op: UiPatchOp) -> UiPatchOp:
     if _segments(op.path)[:1] != ["blocks"]:
         return op
     return op.model_copy(update={"value": jsonable(op.value)})
+
+
+# ------------------------------------------------------------------- live captions (V5-31)
+
+_captions_log = get_logger(__name__)
+
+#: The fewest seconds between two interim captions of the agent (the final always goes).
+CAPTION_INTERIM_INTERVAL_S: Final[float] = 0.25
+
+#: Sends one caption (`UiChannel.caption`).
+CaptionSender = Callable[[CaptionSegment], Awaitable[None]]
+
+
+class CaptionStream:
+    """Builds and sends the caption segments of one session, in order.
+
+    Args:
+        send: Sends one segment (`UiChannel.caption`).
+        show_user: Caption the caller (a `captions` block has `show_user`).
+        show_agent: Caption the agent (a `captions` block has `show_agent`).
+        agent_language: The agent's current reply language, read per segment.
+        clock: Test seam for `time.monotonic`.
+        wall_clock: Test seam for `time.time` (the segment's `ts`).
+    """
+
+    def __init__(
+        self,
+        send: CaptionSender,
+        *,
+        show_user: bool = True,
+        show_agent: bool = True,
+        agent_language: Callable[[], str | None] = lambda: None,
+        clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._send = send
+        self.show_user = show_user
+        self.show_agent = show_agent
+        self._agent_language = agent_language
+        self._clock = clock
+        self._wall_clock = wall_clock
+        self._counter = 0
+        self._user_id: str | None = None
+        self._agent_id: str | None = None
+        self._agent_text = ""
+        self._agent_last_sent = 0.0
+        self._tail: asyncio.Task[None] | None = None
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    def _next_id(self, speaker: CaptionSpeaker) -> str:
+        self._counter += 1
+        return f"{speaker[0]}-{self._counter}"
+
+    def _emit(
+        self, segment_id: str, speaker: CaptionSpeaker, text: str, final: bool, language: str | None
+    ) -> None:
+        segment = CaptionSegment(
+            id=segment_id, speaker=speaker, text=text, final=final, language=language, ts=self._wall_clock()
+        )
+        previous = self._tail
+
+        async def _send() -> None:
+            if previous is not None:
+                with contextlib.suppress(BaseException):
+                    await previous
+            try:
+                await self._send(segment)
+            except Exception:  # noqa: BLE001 - a lost caption must never break the call
+                _captions_log.debug("caption not sent", speaker=speaker, exc_info=True)
+
+        try:
+            task = asyncio.get_running_loop().create_task(_send())
+        except RuntimeError:  # no running loop (sync tests): drop it
+            return
+        self._tail = task
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    # ---------------------------------------------------------------- the caller
+
+    def user(self, text: str, *, final: bool, language: str | None = None) -> None:
+        """A transcript of the caller (`user_input_transcribed`): interim or final."""
+        if not self.show_user:
+            return
+        text = text.strip()
+        if not text and not final:
+            return
+        if self._user_id is None:
+            if not text:
+                return
+            self._user_id = self._next_id("user")
+        self._emit(self._user_id, "user", text, final, language)
+        if final:
+            self._user_id = None
+
+    # ------------------------------------------------------------------ the agent
+
+    def agent_delta(self, delta: str) -> None:
+        """The next words of the agent, already timed to its audio."""
+        if not self.show_agent or not delta:
+            return
+        if self._agent_id is None:
+            self._agent_id = self._next_id("agent")
+            self._agent_text = ""
+            self._agent_last_sent = 0.0
+        self._agent_text += delta
+        now = self._clock()
+        if self._agent_text.strip() and now - self._agent_last_sent >= CAPTION_INTERIM_INTERVAL_S:
+            self._agent_last_sent = now
+            self._emit(self._agent_id, "agent", self._agent_text.strip(), False, self._agent_language())
+
+    def agent_flush(self) -> None:
+        """The agent finished (or was interrupted in) an utterance: send it as final."""
+        if self._agent_id is None:
+            return
+        text = self._agent_text.strip()
+        segment_id, self._agent_id, self._agent_text = self._agent_id, None, ""
+        if text:
+            self._emit(segment_id, "agent", text, True, self._agent_language())
+
+    async def drain(self) -> None:
+        """Wait for the captions already queued (tests and shutdown)."""
+        if self._tail is not None:
+            with contextlib.suppress(BaseException):
+                await self._tail
+
+
+class CaptionsTextOutput(TextOutput):
+    """A text output after RoomIO's transcription output that feeds the agent's captions.
+
+    It sees exactly what the browser's transcription sees, in step with the
+    audio. Until :meth:`bind` gives it a :class:`CaptionStream` (a session whose
+    panel has a `captions` block) it does nothing.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(label="LKAPCaptions", next_in_chain=None)
+        self._stream: CaptionStream | None = None
+
+    def bind(self, stream: CaptionStream | None) -> None:
+        """Start (or stop, with `None`) feeding `stream`."""
+        self._stream = stream
+
+    @property
+    def bound(self) -> bool:
+        """Whether a caption stream is attached."""
+        return self._stream is not None
+
+    async def capture_text(self, text: str) -> None:
+        """One delta of the agent's words."""
+        if self._stream is not None:
+            self._stream.agent_delta(str(text))
+
+    def flush(self) -> None:
+        """The end of one agent utterance."""
+        if self._stream is not None:
+            self._stream.agent_flush()
+
+
+#: `AgentSession` -> its captions tap (weak: the tap goes with its session).
+_CAPTION_TAPS: weakref.WeakKeyDictionary[Any, CaptionsTextOutput] = weakref.WeakKeyDictionary()
+
+
+def register_caption_tap(session: Any, tap: CaptionsTextOutput) -> None:
+    """Remember the tap the session builder put in `session`'s room options."""
+    try:
+        _CAPTION_TAPS[session] = tap
+    except TypeError:  # a test double that cannot be weakly referenced
+        _captions_log.debug("captions tap not registered: the session cannot be weakly referenced")
+
+
+def caption_tap_for(session: Any) -> CaptionsTextOutput | None:
+    """The captions tap of `session`, if the session builder made one."""
+    try:
+        return _CAPTION_TAPS.get(session)
+    except TypeError:
+        return None

@@ -57,6 +57,7 @@ from livekit.agents import (
     MetricsCollectedEvent,
     SessionUsageUpdatedEvent,
     ToolExecutionUpdatedEvent,
+    UserInputTranscribedEvent,
 )
 from livekit.agents import llm as lk_llm
 from livekit.agents.metrics import LLMMetrics, STTMetrics, TTSMetrics
@@ -80,6 +81,7 @@ from lkap_agent.tools.provider import REAUTH_MESSAGE
 
 __all__ = [
     "CONSENT_EVENT",
+    "LANGUAGE_EXTRA_KEY",
     "LOCALE_EVENT",
     "MAX_PROVIDER_REQUEST_IDS",
     "LatencyCollector",
@@ -180,6 +182,21 @@ LOCALE_EVENT: Final[str] = "locale"
 #: and the worker's recording gate (`main.py`) starts a consent-gated recording on it.
 CONSENT_EVENT: Final[str] = _CONSENT_EVENT
 
+#: `ChatMessage.extra` key of a turn's language (V5-31): the caller's detected language on a
+#: user message (`PlatformAgent` stamps the turn's majority language, else the observer the
+#: transcriber's last final one), the reply language on an assistant message. It becomes
+#: `TranscriptTurn.language` and the `language` of the `user_turn` / `agent_turn` events.
+LANGUAGE_EXTRA_KEY: Final[str] = "lkap.language"
+
+#: Transcriber language values that name no language.
+_NON_LANGUAGES: Final[frozenset[str]] = frozenset({"", "multi", "auto", "unknown", "detect"})
+
+
+def _message_language(item: lk_llm.ChatMessage) -> str | None:
+    """The language stamped on a chat message (`ChatMessage.extra`), if any."""
+    value = item.extra.get(LANGUAGE_EXTRA_KEY) if isinstance(item.extra, dict) else None
+    return value if isinstance(value, str) and value else None
+
 
 def locale_event_payload(
     *, caller_timezone: str, source: LocaleSource, business_timezone: str
@@ -221,7 +238,8 @@ def transcript_from_history(history: lk_llm.ChatContext) -> list[TranscriptTurn]
 
     Only user and assistant `ChatMessage` items survive; `ImageContent` is
     dropped because `ChatMessage.text_content` returns text parts only, so
-    frames never reach the database.
+    frames never reach the database. A turn's language (V5-31) comes from the
+    message's :data:`LANGUAGE_EXTRA_KEY`.
     """
     turns: list[TranscriptTurn] = []
     for item in history.items:
@@ -236,6 +254,7 @@ def transcript_from_history(history: lk_llm.ChatContext) -> list[TranscriptTurn]
                 text=text,
                 ts=item.created_at,
                 interrupted=bool(item.interrupted),
+                language=_message_language(item),
             )
         )
     return turns
@@ -283,6 +302,8 @@ class SessionObserver:
         )
         #: The transcript posted with the summary (the QA judge scores exactly this).
         self.transcript: list[TranscriptTurn] = []
+        #: The transcriber's language of the caller's last final transcript (V5-31).
+        self._heard_language: str | None = None
 
     # ------------------------------------------------------------------ events
 
@@ -346,6 +367,7 @@ class SessionObserver:
         session.on("tool_execution_updated", self._on_tool_execution)
         session.on("session_usage_updated", self._on_usage)
         session.on("error", self._on_error)
+        session.on("user_input_transcribed", self._on_transcribed)
         if self._requests is not None:
             logger.info(
                 "metrics_collected subscribed for cost reconciliation; "
@@ -370,13 +392,31 @@ class SessionObserver:
             return
         if item.role == "user":
             # V5-27 (S5-4): `turn_id` is the message id a voice `consent` event points at.
-            self.record("user_turn", {"text": text, "turn_id": item.id})
+            user_payload: dict[str, Any] = {"text": text, "turn_id": item.id}
+            language = _message_language(item) or self._heard_language
+            self._heard_language = None
+            if language is not None:
+                if isinstance(item.extra, dict):
+                    item.extra.setdefault(LANGUAGE_EXTRA_KEY, language)
+                user_payload["language"] = language
+            self.record("user_turn", user_payload)
         elif item.role == "assistant":
             payload: dict[str, Any] = {"text": text, "interrupted": bool(item.interrupted)}
+            reply_language = _message_language(item)
+            if reply_language is not None:
+                payload["language"] = reply_language
             if item.metrics is not None:
                 payload["metrics"] = _dump(item.metrics)
                 self._latency.add(item.metrics)
             self.record("agent_turn", payload)
+
+    def _on_transcribed(self, ev: UserInputTranscribedEvent) -> None:
+        """Keep the language of the caller's last final transcript (V5-31)."""
+        if not ev.is_final or ev.language is None:
+            return
+        language = str(ev.language).strip()
+        if language.lower() not in _NON_LANGUAGES:
+            self._heard_language = language
 
     def _on_tool_execution(self, ev: ToolExecutionUpdatedEvent) -> None:
         update = ev.update

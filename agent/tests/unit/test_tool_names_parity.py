@@ -69,6 +69,8 @@ UNFENCED_BUILTIN_TOOLS: frozenset[str] = frozenset(
         "spell_back",
         "send_sms",
         "notify_team",
+        # V5-31: answers with a fixed sentence of the platform's own.
+        "switch_language",
     }
 )
 

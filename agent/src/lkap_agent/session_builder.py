@@ -67,6 +67,17 @@ Conversation tuning (V5-07, docs/v5/PLAN-V5.md):
   the configured filter as it is.
 * ``voice.ambient_sound`` plays through the same `BackgroundAudioPlayer` as the
   thinking sound (:func:`start_background_audio`), only with audio output.
+
+Languages and captions (V5-31, docs/v5/PLAN-V5.md):
+
+* ``voice.auto_detect`` builds the STT slot with the registry's detection value
+  (`lkap_agent.languages.apply_stt_detection`, in :func:`prepare_resolved`); the
+  stored config keeps its own `language` field.
+* A panel with a ``captions`` block gets a :class:`~lkap_agent.ui.channel.CaptionsTextOutput`
+  after RoomIO's transcription output (`RoomOptions.text_output =
+  TextOutputOptions(next_in_chain=tap)`, livekit-agents 1.8.3 `room_io/types.py`), so
+  the agent's captions are timed like the browser's transcription. The agent binds
+  it to the session's caption stream (`caption_tap_for`). No tap on the text channel.
 """
 
 from __future__ import annotations
@@ -77,7 +88,7 @@ from dataclasses import dataclass
 from typing import Any, Final, cast
 
 from livekit.agents import NOT_GIVEN, AgentSession, TurnHandlingOptions
-from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions
+from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions, TextOutputOptions
 from livekit.agents.voice.tool_executor import AsyncToolOptions
 from lkap_contracts.agent_config import (
     AgentConfig,
@@ -87,14 +98,17 @@ from lkap_contracts.agent_config import (
     ResolvedCompliance,
     ResolvedProvider,
     ThinkingSound,
+    effective_languages,
 )
 from lkap_contracts.providers import ModelCapabilities, ProviderSpec, by_kind
 from lkap_contracts.providers import get as get_spec
 from lkap_contracts.turn_handling import resolve_turn_handling
 
+from lkap_agent.languages import apply_stt_detection, language_rule
 from lkap_agent.logging import get_logger
 from lkap_agent.providers.factory import BuiltProviders, telephony_noise_cancellation, turn_detector_kwargs
 from lkap_agent.telephony import is_sip_channel
+from lkap_agent.ui.channel import CaptionsTextOutput, register_caption_tap
 
 __all__ = [
     "AMBIENT_SOUND_VOLUME",
@@ -106,6 +120,7 @@ __all__ = [
     "apply_compliance",
     "auto_inject_active",
     "build_turn_handling",
+    "has_captions_block",
     "factory_view",
     "is_text_channel",
     "llm_capabilities_of",
@@ -113,6 +128,7 @@ __all__ = [
     "recording_needs_consent",
     "start_background_audio",
     "start_thinking_sound",
+    "with_language_rule",
 ]
 
 logger = get_logger(__name__)
@@ -229,6 +245,9 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
       :func:`_apply_turn_detector_settings`.
     * **Telephony noise cancellation** (the `telephony` preset on a phone call,
       V5-07): see :func:`_apply_telephony_noise_cancellation`.
+    * **Language detection** (`voice.auto_detect`, V5-31): the STT slot is built
+      with its detection value (`languages.apply_stt_detection`).
+    * **Languages rule** (V5-31): see :func:`with_language_rule`.
 
     Args:
         resolved: The config fetched from the api.
@@ -257,7 +276,29 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
         )
     _apply_turn_detector_settings(resolved, slots)
     _apply_telephony_noise_cancellation(resolved, slots)
-    return resolved.model_copy(update={"resolved": slots})
+    apply_stt_detection(resolved, slots)
+    return resolved.model_copy(update={"resolved": slots, "config": with_language_rule(resolved.config)})
+
+
+def with_language_rule(config: AgentConfig) -> AgentConfig:
+    """`config` with the fixed languages rule appended to its instructions (V5-31).
+
+    Appended to `AgentConfig.instructions` (like the compliance notes) so a
+    prompt agent and every flow node compose it; one-language agents without
+    detection are returned unchanged.
+    """
+    rule = language_rule(effective_languages(config.voice), auto_detect=config.voice.auto_detect)
+    if not rule:
+        return config
+    base = config.instructions.rstrip()
+    instructions = f"{base}\n\n{rule}" if base else rule
+    return config.model_copy(update={"instructions": instructions})
+
+
+def has_captions_block(resolved: ResolvedAgentConfig) -> bool:
+    """Whether the session's panel shows a `captions` block (the agent's config or the effective layout)."""
+    blocks = [*resolved.config.panel.blocks, *resolved.panel.blocks]
+    return any(spec.type == "captions" for spec in blocks)
 
 
 def _client_side_turns(resolved: ResolvedAgentConfig) -> bool:
@@ -405,6 +446,9 @@ class SessionPlan:
     ambient_sound: str = "none"
     #: `pipeline.conversation_preset` the session was built with (for logs and tests).
     conversation_preset: str = "custom"
+    #: V5-31: the text output after RoomIO's transcription that feeds the agent's captions
+    #: (a panel with a `captions` block, never on the text channel).
+    captions_tap: CaptionsTextOutput | None = None
 
     @property
     def needs_generate_reply_greeting(self) -> bool:
@@ -579,6 +623,11 @@ class SessionBuilder:
             audio_output=False if text_only else NOT_GIVEN,
             close_on_disconnect=False,
         )
+        captions_tap: CaptionsTextOutput | None = None
+        if not text_only and has_captions_block(resolved):
+            captions_tap = CaptionsTextOutput()
+            room_options.text_output = TextOutputOptions(next_in_chain=captions_tap)
+            register_caption_tap(session, captions_tap)
 
         logger.info(
             "session built",
@@ -593,6 +642,7 @@ class SessionBuilder:
             max_tool_steps=config.tools.max_tool_steps,
             preemptive_generation=preemptive_enabled,
             conversation_preset=config.pipeline.conversation_preset,
+            captions=captions_tap is not None,
         )
         return SessionPlan(
             session=session,
@@ -606,6 +656,7 @@ class SessionBuilder:
             thinking_sound="none" if text_only else config.voice.thinking_sound,
             ambient_sound="none" if text_only else config.voice.ambient_sound,
             conversation_preset=config.pipeline.conversation_preset,
+            captions_tap=captions_tap,
         )
 
     @staticmethod

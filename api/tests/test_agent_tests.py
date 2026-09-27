@@ -158,6 +158,11 @@ async def test_run_judge_repairs_a_non_json_answer_once() -> None:
     assert "could not be read" in llm.calls[1][1]
 
 
+def test_a_score_on_a_ten_point_scale_is_rescaled() -> None:
+    assert judges.parse_judge_answer('{"verdict": "pass", "score": 8, "reason": "ok"}').score == 0.8
+    assert judges.parse_judge_answer('{"verdict": "fail", "score": 1}').score == 1.0
+
+
 async def test_run_judge_marks_a_second_bad_answer_inconclusive() -> None:
     llm = ScriptedLLM(["not json", '{"verdict": "maybe"}'])
 
@@ -861,6 +866,9 @@ async def test_gate_checks_the_version_being_published(
     assert response.json()["error"]["code"] == "tests_failing"
     assert response.json()["error"]["details"]["reason"] == "missing"
     assert response.json()["error"]["details"]["config_version"] == 2
+    async with database.session() as db:
+        agent = await db.scalar(select(Agent).where(Agent.id == agent_id))
+    assert agent is not None and agent.config_version == 1 and agent.published is False
 
 
 async def test_gate_does_not_touch_an_already_published_agent(

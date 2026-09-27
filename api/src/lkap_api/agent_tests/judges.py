@@ -151,7 +151,12 @@ def parse_judge_answer(raw: str) -> JudgeAnswer:
         json.JSONDecodeError: Not JSON.
         pydantic.ValidationError: JSON of the wrong shape.
     """
-    return JudgeAnswer.model_validate(json.loads(_FENCE_RE.sub("", raw).strip()))
+    data = json.loads(_FENCE_RE.sub("", raw).strip())
+    score = data.get("score") if isinstance(data, dict) else None
+    if isinstance(score, int | float) and not isinstance(score, bool) and 1 < score <= 10:
+        # A judge that answered on a 1-10 scale: the verdict stands, the score is rescaled.
+        data["score"] = score / 10
+    return JudgeAnswer.model_validate(data)
 
 
 async def _complete(llm: JudgeLLM, system: str, user: str) -> str:

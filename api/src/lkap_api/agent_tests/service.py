@@ -200,12 +200,21 @@ async def latest_run(
     return (await db.execute(query.order_by(RunRow.created_at.desc(), RunRow.id.desc()).limit(1))).scalar()
 
 
-async def check_publish_gate(db: AsyncSession, agent: Agent, config: AgentConfig) -> None:
+async def check_publish_gate(
+    db: AsyncSession, agent: Agent, config: AgentConfig, *, config_version: int | None = None
+) -> None:
     """Refuse publishing when the gate is on and the latest run on this version does not pass.
 
     Opt-in: nothing is checked when ``publish_gate.require_tests`` is false. A run
     that could not run (``error``) refuses too, and the message says the tests did
     not run rather than that they failed.
+
+    Args:
+        db: The request's session.
+        agent: The agent being published.
+        config: The configuration being published (its ``publish_gate`` decides).
+        config_version: The version being published; defaults to ``agent.config_version``
+            (a save in the same request passes the version it is about to create).
 
     Raises:
         PublishGateError: 422 ``tests_failing`` with a ``PublishGateRefusal`` as ``details``.
@@ -214,10 +223,8 @@ async def check_publish_gate(db: AsyncSession, agent: Agent, config: AgentConfig
     if not gate.require_tests:
         return
     await expire_stale_runs(db, workspace_id=agent.workspace_id, agent_id=agent.id)
-    run = await latest_run(
-        db, workspace_id=agent.workspace_id, agent_id=agent.id, config_version=agent.config_version
-    )
-    version = agent.config_version
+    version = agent.config_version if config_version is None else config_version
+    run = await latest_run(db, workspace_id=agent.workspace_id, agent_id=agent.id, config_version=version)
     way_out = (
         "run the tests on this version, or turn off “Require passing tests” (publish_gate.require_tests)"
     )

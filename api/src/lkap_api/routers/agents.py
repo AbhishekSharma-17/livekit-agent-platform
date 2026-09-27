@@ -853,6 +853,14 @@ async def update_agent(
         row.description = payload.description
     if payload.ui_panel_id is not None:
         row.ui_panel_id = payload.ui_panel_id
+    publishing = payload.published is True and not row.published
+    if publishing:
+        # V5-29: the opt-in publish gate, before anything is saved or provisioned. A config that
+        # changes in this request is published as the next version, which has no run yet.
+        if payload.config is None:
+            await check_publish_gate(db, row, agent_config_of(row))
+        elif payload.config.model_dump(mode="json") != row.config:
+            await check_publish_gate(db, row, payload.config, config_version=row.config_version + 1)
     if payload.config is not None:
         check_endpoint_overrides(ctx, row.config, payload.config.model_dump(mode="json"))
         check_apps_changes(ctx, row.config, payload.config)
@@ -874,8 +882,8 @@ async def update_agent(
             row.config_version += 1
             _snapshot_version(db, row, created_by=ctx.actor.id)
     if payload.published is not None:
-        if payload.published and not row.published:
-            # V5-29: the opt-in publish gate, on the version being published (after the save above).
+        if publishing and payload.config is not None:
+            # V5-29: again on the version actually saved (`apps.on_save` may have changed it).
             await check_publish_gate(db, row, agent_config_of(row))
         row.published = payload.published
     row.updated_at = utcnow()

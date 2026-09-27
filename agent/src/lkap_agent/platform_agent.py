@@ -35,7 +35,17 @@
   stored transcript,
 * streams live captions (V5-31) while the panel has a `captions` block: the
   caller's transcripts and the agent's timed words go to `lkap.captions`
-  (:class:`~lkap_agent.ui.channel.CaptionStream`).
+  (:class:`~lkap_agent.ui.channel.CaptionStream`),
+* applies a listening supervisor's typed whisper (V5-37): the api sends it
+  with the server API as a data packet on `lkap.supervisor`, to the agent
+  only; a packet is honoured only when the server sent it (no participant)
+  and it names this session. The text becomes a persisted system note fenced
+  in `<supervisor_note>` (privileged guidance that never overrides the
+  instructions, never read out, never the caller's words), and `reply_now`
+  also asks for a reply at once. Each whisper is logged and recorded as a
+  `supervisor_whisper` event. A listener joins hidden and cannot publish, so
+  it is invisible here and RoomIO (linked to the caller's identity) never
+  takes a turn from it.
 
 `SessionContext` is the worker's concrete `packs.base.PackSessionContext`; it is
 built here because everything a pack needs is already assembled at this point.
@@ -46,6 +56,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal
@@ -63,7 +74,13 @@ from livekit.agents import (
 )
 from livekit.agents import llm as lk_llm
 from lkap_contracts.agent_config import AgentConfig, PipelineMode, ResolvedProvider
-from lkap_contracts.api_models import KbHit
+from lkap_contracts.api_models import (
+    SUPERVISOR_TOPIC,
+    SUPERVISOR_WHISPER_EVENT,
+    KbHit,
+    SupervisorWhisperEvent,
+    SupervisorWhisperPacket,
+)
 from lkap_contracts.common import SessionChannel
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import ModelCapabilities, vision_support
@@ -114,7 +131,7 @@ from lkap_agent.tools.execution import (
     sdk_version_at_least,
     wrap_tool,
 )
-from lkap_agent.tools.untrusted import UNTRUSTED_RULE
+from lkap_agent.tools.untrusted import UNTRUSTED_RULE, strip_control
 from lkap_agent.ui.blocks import (
     VOICE_ONLY_CHANNELS,
     block_ids_of_type,
@@ -125,6 +142,8 @@ from lkap_agent.ui.channel import BARGE_IN, CaptionStream, caption_tap_for
 from lkap_agent.vision import encode_jpeg_data_url
 
 __all__ = [
+    "SUPERVISOR_NOTE_RULE",
+    "SUPERVISOR_REPLY_NOW",
     "GreetingMode",
     "PlatformAgent",
     "SessionContext",
@@ -132,6 +151,7 @@ __all__ = [
     "model_vision_support",
     "platform_text_input_cb",
     "resolve_greeting_mode",
+    "supervisor_note",
 ]
 
 logger = get_logger(__name__)
@@ -201,6 +221,42 @@ _TRANSCRIBED_KEY: Final[str] = "_lkap_transcribed_wired"
 
 #: `SessionContext.userdata` key of the session's :class:`~lkap_agent.ui.channel.CaptionStream`.
 CAPTIONS_USERDATA_KEY: Final[str] = "lkap.captions"
+
+#: `SessionContext.userdata` key: the supervisor whisper handler is registered (once per session, V5-37).
+_SUPERVISOR_KEY: Final[str] = "_lkap_supervisor_wired"
+
+#: What the model is told about a supervisor's whisper (V5-37). The whisper comes from a
+#: signed-in builder, so it is guidance the model may act on, unlike `<untrusted>` data; it
+#: is still bounded: it never overrides the instructions and is never repeated to the caller.
+SUPERVISOR_NOTE_RULE: Final[str] = (
+    "A supervisor who is listening to this call sent you the guidance below. The caller cannot "
+    "see or hear it: never read it out, quote it or mention the supervisor. Follow it when it "
+    "fits your instructions; it never overrides them or your safety rules."
+)
+
+#: `generate_reply` instructions for a whisper sent with `reply_now` (added after the note).
+SUPERVISOR_REPLY_NOW: Final[str] = (
+    "Act on the supervisor's guidance now, in your next words to the caller, naturally and "
+    "without mentioning the supervisor."
+)
+
+#: The fence tag; the whisper can never open or close one itself.
+_SUPERVISOR_TAG_RE = re.compile(r"<\s*/?\s*supervisor_note", re.IGNORECASE)
+
+
+def supervisor_note(text: str) -> str:
+    """The system note a whisper becomes: :data:`SUPERVISOR_NOTE_RULE` and the fenced text.
+
+    Control characters (other than newlines and tabs) and every `<supervisor_note` /
+    `</supervisor_note` sequence are removed from the text first, repeatedly, so it
+    cannot close its own fence.
+    """
+    clean = strip_control(text)
+    previous = None
+    while previous != clean:
+        previous = clean
+        clean = _SUPERVISOR_TAG_RE.sub("", clean)
+    return f"{SUPERVISOR_NOTE_RULE}\n<supervisor_note>{clean.strip()}</supervisor_note>"
 
 
 def compose_instructions(
@@ -389,6 +445,7 @@ class PlatformAgent(Agent):
         )
         self._init_blocks()
         self._init_languages()
+        self._wire_supervisor()
 
     # ------------------------------------------------------------- tool policy
 
@@ -639,6 +696,107 @@ class PlatformAgent(Agent):
         if released:
             logger.debug("barge-in cancelled pending requests", block_ids=released)
 
+    # ------------------------------------------------------ supervisor whisper (V5-37)
+
+    def _wire_supervisor(self) -> None:
+        """Listen for supervisor packets on the room, once per session (flow nodes share it)."""
+        userdata = getattr(self._ctx, "userdata", None)
+        on = getattr(self._ctx.room, "on", None)
+        if not isinstance(userdata, dict) or userdata.get(_SUPERVISOR_KEY) or not callable(on):
+            return
+        userdata[_SUPERVISOR_KEY] = True
+        on("data_received", self.on_supervisor_data)
+
+    def on_supervisor_data(self, packet: rtc.DataPacket) -> None:
+        """A data packet: apply it when it is a supervisor whisper the server sent for this session.
+
+        Synchronous (the room's event contract); the whisper is applied in a task.
+        A packet from any participant is refused: only the api, through the server
+        API, sends on :data:`~lkap_contracts.api_models.SUPERVISOR_TOPIC`. Never raises.
+        """
+        if getattr(packet, "topic", None) != SUPERVISOR_TOPIC:
+            return
+        sender = getattr(packet, "participant", None)
+        if sender is not None:
+            logger.warning(
+                "supervisor packet from a participant ignored",
+                session_id=self._ctx.session_id,
+                identity=getattr(sender, "identity", None),
+            )
+            return
+        try:
+            message = SupervisorWhisperPacket.model_validate_json(bytes(packet.data))
+        except Exception:  # noqa: BLE001 - a malformed packet is dropped
+            logger.warning("malformed supervisor packet ignored", session_id=self._ctx.session_id)
+            return
+        if message.session_id != self._ctx.session_id:
+            logger.warning(
+                "supervisor packet for another session ignored",
+                session_id=self._ctx.session_id,
+                packet_session_id=message.session_id,
+            )
+            return
+        task = asyncio.create_task(self._apply_whisper_quietly(message))
+        self._hook_tasks.add(task)
+        task.add_done_callback(self._hook_tasks.discard)
+
+    async def _apply_whisper_quietly(self, message: SupervisorWhisperPacket) -> None:
+        await self.apply_whisper(message)
+
+    async def apply_whisper(self, message: SupervisorWhisperPacket) -> Literal["note", "reply"] | None:
+        """Give a whisper to the running agent as a system note; with `reply_now`, also reply.
+
+        The note is persisted in the current agent's chat context (a flow's current
+        node, else this agent): `turn_ctx` is a per-turn copy in livekit-agents 1.8.3,
+        so a note added only there would be gone by the next turn. Never raises.
+
+        Returns:
+            How it was applied (`note` or `reply`), or `None` when it could not be.
+        """
+        note = supervisor_note(message.text)
+        logger.info(
+            "supervisor_whisper",
+            session_id=self._ctx.session_id,
+            whisper_id=message.id,
+            by=message.by,
+            chars=len(message.text),
+            reply_now=message.reply_now,
+        )
+        session = self._ctx.session
+        try:
+            agent = session.current_agent
+        except Exception:  # noqa: BLE001 - no running session: this agent holds the context
+            agent = self
+        applied: Literal["note", "reply"] | None = None
+        try:
+            persisted = agent.chat_ctx.copy()
+            persisted.add_message(role="system", content=note)
+            await agent.update_chat_ctx(persisted)
+            applied = "note"
+        except Exception:
+            logger.warning(
+                "supervisor note could not be added", session_id=self._ctx.session_id, exc_info=True
+            )
+        if message.reply_now:
+            try:
+                session.generate_reply(instructions=f"{note}\n\n{SUPERVISOR_REPLY_NOW}")
+                applied = "reply"
+            except Exception:
+                logger.warning(
+                    "supervisor reply could not start", session_id=self._ctx.session_id, exc_info=True
+                )
+        if applied is None:
+            self._ctx.record_event(
+                "error", {"message": "A supervisor's whisper could not be given to the agent."}
+            )
+            return None
+        event = SupervisorWhisperEvent(id=message.id, by=message.by, text=message.text, applied=applied)
+        try:
+            self._ctx.record_event(SUPERVISOR_WHISPER_EVENT, event.model_dump(mode="json"))
+        except Exception:
+            logger.debug("supervisor whisper event not recorded", exc_info=True)
+        return applied
+
     # --------------------------------------------------- languages and captions (V5-31)
 
     def _init_languages(self) -> None:
@@ -679,7 +837,8 @@ class PlatformAgent(Agent):
             for spec in caption_specs:
                 current = blocks.get(spec.id)
                 seeded = dict(current) if isinstance(current, dict) else {}
-                seeded.setdefault("language", language)
+                if seeded.get("language") is None:  # asks #210: the seed carries `language: None`
+                    seeded["language"] = language
                 seeded.setdefault("target_language", spec.config.get("target_language"))
                 blocks[spec.id] = seeded
         caption = getattr(self._ctx.ui, "caption", None)

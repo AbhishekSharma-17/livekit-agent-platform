@@ -208,10 +208,6 @@ def initial_block_state(spec: BlockSpec) -> dict[str, Any]:
     except ValidationError as exc:
         logger.warning("block config does not seed a valid state", block_id=spec.id, error=str(exc))
         state = _dump(model())
-    if spec.type == "captions" and state.get("language") is None:
-        # The conversation's language is not in the config: `PlatformAgent._init_captions`
-        # fills it with `setdefault` before the first snapshot, so an empty key is left out.
-        state.pop("language", None)
     return state
 
 

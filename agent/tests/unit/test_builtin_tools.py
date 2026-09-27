@@ -16,6 +16,7 @@ import httpx
 import pytest
 import respx
 from fakes.fake_ctx import FakePackSessionContext, default_agent_config
+from fakes.fake_room import FakeRemoteParticipant, FakeRoom
 from livekit import rtc
 from livekit.agents import ChatContext, RunContext, ToolError
 from livekit.agents.llm.utils import build_legacy_openai_schema
@@ -23,21 +24,24 @@ from lkap_contracts.agent_config import (
     CapabilitiesConfig,
     KnowledgeConfig,
     NotifyTeamConfig,
+    PanelLayout,
     PipelineMode,
     ResolvedProvider,
     ToolsConfig,
 )
-from lkap_contracts.api_models import KbHit
+from lkap_contracts.api_models import EscalationEvent, KbHit
 from lkap_contracts.common import ProviderRef
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     BUILTIN_DEFAULT_MODES,
     CONFIGURED_BUILTINS,
+    ESCALATION_MODES,
     NEVER_BACKGROUND_TOOLS,
     WRITE_BUILTINS,
     HttpToolDefinition,
     never_background,
 )
+from lkap_contracts.ui_protocol import BlockSpec
 from packs.base import FrameSnapshot
 
 from lkap_agent.locale import LOCALE_USERDATA_KEY, SessionLocale
@@ -47,7 +51,13 @@ from lkap_agent.tools.builtin.convert_time import build_convert_time_tool
 from lkap_agent.tools.builtin.current_time import build_current_time_tool
 from lkap_agent.tools.builtin.describe_current_frame import build_describe_current_frame_tool
 from lkap_agent.tools.builtin.end_call import build_end_call_tool
-from lkap_agent.tools.builtin.escalate_to_human import build_escalate_to_human_tool
+from lkap_agent.tools.builtin.escalate_to_human import (
+    HANDOFF_REASONS,
+    NEXT_STEP,
+    build_escalate_to_human_tool,
+    is_human_participant,
+    watch_for_human,
+)
 from lkap_agent.tools.builtin.fetch_url import MAX_BYTES, build_fetch_url_tool, extract_text
 from lkap_agent.tools.builtin.http_request import build_http_request_tool
 from lkap_agent.tools.builtin.notify_team import build_notify_team_tool, post_team_notification
@@ -59,6 +69,7 @@ from lkap_agent.tools.builtin.spell_back import build_spell_back_tool, spell
 from lkap_agent.tools.declarative import build_http_tool
 from lkap_agent.tools.execution import policy_of
 from lkap_agent.tools.vendors import VendorError
+from lkap_agent.ui.channel import UiChannel
 
 
 @dataclass
@@ -264,7 +275,10 @@ class TestEscalateToHuman:
 
         await tool(context=_run_ctx("call-7"), reason="injury reported", urgency="high")
 
+        # V5-37: the old two-argument call still works; `mode` defaults to `transfer`, which keeps
+        # the pre-V5-37 payload (an absent `mode` reads as `transfer`).
         assert ctx.events == [("escalation", {"reason": "injury reported", "urgency": "high"})]
+        assert EscalationEvent.model_validate(ctx.events[0][1]).mode == "transfer"
 
     async def test_escalate_to_human_survives_a_failing_event_sink(self) -> None:
         ctx = FakePackSessionContext()
@@ -279,6 +293,108 @@ class TestEscalateToHuman:
 
         assert "follow up" in result
         assert len(ctx.ui.state.activity) == 1
+
+    # ---------------------------------------------------------------- V5-37: mode, handoff
+    @staticmethod
+    def _handoff_ctx(room: FakeRoom | None = None) -> tuple[FakePackSessionContext, UiChannel]:
+        panel = PanelLayout(blocks=[BlockSpec(id="handoff", type="handoff")])
+        config = default_agent_config().model_copy(update={"panel": panel})
+        fake_room = room or FakeRoom()
+        channel = UiChannel(fake_room, "sess-test")  # type: ignore[arg-type]
+        channel.init_blocks(panel.blocks)
+        ctx = FakePackSessionContext(config=config, ui=cast(Any, channel), room=cast(rtc.Room, fake_room))
+        return ctx, channel
+
+    def test_the_tool_schema_offers_the_four_modes_with_transfer_the_default(self) -> None:
+        tool = build_escalate_to_human_tool(FakePackSessionContext())
+
+        properties = _tool_parameters(tool)["properties"]
+
+        assert properties["mode"]["enum"] == list(ESCALATION_MODES)
+        assert properties["mode"]["default"] == "transfer"
+        assert "mode" not in _tool_parameters(tool).get("required", [])
+
+    @pytest.mark.parametrize("mode", ["transfer", "takeover", "listen_in", "callback"])
+    async def test_every_mode_records_the_event_and_writes_the_handoff_block(self, mode: str) -> None:
+        ctx, channel = self._handoff_ctx()
+        tool = build_escalate_to_human_tool(ctx)
+
+        result = await tool(context=_run_ctx(), reason="caller wants a manager", mode=mode)
+
+        [(kind, payload)] = ctx.events
+        assert kind == "escalation"
+        assert EscalationEvent.model_validate(payload) == EscalationEvent(
+            reason="caller wants a manager", urgency="normal", mode=mode
+        )
+        assert ("mode" in payload) is (mode != "transfer")
+        block = channel.state.blocks["handoff"]
+        assert block["status"] == "requested"
+        assert block["mode"] is None  # `mode` names the transfer that ran (cold/warm), not this
+        assert block["reason"] == HANDOFF_REASONS[mode]
+        assert "manager" not in block["reason"]  # never the model's words: the caller sees the block
+        assert result.endswith(NEXT_STEP[mode])
+        assert ctx.ui.state.activity[0].detail == {"urgency": "normal", "mode": mode}
+
+    async def test_listen_in_writes_the_block_and_a_person_joining_marks_it_connected(self) -> None:
+        room = FakeRoom()
+        ctx, channel = self._handoff_ctx(room)
+        tool = build_escalate_to_human_tool(ctx)
+
+        await tool(context=_run_ctx(), reason="complex claim", mode="listen_in")
+        assert channel.state.blocks["handoff"]["status"] == "requested"
+
+        # A supervisor listener (hidden in LiveKit, but even if seen) is not a person taking over.
+        room.emit(
+            "participant_connected",
+            FakeRemoteParticipant("supervisor:u1", attributes={"lkap.role": "supervisor"}),
+        )
+        await asyncio.sleep(0)
+        assert channel.state.blocks["handoff"]["status"] == "requested"
+
+        person = FakeRemoteParticipant("human:u2", attributes={"lkap.role": "human"})
+        cast(Any, person).name = "Dana"
+        room.emit("participant_connected", person)
+        for _ in range(3):
+            await asyncio.sleep(0)
+
+        assert channel.state.blocks["handoff"]["status"] == "connected"
+        assert channel.state.blocks["handoff"]["agent_name"] == "Dana"
+
+    async def test_a_person_already_in_the_room_marks_it_connected_and_the_watcher_registers_once(
+        self,
+    ) -> None:
+        room = FakeRoom()
+        room.add_remote_participant(FakeRemoteParticipant("human:u2", attributes={"lkap.role": "human"}))
+        ctx, channel = self._handoff_ctx(room)
+        tool = build_escalate_to_human_tool(ctx)
+
+        await tool(context=_run_ctx(), reason="takeover", mode="takeover")
+        for _ in range(3):
+            await asyncio.sleep(0)
+
+        assert channel.state.blocks["handoff"]["status"] == "connected"
+        assert watch_for_human(ctx) is False  # already registered for this session
+
+    async def test_the_team_post_names_a_mode_other_than_transfer(self) -> None:
+        posts: list[tuple[str, str]] = []
+
+        async def notify(reason: str, urgency: str) -> None:
+            posts.append((reason, urgency))
+
+        tool = build_escalate_to_human_tool(FakePackSessionContext(), notify=notify)  # type: ignore[arg-type]
+
+        await tool(context=_run_ctx(), reason="needs help", mode="listen_in")
+        await tool(context=_run_ctx(), reason="needs help")
+
+        assert posts == [
+            ("needs help (asks for a supervisor to listen in)", "normal"),
+            ("needs help", "normal"),
+        ]
+
+    def test_only_a_platform_marked_human_counts(self) -> None:
+        assert is_human_participant(FakeRemoteParticipant("x", attributes={"lkap.role": "human"}))
+        assert not is_human_participant(FakeRemoteParticipant("x", attributes={"role": "human"}))
+        assert not is_human_participant(FakeRemoteParticipant("x"))
 
 
 #: R-V5-10 fixtures: 20:15 UTC on Friday 25 September 2026 is 01:45 on Saturday in

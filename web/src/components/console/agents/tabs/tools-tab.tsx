@@ -30,7 +30,9 @@ import { displayMessage } from "@/components/console/agents/editor/validation-ma
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { ProviderSlotCard } from "@/components/console/registry/provider-slot-card";
+import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
+import { KitGallery } from "@/components/console/tools/kits/kit-gallery";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ToolRow } from "@/components/console/tools/tool-row";
 import { ToolTemplateDialog } from "@/components/console/tools/tool-template-dialog";
@@ -154,6 +156,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
 
   const ownTools = ownToolsQuery.data?.items ?? [];
   const httpTools = ownTools.filter((t) => t.kind === "http");
+  const datasetTools = ownTools.filter((t) => t.kind === "dataset");
   // A Composio app server / tool finder is created with this exact
   // `agent_id` (`tool_providers/provisioning.py`), so it would otherwise
   // show here too, editable — it's managed from the Connected apps card
@@ -342,6 +345,59 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
       </Section>
 
       <ConnectedAppsCard agentId={agent.id} />
+
+      <KitGallery agent={agent} />
+
+      <Section
+        id="tools-dataset"
+        title="Lookup tables"
+        description="Look a caller up in one of the workspace's lookup tables."
+        aside={
+          <DatasetToolEditorDialog
+            agentId={agent.id}
+            onSaved={(tool) => {
+              setAttached(tool.id, true);
+              void ownToolsQuery.refetch();
+            }}
+            trigger={
+              <Button type="button" variant="outline" size="sm">
+                <PlusIcon className="size-3.5" /> Add lookup tool
+              </Button>
+            }
+          />
+        }
+      >
+        <SectionRow>
+          {ownToolsQuery.isError ? (
+            <ErrorBanner message={errorMessage(ownToolsQuery.error)} onRetry={() => ownToolsQuery.refetch()} />
+          ) : ownToolsQuery.isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : datasetTools.length === 0 ? (
+            <EmptyState compact title="No lookup tools yet" description="Look a record up in a workspace lookup table." />
+          ) : (
+            <div className="space-y-2">
+              {datasetTools.map((tool) => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  agentId={agent.id}
+                  attached={(toolIds ?? []).includes(tool.id)}
+                  onToggleAttach={(attached) => setAttached(tool.id, attached)}
+                  onSaved={() => void ownToolsQuery.refetch()}
+                  onDeleted={() => {
+                    setAttached(tool.id, false);
+                    void ownToolsQuery.refetch();
+                  }}
+                  secretBagSpec={secretBagSpec}
+                />
+              ))}
+            </div>
+          )}
+          {datasetTools.length > 0 ? (
+            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Saved automatically to this agent.</p>
+          ) : null}
+        </SectionRow>
+      </Section>
 
       <Section
         id="tools-http"

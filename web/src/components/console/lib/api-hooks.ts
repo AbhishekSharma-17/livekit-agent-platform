@@ -37,6 +37,11 @@ import type {
   CredentialPage,
   CredentialTestResult,
   CredentialUpdate,
+  DatasetLookupIn,
+  DatasetLookupOut,
+  DatasetOut,
+  DatasetPage,
+  DatasetPreviewOut,
   HealthResponse,
   KbCreate,
   KbDocumentOut,
@@ -75,6 +80,9 @@ import type {
   ToolCreate,
   ToolDryRunRequest,
   ToolDryRunResult,
+  ToolKitInstantiate,
+  ToolKitInstantiated,
+  ToolKitsResponse,
   ToolkitOut,
   ToolkitPage,
   ToolOut,
@@ -84,6 +92,7 @@ import type {
   ToolTemplatesResponse,
   ValidationResult,
 } from "@/contracts/lkap-contracts";
+import { uploadDataset } from "@/components/console/lib/upload";
 
 /**
  * Typed react-query hooks over `@/lib/api`'s generic `apiRequest`. All calls
@@ -151,6 +160,12 @@ const keys = {
   appsActions: (slug: string, params: AppActionListParams) => ["apps", "actions", slug, params] as const,
   appsConnections: ["apps", "connections"] as const,
   appsConnection: (id: string) => ["apps", "connection", id] as const,
+  /** V6-19: lookup tables (`GET /v1/datasets…`, D-V6-27). */
+  datasets: ["datasets"] as const,
+  dataset: (id: string) => ["datasets", id] as const,
+  datasetRows: (id: string, offset: number, limit: number) => ["datasets", id, "rows", offset, limit] as const,
+  /** V6-19: tool kits (`GET /v1/tool-kits…`, D-V6-26). */
+  toolKits: ["tool-kits"] as const,
 };
 
 
@@ -500,6 +515,108 @@ export function useInstantiateToolTemplate() {
     onSuccess: (_result, { body }) => {
       void queryClient.invalidateQueries({ queryKey: keys.tools(body.agent_id ?? undefined) });
       void queryClient.invalidateQueries({ queryKey: keys.tools(undefined) });
+    },
+  });
+}
+
+// ---- lookup tables (V6-19: `GET/POST /v1/datasets…`, D-V6-27) ----
+
+/** `GET /v1/datasets` — newest first; polls while any import is still `pending`. */
+export function useDatasets(options?: { pollWhilePending?: boolean; enabled?: boolean }) {
+  return useQuery({
+    queryKey: keys.datasets,
+    queryFn: () => api.get<DatasetPage>("datasets"),
+    enabled: options?.enabled ?? true,
+    refetchInterval: (query) => {
+      if (!options?.pollWhilePending) return false;
+      const hasPending = query.state.data?.items.some((item: DatasetOut) => item.status === "pending") ?? false;
+      return hasPending ? 2000 : false;
+    },
+  });
+}
+
+/** `GET /v1/datasets/{id}` — polls while the import is `pending` (progress, then status/error). */
+export function useDataset(id: string, options?: { poll?: boolean }) {
+  return useQuery({
+    queryKey: keys.dataset(id),
+    queryFn: () => api.get<DatasetOut>(`datasets/${id}`),
+    enabled: id.length > 0,
+    refetchInterval: (query) => {
+      if (!options?.poll) return false;
+      return query.state.data?.status === "pending" ? 2000 : false;
+    },
+  });
+}
+
+/** `GET /v1/datasets/{id}/rows` — a page of imported rows in file order (empty until `ready`). */
+export function useDatasetRows(id: string, offset: number, limit: number, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: keys.datasetRows(id, offset, limit),
+    queryFn: () => api.get<DatasetPreviewOut>(`datasets/${id}/rows`, { offset, limit }),
+    enabled: id.length > 0 && (options?.enabled ?? true),
+  });
+}
+
+/** `POST /v1/datasets` — multipart (`upload.ts`'s `uploadDataset`, `apiRequest` always JSON-encodes). */
+export function useUploadDataset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, keyColumns, file }: { name: string; keyColumns: Record<string, string>; file: File }) =>
+      uploadDataset(name, keyColumns, file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.datasets });
+    },
+  });
+}
+
+/** `DELETE /v1/datasets/{id}` — 409 while a tool still uses the table (the error names them). */
+export function useDeleteDataset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`datasets/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.datasets });
+    },
+  });
+}
+
+/** `POST /v1/datasets/{id}/lookup` — the console's test lookup (a builder write, like the knowledge test search). */
+export function useDatasetLookup(id: string) {
+  return useMutation({
+    mutationFn: (body: DatasetLookupIn) => api.post<DatasetLookupOut>(`datasets/${id}/lookup`, body),
+  });
+}
+
+// ---- tool kits (V6-19: `GET/POST /v1/tool-kits…`, D-V6-26) ----
+
+/** `GET /v1/tool-kits` — the kits gallery, in catalogue order. */
+export function useToolKits() {
+  return useQuery({
+    queryKey: keys.toolKits,
+    queryFn: () => api.get<ToolKitsResponse>("tool-kits"),
+  });
+}
+
+/**
+ * `POST /v1/tool-kits/{id}/instantiate` — with `dry_run: true` this only
+ * previews (`ToolKitInstantiated.changes`); without it, the kit is added to
+ * the agent in one new configuration version, so the agent (its config,
+ * panel, flow) and the shared tools list both need refreshing. The open
+ * agent editor already resets its form whenever `agent.config_version`
+ * changes (`agent-editor.tsx`), so invalidating `keys.agent` here is enough
+ * to bring a kit's new tools, blocks and instructions into view.
+ */
+export function useInstantiateToolKit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kitId, body }: { kitId: string; body: ToolKitInstantiate }) =>
+      api.post<ToolKitInstantiated>(`tool-kits/${kitId}/instantiate`, body),
+    onSuccess: (_result, { body }) => {
+      if (body.dry_run) return;
+      void queryClient.invalidateQueries({ queryKey: keys.agent(body.agent_id) });
+      void queryClient.invalidateQueries({ queryKey: keys.tools(body.agent_id) });
+      void queryClient.invalidateQueries({ queryKey: keys.tools(undefined) });
+      void queryClient.invalidateQueries({ queryKey: keys.datasets });
     },
   });
 }
@@ -1000,10 +1117,11 @@ export function useToolProviderActions(slug: string | null, params: AppActionLis
 }
 
 /** `GET .../connections` — every connected app of the workspace. */
-export function useToolProviderConnections() {
+export function useToolProviderConnections(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: keys.appsConnections,
     queryFn: () => api.get<AppConnectionPage>(`${APPS_BASE}/connections`),
+    enabled: options?.enabled ?? true,
   });
 }
 

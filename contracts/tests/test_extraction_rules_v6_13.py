@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
+
 from lkap_contracts.agent_config import AgentConfig
 from lkap_contracts.extraction import (
     EveryNTurnsTrigger,
@@ -37,7 +39,6 @@ from lkap_contracts.rules_expr import (
 )
 from lkap_contracts.tools import BUILTIN_TOOL_NAMES
 from lkap_contracts.ui_protocol import BlockSpec
-from pydantic import ValidationError
 
 # --------------------------------------------------------------------------- grammar: valid
 
@@ -354,7 +355,12 @@ def test_extraction_config_triggers_one_per_kind() -> None:
             ]
         }
     )
-    assert [type(t) for t in config.triggers] == [EveryNTurnsTrigger, ToolTrigger, NodeExitTrigger, ManualTrigger]
+    assert [type(t) for t in config.triggers] == [
+        EveryNTurnsTrigger,
+        ToolTrigger,
+        NodeExitTrigger,
+        ManualTrigger,
+    ]
     with pytest.raises(ValidationError, match="one trigger of each kind"):
         ExtractionConfig.model_validate({"triggers": [{"kind": "manual"}, {"kind": "manual"}]})
     with pytest.raises(ValidationError, match="at least one tool"):
@@ -389,7 +395,9 @@ def test_rule_issues_missing_block_is_an_error() -> None:
 
 
 def test_rule_issues_wrong_block_type_is_an_error() -> None:
-    rule = Rule.model_validate(_rule(then=[{"do": "details.set", "block_id": "notes", "key": "k", "value": "v"}]))
+    rule = Rule.model_validate(
+        _rule(then=[{"do": "details.set", "block_id": "notes", "key": "k", "value": "v"}])
+    )
     (issue,) = rule_issues([rule], _BLOCKS)
     assert issue.severity == "error" and "notes block" in issue.message
 

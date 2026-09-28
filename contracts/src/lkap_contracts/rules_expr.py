@@ -354,6 +354,9 @@ class _Parser:
     def current(self) -> _Token:
         return self.tokens[self.index]
 
+    def _at(self, kind: TokenKind) -> bool:
+        return self.current.kind == kind
+
     def _word(self, *words: str) -> bool:
         token = self.current
         return token.kind == "word" and token.text.lower() in words
@@ -392,7 +395,7 @@ class _Parser:
         if self.current.kind == "lparen":
             opening = self._advance()
             inner = self._or(depth + 1)
-            if self.current.kind != "rparen":
+            if not self._at("rparen"):
                 raise ConditionError("a '(' is not closed", opening.position)
             self._advance()
             return inner
@@ -408,8 +411,8 @@ class _Parser:
         if token.kind == "tool":
             self._advance()
             self._count(token.position)
-            name, outcome = token.value
-            return ToolOutcome(name, outcome)
+            tool_name, outcome = token.value
+            return ToolOutcome(tool_name, outcome)
         if token.kind != "var":
             if token.kind == "end":
                 raise ConditionError("the condition ends too early", token.position)

@@ -199,13 +199,17 @@ def _triggers_bounded(value: list[Any]) -> list[Any]:
     return value
 
 
+def _default_triggers() -> list[ExtractionTrigger]:
+    return [EveryNTurnsTrigger()]
+
+
 class ExtractionConfig(BaseModel):
     """What the agent captures from the conversation while it talks (off by default)."""
 
     enabled: bool = False
     fields: Annotated[list[ExtractionField], AfterValidator(_fields_bounded)] = []
     triggers: Annotated[list[ExtractionTrigger], AfterValidator(_triggers_bounded)] = Field(
-        default_factory=lambda: [EveryNTurnsTrigger()]
+        default_factory=_default_triggers
     )
     """When extraction runs; the default is after every caller turn."""
     min_turn_chars: int = Field(default=12, ge=0, le=200)

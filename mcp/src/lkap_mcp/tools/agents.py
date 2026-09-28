@@ -334,6 +334,9 @@ def register(registry: Registry) -> None:
 
         Ready-made panels (docs ``concepts/panels-and-blocks``): ``panel_preset="notebook"`` replaces
         ``panel`` with the Notebook preset; it combines with a ``patch`` that has no ``panel`` key.
+        Live extraction and rules (docs ``concepts/extraction``): ``patch={"extraction": {"enabled":
+        true, "fields": [...]}, "rules": [{"id", "when": "var.hazard matches /fire/i", "then": [...]}]}``
+        captures facts into the session's variables in the background and reacts to them.
         """
         if patch is not None and config is not None:
             return ToolResult.fail("invalid_input", "pass either patch or config, not both")

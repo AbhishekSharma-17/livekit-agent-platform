@@ -194,3 +194,25 @@ def test_the_collector_keeps_a_repeated_id_once_and_ignores_other_metrics() -> N
     data = collector.data()
     assert [row["request_id"] for row in data["stt"]] == ["dg-1"]
     assert data["llm"] == [] and data["tts"] == [] and data["dropped"] == 0
+
+
+async def test_a_prompt_agents_captured_values_ride_in_the_summary() -> None:
+    """V6-13 (ask #72): live extraction/rules on a prompt agent reach `sessions.variables`/`disposition`."""
+    api = FakeApi()
+    observer = SessionObserver(session_id="sess-1", client=cast(Any, api))
+
+    await observer.shutdown(reason="done", disposition="callback_booked", variables={"policy_number": "P-1"})
+
+    [summary] = api.summaries
+    assert summary.disposition == "callback_booked"
+    assert summary.variables == {"policy_number": "P-1"}
+
+
+async def test_without_captured_values_the_summary_is_unchanged() -> None:
+    api = FakeApi()
+    observer = SessionObserver(session_id="sess-1", client=cast(Any, api))
+
+    await observer.shutdown(reason="done")
+
+    [summary] = api.summaries
+    assert (summary.disposition, summary.variables) == (None, {})

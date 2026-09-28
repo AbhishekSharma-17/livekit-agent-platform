@@ -36,8 +36,8 @@ Notebook panel, and a layout block shows blocks as tabs or columns) and, optiona
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
 ...})`). Agents produce **sessions** (`session_list`, `session_get`,
 `session_memory`), which carry a transcript, QA score, cost lines and (if
-enabled) a recording. Guardrails, languages, caller memory, privacy,
-disclosure and conversation presets are agent config sections:
+enabled) a recording. Live extraction and rules, guardrails, languages, caller memory,
+privacy, disclosure and conversation presets are agent config sections:
 `lkap_describe("schema", "AgentConfig")`.
 
 ## Workflow
@@ -117,4 +117,4 @@ numbered, copy-pasteable tool sequence
 `knowledge`, `tools-http`, `tools-mcp`, `panels-and-blocks`, `flows`,
 `telephony`, `qa-and-evals`, `recordings-and-cost`, `webhooks`,
 `sessions-and-test-chat`, `roles-and-scopes`, `apps`, `tools`, `testing`,
-`memory` (`lkap_explain(topic)`).
+`memory`, `extraction` (`lkap_explain(topic)`).

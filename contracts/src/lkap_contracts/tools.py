@@ -57,6 +57,9 @@ BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     # V6-06: a picture from the agent's ``pipeline.image_gen`` model into a gallery block;
     # registered only when that slot resolves and the panel has a gallery.
     "generate_image",
+    # V6-13: runs the live extraction now; registered only when ``extraction`` is on with a
+    # ``manual`` trigger (``AgentConfig.extraction.triggers``).
+    "extract_now",
 )
 
 #: Built-ins that reach a vendor or the internet and are registered only when the agent
@@ -330,6 +333,8 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "spell_back",
         # V5-31: instant, and the model's next sentence is in the new language.
         "switch_language",
+        # V6-13: bounded to two seconds, and the model reads the captured values next.
+        "extract_now",
         # Composio Tool Router meta tools (docs/v5/COMPOSIO.md D-V5-C7): running an action,
         # opening a connection or waiting on one always waits for the result.
         "COMPOSIO_MULTI_EXECUTE_TOOL",

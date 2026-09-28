@@ -855,6 +855,35 @@ class ResolvedAgentConfig(BaseModel):       # addition
 
 A run (`AgentTestRun`, `POST /v1/agents/{id}/tests/run`, job `agent_tests_run`) is pinned to the `config_version` it was queued on; the api plays each case's persona with the agent's `workflow_llm` (else `llm`) over a scratch `channel="text"` session and judges the transcript with `qa.model` (else `workflow_llm`, else `llm`) through its OpenAI-compatible client — five judges (`task_completion`, `tool_use`, `safety`, `relevancy`, `accuracy`), each `{verdict: pass|fail|inconclusive, score 0..1, reason}`, one repair retry for a non-JSON answer. Transcripts and tool output reach the persona and the judges inside the `<untrusted>` fence (R-V5-15). Run `status`: `queued`, `running`, `passed`, `failed`, `inconclusive`, `error` (did not run — never a test failure). The worker honours `tool_mocks` in `tools/declarative.py`: a mocked HTTP tool or app action returns its fixture (a string as-is, else JSON), fenced like a real result, with no request. Publishing (`PUT /v1/agents/{id}` with `published: true` on an unpublished agent) with `require_tests` on answers `422 tests_failing` with `details: PublishGateRefusal {reason: missing|running|failing|error, config_version, min_pass_ratio, run_id?, run_status?, pass_ratio?, error?}` unless the latest run on the version being published passed at least `min_pass_ratio` of its cases. Validation: a mock naming none of the agent's HTTP tools or app actions is an error (a warning when an MCP server is attached); `require_tests` with no cases is a warning. Tables: `agent_test_runs`, `agent_test_results` (`v5_006_agent_tests`).
 
+### Live extraction and declarative rules (V6-13, D-V6-24/25; `lkap_contracts.{extraction,rules,rules_expr}`)
+
+```python
+class AgentConfig(BaseModel):               # additions (defaults: off / empty — no stored agent changes)
+    extraction: ExtractionConfig = ExtractionConfig()
+    rules: list[Rule] = []                  # ≤ 50, unique ids
+
+class ExtractionConfig(BaseModel):
+    enabled: bool = False
+    fields: list[ExtractionField] = []      # ≤ 30, unique names
+    triggers: list[ExtractionTrigger] = [every_n_turns(n=1)]   # one per kind
+    min_turn_chars: int = 12                # 0..200; shorter caller turns do not count
+    still_needed: Literal["checklist"] | None = None           # need_<field> items, merged into the checklist
+
+class ExtractionField(VariableSpec):        # name, type, description, options, required
+    label: str = ""; hint: str = ""; sensitive: bool = False
+    show_in: str | None = None              # details:<block>[.<key>] | notebook:<block>.<section> (details or text section)
+
+ExtractionTrigger = every_n_turns{n 1..20} | tool{tools[1..20]} | node_exit{nodes[]} | manual  # manual → `extract_now`
+
+class Rule(BaseModel):
+    id: str; label: str = ""; when: str     # ≤ 200 chars, the rules_expr grammar
+    then: list[RuleAction]                  # 1..10: checklist.set_item | checklist.check | status.set | details.set
+                                            # | note.push | var.set | escalate | instruct | disposition.set
+    once: bool = True; enabled: bool = True
+```
+
+The condition grammar (`rules_expr.parse_condition` → a frozen-dataclass tree, `evaluate(tree, variables, tool_outcomes)`; never `eval`): `var.x is [not] set|empty`, `var.x ==|!= "text"|number|true|false`, `var.n >=|<=|>|< number`, `var.x matches /re/i`, `tool.<name>.ok|failed`, `not`, `and`, `or`, parentheses; ≤ 8 levels, ≤ 12 checks, literals ≤ 100 chars; a regex that repeats a repeated group is refused (`nested_repeat`, the guardrails scanner). An unset variable makes every comparison false. The worker (`agent/extraction/**`, `agent/rules/**`) extracts in the background on `workflow_llm` (one call ≤ `EXTRACTION_BUDGET_S` = 2 s, cached by a transcript hash, never delaying the reply) into the shared variable store (`tools.context.session_variables`), marks the names in `userdata["lkap.extracted_variables"]` (fenced as `extraction` where a flow renders them into instructions; bound names as `tool_binding`, ask #31), then evaluates the rules; rules also run after each tool batch. Events: `extraction` (`ExtractionEvent`: trigger, status, `fields {name: set}`, `changed`, `still_needed`; `values` only on `storage_tier == "full"` and never for a `sensitive` field — the post-call scrub drops `values` on `redacted`/`basic`), `rule_fired` (`RuleFiredEvent`: rule id, label, action kinds, skipped kinds, trigger; never a value), and a rule's `escalate` records the ordinary `escalation` event. Validation (`config_service.extraction_rules_issues`): targets on the panel and of the right type (error; a notebook target must name a `details` or `text` section), unknown `var.`/`tool.` names, missing `node_exit` steps and flow-extracted overlaps (warnings).
+
 Validation rules (api, at save): every `ProviderRef.provider_id` exists and matches the slot kind; `credential_id` present iff required and credential's `provider_id` matches; `model` in `spec.models` **or** free text (warn, not error — Inference lists churn); a realtime provider whose `spec.capabilities.video_input` is false combined with `capabilities.camera`/`screen_share` = warning (the model will not see frames; frames still reach the UI/pin path); avatar works with both modes.
 
 ---

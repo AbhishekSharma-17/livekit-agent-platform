@@ -1,0 +1,24 @@
+{
+  "$id": "lkap-contracts/InstructAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A system note for the model's next reply only (sent as written; no placeholders).",
+  "properties": {
+    "do": {
+      "const": "instruct",
+      "default": "instruct",
+      "title": "Do",
+      "type": "string"
+    },
+    "text": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "title": "InstructAction",
+  "type": "object"
+}

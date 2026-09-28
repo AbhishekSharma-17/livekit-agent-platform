@@ -13,6 +13,10 @@
   (``args_redacted``, ``result_preview``, ``message_preview``) and the transfer
   summary is cleared.
 
+On both ``redacted`` and ``basic`` the captured values an ``extraction`` event carries
+(V6-13; the worker writes them only on ``full``, so this drops what a tier change after the
+call would otherwise keep) are removed (:data:`VALUE_PAYLOAD_KEYS`).
+
 The job runs once per session: it records a ``privacy_scrubbed`` session event
 (its ``ts`` is the ``scrubbed_at`` the console shows, no column and no
 migration) and does nothing when that event exists, so a retry or a second
@@ -54,6 +58,7 @@ from lkap_api.privacy.redact import redact_text, scrub_value
 __all__ = [
     "PRIVACY_SCRUBBED_EVENT",
     "TOOL_PAYLOAD_KEYS",
+    "VALUE_PAYLOAD_KEYS",
     "ModelPass",
     "ScrubResult",
     "enqueue_scrub",
@@ -74,6 +79,12 @@ TOOL_PAYLOAD_KEYS: Final[dict[str, tuple[str, ...]]] = {
     "tool_call_started": ("args_redacted",),
     "tool_call_ended": ("result_preview",),
     "tool_call_updated": ("message_preview",),
+}
+
+#: The payload keys the `redacted` and `basic` tiers drop, per event type (V6-13: an `extraction`
+#: event's captured values; the field names and whether each is set stay).
+VALUE_PAYLOAD_KEYS: Final[dict[str, tuple[str, ...]]] = {
+    "extraction": ("values",),
 }
 
 #: The events that carry a transcript turn's text (the LLM pass rewrites them too).
@@ -156,8 +167,10 @@ async def _load(db: AsyncSession, session_id: str) -> SessionRow | None:
     ).scalar_one_or_none()
 
 
-def _drop_tool_payload(event_type: str, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    keys = [key for key in TOOL_PAYLOAD_KEYS.get(event_type, ()) if key in payload]
+def _drop_tool_payload(
+    event_type: str, payload: dict[str, Any], table: dict[str, tuple[str, ...]] = TOOL_PAYLOAD_KEYS
+) -> tuple[dict[str, Any], int]:
+    keys = [key for key in table.get(event_type, ()) if key in payload]
     if not keys:
         return payload, 0
     return {k: v for k, v in payload.items() if k not in keys}, len(keys)
@@ -211,9 +224,9 @@ async def scrub_session(ctx: JobContext, session_id: str) -> ScrubResult:
     changed_events: dict[int, dict[str, Any]] = {}
     event_payloads: dict[int, tuple[str, dict[str, Any]]] = {}
     for event_id, event_type, payload in events:
-        kept = payload
+        kept, _values = _drop_tool_payload(event_type, payload, VALUE_PAYLOAD_KEYS)
         if privacy.storage_tier == "basic":
-            kept, removed = _drop_tool_payload(event_type, payload)
+            kept, removed = _drop_tool_payload(event_type, kept)
             dropped += removed
         masked = scrub_value(kept, counts)
         event_payloads[event_id] = (event_type, masked)

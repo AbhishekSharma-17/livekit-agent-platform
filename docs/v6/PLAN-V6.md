@@ -399,8 +399,8 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-20 | Fable | 5 | merged | d1365cc | | |
 | V6-21 | Opus | 6 | merged | aea6a9b | | #162, #166 |
 | V6-22 | Opus | 6 | running | | | |
-| V6-23 | Opus | 6 | running | | | |
-| V6-24 | Sonnet | 7 | planned | | | |
+| V6-23 | Opus | 6 | merged | f365327 | | #211–#217 |
+| V6-24 | Sonnet | 7 | running | | | |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
 | V6-26 | Sonnet (+ Opus contracts hunk) | 7 | merged | 0f319ed (+ V6-26b 4f200ee) | | |
 | V6-27 | Opus | 6 | merged | 035b223 | | #177 |

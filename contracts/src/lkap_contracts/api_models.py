@@ -2064,6 +2064,9 @@ class ConnectionTestResult(BaseModel):
     message: str
     capabilities: ConnectionCapabilities = ConnectionCapabilities()
     latency_ms: float | None = None
+    #: V6-27: non-blocking findings in plain words (for example another connection's
+    #: workers registered under the same agent name on the same LiveKit server).
+    warnings: list[str] = []
 
 
 class ConnectionRotateIn(BaseModel):
@@ -2097,6 +2100,11 @@ class FleetStatus(BaseModel):
     instances: list[WorkerInstanceOut] = []
     installed_provider_ids: list[str] = []
     image: Literal["slim", "full"] = "slim"
+    #: V6-27: workers of this connection that are ready and heard from within the last 90 s.
+    ready_workers: int = 0
+    #: V6-27: ready workers of *other* connections (any workspace; a count only) registered
+    #: under the same agent name on the same LiveKit server. LiveKit splits calls between them.
+    shared_agent_name_workers: int = 0
 
 
 class FleetActionIn(BaseModel):
@@ -2131,6 +2139,9 @@ class ConnectionOut(BaseModel):
     last_error: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    #: V6-27: workers of this connection that are ready now (heard from within 90 s).
+    #: Set by the list and get routes; ``None`` where it was not computed.
+    ready_workers: int | None = None
 
 
 class ConnectionCreate(BaseModel):

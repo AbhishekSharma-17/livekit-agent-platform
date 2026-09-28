@@ -32,12 +32,13 @@ from pydantic import BaseModel
 from lkap_api.auth.deps import OptionalPrincipalDep, client_ip
 from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.connections.clients import ClientFactoryDep
-from lkap_api.connections.service import mint_session_token
+from lkap_api.connections.service import mint_session_token, resolve_agent_connection
 from lkap_api.costs.snapshot import attach_estimate
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.models import new_id
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, UnprocessableEntityError
+from lkap_api.fleet import readiness
 from lkap_api.limits import reserve_session_slot
 from lkap_api.livekit_tokens import new_participant_identity, participant_attributes, room_name_for
 from lkap_api.logging import get_logger
@@ -112,7 +113,7 @@ async def embed_policy(id_or_slug: str, db: DbDep) -> EmbedPolicy:
         "(CONTRACTS-V2 §3.4). Used by the console's Test chat drawer (privileged, unpublished "
         "agents included) and the widget's text mode (public, subject to `allowed_origins`). "
         "`timezone` (or `participant_metadata.timezone`) is the browser's IANA timezone, used as "
-        "the caller's; an unknown name is ignored."
+        "the caller's; an unknown name is ignored. 409 `no_worker_running` as for `connect`."
     ),
 )
 async def start_text_session(
@@ -135,6 +136,7 @@ async def start_text_session(
         RateLimitedError: A rate-limit bucket is empty.
         AgentBusyError: `max_concurrent_sessions` reached.
         UnprocessableEntityError: `participant_metadata` over 2 KB.
+        NoWorkerRunningError: V6-27 — no worker of the agent's connection is running.
     """
     agent = await load_agent(db, id_or_slug)
     privileged = await is_privileged(db, principal, agent)
@@ -167,6 +169,14 @@ async def start_text_session(
             capacity=limits.rate_per_agent_per_min,
             what="connects per minute for this agent",
         )
+    # V6-27: fail fast, before the slot is taken, when no worker would answer.
+    await readiness.ensure_worker_ready(
+        db,
+        await resolve_agent_connection(db, agent),
+        mode=settings.call_start_worker_check,
+        privileged=privileged,
+        api_started_at=readiness.api_started_at(request),
+    )
     # R-V2-34: count, insert and commit under the agent's slot lock (the commit
     # is explicit so the lock is released only once the row is visible).
     async with reserve_session_slot(db, agent, limits):

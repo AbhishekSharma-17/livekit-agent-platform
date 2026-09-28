@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { CapabilityList } from "@/components/console/connections/capability-list";
-import { slugify } from "@/components/console/connections/connection-model";
+import {
+  AGENT_NAME_HINT,
+  agentNameError,
+  slugify,
+  WORKER_NEEDED_NOTE,
+  WORKER_START_BY_MODE,
+} from "@/components/console/connections/connection-model";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
@@ -119,6 +125,14 @@ export function ConnectionCreateForm() {
     return Object.keys(next).length === 0;
   }
 
+  /** V6-27: a 409 `agent_name_in_use` goes under the Agent name field; `true` when it was one. */
+  function showAgentNameError(error: unknown): boolean {
+    const message = agentNameError(error);
+    if (!message) return false;
+    setErrors((prev) => ({ ...prev, agent_name: message }));
+    return true;
+  }
+
   async function runTest() {
     if (!validate()) return;
     try {
@@ -127,6 +141,12 @@ export function ConnectionCreateForm() {
       setTestedPayloadKey(payloadKey);
       if (!result.ok) toast.error(result.message);
     } catch (error) {
+      if (showAgentNameError(error)) {
+        // The api checks the name before it probes: there is no probe result to show.
+        setTestResult(null);
+        setTestedPayloadKey(null);
+        return;
+      }
       const message = errorMessage(error);
       setTestResult({ ok: false, message, capabilities: {} });
       setTestedPayloadKey(payloadKey);
@@ -142,7 +162,7 @@ export function ConnectionCreateForm() {
       toast.success(`${connection.name} created.`);
       router.push(`/console/connections/${connection.id}`);
     } catch (error) {
-      toast.error(errorMessage(error));
+      if (!showAgentNameError(error)) toast.error(errorMessage(error));
     }
   }
 
@@ -234,12 +254,20 @@ export function ConnectionCreateForm() {
         </Field>
       </div>
 
-      <Field
-        label="Agent name"
-        htmlFor="conn-agent-name"
-        hint="Must be unique inside this LiveKit project."
-      >
-        <Input id="conn-agent-name" value={state.agent_name} onChange={(event) => update("agent_name", event.target.value)} className="font-mono text-[0.8125rem]" />
+      <Field label="Agent name" htmlFor="conn-agent-name" hint={AGENT_NAME_HINT} error={errors.agent_name}>
+        <Input
+          id="conn-agent-name"
+          value={state.agent_name}
+          onChange={(event) => {
+            update("agent_name", event.target.value);
+            setErrors((prev) => {
+              const next = { ...prev };
+              delete next.agent_name;
+              return next;
+            });
+          }}
+          className="font-mono text-[0.8125rem]"
+        />
       </Field>
 
       {state.deployment_type === "cloud" ? (
@@ -306,6 +334,9 @@ export function ConnectionCreateForm() {
             );
           })}
         </div>
+        <p className="text-[0.8125rem] text-pretty text-muted-foreground" data-slot="worker-note">
+          {WORKER_NEEDED_NOTE} {WORKER_START_BY_MODE[state.deployment_mode]}
+        </p>
       </fieldset>
 
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">

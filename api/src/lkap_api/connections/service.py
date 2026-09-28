@@ -35,6 +35,17 @@ Fleet desired state — the interface V2-04 (supervisor) builds on
 
 Workers receive their environment from ``GET /internal/v1/connections/{id}/worker-env``
 (:func:`lkap_api.connections.bundle.worker_env`), fetched just in time.
+
+Agent-name clashes (V6-27)
+--------------------------
+LiveKit hands a job to *any* worker registered under the dispatched ``agent_name`` on
+that server, whoever started it. Two connections on one LiveKit server with the same
+``agent_name`` therefore split each other's calls. :func:`ensure_agent_name_free`
+refuses that on create, on an update that changes the url or the agent name, and in
+the unsaved-details test, with a 409 ``agent_name_in_use``. The lookup behind it,
+:func:`agent_name_users`, is the one deliberate cross-workspace read in this module
+besides the service-token routes: it returns ids (for counting workers) and a name only
+for connections of the caller's own workspace, never another workspace's name or slug.
 """
 
 from __future__ import annotations
@@ -45,7 +56,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from lkap_contracts.api_models import (
     ConnectionCreate,
@@ -57,7 +68,7 @@ from lkap_contracts.common import SessionChannel
 from lkap_contracts.connections import ConnectionCapabilities
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.fleet import FleetDesired
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
@@ -105,6 +116,147 @@ def validate_url(url: str, deployment_type: str) -> str:
     policy = net_guard.policy_from_settings(get_settings()).for_connection(deployment_type)
     net_guard.validate_url(cleaned, policy, field_name="url", schemes=_URL_SCHEMES)
     return cleaned
+
+
+def normalize_server_url(url: str) -> str:
+    """Return the form two connection urls are compared in (V6-27).
+
+    ``ws``, ``wss``, ``http`` and ``https`` reach the same LiveKit server, so the scheme
+    is dropped; the host is lower-cased, the default ports 80 and 443 are removed and a
+    trailing slash is stripped. The result is a comparison key, never a url to dial.
+
+    Args:
+        url: A stored or submitted connection url.
+
+    Returns:
+        ``host[:port][/path]``; the lower-cased input when it has no host.
+    """
+    raw = url.strip()
+    parts = urlsplit(raw if "://" in raw else f"//{raw}")
+    host = (parts.hostname or "").lower()
+    if not host:
+        return raw.lower().rstrip("/")
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    if ":" in host:
+        host = f"[{host}]"
+    netloc = host if port in (None, 80, 443) else f"{host}:{port}"
+    return netloc + parts.path.rstrip("/")
+
+
+class AgentNameInUseError(ConflictError):
+    """409 — another connection registers workers under this agent name on the same server."""
+
+    code = "agent_name_in_use"
+
+
+#: The user-facing text of :class:`AgentNameInUseError` (V6-27).
+AGENT_NAME_IN_USE_MESSAGE = (
+    "Another connection already uses the agent name '{name}' on this LiveKit server. "
+    "Calls would be split between them. Pick a different agent name."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentNameUser:
+    """Another connection that registers workers under the same agent name on the same server.
+
+    ``name`` is set only when that connection belongs to the caller's workspace; for a
+    connection of another workspace only its id is known here, and the id never leaves
+    the api (it is used to count that connection's workers).
+    """
+
+    id: str
+    same_workspace: bool
+    name: str | None
+
+
+async def agent_name_users(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    url: str,
+    agent_name: str,
+    exclude_id: str | None = None,
+) -> list[AgentNameUser]:
+    """Other connections, in any workspace, on the same LiveKit server under ``agent_name``.
+
+    **Deliberate cross-workspace read (V6-27).** LiveKit routes jobs by server and agent
+    name, not by LKAP workspace, so a clash in another workspace splits this one's calls
+    just the same. The query is narrowed to what the check needs: rows with this exact
+    ``agent_name``, selecting the id, the url (normalised here, in Python) and — through
+    a ``CASE`` on ``workspace_id`` — the name of the caller's own connections only.
+
+    Args:
+        db: Open session.
+        workspace_id: The caller's workspace (decides which names may be returned).
+        url: The server url to compare against (normalised by :func:`normalize_server_url`).
+        agent_name: The agent name to look for (compared exactly, as LiveKit does).
+        exclude_id: The connection itself, on update.
+
+    Returns:
+        The other connections using that server and agent name; empty when none do.
+    """
+    own = LiveKitConnection.workspace_id == workspace_id
+    stmt = (
+        select(
+            LiveKitConnection.id,
+            LiveKitConnection.url,
+            case((own, True), else_=False),
+            case((own, LiveKitConnection.name), else_=None),
+        )
+        .where(LiveKitConnection.agent_name == agent_name)
+        .execution_options(**{CROSS_WORKSPACE_OPTION: True})
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(LiveKitConnection.id != exclude_id)
+    target = normalize_server_url(url)
+    users = [
+        AgentNameUser(id=str(row[0]), same_workspace=bool(row[2]), name=str(row[3]) if row[2] else None)
+        for row in (await db.execute(stmt)).all()
+        if normalize_server_url(str(row[1])) == target
+    ]
+    # Own-workspace users first, so a message can name one.
+    return sorted(users, key=lambda user: not user.same_workspace)
+
+
+def agent_name_in_use_error(agent_name: str, users: Sequence[AgentNameUser]) -> AgentNameInUseError:
+    """The 409 for a clash; names the clashing connection only when it is the caller's own."""
+    message = AGENT_NAME_IN_USE_MESSAGE.format(name=agent_name)
+    details: dict[str, str] = {"field": "agent_name"}
+    own = next((user for user in users if user.same_workspace and user.name), None)
+    if own is not None and own.name is not None:
+        message += f" Your connection '{own.name}' uses it."
+        details["connection_name"] = own.name
+    return AgentNameInUseError(message, details=details)
+
+
+async def ensure_agent_name_free(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    url: str,
+    agent_name: str,
+    exclude_id: str | None = None,
+) -> None:
+    """Refuse an agent name another connection already uses on the same LiveKit server.
+
+    Raises:
+        AgentNameInUseError: 409 ``agent_name_in_use`` with ``details.field = "agent_name"``.
+    """
+    users = await agent_name_users(
+        db, workspace_id=workspace_id, url=url, agent_name=agent_name, exclude_id=exclude_id
+    )
+    if users:
+        log.info(
+            "connection_agent_name_in_use",
+            workspace_id=workspace_id,
+            agent_name=agent_name,
+            same_workspace=any(user.same_workspace for user in users),
+        )
+        raise agent_name_in_use_error(agent_name, users)
 
 
 def _validate_fields(
@@ -156,8 +308,11 @@ def connection_fingerprint(vault: Vault, row: LiveKitConnection) -> str:
     return "…" + key[-4:] if key else UNKNOWN_FINGERPRINT
 
 
-def to_out(row: LiveKitConnection, vault: Vault) -> ConnectionOut:
-    """Render a connection for admin callers; secrets are reduced to a fingerprint."""
+def to_out(row: LiveKitConnection, vault: Vault, *, ready_workers: int | None = None) -> ConnectionOut:
+    """Render a connection for admin callers; secrets are reduced to a fingerprint.
+
+    ``ready_workers`` (V6-27) is passed by the list and get routes.
+    """
     return ConnectionOut(
         id=row.id,
         workspace_id=row.workspace_id,
@@ -181,6 +336,7 @@ def to_out(row: LiveKitConnection, vault: Vault) -> ConnectionOut:
         last_error=row.last_error,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        ready_workers=ready_workers,
     )
 
 
@@ -518,6 +674,7 @@ async def create_connection(
     Raises:
         UnprocessableEntityError: On an invalid url, slug, agent name or mode.
         ConflictError: If the slug is already used in the workspace.
+        AgentNameInUseError: If another connection uses the agent name on the same server.
     """
     url = validate_url(payload.url, payload.deployment_type)
     _validate_fields(
@@ -537,6 +694,7 @@ async def create_connection(
     )
     if clash is not None:
         raise ConflictError(f"a connection with slug '{payload.slug}' already exists")
+    await ensure_agent_name_free(db, workspace_id=workspace_id, url=url, agent_name=payload.agent_name)
 
     make_default = payload.is_default or (await default_connection(db, workspace_id)) is None
     if make_default:
@@ -590,6 +748,7 @@ async def update_connection(
     Raises:
         NotFoundError: If the connection is not in the workspace.
         UnprocessableEntityError: On invalid values.
+        AgentNameInUseError: If a changed url or agent name clashes with another connection.
     """
     row = await get_connection(db, workspace_id, connection_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -602,6 +761,14 @@ async def update_connection(
         deployment_mode=changes.get("deployment_mode") or row.deployment_mode,
     )
     await _check_storage(db, workspace_id, changes.get("storage_config_id"))
+    # V6-27: re-check the agent name only when the server or the name really changes, so a
+    # rename of a connection that predates the check is never blocked by its old clash.
+    next_url: str = changes.get("url") or row.url
+    next_agent_name: str = changes.get("agent_name") or row.agent_name
+    if next_agent_name != row.agent_name or normalize_server_url(next_url) != normalize_server_url(row.url):
+        await ensure_agent_name_free(
+            db, workspace_id=workspace_id, url=next_url, agent_name=next_agent_name, exclude_id=row.id
+        )
     for name, value in changes.items():
         if value is None and name not in {"region", "storage_config_id"}:
             continue

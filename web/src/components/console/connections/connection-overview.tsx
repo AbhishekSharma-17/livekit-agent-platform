@@ -7,13 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { CapabilityList } from "@/components/console/connections/capability-list";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  AGENT_NAME_HINT,
+  agentNameError,
   connectionStatusLabel,
   connectionStatusTone,
   DEPLOYMENT_MODE_LABEL,
   DEPLOYMENT_TYPE_LABEL,
 } from "@/components/console/connections/connection-model";
 import { RotateDialog } from "@/components/console/connections/rotate-dialog";
+import { WorkerStatusNotice } from "@/components/console/connections/worker-status-notice";
 import { INFERENCE_CREDITS_LINE } from "@/components/console/registry/provider-meta";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { CopyButton } from "@/components/shared/copy-button";
@@ -29,10 +33,13 @@ export function ConnectionOverview({ connection }: { connection: ConnectionOut }
   const testConnection = useTestConnection();
   const setDefault = useSetDefaultConnection();
   const [editing, setEditing] = React.useState(false);
+  const [testWarnings, setTestWarnings] = React.useState<string[]>([]);
 
   async function runTest() {
     try {
       const result = await testConnection.mutateAsync(connection.id);
+      // V6-27: never a failure — the agent-name findings stay on the page until the next test.
+      setTestWarnings(result.warnings ?? []);
       if (!result.ok) toast.error(result.message);
       else toast.success("Connection OK.");
     } catch (error) {
@@ -68,6 +75,20 @@ export function ConnectionOverview({ connection }: { connection: ConnectionOut }
           <RotateDialog connection={connection} />
         </div>
       </div>
+
+      {testWarnings.length > 0 ? (
+        <Alert variant="warning">
+          <AlertDescription>
+            <ul className="flex list-none flex-col gap-1 p-0">
+              {testWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <WorkerStatusNotice connection={connection} />
 
       <DescriptionList
         columns={2}
@@ -135,6 +156,7 @@ function EditForm({ connection, onDone }: { connection: ConnectionOut; onDone: (
   const [agentName, setAgentName] = React.useState(connection.agent_name ?? "lkap-agent");
   const [useInference, setUseInference] = React.useState(connection.use_inference ?? true);
   const [replicas, setReplicas] = React.useState(connection.replicas ?? 1);
+  const [agentNameProblem, setAgentNameProblem] = React.useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -149,7 +171,10 @@ function EditForm({ connection, onDone }: { connection: ConnectionOut; onDone: (
       toast.success("Connection updated.");
       onDone();
     } catch (error) {
-      toast.error(errorMessage(error));
+      // V6-27: an agent-name clash belongs under the field, not only in a toast.
+      const inline = agentNameError(error);
+      if (inline) setAgentNameProblem(inline);
+      else toast.error(errorMessage(error));
     }
   }
 
@@ -158,8 +183,16 @@ function EditForm({ connection, onDone }: { connection: ConnectionOut; onDone: (
       <Field label="Name" htmlFor="edit-conn-name">
         <Input id="edit-conn-name" value={name} onChange={(event) => setName(event.target.value)} />
       </Field>
-      <Field label="Agent name" htmlFor="edit-conn-agent-name">
-        <Input id="edit-conn-agent-name" value={agentName} onChange={(event) => setAgentName(event.target.value)} className="font-mono text-[0.8125rem]" />
+      <Field label="Agent name" htmlFor="edit-conn-agent-name" hint={AGENT_NAME_HINT} error={agentNameProblem}>
+        <Input
+          id="edit-conn-agent-name"
+          value={agentName}
+          onChange={(event) => {
+            setAgentName(event.target.value);
+            setAgentNameProblem(null);
+          }}
+          className="font-mono text-[0.8125rem]"
+        />
       </Field>
       {connection.deployment_type === "cloud" ? (
         <Field label="Use LiveKit Inference" htmlFor="edit-conn-inference" inline>

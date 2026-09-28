@@ -126,6 +126,11 @@
       "title": "Instances",
       "type": "array"
     },
+    "ready_workers": {
+      "default": 0,
+      "title": "Ready Workers",
+      "type": "integer"
+    },
     "restart_generation": {
       "default": 0,
       "title": "Restart Generation",
@@ -143,6 +148,11 @@
       ],
       "default": null,
       "title": "Restart Requested At"
+    },
+    "shared_agent_name_workers": {
+      "default": 0,
+      "title": "Shared Agent Name Workers",
+      "type": "integer"
     }
   },
   "title": "FleetStatus",

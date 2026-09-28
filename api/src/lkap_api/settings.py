@@ -120,6 +120,12 @@ class Settings(BaseSettings):
     web_base_url: str | None = None
     redis_url: str | None = None
     rate_limit_enabled: bool = True
+    #: ``LKAP_CALL_START_WORKER_CHECK`` (V6-27): what a call start does when no worker of
+    #: the agent's connection has been heard from. ``block`` answers 409
+    #: ``no_worker_running`` (external and supervised connections only, never in the first
+    #: two minutes after the api starts); ``warn`` only logs ``call_start_no_worker``;
+    #: ``off`` skips the check. Use ``warn`` when workers run without ``LKAP_CONNECTION_ID``.
+    call_start_worker_check: Literal["block", "warn", "off"] = "block"
     # --- V2-21 outbound network guard (lkap_api.net_guard) ---
     #: Comma-separated host names / IPs / CIDRs exempt from the private-range
     #: block. Unset: ``localhost,127.0.0.1,::1`` in dev, nothing in prod.

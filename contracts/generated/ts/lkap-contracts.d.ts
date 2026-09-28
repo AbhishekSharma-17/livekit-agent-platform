@@ -3922,6 +3922,7 @@ export interface ConnectionOut {
   last_checked_at?: string | null;
   last_error?: string | null;
   name: string;
+  ready_workers?: number | null;
   region?: string | null;
   replicas?: number;
   slug: string;
@@ -3977,6 +3978,7 @@ export interface ConnectionTestResult {
   latency_ms?: number | null;
   message: string;
   ok: boolean;
+  warnings?: string[];
 }
 /**
  * ``PUT /v1/connections/{id}`` — a partial update; secrets go through rotate.
@@ -4823,8 +4825,10 @@ export interface FleetStatus {
   image?: "slim" | "full";
   installed_provider_ids?: string[];
   instances?: WorkerInstanceOut[];
+  ready_workers?: number;
   restart_generation?: number;
   restart_requested_at?: string | null;
+  shared_agent_name_workers?: number;
 }
 /**
  * One registered worker process of a connection's pool.

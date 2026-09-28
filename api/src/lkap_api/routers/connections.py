@@ -35,6 +35,7 @@ from lkap_api.connections.clients import ClientFactoryDep
 from lkap_api.connections.probe import probe_connection
 from lkap_api.deps import AdminCtxDep, AdminDep, DbDep, SettingsDep, VaultDep
 from lkap_api.errors import ConflictError
+from lkap_api.fleet import readiness
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -54,7 +55,10 @@ WorkspaceIdDep = Annotated[str, Depends(current_workspace_id)]
     "",
     response_model=ConnectionPage,
     summary="List connections",
-    description="The workspace's LiveKit connections, default first. Secrets are reduced to a fingerprint.",
+    description=(
+        "The workspace's LiveKit connections, default first. Secrets are reduced to a fingerprint. "
+        "`ready_workers` counts each connection's workers that are ready and were heard from within 90 s."
+    ),
 )
 async def list_connections(
     db: DbDep,
@@ -66,7 +70,10 @@ async def list_connections(
 ) -> ConnectionPage:
     """Return one page of connections."""
     rows, total = await service.list_connections(db, workspace_id, limit=limit, offset=offset)
-    return ConnectionPage(items=[service.to_out(row, vault) for row in rows], total=total)
+    ready = await readiness.ready_worker_counts(db, [row.id for row in rows])
+    return ConnectionPage(
+        items=[service.to_out(row, vault, ready_workers=ready.get(row.id, 0)) for row in rows], total=total
+    )
 
 
 @router.post(
@@ -77,7 +84,9 @@ async def list_connections(
     description=(
         "Stores a LiveKit Cloud project or self-hosted server. `api_key`/`api_secret` are encrypted "
         "at rest and never returned. The first connection of a workspace becomes its default. "
-        "Run `POST /v1/connections/{id}/test` to probe capabilities."
+        "Run `POST /v1/connections/{id}/test` to probe capabilities. 409 `agent_name_in_use` "
+        '(`details.field = "agent_name"`) when another connection, in any workspace, already uses '
+        "the agent name on the same LiveKit server: LiveKit would split calls between them."
     ),
 )
 async def create_connection(
@@ -114,15 +123,30 @@ def _audit_destination(request: Request, payload: ConnectionCreate) -> None:
     description=(
         "Probes a url/key/secret before it is saved (the create form's first test): "
         "`RoomService.list_rooms` decides `ok`, then SIP/Egress/Ingress list calls set capability "
-        "flags. Nothing is stored. Each call has a 5 s budget."
+        "flags. Nothing is stored. Each call has a 5 s budget. The agent name is checked first: "
+        "409 `agent_name_in_use` when another connection already uses it on the same LiveKit server."
     ),
 )
 async def test_unsaved_connection(
-    payload: ConnectionCreate, request: Request, vault: VaultDep, factory: ClientFactoryDep, _admin: AdminDep
+    payload: ConnectionCreate,
+    request: Request,
+    db: DbDep,
+    vault: VaultDep,
+    factory: ClientFactoryDep,
+    workspace_id: WorkspaceIdDep,
+    _admin: AdminDep,
 ) -> ConnectionTestResult:
-    """Probe connection details without saving them (the destination is audited, S5-14)."""
+    """Probe connection details without saving them (the destination is audited, S5-14).
+
+    Raises:
+        AgentNameInUseError: V6-27 — the agent name clashes on this server; the form shows
+            it under the Agent name field before anything is saved.
+    """
     _audit_destination(request, payload)
     unsaved = service.UnsavedConnection.from_create(vault, payload)
+    await service.ensure_agent_name_free(
+        db, workspace_id=workspace_id, url=unsaved.url, agent_name=payload.agent_name
+    )
     return await probe_connection(
         factory, unsaved, deployment_type=payload.deployment_type, use_inference=payload.use_inference
     )
@@ -132,13 +156,18 @@ async def test_unsaved_connection(
     "/{connection_id}",
     response_model=ConnectionOut,
     summary="Get a connection",
-    description="One connection by id or slug, with its effective capability flags.",
+    description=(
+        "One connection by id or slug, with its effective capability flags and `ready_workers` "
+        "(its workers that are ready and were heard from within 90 s)."
+    ),
 )
 async def get_connection(
     connection_id: str, db: DbDep, vault: VaultDep, workspace_id: WorkspaceIdDep, _admin: AdminDep
 ) -> ConnectionOut:
     """Return one connection."""
-    return service.to_out(await service.get_connection(db, workspace_id, connection_id), vault)
+    row = await service.get_connection(db, workspace_id, connection_id)
+    ready = await readiness.ready_worker_counts(db, [row.id])
+    return service.to_out(row, vault, ready_workers=ready.get(row.id, 0))
 
 
 @router.put(
@@ -148,7 +177,8 @@ async def get_connection(
     description=(
         "Partial update of non-secret fields (secrets change through `rotate`). Changing the url "
         "resets `status` to `unverified`; any change that alters the worker inputs updates the "
-        "pool's desired-state hash."
+        "pool's desired-state hash. A changed url or agent name gets the create route's "
+        "409 `agent_name_in_use` check."
     ),
 )
 async def update_connection(
@@ -192,7 +222,9 @@ async def delete_connection(
     description=(
         "Runs `RoomService.list_rooms` (5 s budget) to validate the stored credentials, then the "
         "SIP/Egress/Ingress list probes for capability flags (their failures do not fail the test). "
-        "Stores `status`, `capabilities`, `last_checked_at` and `last_error`."
+        "Stores `status`, `capabilities`, `last_checked_at` and `last_error`. `warnings` (never a "
+        "failure) says when another connection uses the same agent name on the same LiveKit server, "
+        "or when workers started for another connection run under it."
     ),
 )
 async def test_connection(
@@ -217,10 +249,20 @@ async def test_connection(
         egress_enabled=result.capabilities.egress_enabled,
         ingress_enabled=result.capabilities.ingress_enabled,
     )
+    # V6-27: non-blocking — a clash that predates the check, or another connection's workers
+    # registered under this name, still splits this connection's calls.
+    users = await service.agent_name_users(
+        db, workspace_id=workspace_id, url=row.url, agent_name=row.agent_name, exclude_id=row.id
+    )
+    warnings = readiness.agent_name_warnings(
+        row.agent_name,
+        clash=bool(users),
+        shared_workers=await readiness.shared_agent_name_workers(db, row),
+    )
     if not result.ok:
         # A failed probe keeps the stored flags; report those rather than the blanked ones.
-        return result.model_copy(update={"capabilities": service.capabilities_of(row)})
-    return result
+        return result.model_copy(update={"capabilities": service.capabilities_of(row), "warnings": warnings})
+    return result.model_copy(update={"warnings": warnings})
 
 
 @router.post(

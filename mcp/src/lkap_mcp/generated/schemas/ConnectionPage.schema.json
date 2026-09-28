@@ -157,6 +157,18 @@
           "title": "Name",
           "type": "string"
         },
+        "ready_workers": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ready Workers"
+        },
         "region": {
           "anyOf": [
             {

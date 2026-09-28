@@ -1,0 +1,14 @@
+{
+  "currency": "USD",
+  "lines": [
+    { "id": "filter", "name": "Water filter", "quantity": 2, "unit_price": 24.5, "line_total": 49.0, "note": null },
+    { "id": "visit", "name": "Technician visit", "quantity": 1, "unit_price": 89.0, "line_total": 89.0, "note": "Monday morning" }
+  ],
+  "adjustments": [
+    { "label": "Discount", "amount": -10.0 },
+    { "label": "Tax", "amount": 10.24 }
+  ],
+  "subtotal": 138.0,
+  "total": 138.24,
+  "updated_at": 1777000100.0
+}

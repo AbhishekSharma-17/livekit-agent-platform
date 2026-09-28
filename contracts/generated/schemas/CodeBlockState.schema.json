@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/CodeBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``code`` block's state (``show_code``, V6-23): read-only code or text in a fixed-width font.\n\nDisplay only: never run, never a link. ``language`` is a label (the console may colour\nby it); the console renders ``code`` as the text of a code block, never as Markdown or HTML.",
+  "properties": {
+    "code": {
+      "default": "",
+      "maxLength": 20000,
+      "title": "Code",
+      "type": "string"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9+#._-]{0,23}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "title": "CodeBlockState",
+  "type": "object"
+}

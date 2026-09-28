@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "ChartPoint": {
+      "description": "One value of a chart: its ``label`` (an x value or a slice name) and, for several lines or\nbar groups, its ``series``.",
+      "properties": {
+        "label": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "series": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Series"
+        },
+        "value": {
+          "maximum": 1000000000000.0,
+          "minimum": -1000000000000.0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "ChartPoint",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ChartBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``chart`` block's state (``show_chart``, V6-23): display data the agent shows.\n\n* ``number`` and ``gauge`` show one value (at most one point); a gauge draws it on the scale\n  ``gauge_min`` .. ``gauge_max``;\n* ``bar`` and ``line`` draw the points in order, grouped by ``series`` (at most 8);\n* ``pie`` draws one slice per point; its values are 0 or more.\n\nAt most :data:`MAX_CHART_POINTS` points (a 201st is refused), every text capped. The\nagent's own words: ``describe_panel`` reads them back fenced like every block state.",
+  "properties": {
+    "caption": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Caption"
+    },
+    "gauge_max": {
+      "default": 100,
+      "maximum": 1000000000000.0,
+      "minimum": -1000000000000.0,
+      "title": "Gauge Max",
+      "type": "number"
+    },
+    "gauge_min": {
+      "default": 0,
+      "maximum": 1000000000000.0,
+      "minimum": -1000000000000.0,
+      "title": "Gauge Min",
+      "type": "number"
+    },
+    "kind": {
+      "default": "bar",
+      "enum": [
+        "number",
+        "bar",
+        "line",
+        "pie",
+        "gauge"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "points": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ChartPoint"
+      },
+      "maxItems": 200,
+      "title": "Points",
+      "type": "array"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "maxLength": 16,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "title": "ChartBlockState",
+  "type": "object"
+}

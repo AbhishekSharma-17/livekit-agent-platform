@@ -1,0 +1,48 @@
+{
+  "$id": "lkap-contracts/SignatureEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The ``signature`` session event (V6-23): what was signed, never the picture's bytes.\n\n``text_hash`` ties the answer to the exact wording shown; ``asset_id`` names the stored\npicture (kind ``signature``) of a signed request. A declined request is recorded too\n(``signed: false``, no picture).",
+  "properties": {
+    "asset_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Asset Id"
+    },
+    "block_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Block Id",
+      "type": "string"
+    },
+    "method": {
+      "const": "drawn",
+      "default": "drawn",
+      "title": "Method",
+      "type": "string"
+    },
+    "signed": {
+      "title": "Signed",
+      "type": "boolean"
+    },
+    "text_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Text Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "block_id",
+    "signed",
+    "text_hash"
+  ],
+  "title": "SignatureEvent",
+  "type": "object"
+}

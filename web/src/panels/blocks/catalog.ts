@@ -16,7 +16,23 @@
  * are configurable, and nothing else is — `BlockSpec.config` is public
  * (R-V2-7), so it never carries anything but these.
  */
-import type { DocumentBlockState, FormBlockState, GalleryBlockState, HandoffBlockState, KbCitationsBlockState, TableBlockState, TableColumn, TranscriptBlockState, VideoBlockState, BlockSpec } from "@/contracts/lkap-contracts";
+import type {
+  CartBlockState,
+  ChartBlockState,
+  CodeBlockState,
+  DocumentBlockState,
+  FormBlockState,
+  GalleryBlockState,
+  HandoffBlockState,
+  KbCitationsBlockState,
+  SignatureBlockState,
+  TableBlockState,
+  TableColumn,
+  TimerBlockState,
+  TranscriptBlockState,
+  VideoBlockState,
+  BlockSpec,
+} from "@/contracts/lkap-contracts";
 
 import type { BlockType } from "@/panels/composite/layout";
 
@@ -48,6 +64,11 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "notebook",
   "layout",
   "canvas",
+  "signature",
+  "chart",
+  "timer",
+  "code",
+  "cart",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -84,7 +105,12 @@ export type BlockToolName =
   | "notebook_check"
   | "draw_on_canvas"
   | "clear_canvas"
-  | "read_canvas";
+  | "read_canvas"
+  | "request_signature"
+  | "show_chart"
+  | "start_timer"
+  | "show_code"
+  | "cart_set";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -100,6 +126,10 @@ export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>(
   "steps",
   // V5-43
   "cards",
+  // V6-23 (S6-1: added to the allow-list deliberately)
+  "chart",
+  "code",
+  "cart",
 ]);
 
 /**
@@ -140,6 +170,12 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   draw_on_canvas: new Set<BlockType>(["canvas"]),
   clear_canvas: new Set<BlockType>(["canvas"]),
   read_canvas: new Set<BlockType>(["canvas"]),
+  // V6-23
+  request_signature: new Set<BlockType>(["signature"]),
+  show_chart: new Set<BlockType>(["chart"]),
+  start_timer: new Set<BlockType>(["timer"]),
+  show_code: new Set<BlockType>(["code"]),
+  cart_set: new Set<BlockType>(["cart"]),
 };
 
 /** One field of a block's config form. */
@@ -366,6 +402,21 @@ export const CANVAS_TOOL_OPTIONS = [
   { value: "eraser", label: "Eraser" },
   { value: "box", label: "Box" },
   { value: "arrow", label: "Arrow" },
+] as const;
+
+/** `chart.kind` values (V6-23): what a chart block draws when the agent names no kind. */
+export const CHART_KINDS = [
+  { value: "number", label: "One big number" },
+  { value: "bar", label: "Bars" },
+  { value: "line", label: "Lines" },
+  { value: "pie", label: "Pie" },
+  { value: "gauge", label: "Gauge" },
+] as const;
+
+/** `timer.mode` values (V6-23). */
+export const TIMER_MODES = [
+  { value: "countdown", label: "Down to zero" },
+  { value: "elapsed", label: "Up from zero" },
 ] as const;
 
 /** `layout.kind` values (V6-08). */
@@ -847,6 +898,115 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     ],
     filledBy: "draw_on_canvas",
   },
+  // V6-23: minimal entries (PLAN-V5 §0.1, R-V5-7); the renderers, composer forms and previews
+  // come with V6-24.
+  signature: {
+    type: "signature",
+    label: "Signature",
+    description: "Wording the caller signs by hand on screen. The signature is kept with the call's files.",
+    defaultTitle: "Signature",
+    idStem: "signature",
+    configFields: [
+      {
+        key: "disclosure_text",
+        label: "What the caller signs",
+        kind: "text",
+        hint: "Leave empty to let the agent write it for each request. Set, the agent cannot change it.",
+        default: "",
+        maxLength: 2000,
+      },
+      {
+        key: "allow_decline",
+        label: "The caller can say not now",
+        kind: "boolean",
+        hint: "Shows a Not now button next to Sign.",
+        default: true,
+      },
+    ],
+    filledBy: "request_signature",
+  },
+  chart: {
+    type: "chart",
+    label: "Chart",
+    description: "Numbers as one big number, bars, lines, a pie or a gauge.",
+    defaultTitle: null,
+    idStem: "chart",
+    configFields: [
+      { key: "kind", label: "Chart", kind: "select", default: "bar", options: CHART_KINDS },
+      {
+        key: "show_table",
+        label: "Also list the numbers",
+        kind: "boolean",
+        hint: "Shows the numbers as a table under the chart.",
+        default: false,
+      },
+    ],
+    filledBy: "show_chart",
+  },
+  timer: {
+    type: "timer",
+    label: "Timer",
+    description: "A countdown or a stopwatch the agent starts. The agent is told when it runs out.",
+    defaultTitle: "Timer",
+    idStem: "timer",
+    configFields: [
+      { key: "mode", label: "Counts", kind: "select", default: "countdown", options: TIMER_MODES },
+      {
+        key: "max_seconds",
+        label: "Longest timer (seconds)",
+        kind: "integer",
+        hint: "The longest timer the agent may start (up to 4 hours).",
+        default: 3600,
+        min: 1,
+      },
+    ],
+    filledBy: "start_timer",
+  },
+  code: {
+    type: "code",
+    label: "Code",
+    description: "Read-only code or text in a fixed-width font. Nothing shown is ever run.",
+    defaultTitle: null,
+    idStem: "code",
+    configFields: [
+      {
+        key: "max_chars",
+        label: "Longest text",
+        kind: "integer",
+        hint: "The most characters the agent may show (up to 20,000).",
+        default: 8000,
+        min: 200,
+      },
+      { key: "wrap", label: "Wrap long lines", kind: "boolean", default: false },
+    ],
+    filledBy: "show_code",
+  },
+  cart: {
+    type: "cart",
+    label: "Cart",
+    description: "Items, prices and totals, such as an order to confirm. It places no order.",
+    defaultTitle: "Your order",
+    idStem: "cart",
+    configFields: [
+      {
+        key: "currency",
+        label: "Currency",
+        kind: "text",
+        hint: "A three-letter code, such as USD, EUR or INR.",
+        default: "USD",
+        maxLength: 3,
+      },
+      {
+        key: "max_lines",
+        label: "Most lines",
+        kind: "integer",
+        hint: "The most lines the cart shows (up to 50).",
+        default: 20,
+        min: 1,
+      },
+    ],
+    filledBy: "cart_set",
+  },
 };
 
 /** The heading a block shows: its title, else the type's default (`null` = none). */
@@ -868,6 +1028,15 @@ export interface BlockStateByType {
   video: Required<VideoBlockState>;
   kb_citations: Required<KbCitationsBlockState>;
   handoff: Required<HandoffBlockState>;
+  // V6-23: signature/chart/timer/code/cart all start from their contracts state model's
+  // defaults, seeded by any `BlockSpec.config` key of the same name (`signature.disclosure_text`,
+  // `chart.kind`, `timer.mode`, `cart.currency`) — the generic rule below, mirroring the
+  // worker's `initial_block_state`.
+  signature: Required<SignatureBlockState>;
+  chart: Required<ChartBlockState>;
+  timer: Required<TimerBlockState>;
+  code: Required<CodeBlockState>;
+  cart: Required<CartBlockState>;
 }
 
 const STATE_DEFAULTS: { [K in keyof BlockStateByType]: () => BlockStateByType[K] } = {
@@ -881,6 +1050,12 @@ const STATE_DEFAULTS: { [K in keyof BlockStateByType]: () => BlockStateByType[K]
   // V5-32/36: the worker seeds `handoff` the same way (`ui/blocks.py::BLOCK_STATE_MODELS`,
   // docs/v5/_asks.md #210) — idle, nothing filled in yet.
   handoff: () => ({ status: "idle", mode: null, target: null, queue_position: null, agent_name: null, reason: null }),
+  // V6-23: mirrors `SignatureBlockState`'s own defaults (`ui/blocks.py::BLOCK_STATE_MODELS`).
+  signature: () => ({ status: "idle", submitted_at: null, disclosure_text: "", signed: null, asset_id: null, text_hash: null, at: null }),
+  chart: () => ({ kind: "bar", title: null, unit: null, points: [], gauge_min: 0, gauge_max: 100, caption: null, updated_at: null }),
+  timer: () => ({ mode: "countdown", label: null, status: "idle", duration_s: null, started_at: null, ends_at: null, ended_at: null }),
+  code: () => ({ code: "", language: null, title: null, updated_at: null }),
+  cart: () => ({ currency: "USD", lines: [], adjustments: [], subtotal: 0, total: 0, updated_at: null }),
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

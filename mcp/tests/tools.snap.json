@@ -1269,7 +1269,12 @@
                   "cards",
                   "notebook",
                   "layout",
-                  "canvas"
+                  "canvas",
+                  "signature",
+                  "chart",
+                  "timer",
+                  "code",
+                  "cart"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -6541,7 +6546,12 @@
                   "cards",
                   "notebook",
                   "layout",
-                  "canvas"
+                  "canvas",
+                  "signature",
+                  "chart",
+                  "timer",
+                  "code",
+                  "cart"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -12171,7 +12181,12 @@
                   "cards",
                   "notebook",
                   "layout",
-                  "canvas"
+                  "canvas",
+                  "signature",
+                  "chart",
+                  "timer",
+                  "code",
+                  "cart"
                 ],
                 "title": "Type",
                 "type": "string"

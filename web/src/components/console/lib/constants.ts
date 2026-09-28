@@ -146,6 +146,12 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "draw_on_canvas", label: "Mark up the drawing board", help: "Lets the agent draw boxes, circles, arrows and short labels on the drawing board." },
   { name: "clear_canvas", label: "Clear the drawing board", help: "Lets the agent wipe the drawing board." },
   { name: "read_canvas", label: "Read the drawing board", help: "Lets the agent read what the caller wrote or drew. Needs a language model that can see pictures." },
+  // V6-23
+  { name: "request_signature", label: "Ask for a signature", help: "Lets the agent ask the caller to sign on screen. The signature is kept with the call's files." },
+  { name: "show_chart", label: "Show a chart", help: "Lets the agent show numbers as a chart: one big number, bars, lines, a pie or a gauge." },
+  { name: "start_timer", label: "Start a timer", help: "Lets the agent start a countdown or a stopwatch. The agent is told when it runs out." },
+  { name: "show_code", label: "Show code", help: "Lets the agent show code or text in a fixed-width font. Nothing shown is ever run." },
+  { name: "cart_set", label: "Fill the cart", help: "Lets the agent show items, prices and totals, such as an order to confirm." },
 ];
 
 /**

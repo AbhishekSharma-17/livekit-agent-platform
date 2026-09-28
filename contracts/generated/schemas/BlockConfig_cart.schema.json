@@ -1,0 +1,25 @@
+{
+  "$id": "lkap-contracts/BlockConfig_cart.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``cart``: lines and totals the agent shows, such as an order to confirm (``cart_set``, V6-23).\n\n``currency`` is an ISO 4217 code (``USD``, ``EUR``, ``INR``); ``max_lines`` is the most lines\nthe cart shows (at most 50). The platform adds up the totals; the block places no order.",
+  "properties": {
+    "currency": {
+      "default": "USD",
+      "maxLength": 3,
+      "minLength": 3,
+      "pattern": "^[A-Z]{3}$",
+      "title": "Currency",
+      "type": "string"
+    },
+    "max_lines": {
+      "default": 20,
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Max Lines",
+      "type": "integer"
+    }
+  },
+  "title": "BlockConfig_cart",
+  "type": "object"
+}

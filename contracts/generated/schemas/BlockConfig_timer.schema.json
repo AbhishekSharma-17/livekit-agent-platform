@@ -1,0 +1,26 @@
+{
+  "$id": "lkap-contracts/BlockConfig_timer.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``timer``: a countdown or a stopwatch the agent starts (``start_timer``, V6-23).\n\n``mode`` is how the timer counts when ``start_timer`` names no mode; ``max_seconds`` is the\nlongest timer the agent may start (at most 4 hours). When a timer runs out the agent is told.",
+  "properties": {
+    "max_seconds": {
+      "default": 3600,
+      "maximum": 14400,
+      "minimum": 1,
+      "title": "Max Seconds",
+      "type": "integer"
+    },
+    "mode": {
+      "default": "countdown",
+      "enum": [
+        "countdown",
+        "elapsed"
+      ],
+      "title": "Mode",
+      "type": "string"
+    }
+  },
+  "title": "BlockConfig_timer",
+  "type": "object"
+}

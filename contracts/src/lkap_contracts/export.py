@@ -121,8 +121,11 @@ from lkap_contracts.ui_protocol import (
     CaptionsBlockState,
     CaptionSegment,
     CardsBlockState,
+    CartBlockState,
+    ChartBlockState,
     ChecklistEdit,
     ChoicesBlockState,
+    CodeBlockState,
     ConsentBlockState,
     DetailsBlockState,
     DetailsEdit,
@@ -141,10 +144,13 @@ from lkap_contracts.ui_protocol import (
     NotebookBlockState,
     NotebookEdit,
     RequestableState,
+    SignatureBlockState,
+    SignatureEvent,
     SlotsBlockState,
     StateDeltaPayload,
     StepsBlockState,
     TableBlockState,
+    TimerBlockState,
     TranscriptBlockState,
     UiPatch,
     UiRequest,
@@ -243,6 +249,12 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "CardsBlockState": CardsBlockState,  # V5-43
     "NotebookBlockState": NotebookBlockState,  # V6-08
     "CanvasBlockState": CanvasBlockState,  # V6-12
+    "SignatureBlockState": SignatureBlockState,  # V6-23
+    "ChartBlockState": ChartBlockState,
+    "TimerBlockState": TimerBlockState,
+    "CodeBlockState": CodeBlockState,
+    "CartBlockState": CartBlockState,
+    "SignatureEvent": SignatureEvent,  # V6-23: the `signature` session event
     "LinkHookIn": LinkHookIn,  # V5-43
     "LinkHookOut": LinkHookOut,
     "LinkCompletedPacket": LinkCompletedPacket,

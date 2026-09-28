@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "CartAdjustment": {
+      "description": "A line under the subtotal: a discount (negative), a tax, a delivery fee.",
+      "properties": {
+        "amount": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Amount",
+          "type": "number"
+        },
+        "label": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "amount"
+      ],
+      "title": "CartAdjustment",
+      "type": "object"
+    },
+    "CartLine": {
+      "description": "One line of a cart: what, how many, the price of one, and the line's total (computed).",
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "line_total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Line Total",
+          "type": "number"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "quantity": {
+          "default": 1,
+          "maximum": 9999,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "unit_price": {
+          "maximum": 1000000000.0,
+          "minimum": 0,
+          "title": "Unit Price",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "unit_price"
+      ],
+      "title": "CartLine",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/CartBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``cart`` block's state (``cart_set``, V6-23): lines and totals the agent shows.\n\nDisplay data: an order is placed by the agent's own tools, never by this block. The totals\nmust add up (:func:`cart_totals`), whoever writes the state, so the caller never sees a\ntotal that is not the sum of the lines; the writers compute them.",
+  "properties": {
+    "adjustments": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CartAdjustment"
+      },
+      "maxItems": 5,
+      "title": "Adjustments",
+      "type": "array"
+    },
+    "currency": {
+      "default": "USD",
+      "pattern": "^[A-Z]{3}$",
+      "title": "Currency",
+      "type": "string"
+    },
+    "lines": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CartLine"
+      },
+      "maxItems": 50,
+      "title": "Lines",
+      "type": "array"
+    },
+    "subtotal": {
+      "default": 0,
+      "title": "Subtotal",
+      "type": "number"
+    },
+    "total": {
+      "default": 0,
+      "title": "Total",
+      "type": "number"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "title": "CartBlockState",
+  "type": "object"
+}

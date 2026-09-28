@@ -36,6 +36,11 @@ const SCHEMA_FILE: Record<string, string> = {
   cards: "CardsBlockState",
   notebook: "NotebookBlockState",
   canvas: "CanvasBlockState",
+  signature: "SignatureBlockState",
+  chart: "ChartBlockState",
+  timer: "TimerBlockState",
+  code: "CodeBlockState",
+  cart: "CartBlockState",
 };
 
 type JsonSchema = {

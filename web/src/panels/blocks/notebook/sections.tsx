@@ -206,7 +206,10 @@ function TextEntryRow({
       data-author={entry.author ?? "agent"}
     >
       <span className="min-w-0 flex-1 leading-snug break-words">
-        <SafeMarkdown text={entry.text} allowLinks className="inline [&_p]:inline [&_p]:m-0" />
+        {/* S6-9 (ruled, R-V6-2, ask #86): a caller-authored entry renders without clickable
+            links — formatting stays, only the anchor is withheld — since the console viewer
+            would otherwise open an https link the *caller* chose, not the agent. */}
+        <SafeMarkdown text={entry.text} allowLinks={entry.author !== "caller"} className="inline [&_p]:inline [&_p]:m-0" />
         {entry.author === "caller" ? (
           <CallerMark>written by you</CallerMark>
         ) : entry.edited_by === "caller" ? (

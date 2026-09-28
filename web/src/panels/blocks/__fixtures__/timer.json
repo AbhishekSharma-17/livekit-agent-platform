@@ -1,0 +1,9 @@
+{
+  "mode": "countdown",
+  "label": "Find your policy number",
+  "status": "running",
+  "duration_s": 120,
+  "started_at": 1777000100.0,
+  "ends_at": 1777000220.0,
+  "ended_at": null
+}

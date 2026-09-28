@@ -135,6 +135,7 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-26 | P | Avatar framing: size the agent video to the avatar's real aspect (portrait / square / landscape), `contain` by default, per-provider native aspect, custom/imported avatars, every surface incl. mobile | Sonnet (+ Opus contracts hunk) | 7 | none (user request 2026-09-28) |
 | V6-27 | P | Connections: catch agent-name clashes on the same LiveKit server (409 `agent_name_in_use`, inline on Test and Save) and make "each connection needs its own worker" obvious (create-form note, no-worker empty state, worker status in the agent picker, fail fast at call start); RUNBOOK §3 | Opus | 6 | none (user request 2026-09-28) |
 | V6-28 | S | Rules: a stored `matches` pattern the scanner refuses becomes a per-rule validation error instead of a load failure (#166); `CanvasBlockConfig.signature_mode` marked superseded (#212) | Opus | 7 | V6-24 merged; before V6-25 (R-V6-3) |
+| V6-29 | R | Hardening from the re-review (R-V6-4): S6-26 and S6-27 (gate), S6-28 … S6-32; the card is R-V6-4 | Opus | 7 | V6-28 merged; before V6-25's final sign-off |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files; contracts commits still serialised in the listed order):
 

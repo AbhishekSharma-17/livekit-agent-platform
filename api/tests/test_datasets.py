@@ -20,10 +20,11 @@ from conftest import create_agent, inference_config
 from connection_fakes import add_agent, connection_row
 from fastapi import FastAPI
 from lkap_contracts.agent_config import AgentConfig
+from lkap_contracts.agent_tests import AgentTest
 from lkap_contracts.datasets import MAX_DATASET_ROWS
 
 from lkap_api import limits
-from lkap_api.config_service import ValidationContext
+from lkap_api.config_service import ValidationContext, agent_test_issues
 from lkap_api.datasets import service as dataset_service
 from lkap_api.datasets.normalise import normalise_key
 from lkap_api.datasets.parse import neutralise_cell
@@ -558,3 +559,26 @@ async def test_agent_validation_flags_a_dataset_tool_whose_table_was_deleted(
         issue["path"] == "tools[0].definition.dataset_id" and "not in this workspace" in issue["message"]
         for issue in result["issues"]
     ), result
+
+
+def test_a_test_case_may_mock_a_dataset_tool() -> None:
+    """V5-29 mocks reach a lookup too (the worker answers it from the fixture)."""
+    config = AgentConfig.model_validate(inference_config().model_dump(mode="json"))
+    config.tools.tool_ids = ["t1"]
+    config.tests = [
+        AgentTest(
+            id="lookup",
+            name="Finds the policy",
+            persona_instructions="You are a caller.",
+            scenario="Ask about your policy.",
+            expectations=["The agent names the holder."],
+            mocks={"lookup_policy": [{"holder_name": "Demo — Asha Rao"}]},
+        )
+    ]
+    ctx = ValidationContext(
+        config=config,
+        tool_names_by_id={"t1": "lookup_policy"},
+        tool_definitions_by_id={"t1": {"kind": "dataset", "name": "lookup_policy"}},
+    )
+
+    assert not [issue for issue in agent_test_issues(ctx) if "mocks" in issue.path]

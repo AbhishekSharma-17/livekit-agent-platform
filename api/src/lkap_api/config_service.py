@@ -1891,7 +1891,7 @@ def agent_test_issues(ctx: ValidationContext) -> list[Issue]:
     for tool_id in config.tools.tool_ids:
         definition = definitions.get(tool_id)
         kind = definition.get("kind") if isinstance(definition, Mapping) else None
-        if kind in ("http", "provider") and tool_id in names_by_id:
+        if kind in ("http", "provider", "dataset") and tool_id in names_by_id:  # V6-16: lookups mock too
             mockable.add(names_by_id[tool_id])
         elif kind == "mcp":
             has_mcp = True

@@ -95,7 +95,7 @@ export function ConnectionOverview({ connection }: { connection: ConnectionOut }
         ]}
       />
 
-      {connection.deployment_type === "cloud" ? (
+      {(connection.deployment_type ?? "cloud") === "cloud" ? (
         <p className="text-[0.8125rem] text-pretty text-muted-foreground">
           {INFERENCE_CREDITS_LINE.text} <span className="text-xs">(as of {INFERENCE_CREDITS_LINE.asOf})</span>
         </p>

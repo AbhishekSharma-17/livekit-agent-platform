@@ -23,6 +23,13 @@ import providersJson from "../../contracts/generated/providers.json";
  * "Recommended" stack per connection type, the credits line's dated
  * constant, and the pre-selection rule for a *new* provider ref (never a
  * stored one — the compatibility rule, U-V6-2).
+ *
+ * `newProviderRef` (the only caller of `recommendedFieldValues`) is called
+ * from exactly two sites in `provider-slot-editor.tsx`: `chooseRun`'s
+ * "inference" branch and `chooseVendor` — both fire only when a builder
+ * actively picks a run choice or a vendor, never to backfill an existing
+ * `ProviderRef`'s missing fields. Verified by `grep -rn "newProviderRef" src`
+ * turning up no other caller.
  */
 
 const REGISTRY = (providersJson as { providers: ProviderSpec[] }).providers;
@@ -184,7 +191,7 @@ describe("ProviderSlotEditor renders the streaming/not-for-live-calls/Recommende
     expect(within(runGroup).getByText("Recommended")).toBeTruthy();
   });
 
-  it("does not badge LiveKit Inference Recommended on a self-hosted connection, or with no connection in view", () => {
+  it("does not badge LiveKit Inference Recommended on a self-hosted connection", () => {
     withClient(
       <ProviderSlotEditor
         kind="stt"
@@ -197,6 +204,42 @@ describe("ProviderSlotEditor renders the streaming/not-for-live-calls/Recommende
     );
     const runGroup = screen.getByText("LiveKit Inference").closest("label") as HTMLElement;
     expect(within(runGroup).queryByText("Recommended")).toBeNull();
+  });
+
+  it("does not badge LiveKit Inference Recommended with no connection in view (the default constraints)", () => {
+    withClient(<ProviderSlotEditor kind="stt" value={null} onChange={vi.fn()} providers={REGISTRY} idPrefix="t-stt-none" />);
+    const runGroup = screen.getByText("LiveKit Inference").closest("label") as HTMLElement;
+    expect(within(runGroup).queryByText("Recommended")).toBeNull();
+  });
+
+  it("names ElevenLabs Flash / Deepgram Aura-2 as tts alternatives on a self-hosted connection (D-V6-3)", () => {
+    withClient(
+      <ProviderSlotEditor
+        kind="tts"
+        value={null}
+        onChange={vi.fn()}
+        providers={REGISTRY}
+        idPrefix="t-tts-self"
+        constraints={{ connection: { deployment_type: "self_hosted" } }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /your own key/i }));
+    expect(screen.getByText(/ElevenLabs Flash or Deepgram Aura-2/)).toBeTruthy();
+  });
+
+  it("does not show the tts alternatives line for an stt slot, or on a Cloud connection", () => {
+    withClient(
+      <ProviderSlotEditor
+        kind="stt"
+        value={null}
+        onChange={vi.fn()}
+        providers={REGISTRY}
+        idPrefix="t-stt-no-alt"
+        constraints={{ connection: { deployment_type: "self_hosted" } }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /your own key/i }));
+    expect(screen.queryByText(/ElevenLabs Flash or Deepgram Aura-2/)).toBeNull();
   });
 
   it("shows Deepgram as Recommended on a self-hosted connection's stt vendor list", () => {
@@ -225,6 +268,27 @@ describe("ProviderSlotEditor renders the streaming/not-for-live-calls/Recommende
     expect(card).toBeTruthy();
     expect(within(card).getByText("Waits for the whole sentence")).toBeTruthy();
     expect(within(card).getByText("Not for live calls")).toBeTruthy();
+  });
+
+  it("reflects the stored fields on the selected vendor card, not just the entry's default (a streaming_field turned on)", () => {
+    // A synthetic mvp entry: the real registry's two streaming_field
+    // carriers (openai-stt, rime-tts) are `full`/`deferred`, which the
+    // vendor list groups under the collapsed "More providers" section
+    // (plain text, no chips) rather than a `VendorCard` — this fixture
+    // isolates the fields-aware chip from that unrelated gate.
+    const withRealtimeField: ProviderSpec = {
+      ...findSpec("openai-stt"),
+      id: "test-stt-realtime-field",
+      status: "mvp",
+      availability: "available",
+      worker_image: "slim",
+    };
+    const registry = [...REGISTRY, withRealtimeField];
+    const stored: ProviderRef = { provider_id: withRealtimeField.id, credential_id: null, model: null, fields: { use_realtime: true } };
+    withClient(<ProviderSlotEditor kind="stt" value={stored} onChange={vi.fn()} providers={registry} idPrefix="t-stt-selected" />);
+    const card = document.querySelector(`[data-provider-id="${withRealtimeField.id}"]`) as HTMLElement;
+    expect(card).toBeTruthy();
+    expect(within(card).getByText("Streams")).toBeTruthy();
   });
 
   it("renders the streaming-field option (openai-stt's use_realtime) with no 'WS'/'PCM'/'SSE' jargon on screen (§0.1)", () => {

@@ -457,5 +457,5 @@ export function isRecommendedProvider(
  */
 export const INFERENCE_CREDITS_LINE = {
   asOf: "2026-09-28",
-  text: "LiveKit Inference credits: the Build plan includes $2.50 a month, then requests fail until the next month (Ship $5, Scale $50, then list prices).",
+  text: "LiveKit Inference credits: the Build plan includes $2.50 a month, then requests fail until the next month. Ship ($5) and Scale ($50) continue at list prices once their credits run out.",
 } as const;

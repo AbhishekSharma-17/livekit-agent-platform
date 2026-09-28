@@ -24,6 +24,7 @@ import {
   isRecommendedProvider,
   isVerified,
   notForLiveCallsChip,
+  RECOMMENDED_STACK,
   slotAvailability,
   streamingChipCopy,
   unavailableCopy,
@@ -286,6 +287,7 @@ export function ProviderSlotEditor({
           name={`${prefix}-vendor`}
           kind={kind}
           selectedId={value?.provider_id ?? null}
+          selectedFields={value?.fields ?? null}
           selectable={selectable}
           unavailable={unavailable}
           onSelect={chooseVendor}
@@ -526,6 +528,7 @@ function VendorList({
   name,
   kind,
   selectedId,
+  selectedFields,
   selectable,
   unavailable,
   onSelect,
@@ -534,6 +537,8 @@ function VendorList({
   name: string;
   kind: ProviderKind;
   selectedId: string | null;
+  /** The selected provider's stored fields, so its own streaming chip reflects e.g. `use_realtime` (not just the entry's default). */
+  selectedFields: Record<string, unknown> | null;
   selectable: ProviderSpec[];
   unavailable: UnavailableEntry[];
   onSelect: (spec: ProviderSpec) => void;
@@ -547,6 +552,9 @@ function VendorList({
         <span id={legendId} className="text-sm font-medium text-foreground">
           Vendor
         </span>
+        {deploymentType === "self_hosted" && kind === "tts" ? (
+          <p className="text-xs text-muted-foreground">{RECOMMENDED_STACK.selfHostedAlternatives}</p>
+        ) : null}
         {selectable.length === 0 ? (
           <p className="text-[0.8125rem] text-muted-foreground">No {kind === "llm" ? "language model" : "provider"} is available for this slot yet.</p>
         ) : (
@@ -559,6 +567,7 @@ function VendorList({
                 checked={spec.id === selectedId}
                 onSelect={() => onSelect(spec)}
                 recommended={isRecommendedProvider(spec, deploymentType)}
+                fields={spec.id === selectedId ? selectedFields : null}
               />
             ))}
           </div>
@@ -628,6 +637,7 @@ function VendorCard({
   checked,
   onSelect,
   recommended = false,
+  fields = null,
 }: {
   name: string;
   spec: ProviderSpec;
@@ -635,12 +645,14 @@ function VendorCard({
   onSelect: () => void;
   /** The recommended stack for the bound connection type (D-V6-3). */
   recommended?: boolean;
+  /** The stored fields, when this card is the selected one — so its streaming chip reflects e.g. `use_realtime` rather than just the entry's default. */
+  fields?: Record<string, unknown> | null;
 }) {
   const caps = spec.capabilities ?? {};
   const voices = caps.voices?.length ?? 0;
   const thinks = THINKING_KINDS.has(spec.kind);
   const speaks = SPEAKING_KINDS.has(spec.kind);
-  const streamChip = streamingChipCopy(spec);
+  const streamChip = streamingChipCopy(spec, fields);
   const liveCallsNote = notForLiveCallsChip(spec);
   return (
     <div

@@ -112,6 +112,13 @@ describe("ConnectionOverview (V6-03, D-V6-14: the LiveKit Inference credits line
     renderWithClient(<ConnectionOverview connection={selfHosted} />);
     expect(screen.queryByText(/LiveKit Inference credits/)).toBeNull();
   });
+
+  it("treats a missing deployment_type as Cloud, matching the adjacent 'Type' row's own fallback", () => {
+    stubFetch(() => ({}));
+    const untyped: ConnectionOut = { ...CONNECTION, id: "conn-3", deployment_type: undefined };
+    renderWithClient(<ConnectionOverview connection={untyped} />);
+    expect(screen.getByText(/LiveKit Inference credits/)).toBeTruthy();
+  });
 });
 
 describe("ConnectionCreateForm", () => {

@@ -1,0 +1,88 @@
+{
+  "id": "payment_esign_link",
+  "name": "Send a payment or signing link",
+  "summary": "Creates a checkout or signing link in your own system, shows it on the caller's screen (with a QR code) and shows when they have paid or signed.",
+  "default_prefix": "pay",
+  "default_variant": "rest",
+  "defaults": [
+    {
+      "name": "base_url",
+      "label": "Link address",
+      "help": "Where a link is created (POST, answering {\"url\": …, \"reference\": …}). Your system reports how it ended on LKAP's link hook for the session.",
+      "kind": "url",
+      "required": true,
+      "example": "https://billing.example.com/api/links"
+    },
+    {
+      "name": "link_host",
+      "label": "Where links go",
+      "help": "The site your payment or signing pages are on; a link to any other site is refused.",
+      "kind": "host",
+      "required": true,
+      "example": "pay.example.com"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "{{ kit.prefix }}_link",
+      "type": "link",
+      "title": "Secure link",
+      "config": {"allowed_hosts": ["{{ kit.link_host }}"], "open_in": "new_tab", "show_qr": true}
+    }
+  ],
+  "instructions_snippet": "When the caller is ready to pay or sign, create their link with {{ kit.tool.create_link }}, then show it with send_link and tell them it is on their screen. Stay with them while they finish: the panel shows when it is done. Never take card numbers or other payment details by voice or in the chat.",
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_sent",
+      "label": "Show that the link was sent",
+      "when": "tool.send_link.ok",
+      "then": [{"do": "status.set", "label": "Link sent", "tone": "info"}]
+    }
+  ],
+  "test_case": {
+    "name": "Sends the payment link",
+    "persona_instructions": "You are a customer who wants to pay your March invoice now. Say you are ready when asked.",
+    "scenario": "Ask to pay the invoice.",
+    "expectations": [
+      "The agent creates a link and shows it rather than asking for card details.",
+      "The agent never asks for a card number."
+    ]
+  },
+  "variants": [
+    {
+      "id": "rest",
+      "label": "Your billing or signing system",
+      "summary": "Your system creates the checkout or signing page and reports when it is done (a key is optional; without one the call carries no key).",
+      "source": "http",
+      "requires": {"secret_names": ["API_KEY"]},
+      "tools": [
+        {
+          "key": "create_link",
+          "label": "Create the link",
+          "risk": "write",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_create_link",
+            "description": "Create the caller's payment or signing link. Say what it is for; add the amount only when the caller agreed to one.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "purpose": {"type": "string", "description": "What the link is for, e.g. 'the March invoice' or 'the rental agreement'."},
+                "amount": {"type": "string", "description": "The amount the caller agreed to, if any (e.g. 120.00)."}
+              },
+              "required": ["purpose"]
+            },
+            "method": "POST",
+            "url": "{{ kit.base_url }}",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "body_template": "{\"purpose\": \"{{ purpose }}\", \"amount\": \"{{ amount }}\", \"session_id\": \"{{ ctx.session_id }}\"}",
+            "timeout_s": 10,
+            "max_result_chars": 800,
+            "bindings": [{"path": "/reference", "to": "var:{{ kit.prefix }}_reference"}]
+          },
+          "fake": {"url": "https://pay.example.com/demo-link", "reference": "DEMO-PAY-7"}
+        }
+      ]
+    }
+  ]
+}

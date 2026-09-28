@@ -1,0 +1,158 @@
+{
+  "$id": "lkap-contracts/ToolKitInstantiate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/tool-kits/{id}/instantiate``: add a kit to one agent (or preview it).\n\n``credential_id`` is a tool-secret key holding the variant's ``requires.secret_names``\n(binding it needs ``admin`` and ``providers:write``); without it the HTTP tools are stored\nwithout their key headers. A ``composio_action`` variant needs ``connection_id`` (a\nconnected app) and, like picking app actions, ``admin`` and ``providers:write``. A\n``dataset`` variant needs ``dataset_id``; ``key_columns`` defaults to the table's key columns.",
+  "properties": {
+    "actions": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "composio_action: the action slugs to pick instead of the kit's",
+      "title": "Actions"
+    },
+    "add_test_case": {
+      "default": true,
+      "description": "Add the kit's test case (its tools answer from fakes)",
+      "title": "Add Test Case",
+      "type": "boolean"
+    },
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "block_prefix": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Names what the kit adds (default: the kit's)",
+      "title": "Block Prefix"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Connection Id"
+    },
+    "credential_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Credential Id"
+    },
+    "dataset_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Id"
+    },
+    "dry_run": {
+      "default": false,
+      "description": "Only say what would be added; change nothing",
+      "title": "Dry Run",
+      "type": "boolean"
+    },
+    "flow_anchor": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Add the kit's flow steps after this step",
+      "title": "Flow Anchor"
+    },
+    "key_columns": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Columns"
+    },
+    "settings": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "default": {},
+      "description": "Values of the kit's `defaults`, e.g. {'base_url': 'https://…'}",
+      "title": "Settings",
+      "type": "object"
+    },
+    "variant": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A variant id (default: the kit's default)",
+      "title": "Variant"
+    }
+  },
+  "required": [
+    "agent_id"
+  ],
+  "title": "ToolKitInstantiate",
+  "type": "object"
+}

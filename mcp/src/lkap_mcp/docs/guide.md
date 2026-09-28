@@ -23,7 +23,8 @@ agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 `half_cascade` — see `lkap_explain("pipeline-modes")`), **providers and keys**
 (`provider_list`, `provider_key_create` — 138 registry entries), **tools**
 (`tool_create_http`, `tool_create_mcp` then `tool_test`,
-`tool_create_from_template`, built-ins like `search_knowledge`; Composio
+`tool_create_from_template`, **kits** `kit_add`, built-ins like
+`search_knowledge`; Composio
 **apps**: `apps_connect`, `apps_add_tools`, `agent_apps_mode` picks actions,
 an app server or a tool finder — recipe `attach-app-actions`), **knowledge
 bases** (`kb_create`, `kb_add_document`; own stores `kb_connection_create`;
@@ -109,7 +110,7 @@ keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 `add-http-tool`, `attach-mcp-server`, `knowledge-from-text`,
 `switch-to-flow`, `composite-panel`, `test-and-publish`,
 `test-a-custom-model`, `diagnose-a-session`, `connect-an-app`,
-`attach-app-actions`, `add-booking-tool`, `estimate-agent-cost` — each is a
+`attach-app-actions`, `add-booking-tool`, `add-kit`, `estimate-agent-cost` — each is a
 numbered, copy-pasteable tool sequence
 (`lkap_describe("recipe", name)`).
 

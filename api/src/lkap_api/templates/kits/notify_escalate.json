@@ -1,0 +1,57 @@
+{
+  "id": "notify_escalate",
+  "name": "Hand over to the team",
+  "summary": "Hands the caller to a person when they ask, are upset or the matter is urgent, shows the hand-over on the panel and, with a team webhook key, tells your team.",
+  "default_prefix": "escalate",
+  "default_variant": "team",
+  "defaults": [
+    {
+      "name": "webhook_secret_name",
+      "label": "Name of the webhook in the key",
+      "help": "Only with a key: the name your team's webhook address is stored under in the tool-secret key you pick.",
+      "kind": "text",
+      "default": "TEAM_WEBHOOK_URL"
+    }
+  ],
+  "blocks": [
+    {"id": "status", "type": "status", "config": {}, "shared": true},
+    {"id": "handoff", "type": "handoff", "title": "Hand-over", "config": {}, "shared": true}
+  ],
+  "instructions_snippet": "If the caller asks for a person, is upset, or the matter is urgent or about safety, tell them you are bringing in the team and call escalate_to_human with a one-line reason. Do not argue or try to talk them out of it.",
+  "variables": [
+    {
+      "name": "needs_person",
+      "type": "boolean",
+      "label": "Wants a person",
+      "hint": "true when the caller asks for a person, is upset or distressed, or the matter is urgent or about safety; otherwise leave it empty"
+    }
+  ],
+  "extraction": {"enabled": true},
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_hand_over",
+      "label": "Hand over when a person is needed",
+      "when": "var.needs_person == true",
+      "then": [
+        {"do": "escalate", "mode": "transfer", "reason": "The caller asked for a person, or the matter is urgent.", "urgency": "high"},
+        {"do": "status.set", "label": "Handing over", "tone": "warning"}
+      ]
+    }
+  ],
+  "test_case": {
+    "name": "Hands over when asked",
+    "persona_instructions": "You are a caller who is frustrated and wants to speak to a person straight away.",
+    "scenario": "Ask for a person in your first message.",
+    "expectations": ["The agent says it is bringing in the team instead of arguing."]
+  },
+  "variants": [
+    {
+      "id": "team",
+      "label": "Your team",
+      "summary": "Uses the built-in hand-over; pick a tool-secret key holding your team's webhook address to also post a message to the team.",
+      "source": "none",
+      "requires": {"secret_names": ["TEAM_WEBHOOK_URL"]},
+      "configures": ["notify_team"]
+    }
+  ]
+}

@@ -299,6 +299,15 @@ from lkap_contracts.guardrails import (
     ProviderRule,
     RegexRule,
 )
+from lkap_contracts.kits import (
+    KIT_FLOW_ANCHOR,
+    KitChange,
+    KitVariant,
+    ToolKit,
+    ToolKitInstantiate,
+    ToolKitInstantiated,
+    ToolKitsResponse,
+)
 from lkap_contracts.migrate import agent_config_v1_to_v2, agent_config_v2_to_v1
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import PRICE_VERSION, PRICES, Price, lookup
@@ -545,6 +554,7 @@ __all__ = [
     "GUARDRAIL_EVENT",
     "GUARDRAIL_TIMEOUT_EVENT",
     "ID_LIKE_FIELD_NAMES",
+    "KIT_FLOW_ANCHOR",
     "LANGUAGE_TOOL_NAMES",
     "MAX_CALLER_EDIT_CHARS",
     "MODEL_ID_PATTERN",
@@ -759,6 +769,8 @@ __all__ = [
     "KbSearchWarning",
     "KbSeed",
     "KbSourceOut",
+    "KitChange",
+    "KitVariant",
     "KnowledgeConfig",
     "KnowledgeConnectionCreate",
     "KnowledgeConnectionOut",
@@ -919,6 +931,10 @@ __all__ = [
     "ToolDryRunResult",
     "ToolExecution",
     "ToolExecutionMode",
+    "ToolKit",
+    "ToolKitInstantiate",
+    "ToolKitInstantiated",
+    "ToolKitsResponse",
     "ToolMeta",
     "ToolNode",
     "ToolNodeOutcomes",

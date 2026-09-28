@@ -1,0 +1,201 @@
+{
+  "id": "case_ticket",
+  "name": "Open a case",
+  "summary": "Opens a case or ticket for anything your team must follow up on, reads the summary back first, shows the case reference on the panel and can check an existing case.",
+  "default_prefix": "case",
+  "default_variant": "rest",
+  "defaults": [
+    {
+      "name": "base_url",
+      "label": "Cases address",
+      "help": "Where a case is opened (POST, answering {\"id\": …, \"status\": …}); …/<reference> reads one back with GET.",
+      "kind": "url",
+      "required": true,
+      "example": "https://helpdesk.example.com/api/cases",
+      "variants": ["rest"]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "{{ kit.prefix }}_case",
+      "type": "details",
+      "title": "Your case",
+      "config": {
+        "fields": [
+          {"key": "reference", "label": "Reference"},
+          {"key": "status", "label": "Status"}
+        ]
+      }
+    }
+  ],
+  "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the case reference afterwards.",
+  "test_case": {
+    "name": "Opens a case and gives the reference",
+    "persona_instructions": "You are a customer whose delivery arrived damaged. You want someone to follow up. Agree when the agent reads the summary back.",
+    "scenario": "Explain the problem and ask for it to be looked into.",
+    "expectations": [
+      "The agent reads the summary back before it opens the case.",
+      "The agent gives the caller the case reference DEMO-CASE-1042."
+    ]
+  },
+  "variants": [
+    {
+      "id": "rest",
+      "label": "Your helpdesk system",
+      "summary": "Opens and checks cases through your own helpdesk's address (a key is optional; without one the calls carry no key).",
+      "source": "http",
+      "requires": {"secret_names": ["API_KEY"]},
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards. If they ask about an existing case, ask for its reference and check it with {{ kit.tool.status }}.",
+      "rules": [
+        {
+          "id": "{{ kit.prefix }}_opened",
+          "label": "Show that the case is open",
+          "when": "tool.{{ kit.tool.create }}.ok",
+          "then": [{"do": "status.set", "label": "Case opened", "tone": "success"}]
+        }
+      ],
+      "tools": [
+        {
+          "key": "create",
+          "label": "Open a case",
+          "risk": "write",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_create",
+            "description": "Open a case for the caller. Read the summary back to them and get a yes before calling.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "summary": {"type": "string", "description": "One line: what the caller needs."},
+                "details": {"type": "string", "description": "What the caller said, in two or three sentences."}
+              },
+              "required": ["summary", "details"]
+            },
+            "method": "POST",
+            "url": "{{ kit.base_url }}",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "body_template": "{\"summary\": \"{{ summary }}\", \"details\": \"{{ details }}\", \"channel\": \"{{ ctx.channel }}\", \"session_id\": \"{{ ctx.session_id }}\"}",
+            "timeout_s": 10,
+            "max_result_chars": 1500,
+            "confirm_readback": ["summary"],
+            "bindings": [
+              {"path": "/id", "to": "details:{{ kit.prefix }}_case.reference"},
+              {"path": "/status", "to": "details:{{ kit.prefix }}_case.status"},
+              {"path": "/id", "to": "var:{{ kit.prefix }}_reference"}
+            ]
+          },
+          "fake": {"id": "DEMO-CASE-1042", "status": "open"}
+        },
+        {
+          "key": "status",
+          "label": "Check a case",
+          "risk": "read",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_status",
+            "description": "Check where an existing case stands. Ask the caller for its reference first.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "reference": {"type": "string", "description": "The case reference, as the caller gave it."}
+              },
+              "required": ["reference"]
+            },
+            "method": "GET",
+            "url": "{{ kit.base_url }}/{{ reference }}",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "timeout_s": 8,
+            "max_result_chars": 1500,
+            "execution": {"mode": "auto"},
+            "bindings": [
+              {"path": "/id", "to": "details:{{ kit.prefix }}_case.reference"},
+              {"path": "/status", "to": "details:{{ kit.prefix }}_case.status"}
+            ]
+          },
+          "fake": {"id": "DEMO-CASE-1042", "status": "in progress"}
+        }
+      ]
+    },
+    {
+      "id": "composio",
+      "label": "A connected helpdesk app",
+      "summary": "Opens the case with a connected app's action (Zendesk, Jira or Linear). Connect the app under Apps first.",
+      "source": "composio_action",
+      "requires": {"apps": ["zendesk", "jira", "linear"]},
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards.",
+      "rules": [
+        {
+          "id": "{{ kit.prefix }}_opened",
+          "label": "Show that the case is open",
+          "when": "tool.{{ kit.tool.create }}.ok",
+          "then": [{"do": "status.set", "label": "Case opened", "tone": "success"}]
+        }
+      ],
+      "apps": [
+        {
+          "toolkit": "zendesk",
+          "label": "Zendesk",
+          "actions": [
+            {"slug": "ZENDESK_CREATE_ZENDESK_TICKET", "key": "create", "label": "Open a ticket", "fake": {"id": 1042, "status": "new"}}
+          ]
+        },
+        {
+          "toolkit": "jira",
+          "label": "Jira",
+          "actions": [
+            {"slug": "JIRA_CREATE_ISSUE", "key": "create", "label": "Open an issue", "fake": {"key": "DEMO-42"}}
+          ]
+        },
+        {
+          "toolkit": "linear",
+          "label": "Linear",
+          "actions": [
+            {"slug": "LINEAR_CREATE_LINEAR_ISSUE", "key": "create", "label": "Open an issue", "fake": {"identifier": "DEMO-42"}}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mcp_linear",
+      "label": "Linear (sign in)",
+      "summary": "Adds Linear's own server of tools; sign in to Linear from the tool's page, then choose which of its tools the agent may use.",
+      "source": "mcp_preset",
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open an issue in Linear: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue's identifier afterwards.",
+      "tools": [
+        {
+          "key": "server",
+          "label": "Linear",
+          "risk": "write",
+          "definition": {
+            "kind": "mcp",
+            "name": "{{ kit.prefix }}_linear",
+            "url": "https://mcp.linear.app/mcp",
+            "auth": {"kind": "oauth", "registration": "auto"},
+            "timeout_s": 10
+          }
+        }
+      ]
+    },
+    {
+      "id": "mcp_atlassian",
+      "label": "Jira through Atlassian (sign in)",
+      "summary": "Adds Atlassian's own server of tools (Jira and Confluence); sign in from the tool's page, then choose which of its tools the agent may use.",
+      "source": "mcp_preset",
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open a Jira issue: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue key afterwards.",
+      "tools": [
+        {
+          "key": "server",
+          "label": "Atlassian",
+          "risk": "write",
+          "definition": {
+            "kind": "mcp",
+            "name": "{{ kit.prefix }}_atlassian",
+            "url": "https://mcp.atlassian.com/v2/mcp",
+            "auth": {"kind": "oauth", "registration": "auto"},
+            "timeout_s": 10
+          }
+        }
+      ]
+    }
+  ]
+}

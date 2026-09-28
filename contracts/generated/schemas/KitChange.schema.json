@@ -1,0 +1,61 @@
+{
+  "$id": "lkap-contracts/KitChange.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One thing an instantiation adds, keeps or leaves out.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "tool",
+        "block",
+        "instructions",
+        "variable",
+        "extraction",
+        "rule",
+        "flow_node",
+        "flow_edge",
+        "flow_variable",
+        "test_case",
+        "notify_team"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "status": {
+      "enum": [
+        "added",
+        "exists",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "status"
+  ],
+  "title": "KitChange",
+  "type": "object"
+}

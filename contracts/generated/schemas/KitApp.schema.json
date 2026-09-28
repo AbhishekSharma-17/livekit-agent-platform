@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "KitAppAction": {
+      "description": "One action of a connected app a ``composio_action`` variant picks.",
+      "properties": {
+        "fake": {
+          "default": null,
+          "title": "Fake"
+        },
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The provider's action slug",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "key",
+        "label"
+      ],
+      "title": "KitAppAction",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/KitApp.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The actions a ``composio_action`` variant picks when the connected app is this one.",
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/KitAppAction"
+      },
+      "minItems": 1,
+      "title": "Actions",
+      "type": "array"
+    },
+    "label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "toolkit": {
+      "description": "The app (lower case), e.g. `zendesk`",
+      "pattern": "^[a-z0-9_]{1,64}$",
+      "title": "Toolkit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "toolkit",
+    "label",
+    "actions"
+  ],
+  "title": "KitApp",
+  "type": "object"
+}

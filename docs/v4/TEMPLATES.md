@@ -376,3 +376,31 @@ Web (`web/tests`): `console-create-agent.test.tsx` rewritten for the dialog: til
 - **`template_id` column** on agents for the list filter and analytics.
 - **Realtime and avatar starters** once the "required key" badge has a real consumer.
 - **Localised starters** (`voice.language`, `stt`/`tts` model language fields) — a per-template `locales` map.
+
+## Addendum (v6): tool kits (V6-18, D-V6-26)
+
+Starters shape a **new** agent; **tool kits** add one job to an **existing** agent. A kit
+(`lkap_contracts.kits.ToolKit`, one file per kit under `api/src/lkap_api/templates/kits/`) bundles the
+tool rows, the panel blocks they fill, an instruction snippet (appended between
+`<!-- kit:<id>:<prefix> -->` markers), extraction fields, rules, optional flow steps and a test case
+whose tools answer from fakes. `GET /v1/tool-kits` lists them; `POST /v1/tool-kits/{id}/instantiate`
+adds one in a single configuration version, or previews it with `dry_run`; adding it again with the
+same `block_prefix` adds nothing. The catalogue:
+
+| Kit | Variants | Adds |
+|---|---|---|
+| `record_lookup` | lookup table (default), your system (GET) | a lookup tool, a results table, a status rule; flow step on request |
+| `case_ticket` | your helpdesk (POST + GET, default), a connected app (Zendesk, Jira, Linear), Linear or Atlassian sign-in servers | open/check tools, a case details card, a rule |
+| `structured_intake` | notebook (default), details card | five extraction fields, the still-needed checklist, a completion rule |
+| `verify_identity` | your system (default; one-time code tools only with text messages), lookup table (reference + answers as key columns) | a check tool, `var.identity_verified`, a verified rule |
+| `payment_esign_link` | your billing or signing system | a create-link tool, a `link` block limited to your pages' site, a rule |
+| `notify_escalate` | the built-in hand-over | the needs-a-person field, an escalation rule, status and hand-over blocks; team notifications with a webhook key |
+| `sheet_crm_log` | your system (default), a connected app (Google Sheets, Airtable) | a log tool, a rule |
+| `booking` | Cal.com (the tool templates above) | the six booking tools, a rule |
+
+No kit needs a key to be added: without one, HTTP tools are stored without their key header.
+`/v1/tool-templates` stays as the Cal.com compatibility path; the `booking` kit wraps the same
+templates. `api/tests/test_tool_kits.py` adds every kit (each variant that needs no connected app) to a
+fresh agent on a keyless workspace and requires zero validation errors. `docs/CONTRACTS.md` §7 has the
+models; the MCP tools are `kit_list` and `kit_add` (recipes `add-kit`,
+`record-lookup-from-a-spreadsheet`).

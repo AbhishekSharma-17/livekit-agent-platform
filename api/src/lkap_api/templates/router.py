@@ -1,6 +1,8 @@
 """``GET /v1/templates`` and ``GET /v1/templates/{template_id}`` (docs/v4/TEMPLATES.md D-V4-3, D-V4-4),
 plus the tool templates ``GET /v1/tool-templates`` and ``POST /v1/tool-templates/{id}/instantiate``
-(V5-25, D-V5-36).
+(V5-25, D-V5-36) and the tool kits ``GET /v1/tool-kits``, ``GET /v1/tool-kits/{id}`` and
+``POST /v1/tool-kits/{id}/instantiate`` (V6-18, D-V6-26; the Cal.com set is also the ``booking``
+kit, and ``/v1/tool-templates`` stays).
 
 Readable like ``/v1/packs``: any workspace member (``viewer``) or an API key
 with ``agents:read``, so the console's New agent dialog and the MCP's
@@ -20,6 +22,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from lkap_contracts import pricing
 from lkap_contracts.api_models import TemplateEstimate, TemplateOut, TemplatesResponse, ToolCreate
+from lkap_contracts.kits import ToolKit, ToolKitInstantiate, ToolKitInstantiated, ToolKitsResponse
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tools import ToolTemplateInstantiate, ToolTemplateInstantiated, ToolTemplatesResponse
@@ -39,6 +42,8 @@ from lkap_api.templates.catalog import (
     load_catalog,
     missing_pack_templates,
 )
+from lkap_api.templates.kit_apply import instantiate_kit
+from lkap_api.templates.kits import get_kit, load_kits
 from lkap_api.templates.seed import seed_from_template
 from lkap_api.templates.tools import (
     ToolTemplateError,
@@ -47,6 +52,8 @@ from lkap_api.templates.tools import (
     load_tool_templates,
     tool_template,
 )
+from lkap_api.tool_providers.adapter import AdapterFactory
+from lkap_api.tool_providers.router import get_adapter_factory
 
 log = get_logger(__name__)
 
@@ -55,9 +62,12 @@ router = APIRouter(tags=["templates"])
 TemplateReaderDep = Annotated[WorkspaceContext, Depends(require("viewer", "agents:read"))]
 #: Instantiating a tool template creates tool rows: the `POST /v1/tools` requirement.
 ToolWriterDep = Annotated[WorkspaceContext, Depends(require("builder", "agents:write"))]
+#: V6-18: a connected app's kit variant picks actions through the Apps adapter (tests override it).
+AppsFactoryDep = Annotated[AdapterFactory, Depends(get_adapter_factory)]
 
 load_catalog()
 load_tool_templates()  # V5-25: a malformed tool template fails startup too
+load_kits()  # V6-18: so does a malformed tool kit
 
 
 #: ``(template id, pack id, PRICE_VERSION) -> estimate`` (D-V4-42: default assumptions, list prices).
@@ -260,3 +270,70 @@ async def instantiate_tool_template(
         created.template_ids.append(template.id)
     log.info("tool_template_instantiated", template_id=template_id, tool_count=len(created.tool_ids))
     return created
+
+
+# ------------------------------------------------------------------ tool kits (V6-18)
+@router.get(
+    "/v1/tool-kits",
+    response_model=ToolKitsResponse,
+    tags=["tools"],
+    summary="List tool kits",
+    description=(
+        "Ready-made kits for common jobs (look a record up, open a case, take down details, verify "
+        "the caller, send a payment link, hand over to the team, log the call, book appointments): "
+        "each lists its variants (where its tools come from), the blocks, instructions, extraction "
+        "fields, rules and flow steps it adds, and the settings it needs. Names are shown with the "
+        "kit's default prefix."
+    ),
+)
+async def list_tool_kits(_ctx: TemplateReaderDep) -> ToolKitsResponse:
+    """Return every kit in gallery order."""
+    return ToolKitsResponse(items=list(load_kits()))
+
+
+@router.get(
+    "/v1/tool-kits/{kit_id}",
+    response_model=ToolKit,
+    tags=["tools"],
+    summary="Get a tool kit",
+    description="One kit, shown with its default prefix and the settings' examples.",
+)
+async def get_tool_kit(kit_id: str, _ctx: TemplateReaderDep) -> ToolKit:
+    """Return one kit.
+
+    Raises:
+        NotFoundError: No kit has this id.
+    """
+    kit = get_kit(kit_id)
+    if kit is None:
+        raise NotFoundError(f"unknown tool kit '{kit_id}'")
+    return kit
+
+
+@router.post(
+    "/v1/tool-kits/{kit_id}/instantiate",
+    response_model=ToolKitInstantiated,
+    tags=["tools"],
+    summary="Add a tool kit to an agent",
+    description=(
+        "Adds the kit's tools, panel blocks, instruction snippet (between `<!-- kit:<id>:<prefix> -->` "
+        "markers), extraction fields, rules, optional flow steps (after `flow_anchor`) and test case "
+        "to one agent in one new configuration version; `dry_run=true` only lists what it would add "
+        "and validates the result. Adding a kit again with the same `block_prefix` adds nothing. No "
+        "key is needed: without `credential_id` HTTP tools are stored without their key header. "
+        "Binding a key needs `admin` and `providers:write`, as for `POST /v1/tools`; a connected "
+        "app's variant needs them too (the Apps rule). A kit that would add a validation error is "
+        "refused (422) and nothing is kept."
+    ),
+)
+async def instantiate_tool_kit(
+    kit_id: str,
+    payload: ToolKitInstantiate,
+    db: DbDep,
+    vault: VaultDep,
+    settings: SettingsDep,
+    ctx: ToolWriterDep,
+    factory: AppsFactoryDep,
+) -> ToolKitInstantiated:
+    """Add (or preview) a kit on one agent of the caller's workspace."""
+    return await instantiate_kit(db, vault, settings, ctx, factory, kit_id, payload)

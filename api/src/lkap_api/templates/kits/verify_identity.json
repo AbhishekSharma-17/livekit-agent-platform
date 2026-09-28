@@ -1,0 +1,172 @@
+{
+  "id": "verify_identity",
+  "name": "Verify the caller",
+  "summary": "Checks who the caller is before the agent discusses their account: their answers are read back and compared with your records, and the panel shows when they are verified.",
+  "default_prefix": "verify",
+  "default_variant": "rest",
+  "defaults": [
+    {
+      "name": "base_url",
+      "label": "Verification address",
+      "help": "Where the answers are checked (POST, answering {\"verified\": true or false}). With text messages on, …/codes texts a one-time code and …/codes/check checks it.",
+      "kind": "url",
+      "required": true,
+      "example": "https://accounts.example.com/api/verify",
+      "variants": ["rest"]
+    }
+  ],
+  "blocks": [
+    {"id": "status", "type": "status", "config": {}, "shared": true}
+  ],
+  "instructions_snippet": "Before you discuss the caller's account, verify who they are: ask for their reference and their date of birth, read both back, then check them. Continue only once the check says they match. If it does not, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice.",
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_verified",
+      "label": "Mark the caller verified",
+      "when": "var.identity_verified == true",
+      "then": [
+        {"do": "status.set", "label": "Caller verified", "tone": "success"},
+        {"do": "instruct", "text": "The caller is now verified: you may discuss their account."}
+      ]
+    }
+  ],
+  "test_case": {
+    "name": "Verifies the caller before helping",
+    "persona_instructions": "You are Demo Rao, reference DEMO-1001, born on 14 March 1985. You want to know if your last payment arrived. Confirm when the agent reads your answers back.",
+    "scenario": "Ask about your last payment.",
+    "expectations": [
+      "The agent asks for the reference and the date of birth before discussing the account.",
+      "The agent reads the answers back before checking them."
+    ]
+  },
+  "variants": [
+    {
+      "id": "rest",
+      "label": "Your own system",
+      "summary": "Your system compares the answers; optionally texts a one-time code when the agent can send text messages.",
+      "source": "http",
+      "requires": {"secret_names": ["API_KEY"], "sms": true},
+      "instructions_snippet": "Before you discuss the caller's account, verify who they are: ask for their reference and their date of birth, read both back, then check them with {{ kit.tool.check }}. Continue only once the check says they match. If it does not, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice. If you have tools to text a one-time code, you may offer that instead: text the code, then check the code they read out.",
+      "tools": [
+        {
+          "key": "check",
+          "label": "Check the answers",
+          "risk": "read",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_check",
+            "description": "Check the caller's answers against their record. Read both answers back and get a yes before calling.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "reference": {"type": "string", "description": "The caller's reference, as they gave it."},
+                "date_of_birth": {"type": "string", "description": "Their date of birth, as they said it (e.g. 14 March 1985)."}
+              },
+              "required": ["reference", "date_of_birth"]
+            },
+            "method": "POST",
+            "url": "{{ kit.base_url }}",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "body_template": "{\"reference\": \"{{ reference }}\", \"date_of_birth\": \"{{ date_of_birth }}\", \"session_id\": \"{{ ctx.session_id }}\"}",
+            "timeout_s": 8,
+            "max_result_chars": 500,
+            "confirm_readback": ["reference", "date_of_birth"],
+            "bindings": [{"path": "/verified", "to": "var:identity_verified"}]
+          },
+          "fake": {"verified": true}
+        },
+        {
+          "key": "send_code",
+          "label": "Text a one-time code",
+          "risk": "write",
+          "only_with": "sms",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_send_code",
+            "description": "Ask the verification system to text a one-time code to the phone number on the caller's record. Use it only when the caller cannot answer the questions.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "reference": {"type": "string", "description": "The caller's reference, as they gave it."}
+              },
+              "required": ["reference"]
+            },
+            "method": "POST",
+            "url": "{{ kit.base_url }}/codes",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "body_template": "{\"reference\": \"{{ reference }}\", \"session_id\": \"{{ ctx.session_id }}\"}",
+            "timeout_s": 8,
+            "max_result_chars": 300
+          },
+          "fake": {"sent": true}
+        },
+        {
+          "key": "check_code",
+          "label": "Check the one-time code",
+          "risk": "read",
+          "only_with": "sms",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_check_code",
+            "description": "Check the one-time code the caller reads out.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "reference": {"type": "string", "description": "The caller's reference, as they gave it."},
+                "code": {"type": "string", "description": "The code as the caller read it out."}
+              },
+              "required": ["reference", "code"]
+            },
+            "method": "POST",
+            "url": "{{ kit.base_url }}/codes/check",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "body_template": "{\"reference\": \"{{ reference }}\", \"code\": \"{{ code }}\", \"session_id\": \"{{ ctx.session_id }}\"}",
+            "timeout_s": 8,
+            "max_result_chars": 300,
+            "bindings": [{"path": "/verified", "to": "var:identity_verified"}]
+          },
+          "fake": {"verified": true}
+        }
+      ]
+    },
+    {
+      "id": "dataset",
+      "label": "Lookup table",
+      "summary": "Compares the answers with a row of one of your lookup tables: the caller is verified when every answer matches the same row.",
+      "source": "dataset",
+      "requires": {
+        "dataset": "A lookup table whose key columns are the reference and each answer to check (a date of birth, a postcode).",
+        "min_key_columns": 2
+      },
+      "instructions_snippet": "Before you discuss the caller's account, verify who they are: ask for their reference and each answer the check needs, read them back, then check them with {{ kit.tool.check }}. The caller is verified only when it finds their record. If it finds nothing, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice.",
+      "rules": [
+        {
+          "id": "{{ kit.prefix }}_matched",
+          "label": "A row matched every answer",
+          "when": "var.{{ kit.prefix }}_record is set",
+          "then": [{"do": "var.set", "name": "identity_verified", "value": true}]
+        }
+      ],
+      "tools": [
+        {
+          "key": "check",
+          "label": "Check the answers",
+          "risk": "read",
+          "definition": {
+            "kind": "dataset",
+            "name": "{{ kit.prefix }}_check",
+            "description": "Check the caller's answers against the lookup table: pass the reference and every answer exactly as they said them. It finds their record only when every answer matches.",
+            "dataset_id": "{{ kit.dataset_id }}",
+            "key_columns": ["{{ kit.key_column }}"],
+            "return_columns": ["{{ kit.key_column }}"],
+            "match": "exact",
+            "max_rows": 1,
+            "max_result_chars": 300,
+            "bindings": [{"path": "/0/{{ kit.key_column }}", "to": "var:{{ kit.prefix }}_record"}]
+          },
+          "fake": [{"{{ kit.key_column }}": "DEMO-1001"}]
+        }
+      ]
+    }
+  ]
+}

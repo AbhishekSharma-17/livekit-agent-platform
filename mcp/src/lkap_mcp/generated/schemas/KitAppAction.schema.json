@@ -1,0 +1,45 @@
+{
+  "$id": "lkap-contracts/KitAppAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One action of a connected app a ``composio_action`` variant picks.",
+  "properties": {
+    "fake": {
+      "default": null,
+      "title": "Fake"
+    },
+    "key": {
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Key",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "risk": {
+      "default": "write",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "title": "Risk",
+      "type": "string"
+    },
+    "slug": {
+      "description": "The provider's action slug",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Slug",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slug",
+    "key",
+    "label"
+  ],
+  "title": "KitAppAction",
+  "type": "object"
+}

@@ -1,0 +1,1310 @@
+{
+  "$defs": {
+    "DatasetToolDefinition": {
+      "description": "A lookup in one of the workspace's datasets (V6-16, D-V6-27; ``lkap_contracts.datasets``).\n\nThe model sees one string argument per key column (``key_columns``, minus the pinned\nones) and gets back at most ``max_rows`` rows with ``return_columns`` (all columns when\nempty), matched ``exact`` or by ``prefix`` on the normalised value. The worker calls the\napi's internal lookup route with the session, so a lookup never reads another\nworkspace's dataset, and fences the rows as ``dataset:<name>``. Read-only: nothing is\never written to a dataset from a call. The tool always runs blocking (a lookup is quick).\n\nV6-07: ``pinned_arguments`` fix a key column's value, hidden from the model (a string may\nbe ``{{ ctx.caller_phone }}`` or ``{{ var.policy_number }}``); ``requires_vars`` refuse\nuntil variables are set; ``bindings`` copy a successful lookup onto the panel. The bound\n(and model-visible) result is the list of rows, so ``/0/holder_name`` is the first row's\n``holder_name``.",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "dataset_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "key_columns": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Key Columns",
+          "type": "array"
+        },
+        "kind": {
+          "const": "dataset",
+          "default": "dataset",
+          "title": "Kind",
+          "type": "string"
+        },
+        "match": {
+          "default": "exact",
+          "enum": [
+            "exact",
+            "prefix"
+          ],
+          "title": "Match",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 2000,
+          "maximum": 8000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "max_rows": {
+          "default": 5,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Rows",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "return_columns": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Return Columns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "dataset_id",
+        "key_columns"
+      ],
+      "title": "DatasetToolDefinition",
+      "type": "object"
+    },
+    "HttpToolDefinition": {
+      "description": "An HTTP call exposed to the model as a raw-schema function tool.",
+      "properties": {
+        "allowed_hosts": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "body_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body Template"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ToolExecution"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "http",
+          "default": "http",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 4000,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "method": {
+          "default": "POST",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "result_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Path"
+        },
+        "silent_reply": {
+          "default": false,
+          "title": "Silent Reply",
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "default": 10,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "parameters",
+        "url"
+      ],
+      "title": "HttpToolDefinition",
+      "type": "object"
+    },
+    "Issue": {
+      "description": "One addressable validation finding (UI_UX_SPEC §7.14).\n\n``path`` is a dotted path into the validated document, for example\n``\"pipeline.tts\"`` or ``\"flow.nodes[2].instructions\"``, so the console can\nfocus the offending field.",
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "severity": {
+          "default": "error",
+          "enum": [
+            "error",
+            "warning"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "message"
+      ],
+      "title": "Issue",
+      "type": "object"
+    },
+    "KitChange": {
+      "description": "One thing an instantiation adds, keeps or leaves out.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "tool",
+            "block",
+            "instructions",
+            "variable",
+            "extraction",
+            "rule",
+            "flow_node",
+            "flow_edge",
+            "flow_variable",
+            "test_case",
+            "notify_team"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "status": {
+          "enum": [
+            "added",
+            "exists",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "status"
+      ],
+      "title": "KitChange",
+      "type": "object"
+    },
+    "KitToolPlan": {
+      "description": "A tool of the kit as it is (or would be) stored.",
+      "properties": {
+        "definition": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "dataset": "#/$defs/DatasetToolDefinition",
+                  "http": "#/$defs/HttpToolDefinition",
+                  "mcp": "#/$defs/McpServerDefinition",
+                  "provider": "#/$defs/ProviderToolDefinition"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/HttpToolDefinition"
+                },
+                {
+                  "$ref": "#/$defs/McpServerDefinition"
+                },
+                {
+                  "$ref": "#/$defs/ProviderToolDefinition"
+                },
+                {
+                  "$ref": "#/$defs/DatasetToolDefinition"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "http",
+            "mcp",
+            "provider",
+            "dataset"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "added",
+            "exists",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tool_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Id"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "kind",
+        "status"
+      ],
+      "title": "KitToolPlan",
+      "type": "object"
+    },
+    "McpHeaderAuth": {
+      "description": "Static request headers, typically an API key (research-v4 tools §4.3.1).\n\nHeader values may reference ``{{ secret.NAME }}``; the api substitutes them from\n``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "header",
+          "default": "header",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "McpHeaderAuth",
+      "type": "object"
+    },
+    "McpNoAuth": {
+      "description": "The MCP server needs no credentials (a public server).",
+      "properties": {
+        "kind": {
+          "const": "none",
+          "default": "none",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "McpNoAuth",
+      "type": "object"
+    },
+    "McpOAuthAuth": {
+      "description": "Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
+      "properties": {
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Id"
+        },
+        "client_secret_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Ref"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "kind": {
+          "const": "oauth",
+          "default": "oauth",
+          "title": "Kind",
+          "type": "string"
+        },
+        "registration": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "preregistered"
+          ],
+          "title": "Registration",
+          "type": "string"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scopes"
+        },
+        "subject": {
+          "default": "workspace",
+          "enum": [
+            "workspace",
+            "agent"
+          ],
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "title": "McpOAuthAuth",
+      "type": "object"
+    },
+    "McpServerDefinition": {
+      "description": "A streamable-HTTP MCP server attached to the agent.\n\n``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the\npre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not\nmoved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or\nwith ``auth.kind == \"none\"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set\nthey are filled from it (``credential_id`` also mirrors an OAuth credential), and a\nvalue that disagrees with ``auth`` is an error. Stored rows need no data migration:\nthey load as header auth and re-save with ``auth``.",
+      "properties": {
+        "allowed_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Tools"
+        },
+        "auth": {
+          "discriminator": {
+            "mapping": {
+              "header": "#/$defs/McpHeaderAuth",
+              "none": "#/$defs/McpNoAuth",
+              "oauth": "#/$defs/McpOAuthAuth"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/McpNoAuth"
+            },
+            {
+              "$ref": "#/$defs/McpHeaderAuth"
+            },
+            {
+              "$ref": "#/$defs/McpOAuthAuth"
+            }
+          ],
+          "title": "Auth"
+        },
+        "cached_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached At"
+        },
+        "cached_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpToolSnapshot"
+              },
+              "maxItems": 200,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Tools"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "mcp",
+          "default": "mcp",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpServerOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sse_read_timeout_s": {
+          "default": 300,
+          "title": "Sse Read Timeout S",
+          "type": "number"
+        },
+        "timeout_s": {
+          "default": 5,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool_context": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolContextSpec"
+          },
+          "default": {},
+          "title": "Tool Context",
+          "type": "object"
+        },
+        "tool_options": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolExecution"
+          },
+          "default": {},
+          "title": "Tool Options",
+          "type": "object"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ],
+      "title": "McpServerDefinition",
+      "type": "object"
+    },
+    "McpServerOrigin": {
+      "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "kind": {
+          "enum": [
+            "server",
+            "router"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "remote_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Remote Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "remote_id"
+      ],
+      "title": "McpServerOrigin",
+      "type": "object"
+    },
+    "McpToolSnapshot": {
+      "description": "One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpToolSnapshot",
+      "type": "object"
+    },
+    "ProviderToolDefinition": {
+      "description": "One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).\n\nCreated by materialisation (``POST /v1/tool-providers/composio/materialise``): the\nparameters are pinned from the provider's schema at import, the description is its first\nsentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``\non the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``\nplaceholder that the api substitutes from ``credential_id`` when a session resolves, as\nfor HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's\n``user_id`` copied from it.",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "connected_account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connected Account Id"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ToolExecution"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "provider",
+          "default": "provider",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 1500,
+          "maximum": 20000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "result_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "data",
+          "title": "Result Path"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write",
+            "destructive"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "silent_reply": {
+          "default": false,
+          "title": "Silent Reply",
+          "type": "boolean"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 10,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool_slug": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "toolkit": {
+          "default": "",
+          "title": "Toolkit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "parameters",
+        "tool_slug",
+        "connection_id",
+        "subject"
+      ],
+      "title": "ProviderToolDefinition",
+      "type": "object"
+    },
+    "ToolBinding": {
+      "description": "Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).\n\nApplied by the worker after a successful call (an HTTP 2xx, an app action that\nsucceeded, an MCP result that is not an error) and before the model's next turn, with\nno model involved. ``path`` points into the tool's result as the model would see it\n(after ``result_path``); ``\"\"`` is the whole result.",
+      "properties": {
+        "path": {
+          "default": "",
+          "maxLength": 256,
+          "title": "Path",
+          "type": "string"
+        },
+        "to": {
+          "maxLength": 140,
+          "minLength": 1,
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "ToolBinding",
+      "type": "object"
+    },
+    "ToolContextSpec": {
+      "description": "The tool-context settings of one MCP tool (``McpServerDefinition.tool_context``).",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        }
+      },
+      "title": "ToolContextSpec",
+      "type": "object"
+    },
+    "ToolExecution": {
+      "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+      "properties": {
+        "announce": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Announce"
+        },
+        "auto_threshold_ms": {
+          "default": 700,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Auto Threshold Ms",
+          "type": "integer"
+        },
+        "cancellable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cancellable"
+        },
+        "duplicate_scope": {
+          "default": "name_and_args",
+          "enum": [
+            "name",
+            "name_and_args"
+          ],
+          "title": "Duplicate Scope",
+          "type": "string"
+        },
+        "filler_delay_s": {
+          "default": 4.0,
+          "maximum": 30,
+          "minimum": 0.5,
+          "title": "Filler Delay S",
+          "type": "number"
+        },
+        "filler_interval_s": {
+          "default": 8.0,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Filler Interval S",
+          "type": "number"
+        },
+        "fillers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Fillers",
+          "type": "array"
+        },
+        "max_duration_s": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Max Duration S",
+          "type": "number"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "blocking",
+                "background",
+                "auto"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "on_duplicate": {
+          "anyOf": [
+            {
+              "enum": [
+                "allow",
+                "reject",
+                "replace",
+                "confirm"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Duplicate"
+        },
+        "report_progress": {
+          "default": false,
+          "title": "Report Progress",
+          "type": "boolean"
+        }
+      },
+      "title": "ToolExecution",
+      "type": "object"
+    },
+    "ValidationResult": {
+      "description": "``POST /v1/agents/{id}/validate``.\n\n``errors``/``warnings`` are the flat v1 lists; ``issues`` carries the same\nfindings with a ``path`` so the console can focus the offending field\n(UI_UX_SPEC §7.14).",
+      "properties": {
+        "errors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "issues": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Issue"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "ValidationResult",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ToolKitInstantiated.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What ``POST /v1/tool-kits/{id}/instantiate`` added, kept and left out (or would, on a dry run).",
+  "properties": {
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/KitChange"
+      },
+      "title": "Changes",
+      "type": "array"
+    },
+    "config_version": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Version"
+    },
+    "dry_run": {
+      "title": "Dry Run",
+      "type": "boolean"
+    },
+    "instructions_snippet": {
+      "title": "Instructions Snippet",
+      "type": "string"
+    },
+    "kit_id": {
+      "title": "Kit Id",
+      "type": "string"
+    },
+    "notes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "prefix": {
+      "title": "Prefix",
+      "type": "string"
+    },
+    "tool_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tool Ids",
+      "type": "array"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/KitToolPlan"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationResult"
+    },
+    "variant": {
+      "title": "Variant",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kit_id",
+    "variant",
+    "prefix",
+    "dry_run",
+    "changes",
+    "tools",
+    "instructions_snippet",
+    "validation"
+  ],
+  "title": "ToolKitInstantiated",
+  "type": "object"
+}

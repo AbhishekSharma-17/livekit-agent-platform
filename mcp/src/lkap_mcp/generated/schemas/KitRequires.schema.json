@@ -1,0 +1,50 @@
+{
+  "$id": "lkap-contracts/KitRequires.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a variant needs, for the gallery (nothing here is needed to add it).",
+  "properties": {
+    "apps": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Apps",
+      "type": "array"
+    },
+    "dataset": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset"
+    },
+    "min_key_columns": {
+      "default": 1,
+      "maximum": 8,
+      "minimum": 1,
+      "title": "Min Key Columns",
+      "type": "integer"
+    },
+    "secret_names": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Secret Names",
+      "type": "array"
+    },
+    "sms": {
+      "default": false,
+      "title": "Sms",
+      "type": "boolean"
+    }
+  },
+  "title": "KitRequires",
+  "type": "object"
+}

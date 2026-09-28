@@ -16391,6 +16391,233 @@
       ],
       "write_scopes": []
     },
+    "kit_add": {
+      "_meta": {
+        "lkap/data": [
+          "ToolKitInstantiated"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "ToolKitInstantiated",
+      "description": "Add a tool kit to an agent: tools, panel blocks, instructions, variables and rules.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "add_test_case": {
+            "default": true,
+            "title": "Add Test Case",
+            "type": "boolean"
+          },
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "block_prefix": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,23}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Names the tools, blocks and rules the kit adds (default: the kit's)",
+            "title": "Block Prefix"
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A connected app (apps_connections) for a composio_action variant",
+            "title": "Connection Id"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A lookup table for a dataset variant",
+            "title": "Dataset Id"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "List what would be added and validate it; change nothing",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "flow_anchor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A flow step to add the kit's flow steps after (flow agents only)",
+            "title": "Flow Anchor"
+          },
+          "key_columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The table's key columns to match on (default: all of them)",
+            "title": "Key Columns"
+          },
+          "kit_id": {
+            "title": "Kit Id",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "secret_key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A tool-secret key holding the variant's secret names (binding it needs providers:write); without it the HTTP tools carry no key header",
+            "title": "Secret Key Id"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Values of the kit's settings (kit_list shows them), e.g. {'base_url': 'https://api.example.com/v1/records'}",
+            "title": "Settings"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A variant id (default: the kit's default)",
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "kit_id",
+          "agent_id"
+        ],
+        "title": "kit_addArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
+    "kit_list": {
+      "_meta": {
+        "lkap/data": [
+          "ToolKitsResponse"
+        ],
+        "lkap/scopes": [
+          "agents:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "ToolKitsResponse",
+      "description": "List the tool kits (ready-made use cases) with their variants and settings, or show one in full.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "kit_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "One kit's full definition (blocks, rules, snippet, tools)",
+            "title": "Kit Id"
+          }
+        },
+        "title": "kit_listArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "agents:read"
+      ],
+      "write_scopes": []
+    },
     "lkap_delete": {
       "_meta": {
         "lkap/data": [
@@ -19765,6 +19992,8 @@
       "kb_get",
       "kb_list",
       "kb_search",
+      "kit_add",
+      "kit_list",
       "lkap_delete",
       "lkap_describe",
       "lkap_explain",
@@ -19853,6 +20082,8 @@
       "kb_get",
       "kb_list",
       "kb_search",
+      "kit_add",
+      "kit_list",
       "lkap_delete",
       "lkap_describe",
       "lkap_explain",
@@ -19917,6 +20148,7 @@
       "kb_evaluate_result",
       "kb_get",
       "kb_list",
+      "kit_list",
       "lkap_describe",
       "lkap_explain",
       "lkap_guide",
@@ -19994,6 +20226,8 @@
       "kb_get",
       "kb_list",
       "kb_search",
+      "kit_add",
+      "kit_list",
       "lkap_delete",
       "lkap_describe",
       "lkap_explain",
@@ -20090,6 +20324,8 @@
       "kb_get",
       "kb_list",
       "kb_search",
+      "kit_add",
+      "kit_list",
       "lkap_delete",
       "lkap_describe",
       "lkap_explain",
@@ -20154,6 +20390,7 @@
       "kb_evaluate_result",
       "kb_get",
       "kb_list",
+      "kit_list",
       "lkap_describe",
       "lkap_explain",
       "lkap_guide",

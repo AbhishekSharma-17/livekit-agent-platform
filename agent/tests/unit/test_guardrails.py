@@ -240,6 +240,32 @@ def test_regex_rule_trips_on_a_card_number_and_not_on_plain_text() -> None:
     assert engine.check_regex("output", "4111 1111 1111 1111") is None, "rules are per stage"
 
 
+def test_the_worker_skips_a_stored_guardrail_pattern_the_scanner_refuses() -> None:
+    """V6-29 (S6-28): a pattern stored before the api's S6-4 check never runs on the worker."""
+    from lkap_contracts.rules_expr import nested_repeat
+    from structlog.testing import capture_logs
+
+    from lkap_agent.guardrails import GUARDRAIL_RULE_UNREADABLE_EVENT
+
+    refused = "(fire|smoke)+"
+    assert nested_repeat(refused)
+    stored = GuardrailsConfig.model_validate(  # loads: the contract checks the length only
+        {"input": [{"kind": "regex", "name": "Hazards", "pattern": refused}, CARD_RULE]}
+    )
+    with capture_logs() as logs:
+        engine, events = _engine(stored)
+
+    skipped = [entry for entry in logs if entry["event"].endswith("rule skipped")]
+    assert [(entry["rule"], entry["stage"], entry["log_level"]) for entry in skipped] == [
+        ("Hazards", "input", "warning")
+    ]
+    assert events == [(GUARDRAIL_RULE_UNREADABLE_EVENT, {"stage": "input", "rule": "Hazards"})]
+    assert refused not in repr(logs) and refused not in repr(events)  # never the pattern text
+    assert engine.check_regex("input", "smoke " * 400 + "!") is None  # the refused rule never runs
+    trip = engine.check_regex("input", "my card is 4111 1111 1111 1111")  # the clean one still does
+    assert trip is not None and trip.rule.name == "Card numbers"
+
+
 async def test_classifier_rule_trips_with_the_text_fenced() -> None:
     model = FakeStructuredLLM([Verdict(violates=True)])
     engine, _ = _engine(GuardrailsConfig.model_validate({"output": [MEDICAL_RULE]}), classifier=model)

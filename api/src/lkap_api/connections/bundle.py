@@ -34,6 +34,8 @@ TEMPLATE_FORMATS: tuple[str, ...] = ("env", "compose", "lk")
 
 #: Observability variables copied from the api's own environment when set.
 OTEL_PASSTHROUGH: tuple[str, ...] = ("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS")
+#: The passed-through variables that hold a credential: a placeholder in every redacted view.
+OTEL_SECRET_PASSTHROUGH: tuple[str, ...] = ("OTEL_EXPORTER_OTLP_HEADERS",)
 
 _SECRET_PLACEHOLDER = "<{name}>"
 
@@ -97,15 +99,21 @@ def redacted_env(row: LiveKitConnection, settings: Settings, fingerprint: str) -
         fingerprint: The key fingerprint (``…abcd``) shown next to the key placeholder.
 
     Returns:
-        An ordered mapping safe to show to an admin.
+        An ordered mapping safe to show to an admin. V6-29 (S6-27): the api's own
+        :data:`OTEL_SECRET_PASSTHROUGH` values (a telemetry vendor's auth header, by
+        OpenTelemetry's convention) become ``<NAME>`` placeholders when set; the endpoint stays.
     """
-    return {
+    env = {
         "LIVEKIT_URL": row.url,
         "LIVEKIT_API_KEY": f"<LIVEKIT_API_KEY {fingerprint}>",
         "LIVEKIT_API_SECRET": _SECRET_PLACEHOLDER.format(name="LIVEKIT_API_SECRET"),
         "LKAP_SERVICE_TOKEN": _SECRET_PLACEHOLDER.format(name="LKAP_SERVICE_TOKEN"),
         **_shared_env(row, settings),
     }
+    for name in OTEL_SECRET_PASSTHROUGH:
+        if name in env:
+            env[name] = _SECRET_PLACEHOLDER.format(name=name)
+    return env
 
 
 def worker_env_template(row: LiveKitConnection, settings: Settings, fingerprint: str, fmt: str) -> str:
@@ -203,7 +211,7 @@ def deploy_bundle(row: LiveKitConnection, settings: Settings, fingerprint: str) 
     toml = f'[project]\n  subdomain = "{subdomain}"\n'
     secrets = (
         "# LKAP worker secrets for `lk agent create --secrets-file secrets.env`.\n"
-        "# Replace <LKAP_SERVICE_TOKEN> before uploading.\n"
+        "# Replace every <...> placeholder (<LKAP_SERVICE_TOKEN> at least) before uploading.\n"
         + "".join(f"{name}={value}\n" for name, value in env.items())
     )
     readme = f"""# Deploy the LKAP worker to LiveKit Cloud: {row.name}

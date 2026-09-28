@@ -15,6 +15,11 @@ worker sets it; the page never does). It is stored only when ``meta.block_id`` n
 only as a PNG of at most :data:`~lkap_contracts.ui_protocol.MAX_CANVAS_SNAPSHOT_BYTES`; the
 session's caps apply as to any file.
 
+V6-29 (S6-32, ask #211): a ``signature`` is stored only when ``meta.source`` is ``"signature"``
+and ``meta.block_id`` names a ``signature`` block of the session's panel (the worker sets both
+and accepts a picture only while it awaits one), and only as a PNG of at most
+:data:`~lkap_contracts.ui_protocol.MAX_SIGNATURE_BYTES`.
+
 Downloads: an S3-compatible backend answers with its own presigned GET (the
 existing signed-URL path); the local backend, whose ``/internal/v1/storage/local``
 URL no route serves (REVIEW-V2 R2-25; the proxy refuses ``/internal/*`` from
@@ -46,7 +51,9 @@ from lkap_contracts.blocks import (
 from lkap_contracts.ui_protocol import (
     CANVAS_SNAPSHOT_SOURCE,
     MAX_CANVAS_SNAPSHOT_BYTES,
+    MAX_SIGNATURE_BYTES,
     MAX_UPLOAD_BYTES,
+    SIGNATURE_SOURCE,
     BlockSpec,
     SessionAssetKind,
 )
@@ -212,7 +219,10 @@ def _limits_for(kind: str, block: BlockSpec | None) -> tuple[list[str], int]:
     if kind == "frame" and block is not None and block.type == "canvas":
         # V6-12: a drawing snapshot is a PNG the page rendered.
         return ["image/png"], MAX_CANVAS_SNAPSHOT_BYTES
-    if kind in ("frame", "signature"):
+    if kind == "signature":
+        # V6-29 (S6-32): a signature is the PNG the page rendered from its pad, as the worker checks.
+        return ["image/png"], MAX_SIGNATURE_BYTES
+    if kind == "frame":
         return ["image/*"], MAX_UPLOAD_BYTES
     if block is not None and block.type == "upload":
         try:
@@ -242,6 +252,26 @@ async def _drawing_board(
         raise UnprocessableEntityError(
             f"'{block_id}' is not a drawing board of this session's panel that the caller may draw on"
         )
+    return block
+
+
+async def _signature_block(
+    db: AsyncSession, settings: Settings, session: SessionRow, meta: dict[str, str]
+) -> BlockSpec:
+    """The signature block a signature picture answers (V6-29, S6-32; ask #211).
+
+    Raises:
+        UnprocessableEntityError: 422 unless ``meta.source`` is ``"signature"`` and
+            ``meta.block_id`` names a ``signature`` block of the session's panel.
+    """
+    if meta.get("source") != SIGNATURE_SOURCE:
+        raise UnprocessableEntityError(f"a signature is marked as one (meta.source = {SIGNATURE_SOURCE!r})")
+    block_id = meta.get("block_id")
+    if not block_id:
+        raise UnprocessableEntityError("a signature names its block (meta.block_id)")
+    block = next((b for b in await _panel_blocks(db, settings, session) if b.id == block_id), None)
+    if block is None or block.type != "signature":
+        raise UnprocessableEntityError(f"'{block_id}' is not a signature block of this session's panel")
     return block
 
 
@@ -335,8 +365,9 @@ async def store_upload(
         data: The file's bytes, already capped at 25 MiB.
         kind: ``upload``, ``frame`` or ``signature``.
         name: The caller's filename (sanitised here, display only).
-        meta: ``block_id`` (required for an upload and a drawing), ``field``, ``caption``,
-            ``source`` (``"ink"`` marks a drawing snapshot, V6-12).
+        meta: ``block_id`` (required for an upload, a drawing and a signature), ``field``,
+            ``caption``, ``source`` (``"ink"`` marks a drawing snapshot, V6-12; a signature
+            carries ``"signature"``, V6-29).
 
     Returns:
         The stored row (flushed).
@@ -344,8 +375,9 @@ async def store_upload(
     Raises:
         ConflictError: 409 when the session has ended or already holds 50 files.
         UnprocessableEntityError: 422 for an empty file, an unknown kind, an upload
-            without an ``upload`` / ``form`` block of the session's panel, or a drawing
-            without a canvas of the panel the caller may draw on.
+            without an ``upload`` / ``form`` block of the session's panel, a drawing
+            without a canvas of the panel the caller may draw on, or a signature without
+            ``meta.source == "signature"`` and a ``signature`` block of the panel.
         UnsupportedMediaTypeError: 415 when the bytes are not an allowed type or not one
             the block accepts.
         UploadTooLargeError: 413 over the block's ``max_bytes`` or the session's room.
@@ -368,6 +400,8 @@ async def store_upload(
             )
     elif kind == "frame" and cleaned.get("source") == CANVAS_SNAPSHOT_SOURCE:
         block = await _drawing_board(db, settings, session, cleaned.get("block_id"))
+    elif kind == "signature":
+        block = await _signature_block(db, settings, session, cleaned)
     mime = sniff_mime(data)
     accept, max_bytes = _limits_for(kind, block)
     if mime is None or not accept_allows(accept, mime):

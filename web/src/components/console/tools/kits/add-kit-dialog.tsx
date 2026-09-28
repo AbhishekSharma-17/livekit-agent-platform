@@ -43,6 +43,7 @@ import { KIT_PREFIX_PATTERN } from "@/components/console/tools/kits/constants";
 import type {
   AgentOut,
   KitChange,
+  KitSetting,
   KitVariant,
   ToolKit,
   ToolKitInstantiate,
@@ -99,11 +100,19 @@ function draftFor(kit: ToolKit): Draft {
   };
 }
 
+/**
+ * A setting's value as the form shows it: what the builder typed, else the kit's default
+ * (ask #276 — the shown default is sent and counts as filled; a cleared input is empty).
+ */
+function settingValue(setting: KitSetting, draft: Draft): string {
+  return draft.settings[setting.name] ?? setting.default ?? "";
+}
+
 /** Everything this variant of the kit is missing to be added (client-side echo of the settings it needs). */
 function requiredSettingsMissing(kit: ToolKit, variant: KitVariant, draft: Draft): string[] {
   return (kit.defaults ?? [])
     .filter((setting) => setting.required && ((setting.variants ?? []).length === 0 || (setting.variants ?? []).includes(variant.id)))
-    .filter((setting) => !draft.settings[setting.name]?.trim())
+    .filter((setting) => !settingValue(setting, draft).trim())
     .map((setting) => setting.label);
 }
 
@@ -177,8 +186,8 @@ export function AddKitDialog({
   function buildBody(dryRun: boolean): ToolKitInstantiate {
     const settings: Record<string, string | number | boolean> = {};
     for (const setting of settingsForVariant) {
-      const raw = draft.settings[setting.name];
-      if (raw === undefined || raw === "") continue;
+      const raw = settingValue(setting, draft);
+      if (raw === "") continue;
       settings[setting.name] = setting.kind === "integer" ? Number(raw) : raw;
     }
     return {
@@ -285,7 +294,7 @@ export function AddKitDialog({
                 <Input
                   id={`${uid}-setting-${setting.name}`}
                   type={setting.kind === "integer" ? "number" : "text"}
-                  value={draft.settings[setting.name] ?? setting.default ?? ""}
+                  value={settingValue(setting, draft)}
                   placeholder={setting.example ?? undefined}
                   onChange={(e) => set("settings", { ...draft.settings, [setting.name]: e.target.value })}
                 />

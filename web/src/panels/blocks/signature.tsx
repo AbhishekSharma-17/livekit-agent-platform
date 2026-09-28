@@ -21,6 +21,9 @@
  * 3. Only once that upload lands does the worker settle the block — `signed`,
  *    `asset_id`, `at`, `text_hash` — and this component shows "Signed".
  *
+ * Sign is enabled only once the pad holds at least one stroke (V6-29, S6-30): a
+ * blank pad is never sent as a signature.
+ *
  * "Not now" skips step 2 entirely (`{signed: false}`; nothing is asked for).
  * A `cancelled` status (barge-in, timeout, or a tap that never produced a
  * picture) offers nothing to press, matching `consent.tsx`'s dismissed state.
@@ -187,8 +190,11 @@ function SignatureQuestion({
 
   // Read by the snapshot subscription without re-subscribing on every stroke.
   const latestStrokes = useRef<LocalStroke[]>([]);
+  // V6-29 (S6-30): Sign stays disabled until the caller has drawn — a blank pad is not a signature.
+  const [hasStroke, setHasStroke] = useState(false);
   const handleStrokesChange = useCallback((strokes: LocalStroke[]) => {
     latestStrokes.current = strokes;
+    setHasStroke(strokes.length > 0);
   }, []);
 
   const answerSnapshot = useCallback(async () => {
@@ -228,7 +234,7 @@ function SignatureQuestion({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" disabled={busy} onClick={() => void submit({ signed: true })}>
+        <Button type="button" size="sm" disabled={busy || !hasStroke} onClick={() => void submit({ signed: true })}>
           {busy ? "Signing…" : "Sign"}
         </Button>
         {allowDecline && (

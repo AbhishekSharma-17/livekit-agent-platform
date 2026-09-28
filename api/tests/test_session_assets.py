@@ -68,6 +68,7 @@ def _panel() -> PanelLayout:
             ),
             BlockSpec(id="intake", type="form"),
             BlockSpec(id="notes", type="notes"),
+            BlockSpec(id="sign", type="signature"),
         ]
     )
 
@@ -235,6 +236,44 @@ async def test_a_frame_is_stored_without_a_block(service_client: httpx.AsyncClie
     assert response.status_code == 201, response.text
     assert response.json()["kind"] == "frame"
     assert response.json()["name"] == "frame.jpg"
+
+
+@pytest.mark.parametrize(
+    ("data", "meta", "status"),
+    [
+        pytest.param(JPEG, {"block_id": "sign", "source": "signature"}, 415, id="jpeg"),
+        pytest.param(
+            PNG + b"\x00" * (1024 * 1024), {"block_id": "sign", "source": "signature"}, 413, id="over-1mib"
+        ),
+        pytest.param(PNG, {"block_id": "nope", "source": "signature"}, 422, id="unknown-block"),
+        pytest.param(PNG, {"block_id": "docs", "source": "signature"}, 422, id="not-a-signature-block"),
+        pytest.param(PNG, {"source": "signature"}, 422, id="no-block"),
+        pytest.param(PNG, {"block_id": "sign"}, 422, id="missing-source"),
+        pytest.param(PNG, {"block_id": "sign", "source": "ink"}, 422, id="wrong-source"),
+    ],
+)
+async def test_a_signature_that_is_not_a_png_or_names_no_signature_block_is_refused(
+    service_client: httpx.AsyncClient,
+    world: World,
+    database: Database,
+    data: bytes,
+    meta: dict[str, Any],
+    status: int,
+) -> None:
+    """V6-29 (S6-32, ask #211): the api re-checks the worker's signature rule."""
+    response = await _upload(service_client, data, name="sign.png", kind="signature", meta=meta)
+    assert response.status_code == status, response.text
+    assert await _rows(database) == []
+
+
+async def test_a_signature_png_for_a_signature_block_is_stored(
+    service_client: httpx.AsyncClient, world: World
+) -> None:
+    meta = {"block_id": "sign", "source": "signature"}
+    response = await _upload(service_client, PNG, name="sign.png", kind="signature", meta=meta)
+    assert response.status_code == 201, response.text
+    assert response.json()["kind"] == "signature"
+    assert response.json()["meta"] == meta
 
 
 async def test_the_session_caps_hold(

@@ -249,4 +249,26 @@ describe("AddKitDialog", () => {
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.getByRole("button", { name: "Preview" })).toBeTruthy();
   });
+
+  it("sends a required setting's shown default and counts it as filled (ask #276)", async () => {
+    const kit = makeKit();
+    kit.defaults = [{ ...kit.defaults![0], default: "api.example.com" }];
+    const calls = stubFetch(previewResult());
+    renderDialog(kit, makeAgent());
+    fireEvent.click(screen.getByRole("button", { name: "Add to this agent" }));
+    await screen.findByRole("dialog");
+
+    expect((screen.getByLabelText("API address") as HTMLInputElement).value).toBe("api.example.com");
+    const previewButton = screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement;
+    expect(previewButton.disabled).toBe(false);
+    fireEvent.click(previewButton);
+
+    await waitFor(() => expect(calls.filter((c) => c.url.includes("/instantiate"))).toHaveLength(1));
+    const body = calls.find((c) => c.url.includes("/instantiate"))?.body;
+    expect(body).toMatchObject({ settings: { base_url: "api.example.com" } });
+
+    // Clearing the input clears the value: nothing is sent and the setting is missing again.
+    fireEvent.change(screen.getByLabelText("API address"), { target: { value: "" } });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement).disabled).toBe(true));
+  });
 });

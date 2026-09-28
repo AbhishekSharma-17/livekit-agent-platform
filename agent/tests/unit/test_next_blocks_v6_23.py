@@ -304,6 +304,22 @@ async def test_not_now_is_recorded_as_declined_without_a_picture() -> None:
     assert (event["signed"], event["asset_id"]) == (False, None)
 
 
+async def test_a_decline_on_a_block_that_forbids_it_records_nothing() -> None:
+    """V6-29 (S6-29): with `allow_decline` off, `signed: false` is a bad answer, never a decline."""
+    no_decline = BlockSpec(id="sign", type="signature", config={"allow_decline": False})
+    s = _setup([no_decline])
+    task = asyncio.create_task(
+        build_request_signature_tool(s.ctx)(context=_run_ctx(), disclosure_text=WORDING)
+    )
+    await _until(lambda: s.ui.pending_requests == {"sign": "request"})
+    await _block_submit(s, "sign", {"signed": False})
+    assert await task == NOT_SIGNED
+    assert _signature_events(s.ctx.events) == []
+    assert not _snapshot_asked(s) and s.api.posted == []
+    state = _sign(s)
+    assert (state.signed, state.asset_id, state.text_hash, state.status) == (None, None, None, "cancelled")
+
+
 async def test_a_sign_whose_picture_never_arrives_records_nothing() -> None:
     s = _setup(snapshot_answer={"ok": False, "payload": {"error": "no board"}})
     task = asyncio.create_task(

@@ -1,0 +1,60 @@
+{
+  "$id": "lkap-contracts/AgentAvatarFraming.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "How the session stage should frame the agent's avatar video (V6-26b, docs/v6/_asks.md #151).\n\nDisplay hints only: the agent's ``AvatarOptions.framing``/``.fit`` exactly as stored (``None``\non an agent saved before V6-26, which renders like ``auto`` + ``contain``) and the selected\navatar provider's registry ``ProviderCapabilities.avatar_aspect``. Never a provider id,\ncredential id or any other pipeline config.",
+  "properties": {
+    "declared_aspect": {
+      "anyOf": [
+        {
+          "enum": [
+            "portrait",
+            "landscape",
+            "square"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Declared Aspect"
+    },
+    "fit": {
+      "anyOf": [
+        {
+          "enum": [
+            "contain",
+            "cover"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fit"
+    },
+    "framing": {
+      "anyOf": [
+        {
+          "enum": [
+            "auto",
+            "portrait",
+            "landscape",
+            "square"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Framing"
+    }
+  },
+  "title": "AgentAvatarFraming",
+  "type": "object"
+}

@@ -1,8 +1,77 @@
 {
   "$defs": {
+    "AgentAvatarFraming": {
+      "description": "How the session stage should frame the agent's avatar video (V6-26b, docs/v6/_asks.md #151).\n\nDisplay hints only: the agent's ``AvatarOptions.framing``/``.fit`` exactly as stored (``None``\non an agent saved before V6-26, which renders like ``auto`` + ``contain``) and the selected\navatar provider's registry ``ProviderCapabilities.avatar_aspect``. Never a provider id,\ncredential id or any other pipeline config.",
+      "properties": {
+        "declared_aspect": {
+          "anyOf": [
+            {
+              "enum": [
+                "portrait",
+                "landscape",
+                "square"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Aspect"
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "enum": [
+                "contain",
+                "cover"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fit"
+        },
+        "framing": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "portrait",
+                "landscape",
+                "square"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Framing"
+        }
+      },
+      "title": "AgentAvatarFraming",
+      "type": "object"
+    },
     "AgentPublicOut": {
       "description": "What an unauthenticated browser may see about a published agent.\n\n``panel`` (R-V2-7, CONTRACTS-V2 §4.4 \"Layout delivery\") is the\n*effective* layout — ``lkap_api.panels.effective_layout(agent, pack)`` —\nnot necessarily ``AgentConfig.panel`` verbatim: it carries the block list\nthe session actually renders, resolved the same way for ``connect`` and\nfor the worker's ``/internal/v1/sessions/{id}/resolved``. ``ui_panel_id``\nstays as the mirror of ``panel.panel_id`` for one release.",
       "properties": {
+        "avatar_framing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAvatarFraming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "capabilities": {
           "$ref": "#/$defs/CapabilitiesConfig"
         },

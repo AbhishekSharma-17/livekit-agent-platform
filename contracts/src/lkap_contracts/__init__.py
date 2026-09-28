@@ -48,6 +48,7 @@ from lkap_contracts.agent_tests import (
     PublishGateRefusal,
 )
 from lkap_contracts.api_models import (
+    AgentAvatarFraming,
     AgentCreate,
     AgentOut,
     AgentPage,
@@ -587,6 +588,7 @@ __all__ = [
     "ActivityEvent",
     "AgentAction",
     "AgentActionResult",
+    "AgentAvatarFraming",
     "AgentConfig",
     "AgentCreate",
     "AgentLimits",

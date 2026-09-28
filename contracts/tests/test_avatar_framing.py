@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from lkap_contracts.agent_config import AvatarOptions, PipelineConfig
+from lkap_contracts.api_models import AgentAvatarFraming, AgentPublicOut
 from lkap_contracts.providers import REGISTRY, ProviderCapabilities
 
 
@@ -105,3 +106,55 @@ def test_every_other_avatar_entry_has_no_fabricated_aspect() -> None:
     for provider_id in undocumented:
         caps = _avatar_entry(provider_id)
         assert caps.avatar_aspect is None, f"{provider_id} should be auto, got {caps.avatar_aspect}"
+
+
+# --------------------------------------------------------------------------- V6-26b (ask #151)
+_PUBLIC_AGENT_BASE: dict[str, object] = {
+    "id": "a1",
+    "slug": "front-desk",
+    "name": "Front desk",
+    "description": "",
+    "ui_panel_id": "generic",
+    "panel": {"panel_id": "generic"},
+    "capabilities": {},
+    "pipeline_mode": "cascaded",
+}
+
+
+def test_agent_public_out_avatar_framing_defaults_to_none() -> None:
+    """A pre-V6-26b payload (no `avatar_framing` key) still validates and means "no hints"."""
+    agent = AgentPublicOut.model_validate(_PUBLIC_AGENT_BASE)
+    assert agent.avatar_framing is None
+
+
+def test_agent_public_out_avatar_framing_round_trips() -> None:
+    agent = AgentPublicOut.model_validate(
+        {
+            **_PUBLIC_AGENT_BASE,
+            "avatar_framing": {"framing": "portrait", "fit": "cover", "declared_aspect": "portrait"},
+        }
+    )
+    assert agent.avatar_framing == AgentAvatarFraming(
+        framing="portrait", fit="cover", declared_aspect="portrait"
+    )
+    assert AgentPublicOut.model_validate_json(agent.model_dump_json()) == agent
+
+
+def test_agent_avatar_framing_mirrors_unset_stored_values() -> None:
+    """Unset stays unset (`None`), never an invented `auto`/`contain` (PLAN-V6 §0.1)."""
+    framing = AgentAvatarFraming()
+    assert framing.model_dump() == {"framing": None, "fit": None, "declared_aspect": None}
+
+
+def test_agent_avatar_framing_carries_display_hints_only() -> None:
+    """Public by construction: no provider id, credential or other pipeline config field."""
+    assert set(AgentAvatarFraming.model_fields) == {"framing", "fit", "declared_aspect"}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"framing": "diagonal"}, {"fit": "stretch"}, {"declared_aspect": "auto"}],
+)
+def test_agent_avatar_framing_rejects_unknown_values(payload: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        AgentAvatarFraming.model_validate(payload)

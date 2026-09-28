@@ -55,8 +55,9 @@ from lkap_api.costs.mapping import resolve_model, slot_for_usage
 from lkap_api.costs.prices import PriceBook, load_price_book, pipeline_refs
 from lkap_api.costs.vendors import (
     BUILT_VENDORS,
+    RECONCILE_KINDS,
+    generation_ids,
     provider_requests_of,
-    request_ids,
     workspace_reconcile_vendors,
 )
 from lkap_api.db.models import Agent, AgentConfigVersion, PhoneNumber, SessionEvent
@@ -508,14 +509,16 @@ async def reconcile_due(db: AsyncSession, session: SessionRow) -> bool:
     """Whether :func:`cost_session`'s caller should enqueue ``cost_reconcile`` (V4-17, D-V4-45).
 
     True when the workspace opted into a vendor with a built client and the worker
-    posted per-request LLM ids (``metrics {kind: "provider_requests"}``). The enqueue
+    posted per-request ids the job can look up (``metrics {kind: "provider_requests"}``:
+    LLM ids, or ``gen-`` ids of the speech slots, D-V6-9). The enqueue
     itself happens in the summary route **after** its commit (ask #40: the jobs
     service opens its own connection), via :func:`lkap_api.jobs.reconcile.enqueue_reconcile`.
     """
     vendors = await workspace_reconcile_vendors(db, session.workspace_id)
     if not BUILT_VENDORS.intersection(vendors):
         return False
-    return bool(request_ids(await provider_requests_of(db, session.id), "llm"))
+    data = await provider_requests_of(db, session.id)
+    return any(generation_ids(data, kind) for kind in RECONCILE_KINDS)
 
 
 async def add_egress_cost_line(db: AsyncSession, session: SessionRow) -> None:

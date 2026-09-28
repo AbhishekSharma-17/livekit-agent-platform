@@ -247,7 +247,7 @@ async def create_price_quotes(
                 kind=spec.kind,
                 quotes=quotes,
                 per_minute_usd=per_minute,
-                note=None if quotes else "no price",
+                note=None if quotes else (book.unpriced_note(item.provider_id, model) or "no price"),
             )
         )
     return PriceQuotesResponse(

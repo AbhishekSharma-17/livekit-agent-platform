@@ -49,6 +49,7 @@ __all__ = [
     "OpenRouterLookupError",
     "fetch_generations",
     "openrouter_api_key",
+    "openrouter_credential",
 ]
 
 log = get_logger(__name__)
@@ -112,6 +113,30 @@ async def openrouter_api_key(
     Returns:
         The decrypted key, or ``None`` when no credential can be chosen.
     """
+    row = await openrouter_credential(db, workspace_id=workspace_id, ref=ref)
+    if row is None:
+        return None
+    key = vault.decrypt(row.ciphertext).get("api_key", "")
+    return key or None
+
+
+async def openrouter_credential(
+    db: AsyncSession, *, workspace_id: str, ref: ProviderRef | None
+) -> Credential | None:
+    """The credential row an OpenRouter slot uses (R-V4-7), never another workspace's.
+
+    The slot's own ``credential_id``; else the workspace's default for the provider;
+    else the workspace's only credential stored under the provider's credential home
+    (``openrouter-llm``). Nothing is decrypted here.
+
+    Args:
+        db: An open session.
+        workspace_id: Only this workspace's rows are read.
+        ref: The slot's provider reference (``None``: the credential home itself).
+
+    Returns:
+        The row, or ``None`` when none can be chosen (none stored, or several and no default).
+    """
     provider_id = ref.provider_id if ref is not None else OPENROUTER_CREDENTIAL_HOME
     home = credential_home(provider_id)
     row: Credential | None = None
@@ -146,10 +171,7 @@ async def openrouter_api_key(
             .all()
         )
         row = candidates[0] if len(candidates) == 1 else None
-    if row is None:
-        return None
-    key = vault.decrypt(row.ciphertext).get("api_key", "")
-    return key or None
+    return row
 
 
 def _record(body: Any) -> dict[str, Any] | None:

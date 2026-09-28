@@ -1,0 +1,170 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  ConditionError,
+  conditionErrorMessage,
+  conditionIssue,
+  conditionToRows,
+  MAX_CONDITION_CHARS,
+  parseCondition,
+  rowsToCondition,
+} from "@/components/console/agents/rules/condition";
+
+/**
+ * V6-15 (ask #74, V6-13's brief): a table of the grammar this TS port must accept and
+ * refuse identically to the api's `lkap_contracts.rules_expr` — valid, invalid and
+ * adversarial (catastrophic regex) conditions, plus the builder <-> text round trip.
+ */
+
+describe("parseCondition — valid", () => {
+  const valid = [
+    'var.policy_number is set',
+    'var.policy_number is not set',
+    'var.hazard is empty',
+    'var.hazard is not empty',
+    'var.claim_type == "auto" and var.estimate >= 5000',
+    "var.hazard matches /fire|smoke|gas/i",
+    "tool.lookup_policy.ok",
+    "tool.lookup_policy.failed",
+    "not (var.injured == true or var.hazard is set)",
+    "var.n != 3",
+    "var.n <= 3.5",
+    "var.flag == false",
+  ];
+  it.each(valid)("%s", (text) => {
+    expect(() => parseCondition(text)).not.toThrow();
+  });
+});
+
+describe("parseCondition — invalid, with the api's exact wording", () => {
+  it("an empty condition", () => {
+    expect(() => parseCondition("")).toThrow("the condition is empty");
+    expect(() => parseCondition("   ")).toThrow("the condition is empty");
+  });
+
+  it("too long", () => {
+    const text = `var.a == "${"x".repeat(MAX_CONDITION_CHARS)}"`;
+    expect(() => parseCondition(text)).toThrow(`a condition is at most ${MAX_CONDITION_CHARS} characters`);
+  });
+
+  it("a word the grammar doesn't understand", () => {
+    try {
+      parseCondition("banana is set");
+      expect.fail("expected a ConditionError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConditionError);
+      expect((error as ConditionError).message).toMatch(
+        /'banana' is not something a condition understands; name a variable as var\.<name> and put text in quotes \(at character 1\)/,
+      );
+    }
+  });
+
+  it("an attribute access after a keyword", () => {
+    // `var.x.y` fails earlier, as a malformed variable name (the same as the api: `_VAR_RE`'s
+    // negative lookahead excludes a trailing '.') — this message is for a keyword word
+    // followed by '.', e.g. a stray `not.thing`.
+    expect(() => parseCondition("not.thing")).toThrow("conditions cannot read attributes or call anything");
+  });
+
+  it("an unterminated string", () => {
+    expect(() => parseCondition('var.x == "unterminated')).toThrow("text in quotes is not closed");
+  });
+
+  it("ends too early", () => {
+    try {
+      parseCondition("var.x is set and");
+      expect.fail("expected a ConditionError");
+    } catch (error) {
+      expect((error as ConditionError).message).toBe("the condition ends too early (at character 17)");
+    }
+  });
+
+  it("an incomplete comparison names what belongs after the operator", () => {
+    expect(() => parseCondition("var.x ==")).toThrow("after '==' write text in quotes, a number, true or false");
+  });
+
+  it("nests too deep", () => {
+    const text = "(".repeat(9) + "var.x is set" + ")".repeat(9);
+    expect(() => parseCondition(text)).toThrow("conditions nest at most 8 levels deep");
+  });
+
+  it("too many predicates", () => {
+    // Short tool-outcome predicates keep the whole string under `MAX_CONDITION_CHARS`
+    // (200) so the length check doesn't fire first — 13 * "tool.X.ok" (9) + 12 * " and " (5) = 177.
+    const text = Array.from({ length: 13 }, (_, i) => `tool.${String.fromCharCode(97 + i)}.ok`).join(" and ");
+    expect(text.length).toBeLessThan(MAX_CONDITION_CHARS);
+    expect(() => parseCondition(text)).toThrow("a condition has at most 12 checks");
+  });
+
+  it("a catastrophic (nested-repeat) pattern is refused, not just slow", () => {
+    expect(() => parseCondition("var.x matches /(a+)+/")).toThrow(
+      "this pattern repeats a group that already repeats, which can take very long; simplify it",
+    );
+    expect(() => parseCondition("var.x matches /(\\w*\\s)*/")).toThrow(/repeats a group that already repeats/);
+  });
+
+  it("a pattern flag other than 'i'", () => {
+    expect(() => parseCondition("var.x matches /abc/g")).toThrow("the only pattern flag is 'i' (ignore case)");
+  });
+
+  it("a '(' left unclosed", () => {
+    expect(() => parseCondition("(var.x is set")).toThrow("a '(' is not closed");
+  });
+
+  it("a bad comparison target", () => {
+    expect(() => parseCondition("var.x >= \"abc\"")).toThrow("after '>=' write a number");
+  });
+});
+
+describe("conditionIssue / conditionErrorMessage — the api's exact prefix", () => {
+  it("prefixes with 'the condition does not read: ' and a 1-based position", () => {
+    expect(conditionIssue("banana")).toBe(
+      "the condition does not read: 'banana' is not something a condition understands; name a variable as var.<name> and put text in quotes (at character 1)",
+    );
+  });
+
+  it("is null for a condition that parses", () => {
+    expect(conditionIssue("var.x is set")).toBeNull();
+  });
+
+  it("conditionErrorMessage matches conditionIssue for the same error", () => {
+    try {
+      parseCondition("banana");
+      expect.fail("expected a ConditionError");
+    } catch (error) {
+      expect(conditionErrorMessage(error as ConditionError)).toBe(conditionIssue("banana"));
+    }
+  });
+});
+
+describe("the builder <-> text bridge", () => {
+  it("round-trips a single predicate", () => {
+    const rows = conditionToRows(parseCondition("var.policy_number is set"));
+    expect(rows).toEqual([{ subject: "var", name: "policy_number", op: "is_set" }]);
+    expect(rowsToCondition(rows!)).toBe("var.policy_number is set");
+  });
+
+  it("round-trips an 'and' of several predicates, including a tool outcome", () => {
+    const text = 'var.claim_type == "auto" and var.estimate >= 5000 and tool.lookup_policy.ok';
+    const rows = conditionToRows(parseCondition(text));
+    expect(rows).toHaveLength(3);
+    const rebuilt = rowsToCondition(rows!);
+    expect(parseCondition(rebuilt)).toEqual(parseCondition(text));
+  });
+
+  it("returns null for a condition using 'or' — the raw-text escape hatch is one-way past that point", () => {
+    const rows = conditionToRows(parseCondition("var.a is set or var.b is set"));
+    expect(rows).toBeNull();
+  });
+
+  it("returns null for a condition using 'not' over something other than is-set", () => {
+    const rows = conditionToRows(parseCondition("not tool.x.ok"));
+    expect(rows).toBeNull();
+  });
+
+  it("a 'matches' row keeps its pattern and ignore-case flag", () => {
+    const rows = conditionToRows(parseCondition("var.hazard matches /fire/i"));
+    expect(rows).toEqual([{ subject: "var", name: "hazard", op: "matches", value: "fire", ignoreCase: true }]);
+    expect(rowsToCondition(rows!)).toBe("var.hazard matches /fire/i");
+  });
+});

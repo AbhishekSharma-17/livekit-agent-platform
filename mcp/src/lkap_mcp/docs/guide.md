@@ -27,7 +27,9 @@ agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 **apps**: `apps_connect`, `apps_add_tools`, `agent_apps_mode` picks actions,
 an app server or a tool finder — recipe `attach-app-actions`), **knowledge
 bases** (`kb_create`, `kb_add_document`; own stores `kb_connection_create`;
-golden questions `kb_evals_set`, `kb_evaluate`), a
+golden questions `kb_evals_set`, `kb_evaluate`), **datasets** (read-only lookup
+tables from a CSV or JSON file: `dataset_create`, `dataset_lookup`, then
+`tool_create_dataset` gives an agent a lookup tool), a
 **panel** (composite blocks, or a pack's own UI; a checklist block brings
 `set_checklist`, a gallery plus a picture model brings `generate_image`, and
 `caller_can_edit` lets callers change a details or checklist block; a notebook
@@ -117,4 +119,4 @@ numbered, copy-pasteable tool sequence
 `knowledge`, `tools-http`, `tools-mcp`, `panels-and-blocks`, `flows`,
 `telephony`, `qa-and-evals`, `recordings-and-cost`, `webhooks`,
 `sessions-and-test-chat`, `roles-and-scopes`, `apps`, `tools`, `testing`,
-`memory`, `extraction` (`lkap_explain(topic)`).
+`memory`, `extraction`, `datasets` (`lkap_explain(topic)`).

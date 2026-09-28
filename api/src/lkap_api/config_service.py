@@ -119,6 +119,7 @@ from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_AC
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
     NON_BLOCKING_MODES,
+    DatasetToolDefinition,
     HttpToolDefinition,
     McpHeaderAuth,
     McpOAuthAuth,
@@ -142,6 +143,7 @@ from lkap_api.connections.probe import effective_capabilities
 from lkap_api.custom_models.capabilities import resolve_capabilities
 from lkap_api.db.models import (
     Credential,
+    Dataset,
     KnowledgeBase,
     LiveKitConnection,
     ProviderCatalogCache,
@@ -286,6 +288,9 @@ class ValidationContext:
     outbound_trunks: int | None = None
     """How many synced outbound trunks the agent's connection has (V5-32: answering-machine
     detection and warm transfer need one); ``None`` skips those checks."""
+    datasets_by_id: Mapping[str, Mapping[str, Any]] | None = None
+    """V6-16: ``{dataset_id: {name, status, keys: {column: type}, columns: [name]}}`` for every
+    dataset of the workspace (``lkap_api.datasets.validation``); ``None`` skips those checks."""
 
     def fingerprint_for(self, ref: ProviderRef) -> str | None:
         """The fingerprint of the credential ``ref`` uses, if it uses one."""
@@ -1568,7 +1573,7 @@ _BINDING_DISPLAY_BLOCK: Final[dict[str, str]] = {
 def _tool_context_specs(definition: Mapping[str, Any]) -> list[tuple[str, Mapping[str, Any]]]:
     """``(path prefix, settings)`` of each place a definition keeps its V6-07 settings."""
     kind = definition.get("kind", "http")
-    if kind in ("http", "provider"):
+    if kind in ("http", "provider", "dataset"):  # V6-16 (ask #35): a lookup keeps them at the top
         return [("", definition)]
     per_tool = definition.get("tool_context") if kind == "mcp" else None
     if not isinstance(per_tool, Mapping):
@@ -2576,6 +2581,24 @@ async def validation_context_for(
             await db.execute(select(KnowledgeBase.id).where(KnowledgeBase.workspace_id == workspace_id))
         ).scalars()
     )
+    # V6-16: the workspace's datasets, for the dataset tool checks.
+    datasets_by_id: dict[str, Mapping[str, Any]] = {
+        row[0]: {
+            "name": row[1],
+            "status": row[2],
+            "keys": {
+                str(key.get("name")): key.get("type") for key in row[3] or [] if isinstance(key, Mapping)
+            },
+            "columns": [str(column.get("name")) for column in row[4] or [] if isinstance(column, Mapping)],
+        }
+        for row in (
+            await db.execute(
+                select(Dataset.id, Dataset.name, Dataset.status, Dataset.key_columns, Dataset.columns).where(
+                    Dataset.workspace_id == workspace_id
+                )
+            )
+        ).tuples()
+    }
     disabled = frozenset(
         (
             await db.execute(
@@ -2597,6 +2620,7 @@ async def validation_context_for(
         disabled_provider_ids=disabled,
         known_tool_ids=tool_ids,
         known_kb_ids=kb_ids,
+        datasets_by_id=datasets_by_id,
         tool_names_by_id=tool_names_by_id,
         tool_definitions_by_id=tool_definitions_by_id,
         connection_statuses=connection_statuses,
@@ -2941,6 +2965,9 @@ def resolve_tool_definition(definition: ToolDefinition, secrets: Mapping[str, st
                 "credential_id": None,
             }
         )
+    if isinstance(definition, DatasetToolDefinition):
+        # V6-16: a lookup carries no secret; the worker calls the api's own internal route.
+        return definition
     if isinstance(definition, ProviderToolDefinition):
         # V5-47 (COMPOSIO.md §4): the Composio key rides the `x-api-key` header, like an app
         # server's; `connection_id` and `subject` stay (the worker sends the subject).

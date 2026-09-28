@@ -297,6 +297,7 @@ forms above. `env_http_headers` (header name → env var name) also works.
 | `file:` references | allowed | refused: `ref_unavailable_in_http_mode` |
 | `env:` references | your environment | the **service's** environment (operator-provisioned) |
 | `kb_add_document(file_path=)` | allowed (25 MB) | refused; use `text` or `url` |
+| `dataset_create(file_path=)` | allowed (5 MiB) | refused; use `text` |
 | `webhook_create` | writes the secret to a 0600 file | unavailable; create webhooks in the console |
 | Test chats | 3 per process | 3 per session, 20 per service |
 | Dialing | `LKAP_MCP_ALLOW_DIAL=1` on your process | `LKAP_MCP_ALLOW_DIAL=1` on the service (an operator decision) |

@@ -39,7 +39,21 @@ from lkap_api.auth.ratelimit import AgentBusyError
 from lkap_api.db.models import Agent, Workspace
 from lkap_api.db.models import Session as SessionRow
 
-__all__ = ["LIVE_STATUSES", "live_session_count", "reserve_session_slot", "slot_lock"]
+__all__ = [
+    "LIVE_STATUSES",
+    "MAX_DATASETS_PER_WORKSPACE",
+    "MAX_DATASET_ROWS_PER_WORKSPACE",
+    "live_session_count",
+    "reserve_session_slot",
+    "slot_lock",
+]
+
+#: V6-16 (D-V6-27): the most datasets (lookup tables) one workspace holds, beside the
+#: knowledge quotas of ``routers/knowledge.py`` (one dataset is itself capped by
+#: ``lkap_contracts.datasets``: 5 MiB, 50,000 rows, 64 columns).
+MAX_DATASETS_PER_WORKSPACE = 100
+#: V6-16: the most rows across one workspace's datasets.
+MAX_DATASET_ROWS_PER_WORKSPACE = 1_000_000
 
 #: Session states that occupy a concurrency slot.
 LIVE_STATUSES = ("created", "active")

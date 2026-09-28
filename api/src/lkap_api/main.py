@@ -49,6 +49,7 @@ from lkap_api.routers import (
     connect,
     connections,
     costs,
+    datasets,
     fleet,
     fleet_internal,
     flows,
@@ -204,6 +205,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(agent_tests_router)  # V5-29: test runs and verdicts
     app.include_router(memory_router)  # V5-40: caller memory (forget, purge, a session's memory)
     app.include_router(panels.router)  # V6-08: ready-made panels
+    app.include_router(datasets.router)  # V6-16: datasets (lookup tables)
     _include_knowledge_router(app)
 
 

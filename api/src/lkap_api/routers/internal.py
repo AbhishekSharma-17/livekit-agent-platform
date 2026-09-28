@@ -364,7 +364,9 @@ async def _build_resolved(
             if access is not None:
                 mcp_oauth.append(access)
             continue
-        tools.append(resolve_tool_definition(definition, secrets.get(definition.credential_id or "", {})))
+        # V6-16: a `dataset` lookup binds no credential (nothing to substitute).
+        credential_id = getattr(definition, "credential_id", None)
+        tools.append(resolve_tool_definition(definition, secrets.get(credential_id or "", {})))
 
     connection = await _session_connection(db, session, agent)
     installed = await installed_provider_ids(db, connection.id)

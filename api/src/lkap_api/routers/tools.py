@@ -18,6 +18,7 @@ from lkap_contracts.api_models import ToolCreate, ToolDryRunRequest, ToolDryRunR
 from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID
 from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID
 from lkap_contracts.tools import (
+    DatasetToolDefinition,
     HttpToolDefinition,
     McpOAuthAuth,
     McpServerDefinition,
@@ -33,6 +34,7 @@ from lkap_api import net_guard
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.auth.roles import Requirement
 from lkap_api.config_service import host_allowed, render_arguments, resolve_tool_definition
+from lkap_api.datasets.tools import check_dataset_tool
 from lkap_api.db.models import Agent, Credential, Tool, utcnow
 from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
@@ -71,6 +73,8 @@ _SECRET_RE = re.compile(r"\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 def _referenced_secret_names(definition: ToolDefinition) -> set[str]:
     """Every `{{ secret.NAME }}` name the tool's url/headers/body reference."""
+    if isinstance(definition, DatasetToolDefinition):  # V6-16: a lookup carries no secret
+        return set()
     if isinstance(definition, ProviderToolDefinition):  # V5-47: no url; the key rides a header
         texts: list[str] = list(definition.headers.values())
     else:
@@ -206,7 +210,10 @@ async def _check_payload(
         is None
     ):
         raise UnprocessableEntityError(f"unknown agent '{payload.agent_id}'")
-    credential_id = payload.definition.credential_id
+    if isinstance(payload.definition, DatasetToolDefinition):
+        # V6-16: the dataset must be this workspace's and the columns its own.
+        await check_dataset_tool(db, ctx.workspace_id, payload.definition)
+    credential_id = getattr(payload.definition, "credential_id", None)
     credential: Credential | None = None
     if credential_id is not None:
         # V2-21: a tool decides where its secrets are sent (url, headers, body), so
@@ -329,8 +336,8 @@ async def _check_provider_binding(
     status_code=status.HTTP_201_CREATED,
     summary="Create a tool",
     description=(
-        "Stores an HTTP tool, an MCP server or a connected app's action (`provider`), shared or "
-        "owned by one agent."
+        "Stores an HTTP tool, an MCP server, a connected app's action (`provider`) or a lookup in "
+        "one of the workspace's datasets (`dataset`), shared or owned by one agent."
     ),
 )
 async def create_tool(
@@ -362,7 +369,7 @@ async def list_tools(
     db: DbDep,
     ctx: AdminCtxDep,
     agent_id: str | None = Query(default=None, description="Only tools owned by this agent"),
-    kind: str | None = Query(default=None, description="http | mcp | provider"),
+    kind: str | None = Query(default=None, description="http | mcp | provider | dataset"),
 ) -> ToolPage:
     """Return the workspace's tool rows, newest first."""
     stmt = select(Tool).where(Tool.workspace_id == ctx.workspace_id)

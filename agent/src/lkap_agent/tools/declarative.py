@@ -38,6 +38,7 @@ from livekit.agents.llm import RawFunctionTool
 from lkap_contracts.tool_context import PlaceholderRef, placeholder_issues
 from lkap_contracts.tool_providers import COMPOSIO_HOST
 from lkap_contracts.tools import (
+    DatasetToolDefinition,
     HttpToolDefinition,
     McpOAuthAuth,
     McpServerDefinition,
@@ -480,7 +481,7 @@ def build_http_tool(
 
 
 def build_http_tools(
-    defs: list[HttpToolDefinition | ProviderToolDefinition],
+    defs: list[HttpToolDefinition | ProviderToolDefinition | DatasetToolDefinition],
     *,
     platform_allowed_hosts: list[str] | None = None,
     user_agent: str | None = None,
@@ -515,10 +516,32 @@ def build_http_tools(
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.
         A `ProviderToolDefinition` (a connected app's action, V5-47) is built by
         `lkap_agent.tools.provider` instead: it calls Composio's execute route on the
-        pinned Composio host, so the HTTP allowlists do not apply to it.
+        pinned Composio host, so the HTTP allowlists do not apply to it. A
+        `DatasetToolDefinition` (V6-16) is built by `lkap_agent.tools.dataset`: a lookup
+        through the api's own internal route, scoped to the session's workspace.
     """
     tools: list[RawFunctionTool[..., Any]] = []
     for definition in defs:
+        if isinstance(definition, DatasetToolDefinition):
+            from lkap_agent.tools.dataset import build_dataset_tool  # noqa: PLC0415 - avoids a cycle
+
+            if mocks and definition.name in mocks:
+                tools.append(
+                    build_dataset_tool(
+                        definition,
+                        execution_default=execution_default,
+                        flow_node=flow_node,
+                        context=context,
+                        mock=mocks[definition.name],
+                    )
+                )
+            else:
+                tools.append(
+                    build_dataset_tool(
+                        definition, execution_default=execution_default, flow_node=flow_node, context=context
+                    )
+                )
+            continue
         if isinstance(definition, ProviderToolDefinition):
             if mocks and definition.name in mocks:
                 tools.append(

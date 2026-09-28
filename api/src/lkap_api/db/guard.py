@@ -55,6 +55,7 @@ TENANT_TABLES: frozenset[str] = frozenset(
         "agent_test_results",  # V5-29
         "memory_subjects",  # V5-40 (the retention sweep is a marked cross-workspace read)
         "memory_events",  # V5-40
+        "datasets",  # V6-16 (its rows and keys are reached only through a scoped dataset)
     }
 )
 

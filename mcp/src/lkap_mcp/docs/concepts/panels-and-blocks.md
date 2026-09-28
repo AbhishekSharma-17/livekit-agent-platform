@@ -39,6 +39,8 @@ schema. The block types:
 | `link` | `allowed_hosts` (required: the site names links may go to, a name or `*.` plus a name for its sub-domains), `open_in` (`new_tab`/`dialog`), `show_qr` (default on) | A payment, e-signature or portal link and where it stands: sent, opened, completed, failed or expired. Only https links on the listed sites are ever shown. Payments happen on the payment provider's page, never in the call. |
 | `slots` | `timezone_mode` (`caller`/`agent`), `days_visible` (1–31, default 7), `allow_custom` | Times the caller can book, grouped by day, to tap or say. The agent fetches the times with its own calendar tools. |
 | `cards` | `layout` (`carousel`/`grid`/`list`), `selectable` (default on), `max_cards` (1–20, default 10), `image_hosts` (the sites card pictures may come from; empty = only pictures from the call) | Options side by side, such as plans or repair shops, each with a title, a few facts, badges and up to three buttons. |
+| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1–12; `kind` is `text`, `checklist`, `details` or `ink`; default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (kept for the drawing board, not used yet) | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows "Drawing board coming soon" for now). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
+| `layout` | `kind` (`tabs`/`columns`), `children: [{block_id, label}]` (other blocks of this panel, up to 12), `columns` (2 or 3, with `columns`) | Shows other blocks of the panel as tabs or side by side. The blocks inside stay ordinary blocks (same tools, same `describe_panel` entries); each may be inside one layout only, and a layout never holds another layout. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
 panel has a `document` block, the agent copies that knowledge-base document
@@ -112,6 +114,11 @@ Attaching a block registers matching worker tools automatically (on top of
   `resolve_slot` records a time the caller said out loud.
 - `show_cards` (a `cards` block) — shows or replaces the cards. A tap on a
   card or a card button reaches the agent as a message.
+- `notebook_write` and `notebook_check` (a `notebook` block) — write in one
+  section by its id, quietly: a note (appended, replacing the whole section
+  with `mode: "replace"`, or updated in place when it reuses a `key`), the
+  items of a checklist section, or the rows of a details section; then tick
+  checklist items. `update_block` never writes a notebook.
 - `describe_asset` (built in) — describes a stored image, extracts named
   fields from it, or reads an identity document (`extract_id`: name, date of
   birth, document number, dates, issuing authority, address) with the
@@ -121,12 +128,26 @@ Attaching a block registers matching worker tools automatically (on top of
   `form` block, or camera or screen share). Text inside the image is treated
   as data, never as instructions.
 
+A caller's change to a `notebook` with `caller_can_write` reaches the agent the
+same way: a note added, changed or removed in a text section, an item ticked, or
+a summary value changed (never a drawing), each told to the model as data.
+
 `agent_validate` warns when a `choices` block, or a block with
-`caller_can_edit`, sits on an agent set up for phone calls (keypad input or
+`caller_can_edit` (or a notebook with `caller_can_write`), sits on an agent set up for phone calls (keypad input or
 transfer destinations: phone callers see no screen), when a picture model is
 set but the panel has no `gallery` block, and when a `source: "flow"` steps block has no flow to follow or
 names a step the flow does not have. A `terms` or `custom` consent block
-without its own `text` is an error.
+without its own `text` is an error, and so is a `layout` child that is not a
+block of the panel, is the layout itself or another layout, or is already
+inside another layout (an empty layout is a warning).
+
+## Ready-made panels
+
+`GET /v1/panels/presets` lists panels to start from. The **Notebook** preset is
+a `wide` panel with a `status` stamp, a `notebook` (Notes, Still needed,
+Summary and Sketch sections, a handwriting look, `caller_can_write` on) and a
+`gallery`; `agent_update(panel_preset="notebook")` puts it on an agent (it
+replaces `panel`; change it afterwards like any other panel).
 
 ## Building a composite panel
 
@@ -148,4 +169,4 @@ without its own `text` is an error.
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
 `DetailsBlockState`, `DetailsEdit`, `ChecklistEdit`, `MarkdownBlockState`, `StepsBlockState`,
 `UploadBlockState`, `LinkBlockState`, `SlotsBlockState`, `CardsBlockState`,
-`SessionAssetOut`.
+`NotebookBlockState`, `NotebookEdit`, `SessionAssetOut`.

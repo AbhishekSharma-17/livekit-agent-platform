@@ -41,6 +41,14 @@ schemas by a vitest parity test):
   ``allow_custom`` (V5-43);
 * ``cards`` → ``layout`` (``carousel`` / ``grid`` / ``list``), ``selectable``,
   ``max_cards`` and ``image_hosts`` (the sites card pictures may come from) (V5-43);
+* ``notebook`` → ``paper`` (``plain`` / ``ruled`` / ``grid`` / ``legal``), ``font``
+  (``print`` / ``handwritten``: typed notes in a handwriting font are a theme, not ink),
+  ``sections: [{id, title, kind}]`` (``text`` / ``checklist`` / ``details`` / ``ink``),
+  ``caller_can_write`` (the caller may add and change notes, tick items and change
+  values) and ``caller_can_draw`` (reserved for the drawing board, V6-12) (V6-08);
+* ``layout`` → ``kind`` (``tabs`` / ``columns``), ``children: [{block_id, label}]``
+  (other top-level blocks of the panel, shown inside this one) and ``columns`` (2 or 3)
+  (V6-08, D-V6-18); :func:`layout_issues` checks the children across the panel;
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -66,18 +74,22 @@ from lkap_contracts.ui_protocol import (
     DEFAULT_UPLOAD_MAX_BYTES,
     MAX_ALLOWED_HOSTS,
     MAX_CARDS,
+    MAX_NOTEBOOK_SECTIONS,
     MAX_UPLOAD_BYTES,
     MAX_UPLOAD_FILES,
+    NOTEBOOK_ID_PATTERN,
     BlockSpec,
     BlockType,
     CaptionsPosition,
     DetailsValueType,
+    NotebookSectionKind,
     normalize_hosts,
 )
 
 __all__ = [
     "BLOCK_CONFIG_MODELS",
     "DEFAULT_UPLOAD_ACCEPT",
+    "MAX_LAYOUT_CHILDREN",
     "UPLOAD_EXTENSIONS",
     "UPLOAD_MIME_TYPES",
     "CaptionsBlockConfig",
@@ -91,8 +103,14 @@ __all__ = [
     "DocumentBlockConfig",
     "EmptyBlockConfig",
     "HandoffBlockConfig",
+    "LayoutBlockConfig",
+    "LayoutChildConfig",
     "LinkBlockConfig",
     "MarkdownBlockConfig",
+    "NotebookBlockConfig",
+    "NotebookFont",
+    "NotebookPaper",
+    "NotebookSectionConfig",
     "SlotsBlockConfig",
     "StepConfig",
     "StepsBlockConfig",
@@ -103,6 +121,7 @@ __all__ = [
     "VideoBlockConfig",
     "accept_allows",
     "block_config_schema_name",
+    "layout_issues",
     "safe_filename",
     "sniff_mime",
     "validate_accept",
@@ -485,6 +504,78 @@ class CardsBlockConfig(_StrictConfig):
         return normalize_hosts(value)
 
 
+#: The paper a ``notebook`` is drawn on (V6-08).
+NotebookPaper = Literal["plain", "ruled", "grid", "legal"]
+#: How typed notes look: ``handwritten`` is a handwriting font on typed text (a theme); real
+#: handwriting is ink (an ``ink`` section, V6-12).
+NotebookFont = Literal["print", "handwritten"]
+
+
+class NotebookSectionConfig(_StrictConfig):
+    """One section of a ``notebook``: its id (what the tools name), heading and kind (V6-08)."""
+
+    id: str = Field(pattern=NOTEBOOK_ID_PATTERN)
+    title: str = Field(default="", max_length=80)
+    kind: NotebookSectionKind = "text"
+
+
+class NotebookBlockConfig(_StrictConfig):
+    """``notebook``: a sectioned notebook the agent writes in, and the caller may too (V6-08, D-V6-15).
+
+    ``sections`` lists what the notebook holds, in order: ``text`` notes
+    (``notebook_write``), a ``checklist`` (``notebook_write`` then ``notebook_check``), a
+    ``details`` card (``notebook_write`` with fields) or an ``ink`` drawing board (the
+    ``canvas`` block of V6-12; until then it shows "Drawing board coming soon").
+    ``caller_can_write`` lets the caller add and change notes, tick items and change
+    values on screen; the agent is told about each change (as data, never as
+    instructions). ``caller_can_draw`` is reserved for the drawing board (V6-12).
+    """
+
+    paper: NotebookPaper = "ruled"
+    font: NotebookFont = "print"
+    sections: list[NotebookSectionConfig] = Field(
+        default=[NotebookSectionConfig(id="notes", title="Notes")],
+        min_length=1,
+        max_length=MAX_NOTEBOOK_SECTIONS,
+    )
+    caller_can_write: bool = False
+    caller_can_draw: bool = False
+
+    @field_validator("sections")
+    @classmethod
+    def _unique_ids(cls, value: list[NotebookSectionConfig]) -> list[NotebookSectionConfig]:
+        ids = [section.id for section in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("section ids must be unique")
+        return value
+
+
+#: The most blocks one ``layout`` block holds.
+MAX_LAYOUT_CHILDREN: Final[int] = 12
+
+
+class LayoutChildConfig(_StrictConfig):
+    """One block a ``layout`` shows inside it: the block's id and, for tabs, the tab's label."""
+
+    block_id: str = Field(min_length=1, max_length=64)
+    label: str | None = Field(default=None, max_length=40)
+
+
+class LayoutBlockConfig(_StrictConfig):
+    """``layout``: shows other blocks of the panel as tabs or side by side (V6-08, D-V6-18).
+
+    A flat container: the children stay ordinary blocks of the panel (their state,
+    tools and ``describe_panel`` entries are unchanged); the console renders a claimed
+    child inside the layout instead of in the panel's flow. A child must exist, be
+    claimed by one layout only, and never be a layout itself (:func:`layout_issues`).
+    ``columns`` (2 or 3) is used with ``kind="columns"``.
+    """
+
+    kind: Literal["tabs", "columns"] = "tabs"
+    children: list[LayoutChildConfig] = Field(default=[], max_length=MAX_LAYOUT_CHILDREN)
+    columns: Literal[2, 3] = 2
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -523,6 +614,8 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "link": LinkBlockConfig,
     "slots": SlotsBlockConfig,
     "cards": CardsBlockConfig,
+    "notebook": NotebookBlockConfig,
+    "layout": LayoutBlockConfig,
 }
 
 
@@ -582,4 +675,63 @@ def validate_panel_block_configs(blocks: Sequence[BlockSpec], *, path: str = "pa
     issues: list[Issue] = []
     for i, spec in enumerate(blocks):
         issues.extend(validate_block_config(spec, path=f"{path}[{i}].config"))
+    return issues
+
+
+def layout_issues(blocks: Sequence[BlockSpec], *, path: str = "panel.blocks") -> list[Issue]:
+    """Check what every ``layout`` block of a panel claims (V6-08, D-V6-18).
+
+    A layout's child must be another block of the same panel, never the layout itself
+    and never another layout, and each block may be claimed by one layout only (so a
+    child cannot be hidden in two places, or nowhere). A layout whose config does not
+    validate is skipped here (:func:`validate_block_config` reports it). A layout that
+    holds nothing gets a warning.
+
+    Args:
+        blocks: ``PanelLayout.blocks``.
+        path: Where the list sits in the validated document.
+
+    Returns:
+        One ``error`` per bad child at ``<path>[i].config.children[j].block_id``, and a
+        ``warning`` at ``<path>[i].config.children`` for an empty layout.
+    """
+    types = {spec.id: spec.type for spec in blocks}
+    claimed: dict[str, str] = {}
+    issues: list[Issue] = []
+    for i, spec in enumerate(blocks):
+        if spec.type != "layout":
+            continue
+        try:
+            config = LayoutBlockConfig.model_validate(spec.config)
+        except ValidationError:
+            continue
+        base = f"{path}[{i}].config.children"
+        if not config.children:
+            issues.append(
+                Issue(
+                    path=base,
+                    message="this layout holds no blocks yet; add the blocks it shows",
+                    severity="warning",
+                )
+            )
+        for j, child in enumerate(config.children):
+            where = f"{base}[{j}].block_id"
+            target = child.block_id
+            if target == spec.id:
+                message = "a layout cannot hold itself"
+            elif target not in types:
+                message = f"there is no block {target!r} on this panel"
+            elif types[target] == "layout":
+                message = f"{target!r} is a layout; a layout cannot hold another layout"
+            elif target in claimed:
+                owner = claimed[target]
+                message = (
+                    f"{target!r} is already shown in {owner!r}"
+                    if owner != spec.id
+                    else f"{target!r} is listed twice in this layout"
+                )
+            else:
+                claimed[target] = spec.id
+                continue
+            issues.append(Issue(path=where, message=message))
     return issues

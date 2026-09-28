@@ -134,6 +134,8 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   // V6-06
   { name: "set_checklist", label: "Write the checklist", help: "Lets the agent list what it still needs from the caller." },
   { name: "check_item", label: "Tick the checklist", help: "Lets the agent mark checklist items as done." },
+  { name: "notebook_write", label: "Write in the notebook", help: "Lets the agent write notes, list items and fill the summary in the notebook." },
+  { name: "notebook_check", label: "Tick the notebook's list", help: "Lets the agent mark items in the notebook's checklist as done." },
 ];
 
 /**

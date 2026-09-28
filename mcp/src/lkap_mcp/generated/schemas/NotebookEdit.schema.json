@@ -1,0 +1,97 @@
+{
+  "$id": "lkap-contracts/NotebookEdit.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``block_action {name: \"edit\", data}`` on a ``notebook`` block (V6-08).\n\nAlways names the section (``section_id``); then exactly one change, matching the\nsection's kind:\n\n* a ``text`` section: ``{text}`` adds the caller's own note; ``{entry_id, text}``\n  changes a note (an empty ``text`` removes it);\n* a ``checklist`` section: ``{item_id, done}`` ticks or unticks an item;\n* a ``details`` section: ``{key, value}`` changes the value of a row already there\n  (an empty ``value`` clears it).\n\nAn ``ink`` section is never edited this way (strokes travel on their own stream, V6-12).",
+  "properties": {
+    "done": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Done"
+    },
+    "entry_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entry Id"
+    },
+    "item_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Item Id"
+    },
+    "key": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key"
+    },
+    "section_id": {
+      "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+      "title": "Section Id",
+      "type": "string"
+    },
+    "text": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "required": [
+    "section_id"
+  ],
+  "title": "NotebookEdit",
+  "type": "object"
+}

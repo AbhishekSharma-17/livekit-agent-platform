@@ -1,7 +1,8 @@
 """`update_block` built-in tool (CONTRACTS-V2 §4.4): change fields of a panel block.
 
 Registered only when the agent's panel has a block this tool can write (see
-`tools.builtin.build_builtin_tools`). The model passes the changed fields as a
+`tools.builtin.build_builtin_tools`). A `notebook` (V6-08) is written by its own tools and a
+`layout` holds no state, so both are refused by name. The model passes the changed fields as a
 JSON-object **string**: a free-form `dict` parameter becomes a Gemini
 function declaration of type OBJECT with no properties, which Gemini rejects
 for the whole tool list.
@@ -74,6 +75,11 @@ def build_update_block_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             raise ToolError(f"Unknown block {block_id!r}; blocks: {describe_blocks(live.values())}.")
         if spec.type in ENVELOPE_BLOCK_TYPES - {"custom"}:
             raise ToolError(f"Block {block_id!r} shows {spec.type}; use set_status or push_note instead.")
+        # V6-08: a notebook has its own tools; a layout only groups other blocks.
+        if spec.type == "notebook":
+            raise ToolError(f"Block {block_id!r} is a notebook; use notebook_write or notebook_check.")
+        if spec.type == "layout":
+            raise ToolError(f"Block {block_id!r} only groups other blocks; change those blocks instead.")
         fields = parse_json_object(patch, "patch")
         if not fields:
             raise ToolError("patch is empty; pass the fields to change.")

@@ -207,6 +207,8 @@ export interface LkapContracts {
   MoneyRange?: MoneyRange;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
+  NotebookBlockState?: NotebookBlockState;
+  NotebookEdit?: NotebookEdit;
   NotifyTeamConfig?: NotifyTeamConfig;
   NumbersRefreshIn?: NumbersRefreshIn;
   NumbersRefreshOut?: NumbersRefreshOut;
@@ -216,6 +218,8 @@ export interface LkapContracts {
   Page?: Page;
   PageSpec?: PageSpec;
   PanelLayout?: PanelLayout;
+  PanelPreset?: PanelPreset;
+  PanelPresetsResponse?: PanelPresetsResponse;
   PhoneNumberCreate?: PhoneNumberCreate;
   PhoneNumberOut?: PhoneNumberOut;
   PhoneNumberPage?: PhoneNumberPage;
@@ -375,7 +379,8 @@ export interface ActivityEvent {
  * * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``. V6-06:
  *   ``name == "edit"`` on a block of :data:`EDITABLE_BLOCK_TYPES` whose config sets
  *   ``caller_can_edit`` is checked (:class:`DetailsEdit`, :class:`ChecklistEdit`), applied
- *   and told to the model before the pack sees it; any other built-in block refuses it
+ *   and told to the model before the pack sees it; any other built-in block refuses it.
+ *   V6-08: a ``notebook`` block with ``caller_can_write`` takes :class:`NotebookEdit`
  * * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
  * * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
  *   (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
@@ -1673,7 +1678,9 @@ export interface BlockSpec {
     | "handoff"
     | "link"
     | "slots"
-    | "cards";
+    | "cards"
+    | "notebook"
+    | "layout";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -6114,6 +6121,137 @@ export interface NodeSpecsResponse {
   v?: 1;
 }
 /**
+ * A ``notebook`` block's state (V6-08, D-V6-15): one entry per section, keyed by section id.
+ *
+ * The sections render in the order the block's config lists them (``NotebookBlockConfig.
+ * sections``); this map carries only their content, so a patch can address one section
+ * (``/sections/<id>/entries``). Each section's ``kind`` matches its config.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookBlockState".
+ */
+export interface NotebookBlockState {
+  sections?: {
+    /**
+     * This interface was referenced by `undefined`'s JSON-Schema definition
+     * via the `patternProperty` "^[A-Za-z0-9_.:-]{1,64}$".
+     */
+    [k: string]: NotebookTextSection | NotebookChecklistSection | NotebookDetailsSection | NotebookInkSection;
+  };
+  updated_at?: number | null;
+}
+/**
+ * A ``text`` section: running notes, newest last.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookTextSection".
+ */
+export interface NotebookTextSection {
+  /**
+   * @maxItems 100
+   */
+  entries?: NotebookEntry[];
+  kind?: "text";
+}
+/**
+ * One note in a ``text`` section of a notebook (V6-08).
+ *
+ * ``author`` is who wrote it; ``key`` makes a note replaceable in place (the agent
+ * writing the same key again updates it, like ``Note.key``); ``edited_by`` is
+ * ``"caller"`` after the caller changed an entry the agent wrote.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookEntry".
+ */
+export interface NotebookEntry {
+  author?: "agent" | "caller";
+  edited_by?: "caller" | null;
+  id: string;
+  key?: string | null;
+  text: string;
+  tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
+  ts: number;
+}
+/**
+ * A ``checklist`` section: items the agent ticks (``notebook_check``) and, when allowed, the caller.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookChecklistSection".
+ */
+export interface NotebookChecklistSection {
+  /**
+   * @maxItems 30
+   */
+  items?: ChecklistItem[];
+  kind?: "checklist";
+}
+/**
+ * One "still needed" item. ``edited_by`` is ``"caller"`` after the caller ticked it on screen (V6-06).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChecklistItem".
+ */
+export interface ChecklistItem {
+  blocking?: boolean;
+  done?: boolean;
+  edited_by?: "caller" | null;
+  hint?: string | null;
+  id: string;
+  label: string;
+}
+/**
+ * A ``details`` section: key-value rows, like a ``details`` card inside the notebook.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookDetailsSection".
+ */
+export interface NotebookDetailsSection {
+  /**
+   * @maxItems 30
+   */
+  items?: DetailsItem[];
+  kind?: "details";
+}
+/**
+ * An ``ink`` section: a drawing board. ``canvas_block_id`` is reserved for V6-12 (D-V6-16).
+ *
+ * Until the ``canvas`` block lands the section stays empty and the console shows
+ * "Drawing board coming soon"; nothing writes it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookInkSection".
+ */
+export interface NotebookInkSection {
+  canvas_block_id?: string | null;
+  kind?: "ink";
+}
+/**
+ * ``block_action {name: "edit", data}`` on a ``notebook`` block (V6-08).
+ *
+ * Always names the section (``section_id``); then exactly one change, matching the
+ * section's kind:
+ *
+ * * a ``text`` section: ``{text}`` adds the caller's own note; ``{entry_id, text}``
+ *   changes a note (an empty ``text`` removes it);
+ * * a ``checklist`` section: ``{item_id, done}`` ticks or unticks an item;
+ * * a ``details`` section: ``{key, value}`` changes the value of a row already there
+ *   (an empty ``value`` clears it).
+ *
+ * An ``ink`` section is never edited this way (strokes travel on their own stream, V6-12).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotebookEdit".
+ */
+export interface NotebookEdit {
+  done?: boolean | null;
+  entry_id?: string | null;
+  item_id?: string | null;
+  key?: string | null;
+  section_id: string;
+  text?: string | null;
+  value?: string | null;
+}
+/**
  * ``POST /v1/telephony/numbers/refresh``: mirror the project's LiveKit-hosted numbers.
  *
  * Without ``connection_id`` every SIP-capable connection of the workspace is read.
@@ -6230,6 +6368,30 @@ export interface PageSpec {
   param: string;
   size?: number | null;
   size_param?: string | null;
+}
+/**
+ * A ready-made panel a builder can start from (V6-08): ``GET /v1/panels/presets``.
+ *
+ * Choosing one replaces the agent's ``panel`` with ``panel`` (a copy); the builder
+ * then changes it like any other panel.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PanelPreset".
+ */
+export interface PanelPreset {
+  description: string;
+  id: string;
+  name: string;
+  panel: PanelLayout;
+}
+/**
+ * ``GET /v1/panels/presets``: the ready-made panels, in the order the console offers them.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "PanelPresetsResponse".
+ */
+export interface PanelPresetsResponse {
+  items: PanelPreset[];
 }
 /**
  * ``POST /v1/telephony/numbers``.
@@ -7179,20 +7341,6 @@ export interface AssetRef {
   size?: number | null;
   stored?: boolean;
   ts: number;
-}
-/**
- * One "still needed" item. ``edited_by`` is ``"caller"`` after the caller ticked it on screen (V6-06).
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ChecklistItem".
- */
-export interface ChecklistItem {
-  blocking?: boolean;
-  done?: boolean;
-  edited_by?: "caller" | null;
-  hint?: string | null;
-  id: string;
-  label: string;
 }
 /**
  * A line in the panel's notes list. A repeated ``key`` upserts in place.

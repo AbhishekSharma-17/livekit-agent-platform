@@ -55,6 +55,7 @@ from lkap_api.routers import (
     health,
     hooks,
     internal,
+    panels,
     provider_keys,
     providers,
     sessions,
@@ -202,6 +203,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(knowledge_connections_router)  # V5-20: bring-your-own stores, hosted re-rankers
     app.include_router(agent_tests_router)  # V5-29: test runs and verdicts
     app.include_router(memory_router)  # V5-40: caller memory (forget, purge, a session's memory)
+    app.include_router(panels.router)  # V6-08: ready-made panels
     _include_knowledge_router(app)
 
 

@@ -190,6 +190,9 @@ BlockType = Literal[
     "link",
     "slots",
     "cards",
+    # V6-08 (D-V6-15, D-V6-18): a sectioned notebook, and a container that groups other blocks.
+    "notebook",
+    "layout",
 ]
 
 
@@ -827,6 +830,119 @@ class CardsBlockState(BaseModel):
         return value
 
 
+# --------------------------------------------------------------------- notebook (V6-08)
+
+#: What one section of a ``notebook`` block holds (D-V6-15): running ``text`` notes, a
+#: ``checklist``, a ``details`` card, or an ``ink`` drawing board (a ``canvas`` block, V6-12).
+NotebookSectionKind = Literal["text", "checklist", "details", "ink"]
+NOTEBOOK_SECTION_KINDS: Final[tuple[str, ...]] = get_args(NotebookSectionKind)
+#: Who wrote a notebook entry: the agent (``notebook_write``) or the caller (an edit on screen).
+NotebookAuthor = Literal["agent", "caller"]
+#: A section id, an entry id or key, a checklist item id: letters, digits and ``_.:-``.
+NOTEBOOK_ID_PATTERN: Final[str] = r"^[A-Za-z0-9_.:-]{1,64}$"
+#: The most sections one notebook has.
+MAX_NOTEBOOK_SECTIONS: Final[int] = 12
+#: The most entries one text section holds (the agent replaces the section to start over).
+MAX_NOTEBOOK_ENTRIES: Final[int] = 100
+#: The longest entry of a text section.
+MAX_NOTEBOOK_ENTRY_CHARS: Final[int] = 2000
+#: The most items of a checklist section, and rows of a details section.
+MAX_NOTEBOOK_ITEMS: Final[int] = 30
+
+NotebookId = Annotated[str, Field(pattern=NOTEBOOK_ID_PATTERN)]
+
+
+def _unique(ids: list[str], what: str) -> None:
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"{what} must be unique")
+
+
+class NotebookEntry(BaseModel):
+    """One note in a ``text`` section of a notebook (V6-08).
+
+    ``author`` is who wrote it; ``key`` makes a note replaceable in place (the agent
+    writing the same key again updates it, like ``Note.key``); ``edited_by`` is
+    ``"caller"`` after the caller changed an entry the agent wrote.
+    """
+
+    id: NotebookId
+    text: str = Field(max_length=MAX_NOTEBOOK_ENTRY_CHARS)
+    author: NotebookAuthor = "agent"
+    key: NotebookId | None = None
+    tone: Tone | None = None
+    ts: float
+    edited_by: EditAuthor | None = None
+
+
+class NotebookTextSection(BaseModel):
+    """A ``text`` section: running notes, newest last."""
+
+    kind: Literal["text"] = "text"
+    entries: list[NotebookEntry] = Field(default=[], max_length=MAX_NOTEBOOK_ENTRIES)
+
+    @field_validator("entries")
+    @classmethod
+    def _unique_ids(cls, value: list[NotebookEntry]) -> list[NotebookEntry]:
+        _unique([entry.id for entry in value], "entry ids")
+        _unique([entry.key for entry in value if entry.key is not None], "entry keys")
+        return value
+
+
+class NotebookChecklistSection(BaseModel):
+    """A ``checklist`` section: items the agent ticks (``notebook_check``) and, when allowed, the caller."""
+
+    kind: Literal["checklist"] = "checklist"
+    items: list[ChecklistItem] = Field(default=[], max_length=MAX_NOTEBOOK_ITEMS)
+
+    @field_validator("items")
+    @classmethod
+    def _unique_ids(cls, value: list[ChecklistItem]) -> list[ChecklistItem]:
+        _unique([item.id for item in value], "item ids")
+        return value
+
+
+class NotebookDetailsSection(BaseModel):
+    """A ``details`` section: key-value rows, like a ``details`` card inside the notebook."""
+
+    kind: Literal["details"] = "details"
+    items: list[DetailsItem] = Field(default=[], max_length=MAX_NOTEBOOK_ITEMS)
+
+    @field_validator("items")
+    @classmethod
+    def _unique_keys(cls, value: list[DetailsItem]) -> list[DetailsItem]:
+        _unique([item.key for item in value], "row keys")
+        return value
+
+
+class NotebookInkSection(BaseModel):
+    """An ``ink`` section: a drawing board. ``canvas_block_id`` is reserved for V6-12 (D-V6-16).
+
+    Until the ``canvas`` block lands the section stays empty and the console shows
+    "Drawing board coming soon"; nothing writes it.
+    """
+
+    kind: Literal["ink"] = "ink"
+    canvas_block_id: str | None = Field(default=None, max_length=64)
+
+
+NotebookSection = Annotated[
+    NotebookTextSection | NotebookChecklistSection | NotebookDetailsSection | NotebookInkSection,
+    Field(discriminator="kind"),
+]
+
+
+class NotebookBlockState(BaseModel):
+    """A ``notebook`` block's state (V6-08, D-V6-15): one entry per section, keyed by section id.
+
+    The sections render in the order the block's config lists them (``NotebookBlockConfig.
+    sections``); this map carries only their content, so a patch can address one section
+    (``/sections/<id>/entries``). Each section's ``kind`` matches its config.
+    """
+
+    sections: dict[NotebookId, NotebookSection] = Field(default={}, max_length=MAX_NOTEBOOK_SECTIONS)
+    updated_at: float | None = None
+
+
 #: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).
 #: How each lands in the form's JSON schema (``FormBlockState.schema``):
 #:
@@ -983,11 +1099,19 @@ class BlockSubmitPayload(BaseModel):
 
 #: The ``block_action`` name a caller's edit of a block is sent with (D-V6-19).
 BLOCK_EDIT_ACTION: Final[str] = "edit"
-#: The block types a caller may edit when the block's config sets ``caller_can_edit``:
-#: a ``details`` value (:class:`DetailsEdit`) and a ``checklist`` tick (:class:`ChecklistEdit`).
-#: An ``edit`` on any other built-in block (requestable, link, consent, upload, captions and
-#: handoff blocks included) is refused; a ``custom`` block's actions stay the pack's.
-EDITABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset({"details", "checklist"})
+#: The block types a caller may edit when the block's config allows it: a ``details`` value
+#: (:class:`DetailsEdit`) and a ``checklist`` tick (:class:`ChecklistEdit`) with
+#: ``caller_can_edit``; a ``notebook`` note, tick or value (:class:`NotebookEdit`) with
+#: ``caller_can_write`` (V6-08). An ``edit`` on any other built-in block (requestable, link,
+#: consent, upload, captions, handoff and layout blocks included) is refused; a ``custom``
+#: block's actions stay the pack's.
+EDITABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset({"details", "checklist", "notebook"})
+#: The config key that lets the caller edit a block of each editable type.
+CALLER_EDIT_FLAGS: Final[dict[str, str]] = {
+    "details": "caller_can_edit",
+    "checklist": "caller_can_edit",
+    "notebook": "caller_can_write",
+}
 #: The longest value a caller may type into a block.
 MAX_CALLER_EDIT_CHARS: Final[int] = 500
 
@@ -1014,6 +1138,61 @@ class ChecklistEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class NotebookEdit(BaseModel):
+    """``block_action {name: "edit", data}`` on a ``notebook`` block (V6-08).
+
+    Always names the section (``section_id``); then exactly one change, matching the
+    section's kind:
+
+    * a ``text`` section: ``{text}`` adds the caller's own note; ``{entry_id, text}``
+      changes a note (an empty ``text`` removes it);
+    * a ``checklist`` section: ``{item_id, done}`` ticks or unticks an item;
+    * a ``details`` section: ``{key, value}`` changes the value of a row already there
+      (an empty ``value`` clears it).
+
+    An ``ink`` section is never edited this way (strokes travel on their own stream, V6-12).
+    """
+
+    section_id: str = Field(pattern=NOTEBOOK_ID_PATTERN)
+    entry_id: str | None = Field(default=None, pattern=NOTEBOOK_ID_PATTERN)
+    text: str | None = Field(default=None, max_length=MAX_CALLER_EDIT_CHARS)
+    item_id: str | None = Field(default=None, min_length=1, max_length=64)
+    done: bool | None = None
+    key: str | None = Field(default=None, min_length=1, max_length=64)
+    value: str | None = Field(default=None, max_length=MAX_CALLER_EDIT_CHARS)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _one_change(self) -> Self:
+        note = self.text is not None and self.item_id is None and self.done is None and self.key is None
+        tick = self.item_id is not None and self.done is not None
+        row = self.key is not None and self.value is not None
+        others_empty = {
+            "note": self.value is None,
+            "tick": self.text is None and self.entry_id is None and self.key is None and self.value is None,
+            "row": self.text is None and self.entry_id is None and self.item_id is None and self.done is None,
+        }
+        shapes = [
+            name for name, ok in (("note", note), ("tick", tick), ("row", row)) if ok and others_empty[name]
+        ]
+        if len(shapes) != 1:
+            raise ValueError(
+                "an edit names the section and one change: {text} or {entry_id, text} for notes, "
+                "{item_id, done} for a checklist, {key, value} for a details row"
+            )
+        return self
+
+    @property
+    def change(self) -> Literal["note", "tick", "row"]:
+        """Which of the three changes this edit is."""
+        if self.item_id is not None:
+            return "tick"
+        if self.key is not None:
+            return "row"
+        return "note"
+
+
 class AgentAction(BaseModel):
     """RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).
 
@@ -1027,7 +1206,8 @@ class AgentAction(BaseModel):
     * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``. V6-06:
       ``name == "edit"`` on a block of :data:`EDITABLE_BLOCK_TYPES` whose config sets
       ``caller_can_edit`` is checked (:class:`DetailsEdit`, :class:`ChecklistEdit`), applied
-      and told to the model before the pack sees it; any other built-in block refuses it
+      and told to the model before the pack sees it; any other built-in block refuses it.
+      V6-08: a ``notebook`` block with ``caller_can_write`` takes :class:`NotebookEdit`
     * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
     * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
       (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block

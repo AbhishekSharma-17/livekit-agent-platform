@@ -920,6 +920,7 @@ POST /v1/tools/{id}/test                 -> McpTestResult                       
 POST /v1/tools/{id}/oauth/start | GET …/oauth/status | POST …/oauth/revoke   # V5-14/V5-16; see §3
 GET  /v1/oauth/mcp/callback | GET /v1/oauth/mcp/client-metadata.json          # V5-14; see §3
 GET  /v1/tool-templates                  -> the Cal.com template set; POST /v1/tool-templates/{id}/instantiate   # V5-25; see §3
+GET  /v1/panels/presets                  -> PanelPresetsResponse (viewer / agents:read)   # V6-08; see §10
 
 # ---- apps (Composio; V5-18, V5-47, V5-53): /v1/tool-providers/composio/*, see §3 "Apps"
 
@@ -1403,6 +1404,25 @@ export function useUiRequests(handler: (req: UiRequest) => Promise<UiRequestResu
 **Link outcomes.** `POST /v1/hooks/link/{session_id}` with `LinkHookIn {block_id | reference, status: completed|failed|expired}` (`extra="forbid"`), signed `X-LKAP-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>` with the signing secret of any enabled webhook endpoint of the session's workspace (±300 s). 202 `LinkHookOut {id, session_id, status, delivered_to}`; 401 for an unknown session or a bad signature (indistinguishable); 422 for a bad body; 409 `not_live` / `no_agent`. The api sends `LinkCompletedPacket {v, op: "link_completed", id, session_id, block_id, reference, status}` as a reliable data packet on `lkap.ui.link` (`TOPIC_UI_LINK`) to the room's agents only; the worker honours a packet only without a participant (server-sent) and for its own session, and applies it only while the link is `pending` or `opened` (idempotent). The model then gets `[The payment link <untrusted source="panel">…</untrusted> was completed.]`.
 
 **`describe_panel`** (registered with any block): one entry per block — `id`, `type`, `title`, `status` and a type summary (counts and at most eight short labels; a link's site, never its URL; never bytes) — as JSON inside `<untrusted source="panel">`, at most 4000 characters (details dropped first, then trailing blocks, with a note).
+
+### Notebook and layout blocks, ready-made panels (V6-08)
+
+`BlockType` gains two blocks (D-V6-15, D-V6-18; configs in `lkap_contracts.blocks`, the state in `lkap_contracts.ui_protocol`):
+
+| Block | Config | State | Tools |
+|---|---|---|---|
+| `notebook` | `paper: plain\|ruled\|grid\|legal` (`ruled`), `font: print\|handwritten` (`print`; a handwriting look for typed notes, not ink), `sections: [{id (letters, digits, _.:-), title (≤ 80), kind: text\|checklist\|details\|ink}]` (1–12, unique ids; default one `notes` text section), `caller_can_write` (off), `caller_can_draw` (off; reserved for V6-12) | `NotebookBlockState {sections: {<section id>: {kind: "text", entries: [NotebookEntry {id, text ≤ 2000, author: agent\|caller, key, tone, ts, edited_by}] ≤ 100} \| {kind: "checklist", items: [ChecklistItem] ≤ 30} \| {kind: "details", items: [DetailsItem] ≤ 30} \| {kind: "ink", canvas_block_id (reserved for V6-12)}} ≤ 12, updated_at}` | `notebook_write`, `notebook_check` |
+| `layout` | `kind: tabs\|columns`, `children: [{block_id, label ≤ 40}]` (≤ 12), `columns: 2\|3` | none (`{}`) | none |
+
+**The notebook.** The config lists the sections and their order; the state keys each section's content by id (seeded empty by the worker), so a patch addresses one section (`/blocks/<id>/sections/<section id>/entries`). `notebook_write(section_id, text?, items?, fields?, mode: append|replace, key?, tone?, block_id?)` appends a note (or updates the note with the same `key`, or replaces the section), upserts checklist items by id (a tick is kept) or details rows by key; `notebook_check(section_id, item_id, done, hint?, block_id?)` ticks. Both are write built-ins, never in the background, and answer nothing on `realtime` / `half_cascade` pipelines. The platform's entry ids start with `n:` and a note's key never contains `:`, so an id never matches another note's key in a keyed `upsert`. An `ink` section is never written by these tools. `update_block` refuses a notebook (and a layout), and neither type is in `UPDATABLE_BLOCK_TYPES`, so a page's `state_delta` never writes one.
+
+**Caller edits.** `EDITABLE_BLOCK_TYPES` gains `notebook`; `CALLER_EDIT_FLAGS` maps each editable type to its flag (`caller_can_edit` on `details` and `checklist`, `caller_can_write` on `notebook`). `block_action {name: "edit", data: NotebookEdit}` where `NotebookEdit` (strict) is `{section_id}` plus exactly one of `{text}` (add the caller's note), `{entry_id, text}` (change a note; empty text removes it), `{item_id, done}` (tick) or `{key, value}` (change a details row; empty clears it), text and values ≤ 500 characters. The worker checks it against the section's kind (an `ink` section refuses), applies it in one patch validated against `NotebookBlockState`, marks the note `author: "caller"` or the changed note, item or row `edited_by: "caller"`, and tells the model in one line fenced as `<untrusted source="caller_edit">`; the pack's `on_block_action` then sees `{section_id, section, key | item_id, label, text | done | value, change}`. The answer is `{ok: true}`, `{ok: true, payload: {changed: false}}` for a no-op, or `{ok: false, error}`.
+
+**`describe_panel`.** A notebook entry lists its sections in config order with totals and at most five notes, items or rows, each cut to 80 characters (the caller's marked "by the caller"); a layout entry is `{shows_as, holds: [block ids]}`. The claimed blocks keep their own entries, so a layout never hides a block from the model; the full Notebook preset stays within the 4,000-character bound without dropping details.
+
+**Layout validation.** `layout_issues(blocks)` (the api's panel validator calls it): a child that is not a block of the panel, the layout itself, another layout, or a block already claimed by a layout (or listed twice) is an error at `panel.blocks[i].config.children[j].block_id`; an empty layout is a warning. Children stay top-level `PanelLayout.blocks` entries; the console renders a claimed child inside its layout instead of in the panel's flow (V6-10).
+
+**Ready-made panels.** `PanelPreset {id, name, description, panel: PanelLayout}`; `GET /v1/panels/presets` (viewer or `agents:read`) → `PanelPresetsResponse {items}`. `NOTEBOOK_PRESET` (`id="notebook"`): `layout="wide"`, blocks `status`, `notebook` (Notes / Still needed / Summary / Sketch, `font="handwritten"`, `caller_can_write=true`) and `gallery`. `panel_preset(id)` returns a copy; the MCP's `agent_update(panel_preset="notebook")` replaces `config.panel` with it.
 
 ### The AG-UI state adapter (`lkap_contracts.ui_agui`)
 

@@ -18,11 +18,11 @@
 import * as React from "react";
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
-import { Streamdown } from "streamdown";
 
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import type { DocumentBlockState, DocumentHighlight } from "@/contracts/lkap-contracts";
+import { SafeMarkdown } from "@/lib/safe-markdown";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
 import { BlockFrame } from "./frame";
@@ -145,9 +145,12 @@ function MarkdownDocument({ src }: { src: string }) {
   }, [src]);
   if (failed) return <PanelEmpty>Couldn&rsquo;t load this document.</PanelEmpty>;
   if (text === null) return <PanelEmpty>Loading…</PanelEmpty>;
+  // V6-10 (ask #333): a fetched document's own Markdown is untrusted content —
+  // https links only, and no images at all (no `assets` map: nothing in this
+  // text can ever be "the session's own asset").
   return (
     <div data-slot="block-document-markdown" className="max-h-[28rem] overflow-y-auto text-sm leading-relaxed">
-      <Streamdown>{text}</Streamdown>
+      <SafeMarkdown text={text} allowLinks />
     </div>
   );
 }

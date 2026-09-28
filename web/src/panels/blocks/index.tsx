@@ -78,15 +78,14 @@ const CaptionsBlock = lazy(() => import("./captions"));
 // `transcript` is one of the more commonly-placed blocks (a brief Suspense
 // fallback there is the traded cost).
 const TranscriptBlock = lazy(() => import("./transcript"));
-
-/** A block type this web build has no renderer for yet (V6-08's two; V6-10 renders them). */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
+// `notebook` pulls in its own paper CSS and four section renderers (V6-10);
+// kept out of the first load the same way, for a panel with no notebook block.
+const NotebookBlock = lazy(() => import("./notebook"));
+// `layout` pulls in `radix-ui`'s Tabs primitive (V6-10); kept out of the
+// first load the same way, for a panel with no `layout` block. Its own
+// module (`./layout`) is where the child-resolution logic lives, not here —
+// see that file's docblock for why it safely imports `Block` back from here.
+const LayoutBlock = lazy(() => import("./layout"));
 
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
@@ -113,9 +112,9 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   link: LinkBlock as AnyBlockComponent,
   slots: SlotsBlock as AnyBlockComponent,
   cards: CardsBlock as AnyBlockComponent,
-  // V6-08 added these types to the contract; their renderers come with V6-10.
-  notebook: NotRenderedYetBlock,
-  layout: NotRenderedYetBlock,
+  // V6-10 (D-V6-15, D-V6-18): both lazy (see above).
+  notebook: NotebookBlock as AnyBlockComponent,
+  layout: LayoutBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
@@ -128,6 +127,8 @@ export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
   "upload",
   "captions",
   "transcript",
+  "notebook",
+  "layout",
 ]);
 
 export interface BlockProps extends PanelProps {
@@ -144,19 +145,59 @@ function BlockFallback({ spec, title }: { spec: BlockSpec; title: string | null 
   );
 }
 
+const MARGIN_NOTE_TONE_DOT: Record<string, string> = {
+  neutral: "bg-muted-foreground",
+  info: "bg-info",
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-danger",
+};
+
+/**
+ * A block's margin notes (`Note.block_id`, V6-06/V6-10, D-V6-19, ask #24): a
+ * `push_note(block_id=...)` shows here, right under the block it names,
+ * rather than (only) in the panel-wide notes list (`notes.tsx` omits it).
+ * Generic to every block type — no renderer needs to know about it.
+ */
+function BlockMarginNotes({ notes }: { notes: NonNullable<PanelProps["state"]["notes"]> }) {
+  return (
+    <aside
+      data-slot="block-margin-notes"
+      aria-label="Notes on this block"
+      className="border-border bg-muted/30 border-t px-4 py-2.5"
+    >
+      <ul className="flex flex-col gap-1.5">
+        {notes.map((note) => (
+          <li key={note.key ?? note.id} data-slot="block-margin-note" className="flex items-start gap-2 text-[0.8125rem] leading-snug">
+            <span
+              aria-hidden="true"
+              className={`mt-1.5 size-1.5 shrink-0 rounded-full ${MARGIN_NOTE_TONE_DOT[note.tone ?? "neutral"]}`}
+            />
+            <span className="min-w-0 break-words">{note.text}</span>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
 /** Render one platform block from a `BlockSpec` and the panel's props. */
 export function Block({ spec, highlighted, ...panel }: BlockProps) {
   const Component = BLOCK_COMPONENTS[spec.type] ?? CustomBlock;
   const title = blockTitle(spec);
   const data = blockStateOf(spec, panel.state.blocks);
+  const marginNotes = (panel.state.notes ?? []).filter((note) => note.block_id === spec.id);
   const node = (
-    <Component
-      spec={spec}
-      data={data as never}
-      panel={panel}
-      title={title}
-      highlighted={highlighted}
-    />
+    <>
+      <Component
+        spec={spec}
+        data={data as never}
+        panel={panel}
+        title={title}
+        highlighted={highlighted}
+      />
+      {marginNotes.length > 0 && <BlockMarginNotes notes={marginNotes} />}
+    </>
   );
   if (!LAZY_BLOCK_TYPES.has(spec.type)) return node;
   return <Suspense fallback={<BlockFallback spec={spec} title={title} />}>{node}</Suspense>;

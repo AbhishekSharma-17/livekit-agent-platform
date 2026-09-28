@@ -136,7 +136,15 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
 
 /** One field of a block's config form. */
 export type BlockConfigField =
-  | { key: string; label: string; kind: "boolean"; hint?: string; default: boolean }
+  | {
+      key: string;
+      label: string;
+      kind: "boolean";
+      hint?: string;
+      default: boolean;
+      /** Shown, switched off, greyed (`notebook.caller_can_draw` until V6-12's drawing board). */
+      disabled?: boolean;
+    }
   | { key: string; label: string; kind: "integer"; hint?: string; default: number; min?: number }
   | { key: string; label: string; kind: "url"; hint?: string; default: string }
   | {
@@ -165,6 +173,28 @@ export type BlockConfigField =
       hint?: string;
       default: Record<string, unknown>[];
       itemKeys: readonly string[];
+    }
+  | {
+      key: "sections";
+      label: string;
+      /**
+       * A `notebook`'s sections (V6-10): id, title, kind (`text` / `checklist`
+       * / `details` / `ink`) — edited by `block-config-form.tsx::NotebookSectionsEditor`.
+       */
+      kind: "sections";
+      hint?: string;
+      default: { id: string; title: string; kind: string }[];
+    }
+  | {
+      key: "children";
+      label: string;
+      /**
+       * A `layout`'s children (V6-10): another block of the panel plus an
+       * optional tab label — edited by `block-config-form.tsx::LayoutChildrenEditor`.
+       */
+      kind: "children";
+      hint?: string;
+      default: { block_id: string; label: string | null }[];
     }
   | {
       key: string;
@@ -318,6 +348,14 @@ export const NOTEBOOK_FONTS = [
 export const LAYOUT_KINDS = [
   { value: "tabs", label: "Tabs" },
   { value: "columns", label: "Side by side" },
+] as const;
+
+/** `notebook.sections[].kind` values (V6-08 → V6-10; `NotebookSectionKind`). */
+export const NOTEBOOK_SECTION_KINDS = [
+  { value: "text", label: "Notes" },
+  { value: "checklist", label: "Checklist" },
+  { value: "details", label: "Summary" },
+  { value: "ink", label: "Drawing board (coming soon)" },
 ] as const;
 
 /** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */
@@ -703,10 +741,9 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       {
         key: "sections",
         label: "Sections",
-        kind: "list",
+        kind: "sections",
         hint: "What the notebook holds, in order: notes, a checklist, a summary card or a drawing board.",
         default: [{ id: "notes", title: "Notes", kind: "text" }],
-        itemKeys: ["id", "title", "kind"],
       },
       {
         key: "caller_can_write",
@@ -721,6 +758,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
         kind: "boolean",
         hint: "Drawing is not available yet.",
         default: false,
+        disabled: true,
       },
     ],
     filledBy: "notebook_write",
@@ -736,10 +774,9 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       {
         key: "children",
         label: "Blocks inside",
-        kind: "list",
+        kind: "children",
         hint: "Other blocks of this panel to show here. Each block can be inside one of these only.",
         default: [],
-        itemKeys: ["block_id", "label"],
       },
       { key: "columns", label: "Columns", kind: "integer", hint: "Used when shown side by side.", default: 2, min: 2 },
     ],
@@ -785,13 +822,59 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** A notebook section's empty content by kind (mirrors the worker's `ui.blocks._empty_section`). */
+function emptyNotebookSection(kind: unknown): Record<string, unknown> {
+  switch (kind) {
+    case "checklist":
+      return { kind: "checklist", items: [] };
+    case "details":
+      return { kind: "details", items: [] };
+    case "ink":
+      return { kind: "ink", canvas_block_id: null };
+    default:
+      return { kind: "text", entries: [] };
+  }
+}
+
+/**
+ * `config.sections` as `{id, kind}` pairs, one `notes` text section when the
+ * config carries none (ask #60, mirrors `NotebookBlockConfig.sections`'
+ * own default of one `notes` text section).
+ */
+function notebookSectionIds(config: Record<string, unknown>): { id: string; kind: unknown }[] {
+  const sections = config.sections;
+  if (Array.isArray(sections) && sections.length > 0) {
+    return sections
+      .filter((section): section is Record<string, unknown> => isRecord(section) && typeof section.id === "string")
+      .map((section) => ({ id: section.id as string, kind: section.kind }));
+  }
+  return [{ id: "notes", kind: "text" }];
+}
+
+/**
+ * A notebook's pre-call state (ask #60): mirrors the worker's
+ * `ui.blocks.empty_notebook_sections` — one empty section per `config.sections`
+ * entry, keyed by id, content shaped by kind. Not a plain key copy (the
+ * generic rule in `initialBlockState` below): `config.sections` and
+ * `state.sections` have different shapes.
+ */
+function notebookInitialState(spec: BlockSpec): Record<string, unknown> {
+  const config = isRecord(spec.config) ? spec.config : {};
+  const sections: Record<string, unknown> = {};
+  for (const { id, kind } of notebookSectionIds(config)) sections[id] = emptyNotebookSection(kind);
+  return { sections, updated_at: null };
+}
+
 /**
  * The state a block renders before the worker's snapshot arrives (pre-call,
  * connecting, the console preview): the type's defaults, seeded by any
  * `BlockSpec.config` key that names a state field — the same rule as the
- * worker's `initial_block_state`. Envelope and custom blocks are `{}`.
+ * worker's `initial_block_state`. Envelope, `layout` and custom blocks are
+ * `{}` (a `layout` has no state of its own, D-V6-18); `notebook` (V6-08) has
+ * its own rule (`notebookInitialState`).
  */
 export function initialBlockState(spec: BlockSpec): Record<string, unknown> {
+  if (spec.type === "notebook") return notebookInitialState(spec);
   const factory = STATE_DEFAULTS[spec.type as keyof BlockStateByType];
   if (!factory) return {};
   const state: Record<string, unknown> = { ...factory() };

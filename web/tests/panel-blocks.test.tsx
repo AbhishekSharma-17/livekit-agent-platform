@@ -115,11 +115,15 @@ describe("block catalog", () => {
     // `transcript` follows for the same reason once its language chip reads the same hook.
     // V5-44: `activity` joins it too — its "working on" line reads the room's live
     // `agent_state` participant attribute the same way.
+    // V6-10: `notebook` joins it too — its own paper CSS and four section renderers;
+    // `layout` joins it too — `radix-ui`'s Tabs primitive.
     expect([...LAZY_BLOCK_TYPES].sort()).toEqual([
       "activity",
       "captions",
       "document",
+      "layout",
       "markdown",
+      "notebook",
       "table",
       "transcript",
       "upload",
@@ -585,12 +589,22 @@ describe("layout (R-V2-7)", () => {
 });
 
 describe("composite panel", () => {
-  it("renders the layout's blocks in order", async () => {
+  it("renders the layout's blocks in order, except a layout's own children (V6-10, D-V6-18)", async () => {
     render(<CompositePanel {...panelProps()} />);
     const panel = screen.getByTestId("composite-panel");
     await screen.findByText("Induction hob");
+    // "tabs" (a `layout`) is itself lazy (V6-10): wait for its active tab's
+    // content too, so "claim" has mounted before the order is read.
+    await screen.findByText("H0-44721");
     const order = [...panel.querySelectorAll("[data-block-id]")].map((el) => el.getAttribute("data-block-id"));
-    expect(order).toEqual(FIXTURE_LAYOUT.blocks.map((b) => b.id));
+    // The fixture's "tabs" layout claims "claim" and "recap" (`layout.json`): both
+    // are left out of the flat top-level flow (`FIXTURE_LAYOUT.blocks` minus them,
+    // in the same order) and render only inside "tabs" instead — "claim" (the
+    // first, active tab) is mounted right after it; "recap" (the inactive tab)
+    // is not, by Radix Tabs's own default (no `forceMount`).
+    const topLevel = FIXTURE_LAYOUT.blocks.filter((b) => b.id !== "claim" && b.id !== "recap").map((b) => b.id);
+    expect(order).toEqual([...topLevel, "claim"]);
+    expect(order).not.toContain("recap");
   });
 
   it("says so when the layout has no blocks", () => {

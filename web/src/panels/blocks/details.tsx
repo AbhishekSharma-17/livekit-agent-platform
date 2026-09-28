@@ -5,14 +5,25 @@
  * CONTRACTS-V2 §4.4, V5-08 → V5-12): typed formatting for money, date, phone,
  * email and badge rows. `config.fields` seeds the starting rows; the agent
  * upserts by `key` and may add more.
+ *
+ * `config.caller_can_edit` (V6-06, D-V6-19, ask #24) lets the caller change a
+ * row's value inline, sending `block_action {block_id, name: "edit", data:
+ * DetailsEdit {key, value}}` through the shared `useCallerEdit` hook
+ * (`notebook/use-caller-edit.ts`). `edited_by === "caller"` shows "changed by
+ * you"; the caller cannot add rows or change labels/types.
  */
 import * as React from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { PencilIcon } from "lucide-react";
 
+import { Icon } from "@/components/shared/icon";
 import { StatusChip } from "@/components/shared/status-chip";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { DetailsItem, DetailsBlockState } from "@/contracts/lkap-contracts";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { MAX_CALLER_EDIT_CHARS, useCallerEdit } from "@/panels/blocks/notebook/use-caller-edit";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
 import { BlockFrame } from "./frame";
@@ -64,9 +75,29 @@ function columnsClass(columns: unknown): string {
   return columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1";
 }
 
-function DetailsRow({ item }: { item: DetailsItem }) {
+function DetailsRow({
+  item,
+  editable,
+  blockId,
+  perform,
+}: {
+  item: DetailsItem;
+  editable: boolean;
+  blockId: string;
+  perform: BlockRenderProps["panel"]["perform"];
+}) {
   const empty = item.value === null || item.value === undefined || item.value === "";
   const text = formatDetailsValue(item);
+  const { sending, error, clearError, send } = useCallerEdit(blockId, perform);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(empty ? "" : String(item.value));
+
+  async function save() {
+    if (draft.length > MAX_CALLER_EDIT_CHARS) return;
+    const result = await send({ key: item.key, value: draft });
+    if (result.ok) setEditing(false);
+  }
+
   return (
     <div data-slot="block-details-item" data-key={item.key} className="flex flex-col gap-0.5">
       <dt className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -80,33 +111,91 @@ function DetailsRow({ item }: { item: DetailsItem }) {
         )}
         {item.label}
       </dt>
-      <dd className={cn("text-sm", empty && "text-muted-foreground italic")}>
-        {item.type === "badge" && !empty ? (
-          <StatusChip tone={item.tone ?? "neutral"} size="sm">
-            {text}
-          </StatusChip>
-        ) : item.type === "phone" && !empty ? (
-          <a href={`tel:${text}`} className="underline underline-offset-2">
-            {text}
-          </a>
-        ) : item.type === "email" && !empty ? (
-          <a href={`mailto:${text}`} className="underline underline-offset-2">
-            {text}
-          </a>
-        ) : (
-          text
-        )}
-        {typeof item.updated_at === "number" && (
-          <span className="text-muted-foreground ml-1.5 text-[0.6875rem] not-italic">· {formatRelative(item.updated_at)}</span>
-        )}
-      </dd>
+      {editing ? (
+        <div className="flex flex-col gap-1.5">
+          <Input
+            autoFocus
+            value={draft}
+            maxLength={MAX_CALLER_EDIT_CHARS}
+            aria-label={`${item.label} value`}
+            onChange={(event) => {
+              clearError();
+              setDraft(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setEditing(false);
+                setDraft(empty ? "" : String(item.value));
+              }
+            }}
+          />
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" disabled={sending} onClick={() => void save()}>
+              {sending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={sending}
+              onClick={() => {
+                setEditing(false);
+                setDraft(empty ? "" : String(item.value));
+                clearError();
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+          {error && (
+            <p role="alert" className="text-danger-text text-[0.8125rem]">
+              {error}
+            </p>
+          )}
+        </div>
+      ) : (
+        <dd className={cn("group flex items-center gap-1.5 text-sm", empty && "text-muted-foreground italic")}>
+          {item.type === "badge" && !empty ? (
+            <StatusChip tone={item.tone ?? "neutral"} size="sm">
+              {text}
+            </StatusChip>
+          ) : item.type === "phone" && !empty ? (
+            <a href={`tel:${text}`} className="underline underline-offset-2">
+              {text}
+            </a>
+          ) : item.type === "email" && !empty ? (
+            <a href={`mailto:${text}`} className="underline underline-offset-2">
+              {text}
+            </a>
+          ) : (
+            text
+          )}
+          {typeof item.updated_at === "number" && (
+            <span className="text-muted-foreground ml-1.5 text-[0.6875rem] not-italic">· {formatRelative(item.updated_at)}</span>
+          )}
+          {item.edited_by === "caller" && <span className="text-muted-foreground ml-1.5 text-[0.6875rem] not-italic">· changed by you</span>}
+          {editable && item.type !== "badge" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Edit ${item.label}`}
+              className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+              onClick={() => setEditing(true)}
+            >
+              <Icon as={PencilIcon} size="sm" />
+            </Button>
+          )}
+        </dd>
+      )}
     </div>
   );
 }
 
-export function DetailsBlock({ spec, data, title, highlighted }: BlockRenderProps<DetailsBlockState>) {
+export function DetailsBlock({ spec, data, panel, title, highlighted }: BlockRenderProps<DetailsBlockState>) {
   const items = useMemo(() => (Array.isArray(data.items) ? data.items : []), [data.items]);
   const columns = (spec.config as { columns?: unknown } | null)?.columns;
+  const editable = (spec.config as { caller_can_edit?: unknown } | null)?.caller_can_edit === true;
 
   return (
     <BlockFrame spec={spec} title={title} count={items.length} highlighted={highlighted}>
@@ -115,7 +204,7 @@ export function DetailsBlock({ spec, data, title, highlighted }: BlockRenderProp
       ) : (
         <dl data-slot="block-details" className={cn("grid gap-x-4 gap-y-3", columnsClass(columns))}>
           {items.map((item) => (
-            <DetailsRow key={item.key} item={item} />
+            <DetailsRow key={item.key} item={item} editable={editable} blockId={spec.id} perform={panel.perform} />
           ))}
         </dl>
       )}

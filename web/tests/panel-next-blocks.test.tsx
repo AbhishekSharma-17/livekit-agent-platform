@@ -10,6 +10,7 @@ import { Block } from "@/panels/blocks";
 import { BLOCK_FIXTURE_STATES, FIXTURE_LAYOUT, fixtureAssetUrls, fixtureUiState } from "@/panels/blocks/__fixtures__";
 import { handleCompositeRequest } from "@/panels/composite/requests";
 import { TOPIC_UI_UPLOAD } from "@/panels/composite/upload";
+import { TOPIC_UI_INK } from "@/lib/livekit";
 import type { PanelProps } from "@/panels/registry";
 
 /**
@@ -71,8 +72,28 @@ function specOf(type: BlockSpec["type"]): BlockSpec {
 function fakeRoom() {
   const writer = { write: vi.fn(async (_chunk: Uint8Array) => {}), close: vi.fn(async () => {}) };
   const streamBytes = vi.fn(async (_options: Record<string, unknown>) => writer);
-  const room = { localParticipant: { streamBytes } };
-  return { room, streamBytes, writer };
+  const sendText = vi.fn<(text: string, options: Record<string, unknown>) => Promise<object>>(async () => ({}));
+  const room = { localParticipant: { streamBytes, sendText } };
+  return { room, streamBytes, sendText, writer };
+}
+
+/** One stroke on the signature pad (pointer down at 20,20, up at 60,60). */
+async function drawStroke(el: HTMLElement) {
+  const svg = within(el).getByRole("img", { name: /Sign here/ });
+  Object.defineProperty(svg, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({ left: 0, top: 0, width: 640, height: 220, right: 640, bottom: 220, x: 0, y: 0, toJSON: () => ({}) }),
+  });
+  await act(async () => {
+    const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+    Object.defineProperty(down, "clientX", { value: 20 });
+    Object.defineProperty(down, "clientY", { value: 20 });
+    svg.dispatchEvent(down);
+    const up = new MouseEvent("pointerup", { bubbles: true, cancelable: true });
+    Object.defineProperty(up, "clientX", { value: 60 });
+    Object.defineProperty(up, "clientY", { value: 60 });
+    svg.dispatchEvent(up);
+  });
 }
 
 async function findBlock(type: string) {
@@ -103,10 +124,31 @@ describe("signature block", () => {
     expect(within(el).queryByRole("button", { name: "Not now" })).toBeNull();
   });
 
+  it("Sign stays disabled until the caller has drawn", async () => {
+    const perform = vi.fn(async () => ({ ok: true, payload: {} }));
+    render(<Block spec={spec} {...panelProps({ perform })} />);
+    const el = await findBlock("signature");
+    const sign = within(el).getByRole("button", { name: "Sign" }) as HTMLButtonElement;
+    expect(sign.disabled).toBe(true);
+    await act(async () => {
+      sign.click();
+    });
+    expect(perform).not.toHaveBeenCalled();
+
+    await drawStroke(el);
+    expect((within(el).getByRole("button", { name: "Sign" }) as HTMLButtonElement).disabled).toBe(false);
+
+    await act(async () => {
+      within(el).getByRole("button", { name: "Clear" }).click();
+    });
+    expect((within(el).getByRole("button", { name: "Sign" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("tapping Sign sends block_submit {values: {signed: true}} — never any stroke data", async () => {
     const perform = vi.fn(async () => ({ ok: true, payload: {} }));
     render(<Block spec={spec} {...panelProps({ perform })} />);
     const el = await findBlock("signature");
+    await drawStroke(el);
     await act(async () => {
       within(el).getByRole("button", { name: "Sign" }).click();
     });
@@ -124,28 +166,14 @@ describe("signature block", () => {
   });
 
   it("answers the worker's snapshot request with a PNG of the locally-drawn strokes — never lkap.ui.ink", async () => {
-    const { room, streamBytes } = fakeRoom();
+    const { room, streamBytes, sendText } = fakeRoom();
     render(
       <RoomContext.Provider value={room as unknown as Room}>
         <Block spec={spec} {...panelProps()} />
       </RoomContext.Provider>,
     );
     const el = await findBlock("signature");
-    const svg = within(el).getByRole("img", { name: /Sign here/ });
-    Object.defineProperty(svg, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({ left: 0, top: 0, width: 640, height: 220, right: 640, bottom: 220, x: 0, y: 0, toJSON: () => ({}) }),
-    });
-    await act(async () => {
-      const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
-      Object.defineProperty(down, "clientX", { value: 20 });
-      Object.defineProperty(down, "clientY", { value: 20 });
-      svg.dispatchEvent(down);
-      const up = new MouseEvent("pointerup", { bubbles: true, cancelable: true });
-      Object.defineProperty(up, "clientX", { value: 60 });
-      Object.defineProperty(up, "clientY", { value: 60 });
-      svg.dispatchEvent(up);
-    });
+    await drawStroke(el);
 
     let result: ReturnType<typeof handleCompositeRequest> | undefined;
     await act(async () => {
@@ -157,6 +185,12 @@ describe("signature block", () => {
     expect(streamBytes).toHaveBeenCalledWith(
       expect.objectContaining({ topic: TOPIC_UI_UPLOAD, name: "sign.png", mimeType: "image/png", attributes: { block_id: "sign", name: "sign.png" } }),
     );
+    // Ask #277: the strokes never travel on the ink topic (nor on any other text stream).
+    expect(sendText).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ topic: TOPIC_UI_INK }));
+    expect(sendText).not.toHaveBeenCalled();
+    for (const [options] of streamBytes.mock.calls) {
+      expect((options as { topic?: string }).topic).not.toBe(TOPIC_UI_INK);
+    }
   });
 
   it("shows Signed once settled, with the timestamp", async () => {
@@ -445,5 +479,86 @@ describe("cart block", () => {
     render(<Block spec={spec} {...panelProps({ state })} />);
     const el = await findBlock("cart");
     expect(within(el).getByText("Nothing in the cart yet.")).toBeTruthy();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* hostile labels (ask #277)                                                   */
+/* -------------------------------------------------------------------------- */
+
+const SCRIPT_LABEL = "<script>alert(1)</script>";
+const JS_URL_LABEL = "javascript:alert(1)";
+const LONG_LABEL = "L".repeat(200);
+
+/** Nothing the agent or the caller wrote became markup, a script or a live link. */
+function expectInert(el: HTMLElement) {
+  expect(el.querySelector("script")).toBeNull();
+  for (const node of Array.from(el.querySelectorAll("[href], [src]"))) {
+    expect(node.getAttribute("href") ?? "").not.toMatch(/^\s*javascript:/i);
+    expect(node.getAttribute("src") ?? "").not.toMatch(/^\s*javascript:/i);
+  }
+  for (const node of Array.from(el.querySelectorAll("*"))) {
+    for (const attr of Array.from(node.attributes)) {
+      expect(attr.name.startsWith("on")).toBe(false);
+    }
+  }
+}
+
+describe("hostile labels stay text", () => {
+  it("a chart's title, labels, unit and caption render as text", async () => {
+    const hostileSpec: BlockSpec = { id: "h", type: "chart", title: null, config: { kind: "bar", show_table: true } };
+    const state = fixtureUiState({
+      h: {
+        kind: "bar",
+        title: SCRIPT_LABEL,
+        unit: JS_URL_LABEL,
+        points: [
+          { label: SCRIPT_LABEL, value: 1, series: null },
+          { label: JS_URL_LABEL, value: 2, series: null },
+          { label: LONG_LABEL, value: 3, series: null },
+        ],
+        caption: SCRIPT_LABEL,
+      },
+    });
+    render(<Block spec={hostileSpec} {...panelProps({ state })} />);
+    const el = await findBlock("chart");
+    expectInert(el);
+    expect(el.textContent).toContain(SCRIPT_LABEL);
+    expect(el.textContent).toContain(JS_URL_LABEL);
+    expect(el.textContent).toContain(LONG_LABEL);
+  });
+
+  it("a cart's line names, notes and adjustment labels render as text", async () => {
+    const state: Record<string, CartBlockState> = {
+      o: {
+        currency: "USD",
+        lines: [
+          { id: "a", name: SCRIPT_LABEL, quantity: 1, unit_price: 10, line_total: 10, note: JS_URL_LABEL },
+          { id: "b", name: LONG_LABEL, quantity: 1, unit_price: 5, line_total: 5, note: null },
+        ],
+        adjustments: [{ label: SCRIPT_LABEL, amount: -1 }],
+        subtotal: 15,
+        total: 14,
+        updated_at: null,
+      },
+    };
+    const hostileSpec: BlockSpec = { id: "o", type: "cart", title: "Order", config: {} };
+    render(<Block spec={hostileSpec} {...panelProps({ state: fixtureUiState(state) })} />);
+    const el = await findBlock("cart");
+    expectInert(el);
+    expect(within(el).getAllByText(SCRIPT_LABEL)).toHaveLength(2);
+    expect(within(el).getByText(JS_URL_LABEL)).toBeTruthy();
+    expect(within(el).getByText(LONG_LABEL)).toBeTruthy();
+  });
+
+  it("a signature's disclosure text renders as text", async () => {
+    const wording = `${SCRIPT_LABEL} [click](${JS_URL_LABEL}) ${LONG_LABEL}`;
+    const state = fixtureUiState({
+      sign: { status: "requested", signed: null, asset_id: null, text_hash: null, at: null, disclosure_text: wording, submitted_at: null },
+    });
+    render(<Block spec={specOf("signature")} {...panelProps({ state })} />);
+    const el = await findBlock("signature");
+    expectInert(el);
+    expect(within(el).getByText(wording)).toBeTruthy();
   });
 });

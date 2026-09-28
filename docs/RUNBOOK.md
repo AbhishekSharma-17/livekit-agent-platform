@@ -405,7 +405,7 @@ preset and three tool kits; `docs/INSURANCE_PACK_MAPPING.md` §5). Creating it o
 **Rule patterns (V6-28, D-V6-31).** A rule whose `matches` pattern the stricter safety check (added in v6)
 refuses stops running and shows as an error on that rule; the agent still loads. Find them with
 `lkap_contracts.rules_expr.nested_repeat` over each stored `config.rules[*].when` pattern, and rewrite each one
-(for example `(fire|smoke)+` → `fire|smoke`).
+(for example `(fire|smoke)+` → `fire|smoke`). Guardrail regex rules (V6-29) get the same check on the worker: one the scan refuses is skipped (a warning in the worker log and a `guardrail_rule_unreadable` event naming the stage and rule), so run the same scan over `config.guardrails.{input,output,tool_output}[*].pattern` and rewrite those too — saving that agent will refuse the pattern until you do.
 
 ### 9.9 v6 at a glance: settings, dependencies, migrations, limits
 

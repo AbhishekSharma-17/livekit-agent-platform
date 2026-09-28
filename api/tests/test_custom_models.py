@@ -107,7 +107,7 @@ async def test_a_pasted_key_in_an_enum_voice_field_is_an_error_with_no_fragment(
     config = inference_config()
     config.pipeline.mode = "realtime"
     config.pipeline.stt = config.pipeline.llm = config.pipeline.tts = None
-    fake_google_key = "AIzaSyD4f8Qm2LxW7vT9cR1pN6kJ3hB0eZyUa5s"
+    fake_google_key = "AIza-placeholder-google-voice-key-0000"
     config.pipeline.realtime = ProviderRef(
         provider_id="google-realtime", credential_id=credential_id, fields={"voice": fake_google_key}
     )

@@ -79,6 +79,7 @@ from lkap_contracts.guardrails import (
     ProviderRule,
     RegexRule,
 )
+from lkap_contracts.rules_expr import nested_repeat
 from lkap_contracts.ui_protocol import ActivityEvent
 from packs.base import StructuredLLM
 from pydantic import BaseModel
@@ -89,6 +90,7 @@ from lkap_agent.tools.untrusted import fence
 
 __all__ = [
     "GUARDRAILS_USERDATA_KEY",
+    "GUARDRAIL_RULE_UNREADABLE_EVENT",
     "MODEL_MAX_CHARS",
     "MODERATION_MODEL",
     "OPENAI_MODERATION_URL",
@@ -112,6 +114,8 @@ logger = get_logger(__name__)
 
 #: `SessionContext.userdata` key of the session's :class:`SessionGuardrails` (flow nodes share it).
 GUARDRAILS_USERDATA_KEY: Final[str] = "lkap.guardrails"
+#: V6-29 (S6-28): a stored regex rule the safety scan refuses was skipped (stage and rule name only).
+GUARDRAIL_RULE_UNREADABLE_EVENT: Final[str] = "guardrail_rule_unreadable"
 
 #: Regex rules see at most this much of a text (Python's `re` has no timeout).
 REGEX_MAX_CHARS: Final[int] = 20_000
@@ -309,7 +313,14 @@ class GuardrailEngine:
             config: The agent's guardrails.
             classifier: Builds the classifier's model.
             moderation: Builds the moderation client, or returns ``None`` when no key was resolved.
-            record_event: Records a session event (``guardrail_timeout``).
+            record_event: Records a session event (``guardrail_timeout``,
+                ``guardrail_rule_unreadable``).
+
+        V6-29 (S6-28): a stored pattern the S6-4 safety scan refuses (``nested_repeat``: a
+        shape that can backtrack for very long on the caller's words) is skipped like one that
+        does not compile, with a warning and a ``guardrail_rule_unreadable`` event naming the
+        stage and the rule, never the pattern. The api refuses such a pattern on save; this
+        covers one stored before that check.
         """
         self.config = config
         self._classifier_factory = classifier
@@ -321,6 +332,17 @@ class GuardrailEngine:
         for stage in ("input", "output", "tool_output"):
             for rule in config.rules(stage):
                 if not isinstance(rule, RegexRule):
+                    continue
+                if nested_repeat(rule.pattern):
+                    logger.warning(
+                        "guardrail pattern refused by the safety scan; rule skipped",
+                        stage=stage,
+                        rule=rule.name,
+                    )
+                    try:
+                        record_event(GUARDRAIL_RULE_UNREADABLE_EVENT, {"stage": stage, "rule": rule.name})
+                    except Exception:  # noqa: BLE001 - the rule is skipped either way
+                        logger.debug("guardrail_rule_unreadable not recorded", exc_info=True)
                     continue
                 try:
                     flags = re.IGNORECASE if rule.ignore_case else 0

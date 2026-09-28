@@ -130,14 +130,28 @@ def build_request_signature_tool(ctx: PackSessionContext) -> FunctionTool[..., A
         ctx.log.debug("builtin_tool.signature_settled", block_id=target, signed=signed, asset_id=asset_id)
         return event.model_dump()
 
-    async def wait_for_signature(target: str, text: str) -> SignatureOutcome | None:
-        """Wait for Sign or Not now; fetch the picture of a signature; `None` when nobody answered."""
+    async def reset(target: str) -> None:
+        """Put the block back to `cancelled` (nothing settled; the page offers nothing to press)."""
+        try:
+            await ctx.ui.patch_block(target, [UiPatchOp(op="set", path="/status", value="cancelled")])
+        except Exception:  # noqa: BLE001 - the model is told either way
+            ctx.log.debug("signature block could not be reset", block_id=target, exc_info=True)
+
+    async def wait_for_signature(target: str, text: str, allow_decline: bool) -> SignatureOutcome | None:
+        """Wait for Sign or Not now; fetch the picture of a signature; `None` when nobody answered.
+
+        V6-29 (S6-29): with the block's `allow_decline` off, `signed: false` is a bad answer
+        (the page hides Not now; only a stale or forged page sends it): nothing is recorded,
+        the block goes back to `cancelled` and the model hears :data:`NOT_SIGNED`.
+        """
         values = await ctx.ui.request_block(target, timeout_s=SIGNATURE_TIMEOUT_S)
         if values is None:
             return None
         signed = values.get("signed")
-        if not isinstance(signed, bool):
+        if not isinstance(signed, bool) or (signed is False and not allow_decline):
             ctx.log.warning("builtin_tool.request_signature.bad_answer", block_id=target)
+            if isinstance(signed, bool):
+                await reset(target)
             return None
         if not signed:
             return await settle(target, text, False, None)
@@ -145,10 +159,7 @@ def build_request_signature_tool(ctx: PackSessionContext) -> FunctionTool[..., A
         picture = await request(target) if callable(request) else None
         if picture is None:
             ctx.log.debug("builtin_tool.request_signature.no_picture", block_id=target)
-            try:
-                await ctx.ui.patch_block(target, [UiPatchOp(op="set", path="/status", value="cancelled")])
-            except Exception:  # noqa: BLE001 - the model is told either way
-                ctx.log.debug("signature block could not be reset", block_id=target, exc_info=True)
+            await reset(target)
             return {"signed": None}
         asset_id, _data = picture
         return await settle(target, text, True, asset_id)
@@ -168,7 +179,8 @@ def build_request_signature_tool(ctx: PackSessionContext) -> FunctionTool[..., A
         except ValueError as exc:
             raise ToolError(str(exc)) from exc
         spec = next(s for s in specs if s.id == target)
-        text = _wording(signature_block_config(spec), disclosure_text)
+        config = signature_block_config(spec)
+        text = _wording(config, disclosure_text)
         call_id = context.function_call.call_id
         channel = getattr(ctx, "channel", "web")
         if channel in VOICE_ONLY_CHANNELS or channel == "text":
@@ -205,7 +217,7 @@ def build_request_signature_tool(ctx: PackSessionContext) -> FunctionTool[..., A
         if background:
             ctx.background.submit(
                 name="request_signature",
-                coro=wait_for_signature(target, text),
+                coro=wait_for_signature(target, text, config.allow_decline),
                 urgent=lambda outcome: outcome is not None,
                 urgent_instructions=lambda outcome: f"{signature_message(outcome)} Acknowledge it briefly.",
                 routine_note=lambda outcome: (
@@ -214,7 +226,7 @@ def build_request_signature_tool(ctx: PackSessionContext) -> FunctionTool[..., A
                 call_id=call_id,
             )
             return None
-        outcome = await wait_for_signature(target, text)
+        outcome = await wait_for_signature(target, text, config.allow_decline)
         if outcome is None:
             return NOT_SIGNED
         return signature_message(outcome)

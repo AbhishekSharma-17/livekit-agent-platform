@@ -39,6 +39,10 @@ export function requestSummary(tool: ToolOut): string {
     // connections lookup needed on this side.
     return tool.definition.description || `App action · ${tool.definition.toolkit || "app"}`;
   }
+  if ("dataset_id" in tool.definition) {
+    // V6-16: a lookup-table tool has no URL; name the columns it looks rows up by.
+    return `Lookup table · by ${tool.definition.key_columns.join(", ")}`;
+  }
   if (tool.definition.kind === "http") {
     let host = tool.definition.url;
     try {

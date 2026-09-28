@@ -1,0 +1,46 @@
+{
+  "$id": "lkap-contracts/DatasetLookupIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /v1/datasets/{id}/lookup``: find rows by their key columns.",
+  "properties": {
+    "keys": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 8,
+      "minProperties": 1,
+      "title": "Keys",
+      "type": "object"
+    },
+    "match": {
+      "default": "exact",
+      "enum": [
+        "exact",
+        "prefix"
+      ],
+      "title": "Match",
+      "type": "string"
+    },
+    "max_rows": {
+      "default": 5,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Max Rows",
+      "type": "integer"
+    },
+    "return_columns": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Return Columns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "keys"
+  ],
+  "title": "DatasetLookupIn",
+  "type": "object"
+}

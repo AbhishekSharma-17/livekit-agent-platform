@@ -57,6 +57,7 @@ from lkap_contracts.compliance import (
     ResolvedCompliance,
 )
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
+from lkap_contracts.datasets import DATASET_MODELS
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.extraction import EXTRACTION_MODELS
 from lkap_contracts.fleet import (
@@ -92,6 +93,7 @@ from lkap_contracts.tool_context import TOOL_CONTEXT_MODELS
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
     TOOL_TEMPLATE_MODELS,
+    DatasetToolDefinition,
     HttpToolDefinition,
     McpHeaderAuth,
     McpNoAuth,
@@ -278,6 +280,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "McpToolSnapshot": McpToolSnapshot,
     "McpTestResult": McpTestResult,
     "ProviderToolDefinition": ProviderToolDefinition,
+    "DatasetToolDefinition": DatasetToolDefinition,  # V6-16
     "ToolExecution": ToolExecution,
     # api models
     "Page": api_models.Page,
@@ -486,6 +489,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     **TOOL_CONTEXT_MODELS,  # V6-07: tool context (placeholders, bindings, read-back)
     **EXTRACTION_MODELS,  # V6-13: live structured extraction
     **RULE_MODELS,  # V6-13: declarative rules
+    **DATASET_MODELS,  # V6-16: datasets (lookup tables)
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.

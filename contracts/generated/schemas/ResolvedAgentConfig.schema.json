@@ -898,6 +898,122 @@
       "title": "ConnectionInfo",
       "type": "object"
     },
+    "DatasetToolDefinition": {
+      "description": "A lookup in one of the workspace's datasets (V6-16, D-V6-27; ``lkap_contracts.datasets``).\n\nThe model sees one string argument per key column (``key_columns``, minus the pinned\nones) and gets back at most ``max_rows`` rows with ``return_columns`` (all columns when\nempty), matched ``exact`` or by ``prefix`` on the normalised value. The worker calls the\napi's internal lookup route with the session, so a lookup never reads another\nworkspace's dataset, and fences the rows as ``dataset:<name>``. Read-only: nothing is\never written to a dataset from a call. The tool always runs blocking (a lookup is quick).\n\nV6-07: ``pinned_arguments`` fix a key column's value, hidden from the model (a string may\nbe ``{{ ctx.caller_phone }}`` or ``{{ var.policy_number }}``); ``requires_vars`` refuse\nuntil variables are set; ``bindings`` copy a successful lookup onto the panel. The bound\n(and model-visible) result is the list of rows, so ``/0/holder_name`` is the first row's\n``holder_name``.",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "dataset_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "key_columns": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Key Columns",
+          "type": "array"
+        },
+        "kind": {
+          "const": "dataset",
+          "default": "dataset",
+          "title": "Kind",
+          "type": "string"
+        },
+        "match": {
+          "default": "exact",
+          "enum": [
+            "exact",
+            "prefix"
+          ],
+          "title": "Match",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 2000,
+          "maximum": 8000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "max_rows": {
+          "default": 5,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Rows",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "return_columns": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Return Columns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "dataset_id",
+        "key_columns"
+      ],
+      "title": "DatasetToolDefinition",
+      "type": "object"
+    },
     "DetailsSetAction": {
       "description": "Write one row of a ``details`` block (``value`` may name ``{{ var.<name> }}``).",
       "properties": {
@@ -4935,6 +5051,7 @@
       "items": {
         "discriminator": {
           "mapping": {
+            "dataset": "#/$defs/DatasetToolDefinition",
             "http": "#/$defs/HttpToolDefinition",
             "mcp": "#/$defs/McpServerDefinition",
             "provider": "#/$defs/ProviderToolDefinition"
@@ -4950,6 +5067,9 @@
           },
           {
             "$ref": "#/$defs/ProviderToolDefinition"
+          },
+          {
+            "$ref": "#/$defs/DatasetToolDefinition"
           }
         ]
       },

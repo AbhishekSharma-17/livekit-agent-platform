@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/InternalDatasetLookupIn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /internal/v1/datasets/{id}/lookup`` (the worker): the session decides the workspace.",
+  "properties": {
+    "keys": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 8,
+      "minProperties": 1,
+      "title": "Keys",
+      "type": "object"
+    },
+    "match": {
+      "default": "exact",
+      "enum": [
+        "exact",
+        "prefix"
+      ],
+      "title": "Match",
+      "type": "string"
+    },
+    "max_rows": {
+      "default": 5,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Max Rows",
+      "type": "integer"
+    },
+    "return_columns": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Return Columns",
+      "type": "array"
+    },
+    "session_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "keys",
+    "session_id"
+  ],
+  "title": "InternalDatasetLookupIn",
+  "type": "object"
+}

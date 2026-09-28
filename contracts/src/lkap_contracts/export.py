@@ -31,6 +31,8 @@ from lkap_contracts.agent_config import (
     MemoryConfig,
     NotifyTeamConfig,
     PanelLayout,
+    PanelPreset,
+    PanelPresetsResponse,
     PrivacyConfig,
     QaConfig,
     RecordingConfig,
@@ -128,6 +130,8 @@ from lkap_contracts.ui_protocol import (
     LinkHookIn,
     LinkHookOut,
     MarkdownBlockState,
+    NotebookBlockState,
+    NotebookEdit,
     RequestableState,
     SlotsBlockState,
     StateDeltaPayload,
@@ -162,6 +166,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "NotifyTeamConfig": NotifyTeamConfig,  # V5-25
     "AvatarOptions": AvatarOptions,
     "PanelLayout": PanelLayout,
+    "PanelPreset": PanelPreset,  # V6-08: ready-made panels
+    "PanelPresetsResponse": PanelPresetsResponse,
     "RecordingConfig": RecordingConfig,
     "DisclosureConfig": DisclosureConfig,
     # V5-29: text simulations, judges and the pre-publish gate
@@ -226,6 +232,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "LinkBlockState": LinkBlockState,  # V5-43
     "SlotsBlockState": SlotsBlockState,  # V5-43
     "CardsBlockState": CardsBlockState,  # V5-43
+    "NotebookBlockState": NotebookBlockState,  # V6-08
     "LinkHookIn": LinkHookIn,  # V5-43
     "LinkHookOut": LinkHookOut,
     "LinkCompletedPacket": LinkCompletedPacket,
@@ -241,6 +248,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "BlockSubmitPayload": BlockSubmitPayload,
     "DetailsEdit": DetailsEdit,  # V6-06: a caller's edit of a block
     "ChecklistEdit": ChecklistEdit,
+    "NotebookEdit": NotebookEdit,  # V6-08
     "AgentAction": AgentAction,
     "AgentActionResult": AgentActionResult,
     # packs

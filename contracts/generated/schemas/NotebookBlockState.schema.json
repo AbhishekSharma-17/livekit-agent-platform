@@ -1,0 +1,375 @@
+{
+  "$defs": {
+    "ChecklistItem": {
+      "description": "One \"still needed\" item. ``edited_by`` is ``\"caller\"`` after the caller ticked it on screen (V6-06).",
+      "properties": {
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "edited_by": {
+          "anyOf": [
+            {
+              "const": "caller",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edited By"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChecklistItem",
+      "type": "object"
+    },
+    "DetailsItem": {
+      "description": "One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.\n\n``edited_by`` is ``\"caller\"`` after the caller changed the value on screen (V6-06);\n``set_details`` writing the row again clears it.",
+      "properties": {
+        "edited_by": {
+          "anyOf": [
+            {
+              "const": "caller",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edited By"
+        },
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tone"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "date",
+            "money",
+            "phone",
+            "email",
+            "badge"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "DetailsItem",
+      "type": "object"
+    },
+    "NotebookChecklistSection": {
+      "description": "A ``checklist`` section: items the agent ticks (``notebook_check``) and, when allowed, the caller.",
+      "properties": {
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ChecklistItem"
+          },
+          "maxItems": 30,
+          "title": "Items",
+          "type": "array"
+        },
+        "kind": {
+          "const": "checklist",
+          "default": "checklist",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "NotebookChecklistSection",
+      "type": "object"
+    },
+    "NotebookDetailsSection": {
+      "description": "A ``details`` section: key-value rows, like a ``details`` card inside the notebook.",
+      "properties": {
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DetailsItem"
+          },
+          "maxItems": 30,
+          "title": "Items",
+          "type": "array"
+        },
+        "kind": {
+          "const": "details",
+          "default": "details",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "NotebookDetailsSection",
+      "type": "object"
+    },
+    "NotebookEntry": {
+      "description": "One note in a ``text`` section of a notebook (V6-08).\n\n``author`` is who wrote it; ``key`` makes a note replaceable in place (the agent\nwriting the same key again updates it, like ``Note.key``); ``edited_by`` is\n``\"caller\"`` after the caller changed an entry the agent wrote.",
+      "properties": {
+        "author": {
+          "default": "agent",
+          "enum": [
+            "agent",
+            "caller"
+          ],
+          "title": "Author",
+          "type": "string"
+        },
+        "edited_by": {
+          "anyOf": [
+            {
+              "const": "caller",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edited By"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "text": {
+          "maxLength": 2000,
+          "title": "Text",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tone"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "ts"
+      ],
+      "title": "NotebookEntry",
+      "type": "object"
+    },
+    "NotebookInkSection": {
+      "description": "An ``ink`` section: a drawing board. ``canvas_block_id`` is reserved for V6-12 (D-V6-16).\n\nUntil the ``canvas`` block lands the section stays empty and the console shows\n\"Drawing board coming soon\"; nothing writes it.",
+      "properties": {
+        "canvas_block_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canvas Block Id"
+        },
+        "kind": {
+          "const": "ink",
+          "default": "ink",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "NotebookInkSection",
+      "type": "object"
+    },
+    "NotebookTextSection": {
+      "description": "A ``text`` section: running notes, newest last.",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NotebookEntry"
+          },
+          "maxItems": 100,
+          "title": "Entries",
+          "type": "array"
+        },
+        "kind": {
+          "const": "text",
+          "default": "text",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "NotebookTextSection",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/NotebookBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``notebook`` block's state (V6-08, D-V6-15): one entry per section, keyed by section id.\n\nThe sections render in the order the block's config lists them (``NotebookBlockConfig.\nsections``); this map carries only their content, so a patch can address one section\n(``/sections/<id>/entries``). Each section's ``kind`` matches its config.",
+  "properties": {
+    "sections": {
+      "default": {},
+      "maxProperties": 12,
+      "patternProperties": {
+        "^[A-Za-z0-9_.:-]{1,64}$": {
+          "discriminator": {
+            "mapping": {
+              "checklist": "#/$defs/NotebookChecklistSection",
+              "details": "#/$defs/NotebookDetailsSection",
+              "ink": "#/$defs/NotebookInkSection",
+              "text": "#/$defs/NotebookTextSection"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/NotebookTextSection"
+            },
+            {
+              "$ref": "#/$defs/NotebookChecklistSection"
+            },
+            {
+              "$ref": "#/$defs/NotebookDetailsSection"
+            },
+            {
+              "$ref": "#/$defs/NotebookInkSection"
+            }
+          ]
+        }
+      },
+      "title": "Sections",
+      "type": "object"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "title": "NotebookBlockState",
+  "type": "object"
+}

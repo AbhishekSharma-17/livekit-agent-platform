@@ -51,7 +51,13 @@ def test_generate_image_is_a_write_built_in_that_never_joins_the_background_sett
 def test_existing_tool_order_is_kept() -> None:
     """New names go at the end: the api and web read the lists in order."""
     assert tools.BUILTIN_TOOL_NAMES[-1] == "generate_image"
-    assert tools.BLOCK_TOOL_NAMES[-2:] == ("set_checklist", "check_item")
+    # V6-08 appends the notebook tools after them.
+    names = tools.BLOCK_TOOL_NAMES
+    assert names[names.index("set_checklist") : names.index("set_checklist") + 2] == (
+        "set_checklist",
+        "check_item",
+    )
+    assert names.index("show_cards") < names.index("set_checklist")
 
 
 @pytest.mark.parametrize("block_type", ["details", "checklist"])
@@ -72,7 +78,8 @@ def test_caller_can_edit_is_an_unknown_key_elsewhere(block_type: str) -> None:
 
 
 def test_the_editable_types_have_editable_configs() -> None:
-    assert EDITABLE_BLOCK_TYPES == {"details", "checklist"}
+    # V6-08 adds the notebook (its own flag, `caller_can_write`).
+    assert EDITABLE_BLOCK_TYPES == {"details", "checklist", "notebook"}
     assert BLOCK_CONFIG_MODELS["checklist"] is ChecklistBlockConfig
     assert BLOCK_CONFIG_MODELS["details"] is DetailsBlockConfig
     assert BLOCK_EDIT_ACTION == "edit"

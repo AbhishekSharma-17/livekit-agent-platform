@@ -156,6 +156,8 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
   show_cards: "Add a cards block first",
   set_checklist: "Add a checklist block first",
   check_item: "Add a checklist block first",
+  notebook_write: "Add a notebook block first",
+  notebook_check: "Add a notebook block first",
 };
 
 /**

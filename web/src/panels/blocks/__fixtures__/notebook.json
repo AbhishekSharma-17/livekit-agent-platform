@@ -1,0 +1,28 @@
+{
+  "sections": {
+    "notes": {
+      "kind": "text",
+      "entries": [
+        { "id": "n1", "text": "Small kitchen fire this morning, stove top. Nobody hurt.", "author": "agent", "key": "what_happened", "ts": 1777000100 },
+        { "id": "n2", "text": "Smoke reached the hallway ceiling.", "author": "agent", "ts": 1777000160 },
+        { "id": "n3", "text": "The extractor fan is damaged too.", "author": "caller", "ts": 1777000200 }
+      ]
+    },
+    "still_needed": {
+      "kind": "checklist",
+      "items": [
+        { "id": "photo_stove", "label": "A photo of the stove", "done": true, "blocking": false },
+        { "id": "repair_quote", "label": "A repair quote", "done": false, "blocking": true, "hint": "Any contractor is fine" }
+      ]
+    },
+    "summary": {
+      "kind": "details",
+      "items": [
+        { "key": "claim_no", "label": "Claim number", "value": "CLM-20931", "type": "string", "updated_at": 1777000300 },
+        { "key": "date_of_loss", "label": "Date of loss", "value": "2026-09-21", "type": "date", "updated_at": 1777000320 }
+      ]
+    },
+    "sketch": { "kind": "ink", "canvas_block_id": null }
+  },
+  "updated_at": 1777000320
+}

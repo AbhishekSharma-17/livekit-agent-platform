@@ -60,6 +60,9 @@ __all__ = [
     "MAX_AGENT_LANGUAGES",
     "MAX_MEMORY_CONSENT_CHARS",
     "MAX_MEMORY_RETENTION_DAYS",
+    "NOTEBOOK_PRESET",
+    "NOTEBOOK_PRESET_ID",
+    "PANEL_PRESETS",
     "AgentConfig",
     "AgentLimits",
     "AppsMode",
@@ -84,6 +87,8 @@ __all__ = [
     "NotifyTeamConfig",
     "NotifyTeamStyle",
     "PanelLayout",
+    "PanelPreset",
+    "PanelPresetsResponse",
     "PipelineConfig",
     "PipelineMode",
     "PrivacyConfig",
@@ -104,6 +109,7 @@ __all__ = [
     "TurnHandlingOptions",
     "VoiceConfig",
     "effective_languages",
+    "panel_preset",
     "pipeline_issues",
     "voice_for_language",
 ]
@@ -560,6 +566,81 @@ class PanelLayout(BaseModel):
         "so the page cannot alter what `describe_panel` hands the model or what the console's "
         "live view shows.",
     )
+
+
+class PanelPreset(BaseModel):
+    """A ready-made panel a builder can start from (V6-08): ``GET /v1/panels/presets``.
+
+    Choosing one replaces the agent's ``panel`` with ``panel`` (a copy); the builder
+    then changes it like any other panel.
+    """
+
+    id: str
+    name: str
+    description: str
+    panel: PanelLayout
+
+
+class PanelPresetsResponse(BaseModel):
+    """``GET /v1/panels/presets``: the ready-made panels, in the order the console offers them."""
+
+    items: list[PanelPreset]
+
+
+#: The "Notebook" preset's id.
+NOTEBOOK_PRESET_ID = "notebook"
+
+#: The "Notebook" preset (V6-08, D-V6-15): a wide panel with a status stamp, a notebook
+#: (notes, a "still needed" checklist, a summary card and a drawing board, in a handwriting
+#: theme; the caller may write in it too) and a gallery for pictures (``generate_image``).
+#: Treat it as read-only: :func:`panel_preset` hands out copies.
+NOTEBOOK_PRESET = PanelLayout(
+    panel_id="composite",
+    layout="wide",
+    blocks=[
+        BlockSpec(id="status", type="status", order=0),
+        BlockSpec(
+            id="notebook",
+            type="notebook",
+            title="Notebook",
+            order=1,
+            config={
+                "paper": "ruled",
+                "font": "handwritten",
+                "sections": [
+                    {"id": "notes", "title": "Notes", "kind": "text"},
+                    {"id": "still_needed", "title": "Still needed", "kind": "checklist"},
+                    {"id": "summary", "title": "Summary", "kind": "details"},
+                    {"id": "sketch", "title": "Sketch", "kind": "ink"},
+                ],
+                "caller_can_write": True,
+                "caller_can_draw": False,
+            },
+        ),
+        BlockSpec(id="gallery", type="gallery", title="Pictures", order=2),
+    ],
+)
+
+#: Every ready-made panel, in the order the console offers them. Treat as read-only.
+PANEL_PRESETS: tuple[PanelPreset, ...] = (
+    PanelPreset(
+        id=NOTEBOOK_PRESET_ID,
+        name="Notebook",
+        description=(
+            "A wide notebook the agent writes in as the call goes: notes, what is still needed, "
+            "a summary and a drawing board, with pictures beside it. The caller can write in it too."
+        ),
+        panel=NOTEBOOK_PRESET,
+    ),
+)
+
+
+def panel_preset(preset_id: str) -> PanelLayout | None:
+    """A copy of the ready-made panel ``preset_id`` (``None`` when there is none), safe to change."""
+    for preset in PANEL_PRESETS:
+        if preset.id == preset_id:
+            return preset.panel.model_copy(deep=True)
+    return None
 
 
 #: ``LocaleConfig.caller_timezone``: ``detect`` resolves the caller's own zone per session

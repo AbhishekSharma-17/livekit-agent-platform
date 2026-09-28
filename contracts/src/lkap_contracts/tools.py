@@ -69,7 +69,16 @@ CONFIGURED_BUILTINS: Final[frozenset[str]] = frozenset({"web_search", "fetch_url
 #: asks before running twice (``on_duplicate="confirm"``) and is not cancellable by default.
 WRITE_BUILTINS: Final[frozenset[str]] = frozenset(
     # V6-06: the checklist tools and a generated picture change what the caller sees.
-    {"send_sms", "notify_team", "set_checklist", "check_item", "generate_image"}
+    # V6-08: so does writing in the notebook.
+    {
+        "send_sms",
+        "notify_team",
+        "set_checklist",
+        "check_item",
+        "generate_image",
+        "notebook_write",
+        "notebook_check",
+    }
 )
 
 #: Built-ins registered only when the agent speaks more than one language (V5-31):
@@ -118,10 +127,15 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     # V6-06: the envelope checklist, for any agent with a checklist block.
     "set_checklist",
     "check_item",
+    # V6-08: writing in a notebook block (notes, its checklist and details sections).
+    "notebook_write",
+    "notebook_check",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
-#: choices have their own tools: a request's status belongs to the request).
+#: choices have their own tools: a request's status belongs to the request). V6-08: a
+#: ``notebook`` is written by ``notebook_write`` / ``notebook_check`` only (so neither
+#: ``update_block`` nor a page's ``state_delta`` reaches it) and a ``layout`` holds no state.
 UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
     {
         "document",
@@ -168,6 +182,8 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "show_cards": frozenset({"cards"}),
     "set_checklist": frozenset({"checklist"}),
     "check_item": frozenset({"checklist"}),
+    "notebook_write": frozenset({"notebook"}),
+    "notebook_check": frozenset({"notebook"}),
 }
 
 
@@ -297,6 +313,9 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "set_checklist",
         "check_item",
         "generate_image",
+        # V6-08: writing in the notebook is instant.
+        "notebook_write",
+        "notebook_check",
         "escalate_to_human",
         "update_block",
         "show_document",

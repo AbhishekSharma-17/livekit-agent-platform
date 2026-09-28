@@ -69,38 +69,6 @@
       "title": "BlockSpec",
       "type": "object"
     },
-    "CapabilitiesConfig": {
-      "description": "Which input affordances the session page offers.",
-      "properties": {
-        "camera": {
-          "default": false,
-          "title": "Camera",
-          "type": "boolean"
-        },
-        "chat_input": {
-          "default": true,
-          "title": "Chat Input",
-          "type": "boolean"
-        },
-        "dtmf": {
-          "default": false,
-          "title": "Dtmf",
-          "type": "boolean"
-        },
-        "screen_share": {
-          "default": false,
-          "title": "Screen Share",
-          "type": "boolean"
-        },
-        "vision_inject_per_turn": {
-          "default": true,
-          "title": "Vision Inject Per Turn",
-          "type": "boolean"
-        }
-      },
-      "title": "CapabilitiesConfig",
-      "type": "object"
-    },
     "PanelLayout": {
       "description": "Which panel renders the session, and (for ``composite``) its blocks.",
       "properties": {
@@ -135,58 +103,51 @@
       },
       "title": "PanelLayout",
       "type": "object"
+    },
+    "PanelPreset": {
+      "description": "A ready-made panel a builder can start from (V6-08): ``GET /v1/panels/presets``.\n\nChoosing one replaces the agent's ``panel`` with ``panel`` (a copy); the builder\nthen changes it like any other panel.",
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "panel": {
+          "$ref": "#/$defs/PanelLayout"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "panel"
+      ],
+      "title": "PanelPreset",
+      "type": "object"
     }
   },
-  "$id": "lkap-contracts/AgentPublicOut.schema.json",
+  "$id": "lkap-contracts/PanelPresetsResponse.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "What an unauthenticated browser may see about a published agent.\n\n``panel`` (R-V2-7, CONTRACTS-V2 §4.4 \"Layout delivery\") is the\n*effective* layout — ``lkap_api.panels.effective_layout(agent, pack)`` —\nnot necessarily ``AgentConfig.panel`` verbatim: it carries the block list\nthe session actually renders, resolved the same way for ``connect`` and\nfor the worker's ``/internal/v1/sessions/{id}/resolved``. ``ui_panel_id``\nstays as the mirror of ``panel.panel_id`` for one release.",
+  "description": "``GET /v1/panels/presets``: the ready-made panels, in the order the console offers them.",
   "properties": {
-    "capabilities": {
-      "$ref": "#/$defs/CapabilitiesConfig"
-    },
-    "description": {
-      "title": "Description",
-      "type": "string"
-    },
-    "id": {
-      "title": "Id",
-      "type": "string"
-    },
-    "name": {
-      "title": "Name",
-      "type": "string"
-    },
-    "panel": {
-      "$ref": "#/$defs/PanelLayout"
-    },
-    "pipeline_mode": {
-      "enum": [
-        "realtime",
-        "cascaded",
-        "half_cascade"
-      ],
-      "title": "Pipeline Mode",
-      "type": "string"
-    },
-    "slug": {
-      "title": "Slug",
-      "type": "string"
-    },
-    "ui_panel_id": {
-      "title": "Ui Panel Id",
-      "type": "string"
+    "items": {
+      "items": {
+        "$ref": "#/$defs/PanelPreset"
+      },
+      "title": "Items",
+      "type": "array"
     }
   },
   "required": [
-    "id",
-    "slug",
-    "name",
-    "description",
-    "ui_panel_id",
-    "panel",
-    "capabilities",
-    "pipeline_mode"
+    "items"
   ],
-  "title": "AgentPublicOut",
+  "title": "PanelPresetsResponse",
   "type": "object"
 }

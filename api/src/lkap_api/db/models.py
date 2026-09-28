@@ -555,7 +555,8 @@ class Tool(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("kind IN ('http','mcp','provider')", name="kind_valid"),  # V5-47 (v5_010)
+        # V5-47 (v5_010) added `provider`, V6-16 (v6_002) `dataset`.
+        CheckConstraint("kind IN ('http','mcp','provider','dataset')", name="kind_valid"),
         Index("ix_tools_workspace", "workspace_id"),
     )
 
@@ -862,6 +863,79 @@ def _drop_postgres_only(target: MetaData, connection: Connection, **kw: Any) -> 
     """Before ``Base.metadata.drop_all`` on Postgres: drop ``kb_vectors`` (it references ``kb_chunks``)."""
     if connection.dialect.name == "postgresql":
         PgOnlyBase.metadata.drop_all(connection)
+
+
+class Dataset(Base):
+    """V6-16 (D-V6-27): a workspace's read-only lookup table, made from a CSV or JSON upload.
+
+    The uploaded bytes stay in the storage backend (``storage_key``); the rows are imported by
+    the ``dataset_import`` job into :class:`DatasetRow`, and every declared key column's
+    normalised values into :class:`DatasetKey`. ``columns`` is ``[{name, label, type, key}]``,
+    ``key_columns`` ``[{name, type}]`` (``lkap_contracts.datasets``). The import's progress and
+    error live on its job row (``jobs.payload``), not here.
+    """
+
+    __tablename__ = "datasets"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = workspace_fk()
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    format: Mapped[str] = mapped_column(String(8), nullable=False, default="csv")
+    columns: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    key_columns: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','ready','failed')", name="status_valid"),
+        CheckConstraint("format IN ('csv','json')", name="format_valid"),
+        UniqueConstraint("workspace_id", "slug", name="uq_datasets_workspace_slug"),
+        Index("ix_datasets_workspace", "workspace_id"),
+    )
+
+
+class DatasetRow(Base):
+    """One row of a dataset: its cells by column name, and its normalised keys (V6-16)."""
+
+    __tablename__ = "dataset_rows"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    dataset_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    keys: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    row: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_dataset_rows_dataset_ordinal", "dataset_id", "ordinal"),)
+
+
+class DatasetKey(Base):
+    """A key cell's normalised value, for exact and prefix lookups (V6-16).
+
+    One per (row, key column) whose cell normalises to a value; ``column_name`` is the
+    ledger's ``column`` (a reserved word on both dialects, so named explicitly).
+    """
+
+    __tablename__ = "dataset_keys"
+
+    row_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("dataset_rows.id", ondelete="CASCADE"), primary_key=True
+    )
+    column_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False
+    )
+    value: Mapped[str] = mapped_column(String(256), nullable=False)
+
+    __table_args__ = (Index("ix_dataset_keys_lookup", "dataset_id", "column_name", "value"),)
 
 
 class AgentKnowledgeBase(Base):

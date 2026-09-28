@@ -1,0 +1,28 @@
+{
+  "$id": "lkap-contracts/DatasetKeyColumn.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A key column and how its cells are normalised.",
+  "properties": {
+    "name": {
+      "pattern": "^[a-z_][a-z0-9_]{0,63}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "type": {
+      "default": "string",
+      "enum": [
+        "string",
+        "phone",
+        "email",
+        "number"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "DatasetKeyColumn",
+  "type": "object"
+}

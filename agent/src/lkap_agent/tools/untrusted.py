@@ -66,6 +66,8 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     # and the values `extract_now` reads back to the model.
     "lkap_agent.flow.variables",
     "lkap_agent.tools.builtin.extract_now",
+    # V6-16: rows found in a workspace dataset (someone's spreadsheet), fenced as `dataset:<tool>`.
+    "lkap_agent.tools.dataset",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

@@ -22,7 +22,9 @@ import type { UiRequest, UiRequestResult } from "@/contracts/lkap-contracts";
 
 export type CompositeRequestEvent =
   | { kind: "reveal"; blockId: string; focus: boolean }
-  | { kind: "navigate"; url: string };
+  | { kind: "navigate"; url: string }
+  /** `read_canvas`'s snapshot request (V6-14, ask #92): the named `canvas` block answers it. */
+  | { kind: "snapshot"; blockId: string };
 
 type Listener = (event: CompositeRequestEvent) => boolean;
 
@@ -91,6 +93,17 @@ export function handleCompositeRequest(request: UiRequest): UiRequestResult {
       const asked = emit({ kind: "navigate", url });
       // The visitor confirms in the panel; the answer is not awaited.
       return asked ? { ok: true, payload: { confirming: true } } : { ok: false, payload: { error: "the panel is not open" } };
+    }
+    case "snapshot": {
+      // `read_canvas`'s wire step 2 (CONTRACTS §10, ask #92): ack `{ok: true}` at once
+      // when a mounted `canvas` block claims this id — it then renders the board and
+      // streams the PNG on `lkap.ui.upload` itself, asynchronously (`canvas.tsx`'s
+      // `answerSnapshot`). No board mounted for this id → `{ok: false}` so the worker's
+      // `request_canvas_snapshot` gives up at once instead of waiting out its timeout.
+      const blockId = blockIdOf(payload);
+      if (!blockId) return { ok: false, payload: { error: "snapshot needs a `block_id`" } };
+      const handled = emit({ kind: "snapshot", blockId });
+      return handled ? { ok: true, payload: {} } : { ok: false, payload: { error: `no drawing board "${blockId}" on this panel` } };
     }
     default:
       return { ok: false, payload: { error: `${request.method} is not supported by this panel` } };

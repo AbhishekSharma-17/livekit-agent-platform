@@ -109,6 +109,8 @@ ROUTE_POLICY: tuple[_Rule, ...] = (
         Requirement("viewer", "agents:read"),
         Requirement("builder", "agents:write"),
     ),
+    # V6-16: datasets (lookup tables) follow the tools rule; a test lookup is a builder write.
+    _Rule("/v1/datasets", Requirement("viewer", "agents:read"), Requirement("builder", "agents:write")),
     _Rule("/v1/packs", Requirement("viewer", "agents:read"), Requirement("builder", "agents:write")),
     _Rule("/v1/flows", Requirement("viewer", "agents:read"), Requirement("builder", "agents:write")),
     _Rule(

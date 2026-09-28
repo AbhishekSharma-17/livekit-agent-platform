@@ -119,4 +119,4 @@ numbered, copy-pasteable tool sequence
 `knowledge`, `tools-http`, `tools-mcp`, `panels-and-blocks`, `flows`,
 `telephony`, `qa-and-evals`, `recordings-and-cost`, `webhooks`,
 `sessions-and-test-chat`, `roles-and-scopes`, `apps`, `tools`, `testing`,
-`memory`, `extraction` (`lkap_explain(topic)`).
+`memory`, `extraction`, `datasets` (`lkap_explain(topic)`).

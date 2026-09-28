@@ -487,13 +487,12 @@ export function DetailsSectionView({
 /* -------------------------------------------------------------------------- */
 
 /**
- * (V6-12, D-V6-16, ask #93): a section whose config names a board
- * (`canvas_block_id`) renders it inside the section — never in the panel's
- * own top-level flow (`composite/index.tsx` hides it there, the same way a
- * `layout` hides its children). Until V6-14 ships the drawing board,
- * `<Block>` resolves a `canvas` spec to its own stub (`NotRenderedYetBlock`,
- * "This block is not shown here yet."); a section with no board yet keeps
- * "Drawing board coming soon."
+ * (V6-12, D-V6-16, ask #93; the board itself is V6-14): a section whose config names a
+ * board (`canvas_block_id`) renders it inside the section — never in the panel's own
+ * top-level flow (`composite/index.tsx` hides it there, the same way a `layout` hides its
+ * children). `<Block>` resolves the `canvas` spec to the real drawing board
+ * (`blocks/canvas.tsx`, lazy); a section with no board yet keeps "Drawing board coming
+ * soon."
  */
 export function InkSectionView({
   canvasBlockId,

@@ -302,6 +302,11 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/credentials",
     "/v1/credentials/{credential_id}",
     "/v1/credentials/{credential_id}/test",
+    "/v1/datasets",  # V6-16
+    "/v1/datasets/{dataset_id}",
+    "/v1/datasets/{dataset_id}/export",
+    "/v1/datasets/{dataset_id}/lookup",
+    "/v1/datasets/{dataset_id}/rows",
     "/v1/flows/node-specs",
     "/v1/health",
     "/v1/knowledge-bases",
@@ -518,6 +523,29 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "kb_connection_create": frozenset({"name", "kind", "settings", "credential_id", "test", "plan"}),
     "kb_connection_update": frozenset({"connection_id", "name", "settings", "credential_id", "plan"}),
     "kb_connection_test": frozenset({"connection_id"}),
+    # V6-16 datasets (lookup tables) and the dataset tool kind
+    "dataset_list": frozenset(),
+    "dataset_create": frozenset(
+        {"name", "key_columns", "text", "filename", "file_path", "wait", "timeout_s", "plan"}
+    ),
+    "dataset_delete": frozenset({"dataset_id", "confirm", "plan"}),
+    "dataset_lookup": frozenset({"dataset_id", "keys", "match", "return_columns", "max_rows"}),
+    "tool_create_dataset": frozenset(
+        {
+            "name",
+            "description",
+            "dataset_id",
+            "key_columns",
+            "return_columns",
+            "match",
+            "max_rows",
+            "pinned_arguments",
+            "requires_vars",
+            "bindings",
+            "agent_id",
+            "plan",
+        }
+    ),
     # 4.6 tools
     "tool_list": frozenset({"agent_id", "kind"}),
     "tool_get": frozenset({"tool_id"}),

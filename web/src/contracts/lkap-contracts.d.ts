@@ -13,7 +13,7 @@ export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNo
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ToolDefinition".
  */
-export type ToolDefinition = HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
+export type ToolDefinition = HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition;
 
 export interface LkapContracts {
   ActivityEvent?: ActivityEvent;
@@ -105,6 +105,14 @@ export interface LkapContracts {
   CredentialPage?: CredentialPage;
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
+  DatasetColumn?: DatasetColumn;
+  DatasetKeyColumn?: DatasetKeyColumn;
+  DatasetLookupIn?: DatasetLookupIn;
+  DatasetLookupOut?: DatasetLookupOut;
+  DatasetOut?: DatasetOut;
+  DatasetPage?: DatasetPage;
+  DatasetPreviewOut?: DatasetPreviewOut;
+  DatasetToolDefinition?: DatasetToolDefinition;
   DetailsBlockState?: DetailsBlockState;
   DetailsEdit?: DetailsEdit;
   DetailsSetAction?: DetailsSetAction;
@@ -146,6 +154,7 @@ export interface LkapContracts {
   IdIssue?: IdIssue;
   InkMessage?: InkMessage;
   InstructAction?: InstructAction;
+  InternalDatasetLookupIn?: InternalDatasetLookupIn;
   InternalKbSearchRequest?: InternalKbSearchRequest;
   InternalTransferIn?: InternalTransferIn;
   InternalTransferOut?: InternalTransferOut;
@@ -4414,6 +4423,156 @@ export interface CredentialUpdate {
   } | null;
 }
 /**
+ * One column of a dataset.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetColumn".
+ */
+export interface DatasetColumn {
+  key?: boolean;
+  label: string;
+  name: string;
+  type?: "string" | "phone" | "email" | "number";
+}
+/**
+ * A key column and how its cells are normalised.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetKeyColumn".
+ */
+export interface DatasetKeyColumn {
+  name: string;
+  type?: "string" | "phone" | "email" | "number";
+}
+/**
+ * ``POST /v1/datasets/{id}/lookup``: find rows by their key columns.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetLookupIn".
+ */
+export interface DatasetLookupIn {
+  keys: {
+    [k: string]: string;
+  };
+  match?: "exact" | "prefix";
+  max_rows?: number;
+  /**
+   * @maxItems 64
+   */
+  return_columns?: string[];
+}
+/**
+ * What a lookup found (rows in file order, only the asked-for columns).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetLookupOut".
+ */
+export interface DatasetLookupOut {
+  dataset_id: string;
+  dataset_name: string;
+  match: "exact" | "prefix";
+  rows: {
+    [k: string]: string | null;
+  }[];
+  truncated?: boolean;
+}
+/**
+ * ``GET /v1/datasets/{id}``: a dataset without its rows.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetOut".
+ */
+export interface DatasetOut {
+  columns: DatasetColumn[];
+  created_at: string;
+  error?: string | null;
+  format: "csv" | "json";
+  id: string;
+  key_columns: DatasetKeyColumn[];
+  name: string;
+  progress?: number | null;
+  row_count: number;
+  sha256: string;
+  slug: string;
+  status: "pending" | "ready" | "failed";
+  updated_at: string;
+}
+/**
+ * ``GET /v1/datasets``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetPage".
+ */
+export interface DatasetPage {
+  items: DatasetOut[];
+  total: number;
+}
+/**
+ * ``GET /v1/datasets/{id}/rows``: a page of rows in file order.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetPreviewOut".
+ */
+export interface DatasetPreviewOut {
+  columns: DatasetColumn[];
+  dataset_id: string;
+  offset: number;
+  rows: {
+    [k: string]: string | null;
+  }[];
+  total: number;
+}
+/**
+ * A lookup in one of the workspace's datasets (V6-16, D-V6-27; ``lkap_contracts.datasets``).
+ *
+ * The model sees one string argument per key column (``key_columns``, minus the pinned
+ * ones) and gets back at most ``max_rows`` rows with ``return_columns`` (all columns when
+ * empty), matched ``exact`` or by ``prefix`` on the normalised value. The worker calls the
+ * api's internal lookup route with the session, so a lookup never reads another
+ * workspace's dataset, and fences the rows as ``dataset:<name>``. Read-only: nothing is
+ * ever written to a dataset from a call. The tool always runs blocking (a lookup is quick).
+ *
+ * V6-07: ``pinned_arguments`` fix a key column's value, hidden from the model (a string may
+ * be ``{{ ctx.caller_phone }}`` or ``{{ var.policy_number }}``); ``requires_vars`` refuse
+ * until variables are set; ``bindings`` copy a successful lookup onto the panel. The bound
+ * (and model-visible) result is the list of rows, so ``/0/holder_name`` is the first row's
+ * ``holder_name``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetToolDefinition".
+ */
+export interface DatasetToolDefinition {
+  bindings?: ToolBinding[];
+  dataset_id: string;
+  description: string;
+  /**
+   * @minItems 1
+   * @maxItems 8
+   */
+  key_columns:
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string]
+    | [string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string];
+  kind?: "dataset";
+  match?: "exact" | "prefix";
+  max_result_chars?: number;
+  max_rows?: number;
+  name: string;
+  pinned_arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
+  requires_vars?: string[];
+  /**
+   * @maxItems 64
+   */
+  return_columns?: string[];
+}
+/**
  * A key-value summary card, "what we have so far" (``set_details``, V5-08).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -4878,6 +5037,24 @@ export interface InkMessage {
   tool?: "pen" | "highlighter" | "box" | "arrow";
   v?: 1;
   width?: number;
+}
+/**
+ * ``POST /internal/v1/datasets/{id}/lookup`` (the worker): the session decides the workspace.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InternalDatasetLookupIn".
+ */
+export interface InternalDatasetLookupIn {
+  keys: {
+    [k: string]: string;
+  };
+  match?: "exact" | "prefix";
+  max_rows?: number;
+  /**
+   * @maxItems 64
+   */
+  return_columns?: string[];
+  session_id: string;
 }
 /**
  * ``POST /internal/v1/kb/search`` (service token).
@@ -7491,7 +7668,7 @@ export interface ResolvedAgentConfig {
   tool_mocks?: {
     [k: string]: unknown;
   };
-  tools: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition)[];
+  tools: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition)[];
   ui_panel_id: string;
   v?: 2;
   variables?: {
@@ -8387,9 +8564,9 @@ export interface TextSessionCreate {
  */
 export interface ToolCreate {
   agent_id?: string | null;
-  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
+  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition;
   enabled?: boolean;
-  kind: "http" | "mcp" | "provider";
+  kind: "http" | "mcp" | "provider" | "dataset";
   name: string;
 }
 /**
@@ -8436,10 +8613,10 @@ export interface ToolMeta {
 export interface ToolOut {
   agent_id?: string | null;
   created_at: string;
-  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition;
+  definition: HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition;
   enabled?: boolean;
   id: string;
-  kind: "http" | "mcp" | "provider";
+  kind: "http" | "mcp" | "provider" | "dataset";
   name: string;
   updated_at: string;
 }

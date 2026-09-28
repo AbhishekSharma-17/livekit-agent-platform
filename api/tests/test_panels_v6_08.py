@@ -25,7 +25,19 @@ def _block(block_id: str, block_type: str, config: dict[str, Any] | None = None)
 
 
 def test_the_notebook_preset_validates_without_an_issue() -> None:
-    assert _issues(NOTEBOOK_PRESET) == []
+    # V6-14, ask #94: the preset's Sketch section now claims a real `canvas` block with
+    # `caller_can_draw` on. On the Cloud default LLM (`google/gemma-4-31b-it`, text-only)
+    # that correctly gets `canvas_vision_issues`' warning — the agent cannot read what the
+    # caller draws there until the agent picks a vision-capable model.
+    assert _issues(NOTEBOOK_PRESET) == [
+        (
+            "panel.blocks[2]",
+            "warning",
+            "'google/gemma-4-31b-it' cannot see pictures, so the agent cannot read what the "
+            "caller draws on this board — pick a model marked 'supports video' (e.g. "
+            "google/gemini-3.5-flash)",
+        )
+    ]
 
 
 @pytest.mark.parametrize(

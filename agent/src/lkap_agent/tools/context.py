@@ -250,11 +250,15 @@ def uses_tool_context(definition: Any) -> bool:
     """Whether a tool definition uses any V6-07 feature (placeholders, bindings, read-back …).
 
     ``main.py`` hands the builders a :class:`ToolCallContext` only when one does, so an agent
-    without them is built exactly as before V6-07.
+    without them is built exactly as before V6-07. A ``dataset`` lookup (V6-16) always does.
     """
     kind = getattr(definition, "kind", None)
     if kind == "mcp":
         return bool(getattr(definition, "tool_context", None))
+    if kind == "dataset":
+        # V6-16 (ask #35): a lookup always needs the session (its id scopes the lookup to the
+        # session's workspace), whether or not it pins values or binds results.
+        return True
     if kind not in ("http", "provider"):
         return False
     if any(getattr(definition, name, None) for name in ("bindings", "requires_vars", "confirm_readback")):

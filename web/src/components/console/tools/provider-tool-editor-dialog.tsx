@@ -43,7 +43,13 @@ import {
   silentReplyConflictMessage,
   type ExecutionDraft,
 } from "@/components/console/tools/execution-fields";
-import type { AppConnectionOut, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
+import { BindingsEditor, bindingsHaveIssues } from "@/components/console/tools/bindings-editor";
+import { PinnedArgumentsEditor, pinnedArgumentsHaveIssues, type PinnedValue } from "@/components/console/tools/pinned-arguments-editor";
+import { ReadbackField, confirmReadbackHasIssues } from "@/components/console/tools/readback-field";
+import { RequiresVarsField, requiresVarsHaveIssues } from "@/components/console/tools/requires-vars-field";
+import { schemaProperties } from "@/components/console/tools/tool-context";
+import { useAgentToolContextOptions } from "@/components/console/tools/use-agent-tool-context";
+import type { AppConnectionOut, ProviderToolDefinition, ToolBinding, ToolOut } from "@/contracts/lkap-contracts";
 
 /** Mirrors `connection-row.tsx`'s status mapping (docs/v5/COMPOSIO.md §6) for the header's read-only status chip. */
 const STATUS_TONE: Record<AppConnectionOut["status"], StatusTone> = {
@@ -114,6 +120,10 @@ interface Draft {
   result_path: string;
   silent_reply: boolean;
   execution: ExecutionDraft;
+  requires_vars: string[];
+  confirm_readback: string[];
+  bindings: ToolBinding[];
+  pinned_arguments: Record<string, PinnedValue>;
 }
 
 function draftFromDefinition(definition: ProviderToolDefinition): Draft {
@@ -125,6 +135,10 @@ function draftFromDefinition(definition: ProviderToolDefinition): Draft {
     result_path: definition.result_path ?? "",
     silent_reply: definition.silent_reply ?? false,
     execution: executionDraftFromValue(definition.execution) ?? DEFAULT_EXECUTION_DRAFT,
+    requires_vars: definition.requires_vars ?? [],
+    confirm_readback: definition.confirm_readback ?? [],
+    bindings: definition.bindings ?? [],
+    pinned_arguments: (definition.pinned_arguments ?? {}) as Record<string, PinnedValue>,
   };
 }
 
@@ -189,6 +203,12 @@ export function ProviderToolEditorDialog({
   const fields = parameterFields(definition.parameters);
   const isRead = definition.risk === "read";
   const lockBlocking = definition.risk === "destructive";
+  const agentContext = useAgentToolContextOptions(tool.agent_id ?? null);
+  const argumentNames = React.useMemo(() => {
+    const properties = schemaProperties(definition.parameters);
+    return properties ? Array.from(properties) : null;
+  }, [definition.parameters]);
+  const pinnedNames = Object.keys(draft.pinned_arguments);
 
   async function handleRefresh(apply: boolean) {
     try {
@@ -211,6 +231,15 @@ export function ProviderToolEditorDialog({
     if (draft.silent_reply && isNonBlocking(draft.execution.mode)) {
       nextErrors.execution = silentReplyConflictMessage(draft.name);
     }
+    // V6-11 (D-V6-22): the same checks the HTTP and MCP editors run.
+    if (
+      requiresVarsHaveIssues(draft.requires_vars) ||
+      confirmReadbackHasIssues(draft.confirm_readback, argumentNames, pinnedNames) ||
+      bindingsHaveIssues(draft.bindings) ||
+      pinnedArgumentsHaveIssues(draft.pinned_arguments)
+    ) {
+      nextErrors.execution ??= "Fix the session values, read-back or bindings below.";
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -227,6 +256,10 @@ export function ProviderToolEditorDialog({
       result_path: draft.result_path.trim() === "" ? null : draft.result_path,
       silent_reply: draft.silent_reply,
       execution: executionFromDraft(draft.execution),
+      requires_vars: draft.requires_vars,
+      confirm_readback: draft.confirm_readback,
+      bindings: draft.bindings,
+      pinned_arguments: draft.pinned_arguments,
     };
 
     try {
@@ -468,6 +501,40 @@ export function ProviderToolEditorDialog({
                 onChange={(execution) => setDraft((d) => ({ ...d, execution }))}
                 isRead={isRead}
               />
+            </section>
+
+            <section className="flex flex-col gap-5 border-t border-border pt-5">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Session and variables</h3>
+              <RequiresVarsField
+                uid={uid}
+                values={draft.requires_vars}
+                onChange={(requires_vars) => setDraft((d) => ({ ...d, requires_vars }))}
+                knownVariables={agentContext.variableNames}
+              />
+              <ReadbackField
+                uid={uid}
+                values={draft.confirm_readback}
+                onChange={(confirm_readback) => setDraft((d) => ({ ...d, confirm_readback }))}
+                argumentNames={argumentNames}
+                pinnedNames={pinnedNames}
+              />
+              <BindingsEditor
+                uid={uid}
+                values={draft.bindings}
+                onChange={(bindings) => setDraft((d) => ({ ...d, bindings }))}
+                detailsBlocks={agentContext.detailsBlocks}
+                tableBlocks={agentContext.tableBlocks}
+              />
+              <PinnedArgumentsEditor
+                values={draft.pinned_arguments}
+                onChange={(pinned_arguments) => setDraft((d) => ({ ...d, pinned_arguments }))}
+                variableNames={agentContext.variableNames}
+              />
+              {!tool.agent_id ? (
+                <p className="text-[0.8125rem] text-muted-foreground">
+                  Attach this action to an agent to pick from its panel blocks and flow variables.
+                </p>
+              ) : null}
             </section>
           </DialogBody>
 

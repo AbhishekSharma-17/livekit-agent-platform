@@ -74,7 +74,7 @@ from lkap_api.settings import Settings
 from lkap_api.storage.resolve import default_storage
 from lkap_api.templates.catalog import DERIVED_PREFIX, derived_template, template_root
 from lkap_api.templates.router import resolve_template
-from lkap_api.templates.seed import apply_tool_seeds, seed_from_template
+from lkap_api.templates.seed import apply_template_rows, seed_from_template
 from lkap_api.tool_providers.provisioning import AppsProvisionerDep  # V5-47
 from lkap_api.vault import Vault
 
@@ -736,9 +736,18 @@ async def create_agent(
     )
     db.add(row)
     await db.flush()
-    if template is not None and template.tool_seeds:
-        tool_ids = await apply_tool_seeds(db, template, workspace_id=ctx.workspace_id, agent_id=row.id)
-        config.tools.tool_ids = [*config.tools.tool_ids, *tool_ids]
+    if template is not None and (template.tool_seeds or template.dataset_seeds or template.kits):
+        # V6-22 (ask #227): HTTP tool seeds, then the starter's lookup tables and kits.
+        config = await apply_template_rows(
+            db,
+            vault=vault,
+            app_settings=settings,
+            ctx=ctx,
+            storage=default_storage(settings),
+            template=template,
+            agent=row,
+            config=config,
+        )
         row.config = config.model_dump(mode="json")
         row.mode = derived_mode(config)
     _raise_if_invalid(

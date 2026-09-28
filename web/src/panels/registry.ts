@@ -21,19 +21,21 @@
  * `@/panels/blocks` (CONTRACTS-V2 §4.4 "`<Block>` for custom panels").
  */
 import type { ReceivedMessage } from "@livekit/components-react";
-import type { ComponentType } from "react";
+import { createElement, useMemo, type ComponentType } from "react";
 
 import type {
   AgentAction,
   AgentPublicOut,
+  PanelLayout,
   UiRequest,
   UiRequestResult,
   UiState,
 } from "@/contracts/lkap-contracts";
 import type { PanelConnectionState } from "@/lib/livekit";
-import { COMPOSITE_PANEL } from "@/panels/composite";
+import { COMPOSITE_PANEL, CompositePanel } from "@/panels/composite";
+import { handleCompositeRequest } from "@/panels/composite/requests";
 import { GENERIC_PANEL } from "@/panels/generic";
-import { INSURANCE_NOTEBOOK_PANEL } from "@/panels/insurance_notebook";
+import notebookPreset from "@/panels/notebook-preset.json";
 
 /** A pack-defined intent (CONTRACTS §10 `AgentAction`, `Pack.on_ui_action`). */
 export interface PanelUiAction {
@@ -143,10 +145,44 @@ export interface PanelDefinition {
 
 export const GENERIC_PANEL_ID = "generic";
 
+/**
+ * The "Notebook" preset (`lkap_contracts.agent_config.NOTEBOOK_PRESET`), verbatim:
+ * `api/tests/test_claims_intake_v6_22.py` keeps `notebook-preset.json` equal to it.
+ */
+export const NOTEBOOK_PRESET_LAYOUT = notebookPreset as PanelLayout;
+
+/** The insurance pack's old panel id, now a legacy alias (V6-22, D-V6-21). */
+export const INSURANCE_NOTEBOOK_ALIAS_ID = "insurance_notebook";
+
+/** `agent` as the composite panel should see it under the alias: the Notebook preset's blocks. */
+export function withNotebookPreset(agent: AgentPublicOut): AgentPublicOut {
+  const blocks = NOTEBOOK_PRESET_LAYOUT.blocks?.map((block) => ({ ...block }));
+  return { ...agent, panel: { ...NOTEBOOK_PRESET_LAYOUT, blocks } };
+}
+
+function InsuranceNotebookAliasPanel(props: PanelProps) {
+  const agent = useMemo(() => withNotebookPreset(props.agent), [props.agent]);
+  return createElement(CompositePanel, { ...props, agent });
+}
+
+/**
+ * `insurance_notebook` — a legacy alias (V6-22, D-V6-21): an agent saved with the insurance
+ * pack's panel id renders the composite panel with the Notebook preset's blocks, in the wide
+ * layout the pack's own notebook used. The custom React notebook is gone; new agents start from
+ * the Claims intake starter.
+ */
+export const INSURANCE_NOTEBOOK_ALIAS: PanelDefinition = {
+  id: INSURANCE_NOTEBOOK_ALIAS_ID,
+  title: "Claim notebook",
+  Component: InsuranceNotebookAliasPanel,
+  layout: "wide",
+  handleRequest: handleCompositeRequest,
+};
+
 export const PANELS: Record<string, PanelDefinition> = {
   [COMPOSITE_PANEL.id]: COMPOSITE_PANEL,
   [GENERIC_PANEL_ID]: GENERIC_PANEL,
-  [INSURANCE_NOTEBOOK_PANEL.id]: INSURANCE_NOTEBOOK_PANEL,
+  [INSURANCE_NOTEBOOK_ALIAS.id]: INSURANCE_NOTEBOOK_ALIAS,
 };
 
 /** The session layout for `panel` rendering `agent` (`layoutFor` → `layout` → side). */

@@ -268,6 +268,9 @@ def test_extract_text_pdf_extracts_without_raising() -> None:
 SEED_COUNTS = [
     ("packs/src/packs/insurance_claim/seeds/policy_lines.md", 4, 6),
     ("packs/src/packs/insurance_claim/seeds/intake_playbook.md", 3, 5),
+    # V6-22: the claims starter ships the pack's two knowledge seeds (copies, so the same counts).
+    ("api/src/lkap_api/templates/catalog/claims_intake/seeds/policy_lines.md", 4, 6),
+    ("api/src/lkap_api/templates/catalog/claims_intake/seeds/intake_playbook.md", 3, 5),
     ("api/src/lkap_api/templates/catalog/knowledge_assistant/seeds/product_faq.md", 5, 6),
     ("api/src/lkap_api/templates/catalog/knowledge_assistant/seeds/support_playbook.md", 2, 6),
     ("api/src/lkap_api/templates/catalog/lead_qualification/seeds/offer_sheet.md", 2, 5),
@@ -293,7 +296,8 @@ def test_every_shipped_seed_file_is_pinned() -> None:
         str(path.relative_to(REPO))
         for pattern in ("packs/src/packs/*/seeds/*", "api/src/lkap_api/templates/catalog/*/seeds/*")
         for path in REPO.glob(pattern)
-        if not re.search(r"evals?\.json$", path.name)
+        # Golden questions and (V6-22) lookup-table seeds are not knowledge seeds.
+        if not re.search(r"evals?\.json$", path.name) and path.suffix not in (".csv", ".json")
     )
     assert seeds == sorted(path for path, _, _ in SEED_COUNTS)
 

@@ -3,9 +3,8 @@
 /**
  * `<SafeMarkdown>` — the one strict Markdown renderer every panel surface
  * routes through (V6-10, ask #333: `https` links only, platform-hosted
- * images only): `document.tsx`'s fetched-Markdown fallback, the `notebook`
- * block's `text` sections, and `insurance_notebook/packet-dialog.tsx`'s
- * adjuster packet.
+ * images only): `document.tsx`'s fetched-Markdown fallback and the `notebook`
+ * block's `text` sections (the insurance pack's packet dialog was removed in V6-22).
  *
  * A trimmed, stricter port of `panels/blocks/markdown.tsx`'s own Streamdown
  * setup (kept there unchanged — not this package's file; see docs/v6/_asks.md):

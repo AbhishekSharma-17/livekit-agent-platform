@@ -21,7 +21,7 @@ def test_settings_reads_required_env_no_dotenv(settings: Settings, data_dir: Pat
 def test_settings_defaults_are_documented_in_contracts(settings: Settings) -> None:
     assert settings.agent_name == "lkap-agent"
     assert settings.cors_origins == "http://localhost:3000"
-    assert settings.packs == "packs.insurance_claim,packs.generic"
+    assert settings.packs == "packs.generic"  # V6-22 (D-V6-21): the generic pack only
     assert settings.embedder == "fastembed"
     assert settings.log_level == "INFO"
     assert settings.log_json is False
@@ -45,6 +45,7 @@ def test_cors_origins_list_splits_and_trims(settings: Settings) -> None:
 
 
 def test_packs_list_splits_and_trims(settings: Settings) -> None:
+    settings.packs = " packs.insurance_claim , packs.generic "
     assert settings.packs_list == ["packs.insurance_claim", "packs.generic"]
 
 

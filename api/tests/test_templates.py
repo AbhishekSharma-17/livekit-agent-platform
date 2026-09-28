@@ -59,6 +59,7 @@ EXPECTED_IDS = (
     "knowledge_assistant",
     "receptionist",
     "vision_assistant",
+    "claims_intake",
     "phone_agent",
     "lead_qualification",
     "survey_intake",
@@ -66,6 +67,9 @@ EXPECTED_IDS = (
 )
 
 REAL_PACKS = "packs.insurance_claim,packs.generic"
+
+#: V6-22: the tool rows a starter's kits create (beside its HTTP tool seeds).
+KIT_TOOLS: dict[str, set[str]] = {"claims_intake": {"policy_lookup"}}
 
 #: Tool names a template may switch off: built-ins, block tools and the telephony tools.
 DISABLEABLE_TOOLS = {*BUILTIN_TOOL_NAMES, *BLOCK_TOOL_NAMES, "send_dtmf", "transfer_call"}
@@ -436,8 +440,9 @@ async def test_every_starter_creates_validates_and_seeds_its_rows(
         (d.filename, d.error) for d in documents
     ]
     assert sorted(config["tools"]["tool_ids"]) == sorted(tool.id for tool in tools)
-    assert len(tools) == len(template.tool_seeds)
-    assert {tool.name for tool in tools} == {seed.definition.name for seed in template.tool_seeds}
+    kit_tools = KIT_TOOLS.get(template_id, set())
+    assert len(tools) == len(template.tool_seeds) + len(kit_tools)
+    assert {tool.name for tool in tools} == {seed.definition.name for seed in template.tool_seeds} | kit_tools
     assert len(config["knowledge"]["kb_ids"]) == len(template.kb_seeds) + len(manifest.kb_seeds) == len(kbs)
     assert version.config_version == 1
     assert version.note == f"created from template {template_id}"

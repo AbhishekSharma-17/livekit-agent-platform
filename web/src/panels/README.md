@@ -23,7 +23,7 @@ Each row carries a `data-slot` (`panel-note`, `panel-checklist-item`, `panel-act
 
 ## Font variables (the notebook's handwriting)
 
-`insurance_notebook/notebook-styles.ts` loads **no** fonts (the runtime Google Fonts `@import` is gone, UI_UX_SPEC §2.3). The paper reads two CSS variables and falls back to the locally-named faces:
+The `notebook` block's paper (`blocks/notebook/paper-theme.ts`) loads **no** fonts (the runtime Google Fonts `@import` is gone, UI_UX_SPEC §2.3). The paper reads two CSS variables and falls back to the locally-named faces:
 
 ```css
 --hand:       var(--font-hand, "Caveat"), ui-rounded, cursive;
@@ -55,18 +55,7 @@ const handLabel = Patrick_Hand({ subsets: ["latin"], weight: "400", display: "sw
 
 Payload keys are fixed by CONTRACTS-V2 §4.4 (ruling R-V2-3b): `open_dialog {dialog, params?}`, `focus {target}`, `request_video_source {source}`, `toast {message, tone?}`. The last two are answered by the room, not by a panel.
 
-**Insurance notebook** (`handleNotebookRequest`, exported from `insurance_notebook/index.tsx`):
-
-| Request | Result |
-|---|---|
-| `open_dialog {dialog: "packet"}` | opens the adjuster packet → `{ok: true, payload: {dialog: "packet"}}` |
-| same, but the workflow has not written a packet | `{ok: false, payload: {error: "the adjuster packet has not been written yet"}}` |
-| same, but no notebook is mounted | `{ok: false, payload: {error: "the claim notebook is not open"}}` |
-| `open_dialog` without a string `dialog` (e.g. the old `{id: …}`) | `{ok: false, payload: {error: "open_dialog needs a `dialog` name"}}` |
-| `open_dialog {dialog: <other>}` | `{ok: false, payload: {error, dialogs: ["packet"]}}` (`NOTEBOOK_DIALOGS`) |
-| any other method | `{ok: false, payload: {error}}` |
-
-`payload.params` is accepted and ignored — the packet takes no parameters. The handler reaches the mounted dialog through `openPacketDialog()` in `packet-dialog.tsx` (a module-level opener set), because `PanelDefinition` is a module object while the dialog's open state belongs to the component.
+**The `insurance_notebook` alias** (V6-22, D-V6-21): the insurance pack's custom notebook panel is gone. `insurance_notebook` is a legacy alias in `registry.ts` that renders the composite panel with the Notebook preset's blocks (`notebook-preset.json`, kept equal to `NOTEBOOK_PRESET` by an api test) in the wide layout, and answers requests like the composite panel (`handleCompositeRequest`); the old `open_dialog {dialog: "packet"}` is declined politely.
 
 ## Panels v2: blocks and the composite panel (V2-11)
 

@@ -21,13 +21,14 @@ def test_settings_defaults_are_documented_in_contracts(settings: Settings) -> No
     assert settings.connection_id is None
     assert settings.heartbeat_interval_s == 30.0
     assert settings.reconnect_grace_s == 60.0
-    assert settings.packs == "packs.insurance_claim,packs.generic"
+    assert settings.packs == "packs.generic"  # V6-22 (D-V6-21): the generic pack only
     assert settings.log_level == "INFO"
     assert settings.log_json is False
     assert settings.vision_max_frame_age_s == 8.0
 
 
 def test_packs_list_splits_and_trims(settings: Settings) -> None:
+    settings.packs = " packs.insurance_claim , packs.generic "
     assert settings.packs_list == ["packs.insurance_claim", "packs.generic"]
 
 

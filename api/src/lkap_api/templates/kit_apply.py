@@ -76,7 +76,7 @@ from lkap_api.templates.tools import ToolTemplateError, instantiate_definition, 
 from lkap_api.tool_providers.adapter import AdapterFactory
 from lkap_api.vault import Vault
 
-__all__ = ["PLANNED_ID_PREFIX", "instantiate_kit"]
+__all__ = ["PLANNED_ID_PREFIX", "add_kit_to_new_agent", "instantiate_kit"]
 
 log = get_logger(__name__)
 
@@ -897,12 +897,61 @@ async def instantiate_kit(
     return _response(plan, section, agent.config_version, result, dry_run=False)
 
 
+async def add_kit_to_new_agent(
+    db: AsyncSession,
+    vault: Vault,
+    app_settings: Settings,
+    ctx: WorkspaceContext,
+    kit_id: str,
+    payload: ToolKitInstantiate,
+    agent: Agent,
+    config: AgentConfig,
+) -> tuple[AgentConfig, list[str]]:
+    """Add a kit to an agent a starter template is creating (V6-22, ask #105).
+
+    The same plan, tool rows (through ``POST /v1/tools``'s checks) and configuration changes as
+    :func:`instantiate_kit`, without its preview, validation, new configuration version and
+    audit row: the agent creation validates once at the end and snapshots version 1
+    (docs/v4/TEMPLATES.md §4). A starter binds no key and no connected app, so a
+    ``composio_action`` variant is refused (by the plan: it needs ``connection_id``).
+
+    Args:
+        db: The agent-creation session (flushed, never committed here).
+        vault: The vault (``POST /v1/tools`` checks).
+        app_settings: The api settings (the network guard).
+        ctx: The creating admin's workspace context.
+        kit_id: The catalogue kit.
+        payload: What to add (``agent_id`` is the new agent; ``dry_run`` is ignored).
+        agent: The new agent row, flushed.
+        config: The configuration seeded so far.
+
+    Returns:
+        The configuration with the kit added, and the plan's notes (what is left to do).
+
+    Raises:
+        NotFoundError: No kit has this id.
+        UnprocessableEntityError: A setting, table or variant does not fit, or a tool fails the
+            tool checks.
+    """
+    plan = await _plan(db, vault, app_settings, ctx, kit_id, payload, agent, config)
+    await _create_tools(db, vault, app_settings, ctx, None, plan, agent)
+    new_config, _ = await _configure(plan, config, payload, db, vault, ctx.workspace_id)
+    log.info(
+        "tool_kit_seeded",
+        kit_id=plan.kit.id,
+        variant=plan.variant.id,
+        agent_id=agent.id,
+        added=sum(1 for change in plan.changes if change.status == "added"),
+    )
+    return new_config, list(plan.notes)
+
+
 async def _create_tools(
     db: AsyncSession,
     vault: Vault,
     app_settings: Settings,
     ctx: WorkspaceContext,
-    factory: AdapterFactory,
+    factory: AdapterFactory | None,
     plan: _Plan,
     agent: Agent,
 ) -> None:
@@ -929,6 +978,8 @@ async def _create_tools(
     wanted = [tool for tool in plan.tools if tool.kind == "provider" and tool.status == "added"]
     if plan.connection_id is None or not wanted:
         return
+    if factory is None:  # a starter's kit (`add_kit_to_new_agent`): no connected app to pick from
+        raise _refuse("a starter cannot add a connected app's actions", reason="app_required")
     await pick_actions(
         db,
         vault,

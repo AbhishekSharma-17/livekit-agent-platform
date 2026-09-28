@@ -34,7 +34,7 @@ export const PREVIEW_GENERIC_AGENT: AgentPublicOut = {
   },
 };
 
-/** The insurance notebook's reference agent — the flagship pack. */
+/** An agent saved with the insurance pack's old panel id (a legacy alias of the Notebook preset, V6-22). */
 export const PREVIEW_INSURANCE_AGENT: AgentPublicOut = {
   id: "preview-insurance-agent",
   name: "Maya",
@@ -64,7 +64,7 @@ export const NOTEBOOK_FIXTURE_IDS = Object.keys(
   NOTEBOOK_FIXTURES,
 ) as NotebookFixtureId[];
 
-/** `resolvePanel("insurance_notebook")`'s state for one of the three golden fixtures. */
+/** `resolvePanel("insurance_notebook")`'s state (the legacy alias) for one of the three golden fixtures. */
 export function notebookState(id: NotebookFixtureId): UiStateStore["state"] {
   return normalizeUiState(NOTEBOOK_FIXTURES[id]);
 }

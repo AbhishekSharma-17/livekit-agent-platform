@@ -270,7 +270,7 @@ function NotebookScene({ params }: { params: Record<string, string> }) {
 
 const notebookScene: SceneDefinition = {
   id: "notebook",
-  label: "Insurance notebook panel",
+  label: "Claim notebook (legacy alias of the Notebook preset)",
   params: { fixture: NOTEBOOK_FIXTURE_IDS },
   defaults: { fixture: "auto" },
   surfaces: ["dark"],
@@ -279,7 +279,7 @@ const notebookScene: SceneDefinition = {
     surfaces: fixture === "blank" ? (["dark", "light"] as const) : undefined,
   })),
   render: (params) => <NotebookScene params={params} />,
-  testIds: ["insurance-notebook"],
+  testIds: ["composite-panel"],
   isSessionSurface: true,
 };
 

@@ -132,6 +132,7 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-23 | P | Next blocks: `signature`, `chart`, `timer`, `code`, `cart` (contracts, tools, validators) | Opus | 6 | V6-12 merged; V6-21 merged |
 | V6-24 | P | Console: the five next-block renderers, composer forms, previews | Sonnet | 7 | V6-23's contracts commit |
 | V6-25 | X | Closing: `ARCHITECTURE-V6.md`, RUNBOOK, CONTRACTS, MCP docs, `llms.txt`, the status table, the final review | Opus (docs) + Fable | 7 | everything above |
+| V6-26 | P | Avatar framing: size the agent video to the avatar's real aspect (portrait / square / landscape), `contain` by default, per-provider native aspect, custom/imported avatars, every surface incl. mobile | Sonnet (+ Opus contracts hunk) | 7 | none (user request 2026-09-28) |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files; contracts commits still serialised in the listed order):
 
@@ -299,6 +300,14 @@ Each card: **Scope**, **Exclusive files**, **Acceptance** (offline gates and nam
 
 ---
 
+
+### V6-26 Avatar framing — Sonnet (+ small Opus contracts hunk) · Wave 7 · depends: none (user request 2026-09-28) · size S–M
+- **Why.** The session stage shows the agent/avatar video in a fixed 16:9 well with `object-cover` (`web/src/components/session/stage-view.tsx:113-119`, also `:199`; the `video` block `web/src/panels/blocks/video.tsx:72`), so a portrait or square avatar (many avatar vendors stream portrait or square video) is cropped — heads and shoulders cut off — and a landscape one can be letterboxed in a compact layout.
+- **Scope.** (1) Framing follows the real video: read the track's dimensions (the `VideoTrack` / `<video>` `videoWidth`/`videoHeight`, updated on resize) and size the well to that aspect within the available space (portrait, square, landscape), instead of a hard-coded `aspect-video`. (2) A fit mode: `contain` (whole avatar visible, neutral background fill) by default for avatars, `cover` with a focal point (default: upper third, so a face is never cropped) as an option. (3) Per-avatar defaults: each avatar provider entry in the registry declares its native aspect/resolution where the vendor documents it (verify per vendor; `auto` when unknown), used before the first frame arrives so the layout doesn't jump. (4) `AvatarOptions` gains `framing: auto|portrait|landscape|square` and `fit: contain|cover` (no default for stored agents → today's behaviour except the crop fix; the console pre-selects `auto` + `contain`). (5) Custom/imported avatars (a vendor avatar built from an uploaded photo): the console shows a framing preview with the uploaded image's aspect, and warns when the image aspect and the chosen framing disagree. (6) The same rules on every surface that shows the agent video: the session stage (compact, stage and expanded), the `video` block, the embed session, the console Live tab mirror, and mobile (375 px) portrait/landscape orientation.
+- **Exclusive files.** `web/src/components/session/{stage-view,agent-stage,session-room}.tsx`, `web/src/components/session/embed/**`, `web/src/panels/blocks/video.tsx`, the avatar section of the agent editor, `web/tests/**` additions; contracts hunk: `AvatarOptions` in `contracts/src/lkap_contracts/agent_config.py` and the avatar entries' capability fields in `contracts/src/lkap_contracts/providers.py` (regenerated files in the same commit).
+- **Acceptance.** Tests render a 9:16, 1:1 and 16:9 fake track in each surface and assert nothing is cropped in `contain` mode and the face region survives in `cover`; no layout jump when the first frame arrives for a provider with a declared aspect; mobile portrait and landscape screenshots in the report; a stored agent without the new fields renders the crop-free default.
+- **Live.** With a configured avatar (Bey / Simli / Tavus / Hedra etc., whichever keys the user adds): confirm the full avatar is visible on desktop and on a phone in both orientations, and with an imported-photo avatar.
+
 ## 4. Security review checkpoint (V6-20 / V6-21; the gate of D-V6-29)
 
 Format as `docs/v5/SECURITY-REVIEW-V5.md`. Each row becomes a table row that says "pass" with the evidence or names a finding.
@@ -392,6 +401,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-23 | Opus | 6 | planned | | | |
 | V6-24 | Sonnet | 7 | planned | | | |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
+| V6-26 | Sonnet (+ Opus contracts hunk) | 7 | planned | | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): none yet.
 

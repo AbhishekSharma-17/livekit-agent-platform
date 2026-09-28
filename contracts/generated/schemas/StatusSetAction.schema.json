@@ -1,0 +1,36 @@
+{
+  "$id": "lkap-contracts/StatusSetAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Set the status stamp.",
+  "properties": {
+    "do": {
+      "const": "status.set",
+      "default": "status.set",
+      "title": "Do",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 60,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "tone": {
+      "default": "info",
+      "enum": [
+        "neutral",
+        "info",
+        "success",
+        "warning",
+        "danger"
+      ],
+      "title": "Tone",
+      "type": "string"
+    }
+  },
+  "required": [
+    "label"
+  ],
+  "title": "StatusSetAction",
+  "type": "object"
+}

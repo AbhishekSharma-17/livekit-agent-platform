@@ -138,10 +138,12 @@ describe("ProviderToolEditorDialog", () => {
     expect(await screen.findByText("Connected")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Tools → Apps" })).toHaveProperty("href", expect.stringContaining("/console/tools?tab=apps"));
 
-    // Pinned parameters, read-only.
-    const calendarIdField = screen.getByText("calendar_id");
+    // Pinned parameters, read-only — scoped to the "Parameters" list's own `<li>`s: V6-11's
+    // "Read back before calling" picker (`ReadbackField`) also names the action's arguments,
+    // as checkbox labels, so a plain `getByText` now matches both.
+    const calendarIdField = screen.getAllByText("calendar_id").find((el) => el.closest("li"))!;
     expect(calendarIdField).toBeTruthy();
-    expect(screen.getByText("duration_minutes")).toBeTruthy();
+    expect(screen.getAllByText("duration_minutes").find((el) => el.closest("li"))).toBeTruthy();
     expect(within(calendarIdField.closest("li")!).getByText("Required")).toBeTruthy();
 
     // The raw slug is tucked away in "Details", not shown in the main header (copy rule: no "slug" outside a disclosure).

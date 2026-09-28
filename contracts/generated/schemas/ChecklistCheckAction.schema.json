@@ -1,0 +1,28 @@
+{
+  "$id": "lkap-contracts/ChecklistCheckAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Tick (or, with ``done: false``, untick) an item that is already on the checklist.",
+  "properties": {
+    "do": {
+      "const": "checklist.check",
+      "default": "checklist.check",
+      "title": "Do",
+      "type": "string"
+    },
+    "done": {
+      "default": true,
+      "title": "Done",
+      "type": "boolean"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+      "title": "Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "ChecklistCheckAction",
+  "type": "object"
+}

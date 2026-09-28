@@ -60,6 +60,10 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     "lkap_agent.platform_agent",
     # V6-06: a caller's edit of a block (`caller_edit`), told to the model as data.
     "lkap_agent.ui.blocks",
+    # V6-13 (ask #31): bound and live-extracted variables rendered into a flow's instructions,
+    # and the values `extract_now` reads back to the model.
+    "lkap_agent.flow.variables",
+    "lkap_agent.tools.builtin.extract_now",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

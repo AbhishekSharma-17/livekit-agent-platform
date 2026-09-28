@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/EveryNTurnsTrigger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "After every ``n``-th caller turn (``n = 1``: every turn).",
+  "properties": {
+    "kind": {
+      "const": "every_n_turns",
+      "default": "every_n_turns",
+      "title": "Kind",
+      "type": "string"
+    },
+    "n": {
+      "default": 1,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "N",
+      "type": "integer"
+    }
+  },
+  "title": "EveryNTurnsTrigger",
+  "type": "object"
+}

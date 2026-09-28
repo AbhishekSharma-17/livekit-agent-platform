@@ -1,0 +1,48 @@
+{
+  "$id": "lkap-contracts/RuleFiredEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The ``rule_fired`` session event: which rule, and the kinds of what it did. Never a value.",
+  "properties": {
+    "actions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Actions",
+      "type": "array"
+    },
+    "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+    },
+    "rule_id": {
+      "title": "Rule Id",
+      "type": "string"
+    },
+    "skipped": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Skipped",
+      "type": "array"
+    },
+    "trigger": {
+      "default": "extraction",
+      "enum": [
+        "extraction",
+        "tool",
+        "variables",
+        "turn"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    }
+  },
+  "required": [
+    "rule_id"
+  ],
+  "title": "RuleFiredEvent",
+  "type": "object"
+}

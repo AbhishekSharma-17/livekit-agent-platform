@@ -1,0 +1,74 @@
+{
+  "$id": "lkap-contracts/ExtractionEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The ``extraction`` session event: one run of the live extraction.",
+  "properties": {
+    "changed": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Changed",
+      "type": "array"
+    },
+    "duration_ms": {
+      "default": 0,
+      "title": "Duration Ms",
+      "type": "integer"
+    },
+    "fields": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "default": {},
+      "title": "Fields",
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "failed",
+        "timeout"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "still_needed": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Still Needed",
+      "type": "array"
+    },
+    "trigger": {
+      "enum": [
+        "turn",
+        "tool",
+        "node_exit",
+        "manual"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    },
+    "values": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Values"
+    }
+  },
+  "required": [
+    "trigger",
+    "status"
+  ],
+  "title": "ExtractionEvent",
+  "type": "object"
+}

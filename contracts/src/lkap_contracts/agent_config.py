@@ -9,10 +9,12 @@ from lkap_contracts.agent_tests import MAX_AGENT_TESTS, AgentTest, PublishGate
 from lkap_contracts.common import Issue, ProviderRef, SessionChannel
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, DisclosurePosition, ResolvedCompliance
 from lkap_contracts.connections import ConnectionInfo
+from lkap_contracts.extraction import ExtractionConfig
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.guardrails import GuardrailsConfig
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language
 from lkap_contracts.qa import MAX_QA_FIELDS, QaField
+from lkap_contracts.rules import Rules
 from lkap_contracts.telephony import TelephonyConfig, WarmTransferRoute
 from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
@@ -74,6 +76,7 @@ __all__ = [
     "ConversationPreset",
     "DisclosureConfig",
     "DisclosurePosition",
+    "ExtractionConfig",
     "GuardrailsConfig",
     "KnowledgeConfig",
     "KnowledgeQueryMode",
@@ -717,6 +720,13 @@ class AgentConfig(BaseModel):
     )
     publish_gate: PublishGate = PublishGate()
     """V5-29: opt-in; when on, publishing needs a passing test run on the version being published."""
+    extraction: ExtractionConfig = ExtractionConfig()
+    """V6-13 (D-V6-24): facts captured live from the conversation into the session's variables;
+    off for every agent saved before it, so no extraction call is ever made."""
+    rules: Rules = []
+    """V6-13 (D-V6-25): ``when`` a condition over variables and tool outcomes holds, ``then`` set
+    the checklist, status, details, a note, a variable, escalate, instruct the next reply or set
+    the disposition (at most 50). Empty for every agent saved before it."""
 
     @field_validator("tests")
     @classmethod

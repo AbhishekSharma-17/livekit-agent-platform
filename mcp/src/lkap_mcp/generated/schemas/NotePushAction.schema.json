@@ -1,0 +1,37 @@
+{
+  "$id": "lkap-contracts/NotePushAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Push a note (``text`` may name ``{{ var.<name> }}``); in ``block_id``'s margin when given.",
+  "properties": {
+    "block_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Block Id"
+    },
+    "do": {
+      "const": "note.push",
+      "default": "note.push",
+      "title": "Do",
+      "type": "string"
+    },
+    "text": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "title": "NotePushAction",
+  "type": "object"
+}

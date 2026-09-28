@@ -1,0 +1,24 @@
+{
+  "$id": "lkap-contracts/DispositionSetAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Set the session's outcome label (a flow's ``disposition``).",
+  "properties": {
+    "do": {
+      "const": "disposition.set",
+      "default": "disposition.set",
+      "title": "Do",
+      "type": "string"
+    },
+    "value": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Value",
+      "type": "string"
+    }
+  },
+  "required": [
+    "value"
+  ],
+  "title": "DispositionSetAction",
+  "type": "object"
+}

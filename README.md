@@ -95,7 +95,7 @@ LKAP_API_BASE_URL=http://127.0.0.1:8080 LKAP_SERVICE_TOKEN=dev-service \
 # 4. web (new terminal)
 cd web && pnpm install
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 LKAP_ADMIN_TOKEN=dev-admin pnpm dev
-# → http://localhost:3000/console  → create an agent from the "insurance_claim" pack
+# → http://localhost:3000/console  → create an agent from the "Claims intake" starter
 #   (default pipeline: LiveKit Inference, no vendor keys needed) → Publish → Test call
 ```
 

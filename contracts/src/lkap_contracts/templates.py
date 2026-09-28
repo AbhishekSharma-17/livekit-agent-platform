@@ -6,11 +6,19 @@ panel blocks, voice settings, knowledge seeds, HTTP tool seeds, a flow, QA,
 telephony and recording. Everything it sets is a field of ``AgentConfig`` or a
 row the api already knows how to create. The catalogue ships with the api
 (``lkap_api/templates/catalog``) and is served by ``GET /v1/templates``.
+
+V6-22 (D-V6-21, ask #105): a starter may also set live extraction, rules and test
+cases (``extraction``, ``rules``, ``tests``), seed lookup tables from its ``seeds/``
+directory (:class:`DatasetSeed`, created or reused by name in the new agent's
+workspace, like the knowledge seeds) and add tool kits (:class:`TemplateKit`,
+applied in order as ``POST /v1/tool-kits/{id}/instantiate`` would, after the
+template's own extraction fields and rules, so a kit keeps a field or rule of the
+same name the template already declares).
 """
 
-from typing import Any, Literal, Self
+from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, Field, field_serializer, model_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
 from lkap_contracts.agent_config import (
     CapabilitiesConfig,
@@ -22,18 +30,26 @@ from lkap_contracts.agent_config import (
     TelephonyConfig,
     VoiceConfig,
 )
+from lkap_contracts.agent_tests import MAX_AGENT_TESTS, AgentTest
+from lkap_contracts.datasets import MAX_DATASET_KEY_COLUMNS, DatasetKeyColumn
+from lkap_contracts.extraction import ExtractionConfig
 from lkap_contracts.flow import FlowSpec
 from lkap_contracts.packs import KbSeed
+from lkap_contracts.rules import Rules
 from lkap_contracts.tools import HttpToolDefinition
 
 __all__ = [
+    "MAX_TEMPLATE_DATASET_SEEDS",
+    "MAX_TEMPLATE_KITS",
     "TEMPLATE_ID_PATTERN",
+    "DatasetSeed",
     "EditorSection",
     "NextStep",
     "RequiredKey",
     "StarterTemplate",
     "TemplateCategory",
     "TemplateChip",
+    "TemplateKit",
     "TemplateRequirements",
     "ToolSeed",
 ]
@@ -98,6 +114,64 @@ class ToolSeed(BaseModel):
     enabled: bool = True
 
 
+#: Most lookup tables one starter seeds.
+MAX_TEMPLATE_DATASET_SEEDS: Final[int] = 4
+#: Most kits one starter adds.
+MAX_TEMPLATE_KITS: Final[int] = 8
+
+# The kit id and prefix shapes of ``lkap_contracts.kits`` (not imported: ``kits`` imports
+# ``api_models``, which imports this module; a contracts test keeps the two equal).
+_KIT_ID_PATTERN = r"^[a-z][a-z0-9_]{0,39}$"
+_KIT_PREFIX_PATTERN = r"^[a-z][a-z0-9_]{0,23}$"
+_SEED_FILE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\.(csv|json)$"
+
+
+class DatasetSeed(BaseModel):
+    """A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).
+
+    At create time the api reuses a table of this ``name`` in the agent's workspace when one
+    exists and did not fail to import; otherwise it reads the file like an upload (the same
+    parser and key normalisation) and stores the rows in the create's own transaction, so the
+    table is ready before the agent is validated. Rows are demo data: ``name`` starts with
+    ``Demo — `` for the shipped starters.
+    """
+
+    name: str = Field(min_length=1, max_length=120)
+    file: str = Field(pattern=_SEED_FILE_PATTERN, description="A `.csv` or `.json` file under `seeds/`")
+    key_columns: list[DatasetKeyColumn]
+    """The columns lookups match on, and how their cells are normalised."""
+
+    @field_validator("key_columns")
+    @classmethod
+    def _keys_bounded(cls, value: list[DatasetKeyColumn]) -> list[DatasetKeyColumn]:
+        # A validator rather than `max_length`: the TS generator turns a small `maxItems` into a
+        # union of tuples no editor can assign an array to.
+        if not 1 <= len(value) <= MAX_DATASET_KEY_COLUMNS:
+            raise ValueError(f"name 1 to {MAX_DATASET_KEY_COLUMNS} key columns")
+        names = [column.name for column in value]
+        if len(set(names)) != len(names):
+            raise ValueError("a key column is named twice")
+        return value
+
+
+class TemplateKit(BaseModel):
+    """A tool kit the starter adds to the new agent (``ToolKitInstantiate``, minus the agent).
+
+    ``dataset`` names one of the starter's :attr:`StarterTemplate.dataset_seeds` for a
+    ``dataset`` variant; ``key_columns`` defaults to that table's key columns. A starter never
+    binds a key (``credential_id``) or a connected app, so kits whose variant needs one are
+    refused when the catalogue loads.
+    """
+
+    kit_id: str = Field(pattern=_KIT_ID_PATTERN)
+    variant: str | None = None
+    block_prefix: str | None = Field(default=None, pattern=_KIT_PREFIX_PATTERN)
+    settings: dict[str, str | int | float | bool] = {}
+    dataset: str | None = Field(default=None, max_length=120)
+    key_columns: list[str] | None = None
+    add_test_case: bool = True
+
+
 class NextStep(BaseModel):
     """One line of the post-create checklist; ``section`` deep-links into the editor, ``href`` elsewhere."""
 
@@ -148,6 +222,13 @@ class StarterTemplate(BaseModel):
     recording: RecordingConfig | None = None
     pack_settings: dict[str, Any] = {}
     timezone: str | None = None
+    # V6-22 (ask #105): extraction, rules and tests set on the seeded config, then the
+    # lookup tables and kits created and added once the agent row exists.
+    extraction: ExtractionConfig | None = None
+    rules: Rules = []
+    tests: list[AgentTest] = Field(default=[], max_length=MAX_AGENT_TESTS)
+    dataset_seeds: list[DatasetSeed] = []
+    kits: list[TemplateKit] = []
 
     # --- gallery ----------------------------------------------------------------
     sample_prompts: list[str] = []
@@ -176,4 +257,19 @@ class StarterTemplate(BaseModel):
             raise ValueError("voice.greeting is not allowed on a template; set the greeting overlay instead")
         if self.knowledge is not None and "kb_ids" in self.knowledge.model_fields_set:
             raise ValueError("knowledge.kb_ids is not allowed on a template; use kb_seeds instead")
+        if len(self.dataset_seeds) > MAX_TEMPLATE_DATASET_SEEDS:
+            raise ValueError(f"a template seeds at most {MAX_TEMPLATE_DATASET_SEEDS} lookup tables")
+        if len(self.kits) > MAX_TEMPLATE_KITS:
+            raise ValueError(f"a template adds at most {MAX_TEMPLATE_KITS} kits")
+        names = [seed.name for seed in self.dataset_seeds]
+        if len(set(names)) != len(names):
+            raise ValueError("dataset_seeds names must be unique")
+        for kit in self.kits:
+            if kit.dataset is not None and kit.dataset not in names:
+                raise ValueError(
+                    f"kit '{kit.kit_id}' names dataset '{kit.dataset}', which no dataset_seeds entry is"
+                )
+        test_ids = [test.id for test in self.tests]
+        if len(set(test_ids)) != len(test_ids):
+            raise ValueError("test case ids must be unique")
         return self

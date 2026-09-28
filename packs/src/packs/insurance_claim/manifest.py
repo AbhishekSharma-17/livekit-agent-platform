@@ -48,11 +48,14 @@ def _vision_model(spec: ProviderSpec) -> str | None:
 #: Ported verbatim from ``live_tools.py`` (docs/INSURANCE_PACK_MAPPING.md #3).
 DEFAULT_GREETING = "I can start the claim while we talk. First, are you and everyone else in a safe place?"
 
+#: V6-22 (D-V6-21): the pack ships one more release for the agents already made from it; new
+#: agents start from the "Claims intake" starter (generic pack, blocks and tool kits).
 DESCRIPTION = (
     "A live voice intake agent for a first notice of loss (FNOL) team: verifies the "
     "policy, extracts and classifies the claim, tracks a document checklist, tapes "
     "camera evidence and an incident sketch into a shared notebook, and escalates "
-    "safety concerns."
+    "safety concerns. Legacy: kept for existing agents; new agents start from the "
+    "Claims intake starter."
 )
 
 MANIFEST = PackManifest(

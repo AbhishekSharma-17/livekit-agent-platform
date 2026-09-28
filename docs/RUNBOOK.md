@@ -51,7 +51,7 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `LKAP_ENV` | ✓ | | | | `dev` (default) or `prod`. `prod` refuses weak or `dev-*` static secrets and turns the admin token off (§2). |
 | `LKAP_ADMIN_TOKEN` | ✓ | | | ✓ | `dev-admin`, the break-glass token (§2). |
 | `LKAP_SERVICE_TOKEN` | ✓ | ✓ | ✓ | | `dev-service`. Must be byte-identical everywhere. |
-| `LKAP_PACKS` | ✓ | ✓ | | | `packs.insurance_claim,packs.generic`. **Must match on the api and every worker** (F-17, §4). |
+| `LKAP_PACKS` | ✓ | ✓ | | | default `packs.generic` (since V6-22; before, `packs.insurance_claim,packs.generic`). **Must match on the api and every worker** (F-17, §4). To keep the legacy insurance pack, see §9.8. |
 | `LKAP_BOOTSTRAP_OWNER_EMAIL` / `_PASSWORD` | ✓ | | | | the first owner (default `owner@local`); see §2 |
 | `LKAP_SESSION_SECRET` | ✓ | | | | signs invite links; unset = derived from the master key. Required in `prod`. |
 | `LKAP_ALLOW_ADMIN_TOKEN` | ✓ | | | | unset = on in `dev`, off in `prod` |
@@ -387,6 +387,19 @@ No migration. What an operator notices:
 
 None of the ten drops a column or table in its upgrade: they add tables, columns and indexes, and `v5_010` widens a check constraint (a table rebuild on SQLite). Apply them as in §9 (back up first). The rehearsals are in `docs/v5/_briefs/migration-rehearsal-v5.md`.
 
+### 9.8 Upgrade note: the default pack list (V6-22)
+
+`LKAP_PACKS` now defaults to `packs.generic` on the api and the worker (D-V6-21). Only a deployment that
+never set the variable changes (D-V6-31). **To keep the legacy pack, set
+`LKAP_PACKS=packs.insurance_claim,packs.generic`** on the api **and** every worker (the supervisor hands the
+api's value to its pools), then restart both. With the default, an agent made from the insurance pack
+(`pack_id="insurance_claim"`) no longer gets the pack's tools and the gallery no longer shows the
+"Insurance claim intake" starter; its notebook panel still renders, but stays empty without the pack's tools.
+
+New agents for the same job start from the **Claims intake** starter (the generic pack, the Notebook
+preset and three tool kits; `docs/INSURANCE_PACK_MAPPING.md` §5). Creating it once adds a
+`Demo — Policy directory` lookup table to the workspace (reused by later ones). No migration.
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:
@@ -448,7 +461,9 @@ API path (admin token):
 
 ```bash
 A='-H X-Admin-Token:dev-admin -H Content-Type:application/json'
-curl -s $A -X POST localhost:8080/v1/agents -d '{"name":"Claims intake","pack_id":"insurance_claim"}'
+curl -s $A -X POST localhost:8080/v1/agents -d '{"name":"Claims intake","template_id":"claims_intake"}'
+# the legacy pack (only with LKAP_PACKS listing it, §9.8):
+curl -s $A -X POST localhost:8080/v1/agents -d '{"name":"Claims (legacy)","pack_id":"insurance_claim"}'
 curl -s $A -X PUT  localhost:8080/v1/agents/<id> -d '{"published":true}'
 ```
 
@@ -487,7 +502,7 @@ Use Chrome on `http://localhost:3000`, allow the microphone and camera, and hang
 | 7a | Camera/screen → pin | `/s/smoke-vision`, camera on, type "Pin what you see with the caption 'test pin'." Then screen share and repeat. | Image with caption in the panel; `meta.source` is `camera`, then `screen`. |
 | 7b | Model sees the frame | Hold up an object: "What am I holding?" | Correct answer on `google/gemini-3.5-flash`. On gemma: no image is sent and one `info` event appears (by design). |
 | 8 | Knowledge base | `/s/smoke-kb`, typed: "What does policy AUTO-11111's status say?" / "Search the knowledge base for flood coverage." | First answer says lapsed without a tool call; second calls `search_knowledge(query)` and names `policy_lines.md`. |
-| 9 | Insurance end to end | Create from pack `insurance_claim`, publish, `/s/<slug>`. Call 1, type or say: "Policy H0-44721, my basement flooded yesterday in Denver, nobody was hurt." Camera on: "Please pin what you see as evidence." Call 2: "Policy AUTO-11111, I was rear-ended on I-25 and my passenger's neck hurts." | Call 1: policy note ≤ 5 s, Claim writer running→done, stamp, still-needed list and %, **Read the adjuster packet** dialog with markdown, a polaroid evidence photo. Call 2: lapsed-policy note, stamp **Escalate to human** (danger), and an urgent spoken reply containing "emergency". |
+| 9 | Insurance end to end (legacy pack; since V6-22 only with `LKAP_PACKS` listing it, §9.8 — the Claims intake starter walk is `docs/v6/_briefs/v6-22-live.md` §3) | Create from pack `insurance_claim`, publish, `/s/<slug>`. Call 1, type or say: "Policy H0-44721, my basement flooded yesterday in Denver, nobody was hurt." Camera on: "Please pin what you see as evidence." Call 2: "Policy AUTO-11111, I was rear-ended on I-25 and my passenger's neck hurts." | Call 1: policy note ≤ 5 s, Claim writer running→done, stamp, still-needed list and %, **Read the adjuster packet** dialog with markdown, a polaroid evidence photo. Call 2: lapsed-policy note, stamp **Escalate to human** (danger), and an urgent spoken reply containing "emergency". |
 | 9b | Sketch (optional) | Needs a `google-image-gen` credential: "Draw a sketch of the incident." | Polaroid "Does this look right?" → confirm round-trip. |
 
 ---

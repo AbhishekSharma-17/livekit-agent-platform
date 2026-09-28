@@ -90,7 +90,7 @@ from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, 
 from lkap_contracts.qa import QaField, QaVerdict, SessionQaIn
 from lkap_contracts.rules import RULE_MODELS
 from lkap_contracts.telephony import AmdConfig, SmsTarget, TelephonyConfig, TransferTarget, WarmTransferRoute
-from lkap_contracts.templates import StarterTemplate
+from lkap_contracts.templates import DatasetSeed, StarterTemplate, TemplateKit
 from lkap_contracts.tool_context import TOOL_CONTEXT_MODELS
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
@@ -280,6 +280,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ToolMeta": ToolMeta,
     # starter templates (v4, docs/v4/TEMPLATES.md §2)
     "StarterTemplate": StarterTemplate,
+    "DatasetSeed": DatasetSeed,  # V6-22 (ask #105)
+    "TemplateKit": TemplateKit,  # V6-22
     # providers and pricing
     "ProviderSpec": ProviderSpec,
     "ModelCapabilities": ModelCapabilities,

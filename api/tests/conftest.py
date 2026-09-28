@@ -300,9 +300,14 @@ def tenant_guard() -> Iterator[None]:
 
 @pytest.fixture
 async def app(settings: Settings, database: Database, fake_packs: dict[str, PackManifest]) -> FastAPI:
-    """An isolated FastAPI app wired to the per-test database."""
+    """An isolated FastAPI app wired to the per-test database.
+
+    V6-22: `LKAP_PACKS` now defaults to the generic pack only; this app lists both fake packs
+    explicitly, as a deployment that keeps the legacy insurance pack does (RUNBOOK upgrade note).
+    """
     from lkap_api.main import create_app
 
+    settings.packs = "packs.insurance_claim,packs.generic"
     application = create_app(settings)
     application.state.db = database
     return application

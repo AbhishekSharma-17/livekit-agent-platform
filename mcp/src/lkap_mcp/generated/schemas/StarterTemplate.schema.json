@@ -111,6 +111,69 @@
       "title": "AgentNode",
       "type": "object"
     },
+    "AgentTest": {
+      "description": "One simulated conversation: who the caller is, what they want, what must happen.",
+      "properties": {
+        "expectations": {
+          "default": [],
+          "description": "What must be true of the agent's side, one statement each (the accuracy and task-completion judges check them).",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Expectations",
+          "type": "array"
+        },
+        "id": {
+          "description": "Stable case id, unique in the agent.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "max_turns": {
+          "default": 12,
+          "description": "Caller turns before the conversation is stopped.",
+          "maximum": 40,
+          "minimum": 1,
+          "title": "Max Turns",
+          "type": "integer"
+        },
+        "mocks": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "Tool name → the result the tool returns in this case instead of calling out (HTTP tools and connected-app actions). A string is returned as-is; anything else as JSON.",
+          "title": "Mocks",
+          "type": "object"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "persona_instructions": {
+          "description": "Who the simulated caller is and how they talk (played by an LLM).",
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Persona Instructions",
+          "type": "string"
+        },
+        "scenario": {
+          "default": "",
+          "description": "What the caller wants in this conversation; the persona pursues it.",
+          "maxLength": 4000,
+          "title": "Scenario",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "persona_instructions"
+      ],
+      "title": "AgentTest",
+      "type": "object"
+    },
     "AmdConfig": {
       "description": "Answering-machine detection on outbound calls (``TelephonyConfig.amd``, V5-32).\n\nWhen ``enabled``, the worker listens to how an outbound call is answered and\nclassifies it with the agent's own speech-to-text and language model before\nthe agent speaks. A person (or an unsure result) → the conversation goes on as\nusual. A voicemail greeting → ``on_machine``: ``leave_message`` speaks\n``message`` after the greeting and hangs up; ``hangup`` hangs up at once. A\nmailbox that cannot take a message is always hung up. A phone menu is\nnavigated by the agent when ``ivr_detection`` is on, else treated as a machine.\nInbound calls and web sessions ignore this setting.",
       "properties": {
@@ -347,6 +410,208 @@
       "title": "CapabilitiesConfig",
       "type": "object"
     },
+    "ChecklistCheckAction": {
+      "description": "Tick (or, with ``done: false``, untick) an item that is already on the checklist.",
+      "properties": {
+        "do": {
+          "const": "checklist.check",
+          "default": "checklist.check",
+          "title": "Do",
+          "type": "string"
+        },
+        "done": {
+          "default": true,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ChecklistCheckAction",
+      "type": "object"
+    },
+    "ChecklistSetItemAction": {
+      "description": "Add or replace one item of the \"still needed\" checklist (the others are kept).",
+      "properties": {
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "do": {
+          "const": "checklist.set_item",
+          "default": "checklist.set_item",
+          "title": "Do",
+          "type": "string"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChecklistSetItemAction",
+      "type": "object"
+    },
+    "DatasetKeyColumn": {
+      "description": "A key column and how its cells are normalised.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "phone",
+            "email",
+            "number"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DatasetKeyColumn",
+      "type": "object"
+    },
+    "DatasetSeed": {
+      "description": "A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).\n\nAt create time the api reuses a table of this ``name`` in the agent's workspace when one\nexists and did not fail to import; otherwise it reads the file like an upload (the same\nparser and key normalisation) and stores the rows in the create's own transaction, so the\ntable is ready before the agent is validated. Rows are demo data: ``name`` starts with\n``Demo — `` for the shipped starters.",
+      "properties": {
+        "file": {
+          "description": "A `.csv` or `.json` file under `seeds/`",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\\.(csv|json)$",
+          "title": "File",
+          "type": "string"
+        },
+        "key_columns": {
+          "items": {
+            "$ref": "#/$defs/DatasetKeyColumn"
+          },
+          "title": "Key Columns",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "file",
+        "key_columns"
+      ],
+      "title": "DatasetSeed",
+      "type": "object"
+    },
+    "DetailsSetAction": {
+      "description": "Write one row of a ``details`` block (``value`` may name ``{{ var.<name> }}``).",
+      "properties": {
+        "block_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "do": {
+          "const": "details.set",
+          "default": "details.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "key": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "value": {
+          "maxLength": 500,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "block_id",
+        "key",
+        "value"
+      ],
+      "title": "DetailsSetAction",
+      "type": "object"
+    },
+    "DispositionSetAction": {
+      "description": "Set the session's outcome label (a flow's ``disposition``).",
+      "properties": {
+        "do": {
+          "const": "disposition.set",
+          "default": "disposition.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "DispositionSetAction",
+      "type": "object"
+    },
     "EndNode": {
       "description": "Terminal node: says farewell, records a disposition and ends the session.",
       "properties": {
@@ -482,6 +747,222 @@
         }
       },
       "title": "EndpointingOptions",
+      "type": "object"
+    },
+    "EscalateAction": {
+      "description": "Flag the session for a person, as ``escalate_to_human`` does, with the rule's reason.",
+      "properties": {
+        "do": {
+          "const": "escalate",
+          "default": "escalate",
+          "title": "Do",
+          "type": "string"
+        },
+        "mode": {
+          "default": "transfer",
+          "enum": [
+            "transfer",
+            "takeover",
+            "listen_in",
+            "callback"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "urgency": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ],
+          "title": "Urgency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "EscalateAction",
+      "type": "object"
+    },
+    "EveryNTurnsTrigger": {
+      "description": "After every ``n``-th caller turn (``n = 1``: every turn).",
+      "properties": {
+        "kind": {
+          "const": "every_n_turns",
+          "default": "every_n_turns",
+          "title": "Kind",
+          "type": "string"
+        },
+        "n": {
+          "default": 1,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "title": "EveryNTurnsTrigger",
+      "type": "object"
+    },
+    "ExtractionConfig": {
+      "description": "What the agent captures from the conversation while it talks (off by default).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExtractionField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "min_turn_chars": {
+          "default": 12,
+          "maximum": 200,
+          "minimum": 0,
+          "title": "Min Turn Chars",
+          "type": "integer"
+        },
+        "still_needed": {
+          "anyOf": [
+            {
+              "const": "checklist",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Still Needed"
+        },
+        "triggers": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "every_n_turns": "#/$defs/EveryNTurnsTrigger",
+                "manual": "#/$defs/ManualTrigger",
+                "node_exit": "#/$defs/NodeExitTrigger",
+                "tool": "#/$defs/ToolTrigger"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/EveryNTurnsTrigger"
+              },
+              {
+                "$ref": "#/$defs/ToolTrigger"
+              },
+              {
+                "$ref": "#/$defs/NodeExitTrigger"
+              },
+              {
+                "$ref": "#/$defs/ManualTrigger"
+              }
+            ]
+          },
+          "title": "Triggers",
+          "type": "array"
+        }
+      },
+      "title": "ExtractionConfig",
+      "type": "object"
+    },
+    "ExtractionField": {
+      "description": "One fact to capture: a flow ``VariableSpec`` plus how to ask for it and where it shows.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "hint": {
+          "default": "",
+          "maxLength": 300,
+          "title": "Hint",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 80,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "sensitive": {
+          "default": false,
+          "title": "Sensitive",
+          "type": "boolean"
+        },
+        "show_in": {
+          "anyOf": [
+            {
+              "maxLength": 140,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Show In"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "enum",
+            "date",
+            "phone",
+            "email"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ExtractionField",
       "type": "object"
     },
     "FlowEdge": {
@@ -821,6 +1302,28 @@
       "title": "HttpToolDefinition",
       "type": "object"
     },
+    "InstructAction": {
+      "description": "A system note for the model's next reply only (sent as written; no placeholders).",
+      "properties": {
+        "do": {
+          "const": "instruct",
+          "default": "instruct",
+          "title": "Do",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "InstructAction",
+      "type": "object"
+    },
     "InterruptionOptions": {
       "additionalProperties": true,
       "description": "How the caller interrupts the agent (SDK ``InterruptionOptions``, ``turn.py:150``).",
@@ -1024,6 +1527,19 @@
       "title": "KnowledgeConfig",
       "type": "object"
     },
+    "ManualTrigger": {
+      "description": "The agent gets the ``extract_now`` tool and decides when to run it.",
+      "properties": {
+        "kind": {
+          "const": "manual",
+          "default": "manual",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ManualTrigger",
+      "type": "object"
+    },
     "NextStep": {
       "description": "One line of the post-create checklist; ``section`` deep-links into the editor, ``href`` elsewhere.",
       "properties": {
@@ -1071,6 +1587,62 @@
         "label"
       ],
       "title": "NextStep",
+      "type": "object"
+    },
+    "NodeExitTrigger": {
+      "description": "When a flow leaves one of these steps (empty: any step).",
+      "properties": {
+        "kind": {
+          "const": "node_exit",
+          "default": "node_exit",
+          "title": "Kind",
+          "type": "string"
+        },
+        "nodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Nodes",
+          "type": "array"
+        }
+      },
+      "title": "NodeExitTrigger",
+      "type": "object"
+    },
+    "NotePushAction": {
+      "description": "Push a note (``text`` may name ``{{ var.<name> }}``); in ``block_id``'s margin when given.",
+      "properties": {
+        "block_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Id"
+        },
+        "do": {
+          "const": "note.push",
+          "default": "note.push",
+          "title": "Do",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "NotePushAction",
       "type": "object"
     },
     "PanelLayout": {
@@ -1628,6 +2200,94 @@
       "title": "RequiredKey",
       "type": "object"
     },
+    "Rule": {
+      "description": "``when`` the condition holds, ``then`` run the actions (see the module docstring).",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Label",
+          "type": "string"
+        },
+        "once": {
+          "default": true,
+          "title": "Once",
+          "type": "boolean"
+        },
+        "then": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "checklist.check": "#/$defs/ChecklistCheckAction",
+                "checklist.set_item": "#/$defs/ChecklistSetItemAction",
+                "details.set": "#/$defs/DetailsSetAction",
+                "disposition.set": "#/$defs/DispositionSetAction",
+                "escalate": "#/$defs/EscalateAction",
+                "instruct": "#/$defs/InstructAction",
+                "note.push": "#/$defs/NotePushAction",
+                "status.set": "#/$defs/StatusSetAction",
+                "var.set": "#/$defs/VarSetAction"
+              },
+              "propertyName": "do"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ChecklistSetItemAction"
+              },
+              {
+                "$ref": "#/$defs/ChecklistCheckAction"
+              },
+              {
+                "$ref": "#/$defs/StatusSetAction"
+              },
+              {
+                "$ref": "#/$defs/DetailsSetAction"
+              },
+              {
+                "$ref": "#/$defs/NotePushAction"
+              },
+              {
+                "$ref": "#/$defs/VarSetAction"
+              },
+              {
+                "$ref": "#/$defs/EscalateAction"
+              },
+              {
+                "$ref": "#/$defs/InstructAction"
+              },
+              {
+                "$ref": "#/$defs/DispositionSetAction"
+              }
+            ]
+          },
+          "title": "Then",
+          "type": "array"
+        },
+        "when": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "When",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "when",
+        "then"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
     "SmsTarget": {
       "description": "One number ``send_sms`` may text, named by its label (V5-25).",
       "properties": {
@@ -1718,6 +2378,40 @@
       "title": "StartNode",
       "type": "object"
     },
+    "StatusSetAction": {
+      "description": "Set the status stamp.",
+      "properties": {
+        "do": {
+          "const": "status.set",
+          "default": "status.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "default": "info",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "StatusSetAction",
+      "type": "object"
+    },
     "TelephonyConfig": {
       "description": "Phone-call settings of an agent (``AgentConfig.telephony``).",
       "properties": {
@@ -1744,6 +2438,100 @@
         }
       },
       "title": "TelephonyConfig",
+      "type": "object"
+    },
+    "TemplateKit": {
+      "description": "A tool kit the starter adds to the new agent (``ToolKitInstantiate``, minus the agent).\n\n``dataset`` names one of the starter's :attr:`StarterTemplate.dataset_seeds` for a\n``dataset`` variant; ``key_columns`` defaults to that table's key columns. A starter never\nbinds a key (``credential_id``) or a connected app, so kits whose variant needs one are\nrefused when the catalogue loads.",
+      "properties": {
+        "add_test_case": {
+          "default": true,
+          "title": "Add Test Case",
+          "type": "boolean"
+        },
+        "block_prefix": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,23}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Prefix"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset"
+        },
+        "key_columns": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key Columns"
+        },
+        "kit_id": {
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
+          "title": "Kit Id",
+          "type": "string"
+        },
+        "settings": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Settings",
+          "type": "object"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant"
+        }
+      },
+      "required": [
+        "kit_id"
+      ],
+      "title": "TemplateKit",
       "type": "object"
     },
     "TemplateRequirements": {
@@ -2090,6 +2878,30 @@
       "title": "ToolSeed",
       "type": "object"
     },
+    "ToolTrigger": {
+      "description": "After one of these tools returns (built-in, attached or block tool names).",
+      "properties": {
+        "kind": {
+          "const": "tool",
+          "default": "tool",
+          "title": "Kind",
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tools"
+      ],
+      "title": "ToolTrigger",
+      "type": "object"
+    },
     "TransferNode": {
       "description": "Hands the call to a human or another number.",
       "properties": {
@@ -2336,6 +3148,48 @@
       "title": "UserTurnLimitOptions",
       "type": "object"
     },
+    "VarSetAction": {
+      "description": "Set a session variable.",
+      "properties": {
+        "do": {
+          "const": "var.set",
+          "default": "var.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "VarSetAction",
+      "type": "object"
+    },
     "VariableSpec": {
       "description": "One variable a flow extracts from the conversation.",
       "properties": {
@@ -2559,6 +3413,14 @@
       "title": "Chips",
       "type": "array"
     },
+    "dataset_seeds": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DatasetSeed"
+      },
+      "title": "Dataset Seeds",
+      "type": "array"
+    },
     "default_voice": {
       "additionalProperties": {
         "type": "string"
@@ -2570,6 +3432,17 @@
     "description": {
       "title": "Description",
       "type": "string"
+    },
+    "extraction": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExtractionConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "flow": {
       "anyOf": [
@@ -2622,6 +3495,14 @@
         "$ref": "#/$defs/KbSeed"
       },
       "title": "Kb Seeds",
+      "type": "array"
+    },
+    "kits": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TemplateKit"
+      },
+      "title": "Kits",
       "type": "array"
     },
     "knowledge": {
@@ -2729,6 +3610,14 @@
         "webhook_endpoint": false
       }
     },
+    "rules": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Rule"
+      },
+      "title": "Rules",
+      "type": "array"
+    },
     "sample_prompts": {
       "default": [],
       "items": {
@@ -2752,6 +3641,15 @@
         }
       ],
       "default": null
+    },
+    "tests": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentTest"
+      },
+      "maxItems": 50,
+      "title": "Tests",
+      "type": "array"
     },
     "timezone": {
       "anyOf": [

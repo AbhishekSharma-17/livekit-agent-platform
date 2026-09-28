@@ -1,6 +1,6 @@
 # Agents
 
-An agent is one row: a `name`, a `pack_id` (`insurance_claim` or `generic`),
+An agent is one row: a `name`, a `pack_id` (`generic`, or a code pack the deployment lists),
 a `mode` (`prompt` or `flow`, derived from whether `config.flow` is set — you
 never send `mode` yourself), and a `config` (`AgentConfig`) holding
 everything else: `instructions`, `pipeline`, `voice`, `capabilities`,
@@ -30,8 +30,9 @@ A **starter template** (`StarterTemplate`) is configuration layered on a
 pack: instructions, greeting, pipeline, capabilities, panel blocks, a flow,
 voice settings, QA, knowledge seeds and HTTP tool seeds, all things you
 could set by hand. A **pack** is code: its own tools, hooks and panel (the
-`insurance_claim` pack's policy lookup and notebook). Use `template_id`;
-the `insurance_claim` starter is how the code pack appears. `pack_id` alone
+legacy `insurance_claim` pack's policy lookup and notebook, loaded only when
+`LKAP_PACKS` lists it). Use `template_id`; `claims_intake` is the same job
+built from blocks and tool kits, no code pack. `pack_id` alone
 creates from the pack's derived starter (`pack:<pack_id>` in
 `lkap://templates`), which is exactly what the manifest seeds. A starter
 never fails to create: what the connection cannot run (DTMF without SIP,

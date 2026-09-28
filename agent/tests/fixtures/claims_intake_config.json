@@ -1,0 +1,1005 @@
+{
+  "config": {
+    "capabilities": {
+      "camera": true,
+      "chat_input": true,
+      "dtmf": false,
+      "screen_share": false,
+      "vision_inject_per_turn": true
+    },
+    "disclosure": {
+      "enabled": true,
+      "position": "both",
+      "text": null
+    },
+    "extraction": {
+      "enabled": true,
+      "fields": [
+        {
+          "description": "",
+          "hint": "The policyholder's full name as it appears on the policy, as the claimant gives it",
+          "label": "Policyholder",
+          "name": "caller_name",
+          "options": null,
+          "required": true,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "The policy number as printed on the card, letters, a hyphen and digits, a zero never the letter O (like H0-44721)",
+          "label": "Policy number",
+          "name": "policy_number",
+          "options": null,
+          "required": true,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "The status the policy lookup reported and the agent read back: active or lapsed",
+          "label": "Policy status",
+          "name": "policy_status",
+          "options": [
+            "active",
+            "lapsed"
+          ],
+          "required": false,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "enum"
+        },
+        {
+          "description": "",
+          "hint": "The best phone number for the adjuster to reach the claimant",
+          "label": "Best number",
+          "name": "callback_number",
+          "options": null,
+          "required": true,
+          "sensitive": true,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "phone"
+        },
+        {
+          "description": "",
+          "hint": "When the loss happened, in the claimant's words or as a date",
+          "label": "Date of loss",
+          "name": "date_of_loss",
+          "options": null,
+          "required": true,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "Where the loss happened: the address, the room or the place",
+          "label": "Where",
+          "name": "loss_location",
+          "options": null,
+          "required": true,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "One line: what happened",
+          "label": "What happened",
+          "name": "reason",
+          "options": null,
+          "required": true,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "The claimant's account of the loss in two or three sentences: what happened, what was damaged and what they have done since",
+          "label": "The claim",
+          "name": "request_details",
+          "options": null,
+          "required": true,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "Water in a home (burst pipe, leak, backup): home_water_damage; a vehicle crash: auto_collision; stolen or lost property: theft_property_loss; medical bills: health_medical_reimbursement; a delayed or cancelled trip: travel_delay_cancellation; else other. Empty until the loss is described",
+          "label": "Kind of claim",
+          "name": "claim_type",
+          "options": [
+            "home_water_damage",
+            "auto_collision",
+            "theft_property_loss",
+            "health_medical_reimbursement",
+            "travel_delay_cancellation",
+            "other"
+          ],
+          "required": false,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "enum"
+        },
+        {
+          "description": "",
+          "hint": "true only when someone is hurt or needs medical attention, or the home or scene is unsafe (fire, gas, exposed wiring, sewage, mold, nowhere to live); false when the claimant says everyone is safe and no one is hurt",
+          "label": "Safety concern",
+          "name": "safety_concern",
+          "options": null,
+          "required": false,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "boolean"
+        },
+        {
+          "description": "",
+          "hint": "Who is hurt or what is unsafe, in a few words",
+          "label": "Safety details",
+          "name": "safety_details",
+          "options": null,
+          "required": false,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "The claimant's rough estimate of the loss in US dollars, as a number",
+          "label": "Estimated loss (USD)",
+          "name": "estimated_loss_usd",
+          "options": null,
+          "required": false,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "number"
+        },
+        {
+          "description": "",
+          "hint": "true when the claimant's latest turn asks whether the loss is covered, what will be paid or whether the claim will be approved; otherwise false",
+          "label": "Asked about coverage",
+          "name": "asked_about_coverage",
+          "options": null,
+          "required": false,
+          "sensitive": false,
+          "show_in": null,
+          "type": "boolean"
+        },
+        {
+          "description": "",
+          "hint": "When suits them for a call back, in their words",
+          "label": "When to call back",
+          "name": "preferred_time",
+          "options": null,
+          "required": false,
+          "sensitive": false,
+          "show_in": "notebook:claim_notebook.summary",
+          "type": "string"
+        },
+        {
+          "description": "",
+          "hint": "true when the caller asks for a person, is upset or distressed, or the matter is urgent or about safety; otherwise leave it empty",
+          "label": "Wants a person",
+          "name": "needs_person",
+          "options": null,
+          "required": false,
+          "sensitive": false,
+          "show_in": null,
+          "type": "boolean"
+        }
+      ],
+      "min_turn_chars": 12,
+      "still_needed": "checklist",
+      "triggers": [
+        {
+          "kind": "every_n_turns",
+          "n": 1
+        }
+      ]
+    },
+    "flow": null,
+    "guardrails": {
+      "budget_ms": 300,
+      "input": [],
+      "model": null,
+      "on_trip": "interrupt",
+      "output": [],
+      "safe_reply": "I'm sorry, I can't help with that. Is there anything else I can help you with?",
+      "tool_output": []
+    },
+    "instructions": "You are the live voice intake agent for an insurance first notice of loss (FNOL) team at Acme Mutual, a fictional insurer.\nSpeak naturally, warmly and briefly. The claimant may be stressed. Acknowledge what they say, then keep the intake moving one or two questions at a time. A notebook on the claimant's screen fills in as you talk: the claim summary, what is still needed, the pictures and your notes. Narrate what you are doing in short asides like \"I'm noting that\" or \"let me check that policy\".\n\nSafety first. Your greeting asks whether everyone is safe. If the claimant mentions an injury, someone needing medical attention, or an unsafe home or scene (fire, gas, exposed wiring, sewage, mold, nowhere to live), tell them to contact emergency services first if anyone is in danger, say a person from the claims team will take over, and call escalate_to_human with a one-line reason.\n\nThe policy. As soon as you hear a policy number, or the policyholder's name when they do not have the number, look it up with policy_lookup. Pass the number as it is printed on the card: letters, a hyphen, then digits, and a zero never the letter O (for example H0-44721). When it returns, read back the policyholder's name and the policy line in one sentence. If nothing is found, ask them to read the number again digit by digit, or look it up by their name. If the policy is lapsed, say a person will review it and keep collecting the loss facts.\n\nThe claim. Let the claimant tell what happened in their own words, then fill the gaps one at a time: when it happened, where, what was damaged, and roughly what it might cost. The open items on the screen are a checklist, not a script: finish what the claimant is describing before you ask the next one, and never read the list out. Dates, addresses and numbers wait until the current topic is closed.\n\nDocuments. Once the kind of claim is clear, the screen lists the documents that kind of claim needs. Ask about the ones that follow naturally from the conversation, one at a time.\n\nCoverage. Never promise coverage, payment, liability, benefits or approval. If the claimant asks whether something is covered or will be paid, say \"I can't confirm coverage\", explain that an adjuster reviews the policy, the cause of loss and the documents, and carry on with the intake. Policy details from the lookup describe what is on the policy, not what will be paid.\n\nEvidence on camera. The claimant can turn on their camera and show you the damage. Whenever you can see something relevant (damage, water lines, dents, broken items, the scene, receipts, documents, serial numbers), say what you see in one or two concrete sentences and call pin_frame in that same turn with a short caption as the note. Report only what you can actually see: if the claimant names something the frame does not clearly show, say what you do see, ask for a closer look or more light, and pin it with confirmed set to false; pin it again with confirmed true once you can see it.\n\nThe sketch. When the claimant asks for a sketch, or once you understand where and how it happened, call generate_image with this style and then the scene: \"A quick hand-drawn pen sketch on cream notebook paper, the kind an insurance adjuster draws in a field notebook. Black ink line drawing, loose confident strokes, small handwritten labels in the same ink, a light blue wash only where water is present and a light red wash only where impact damage is. Top-down or simple perspective, no photorealism, no shading gradients, no people. Write no names, dates, addresses or claim numbers anywhere; the only text is short labels for the objects in the scene. Scene to draw:\" followed by a short description of the layout and what happened. Ask whether the sketch looks right, and draw it again with their correction.\n\nThe hand-off. When the core facts are in, summarise the claim back in two sentences, write the adjuster's hand-off summary into the notebook's Notes section with notebook_write (the policy, what happened, when and where, the kind of claim, any safety concern and the documents still needed), and tell the claimant an adjuster will be in touch.\n\nWhen you call a tool, say at most one short clause first (\"Let me check that policy\"), and speak the result only once it comes back.\n\n<!-- kit:record_lookup:policy -->\nWhen the caller gives a reference, look the record up with policy_lookup before you answer. Read back only what they need, never the whole record. If nothing is found, say so and ask them to check the reference; never guess a record.\n<!-- /kit:record_lookup:policy -->\n\n<!-- kit:structured_intake:claim -->\nTake down the caller's details as you talk: their name, why they are calling, what happened, the best number to call back and when suits them. The panel shows what is still needed: ask for one missing item at a time and never make one up. Before you finish, read the details back and correct anything they change.\n<!-- /kit:structured_intake:claim -->\n\n<!-- kit:notify_escalate:escalate -->\nIf the caller asks for a person, is upset, or the matter is urgent or about safety, tell them you are bringing in the team and call escalate_to_human with a one-line reason. Do not argue or try to talk them out of it.\n<!-- /kit:notify_escalate:escalate -->",
+    "knowledge": {
+      "auto_inject": true,
+      "kb_ids": [
+        "kb-0",
+        "kb-1"
+      ],
+      "max_inject_tokens": 1200,
+      "min_score": null,
+      "mode": "hybrid",
+      "prefetch": true,
+      "query_mode": "conversation",
+      "rerank": "none",
+      "skip_short_turns": true,
+      "top_k": 4
+    },
+    "locale": {
+      "caller_timezone": "detect"
+    },
+    "memory": {
+      "consent_line": null,
+      "enabled": false,
+      "max_recall_tokens": 400,
+      "retention_days": 90,
+      "scope": "agent",
+      "verbatim": false
+    },
+    "pack_settings": {},
+    "panel": {
+      "accept_state_delta": false,
+      "blocks": [
+        {
+          "config": {},
+          "id": "status",
+          "order": 0,
+          "title": null,
+          "type": "status"
+        },
+        {
+          "config": {
+            "caller_can_draw": false,
+            "caller_can_write": true,
+            "font": "handwritten",
+            "paper": "ruled",
+            "sections": [
+              {
+                "id": "notes",
+                "kind": "text",
+                "title": "Notes"
+              },
+              {
+                "id": "still_needed",
+                "kind": "checklist",
+                "title": "Still needed"
+              },
+              {
+                "id": "summary",
+                "kind": "details",
+                "title": "Summary"
+              },
+              {
+                "canvas_block_id": "sketch_board",
+                "id": "sketch",
+                "kind": "ink",
+                "title": "Sketch"
+              }
+            ]
+          },
+          "id": "claim_notebook",
+          "order": 1,
+          "title": "Claim notebook",
+          "type": "notebook"
+        },
+        {
+          "config": {
+            "caller_can_draw": true
+          },
+          "id": "sketch_board",
+          "order": 2,
+          "title": "Sketch",
+          "type": "canvas"
+        },
+        {
+          "config": {},
+          "id": "gallery",
+          "order": 3,
+          "title": "Pictures",
+          "type": "gallery"
+        },
+        {
+          "config": {
+            "columns": []
+          },
+          "id": "policy_results",
+          "order": 4,
+          "title": "Record",
+          "type": "table"
+        },
+        {
+          "config": {},
+          "id": "checklist",
+          "order": 5,
+          "title": "Still needed",
+          "type": "checklist"
+        },
+        {
+          "config": {},
+          "id": "handoff",
+          "order": 6,
+          "title": "Hand-over",
+          "type": "handoff"
+        }
+      ],
+      "layout": "wide",
+      "panel_id": "composite"
+    },
+    "pipeline": {
+      "avatar": null,
+      "avatar_options": {
+        "fit": null,
+        "framing": null,
+        "idle_timeout_s": null,
+        "max_duration_s": null,
+        "participant_name": "Avatar",
+        "video_quality": null
+      },
+      "conversation_preset": "custom",
+      "image_gen": null,
+      "llm": {
+        "credential_id": null,
+        "fields": {},
+        "model": "google/gemini-3.5-flash",
+        "provider_id": "livekit-inference-llm"
+      },
+      "mode": "cascaded",
+      "noise_cancellation": null,
+      "realtime": null,
+      "stt": {
+        "credential_id": null,
+        "fields": {},
+        "model": "deepgram/nova-3",
+        "provider_id": "livekit-inference-stt"
+      },
+      "tts": {
+        "credential_id": null,
+        "fields": {},
+        "model": "inworld/inworld-tts-2",
+        "provider_id": "livekit-inference-tts"
+      },
+      "turn_detection": null,
+      "turn_detector": null,
+      "turn_handling": {},
+      "vad": null,
+      "workflow_llm": null
+    },
+    "privacy": {
+      "scrub_model": null,
+      "storage_tier": "full",
+      "stt_redact": [],
+      "telemetry_pii": true
+    },
+    "publish_gate": {
+      "min_pass_ratio": 1.0,
+      "require_tests": false
+    },
+    "qa": {
+      "enabled": false,
+      "fields": [],
+      "model": null,
+      "rubric_prompt": null
+    },
+    "recording": {
+      "audio_only": true,
+      "consent_text": null,
+      "enabled": false,
+      "require_consent": false,
+      "retention_days": null,
+      "storage_config_id": null
+    },
+    "rules": [
+      {
+        "enabled": true,
+        "id": "safety_first",
+        "label": "An injury or an unsafe scene goes to a person",
+        "once": true,
+        "then": [
+          {
+            "do": "escalate",
+            "mode": "transfer",
+            "reason": "The claimant reported an injury or an unsafe home or scene.",
+            "urgency": "high"
+          },
+          {
+            "do": "status.set",
+            "label": "Safety review",
+            "tone": "danger"
+          },
+          {
+            "do": "instruct",
+            "text": "The claimant reported an injury or an unsafe scene. Tell them to contact emergency services first if anyone is in danger, and that a person from the claims team will take over now."
+          }
+        ],
+        "when": "var.safety_concern == true"
+      },
+      {
+        "enabled": true,
+        "id": "documents_water",
+        "label": "Home water damage: the documents to gather and the coverage caveat",
+        "once": true,
+        "then": [
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Documents the loss condition.",
+            "id": "doc_water_1",
+            "label": "Photos or video of damaged areas before cleanup"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Shows steps taken to prevent additional damage.",
+            "id": "doc_water_2",
+            "label": "Mitigation or drying invoice"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports the estimated repair cost.",
+            "id": "doc_water_3",
+            "label": "Repair estimate or contractor assessment"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports contents reimbursement.",
+            "id": "doc_water_4",
+            "label": "Receipts for damaged personal property"
+          },
+          {
+            "do": "instruct",
+            "text": "This is a water damage claim. Its review turns on the source of the water, how sudden it was, the steps taken to stop more damage, exclusions and whether flood cover is separate. Never promise coverage: if asked, say \"I can't confirm coverage\" and that an adjuster reviews the policy forms, endorsements and the cause of loss."
+          }
+        ],
+        "when": "var.claim_type == \"home_water_damage\""
+      },
+      {
+        "enabled": true,
+        "id": "documents_auto",
+        "label": "Auto collision: the documents to gather and the coverage caveat",
+        "once": true,
+        "then": [
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Documents impact location and visible damage.",
+            "id": "doc_auto_1",
+            "label": "Photos of vehicles and scene"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Confirms crash facts and involved parties.",
+            "id": "doc_auto_2",
+            "label": "Police report or incident exchange form"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports vehicle damage costs.",
+            "id": "doc_auto_3",
+            "label": "Repair estimate or tow/storage invoice"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports injury-related escalation and benefits.",
+            "id": "doc_auto_4",
+            "label": "Medical documentation for any injuries"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Helps liability review.",
+            "id": "doc_auto_5",
+            "label": "Other driver and witness information"
+          },
+          {
+            "do": "instruct",
+            "text": "This is an auto collision claim. Its review depends on who was at fault, the coverage type, deductibles, the police report, photos and the repair estimate. Any injury needs a person straight away, and make no promise about medical cover or payment: if asked, say \"I can't confirm coverage\"."
+          }
+        ],
+        "when": "var.claim_type == \"auto_collision\""
+      },
+      {
+        "enabled": true,
+        "id": "documents_theft",
+        "label": "Theft or property loss: the documents to gather and the coverage caveat",
+        "once": true,
+        "then": [
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Most theft claims require a filed report.",
+            "id": "doc_theft_1",
+            "label": "Police report number or theft report"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports ownership and value.",
+            "id": "doc_theft_2",
+            "label": "Receipts, serial numbers, or ownership proof"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Helps item identification.",
+            "id": "doc_theft_3",
+            "label": "Photos of the item or packaging if available"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Helps verify circumstances of loss.",
+            "id": "doc_theft_4",
+            "label": "Location timeline and access details"
+          },
+          {
+            "do": "instruct",
+            "text": "This is a theft or property loss claim. Its review needs proof of ownership, where it was lost, who had access and a police or incident report number; high-value electronics or jewellery may have limits. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+          }
+        ],
+        "when": "var.claim_type == \"theft_property_loss\""
+      },
+      {
+        "enabled": true,
+        "id": "documents_medical",
+        "label": "Medical reimbursement: the documents to gather and the coverage caveat",
+        "once": true,
+        "then": [
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Shows services, dates, and charged amounts.",
+            "id": "doc_medical_1",
+            "label": "Itemized provider bill"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Shows what was paid or denied.",
+            "id": "doc_medical_2",
+            "label": "Explanation of benefits or denial notice"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports reimbursement amount.",
+            "id": "doc_medical_3",
+            "label": "Proof of payment"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports eligibility review.",
+            "id": "doc_medical_4",
+            "label": "Provider name and diagnosis or treatment summary"
+          },
+          {
+            "do": "instruct",
+            "text": "This is a medical reimbursement claim. Its review depends on the plan terms, eligibility, the dates of service, itemised bills, the explanation of benefits and proof of payment. Give no medical, benefits or coverage advice: if asked, say \"I can't confirm coverage\"."
+          }
+        ],
+        "when": "var.claim_type == \"health_medical_reimbursement\""
+      },
+      {
+        "enabled": true,
+        "id": "documents_travel",
+        "label": "Travel delay or cancellation: the documents to gather and the coverage caveat",
+        "once": true,
+        "then": [
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Confirms the covered travel disruption.",
+            "id": "doc_travel_1",
+            "label": "Carrier cancellation or delay notice"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Shows trip dates and route.",
+            "id": "doc_travel_2",
+            "label": "Original itinerary and booking confirmation"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports claimed loss amount.",
+            "id": "doc_travel_3",
+            "label": "Receipts for prepaid nonrefundable expenses"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Prevents duplicate recovery.",
+            "id": "doc_travel_4",
+            "label": "Refund, voucher, or credit documentation"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports cause of disruption.",
+            "id": "doc_travel_5",
+            "label": "Weather, emergency, or event documentation if available"
+          },
+          {
+            "do": "instruct",
+            "text": "This is a travel delay or cancellation claim. Its review depends on the covered reason, the carrier's notice, the trip dates, prepaid amounts that cannot be refunded and any refunds or credits received. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+          }
+        ],
+        "when": "var.claim_type == \"travel_delay_cancellation\""
+      },
+      {
+        "enabled": true,
+        "id": "documents_other",
+        "label": "Other: the documents to gather and the coverage caveat",
+        "once": true,
+        "then": [
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Documents what happened.",
+            "id": "doc_other_1",
+            "label": "Photos or available proof of loss"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Supports the claimed amount.",
+            "id": "doc_other_2",
+            "label": "Receipts, estimates, or invoices"
+          },
+          {
+            "blocking": false,
+            "do": "checklist.set_item",
+            "done": false,
+            "hint": "Helps verify loss facts.",
+            "id": "doc_other_3",
+            "label": "Any third-party report or confirmation"
+          },
+          {
+            "do": "instruct",
+            "text": "The kind of claim is not clear yet: collect the basic loss facts and any proof of loss, and a person will triage it. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+          }
+        ],
+        "when": "var.claim_type == \"other\""
+      },
+      {
+        "enabled": true,
+        "id": "coverage_caveat",
+        "label": "Never confirm coverage",
+        "once": false,
+        "then": [
+          {
+            "do": "instruct",
+            "text": "The claimant asked about coverage or payment. Say \"I can't confirm coverage\": an adjuster reviews the policy, the cause of loss and the documents. Promise no coverage, payment, liability or approval, then carry on with the intake."
+          }
+        ],
+        "when": "var.asked_about_coverage == true"
+      },
+      {
+        "enabled": true,
+        "id": "policy_lapsed",
+        "label": "A lapsed policy needs a person's review",
+        "once": true,
+        "then": [
+          {
+            "do": "status.set",
+            "label": "Policy needs review",
+            "tone": "danger"
+          },
+          {
+            "block_id": null,
+            "do": "note.push",
+            "text": "The policy is lapsed: a person reviews it before the claim is assigned."
+          },
+          {
+            "do": "instruct",
+            "text": "The policy is lapsed. Tell the claimant a person will review it, and keep collecting the loss facts."
+          }
+        ],
+        "when": "var.policy_status == \"lapsed\""
+      },
+      {
+        "enabled": true,
+        "id": "high_loss",
+        "label": "A high estimated loss gets a prompt adjuster review",
+        "once": true,
+        "then": [
+          {
+            "do": "status.set",
+            "label": "Adjuster review",
+            "tone": "warning"
+          },
+          {
+            "block_id": "claim_notebook",
+            "do": "note.push",
+            "text": "High estimated loss: flag for a prompt adjuster review."
+          }
+        ],
+        "when": "var.estimated_loss_usd >= 25000"
+      },
+      {
+        "enabled": true,
+        "id": "packet_ready",
+        "label": "The hand-off summary, once the core facts are in",
+        "once": true,
+        "then": [
+          {
+            "block_id": "claim_notebook",
+            "do": "note.push",
+            "text": "Hand-off: {{ var.caller_name }}, policy {{ var.policy_number }}. {{ var.claim_type }} on {{ var.date_of_loss }} at {{ var.loss_location }}. {{ var.request_details }}"
+          },
+          {
+            "do": "status.set",
+            "label": "Ready for an adjuster",
+            "tone": "success"
+          },
+          {
+            "do": "instruct",
+            "text": "The core facts are in. Summarise the claim back in two sentences, write the hand-off summary into the notebook's Notes section with notebook_write, and tell the claimant an adjuster will be in touch."
+          }
+        ],
+        "when": "var.caller_name is set and var.policy_number is set and var.claim_type is set and var.date_of_loss is set and var.loss_location is set and var.request_details is set"
+      },
+      {
+        "enabled": true,
+        "id": "policy_found",
+        "label": "Show that a record was looked up",
+        "once": false,
+        "then": [
+          {
+            "do": "status.set",
+            "label": "Record checked",
+            "tone": "info"
+          }
+        ],
+        "when": "tool.policy_lookup.ok"
+      },
+      {
+        "enabled": true,
+        "id": "claim_complete",
+        "label": "Mark the intake complete",
+        "once": true,
+        "then": [
+          {
+            "do": "status.set",
+            "label": "Details taken",
+            "tone": "success"
+          }
+        ],
+        "when": "var.caller_name is set and var.reason is set"
+      },
+      {
+        "enabled": true,
+        "id": "escalate_hand_over",
+        "label": "Hand over when a person is needed",
+        "once": true,
+        "then": [
+          {
+            "do": "escalate",
+            "mode": "transfer",
+            "reason": "The caller asked for a person, or the matter is urgent.",
+            "urgency": "high"
+          },
+          {
+            "do": "status.set",
+            "label": "Handing over",
+            "tone": "warning"
+          }
+        ],
+        "when": "var.needs_person == true"
+      }
+    ],
+    "telephony": {
+      "amd": {
+        "enabled": false,
+        "ivr_detection": false,
+        "message": null,
+        "on_machine": "hangup"
+      },
+      "sms_targets": [],
+      "transfer_targets": []
+    },
+    "tests": [
+      {
+        "expectations": [
+          "The agent's first message asks whether the caller and everyone else are safe.",
+          "The agent looks the policy up with policy_lookup and reads back the policyholder's name (Maya Singh) and the policy line (homeowners) before relying on it.",
+          "The agent treats the loss as a home water damage claim and asks about documents that fit it: photos before cleanup, a drying or mitigation invoice, a repair estimate or receipts.",
+          "When the caller asks whether the loss is covered, the agent says it can't confirm coverage and promises no payment or approval.",
+          "When the caller asks for a sketch, the agent calls generate_image with a pen-sketch description of the kitchen and asks whether it looks right.",
+          "Before finishing, the agent writes a hand-off summary into the notebook with notebook_write and summarises the claim back in two sentences.",
+          "The agent asks one or two questions at a time and does not read out a checklist."
+        ],
+        "id": "fnol-golden",
+        "max_turns": 14,
+        "mocks": {
+          "policy_lookup": [
+            {
+              "coverages": "Dwelling $620,000; Personal property $310,000; Water backup and sump overflow endorsement $10,000; Loss of use 12 months",
+              "deductibles": "all perils $1,000; wind hail $2,500",
+              "effective_period": "2026-01-01 to 2026-12-31",
+              "notes": "Sump pump and water backup endorsement is on file.",
+              "policy_line": "Homeowners (HO-3)",
+              "policy_number": "H0-44721",
+              "policyholder_name": "Maya Singh",
+              "status": "active"
+            }
+          ]
+        },
+        "name": "First notice of loss: a burst pipe in the kitchen",
+        "persona_instructions": "You are Maya Singh, a homeowner. Last night a pipe under your kitchen sink burst and water soaked the kitchen floor and the lower cabinets; you turned the water off at the main. Everyone is safe and no one is hurt. Your policy number is H0-44721. The best number to reach you is 555 0100. It happened yesterday evening at your home on Elm Street. You think the damage is about 8,000 dollars. Answer briefly and only what you are asked, except: after you have described the damage, ask whether this is covered, and later ask the agent to sketch the kitchen so the adjuster can see where the pipe burst.",
+        "scenario": "Report the burst pipe, get the policy checked, ask about coverage and ask for a sketch."
+      },
+      {
+        "expectations": [
+          "The agent's first message asks whether the caller and everyone else are safe.",
+          "When the caller says the passenger is hurt, the agent tells them to contact emergency services if anyone is in danger and says a person from the claims team will take over (escalate_to_human or a hand-over).",
+          "The agent looks the policy up by the policyholder's name with policy_lookup and reads back the policy line (personal auto).",
+          "The agent never promises coverage for the injury or the car."
+        ],
+        "id": "fnol-safety",
+        "max_turns": 10,
+        "mocks": {
+          "policy_lookup": [
+            {
+              "coverages": "Bodily injury 100/300; Collision; Comprehensive; Medical payments $5,000; Rental reimbursement $40/day up to 30 days",
+              "deductibles": "collision $500; comprehensive $250",
+              "effective_period": "2026-03-15 to 2026-09-15",
+              "notes": "Two listed drivers. Rental reimbursement is available while the vehicle is in the shop.",
+              "policy_line": "Personal auto",
+              "policy_number": "AUTO-90210",
+              "policyholder_name": "Jordan Lee",
+              "status": "active"
+            }
+          ]
+        },
+        "name": "First notice of loss: a collision with an injury",
+        "persona_instructions": "You are Jordan Lee. An hour ago another car hit yours at a junction. Your passenger's neck hurts and she is waiting for an ambulance. You do not have your policy number to hand; your name is Jordan Lee. Answer briefly. You can show the dented door on camera if asked, but this is a text chat, so describe it instead.",
+        "scenario": "Report the collision and say that your passenger is hurt."
+      },
+      {
+        "expectations": [
+          "The agent says what it can see on camera in one or two concrete sentences and pins the frame with pin_frame and a short caption as the note, or says plainly that it has no camera view yet.",
+          "The agent reports only what it can see and asks for a closer look when something is unclear."
+        ],
+        "id": "fnol-evidence",
+        "max_turns": 8,
+        "mocks": {
+          "policy_lookup": [
+            {
+              "coverages": "Dwelling $620,000; Personal property $310,000; Water backup and sump overflow endorsement $10,000; Loss of use 12 months",
+              "deductibles": "all perils $1,000; wind hail $2,500",
+              "effective_period": "2026-01-01 to 2026-12-31",
+              "notes": "Sump pump and water backup endorsement is on file.",
+              "policy_line": "Homeowners (HO-3)",
+              "policy_number": "H0-44721",
+              "policyholder_name": "Maya Singh",
+              "status": "active"
+            }
+          ]
+        },
+        "name": "First notice of loss: showing the damage on camera",
+        "persona_instructions": "You are Maya Singh, policy H0-44721. Everyone is safe. Water from a burst pipe damaged your kitchen floor. You have your camera on and are pointing it at the swollen floorboards and a water line on the cabinet. Answer briefly.",
+        "scenario": "Show the water damage on camera and ask the agent to note it."
+      },
+      {
+        "expectations": [
+          "The agent asks for the caller's name.",
+          "The agent reads the details back before finishing."
+        ],
+        "id": "kit-structured_intake-claim",
+        "max_turns": 12,
+        "mocks": {},
+        "name": "Takes down the details",
+        "persona_instructions": "You are Demo Rao. Your internet has been down since yesterday evening. You would like a call back tomorrow morning on 555 0100. Give details only when asked.",
+        "scenario": "Report the problem and ask for a call back."
+      },
+      {
+        "expectations": [
+          "The agent says it is bringing in the team instead of arguing."
+        ],
+        "id": "kit-notify_escalate-escalate",
+        "max_turns": 12,
+        "mocks": {},
+        "name": "Hands over when asked",
+        "persona_instructions": "You are a caller who is frustrated and wants to speak to a person straight away.",
+        "scenario": "Ask for a person in your first message."
+      }
+    ],
+    "timezone": "UTC",
+    "tools": {
+      "apps": {
+        "accounts": {},
+        "allowed_toolkits": [],
+        "denied_actions": [],
+        "mode": "off",
+        "reviewed_actions": [],
+        "router": {
+          "execute": true,
+          "manage_connections": false,
+          "search": true
+        }
+      },
+      "builtin_disabled": [],
+      "builtin_execution": {},
+      "execution_default": "blocking",
+      "fetch_url_allowed_hosts": [],
+      "http_request_enabled": false,
+      "max_tool_steps": 3,
+      "notify_team": null,
+      "sms": null,
+      "tool_ids": [
+        "tool-policy-lookup"
+      ],
+      "web_search": null
+    },
+    "v": 2,
+    "voice": {
+      "allow_interruptions": true,
+      "ambient_sound": "none",
+      "auto_detect": false,
+      "first_speaker": "agent",
+      "greeting": "I can start the claim while we talk. First, are you and everyone else in a safe place?",
+      "greeting_mode": "say",
+      "language": "en",
+      "languages": [],
+      "thinking_sound": "none",
+      "user_away_timeout_s": 15.0,
+      "voices_by_language": {}
+    }
+  },
+  "tools": [
+    {
+      "bindings": [
+        {
+          "path": "",
+          "to": "table:policy_results"
+        }
+      ],
+      "dataset_id": "00000000000000000000000000000000",
+      "description": "Find a record in the lookup table by its reference. Ask the caller for the reference first and pass it as they said it.",
+      "key_columns": [
+        "policy_number",
+        "policyholder_name"
+      ],
+      "kind": "dataset",
+      "match": "exact",
+      "max_result_chars": 2000,
+      "max_rows": 3,
+      "name": "policy_lookup",
+      "pinned_arguments": {},
+      "requires_vars": [],
+      "return_columns": []
+    }
+  ]
+}

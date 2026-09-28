@@ -81,7 +81,9 @@ class Settings(BaseSettings):
     #: not "this loopback, on whatever port I actually bound". Unset by
     #: default so a misconfigured host never silently derives the wrong one.
     api_base_url: str | None = None
-    packs: str = "packs.insurance_claim,packs.generic"
+    #: `LKAP_PACKS`: the code packs this api loads. V6-22 (D-V6-21): the generic pack only;
+    #: to keep the legacy insurance pack, set `packs.insurance_claim,packs.generic` (RUNBOOK).
+    packs: str = "packs.generic"
     log_level: str = "INFO"
     log_json: bool = False
     embedder: str = "fastembed"

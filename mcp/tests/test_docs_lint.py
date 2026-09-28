@@ -406,6 +406,7 @@ ENV_VAR_ALLOWLIST: Final[frozenset[str]] = frozenset(
         "LKAP_NET_ALLOW_PRIVATE_HOSTS",
         "LKAP_HTTP_TOOL_USER_AGENT",
         "LKAP_HTTP_TOOL_ALLOWED_HOSTS",  # V5-25: fetch_url's ceiling
+        "LKAP_PACKS",  # V6-22: the legacy insurance pack loads only when a deployment lists it
         "LIVEKIT_URL",
         "LIVEKIT_API_KEY",
         "LIVEKIT_API_SECRET",
@@ -806,7 +807,7 @@ def _template_ids_mentioned() -> set[str]:
 
 
 def test_recipes_mention_template_ids() -> None:
-    assert {"blank", "insurance_claim", "receptionist"} <= _template_ids_mentioned()
+    assert {"blank", "claims_intake", "receptionist"} <= _template_ids_mentioned()
 
 
 @pytest.fixture

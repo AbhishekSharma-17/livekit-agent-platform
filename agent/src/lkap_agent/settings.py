@@ -90,7 +90,9 @@ class Settings(BaseSettings):
 
     service_token: str
     api_base_url: str
-    packs: str = "packs.insurance_claim,packs.generic"
+    #: `LKAP_PACKS`: the code packs this worker loads. V6-22 (D-V6-21): the generic pack only;
+    #: to keep the legacy insurance pack, set `packs.insurance_claim,packs.generic` on the api too.
+    packs: str = "packs.generic"
     http_tool_allowed_hosts: str = ""
     #: `LKAP_MCP_ALLOWED_HOSTS` (V5-09, D-V5-4): comma-separated MCP server hosts. Empty = any
     #: public `https` host; non-empty = a ceiling no MCP server may leave; `@http` = reuse

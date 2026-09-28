@@ -53,10 +53,10 @@ result is usually ready when the turn ends). A chunk injected in the last
 three turns is not injected again. `agent_validate` flags a `min_score`
 outside 0–1 and warns when `rerank="local"` runs without `prefetch`.
 
-Packs can seed knowledge bases at agent-creation time (`PackManifest.
-kb_seeds`) — the `insurance_claim` pack seeds "Insurance policy lines" and
-"Intake playbook" from its own files, already populated by the time
-`agent_create` returns.
+Starter templates and packs can seed knowledge bases at agent-creation time
+(`PackManifest.kb_seeds` for a pack) — the `claims_intake` starter seeds
+"Claims intake · Policy lines" and "Claims intake · Intake playbook" from its
+own files, already populated by the time `agent_create` returns.
 
 ## Measuring retrieval
 

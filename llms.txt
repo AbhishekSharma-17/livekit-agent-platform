@@ -2,9 +2,10 @@
 
 > A configurable voice/video agent platform on LiveKit: connections, agents
 > (prompt or flow), providers and keys, knowledge bases (with evaluations
-> and bring-your-own stores), HTTP/MCP tools, connected apps through
-> Composio, panels, telephony, sessions, QA, simulated-caller tests, caller
-> memory, guardrails and costs — all reachable by a coding agent through one
+> and bring-your-own stores), HTTP/MCP tools, lookup tables and tool kits,
+> connected apps through Composio, panels (a notebook, a drawing board and
+> more blocks), live extraction and rules, telephony, sessions, QA,
+> simulated-caller tests, caller memory, guardrails and costs — all reachable by a coding agent through one
 > MCP server, `lkap` (package name lkap-mcp, `mcp/`). There is no CLI.
 
 Start with the platform guide, then the reference docs below. A coding agent
@@ -35,6 +36,13 @@ exist for Codex, generic agents, and anyone browsing the checkout.
   the knowledge service, connected apps, MCP sign-in, caller files, consent,
   privacy, languages, tests, telephony, listen-in, guardrails, memory, panel
   blocks — with an index of every v5 decision and ruling.
+- [docs/v6/ARCHITECTURE-V6.md](docs/v6/ARCHITECTURE-V6.md): what v6 added —
+  streaming speech and the recommended stacks, OpenRouter prices, the
+  notebook, drawing board and next panel blocks, tool context and bindings,
+  live extraction and rules, lookup tables, the flow tool step, tool kits,
+  the claims-intake starter, avatar framing, connection names and workers —
+  with an index of every v6 decision and ruling
+  ([docs/v6/README.md](docs/v6/README.md) indexes the v6 docs).
 
 ## Optional
 

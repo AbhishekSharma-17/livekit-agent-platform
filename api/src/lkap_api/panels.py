@@ -29,6 +29,12 @@ name, is an error at ``panel.blocks[i].config.allowed_hosts``), and a ``link``
 block on an agent set up for phone calls without text messages gets a tip
 (:data:`LINK_ON_PHONE_MESSAGE`): phone callers cannot see it, so the agent can
 only text the link when ``tools.sms`` is set.
+
+V6-06: ``caller_can_edit`` is accepted by the ``details`` and ``checklist`` configs
+only (anywhere else it is an unknown key, an error). Two tips: an editable block on an
+agent set up for phone calls (:data:`CALLER_EDIT_ON_PHONE_MESSAGE`: phone callers see no
+screen), and a picture model (``pipeline.image_gen``) on a composite panel with blocks
+but no ``gallery`` (:data:`PICTURES_NEED_A_GALLERY_MESSAGE`: ``generate_image`` needs one).
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from lkap_contracts.agent_config import AgentConfig, PanelLayout
 from lkap_contracts.blocks import validate_panel_block_configs
 from lkap_contracts.common import Issue
 from lkap_contracts.packs import PackManifest
+from lkap_contracts.ui_protocol import EDITABLE_BLOCK_TYPES
 
 from lkap_api.config_service import ValidationContext, register_validator
 from lkap_api.db.models import Agent
@@ -48,6 +55,19 @@ LINK_ON_PHONE_MESSAGE: Final[str] = (
     "Tip: callers on a phone line cannot see links; set up text messages so the agent can text the "
     "link to them instead"
 )
+
+#: A block the caller may edit on an agent set up for phone calls (V6-06, a tip).
+CALLER_EDIT_ON_PHONE_MESSAGE: Final[str] = (
+    "Tip: callers on a phone line cannot see the panel, so only callers on the web page can change this block"
+)
+#: A picture model on a panel with no gallery block (V6-06, a tip).
+PICTURES_NEED_A_GALLERY_MESSAGE: Final[str] = (
+    "Tip: a picture model is set, but the panel has no gallery block, so the agent cannot show "
+    "pictures; add a gallery block"
+)
+
+#: The built-in panel that renders `PanelLayout.blocks`.
+COMPOSITE_PANEL_ID: Final[str] = "composite"
 
 #: The literal `AgentConfig.panel` field default — the "never customized" marker.
 _UNSET_PANEL = PanelLayout()
@@ -101,6 +121,27 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
             for index, block in enumerate(config.panel.blocks)
             if block.type == "link"
         ]
+    if on_phone:
+        issues += [
+            Issue(
+                path=f"panel.blocks[{index}].config.caller_can_edit",
+                message=CALLER_EDIT_ON_PHONE_MESSAGE,
+                severity="warning",
+            )
+            for index, block in enumerate(config.panel.blocks)
+            if block.type in EDITABLE_BLOCK_TYPES and block.config.get("caller_can_edit") is True
+        ]
+    panel = config.panel
+    if (
+        config.pipeline.image_gen is not None
+        and panel.panel_id == COMPOSITE_PANEL_ID
+        and panel.blocks
+        and not any(block.type == "gallery" for block in panel.blocks)
+        and "generate_image" not in config.tools.builtin_disabled
+    ):
+        issues.append(
+            Issue(path="pipeline.image_gen", message=PICTURES_NEED_A_GALLERY_MESSAGE, severity="warning")
+        )
     flow = ctx.config.flow
     node_ids = {node.id for node in flow.nodes if node.kind == "agent"} if flow is not None else set()
     for index, block in enumerate(ctx.config.panel.blocks):

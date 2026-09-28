@@ -5,6 +5,11 @@ and the block-writing built-in tools (CONTRACTS-V2 §4.4, ARCHITECTURE-V2
 D-V2-12). Nothing here talks to LiveKit; `open_citation` (V5-08) only drives
 the channel it is handed.
 
+Caller edits (V6-06, D-V6-19): `caller_edit_refusal` and `check_caller_edit`
+check a `block_action {name: "edit"}` against the block (a `details` value or a
+`checklist` tick, only with `caller_can_edit`); `caller_edit_message` is the one
+line the model hears, the change fenced as `<untrusted source="caller_edit">`.
+
 Block state lives in `UiState.blocks[<BlockSpec.id>]` as **plain JSON
 dicts** (never model instances): `FormBlockState.schema_` carries the alias
 `schema`, and `UiSnapshot.model_dump_json()` does not dump by alias, so a
@@ -14,18 +19,24 @@ stored model would put `schema_` on the wire.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
 from lkap_contracts.agent_config import PanelLayout
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.ui_protocol import (
+    EDITABLE_BLOCK_TYPES,
+    MAX_CALLER_EDIT_CHARS,
     BlockSpec,
     BlockType,
     CaptionsBlockState,
     CardsBlockState,
+    ChecklistEdit,
+    ChecklistItem,
     ChoicesBlockState,
     ConsentBlockState,
     DetailsBlockState,
+    DetailsEdit,
     DocumentBlockState,
     DocumentHighlight,
     FormBlockState,
@@ -40,12 +51,14 @@ from lkap_contracts.ui_protocol import (
     StepsBlockState,
     TableBlockState,
     TranscriptBlockState,
+    UiPatchOp,
     UploadBlockState,
     VideoBlockState,
 )
 from pydantic import BaseModel, ValidationError
 
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.untrusted import fence, strip_control
 
 if TYPE_CHECKING:
     from lkap_agent.ui.channel import UiChannel
@@ -53,7 +66,12 @@ if TYPE_CHECKING:
 __all__ = [
     "ASSET_DOCUMENT_ID_KEY",
     "BLOCK_STATE_MODELS",
+    "CALLER_EDIT_SOURCE",
     "CARD_SELECT",
+    "CallerEdit",
+    "caller_edit_message",
+    "caller_edit_refusal",
+    "check_caller_edit",
     "LINK_OPENED",
     "card_action_error",
     "find_card",
@@ -131,6 +149,9 @@ OPEN_CITATION: Final[str] = "open_citation"
 
 #: `AssetRef.meta` key naming the knowledge-base document an asset holds (V5-19 pushes them).
 ASSET_DOCUMENT_ID_KEY: Final[str] = "document_id"
+
+#: The fence source of a caller's edit in what the model hears (V6-06, `FENCED_SITES`).
+CALLER_EDIT_SOURCE: Final[str] = "caller_edit"
 
 #: Page-relative (0..1) rectangle covering a whole page (as `show_document` uses).
 FULL_PAGE_BBOX: Final[tuple[float, float, float, float]] = (0.0, 0.0, 1.0, 1.0)
@@ -575,6 +596,151 @@ async def set_handoff(
             continue
         written.append(block_id)
     return written
+
+
+# --------------------------------------------------------------------- caller edits (V6-06)
+
+
+@dataclass(frozen=True, slots=True)
+class CallerEdit:
+    """A caller's edit of a block, checked against the block (V6-06, D-V6-19).
+
+    Attributes:
+        block_type: The edited block's type (one of ``EDITABLE_BLOCK_TYPES``).
+        block_ops: Ops relative to the block (a ``details`` value), for the block validators.
+        envelope_ops: Absolute ops on the envelope (a ``checklist`` tick).
+        data: What the platform and the pack are handed: ``{key, label, value}`` for a
+            details row, ``{item_id, label, done}`` for a checklist item. ``value`` is the
+            caller's text, cleaned (control characters dropped, spaces collapsed).
+        changed: ``False`` when the edit changes nothing; it is then neither applied nor told.
+    """
+
+    block_type: str
+    block_ops: list[UiPatchOp] = field(default_factory=list)
+    envelope_ops: list[UiPatchOp] = field(default_factory=list)
+    data: dict[str, Any] = field(default_factory=dict)
+    changed: bool = True
+
+
+def caller_edit_refusal(spec: BlockSpec | None) -> str | None:
+    """Why the caller may not edit the block `spec`, or `None` when they may (V6-06).
+
+    A caller may edit a block of ``EDITABLE_BLOCK_TYPES`` whose config sets
+    ``caller_can_edit``. Every other built-in block refuses, requestable, link,
+    consent, upload, captions and handoff blocks included (a ``custom`` block is the
+    pack's, and never reaches here).
+    """
+    if spec is None:
+        return "unknown block"
+    if spec.type not in EDITABLE_BLOCK_TYPES:
+        return f"a {spec.type} block cannot be changed from the page"
+    if spec.config.get("caller_can_edit") is not True:
+        return "this block cannot be changed from the page"
+    return None
+
+
+def _clean_caller_text(text: str) -> str:
+    return " ".join(strip_control(text).split())
+
+
+def _details_value(text: str, value_type: str) -> str | float | None:
+    """A details value as `set_details` stores it: empty clears, numbers stay numbers."""
+    if not text:
+        return None
+    if value_type in ("number", "money"):
+        try:
+            return float(text.replace(",", ""))
+        except ValueError:
+            return text
+    return text
+
+
+def check_caller_edit(
+    spec: BlockSpec,
+    state: Mapping[str, Any],
+    checklist: Sequence[ChecklistItem],
+    data: Mapping[str, Any],
+    *,
+    now: float,
+) -> CallerEdit | str:
+    """Check a caller's ``block_action {name: "edit", data}`` against the block (V6-06).
+
+    Call :func:`caller_edit_refusal` first. A ``details`` edit (:class:`DetailsEdit`)
+    changes the value of a row already on the card, keeping its label and type; a
+    ``checklist`` edit (:class:`ChecklistEdit`) ticks or unticks an item of the envelope
+    checklist. Either marks the row or item ``edited_by: "caller"``.
+
+    Args:
+        spec: The edited block (an editable type that allows edits).
+        state: The block's current state (``details``).
+        checklist: The envelope checklist (``checklist``).
+        data: The action's ``data`` as the browser sent it.
+        now: The time stamped on a changed details row.
+
+    Returns:
+        The checked edit, or a plain-words refusal.
+    """
+    if spec.type == "details":
+        try:
+            details = DetailsEdit.model_validate(data)
+        except ValidationError:
+            return f"a change needs the row's key and a value of at most {MAX_CALLER_EDIT_CHARS} characters"
+        rows = state.get("items")
+        row = (
+            next(
+                (r for r in rows if isinstance(r, dict) and r.get("key") == details.key),
+                None,
+            )
+            if isinstance(rows, list)
+            else None
+        )
+        if row is None:
+            return f"the card has no row {details.key!r}"
+        text = _clean_caller_text(details.value)
+        value = _details_value(text, str(row.get("type") or "string"))
+        label = str(row.get("label") or details.key)
+        summary: dict[str, Any] = {"key": details.key, "label": label, "value": text}
+        if row.get("value") == value:
+            return CallerEdit(block_type="details", data=summary, changed=False)
+        updated = {**row, "value": value, "updated_at": now, "edited_by": "caller"}
+        op = UiPatchOp(op="upsert", path="/items", value=updated, key=details.key)
+        return CallerEdit(block_type="details", block_ops=[op], data=summary)
+    if spec.type == "checklist":
+        try:
+            tick = ChecklistEdit.model_validate(data)
+        except ValidationError:
+            return "a tick needs the item's id and whether it is done"
+        item = next((i for i in checklist if i.id == tick.item_id), None)
+        if item is None:
+            return f"the checklist has no item {tick.item_id!r}"
+        ticked: dict[str, Any] = {"item_id": item.id, "label": item.label, "done": tick.done}
+        if item.done == tick.done:
+            return CallerEdit(block_type="checklist", data=ticked, changed=False)
+        new_item = item.model_copy(update={"done": tick.done, "edited_by": "caller"})
+        op = UiPatchOp(op="upsert", path="/checklist", value=new_item, key=item.id)
+        return CallerEdit(block_type="checklist", envelope_ops=[op], data=ticked)
+    return f"a {spec.type} block cannot be changed from the page"  # pragma: no cover - refused earlier
+
+
+def caller_edit_message(spec: BlockSpec, data: Mapping[str, Any]) -> str:
+    """The one line the model hears about a caller's edit (V6-06); the change itself is fenced.
+
+    The caller typed the value, so the whole change travels inside
+    ``<untrusted source="caller_edit">`` (R-V5-15): data to check, never instructions.
+    """
+    label = str(data.get("label") or data.get("key") or data.get("item_id") or "")
+    where = spec.title or spec.id
+    if spec.type == "checklist":
+        change = f'ticked "{label}"' if data.get("done") else f'unticked "{label}"'
+        change += f" on the checklist {where}"
+    else:
+        value = str(data.get("value") or "")
+        change = f'changed "{label}" on {where} to "{value}"' if value else f'cleared "{label}" on {where}'
+    body = fence(change, source=CALLER_EDIT_SOURCE, max_chars=MAX_CALLER_EDIT_CHARS + 200)
+    return (
+        f"[The caller edited the panel on screen: {body}. Take it into account, confirm it with "
+        "the caller if it matters, and carry on.]"
+    )
 
 
 def _dump(instance: BaseModel) -> dict[str, Any]:

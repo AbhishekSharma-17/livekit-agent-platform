@@ -25,6 +25,12 @@ same machinery with `method="form"` and its v2 statuses. `submit_block`
 `block_action {name: "open_citation"}` on a `kb_citations` block is handled
 here (`ui.blocks.open_citation`) before any pack callback.
 
+V6-06: a caller's `block_action {name: "edit"}` on a built-in block is checked
+here (a `details` value or a `checklist` tick, only with `caller_can_edit`), applied
+in one patch and recorded; every other built-in block refuses it (recorded too).
+The checked edit then reaches the platform (which tells the model) and the pack.
+`store_asset(galleries=...)` shows a picture in named gallery blocks only.
+
 V5-43: a `link` block's `block_action {name: "opened"}` marks the link opened;
 a `cards` block's `block_action` must name a card on the block and either
 `select` (with `selectable`) or one of that card's buttons: a tap on the card
@@ -91,6 +97,7 @@ from lkap_contracts.tools import UPDATABLE_BLOCK_TYPES
 from lkap_contracts.ui_agui import AguiPatchError, agui_delta_to_patch
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
+    BLOCK_EDIT_ACTION,
     FORM_UPLOAD_KEY,
     FORM_WIDGET_KEY,
     RPC_AGENT_ACTION,
@@ -140,8 +147,11 @@ from lkap_agent.ui.blocks import (
     CARD_SELECT,
     LINK_OPENED,
     OPEN_CITATION,
+    CallerEdit,
     block_path,
+    caller_edit_refusal,
     card_action_error,
+    check_caller_edit,
     choice_selection_error,
     find_slot,
     initial_block_states,
@@ -681,11 +691,13 @@ class UiChannel:
         stored: bool = False,
         name: str | None = None,
         extra_ops: Iterable[UiPatchOp] = (),
+        galleries: Iterable[str] | None = None,
     ) -> str:
         """Stream `data` on `lkap.ui.asset` and patch its `AssetRef` (plus `extra_ops`) in one patch.
 
         `asset_id` is the stored asset's id for a file the api holds (V5-19),
-        else a fresh one. Images also join every gallery block.
+        else a fresh one. Images also join every gallery block, or only the
+        gallery blocks named in `galleries` (V6-06).
         """
         asset_id = asset_id or str(uuid.uuid4())
         ext = (mimetypes.guess_extension(mime) or "").lstrip(".") or "bin"
@@ -712,10 +724,13 @@ class UiChannel:
         )
         ops = [UiPatchOp(op="append", path="/assets", value=ref)]
         if mime.startswith("image/"):
+            wanted = set(galleries) if galleries is not None else None
             ops.extend(
                 UiPatchOp(op="append", path=block_path(block_id, "asset_ids"), value=asset_id)
                 for block_id, spec in self._block_specs.items()
-                if spec.type == "gallery" and block_id in self.state.blocks
+                if spec.type == "gallery"
+                and block_id in self.state.blocks
+                and (wanted is None or block_id in wanted)
             )
         ops.extend(extra_ops)
         await self.patch(ops)
@@ -785,12 +800,14 @@ class UiChannel:
         meta: dict[str, str] | None = None,
         *,
         store_kind: Literal["frame", "signature"] = "frame",
+        galleries: Iterable[str] | None = None,
     ) -> str:
         """Store a file the agent made (a pinned frame) through the api, then show it (V5-19).
 
         Best effort: when the api refuses or is unreachable the file is shown
         exactly as `push_asset` always did (not stored), so the panel never
-        loses the picture.
+        loses the picture. `galleries` (V6-06) limits the gallery blocks an
+        image joins (default: every gallery).
 
         Returns:
             The asset id (the stored id when the api kept it).
@@ -810,7 +827,9 @@ class UiChannel:
             except AssetRejectedError as exc:
                 self._log.warning("a pinned file was not stored", status=exc.status)
         if stored is None:
-            return await self._publish_asset(data, mime, kind=kind, caption=caption, meta=meta)
+            return await self._publish_asset(
+                data, mime, kind=kind, caption=caption, meta=meta, galleries=galleries
+            )
         return await self._publish_asset(
             data,
             stored.mime,
@@ -820,6 +839,7 @@ class UiChannel:
             asset_id=stored.id,
             stored=True,
             name=stored.name,
+            galleries=galleries,
         )
 
     async def asset_from_document(self, document_id: str) -> tuple[str | None, str | None]:
@@ -1451,6 +1471,16 @@ class UiChannel:
                 return AgentActionResult(ok=False, error="block_action needs a block_id")
             name = str(action.payload.get("name", ""))
             data = dict(action.payload.get("data") or {})
+            block_type = self._block_type(block_id)
+            if name == BLOCK_EDIT_ACTION and block_type is not None and block_type != "custom":
+                # V6-06: a caller's edit of a built-in block is checked and applied here; a
+                # pack-rendered block (custom, or a custom panel's own ids) stays the pack's.
+                refused, edited = await self._caller_edit(block_id, data)
+                if refused is not None:
+                    return AgentActionResult(ok=False, error=refused)
+                if edited is None:
+                    return AgentActionResult(ok=True, payload={"changed": False})
+                data = edited
             if name == OPEN_CITATION and self._block_type(block_id) == "kb_citations":
                 # E1 (V5-08): the platform opens the cited page; packs never see it.
                 return AgentActionResult(ok=True, payload=await open_citation(self, block_id, data))
@@ -1577,6 +1607,70 @@ class UiChannel:
             ],
         )
         return True
+
+    async def _caller_edit(
+        self, block_id: str, data: dict[str, Any]
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Check and apply a caller's `block_action {name: "edit"}` (V6-06, D-V6-19).
+
+        Allowed only on a block of `EDITABLE_BLOCK_TYPES` whose config sets
+        `caller_can_edit`; checked against the block (`ui.blocks.check_caller_edit`) and,
+        for a details value, against its state model before one patch is sent. A refusal
+        is recorded (`block_update`, `op: "caller_edit_refused"`); an applied edit too
+        (`op: "caller_edit"`), naming the row or item but never the caller's text.
+
+        Returns:
+            `(refusal, None)` when refused; `(None, None)` when the edit changes nothing;
+            `(None, data)` with the checked data the platform and the pack are handed.
+        """
+        spec = self._block_specs.get(block_id)
+        block_type = spec.type if spec is not None else None
+        refusal = caller_edit_refusal(spec)
+        edit: CallerEdit | str | None = None
+        if refusal is None and spec is not None:
+            state = self.state.blocks.get(block_id)
+            edit = check_caller_edit(
+                spec, state if isinstance(state, dict) else {}, self.state.checklist, data, now=time.time()
+            )
+            if isinstance(edit, str):
+                refusal = edit
+        if refusal is not None or not isinstance(edit, CallerEdit):
+            reason = refusal or "refused"
+            self._log.info("caller edit refused", block_id=block_id, block_type=block_type, reason=reason)
+            self._record(
+                "block_update",
+                {
+                    "block_id": block_id,
+                    "block_type": block_type,
+                    "op": "caller_edit_refused",
+                    "reason": reason,
+                },
+            )
+            return reason, None
+        if not edit.changed:
+            return None, None
+        ops = list(edit.envelope_ops)
+        if edit.block_ops:
+            try:
+                ops += self._validated_block_ops(block_id, edit.block_ops)
+            except ValidationError:
+                reason = "the change does not fit the block"
+                self._record(
+                    "block_update",
+                    {
+                        "block_id": block_id,
+                        "block_type": block_type,
+                        "op": "caller_edit_refused",
+                        "reason": reason,
+                    },
+                )
+                return reason, None
+        await self.patch(ops)
+        target: dict[str, Any] = {k: edit.data[k] for k in ("key", "item_id") if k in edit.data}
+        self._record(
+            "block_update", {"block_id": block_id, "block_type": block_type, "op": "caller_edit", **target}
+        )
+        return None, dict(edit.data)
 
     async def _card_action(self, block_id: str, name: str, data: dict[str, Any]) -> str | None:
         """Check a `cards` block action and record a card pick (V5-43); the refusal reason, or `None`."""

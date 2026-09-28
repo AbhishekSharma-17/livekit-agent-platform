@@ -58,6 +58,8 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     # V5-43: the panel's state (caller, page and tool text) and the card and link messages.
     "lkap_agent.tools.builtin.describe_panel",
     "lkap_agent.platform_agent",
+    # V6-06: a caller's edit of a block (`caller_edit`), told to the model as data.
+    "lkap_agent.ui.blocks",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

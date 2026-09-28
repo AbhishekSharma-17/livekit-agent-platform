@@ -17,8 +17,8 @@ schema. The block types:
 | Type | Config | What it shows |
 |---|---|---|
 | `status` | none | A big status stamp the agent updates. |
-| `notes` | none | A running list of short notes. |
-| `checklist` | none | "Still needed" items with done/not-done state. |
+| `notes` | none | A running list of short notes. A note can also be pinned beside one block (`push_note` with `block_id`). |
+| `checklist` | `caller_can_edit` (default off: the caller may tick items on screen) | "Still needed" items with done/not-done state. |
 | `activity` | none | A timeline of tool calls and events. |
 | `form` | none | A structured form the agent can request the user fill in. |
 | `gallery` | none | A grid of images/assets the agent pushes. |
@@ -29,7 +29,7 @@ schema. The block types:
 | `video` | `source` (`agent_avatar`/`user_camera`/`user_screen`/`track:<sid>`), `muted` | A video tile. |
 | `custom` | `kind` + any pack-declared JSON (all public) | A pack-rendered block outside the built-in set. |
 | `choices` | `multi`, `layout` (`buttons`/`list`/`chips`), `max_options` (2–20, default 8) | Options the caller taps or answers out loud (yes/no, "which policy?", a quick poll). |
-| `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows) | A key-value card of facts collected so far; `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
+| `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows), `caller_can_edit` (default off: the caller may change a value on screen) | A key-value card of facts collected so far; `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
 | `markdown` | `max_chars` (200–50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
 | `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
 | `consent` | `kind` (`recording`/`ai_disclosure`/`terms`/`custom`), `text` (empty = the workspace's wording for `recording` and `ai_disclosure`), `required`, `decline_action` (`continue`/`end_call`), `show_banner` | A question the caller accepts or declines, such as agreeing to be recorded, plus the "you're talking to an AI assistant" banner. The text is public by design. |
@@ -73,6 +73,15 @@ Attaching a block registers matching worker tools automatically (on top of
   is not). `resolve_choice` records an option the caller said out loud. On a
   phone call nothing is shown and the agent asks out loud.
 - `set_details` (a `details` block) — adds or updates rows by `key`, quietly.
+- `set_checklist` and `check_item` (a `checklist` block) — write the "still
+  needed" list and tick items, quietly. With `caller_can_edit` on a `checklist`
+  or `details` block the caller can tick an item or change a value on screen;
+  the agent is told each change as data (never as instructions) and
+  `describe_panel` marks it "by the caller". Every other block refuses a change
+  from the page.
+- `generate_image` (built in; a `gallery` block and a picture model in
+  `pipeline.image_gen`) — makes a picture from a description and shows it in
+  the gallery a few seconds later; the file is kept with the session.
 - `show_text` (a `markdown` block) — replaces the text; the agent speaks a
   one-line summary. Raw HTML and text over `max_chars` are refused.
 - `set_steps` (a `steps` block with `source: "manual"`) — marks steps
@@ -112,9 +121,10 @@ Attaching a block registers matching worker tools automatically (on top of
   `form` block, or camera or screen share). Text inside the image is treated
   as data, never as instructions.
 
-`agent_validate` warns when a `choices` block sits on an agent set up for
-phone calls (keypad input or transfer destinations: phone callers see no
-screen), and when a `source: "flow"` steps block has no flow to follow or
+`agent_validate` warns when a `choices` block, or a block with
+`caller_can_edit`, sits on an agent set up for phone calls (keypad input or
+transfer destinations: phone callers see no screen), when a picture model is
+set but the panel has no `gallery` block, and when a `source: "flow"` steps block has no flow to follow or
 names a step the flow does not have. A `terms` or `custom` consent block
 without its own `text` is an error.
 
@@ -136,6 +146,6 @@ without its own `text` is an error.
 `PanelLayout`, `BlockSpec`, `FormBlockState`, `DocumentBlockState`,
 `GalleryBlockState`, `TableBlockState`, `TranscriptBlockState`,
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
-`DetailsBlockState`, `MarkdownBlockState`, `StepsBlockState`,
+`DetailsBlockState`, `DetailsEdit`, `ChecklistEdit`, `MarkdownBlockState`, `StepsBlockState`,
 `UploadBlockState`, `LinkBlockState`, `SlotsBlockState`, `CardsBlockState`,
 `SessionAssetOut`.

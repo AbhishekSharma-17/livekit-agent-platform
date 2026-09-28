@@ -71,6 +71,8 @@ UNFENCED_BUILTIN_TOOLS: frozenset[str] = frozenset(
         "notify_team",
         # V5-31: answers with a fixed sentence of the platform's own.
         "switch_language",
+        # V6-06: answers with a fixed sentence; the picture goes to the panel, never the model.
+        "generate_image",
     }
 )
 

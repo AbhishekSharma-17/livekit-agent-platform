@@ -104,6 +104,8 @@ from lkap_contracts.common import SessionChannel
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import ModelCapabilities, vision_support
 from lkap_contracts.ui_protocol import (
+    BLOCK_EDIT_ACTION,
+    EDITABLE_BLOCK_TYPES,
     TOPIC_UI_LINK,
     ActivityEvent,
     LinkCompletedPacket,
@@ -162,6 +164,7 @@ from lkap_agent.tools.untrusted import UNTRUSTED_RULE, fence, strip_control
 from lkap_agent.ui.blocks import (
     VOICE_ONLY_CHANNELS,
     block_ids_of_type,
+    caller_edit_message,
     initial_block_states,
     resolve_block_specs,
 )
@@ -1203,10 +1206,15 @@ class PlatformAgent(Agent):
         """`block_action` → the pack's optional `on_block_action` (default no-op).
 
         `on_block_action` is not part of the structural `Pack` Protocol (see
-        `packs.base.BlockActionPack`), so it is looked up here.
+        `packs.base.BlockActionPack`), so it is looked up here. V6-06: a caller's
+        edit of a details value or a checklist tick (checked and applied by the
+        channel) is told to the model in one fenced line before the pack sees it.
         """
         specs = getattr(self._ctx.ui, "block_specs", None)
         spec = specs.get(block_id) if isinstance(specs, dict) else None
+        if spec is not None and name == BLOCK_EDIT_ACTION and spec.type in EDITABLE_BLOCK_TYPES:
+            # The channel refused anything it could not check, so `data` is the checked edit.
+            self._tell_model(caller_edit_message(spec, data), what="a caller edit")
         if spec is not None and spec.type == "cards":
             # V5-43: the channel checked the card and the action; the model hears about it.
             state = self._ctx.ui.state.blocks.get(block_id) or {}

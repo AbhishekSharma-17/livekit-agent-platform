@@ -14,6 +14,9 @@ switched off by name in `tools.builtin_disabled`
   reference number or amount back to the caller ("B as in boy", digits in
   small groups, "one hundred dollars and fifty cents"). Instant.
 - `current_time`, `convert_time`: the caller's and the business's time.
+- `generate_image`: a picture (a sketch, a diagram) from the agent's picture
+  model (`pipeline.image_gen`) into the panel's `gallery` block; offered only
+  when both are set (`panels-and-blocks`).
 
 ## Network built-ins (off until configured)
 

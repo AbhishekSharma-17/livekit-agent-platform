@@ -28,7 +28,9 @@ agent has a **pipeline** (`cascaded` stt/llm/tts, `realtime`, or
 an app server or a tool finder — recipe `attach-app-actions`), **knowledge
 bases** (`kb_create`, `kb_add_document`; own stores `kb_connection_create`;
 golden questions `kb_evals_set`, `kb_evaluate`), a
-**panel** (composite blocks, or a pack's own UI) and, optionally, a **flow**
+**panel** (composite blocks, or a pack's own UI; a checklist block brings
+`set_checklist`, a gallery plus a picture model brings `generate_image`, and
+`caller_can_edit` lets callers change a details or checklist block) and, optionally, a **flow**
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
 ...})`). Agents produce **sessions** (`session_list`, `session_get`,
 `session_memory`), which carry a transcript, QA score, cost lines and (if

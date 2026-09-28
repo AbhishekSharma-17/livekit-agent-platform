@@ -752,7 +752,14 @@ class TestBuildBuiltinTools:
         # V5-19: `describe_asset` needs a vision LLM and a picture source; the fake session has neither.
         # V5-25: the network built-ins need their own settings (`CONFIGURED_BUILTINS`).
         # V5-31: `switch_language` needs more than one language.
-        unregistered = {"describe_current_frame", "pin_frame", "describe_asset", "switch_language"}
+        # V6-06: `generate_image` needs an image model and a gallery block.
+        unregistered = {
+            "describe_current_frame",
+            "pin_frame",
+            "describe_asset",
+            "switch_language",
+            "generate_image",
+        }
         unregistered |= CONFIGURED_BUILTINS
         assert names == set(BUILTIN_TOOL_NAMES) - unregistered
 

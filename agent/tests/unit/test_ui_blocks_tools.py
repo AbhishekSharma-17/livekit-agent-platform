@@ -122,6 +122,8 @@ def test_block_tools_registered_only_for_blocks_that_need_them() -> None:
         BlockSpec(id="pay", type="link", config={"allowed_hosts": ["example.com"]}, order=12),
         BlockSpec(id="times", type="slots", order=13),
         BlockSpec(id="plans", type="cards", order=14),
+        # V6-06: the checklist tools.
+        BlockSpec(id="todo", type="checklist", order=15),
     ]
     ctx, _ch, _room = _ctx([*BLOCKS, *wave10])
     names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
@@ -133,8 +135,8 @@ def test_default_composite_blocks_register_no_block_tools() -> None:
     envelope = [BlockSpec(id=t, type=t) for t in ("status", "notes", "checklist", "activity")]  # type: ignore[arg-type]
     ctx, _ch, _room = _ctx(envelope)
     names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
-    # V5-43: only `describe_panel`, which reads any block.
-    assert names & set(BLOCK_TOOL_NAMES) == {"describe_panel"}
+    # V5-43: only `describe_panel`, which reads any block; V6-06: and the checklist tools.
+    assert names & set(BLOCK_TOOL_NAMES) == {"describe_panel", "set_checklist", "check_item"}
 
 
 def test_insurance_style_custom_panel_registers_no_block_tools() -> None:

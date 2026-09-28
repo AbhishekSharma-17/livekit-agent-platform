@@ -29,6 +29,7 @@ from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
 from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_execution
 
 from .calculate import build_calculate_tool
+from .check_item import build_check_item_tool
 from .convert_time import build_convert_time_tool
 from .current_time import build_current_time_tool
 from .describe_asset import build_describe_asset_tool, vision_llm
@@ -37,6 +38,7 @@ from .describe_panel import build_describe_panel_tool
 from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
 from .fetch_url import build_fetch_url_tool
+from .generate_image import build_generate_image_tool
 from .http_request import build_http_request_tool
 from .notify_team import ESCALATION_TIMEOUT_S, build_notify_team_tool, post_team_notification
 from .pin_frame import build_pin_frame_tool
@@ -52,6 +54,7 @@ from .resolve_slot import build_resolve_slot_tool
 from .search_knowledge import build_search_knowledge_tool
 from .send_link import build_send_link_tool
 from .send_sms import build_send_sms_tool
+from .set_checklist import build_set_checklist_tool
 from .set_details import build_set_details_tool
 from .set_status import build_set_status_tool
 from .set_steps import build_set_steps_tool, manual_steps_blocks
@@ -71,6 +74,7 @@ __all__ = [
     "TELEPHONY_TOOL_NAMES",
     "build_builtin_tools",
     "build_calculate_tool",
+    "build_check_item_tool",
     "build_convert_time_tool",
     "build_current_time_tool",
     "build_describe_asset_tool",
@@ -79,6 +83,7 @@ __all__ = [
     "build_end_call_tool",
     "build_escalate_to_human_tool",
     "build_fetch_url_tool",
+    "build_generate_image_tool",
     "build_http_request_tool",
     "build_notify_team_tool",
     "build_pin_frame_tool",
@@ -94,6 +99,7 @@ __all__ = [
     "build_search_knowledge_tool",
     "build_send_link_tool",
     "build_send_sms_tool",
+    "build_set_checklist_tool",
     "build_set_details_tool",
     "build_set_status_tool",
     "build_set_steps_tool",
@@ -194,6 +200,9 @@ def build_builtin_tools(
         tool whose key did not resolve answers "not set up" when called).
         V5-31: `switch_language` only when the agent lists more than one language
         (`voice.languages`; empty = the single `voice.language`).
+        V6-06: `set_checklist` and `check_item` for a `checklist` block;
+        `generate_image` when the session has an image model (`ctx.image_gen`,
+        from `pipeline.image_gen`) and the panel has a `gallery` block.
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -343,6 +352,13 @@ def build_builtin_tools(
         tools.append(build_resolve_slot_tool(ctx))
     if "cards" in block_types and _want("show_cards"):
         tools.append(build_show_cards_tool(ctx))
+    # V6-06: the envelope checklist, and pictures from the agent's own image model.
+    if "checklist" in block_types and _want("set_checklist"):
+        tools.append(build_set_checklist_tool(ctx))
+    if "checklist" in block_types and _want("check_item"):
+        tools.append(build_check_item_tool(ctx))
+    if getattr(ctx, "image_gen", None) is not None and "gallery" in block_types and _want("generate_image"):
+        tools.append(build_generate_image_tool(ctx))
     # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one.
     holds_pictures = bool(block_types & {"upload", "form"}) or has_vision
     if holds_pictures and _want("describe_asset") and vision_llm(ctx) is not None:

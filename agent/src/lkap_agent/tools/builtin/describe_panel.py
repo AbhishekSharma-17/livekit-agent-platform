@@ -13,6 +13,10 @@ tool returned, so the whole summary is fenced as ``<untrusted source="panel">``
 (R-V5-15, :func:`lkap_agent.tools.untrusted.fence`): it is data, never
 instructions. Registered whenever the panel has any block; blocking and instant
 (`NEVER_BACKGROUND_TOOLS`).
+
+V6-06: a details row or checklist item the caller changed on screen is marked
+(``edited: "by the caller"`` / ``ticked_by_caller``), and a block with notes
+pinned to it (``Note.block_id``) says how many (``margin_notes``).
 """
 
 from __future__ import annotations
@@ -96,7 +100,16 @@ def _summary(spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, A
         case "checklist":
             items = _list(envelope.get("checklist"))
             still = [i for i in items if isinstance(i, dict) and not i.get("done")]
-            return {"done": _count(items) - len(still), "still_needed": _labels(still)}
+            by_caller = [i for i in items if isinstance(i, dict) and i.get("edited_by") == "caller"]
+            ticked = [
+                f"{_text(i.get('label'))}: {'done' if i.get('done') else 'not done'}"
+                for i in by_caller[:MAX_LIST_ITEMS]
+            ]
+            return {
+                "done": _count(items) - len(still),
+                "still_needed": _labels(still),
+                "ticked_by_caller": ticked,
+            }
         case "activity":
             rows = _list(envelope.get("activity"))
             return {
@@ -129,7 +142,11 @@ def _summary(spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, A
         case "details":
             items = _list(s.get("items"))
             rows = [
-                {"label": _text(i.get("label")), "value": _text(i.get("value"))}
+                {
+                    "label": _text(i.get("label")),
+                    "value": _text(i.get("value")),
+                    **({"edited": "by the caller"} if i.get("edited_by") == "caller" else {}),
+                }
                 for i in items[: MAX_LIST_ITEMS * 2]
                 if isinstance(i, dict)
             ]
@@ -184,6 +201,11 @@ def _summary(spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, A
 def describe_panel_state(specs: Iterable[BlockSpec], state: Mapping[str, Any]) -> list[dict[str, Any]]:
     """One compact entry per block, in render order (``None`` and empty values dropped)."""
     blocks = _dict(state.get("blocks"))
+    margin: dict[str, int] = {}
+    for note in _list(state.get("notes")):
+        pinned = _dict(note).get("block_id")
+        if isinstance(pinned, str) and pinned:
+            margin[pinned] = margin.get(pinned, 0) + 1
     out: list[dict[str, Any]] = []
     for spec in specs:
         block_state = blocks.get(spec.id)
@@ -193,6 +215,8 @@ def describe_panel_state(specs: Iterable[BlockSpec], state: Mapping[str, Any]) -
         if isinstance(status, str):
             entry["status"] = status
         entry.update(_summary(spec, block_state, state))
+        if margin.get(spec.id):
+            entry["margin_notes"] = margin[spec.id]
         out.append({k: v for k, v in entry.items() if v not in (None, [], {}, "")})
     return out
 

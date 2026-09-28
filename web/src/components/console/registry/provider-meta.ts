@@ -149,7 +149,7 @@ export function unavailableCopy(spec: ProviderSpec, ctx: SlotConnectionContext =
       return {
         chip: "Cloud only",
         reason:
-          "Not available on self-hosted connections — LiveKit Inference needs LiveKit Cloud. Use your own STT/LLM/TTS keys.",
+          "Not available on self-hosted connections — LiveKit Inference needs LiveKit Cloud. Use your own STT/LLM/TTS keys (Deepgram + Cartesia is a recommended streaming pair).",
       };
     case "not-installed":
       return {
@@ -349,3 +349,113 @@ export function suggestedCredentialLabel(spec: Pick<ProviderSpec, "vendor">, now
   const month = now.toLocaleString("en-GB", { month: "long", year: "numeric" });
   return `${spec.vendor} key · ${month}`;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Streaming (V6-03, D-V6-1, D-V6-2)                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * OpenRouter's two speech entries: request/response only (one WAV per
+ * utterance, one POST per sentence), so they never suit a live call (D-V6-1)
+ * even though a future registry note could still record `streaming: false`
+ * for other reasons too.
+ */
+export const OPENROUTER_SPEECH_IDS: ReadonlySet<string> = new Set(["openrouter-stt", "openrouter-tts"]);
+
+export function isOpenRouterSpeech(id: string): boolean {
+  return OPENROUTER_SPEECH_IDS.has(id);
+}
+
+/**
+ * Mirrors `lkap_contracts.providers.speech_streams` (V6-02, ask #16): whether
+ * a speech reference streams, given the fields it stores. `null` for a
+ * non-speech kind or an entry the registry hasn't recorded (`streaming_note`
+ * then says why nothing is shown).
+ */
+export function speechStreams(
+  spec: Pick<ProviderSpec, "kind" | "capabilities">,
+  fields?: Record<string, unknown> | null,
+): boolean | null {
+  if (spec.kind !== "stt" && spec.kind !== "tts") return null;
+  const capabilities = spec.capabilities;
+  const field = capabilities?.streaming_field;
+  if (field && (fields ?? {})[field] === true) return true;
+  return capabilities?.streaming ?? null;
+}
+
+export interface StreamingChipCopy {
+  /** Plain-words chip text — never "WS"/"PCM"/"SSE" (§0.1). */
+  label: string;
+  tone: "success" | "neutral";
+  /** `capabilities.streaming_note`, shown on hover/focus. */
+  tip?: string;
+}
+
+/**
+ * Chip copy for a speech entry's streaming state (D-V6-1, D-V6-2): "Streams"
+ * / "Waits for the whole sentence", with the registry's note as the tip.
+ * `null` when the registry hasn't recorded a value — the console says
+ * nothing rather than guess.
+ */
+export function streamingChipCopy(
+  spec: Pick<ProviderSpec, "id" | "kind" | "capabilities">,
+  fields?: Record<string, unknown> | null,
+): StreamingChipCopy | null {
+  const streams = speechStreams(spec, fields);
+  if (streams === null) return null;
+  const tip = spec.capabilities?.streaming_note ?? undefined;
+  if (streams) return { label: "Streams", tone: "success", tip };
+  return { label: "Waits for the whole sentence", tone: "neutral", tip };
+}
+
+/** A short second chip for OpenRouter's two speech entries (D-V6-1); `null` for every other provider. */
+export function notForLiveCallsChip(spec: Pick<ProviderSpec, "id">): string | null {
+  return isOpenRouterSpeech(spec.id) ? "Not for live calls" : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Recommended stack (V6-03, D-V6-3, D-V6-14; ask #16: console constants,     */
+/* not registry — a contracts follow-up could promote these later)           */
+/* -------------------------------------------------------------------------- */
+
+export type DeploymentType = "cloud" | "self_hosted";
+
+/**
+ * The recommended voice stack per connection type (D-V6-3), dated so a
+ * later refresh is visible in review. Not a registry field (ask #16): the
+ * registry only says what streams, not what LKAP suggests pairing.
+ */
+export const RECOMMENDED_STACK = {
+  asOf: "2026-09-28",
+  /** LiveKit Cloud: LiveKit Inference for every kind — no key needed. */
+  cloudProviderIds: new Set(["livekit-inference-stt", "livekit-inference-llm", "livekit-inference-tts"]),
+  /** Self-hosted: Deepgram Nova-3 (or Flux for the lowest delay) + Cartesia Sonic. */
+  selfHostedProviderIds: new Set(["deepgram-stt", "deepgram-flux-stt", "cartesia-tts"]),
+  selfHostedAlternatives: "ElevenLabs Flash or Deepgram Aura-2 are good alternatives for text-to-speech.",
+} as const;
+
+/**
+ * Whether `spec` is the recommended pick for `deploymentType` (D-V6-3):
+ * LiveKit Inference on Cloud, Deepgram/Cartesia on self-hosted. `false` with
+ * no `deploymentType` (the connection isn't known here) — the badge shows
+ * only where a connection is in view.
+ */
+export function isRecommendedProvider(
+  spec: Pick<ProviderSpec, "id" | "kind">,
+  deploymentType: DeploymentType | null | undefined,
+): boolean {
+  if (spec.kind !== "stt" && spec.kind !== "llm" && spec.kind !== "tts") return false;
+  if (deploymentType === "cloud") return RECOMMENDED_STACK.cloudProviderIds.has(spec.id);
+  if (deploymentType === "self_hosted") return RECOMMENDED_STACK.selfHostedProviderIds.has(spec.id);
+  return false;
+}
+
+/**
+ * The LiveKit Inference plan-credits line (D-V6-14), dated so a price
+ * refresh is visible in review — not a live billing call (there is no
+ * documented billing API).
+ */
+export const INFERENCE_CREDITS_LINE = {
+  asOf: "2026-09-28",
+  text: "LiveKit Inference credits: the Build plan includes $2.50 a month, then requests fail until the next month (Ship $5, Scale $50, then list prices).",
+} as const;

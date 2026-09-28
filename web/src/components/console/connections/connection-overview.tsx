@@ -14,6 +14,7 @@ import {
   DEPLOYMENT_TYPE_LABEL,
 } from "@/components/console/connections/connection-model";
 import { RotateDialog } from "@/components/console/connections/rotate-dialog";
+import { INFERENCE_CREDITS_LINE } from "@/components/console/registry/provider-meta";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { CopyButton } from "@/components/shared/copy-button";
 import { DescriptionList } from "@/components/shared/description-list";
@@ -93,6 +94,12 @@ export function ConnectionOverview({ connection }: { connection: ConnectionOut }
           },
         ]}
       />
+
+      {connection.deployment_type === "cloud" ? (
+        <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+          {INFERENCE_CREDITS_LINE.text} <span className="text-xs">(as of {INFERENCE_CREDITS_LINE.asOf})</span>
+        </p>
+      ) : null}
 
       {connection.last_error ? (
         <p className="rounded-md bg-danger-soft px-3 py-2 text-[0.8125rem] text-pretty text-danger-text">

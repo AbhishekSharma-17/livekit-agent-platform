@@ -39,7 +39,8 @@ def test_each_new_builtin_is_backgroundable_or_never_background_not_both() -> No
 
 
 def test_write_and_configured_builtins_and_default_modes() -> None:
-    # V6-06 adds the checklist tools and generate_image; V6-08 the notebook tools.
+    # V6-06 adds the checklist tools and generate_image; V6-08 the notebook tools; V6-12 the
+    # two canvas writes.
     assert WRITE_BUILTINS == {
         "send_sms",
         "notify_team",
@@ -48,6 +49,8 @@ def test_write_and_configured_builtins_and_default_modes() -> None:
         "generate_image",
         "notebook_write",
         "notebook_check",
+        "draw_on_canvas",
+        "clear_canvas",
     }
     assert CONFIGURED_BUILTINS == {"web_search", "fetch_url", "send_sms", "notify_team"}
     assert BUILTIN_DEFAULT_MODES == {

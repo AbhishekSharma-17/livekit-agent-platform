@@ -40,6 +40,12 @@ RPC_AGENT_ACTION = "lkap.agent.action"
 #: when ``POST /v1/hooks/link/{session_id}`` verifies (:class:`LinkCompletedPacket`). The
 #: worker honours only packets the server sent (no participant) for its own session.
 TOPIC_UI_LINK = "lkap.ui.link"
+#: Browser -> agent text stream of a caller's pen strokes on a ``canvas`` block (V6-12,
+#: D-V6-16): one :class:`InkMessage` JSON per message, at most :data:`MAX_INK_MESSAGE_BYTES`,
+#: at most :data:`MAX_INK_MESSAGES_PER_S` a second. The worker takes it from the session's
+#: caller only, for a canvas the caller may draw on (:func:`lkap_contracts.blocks.
+#: canvas_caller_can_draw`), and writes accepted strokes to the block's state.
+TOPIC_UI_INK = "lkap.ui.ink"
 
 
 #: Canonical mapping of topic constant name to wire value (exported to JSON/TS).
@@ -52,6 +58,7 @@ TOPICS: dict[str, str] = {
     "RPC_UI_REQUEST": RPC_UI_REQUEST,
     "RPC_AGENT_ACTION": RPC_AGENT_ACTION,
     "TOPIC_UI_LINK": TOPIC_UI_LINK,
+    "TOPIC_UI_INK": TOPIC_UI_INK,
 }
 
 #: Number of patches after which the agent re-sends a full snapshot.
@@ -193,6 +200,8 @@ BlockType = Literal[
     # V6-08 (D-V6-15, D-V6-18): a sectioned notebook, and a container that groups other blocks.
     "notebook",
     "layout",
+    # V6-12 (D-V6-16): a drawing board the caller writes on and the agent marks up.
+    "canvas",
 ]
 
 
@@ -915,10 +924,13 @@ class NotebookDetailsSection(BaseModel):
 
 
 class NotebookInkSection(BaseModel):
-    """An ``ink`` section: a drawing board. ``canvas_block_id`` is reserved for V6-12 (D-V6-16).
+    """An ``ink`` section: a drawing board (D-V6-16).
 
-    Until the ``canvas`` block lands the section stays empty and the console shows
-    "Drawing board coming soon"; nothing writes it.
+    V6-12: ``canvas_block_id`` names the panel's ``canvas`` block the section shows; the worker
+    seeds it from the section's config (``NotebookSectionConfig.canvas_block_id``) and nothing
+    else writes it. The strokes live in that canvas block's own state (``CanvasBlockState``);
+    the console renders the canvas inside the notebook and leaves it out of the panel's flow.
+    ``None`` is a section with no board yet ("Drawing board coming soon").
     """
 
     kind: Literal["ink"] = "ink"
@@ -941,6 +953,214 @@ class NotebookBlockState(BaseModel):
 
     sections: dict[NotebookId, NotebookSection] = Field(default={}, max_length=MAX_NOTEBOOK_SECTIONS)
     updated_at: float | None = None
+
+
+# --------------------------------------------------------------------- canvas (V6-12)
+
+#: Who put a mark on a canvas: the caller (a pen stroke sent on :data:`TOPIC_UI_INK`) or the
+#: agent (``draw_on_canvas``).
+CanvasAuthor = Literal["agent", "caller"]
+#: What a caller's stroke was drawn with: ``pen`` and ``highlighter`` are freehand, ``box`` and
+#: ``arrow`` are shapes drawn by hand (their first and last points). Erasing is an ``erase``
+#: message, never a stroke. A stroke never carries text (D-V6-16, security row 7).
+InkTool = Literal["pen", "highlighter", "box", "arrow"]
+INK_TOOLS: Final[tuple[str, ...]] = get_args(InkTool)
+#: What one :class:`InkMessage` does: ``add`` starts a stroke (or, with the id of one of the
+#: caller's strokes, continues it: a long stroke arrives in several messages), ``erase``
+#: removes one of the caller's strokes (the eraser, or undo), ``clear`` removes all of them.
+InkOp = Literal["add", "erase", "clear"]
+#: What the agent draws (``draw_on_canvas``): a ``box``, a ``circle`` (the ellipse inside a box:
+#: "circle the dent"), an ``arrow`` (two points), a ``text`` label, or a ``path`` of points.
+CanvasShapeKind = Literal["box", "circle", "arrow", "text", "path"]
+CANVAS_SHAPE_KINDS: Final[tuple[str, ...]] = get_args(CanvasShapeKind)
+#: A stroke or shape id: letters, digits and ``_.:-``.
+CANVAS_MARK_ID_PATTERN: Final[str] = r"^[A-Za-z0-9_.:-]{1,64}$"
+#: A mark's colour: ``#rrggbb``.
+CANVAS_COLOR_PATTERN: Final[str] = r"^#[0-9a-fA-F]{6}$"
+#: The caller's default ink, and the agent's default mark-up colour.
+DEFAULT_INK_COLOR: Final[str] = "#1f2937"
+DEFAULT_SHAPE_COLOR: Final[str] = "#dc2626"
+#: What is behind the drawing: nothing, the caller's live camera, or a picture of this session
+#: (``asset:<asset id>``: a pinned frame, a gallery picture, an upload).
+CANVAS_BACKGROUND_PATTERN: Final[str] = r"^(none|live_camera|asset:[A-Za-z0-9_.:-]{1,128})$"
+#: Prefix of an asset background.
+CANVAS_ASSET_BACKGROUND_PREFIX: Final[str] = "asset:"
+#: The largest :class:`InkMessage` the worker reads (UTF-8 bytes); a longer one is dropped.
+MAX_INK_MESSAGE_BYTES: Final[int] = 2048
+#: How many ink messages a second the worker takes from the caller (the rest are dropped).
+MAX_INK_MESSAGES_PER_S: Final[int] = 20
+#: The most points one :class:`InkMessage` carries.
+MAX_INK_POINTS_PER_MESSAGE: Final[int] = 128
+#: The most points one stroke holds, all its messages together.
+MAX_STROKE_POINTS: Final[int] = 1000
+#: The most strokes one canvas holds, whatever its config says (D-V6-16).
+MAX_CANVAS_STROKES: Final[int] = 2000
+#: ``max_strokes`` of a canvas whose config sets none.
+DEFAULT_CANVAS_STROKES: Final[int] = 500
+#: The most stroke points one canvas holds, and one session takes from the caller in all.
+MAX_CANVAS_POINTS: Final[int] = 20_000
+MAX_SESSION_INK_POINTS: Final[int] = 50_000
+#: The most shapes the agent keeps on one canvas, and the most points of one ``path``.
+MAX_CANVAS_SHAPES: Final[int] = 200
+MAX_SHAPE_POINTS: Final[int] = 200
+#: The longest ``text`` shape, and the longest label on any shape (agent-authored).
+MAX_SHAPE_TEXT_CHARS: Final[int] = 200
+MAX_SHAPE_LABEL_CHARS: Final[int] = 80
+#: The largest drawing snapshot (a PNG the page renders for ``read_canvas``).
+MAX_CANVAS_SNAPSHOT_BYTES: Final[int] = 5 * 1024 * 1024
+#: ``session_assets.meta.source`` of a stored drawing snapshot (kind ``frame``; set by the
+#: worker, never by the page; no new asset kind, so no migration).
+CANVAS_SNAPSHOT_SOURCE: Final[str] = "ink"
+
+#: A normalised coordinate or pressure: 0 is the board's left (top) edge, 1 its right (bottom).
+Unit = Annotated[float, Field(ge=0, le=1)]
+#: One point of a caller's stroke: ``[x, y]`` or ``[x, y, pressure]``, each 0..1.
+InkPoint = Annotated[list[Unit], Field(min_length=2, max_length=3)]
+#: One point of an agent's shape: ``[x, y]``, 0..1.
+ShapePoint = Annotated[list[Unit], Field(min_length=2, max_length=2)]
+CanvasMarkId = Annotated[str, Field(pattern=CANVAS_MARK_ID_PATTERN)]
+#: How far past the board's edge a box may reach (rounding in the browser).
+_EDGE_SLACK: Final[float] = 1e-6
+
+
+class InkStroke(BaseModel):
+    """One of the caller's strokes on a canvas (V6-12), as the worker stored it.
+
+    ``points`` are normalised to the board (``[x, y]`` or ``[x, y, pressure]``); ``width`` is
+    in board pixels (``CanvasBlockState.width``). Written by the worker only, from
+    :class:`InkMessage` s it accepted; a stroke carries no text.
+    """
+
+    id: CanvasMarkId
+    author: CanvasAuthor = "caller"
+    tool: InkTool = "pen"
+    points: list[InkPoint] = Field(min_length=1, max_length=MAX_STROKE_POINTS)
+    color: str = Field(default=DEFAULT_INK_COLOR, pattern=CANVAS_COLOR_PATTERN)
+    width: float = Field(default=3, ge=0.5, le=40)
+    ts: float
+
+
+class CanvasShape(BaseModel):
+    """One mark the agent drew on a canvas (``draw_on_canvas``, V6-12). ``draw_on_canvas``
+    upserts shapes by ``id``.
+
+    * ``box`` and ``circle``: ``x``, ``y`` (the top-left corner), ``w`` and ``h``, all 0..1 and
+      inside the board (a circle is the ellipse inside that box);
+    * ``arrow``: ``points`` — from and to;
+    * ``path``: ``points`` — two or more;
+    * ``text``: ``x``, ``y`` and ``text``.
+
+    ``label`` is a short caption next to any shape. Both texts are the agent's own words.
+    """
+
+    id: CanvasMarkId
+    author: CanvasAuthor = "agent"
+    kind: CanvasShapeKind
+    x: Unit | None = None
+    y: Unit | None = None
+    w: Unit | None = None
+    h: Unit | None = None
+    points: list[ShapePoint] = Field(default=[], max_length=MAX_SHAPE_POINTS)
+    text: str | None = Field(default=None, max_length=MAX_SHAPE_TEXT_CHARS)
+    label: str | None = Field(default=None, max_length=MAX_SHAPE_LABEL_CHARS)
+    color: str = Field(default=DEFAULT_SHAPE_COLOR, pattern=CANVAS_COLOR_PATTERN)
+    width: float = Field(default=4, ge=0.5, le=40)
+    ts: float | None = None
+
+    @model_validator(mode="after")
+    def _fits_its_kind(self) -> Self:
+        match self.kind:
+            case "box" | "circle":
+                if self.x is None or self.y is None or self.w is None or self.h is None:
+                    raise ValueError(f"a {self.kind} needs x, y, w and h")
+                if self.w <= 0 or self.h <= 0:
+                    raise ValueError(f"a {self.kind} needs a width and a height above 0")
+                if self.x + self.w > 1 + _EDGE_SLACK or self.y + self.h > 1 + _EDGE_SLACK:
+                    raise ValueError(f"a {self.kind} must stay inside the board (x + w and y + h at most 1)")
+            case "arrow":
+                if len(self.points) != 2:
+                    raise ValueError("an arrow needs exactly two points: from and to")
+            case "path":
+                if len(self.points) < 2:
+                    raise ValueError("a path needs at least two points")
+            case "text":
+                if self.x is None or self.y is None or not (self.text or "").strip():
+                    raise ValueError("a text mark needs x, y and some text")
+        return self
+
+
+class CanvasBlockState(BaseModel):
+    """A ``canvas`` block's state (V6-12, D-V6-16): the caller's strokes and the agent's shapes.
+
+    Every coordinate is normalised to the board (0..1), so ``width`` and ``height`` only fix
+    its shape (and the pixel unit of a mark's ``width``). ``background`` is ``none``,
+    ``live_camera`` (the marks overlay the caller's camera) or ``asset:<id>`` (a picture of
+    this session, e.g. a pinned frame: "circle the dent"). ``strokes`` are written by the
+    worker from the caller's :class:`InkMessage` s; ``shapes`` by ``draw_on_canvas``;
+    ``snapshot_asset_id`` is the stored PNG ``read_canvas`` last read; ``limit_reached`` says
+    the board is full (the caller's next strokes are dropped until it is cleared).
+    """
+
+    width: int = Field(default=1600, ge=1, le=10000)
+    height: int = Field(default=1200, ge=1, le=10000)
+    background: str = Field(default="none", pattern=CANVAS_BACKGROUND_PATTERN)
+    strokes: list[InkStroke] = Field(default=[], max_length=MAX_CANVAS_STROKES)
+    shapes: list[CanvasShape] = Field(default=[], max_length=MAX_CANVAS_SHAPES)
+    snapshot_asset_id: str | None = Field(default=None, max_length=128)
+    limit_reached: bool = False
+    updated_at: float | None = None
+
+    @field_validator("strokes")
+    @classmethod
+    def _unique_strokes(cls, value: list[InkStroke]) -> list[InkStroke]:
+        _unique([stroke.id for stroke in value], "stroke ids")
+        return value
+
+    @field_validator("shapes")
+    @classmethod
+    def _unique_shapes(cls, value: list[CanvasShape]) -> list[CanvasShape]:
+        _unique([shape.id for shape in value], "shape ids")
+        return value
+
+
+class InkMessage(BaseModel):
+    """One message on :data:`TOPIC_UI_INK` (V6-12, D-V6-16): a piece of the caller's drawing.
+
+    * ``add`` — ``stroke_id`` and at least one point. A new id starts a stroke (``tool``,
+      ``color`` and ``width`` are taken from this first message); the id of a stroke the
+      caller already drew continues it, its points appended (a long stroke is sent in pieces).
+    * ``erase`` — ``stroke_id`` of one of the caller's strokes, no points.
+    * ``clear`` — no points: every stroke of the caller on the block goes.
+
+    At most :data:`MAX_INK_MESSAGE_BYTES` of JSON and :data:`MAX_INK_POINTS_PER_MESSAGE`
+    points; the page batches a stroke's points (about every 50 ms) rather than sending each
+    one. Strict: an unknown key, text, or a point outside 0..1 makes the whole message dropped.
+    """
+
+    v: Literal[1] = 1
+    block_id: str = Field(min_length=1, max_length=64)
+    stroke_id: str | None = Field(default=None, pattern=CANVAS_MARK_ID_PATTERN)
+    op: InkOp = "add"
+    tool: InkTool = "pen"
+    points: list[InkPoint] = Field(default=[], max_length=MAX_INK_POINTS_PER_MESSAGE)
+    color: str = Field(default=DEFAULT_INK_COLOR, pattern=CANVAS_COLOR_PATTERN)
+    width: float = Field(default=3, ge=0.5, le=40)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _fits_its_op(self) -> Self:
+        match self.op:
+            case "add":
+                if self.stroke_id is None or not self.points:
+                    raise ValueError("an add names the stroke and carries at least one point")
+            case "erase":
+                if self.stroke_id is None or self.points:
+                    raise ValueError("an erase names the stroke and carries no points")
+            case "clear":
+                if self.points:
+                    raise ValueError("a clear carries no points")
+        return self
 
 
 #: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).
@@ -1041,6 +1261,11 @@ class UiRequest(BaseModel):
       The block's state already shows ``status: "requested"``, so the browser
       acks at once (``{}``) and answers later with ``block_submit``; an inline
       ``{values}`` or ``{cancelled: true}`` result is accepted too.
+    * ``snapshot`` — ``{block_id}`` (V6-12, D-V6-16): draw the ``canvas`` block as it shows
+      (background, strokes and shapes) into a PNG of at most :data:`MAX_CANVAS_SNAPSHOT_BYTES`
+      and send it on ``lkap.ui.upload`` with the attributes ``block_id`` (the canvas) and
+      ``name``; ack at once with ``{}``. The worker takes the file only while it is waiting for
+      that snapshot and only for a canvas the caller may draw on.
     """
 
     v: Literal[1] = 1
@@ -1053,6 +1278,7 @@ class UiRequest(BaseModel):
         "show_block",
         "navigate",
         "request",
+        "snapshot",
     ]
     payload: dict[str, Any] = {}
 

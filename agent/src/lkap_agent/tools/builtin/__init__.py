@@ -30,11 +30,13 @@ from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_
 
 from .calculate import build_calculate_tool
 from .check_item import build_check_item_tool
+from .clear_canvas import build_clear_canvas_tool
 from .convert_time import build_convert_time_tool
 from .current_time import build_current_time_tool
 from .describe_asset import build_describe_asset_tool, vision_llm
 from .describe_current_frame import build_describe_current_frame_tool
 from .describe_panel import build_describe_panel_tool
+from .draw_on_canvas import build_draw_on_canvas_tool
 from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
 from .extract_now import build_extract_now_tool
@@ -46,6 +48,7 @@ from .notebook_write import build_notebook_write_tool
 from .notify_team import ESCALATION_TIMEOUT_S, build_notify_team_tool, post_team_notification
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
+from .read_canvas import build_read_canvas_tool
 from .record_consent import build_record_consent_tool
 from .request_choice import build_request_choice_tool
 from .request_consent import build_request_consent_tool
@@ -78,11 +81,13 @@ __all__ = [
     "build_builtin_tools",
     "build_calculate_tool",
     "build_check_item_tool",
+    "build_clear_canvas_tool",
     "build_convert_time_tool",
     "build_current_time_tool",
     "build_describe_asset_tool",
     "build_describe_current_frame_tool",
     "build_describe_panel_tool",
+    "build_draw_on_canvas_tool",
     "build_end_call_tool",
     "build_escalate_to_human_tool",
     "build_fetch_url_tool",
@@ -94,6 +99,7 @@ __all__ = [
     "build_notify_team_tool",
     "build_pin_frame_tool",
     "build_push_note_tool",
+    "build_read_canvas_tool",
     "build_record_consent_tool",
     "build_request_choice_tool",
     "build_request_consent_tool",
@@ -210,6 +216,9 @@ def build_builtin_tools(
         `generate_image` when the session has an image model (`ctx.image_gen`,
         from `pipeline.image_gen`) and the panel has a `gallery` block.
         V6-08: `notebook_write` and `notebook_check` for a `notebook` block.
+        V6-12: `draw_on_canvas`, `clear_canvas` and `read_canvas` for a `canvas` block (which also
+        lets `describe_asset` re-read a drawing snapshot, and gives `pin_frame` its
+        `canvas_block_id`).
         V6-13: `extract_now` when `extraction` is on with a `manual` trigger; the
         session's live extraction and rules are built (and start listening) here.
     """
@@ -373,6 +382,13 @@ def build_builtin_tools(
         tools.append(build_notebook_write_tool(ctx))
     if "notebook" in block_types and _want("notebook_check"):
         tools.append(build_notebook_check_tool(ctx))
+    # V6-12: a drawing board: mark it up, clear it, read what the caller wrote.
+    if "canvas" in block_types and _want("draw_on_canvas"):
+        tools.append(build_draw_on_canvas_tool(ctx))
+    if "canvas" in block_types and _want("clear_canvas"):
+        tools.append(build_clear_canvas_tool(ctx))
+    if "canvas" in block_types and _want("read_canvas"):
+        tools.append(build_read_canvas_tool(ctx))
     # V6-13: the session's live extraction and rules listen from here (every session is assembled
     # through this builder before any tool runs); nothing is built for an agent without them.
     from lkap_agent.extraction.session import live_structure, wants_extract_now  # noqa: PLC0415
@@ -380,8 +396,9 @@ def build_builtin_tools(
     live_structure(ctx)
     if wants_extract_now(ctx.config) and _want("extract_now"):
         tools.append(build_extract_now_tool(ctx))
-    # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one.
-    holds_pictures = bool(block_types & {"upload", "form"}) or has_vision
+    # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one
+    # (V6-12: a drawing board's snapshot is one).
+    holds_pictures = bool(block_types & {"upload", "form", "canvas"}) or has_vision
     if holds_pictures and _want("describe_asset") and vision_llm(ctx) is not None:
         tools.append(build_describe_asset_tool(ctx))
 

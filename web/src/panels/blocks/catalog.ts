@@ -47,6 +47,7 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "cards",
   "notebook",
   "layout",
+  "canvas",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -80,7 +81,10 @@ export type BlockToolName =
   | "set_checklist"
   | "check_item"
   | "notebook_write"
-  | "notebook_check";
+  | "notebook_check"
+  | "draw_on_canvas"
+  | "clear_canvas"
+  | "read_canvas";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -132,6 +136,10 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   // V6-08
   notebook_write: new Set<BlockType>(["notebook"]),
   notebook_check: new Set<BlockType>(["notebook"]),
+  // V6-12
+  draw_on_canvas: new Set<BlockType>(["canvas"]),
+  clear_canvas: new Set<BlockType>(["canvas"]),
+  read_canvas: new Set<BlockType>(["canvas"]),
 };
 
 /** One field of a block's config form. */
@@ -312,6 +320,22 @@ export const NOTEBOOK_PAPERS = [
 export const NOTEBOOK_FONTS = [
   { value: "print", label: "Print" },
   { value: "handwritten", label: "Handwriting" },
+] as const;
+
+/** `canvas.background` values (V6-12): what the drawing board starts on. */
+export const CANVAS_BACKGROUNDS = [
+  { value: "none", label: "Blank" },
+  { value: "asset", label: "A picture the agent puts on it" },
+  { value: "live_camera", label: "The caller's camera" },
+] as const;
+
+/** `canvas.tools` the caller may be offered (V6-12; `text` is reserved and not offered). */
+export const CANVAS_TOOL_OPTIONS = [
+  { value: "pen", label: "Pen" },
+  { value: "highlighter", label: "Highlighter" },
+  { value: "eraser", label: "Eraser" },
+  { value: "box", label: "Box" },
+  { value: "arrow", label: "Arrow" },
 ] as const;
 
 /** `layout.kind` values (V6-08). */
@@ -744,6 +768,48 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       { key: "columns", label: "Columns", kind: "integer", hint: "Used when shown side by side.", default: 2, min: 2 },
     ],
     filledBy: "the blocks you put in it",
+  },
+  // V6-12: a minimal entry (PLAN-V5 §0.1, R-V5-7); the drawing board itself, the tools picker
+  // and previews come with V6-14.
+  canvas: {
+    type: "canvas",
+    label: "Drawing board",
+    description: "A board the caller can write or sketch on by hand, and the agent can mark up and read.",
+    defaultTitle: "Drawing board",
+    idStem: "board",
+    configFields: [
+      {
+        key: "caller_can_draw",
+        label: "The caller can draw",
+        kind: "boolean",
+        hint: "The caller can write and sketch on the board. The agent can read what they wrote.",
+        default: false,
+      },
+      {
+        key: "tools",
+        label: "Tools",
+        kind: "multiselect",
+        default: ["pen", "highlighter", "eraser"],
+        options: CANVAS_TOOL_OPTIONS,
+      },
+      { key: "background", label: "Starts on", kind: "select", default: "none", options: CANVAS_BACKGROUNDS },
+      {
+        key: "max_strokes",
+        label: "Most strokes",
+        kind: "integer",
+        hint: "The board says it is full after this many strokes (up to 2,000).",
+        default: 500,
+        min: 1,
+      },
+      {
+        key: "signature_mode",
+        label: "Signature board",
+        kind: "boolean",
+        hint: "Kept for signatures; not used yet.",
+        default: false,
+      },
+    ],
+    filledBy: "draw_on_canvas",
   },
 };
 

@@ -1,0 +1,32 @@
+{
+  "width": 1600,
+  "height": 1200,
+  "background": "none",
+  "strokes": [
+    {
+      "id": "s-1",
+      "author": "caller",
+      "tool": "pen",
+      "points": [[0.12, 0.3, 0.5], [0.14, 0.26, 0.55], [0.17, 0.24, 0.6], [0.2, 0.27, 0.6], [0.21, 0.33, 0.5]],
+      "color": "#1f2937",
+      "width": 3,
+      "ts": 1777000400
+    },
+    {
+      "id": "s-2",
+      "author": "caller",
+      "tool": "highlighter",
+      "points": [[0.3, 0.6], [0.55, 0.6]],
+      "color": "#facc15",
+      "width": 14,
+      "ts": 1777000410
+    }
+  ],
+  "shapes": [
+    { "id": "dent", "author": "agent", "kind": "circle", "x": 0.55, "y": 0.2, "w": 0.2, "h": 0.15, "label": "The dent", "color": "#dc2626", "width": 4, "ts": 1777000420 },
+    { "id": "arrow-1", "author": "agent", "kind": "arrow", "points": [[0.4, 0.45], [0.55, 0.3]], "color": "#dc2626", "width": 4, "ts": 1777000421 }
+  ],
+  "snapshot_asset_id": null,
+  "limit_reached": false,
+  "updated_at": 1777000421
+}

@@ -262,7 +262,8 @@
             "slots",
             "cards",
             "notebook",
-            "layout"
+            "layout",
+            "canvas"
           ],
           "title": "Type",
           "type": "string"

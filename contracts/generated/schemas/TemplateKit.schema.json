@@ -1,0 +1,96 @@
+{
+  "$id": "lkap-contracts/TemplateKit.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A tool kit the starter adds to the new agent (``ToolKitInstantiate``, minus the agent).\n\n``dataset`` names one of the starter's :attr:`StarterTemplate.dataset_seeds` for a\n``dataset`` variant; ``key_columns`` defaults to that table's key columns. A starter never\nbinds a key (``credential_id``) or a connected app, so kits whose variant needs one are\nrefused when the catalogue loads.",
+  "properties": {
+    "add_test_case": {
+      "default": true,
+      "title": "Add Test Case",
+      "type": "boolean"
+    },
+    "block_prefix": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Block Prefix"
+    },
+    "dataset": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset"
+    },
+    "key_columns": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Columns"
+    },
+    "kit_id": {
+      "pattern": "^[a-z][a-z0-9_]{0,39}$",
+      "title": "Kit Id",
+      "type": "string"
+    },
+    "settings": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "default": {},
+      "title": "Settings",
+      "type": "object"
+    },
+    "variant": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Variant"
+    }
+  },
+  "required": [
+    "kit_id"
+  ],
+  "title": "TemplateKit",
+  "type": "object"
+}

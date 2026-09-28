@@ -113,6 +113,7 @@ export interface LkapContracts {
   DatasetOut?: DatasetOut;
   DatasetPage?: DatasetPage;
   DatasetPreviewOut?: DatasetPreviewOut;
+  DatasetSeed?: DatasetSeed;
   DatasetToolDefinition?: DatasetToolDefinition;
   DetailsBlockState?: DetailsBlockState;
   DetailsEdit?: DetailsEdit;
@@ -327,6 +328,7 @@ export interface LkapContracts {
   TableBlockState?: TableBlockState;
   TelephonyConfig?: TelephonyConfig;
   TemplateEstimate?: TemplateEstimate;
+  TemplateKit?: TemplateKit;
   TemplateOut?: TemplateOut;
   TemplatesResponse?: TemplatesResponse;
   TextSessionCreate?: TextSessionCreate;
@@ -4561,6 +4563,26 @@ export interface DatasetPreviewOut {
   total: number;
 }
 /**
+ * A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).
+ *
+ * At create time the api reuses a table of this ``name`` in the agent's workspace when one
+ * exists and did not fail to import; otherwise it reads the file like an upload (the same
+ * parser and key normalisation) and stores the rows in the create's own transaction, so the
+ * table is ready before the agent is validated. Rows are demo data: ``name`` starts with
+ * ``Demo — `` for the shipped starters.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DatasetSeed".
+ */
+export interface DatasetSeed {
+  /**
+   * A `.csv` or `.json` file under `seeds/`
+   */
+  file: string;
+  key_columns: DatasetKeyColumn[];
+  name: string;
+}
+/**
  * A lookup in one of the workspace's datasets (V6-16, D-V6-27; ``lkap_contracts.datasets``).
  *
  * The model sees one string argument per key column (``key_columns``, minus the pinned
@@ -8592,16 +8614,19 @@ export interface StarterTemplate {
     | "knowledge_seeds"
     | "image_gen"
   )[];
+  dataset_seeds?: DatasetSeed[];
   default_voice?: {
     [k: string]: string;
   };
   description: string;
+  extraction?: ExtractionConfig | null;
   flow?: FlowSpec | null;
   greeting?: string | null;
   http_request_enabled?: boolean;
   id: string;
   instructions?: string | null;
   kb_seeds?: KbSeed[];
+  kits?: TemplateKit[];
   knowledge?: KnowledgeConfig | null;
   max_tool_steps?: number | null;
   name: string;
@@ -8616,13 +8641,40 @@ export interface StarterTemplate {
   qa?: QaConfig | null;
   recording?: RecordingConfig | null;
   requires?: TemplateRequirements;
+  rules?: Rule[];
   sample_prompts?: string[];
   tagline: string;
   telephony?: TelephonyConfig | null;
+  /**
+   * @maxItems 50
+   */
+  tests?: AgentTest[];
   timezone?: string | null;
   tool_seeds?: ToolSeed[];
   v?: 1;
   voice?: VoiceConfig | null;
+}
+/**
+ * A tool kit the starter adds to the new agent (``ToolKitInstantiate``, minus the agent).
+ *
+ * ``dataset`` names one of the starter's :attr:`StarterTemplate.dataset_seeds` for a
+ * ``dataset`` variant; ``key_columns`` defaults to that table's key columns. A starter never
+ * binds a key (``credential_id``) or a connected app, so kits whose variant needs one are
+ * refused when the catalogue loads.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TemplateKit".
+ */
+export interface TemplateKit {
+  add_test_case?: boolean;
+  block_prefix?: string | null;
+  dataset?: string | null;
+  key_columns?: string[] | null;
+  kit_id: string;
+  settings?: {
+    [k: string]: string | number | boolean;
+  };
+  variant?: string | null;
 }
 /**
  * One line of the post-create checklist; ``section`` deep-links into the editor, ``href`` elsewhere.

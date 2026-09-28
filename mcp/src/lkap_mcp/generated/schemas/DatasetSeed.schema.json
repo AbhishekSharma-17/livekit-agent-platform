@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "DatasetKeyColumn": {
+      "description": "A key column and how its cells are normalised.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "phone",
+            "email",
+            "number"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DatasetKeyColumn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/DatasetSeed.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).\n\nAt create time the api reuses a table of this ``name`` in the agent's workspace when one\nexists and did not fail to import; otherwise it reads the file like an upload (the same\nparser and key normalisation) and stores the rows in the create's own transaction, so the\ntable is ready before the agent is validated. Rows are demo data: ``name`` starts with\n``Demo — `` for the shipped starters.",
+  "properties": {
+    "file": {
+      "description": "A `.csv` or `.json` file under `seeds/`",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\\.(csv|json)$",
+      "title": "File",
+      "type": "string"
+    },
+    "key_columns": {
+      "items": {
+        "$ref": "#/$defs/DatasetKeyColumn"
+      },
+      "title": "Key Columns",
+      "type": "array"
+    },
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "file",
+    "key_columns"
+  ],
+  "title": "DatasetSeed",
+  "type": "object"
+}

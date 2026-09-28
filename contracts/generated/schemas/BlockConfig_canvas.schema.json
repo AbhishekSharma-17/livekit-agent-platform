@@ -1,0 +1,59 @@
+{
+  "$id": "lkap-contracts/BlockConfig_canvas.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``canvas``: a drawing board the caller writes on and the agent marks up (V6-12, D-V6-16).\n\n``caller_can_draw`` lets the caller draw (their strokes reach the worker on\n``lkap.ui.ink``; the agent reads them with ``read_canvas``, a picture read by its vision\nmodel); without it only the agent draws (``draw_on_canvas``). ``tools`` is what the board\noffers the caller; ``max_strokes`` how many strokes the board holds before it says it is\nfull (at most 2,000). ``background`` is what the board starts on. ``signature_mode``\n(reserved for the signature block, V6-23) shows a small board with a baseline and no shapes.\nA board shown in a notebook ``ink`` section may also be drawn on when that notebook sets\n``caller_can_draw`` (:func:`canvas_caller_can_draw`).",
+  "properties": {
+    "background": {
+      "default": "none",
+      "enum": [
+        "none",
+        "asset",
+        "live_camera"
+      ],
+      "title": "Background",
+      "type": "string"
+    },
+    "caller_can_draw": {
+      "default": false,
+      "title": "Caller Can Draw",
+      "type": "boolean"
+    },
+    "max_strokes": {
+      "default": 500,
+      "maximum": 2000,
+      "minimum": 1,
+      "title": "Max Strokes",
+      "type": "integer"
+    },
+    "signature_mode": {
+      "default": false,
+      "title": "Signature Mode",
+      "type": "boolean"
+    },
+    "tools": {
+      "default": [
+        "pen",
+        "highlighter",
+        "eraser"
+      ],
+      "items": {
+        "enum": [
+          "pen",
+          "highlighter",
+          "eraser",
+          "box",
+          "arrow",
+          "text"
+        ],
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "title": "BlockConfig_canvas",
+  "type": "object"
+}

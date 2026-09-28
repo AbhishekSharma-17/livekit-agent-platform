@@ -1211,7 +1211,8 @@
                   "slots",
                   "cards",
                   "notebook",
-                  "layout"
+                  "layout",
+                  "canvas"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -5417,7 +5418,8 @@
                   "slots",
                   "cards",
                   "notebook",
-                  "layout"
+                  "layout",
+                  "canvas"
                 ],
                 "title": "Type",
                 "type": "string"
@@ -10164,7 +10166,8 @@
                   "slots",
                   "cards",
                   "notebook",
-                  "layout"
+                  "layout",
+                  "canvas"
                 ],
                 "title": "Type",
                 "type": "string"

@@ -136,6 +136,10 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "check_item", label: "Tick the checklist", help: "Lets the agent mark checklist items as done." },
   { name: "notebook_write", label: "Write in the notebook", help: "Lets the agent write notes, list items and fill the summary in the notebook." },
   { name: "notebook_check", label: "Tick the notebook's list", help: "Lets the agent mark items in the notebook's checklist as done." },
+  // V6-12
+  { name: "draw_on_canvas", label: "Mark up the drawing board", help: "Lets the agent draw boxes, circles, arrows and short labels on the drawing board." },
+  { name: "clear_canvas", label: "Clear the drawing board", help: "Lets the agent wipe the drawing board." },
+  { name: "read_canvas", label: "Read the drawing board", help: "Lets the agent read what the caller wrote or drew. Needs a language model that can see pictures." },
 ];
 
 /**

@@ -1,0 +1,308 @@
+{
+  "$defs": {
+    "CanvasShape": {
+      "description": "One mark the agent drew on a canvas (``draw_on_canvas``, V6-12). ``draw_on_canvas``\nupserts shapes by ``id``.\n\n* ``box`` and ``circle``: ``x``, ``y`` (the top-left corner), ``w`` and ``h``, all 0..1 and\n  inside the board (a circle is the ellipse inside that box);\n* ``arrow``: ``points`` — from and to;\n* ``path``: ``points`` — two or more;\n* ``text``: ``x``, ``y`` and ``text``.\n\n``label`` is a short caption next to any shape. Both texts are the agent's own words.",
+      "properties": {
+        "author": {
+          "default": "agent",
+          "enum": [
+            "agent",
+            "caller"
+          ],
+          "title": "Author",
+          "type": "string"
+        },
+        "color": {
+          "default": "#dc2626",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "h": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "H"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "box",
+            "circle",
+            "arrow",
+            "text",
+            "path"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "points": {
+          "default": [],
+          "items": {
+            "items": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 200,
+          "title": "Points",
+          "type": "array"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "ts": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ts"
+        },
+        "w": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "W"
+        },
+        "width": {
+          "default": 4,
+          "maximum": 40,
+          "minimum": 0.5,
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "CanvasShape",
+      "type": "object"
+    },
+    "InkStroke": {
+      "description": "One of the caller's strokes on a canvas (V6-12), as the worker stored it.\n\n``points`` are normalised to the board (``[x, y]`` or ``[x, y, pressure]``); ``width`` is\nin board pixels (``CanvasBlockState.width``). Written by the worker only, from\n:class:`InkMessage` s it accepted; a stroke carries no text.",
+      "properties": {
+        "author": {
+          "default": "caller",
+          "enum": [
+            "agent",
+            "caller"
+          ],
+          "title": "Author",
+          "type": "string"
+        },
+        "color": {
+          "default": "#1f2937",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "items": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 1000,
+          "minItems": 1,
+          "title": "Points",
+          "type": "array"
+        },
+        "tool": {
+          "default": "pen",
+          "enum": [
+            "pen",
+            "highlighter",
+            "box",
+            "arrow"
+          ],
+          "title": "Tool",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "width": {
+          "default": 3,
+          "maximum": 40,
+          "minimum": 0.5,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "points",
+        "ts"
+      ],
+      "title": "InkStroke",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/CanvasBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``canvas`` block's state (V6-12, D-V6-16): the caller's strokes and the agent's shapes.\n\nEvery coordinate is normalised to the board (0..1), so ``width`` and ``height`` only fix\nits shape (and the pixel unit of a mark's ``width``). ``background`` is ``none``,\n``live_camera`` (the marks overlay the caller's camera) or ``asset:<id>`` (a picture of\nthis session, e.g. a pinned frame: \"circle the dent\"). ``strokes`` are written by the\nworker from the caller's :class:`InkMessage` s; ``shapes`` by ``draw_on_canvas``;\n``snapshot_asset_id`` is the stored PNG ``read_canvas`` last read; ``limit_reached`` says\nthe board is full (the caller's next strokes are dropped until it is cleared).",
+  "properties": {
+    "background": {
+      "default": "none",
+      "pattern": "^(none|live_camera|asset:[A-Za-z0-9_.:-]{1,128})$",
+      "title": "Background",
+      "type": "string"
+    },
+    "height": {
+      "default": 1200,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Height",
+      "type": "integer"
+    },
+    "limit_reached": {
+      "default": false,
+      "title": "Limit Reached",
+      "type": "boolean"
+    },
+    "shapes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CanvasShape"
+      },
+      "maxItems": 200,
+      "title": "Shapes",
+      "type": "array"
+    },
+    "snapshot_asset_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Asset Id"
+    },
+    "strokes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/InkStroke"
+      },
+      "maxItems": 2000,
+      "title": "Strokes",
+      "type": "array"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "width": {
+      "default": 1600,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Width",
+      "type": "integer"
+    }
+  },
+  "title": "CanvasBlockState",
+  "type": "object"
+}

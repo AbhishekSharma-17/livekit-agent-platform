@@ -272,7 +272,7 @@
       "type": "object"
     },
     "NotebookInkSection": {
-      "description": "An ``ink`` section: a drawing board. ``canvas_block_id`` is reserved for V6-12 (D-V6-16).\n\nUntil the ``canvas`` block lands the section stays empty and the console shows\n\"Drawing board coming soon\"; nothing writes it.",
+      "description": "An ``ink`` section: a drawing board (D-V6-16).\n\nV6-12: ``canvas_block_id`` names the panel's ``canvas`` block the section shows; the worker\nseeds it from the section's config (``NotebookSectionConfig.canvas_block_id``) and nothing\nelse writes it. The strokes live in that canvas block's own state (``CanvasBlockState``);\nthe console renders the canvas inside the notebook and leaves it out of the panel's flow.\n``None`` is a section with no board yet (\"Drawing board coming soon\").",
       "properties": {
         "canvas_block_id": {
           "anyOf": [

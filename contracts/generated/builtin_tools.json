@@ -20,14 +20,21 @@
     "set_checklist",
     "check_item",
     "notebook_write",
-    "notebook_check"
+    "notebook_check",
+    "draw_on_canvas",
+    "clear_canvas",
+    "read_canvas"
   ],
   "block_tool_types": {
     "check_item": [
       "checklist"
     ],
+    "clear_canvas": [
+      "canvas"
+    ],
     "describe_panel": [
       "activity",
+      "canvas",
       "captions",
       "cards",
       "checklist",
@@ -53,11 +60,17 @@
       "upload",
       "video"
     ],
+    "draw_on_canvas": [
+      "canvas"
+    ],
     "notebook_check": [
       "notebook"
     ],
     "notebook_write": [
       "notebook"
+    ],
+    "read_canvas": [
+      "canvas"
     ],
     "record_consent": [
       "consent"
@@ -160,6 +173,8 @@
   ],
   "write_builtins": [
     "check_item",
+    "clear_canvas",
+    "draw_on_canvas",
     "generate_image",
     "notebook_check",
     "notebook_write",

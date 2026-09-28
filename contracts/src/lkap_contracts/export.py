@@ -111,6 +111,7 @@ from lkap_contracts.ui_protocol import (
     BlockRequestPayload,
     BlockSpec,
     BlockSubmitPayload,
+    CanvasBlockState,
     CaptionsBlockState,
     CaptionSegment,
     CardsBlockState,
@@ -124,6 +125,7 @@ from lkap_contracts.ui_protocol import (
     FormUploadSpec,
     GalleryBlockState,
     HandoffBlockState,
+    InkMessage,
     KbCitationsBlockState,
     LinkBlockState,
     LinkCompletedPacket,
@@ -233,6 +235,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SlotsBlockState": SlotsBlockState,  # V5-43
     "CardsBlockState": CardsBlockState,  # V5-43
     "NotebookBlockState": NotebookBlockState,  # V6-08
+    "CanvasBlockState": CanvasBlockState,  # V6-12
     "LinkHookIn": LinkHookIn,  # V5-43
     "LinkHookOut": LinkHookOut,
     "LinkCompletedPacket": LinkCompletedPacket,
@@ -249,6 +252,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "DetailsEdit": DetailsEdit,  # V6-06: a caller's edit of a block
     "ChecklistEdit": ChecklistEdit,
     "NotebookEdit": NotebookEdit,  # V6-08
+    "InkMessage": InkMessage,  # V6-12: a caller's stroke on lkap.ui.ink
     "AgentAction": AgentAction,
     "AgentActionResult": AgentActionResult,
     # packs

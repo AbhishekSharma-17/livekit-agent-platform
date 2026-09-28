@@ -24,6 +24,7 @@ import {
   LinkIcon,
   NotebookPenIcon,
   PanelsTopLeftIcon,
+  PencilLineIcon,
   ClipboardListIcon,
   FileTextIcon,
   GaugeIcon,
@@ -97,6 +98,7 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   cards: GalleryHorizontalIcon,
   notebook: NotebookPenIcon,
   layout: PanelsTopLeftIcon,
+  canvas: PencilLineIcon,
 };
 
 /**

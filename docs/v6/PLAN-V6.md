@@ -395,10 +395,10 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-16 | Opus | 4 | merged | b379030 | | |
 | V6-17 | Opus | 4 | merged | 53b4553 | | |
 | V6-18 | Opus | 5 | merged | b4d502b | | |
-| V6-19 | Sonnet | 5 | running | | | |
+| V6-19 | Sonnet | 5 | merged | 9652a2e | | #191, #192 |
 | V6-20 | Fable | 5 | merged | d1365cc | | |
 | V6-21 | Opus | 6 | merged | aea6a9b | | #162, #166 |
-| V6-22 | Opus | 6 | planned | | | |
+| V6-22 | Opus | 6 | running | | | |
 | V6-23 | Opus | 6 | running | | | |
 | V6-24 | Sonnet | 7 | planned | | | |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |

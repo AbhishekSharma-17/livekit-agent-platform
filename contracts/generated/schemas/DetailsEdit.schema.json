@@ -1,0 +1,25 @@
+{
+  "$id": "lkap-contracts/DetailsEdit.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``block_action {name: \"edit\", data}`` on a ``details`` block (V6-06).\n\nChanges the value of a row already on the card (``key``); the caller cannot add\nrows or change labels. An empty ``value`` clears it.",
+  "properties": {
+    "key": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Key",
+      "type": "string"
+    },
+    "value": {
+      "maxLength": 500,
+      "title": "Value",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ],
+  "title": "DetailsEdit",
+  "type": "object"
+}

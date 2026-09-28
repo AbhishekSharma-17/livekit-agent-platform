@@ -39,7 +39,8 @@ def test_each_new_builtin_is_backgroundable_or_never_background_not_both() -> No
 
 
 def test_write_and_configured_builtins_and_default_modes() -> None:
-    assert WRITE_BUILTINS == {"send_sms", "notify_team"}
+    # V6-06 adds the checklist tools and generate_image.
+    assert WRITE_BUILTINS == {"send_sms", "notify_team", "set_checklist", "check_item", "generate_image"}
     assert CONFIGURED_BUILTINS == {"web_search", "fetch_url", "send_sms", "notify_team"}
     assert BUILTIN_DEFAULT_MODES == {
         "web_search": "auto",
@@ -53,7 +54,8 @@ def test_write_and_configured_builtins_and_default_modes() -> None:
 def test_builtin_tools_document_carries_the_new_sets() -> None:
     document = builtin_tools_document()
     assert document["configured_builtins"] == sorted(CONFIGURED_BUILTINS)
-    assert document["write_builtins"] == ["notify_team", "send_sms"]
+    assert document["write_builtins"] == sorted(WRITE_BUILTINS)
+    assert {"notify_team", "send_sms"} <= set(document["write_builtins"])
     assert document["builtin_default_modes"]["web_search"] == "auto"
 
 

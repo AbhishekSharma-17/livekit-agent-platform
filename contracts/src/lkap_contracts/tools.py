@@ -45,6 +45,9 @@ BUILTIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     # V5-31: registered only when the agent lists more than one language
     # (``AgentConfig.voice.languages``); see :data:`LANGUAGE_TOOL_NAMES`.
     "switch_language",
+    # V6-06: a picture from the agent's ``pipeline.image_gen`` model into a gallery block;
+    # registered only when that slot resolves and the panel has a gallery.
+    "generate_image",
 )
 
 #: Built-ins that reach a vendor or the internet and are registered only when the agent
@@ -55,7 +58,10 @@ CONFIGURED_BUILTINS: Final[frozenset[str]] = frozenset({"web_search", "fetch_url
 
 #: Built-ins that change the world (V5-25): run with ``is_read=False``, so a non-blocking run
 #: asks before running twice (``on_duplicate="confirm"``) and is not cancellable by default.
-WRITE_BUILTINS: Final[frozenset[str]] = frozenset({"send_sms", "notify_team"})
+WRITE_BUILTINS: Final[frozenset[str]] = frozenset(
+    # V6-06: the checklist tools and a generated picture change what the caller sees.
+    {"send_sms", "notify_team", "set_checklist", "check_item", "generate_image"}
+)
 
 #: Built-ins registered only when the agent speaks more than one language (V5-31):
 #: ``switch_language`` changes the reply language, the voice and the transcriber mid-call.
@@ -100,6 +106,9 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     "request_slot",
     "resolve_slot",
     "show_cards",
+    # V6-06: the envelope checklist, for any agent with a checklist block.
+    "set_checklist",
+    "check_item",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
@@ -148,6 +157,8 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "request_slot": frozenset({"slots"}),
     "resolve_slot": frozenset({"slots"}),
     "show_cards": frozenset({"cards"}),
+    "set_checklist": frozenset({"checklist"}),
+    "check_item": frozenset({"checklist"}),
 }
 
 
@@ -272,6 +283,11 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "request_slot",
         "resolve_slot",
         "show_cards",
+        # V6-06: writing the checklist is instant; a picture runs as its own job (like the
+        # insurance pack's sketch), so the call itself answers at once.
+        "set_checklist",
+        "check_item",
+        "generate_image",
         "escalate_to_human",
         "update_block",
         "show_document",

@@ -177,7 +177,7 @@
       "type": "object"
     },
     "ChecklistItem": {
-      "description": "One \"still needed\" item.",
+      "description": "One \"still needed\" item. ``edited_by`` is ``\"caller\"`` after the caller ticked it on screen (V6-06).",
       "properties": {
         "blocking": {
           "default": false,
@@ -188,6 +188,19 @@
           "default": false,
           "title": "Done",
           "type": "boolean"
+        },
+        "edited_by": {
+          "anyOf": [
+            {
+              "const": "caller",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edited By"
         },
         "hint": {
           "anyOf": [
@@ -535,8 +548,20 @@
       "type": "object"
     },
     "Note": {
-      "description": "A line in the panel's notes list. A repeated ``key`` upserts in place.",
+      "description": "A line in the panel's notes list. A repeated ``key`` upserts in place.\n\n``block_id`` (V6-06, D-V6-19) pins the note to one block of the panel: the\nconsole shows it in that block's margin instead of (only) the notes list.\n``None`` is a panel-wide note, as before.",
       "properties": {
+        "block_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Id"
+        },
         "id": {
           "title": "Id",
           "type": "string"

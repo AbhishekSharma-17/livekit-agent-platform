@@ -2,8 +2,14 @@
   "$id": "lkap-contracts/BlockConfig_checklist.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "A block type that takes no configuration at all.",
-  "properties": {},
+  "description": "``checklist``: whether the caller may tick items on screen (V6-06).\n\nThe items themselves live in the envelope (``UiState.checklist``), written by\n``set_checklist`` / ``check_item`` or the pack; the agent is told about each tick.",
+  "properties": {
+    "caller_can_edit": {
+      "default": false,
+      "title": "Caller Can Edit",
+      "type": "boolean"
+    }
+  },
   "title": "BlockConfig_checklist",
   "type": "object"
 }

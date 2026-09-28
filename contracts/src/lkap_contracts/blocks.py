@@ -15,12 +15,14 @@ schemas by a vitest parity test):
 * ``transcript`` → ``show_tools``;
 * ``video`` → ``source`` (``agent_avatar`` / ``user_camera`` / ``user_screen`` /
   ``track:<sid>``) and ``muted``;
-* the envelope blocks (``status``, ``notes``, ``checklist``, ``activity``) and
+* the envelope blocks (``status``, ``notes``, ``activity``) and
   ``form``, ``gallery``, ``kb_citations`` → no keys;
+* ``checklist`` → ``caller_can_edit`` (V6-06: the caller may tick items);
 * ``choices`` → ``multi``, ``layout`` (``buttons`` / ``list`` / ``chips``),
   ``max_options`` (V5-08);
 * ``details`` → ``columns`` (1 or 2) and ``fields: [{key, label, type}]``, the
-  starting rows (seeded as ``items`` with no value);
+  starting rows (seeded as ``items`` with no value), and ``caller_can_edit`` (V6-06:
+  the caller may change a row's value);
 * ``markdown`` → ``max_chars`` and ``allow_links``;
 * ``steps`` → ``steps: [{id, label}]`` (seeded as pending), ``source``
   (``flow`` / ``manual``) and ``show_notes``;
@@ -80,6 +82,7 @@ __all__ = [
     "UPLOAD_MIME_TYPES",
     "CaptionsBlockConfig",
     "CardsBlockConfig",
+    "ChecklistBlockConfig",
     "ChoicesBlockConfig",
     "ConsentBlockConfig",
     "CustomBlockConfig",
@@ -180,10 +183,15 @@ class DetailsFieldConfig(_StrictConfig):
 
 
 class DetailsBlockConfig(_StrictConfig):
-    """``details``: one or two columns, and the rows the card starts with."""
+    """``details``: one or two columns, the rows the card starts with, and whether the caller may edit.
+
+    ``caller_can_edit`` (V6-06) lets the caller change the value of a row on screen; the
+    agent is told about each change (as data, never as instructions).
+    """
 
     columns: int = Field(default=1, ge=1, le=2)
     fields: list[DetailsFieldConfig] = []
+    caller_can_edit: bool = False
 
     @field_validator("fields")
     @classmethod
@@ -192,6 +200,16 @@ class DetailsBlockConfig(_StrictConfig):
         if len(set(keys)) != len(keys):
             raise ValueError("field keys must be unique")
         return value
+
+
+class ChecklistBlockConfig(_StrictConfig):
+    """``checklist``: whether the caller may tick items on screen (V6-06).
+
+    The items themselves live in the envelope (``UiState.checklist``), written by
+    ``set_checklist`` / ``check_item`` or the pack; the agent is told about each tick.
+    """
+
+    caller_can_edit: bool = False
 
 
 class MarkdownBlockConfig(_StrictConfig):
@@ -484,7 +502,7 @@ class CustomBlockConfig(BaseModel):
 BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "status": EmptyBlockConfig,
     "notes": EmptyBlockConfig,
-    "checklist": EmptyBlockConfig,
+    "checklist": ChecklistBlockConfig,
     "activity": EmptyBlockConfig,
     "form": EmptyBlockConfig,
     "gallery": EmptyBlockConfig,

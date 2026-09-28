@@ -111,9 +111,11 @@ from lkap_contracts.ui_protocol import (
     CaptionsBlockState,
     CaptionSegment,
     CardsBlockState,
+    ChecklistEdit,
     ChoicesBlockState,
     ConsentBlockState,
     DetailsBlockState,
+    DetailsEdit,
     DocumentBlockState,
     FormBlockState,
     FormUploadSpec,
@@ -236,6 +238,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "RequestableState": RequestableState,
     "BlockRequestPayload": BlockRequestPayload,
     "BlockSubmitPayload": BlockSubmitPayload,
+    "DetailsEdit": DetailsEdit,  # V6-06: a caller's edit of a block
+    "ChecklistEdit": ChecklistEdit,
     "AgentAction": AgentAction,
     "AgentActionResult": AgentActionResult,
     # packs

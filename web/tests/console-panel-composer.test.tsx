@@ -195,9 +195,11 @@ describe("composer model", () => {
 
   it("knows when the worker registers each block tool (#69)", () => {
     const none = blockToolStatus(panel(), []);
-    // V5-43: `describe_panel` reads any block, so the four envelope blocks already register it.
-    expect(none.filter((s) => s.name !== "describe_panel").every((s) => !s.available)).toBe(true);
-    expect(none.find((s) => s.name === "describe_panel")?.available).toBe(true);
+    // V5-43: `describe_panel` reads any block, so the four envelope blocks already register it;
+    // V6-06: the checklist block brings `set_checklist` and `check_item`.
+    const fromEnvelope = new Set(["describe_panel", "set_checklist", "check_item"]);
+    expect(none.filter((s) => !fromEnvelope.has(s.name)).every((s) => !s.available)).toBe(true);
+    expect(none.filter((s) => fromEnvelope.has(s.name)).every((s) => s.available)).toBe(true);
     expect(blockToolStatus(panel([]), []).every((s) => !s.available)).toBe(true);
     const withForm = blockToolStatus(addBlock(panel(), "form"), ["request_form"]);
     const byName = Object.fromEntries(withForm.map((s) => [s.name, s]));

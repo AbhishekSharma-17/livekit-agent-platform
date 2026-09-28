@@ -154,6 +154,8 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
   request_slot: "Add a times block first",
   resolve_slot: "Add a times block first",
   show_cards: "Add a cards block first",
+  set_checklist: "Add a checklist block first",
+  check_item: "Add a checklist block first",
 };
 
 /**

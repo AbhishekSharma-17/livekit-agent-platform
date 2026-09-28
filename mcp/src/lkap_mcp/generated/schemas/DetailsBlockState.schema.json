@@ -1,8 +1,21 @@
 {
   "$defs": {
     "DetailsItem": {
-      "description": "One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.",
+      "description": "One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.\n\n``edited_by`` is ``\"caller\"`` after the caller changed the value on screen (V6-06);\n``set_details`` writing the row again clears it.",
       "properties": {
+        "edited_by": {
+          "anyOf": [
+            {
+              "const": "caller",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edited By"
+        },
         "key": {
           "minLength": 1,
           "title": "Key",

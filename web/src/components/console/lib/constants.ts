@@ -69,6 +69,12 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
     label: "Switch language",
     help: "Lets the agent change the language it speaks, and its voice, when the caller asks or switches.",
   },
+  // V6-06: offered only when the agent has a picture model and the panel has a gallery.
+  {
+    name: "generate_image",
+    label: "Make pictures",
+    help: "Lets the agent make a picture, such as a sketch, and show it in the panel's gallery. Needs a picture model.",
+  },
 ];
 
 export const PROVIDER_KIND_LABELS: Record<string, string> = {
@@ -125,6 +131,9 @@ export const BLOCK_TOOLS: BuiltinToolInfo[] = [
   { name: "request_slot", label: "Offer times", help: "Lets the agent show times to book and wait for the caller to pick one." },
   { name: "resolve_slot", label: "Record spoken times", help: "Lets the agent mark the time the caller said out loud." },
   { name: "show_cards", label: "Show cards", help: "Lets the agent show options side by side as cards." },
+  // V6-06
+  { name: "set_checklist", label: "Write the checklist", help: "Lets the agent list what it still needs from the caller." },
+  { name: "check_item", label: "Tick the checklist", help: "Lets the agent mark checklist items as done." },
 ];
 
 /**

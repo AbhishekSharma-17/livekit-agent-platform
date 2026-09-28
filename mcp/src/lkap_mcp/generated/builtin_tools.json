@@ -16,9 +16,14 @@
     "send_link",
     "request_slot",
     "resolve_slot",
-    "show_cards"
+    "show_cards",
+    "set_checklist",
+    "check_item"
   ],
   "block_tool_types": {
+    "check_item": [
+      "checklist"
+    ],
     "describe_panel": [
       "activity",
       "captions",
@@ -70,6 +75,9 @@
     ],
     "send_link": [
       "link"
+    ],
+    "set_checklist": [
+      "checklist"
     ],
     "set_details": [
       "details"
@@ -127,7 +135,8 @@
     "fetch_url",
     "send_sms",
     "notify_team",
-    "switch_language"
+    "switch_language",
+    "generate_image"
   ],
   "configured_builtins": [
     "fetch_url",
@@ -140,7 +149,10 @@
     "pin_frame"
   ],
   "write_builtins": [
+    "check_item",
+    "generate_image",
     "notify_team",
-    "send_sms"
+    "send_sms",
+    "set_checklist"
   ]
 }

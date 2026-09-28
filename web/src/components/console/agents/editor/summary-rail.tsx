@@ -297,6 +297,10 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
     notify_team: Boolean(savedTools?.notify_team),
     // V5-31: registered only when the agent speaks more than one language.
     switch_language: (config?.voice?.languages ?? []).length > 1,
+    // V6-06: registered only with a picture model and a gallery block.
+    generate_image:
+      Boolean(pipeline?.image_gen) &&
+      ((config?.panel ?? agent.config.panel)?.blocks ?? []).some((block) => block.type === "gallery"),
   };
   const toolCounts = {
     builtin: BUILTIN_TOOLS.filter(

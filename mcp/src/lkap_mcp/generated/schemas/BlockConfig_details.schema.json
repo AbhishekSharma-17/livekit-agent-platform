@@ -39,8 +39,13 @@
   "$id": "lkap-contracts/BlockConfig_details.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "``details``: one or two columns, and the rows the card starts with.",
+  "description": "``details``: one or two columns, the rows the card starts with, and whether the caller may edit.\n\n``caller_can_edit`` (V6-06) lets the caller change the value of a row on screen; the\nagent is told about each change (as data, never as instructions).",
   "properties": {
+    "caller_can_edit": {
+      "default": false,
+      "title": "Caller Can Edit",
+      "type": "boolean"
+    },
     "columns": {
       "default": 1,
       "maximum": 2,

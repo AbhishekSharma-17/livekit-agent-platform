@@ -1,0 +1,24 @@
+{
+  "$id": "lkap-contracts/ChecklistEdit.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``block_action {name: \"edit\", data}`` on a ``checklist`` block (V6-06): tick or untick an item.",
+  "properties": {
+    "done": {
+      "title": "Done",
+      "type": "boolean"
+    },
+    "item_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Item Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "done"
+  ],
+  "title": "ChecklistEdit",
+  "type": "object"
+}

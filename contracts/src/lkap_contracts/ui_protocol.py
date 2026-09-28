@@ -11,7 +11,15 @@ from datetime import datetime
 from typing import Annotated, Any, Final, Literal, Self, get_args
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, TEXT_HASH_PATTERN, ConsentKind, ConsentMethod
 
@@ -62,8 +70,29 @@ class StatusStamp(BaseModel):
     key: str | None = None
 
 
-class Note(BaseModel):
-    """A line in the panel's notes list. A repeated ``key`` upserts in place."""
+class _OmitsUnsetV6Keys(BaseModel):
+    """Leaves a V6-06 key off the wire while it is ``None`` (``Note.block_id``, ``edited_by``).
+
+    So a panel that never uses them sends exactly what it sent before V6-06 (the
+    insurance pack's committed ``UiState`` goldens, every stored snapshot).
+    """
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_v6_keys(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        for key in ("block_id", "edited_by"):
+            if key in data and data[key] is None:
+                del data[key]
+        return data
+
+
+class Note(_OmitsUnsetV6Keys):
+    """A line in the panel's notes list. A repeated ``key`` upserts in place.
+
+    ``block_id`` (V6-06, D-V6-19) pins the note to one block of the panel: the
+    console shows it in that block's margin instead of (only) the notes list.
+    ``None`` is a panel-wide note, as before.
+    """
 
     id: str
     text: str
@@ -71,16 +100,24 @@ class Note(BaseModel):
     tone: Tone = "neutral"
     ts: float
     key: str | None = None
+    block_id: str | None = None
 
 
-class ChecklistItem(BaseModel):
-    """One "still needed" item."""
+#: Who last changed a value the agent also writes (V6-06): ``caller`` for an edit the caller
+#: made on screen (a ``block_action {name: "edit"}``). ``None`` is the agent's own value; the
+#: agent writing the value again clears the marker.
+EditAuthor = Literal["caller"]
+
+
+class ChecklistItem(_OmitsUnsetV6Keys):
+    """One "still needed" item. ``edited_by`` is ``"caller"`` after the caller ticked it on screen (V6-06)."""
 
     id: str
     label: str
     done: bool = False
     blocking: bool = False
     hint: str | None = None
+    edited_by: EditAuthor | None = None
 
 
 #: What a stored session asset is (``session_assets.kind``, V5-19): a caller's
@@ -315,8 +352,12 @@ class ChoicesBlockState(RequestableState):
 DetailsValueType = Literal["string", "number", "date", "money", "phone", "email", "badge"]
 
 
-class DetailsItem(BaseModel):
-    """One key-value row of a ``details`` card; ``set_details`` upserts by ``key``."""
+class DetailsItem(_OmitsUnsetV6Keys):
+    """One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.
+
+    ``edited_by`` is ``"caller"`` after the caller changed the value on screen (V6-06);
+    ``set_details`` writing the row again clears it.
+    """
 
     key: str = Field(min_length=1)
     label: str
@@ -324,6 +365,7 @@ class DetailsItem(BaseModel):
     type: DetailsValueType = "string"
     tone: Tone | None = None
     updated_at: float | None = None
+    edited_by: EditAuthor | None = None
 
 
 class DetailsBlockState(BaseModel):
@@ -937,6 +979,41 @@ class BlockSubmitPayload(BaseModel):
         return self
 
 
+# --------------------------------------------------------------------- caller edits (V6-06)
+
+#: The ``block_action`` name a caller's edit of a block is sent with (D-V6-19).
+BLOCK_EDIT_ACTION: Final[str] = "edit"
+#: The block types a caller may edit when the block's config sets ``caller_can_edit``:
+#: a ``details`` value (:class:`DetailsEdit`) and a ``checklist`` tick (:class:`ChecklistEdit`).
+#: An ``edit`` on any other built-in block (requestable, link, consent, upload, captions and
+#: handoff blocks included) is refused; a ``custom`` block's actions stay the pack's.
+EDITABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset({"details", "checklist"})
+#: The longest value a caller may type into a block.
+MAX_CALLER_EDIT_CHARS: Final[int] = 500
+
+
+class DetailsEdit(BaseModel):
+    """``block_action {name: "edit", data}`` on a ``details`` block (V6-06).
+
+    Changes the value of a row already on the card (``key``); the caller cannot add
+    rows or change labels. An empty ``value`` clears it.
+    """
+
+    key: str = Field(min_length=1, max_length=64)
+    value: str = Field(max_length=MAX_CALLER_EDIT_CHARS)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ChecklistEdit(BaseModel):
+    """``block_action {name: "edit", data}`` on a ``checklist`` block (V6-06): tick or untick an item."""
+
+    item_id: str = Field(min_length=1, max_length=64)
+    done: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class AgentAction(BaseModel):
     """RPC payload for ``lkap.agent.action`` (browser asks the agent to do something).
 
@@ -947,7 +1024,10 @@ class AgentAction(BaseModel):
     * ``ui_action`` — ``{name, data}`` → ``Pack.on_ui_action``
     * ``form_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
       (``form`` blocks only; kept for one release beside ``block_submit``)
-    * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``
+    * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``. V6-06:
+      ``name == "edit"`` on a block of :data:`EDITABLE_BLOCK_TYPES` whose config sets
+      ``caller_can_edit`` is checked (:class:`DetailsEdit`, :class:`ChecklistEdit`), applied
+      and told to the model before the pack sees it; any other built-in block refuses it
     * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
     * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
       (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block

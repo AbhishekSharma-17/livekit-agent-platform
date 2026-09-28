@@ -71,6 +71,7 @@ export interface LkapContracts {
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
+  ChecklistEdit?: ChecklistEdit;
   ChoicesBlockState?: ChoicesBlockState;
   ComplianceOut?: ComplianceOut;
   CompliancePreset?: CompliancePreset;
@@ -102,6 +103,7 @@ export interface LkapContracts {
   CredentialTestResult?: CredentialTestResult;
   CredentialUpdate?: CredentialUpdate;
   DetailsBlockState?: DetailsBlockState;
+  DetailsEdit?: DetailsEdit;
   DisclosureConfig?: DisclosureConfig;
   DispatchMetadata?: DispatchMetadata;
   DispatchRuleCreate?: DispatchRuleCreate;
@@ -368,7 +370,10 @@ export interface ActivityEvent {
  * * ``ui_action`` — ``{name, data}`` → ``Pack.on_ui_action``
  * * ``form_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
  *   (``form`` blocks only; kept for one release beside ``block_submit``)
- * * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``
+ * * ``block_action`` — ``{block_id, name, data}`` → ``Pack.on_block_action``. V6-06:
+ *   ``name == "edit"`` on a block of :data:`EDITABLE_BLOCK_TYPES` whose config sets
+ *   ``caller_can_edit`` is checked (:class:`DetailsEdit`, :class:`ChecklistEdit`), applied
+ *   and told to the model before the pack sees it; any other built-in block refuses it
  * * ``rewind`` / ``inject_user_text`` — the text-session actions (V2-18)
  * * ``block_submit`` — ``{block_id, values}`` or ``{block_id, cancelled: true}``
  *   (V5-02): the answer to a ``request`` (or a ``form``) on any requestable block
@@ -3280,6 +3285,16 @@ export interface CatalogResponse {
   total?: number | null;
 }
 /**
+ * ``block_action {name: "edit", data}`` on a ``checklist`` block (V6-06): tick or untick an item.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChecklistEdit".
+ */
+export interface ChecklistEdit {
+  done: boolean;
+  item_id: string;
+}
+/**
  * Quick replies the caller taps or answers by voice (``request_choice``, V5-08).
  *
  * ``selected`` holds the chosen option ids once ``status`` is ``submitted``
@@ -4039,16 +4054,33 @@ export interface DetailsBlockState {
 /**
  * One key-value row of a ``details`` card; ``set_details`` upserts by ``key``.
  *
+ * ``edited_by`` is ``"caller"`` after the caller changed the value on screen (V6-06);
+ * ``set_details`` writing the row again clears it.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "DetailsItem".
  */
 export interface DetailsItem {
+  edited_by?: "caller" | null;
   key: string;
   label: string;
   tone?: ("neutral" | "info" | "success" | "warning" | "danger") | null;
   type?: "string" | "number" | "date" | "money" | "phone" | "email" | "badge";
   updated_at?: number | null;
   value?: string | number | null;
+}
+/**
+ * ``block_action {name: "edit", data}`` on a ``details`` block (V6-06).
+ *
+ * Changes the value of a row already on the card (``key``); the caller cannot add
+ * rows or change labels. An empty ``value`` clears it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DetailsEdit".
+ */
+export interface DetailsEdit {
+  key: string;
+  value: string;
 }
 /**
  * Serialised as JSON into ``RoomAgentDispatch.metadata``.
@@ -7082,7 +7114,7 @@ export interface AssetRef {
   ts: number;
 }
 /**
- * One "still needed" item.
+ * One "still needed" item. ``edited_by`` is ``"caller"`` after the caller ticked it on screen (V6-06).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ChecklistItem".
@@ -7090,6 +7122,7 @@ export interface AssetRef {
 export interface ChecklistItem {
   blocking?: boolean;
   done?: boolean;
+  edited_by?: "caller" | null;
   hint?: string | null;
   id: string;
   label: string;
@@ -7097,10 +7130,15 @@ export interface ChecklistItem {
 /**
  * A line in the panel's notes list. A repeated ``key`` upserts in place.
  *
+ * ``block_id`` (V6-06, D-V6-19) pins the note to one block of the panel: the
+ * console shows it in that block's margin instead of (only) the notes list.
+ * ``None`` is a panel-wide note, as before.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "Note".
  */
 export interface Note {
+  block_id?: string | null;
   id: string;
   key?: string | null;
   kind?: string;

@@ -74,7 +74,9 @@ export type BlockToolName =
   | "send_link"
   | "request_slot"
   | "resolve_slot"
-  | "show_cards";
+  | "show_cards"
+  | "set_checklist"
+  | "check_item";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -120,6 +122,9 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   request_slot: new Set<BlockType>(["slots"]),
   resolve_slot: new Set<BlockType>(["slots"]),
   show_cards: new Set<BlockType>(["cards"]),
+  // V6-06
+  set_checklist: new Set<BlockType>(["checklist"]),
+  check_item: new Set<BlockType>(["checklist"]),
 };
 
 /** One field of a block's config form. */
@@ -316,8 +321,16 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     description: "What the agent still needs from the caller.",
     defaultTitle: "Still needed",
     idStem: "checklist",
-    configFields: [],
-    filledBy: "the pack's checklist",
+    configFields: [
+      {
+        key: "caller_can_edit",
+        label: "The caller can tick items",
+        kind: "boolean",
+        hint: "The agent is told when the caller ticks an item.",
+        default: false,
+      },
+    ],
+    filledBy: "set_checklist",
   },
   activity: {
     type: "activity",
@@ -458,6 +471,13 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
         hint: "Rows the card starts with. The agent fills them in and may add more.",
         default: [],
         itemKeys: ["key", "label", "type"],
+      },
+      {
+        key: "caller_can_edit",
+        label: "The caller can change values",
+        kind: "boolean",
+        hint: "The agent is told when the caller changes a value.",
+        default: false,
       },
     ],
     filledBy: "set_details",

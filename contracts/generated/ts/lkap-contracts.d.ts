@@ -8,7 +8,7 @@
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "FlowNode".
  */
-export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode;
+export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode;
 /**
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ToolDefinition".
@@ -314,6 +314,7 @@ export interface LkapContracts {
   ToolDryRunResult?: ToolDryRunResult;
   ToolExecution?: ToolExecution;
   ToolMeta?: ToolMeta;
+  ToolNode?: ToolNode;
   ToolOut?: ToolOut;
   ToolPage?: ToolPage;
   ToolTemplate?: ToolTemplate;
@@ -596,7 +597,7 @@ export interface ManualTrigger {
  */
 export interface FlowSpec {
   edges?: FlowEdge[];
-  nodes?: (StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode)[];
+  nodes?: (StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode)[];
   v?: 1;
   variables?: VariableSpec[];
 }
@@ -748,6 +749,62 @@ export interface QaNode {
    */
   position?: [unknown, unknown];
   rubric_prompt?: string | null;
+}
+/**
+ * Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).
+ *
+ * The worker runs the tool the moment the step is entered — through the same execution path
+ * as a call the model makes (blocking, the same guardrails and fences) — applies
+ * :attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The
+ * result text itself never reaches the model: what the next steps need goes into variables
+ * (``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolNode".
+ */
+export interface ToolNode {
+  arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
+  bindings?: ToolBinding[];
+  id: string;
+  kind?: "tool";
+  label?: string;
+  mcp_tool?: string | null;
+  on?: ToolNodeOutcomes;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  timeout_s?: number;
+  tool: string;
+}
+/**
+ * Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).
+ *
+ * Applied by the worker after a successful call (an HTTP 2xx, an app action that
+ * succeeded, an MCP result that is not an error) and before the model's next turn, with
+ * no model involved. ``path`` points into the tool's result as the model would see it
+ * (after ``result_path``); ``""`` is the whole result.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolBinding".
+ */
+export interface ToolBinding {
+  path?: string;
+  to: string;
+}
+/**
+ * Which outgoing edge a ``tool`` node takes for each outcome (edge ids).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolNodeOutcomes".
+ */
+export interface ToolNodeOutcomes {
+  empty?: string | null;
+  error?: string | null;
+  ok?: string | null;
 }
 /**
  * One variable a flow extracts from the conversation.
@@ -4693,21 +4750,6 @@ export interface HttpToolDefinition {
   silent_reply?: boolean;
   timeout_s?: number;
   url: string;
-}
-/**
- * Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).
- *
- * Applied by the worker after a successful call (an HTTP 2xx, an app action that
- * succeeded, an MCP result that is not an error) and before the model's next turn, with
- * no model involved. ``path`` points into the tool's result as the model would see it
- * (after ``result_path``); ``""`` is the whole result.
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ToolBinding".
- */
-export interface ToolBinding {
-  path?: string;
-  to: string;
 }
 /**
  * What :func:`validate_id_value` found wrong with an id-like value (R-V4-31). Value-free.

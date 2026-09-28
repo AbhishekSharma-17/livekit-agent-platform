@@ -1346,10 +1346,11 @@ class DetailsEdit(BaseModel):
     """``block_action {name: "edit", data}`` on a ``details`` block (V6-06).
 
     Changes the value of a row already on the card (``key``); the caller cannot add
-    rows or change labels. An empty ``value`` clears it.
+    rows or change labels. An empty ``value`` clears it. ``key`` has the id shape (V6-21,
+    S6-7): an odd value is refused by the contract, never echoed into a log line or an event.
     """
 
-    key: str = Field(min_length=1, max_length=64)
+    key: str = Field(pattern=NOTEBOOK_ID_PATTERN)
     value: str = Field(max_length=MAX_CALLER_EDIT_CHARS)
 
     model_config = ConfigDict(extra="forbid")
@@ -1358,7 +1359,7 @@ class DetailsEdit(BaseModel):
 class ChecklistEdit(BaseModel):
     """``block_action {name: "edit", data}`` on a ``checklist`` block (V6-06): tick or untick an item."""
 
-    item_id: str = Field(min_length=1, max_length=64)
+    item_id: str = Field(pattern=NOTEBOOK_ID_PATTERN)
     done: bool
 
     model_config = ConfigDict(extra="forbid")
@@ -1382,9 +1383,9 @@ class NotebookEdit(BaseModel):
     section_id: str = Field(pattern=NOTEBOOK_ID_PATTERN)
     entry_id: str | None = Field(default=None, pattern=NOTEBOOK_ID_PATTERN)
     text: str | None = Field(default=None, max_length=MAX_CALLER_EDIT_CHARS)
-    item_id: str | None = Field(default=None, min_length=1, max_length=64)
+    item_id: str | None = Field(default=None, pattern=NOTEBOOK_ID_PATTERN)
     done: bool | None = None
-    key: str | None = Field(default=None, min_length=1, max_length=64)
+    key: str | None = Field(default=None, pattern=NOTEBOOK_ID_PATTERN)
     value: str | None = Field(default=None, max_length=MAX_CALLER_EDIT_CHARS)
 
     model_config = ConfigDict(extra="forbid")

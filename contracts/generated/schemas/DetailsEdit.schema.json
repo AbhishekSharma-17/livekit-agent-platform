@@ -2,11 +2,10 @@
   "$id": "lkap-contracts/DetailsEdit.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "``block_action {name: \"edit\", data}`` on a ``details`` block (V6-06).\n\nChanges the value of a row already on the card (``key``); the caller cannot add\nrows or change labels. An empty ``value`` clears it.",
+  "description": "``block_action {name: \"edit\", data}`` on a ``details`` block (V6-06).\n\nChanges the value of a row already on the card (``key``); the caller cannot add\nrows or change labels. An empty ``value`` clears it. ``key`` has the id shape (V6-21,\nS6-7): an odd value is refused by the contract, never echoed into a log line or an event.",
   "properties": {
     "key": {
-      "maxLength": 64,
-      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
       "title": "Key",
       "type": "string"
     },

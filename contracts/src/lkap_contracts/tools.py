@@ -698,7 +698,8 @@ class DatasetToolDefinition(BaseModel):
     kind: Literal["dataset"] = "dataset"
     name: str = Field(pattern=TOOL_NAME_PATTERN)
     description: str
-    dataset_id: str = Field(min_length=1, max_length=64)
+    dataset_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    """The dataset's id (``uuid4().hex``; V6-21, S6-15: the worker puts it in an api path)."""
     key_columns: list[str] = Field(min_length=1, max_length=MAX_DATASET_KEY_COLUMNS)
     """The dataset's key columns this tool matches on (each one a declared key column)."""
     return_columns: list[str] = Field(default=[], max_length=MAX_DATASET_COLUMNS)

@@ -443,6 +443,23 @@ def test_an_unusable_live_value_falls_through_to_the_table(value: str | None) ->
     assert q is None  # no table rows for openrouter-llm: unknown, never zero
 
 
+@pytest.mark.parametrize(
+    ("provider_id", "unit", "key"),
+    [
+        ("openrouter-llm", "tokens_in", "prompt"),
+        ("openrouter-llm", "tokens_out", "completion"),
+        ("openrouter-image-gen", "images", "image_output"),
+    ],
+)
+def test_a_wild_llm_catalogue_price_is_refused(provider_id: str, unit: Any, key: str) -> None:
+    """V6-21 (S6-24): a live price above a dollar per unit is "no price", never a quote."""
+    wild = quote(provider_id, "vendor/model", unit, catalog_meta={"pricing": {key: "12.5"}}, now=NOW)
+    edge = quote(provider_id, "vendor/model", unit, catalog_meta={"pricing": {key: "1"}}, now=NOW)
+
+    assert wild is None
+    assert edge is not None and edge.usd_per_unit == Decimal(1)
+
+
 def test_a_live_quote_past_its_ttl_is_stale_and_dated_by_the_fetch() -> None:
     fetched = NOW - dt.timedelta(hours=7)
     meta = {"pricing": {"prompt": "0.000001"}}

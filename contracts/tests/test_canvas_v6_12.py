@@ -50,7 +50,8 @@ def _notebook(block_id: str = "nb", *, board: str | None = "board", **config: An
 
 
 def test_canvas_is_appended_to_the_block_types_with_a_strict_config() -> None:
-    assert get_args(BlockType)[-1] == "canvas"
+    # V6-23 appends its five blocks after it.
+    assert get_args(BlockType)[-6] == "canvas"
     assert BLOCK_CONFIG_MODELS["canvas"] is CanvasBlockConfig
     issues = validate_block_config(_spec("board", "canvas", {"caller_can_draw": True, "colour": "red"}))
     assert [i.path for i in issues] == ["config.colour"]
@@ -75,7 +76,8 @@ def test_canvas_config_defaults_and_bounds() -> None:
 
 
 def test_the_canvas_tools_are_blocking_block_tools() -> None:
-    assert tools.BLOCK_TOOL_NAMES[-3:] == ("draw_on_canvas", "clear_canvas", "read_canvas")
+    # V6-23 appends its five tools after them.
+    assert tools.BLOCK_TOOL_NAMES[-8:-5] == ("draw_on_canvas", "clear_canvas", "read_canvas")
     for name in ("draw_on_canvas", "clear_canvas", "read_canvas"):
         assert name not in tools.BUILTIN_TOOL_NAMES
         assert tools.BLOCK_TOOL_TYPES[name] == {"canvas"}

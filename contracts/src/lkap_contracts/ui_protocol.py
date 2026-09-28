@@ -8,6 +8,7 @@ for a fresh snapshot over RPC when it sees a gap.
 
 import re
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Any, Final, Literal, Self, get_args
 from urllib.parse import urlsplit
 
@@ -202,6 +203,12 @@ BlockType = Literal[
     "layout",
     # V6-12 (D-V6-16): a drawing board the caller writes on and the agent marks up.
     "canvas",
+    # V6-23 (D-V6-20): a signature, a chart, a timer, read-only code and a cart.
+    "signature",
+    "chart",
+    "timer",
+    "code",
+    "cart",
 ]
 
 
@@ -1163,6 +1170,277 @@ class InkMessage(BaseModel):
         return self
 
 
+# --------------------------------------------------------------------- next blocks (V6-23)
+
+#: The session event a settled signature records (D-V6-20), as ``consent`` does for consent.
+SIGNATURE_EVENT: Final[str] = "signature"
+#: The session event the worker records when a timer runs out (``start_timer``).
+TIMER_ENDED_EVENT: Final[str] = "timer_ended"
+#: ``session_assets.meta.source`` of a stored signature picture (kind ``signature``; set by the
+#: worker, never by the page).
+SIGNATURE_SOURCE: Final[str] = "signature"
+#: The largest signature picture the worker takes (a PNG the page renders when the caller signs).
+MAX_SIGNATURE_BYTES: Final[int] = 1024 * 1024
+
+
+class SignatureBlockState(RequestableState):
+    """A ``signature`` block's state (V6-23, D-V6-20): wording the caller signs by hand.
+
+    ``request_signature`` shows ``disclosure_text`` (the block config's wording when it sets
+    one, else the agent's) over a small drawing board and waits (``status`` is the request
+    lifecycle every requestable block shares). The caller's strokes stay on the page; when the
+    caller taps Sign the page answers ``block_submit {values: {signed: true}}`` (``false`` for
+    "Not now"), the worker asks for the picture (``UiRequest.method="snapshot"``) and stores the
+    PNG as a session asset of kind ``signature``. Only then are ``signed``, ``asset_id``, ``at``
+    and ``text_hash`` (the SHA-256 of the wording shown, ``compliance.consent_text_hash``)
+    written, by the worker: a browser answer never writes them, and an answer with no request
+    waiting is dropped.
+    """
+
+    disclosure_text: str = Field(default="", max_length=MAX_CONSENT_TEXT_CHARS)
+    signed: bool | None = None
+    asset_id: str | None = Field(default=None, max_length=128)
+    text_hash: str | None = Field(default=None, pattern=TEXT_HASH_PATTERN)
+    at: float | None = None
+
+
+class SignatureEvent(BaseModel):
+    """The ``signature`` session event (V6-23): what was signed, never the picture's bytes.
+
+    ``text_hash`` ties the answer to the exact wording shown; ``asset_id`` names the stored
+    picture (kind ``signature``) of a signed request. A declined request is recorded too
+    (``signed: false``, no picture).
+    """
+
+    block_id: str = Field(min_length=1, max_length=64)
+    signed: bool
+    text_hash: str = Field(pattern=TEXT_HASH_PATTERN)
+    asset_id: str | None = Field(default=None, max_length=128)
+    method: Literal["drawn"] = "drawn"
+
+
+#: What a ``chart`` block draws (D-V6-20): one big ``number``, ``bar`` s, a ``line``, a ``pie``
+#: or a ``gauge`` (one value on a scale). The console draws it as inline SVG, no chart library.
+ChartKind = Literal["number", "bar", "line", "pie", "gauge"]
+CHART_KINDS: Final[tuple[str, ...]] = get_args(ChartKind)
+#: The most points one chart holds (a 201st is refused).
+MAX_CHART_POINTS: Final[int] = 200
+#: The most series (lines, or bar groups) one chart holds.
+MAX_CHART_SERIES: Final[int] = 8
+#: The longest point label or series name, title, unit and caption.
+MAX_CHART_LABEL_CHARS: Final[int] = 40
+MAX_CHART_TITLE_CHARS: Final[int] = 120
+MAX_CHART_UNIT_CHARS: Final[int] = 16
+MAX_CHART_CAPTION_CHARS: Final[int] = 200
+#: The largest magnitude of a chart value.
+MAX_CHART_VALUE: Final[float] = 1e12
+
+#: A finite chart value within :data:`MAX_CHART_VALUE`.
+ChartValue = Annotated[float, Field(ge=-MAX_CHART_VALUE, le=MAX_CHART_VALUE, allow_inf_nan=False)]
+
+
+class ChartPoint(BaseModel):
+    """One value of a chart: its ``label`` (an x value or a slice name) and, for several lines or
+    bar groups, its ``series``."""
+
+    label: str = Field(min_length=1, max_length=MAX_CHART_LABEL_CHARS)
+    value: ChartValue
+    series: str | None = Field(default=None, min_length=1, max_length=MAX_CHART_LABEL_CHARS)
+
+
+class ChartBlockState(BaseModel):
+    """A ``chart`` block's state (``show_chart``, V6-23): display data the agent shows.
+
+    * ``number`` and ``gauge`` show one value (at most one point); a gauge draws it on the scale
+      ``gauge_min`` .. ``gauge_max``;
+    * ``bar`` and ``line`` draw the points in order, grouped by ``series`` (at most 8);
+    * ``pie`` draws one slice per point; its values are 0 or more.
+
+    At most :data:`MAX_CHART_POINTS` points (a 201st is refused), every text capped. The
+    agent's own words: ``describe_panel`` reads them back fenced like every block state.
+    """
+
+    kind: ChartKind = "bar"
+    title: str | None = Field(default=None, max_length=MAX_CHART_TITLE_CHARS)
+    unit: str | None = Field(default=None, max_length=MAX_CHART_UNIT_CHARS)
+    points: list[ChartPoint] = Field(default=[], max_length=MAX_CHART_POINTS)
+    gauge_min: ChartValue = 0
+    gauge_max: ChartValue = 100
+    caption: str | None = Field(default=None, max_length=MAX_CHART_CAPTION_CHARS)
+    updated_at: float | None = None
+
+    @model_validator(mode="after")
+    def _fits_its_kind(self) -> Self:
+        series = {point.series for point in self.points if point.series is not None}
+        if len(series) > MAX_CHART_SERIES:
+            raise ValueError(f"a chart shows at most {MAX_CHART_SERIES} series")
+        if self.gauge_min >= self.gauge_max:
+            raise ValueError("gauge_min must be below gauge_max")
+        match self.kind:
+            case "number" | "gauge":
+                if len(self.points) > 1:
+                    raise ValueError(f"a {self.kind} chart shows one value")
+                if series:
+                    raise ValueError(f"a {self.kind} chart has no series")
+            case "pie":
+                if series:
+                    raise ValueError("a pie chart has no series")
+                if any(point.value < 0 for point in self.points):
+                    raise ValueError("a pie chart's values are 0 or more")
+            case _:
+                pass
+        return self
+
+
+#: How a ``timer`` block counts: down to zero, or up from zero.
+TimerMode = Literal["countdown", "elapsed"]
+TIMER_MODES: Final[tuple[str, ...]] = get_args(TimerMode)
+#: Where a timer stands: not started, running, run out (``ended``, the worker ended it) or
+#: ``stopped`` by the agent before its end.
+TimerStatus = Literal["idle", "running", "ended", "stopped"]
+#: The longest timer (4 hours).
+MAX_TIMER_SECONDS: Final[int] = 4 * 3600
+#: The longest timer label.
+MAX_TIMER_LABEL_CHARS: Final[int] = 80
+
+
+class TimerBlockState(BaseModel):
+    """A ``timer`` block's state (``start_timer``, V6-23).
+
+    ``countdown`` shows the time left until ``duration_s`` has passed since ``started_at``;
+    ``elapsed`` shows the time since ``started_at`` and ends after ``duration_s`` too (its cap).
+    The page counts on its own clock from the moment it sees ``running`` (``duration_s`` minus
+    what has passed), so a clock difference between the worker and the browser does not matter;
+    ``ends_at`` is the worker's own end time. When the time is up the worker writes ``ended``
+    (and ``ended_at``), records a ``timer_ended`` session event and tells the model in one line.
+    """
+
+    mode: TimerMode = "countdown"
+    label: str | None = Field(default=None, max_length=MAX_TIMER_LABEL_CHARS)
+    status: TimerStatus = "idle"
+    duration_s: int | None = Field(default=None, ge=1, le=MAX_TIMER_SECONDS)
+    started_at: float | None = None
+    ends_at: float | None = None
+    ended_at: float | None = None
+
+    @model_validator(mode="after")
+    def _running_has_times(self) -> Self:
+        if self.status == "running" and (
+            self.duration_s is None or self.started_at is None or self.ends_at is None
+        ):
+            raise ValueError("a running timer has duration_s, started_at and ends_at")
+        return self
+
+
+#: The longest code a ``code`` block shows, whatever its config says.
+MAX_CODE_CHARS: Final[int] = 20_000
+#: A code block's language label (display only: nothing is ever run): ``python``, ``c++``, ``c#``,
+#: ``json``, ``shell``.
+CODE_LANGUAGE_PATTERN: Final[str] = r"^[a-z0-9][a-z0-9+#._-]{0,23}$"
+#: The longest code block title.
+MAX_CODE_TITLE_CHARS: Final[int] = 120
+
+
+class CodeBlockState(BaseModel):
+    """A ``code`` block's state (``show_code``, V6-23): read-only code or text in a fixed-width font.
+
+    Display only: never run, never a link. ``language`` is a label (the console may colour
+    by it); the console renders ``code`` as the text of a code block, never as Markdown or HTML.
+    """
+
+    code: str = Field(default="", max_length=MAX_CODE_CHARS)
+    language: str | None = Field(default=None, pattern=CODE_LANGUAGE_PATTERN)
+    title: str | None = Field(default=None, max_length=MAX_CODE_TITLE_CHARS)
+    updated_at: float | None = None
+
+
+#: An ISO 4217 currency code (``USD``, ``EUR``, ``INR``).
+CURRENCY_PATTERN: Final[str] = r"^[A-Z]{3}$"
+#: The most lines and adjustments (discount, tax, delivery) one cart holds.
+MAX_CART_LINES: Final[int] = 50
+MAX_CART_ADJUSTMENTS: Final[int] = 5
+#: The most of one line, and the largest price or adjustment.
+MAX_CART_QUANTITY: Final[int] = 9999
+MAX_CART_AMOUNT: Final[float] = 1e9
+#: The longest line name or note, and adjustment label.
+MAX_CART_NAME_CHARS: Final[int] = 120
+MAX_CART_LABEL_CHARS: Final[int] = 40
+#: How far a stored total may be from the sum the platform computes (float rounding).
+_CART_TOLERANCE: Final[float] = 0.005
+
+#: A finite money amount within :data:`MAX_CART_AMOUNT` either way.
+CartAmount = Annotated[float, Field(ge=-MAX_CART_AMOUNT, le=MAX_CART_AMOUNT, allow_inf_nan=False)]
+
+
+class CartLine(BaseModel):
+    """One line of a cart: what, how many, the price of one, and the line's total (computed)."""
+
+    id: str = Field(pattern=NOTEBOOK_ID_PATTERN)
+    name: str = Field(min_length=1, max_length=MAX_CART_NAME_CHARS)
+    quantity: int = Field(default=1, ge=1, le=MAX_CART_QUANTITY)
+    unit_price: float = Field(ge=0, le=MAX_CART_AMOUNT, allow_inf_nan=False)
+    line_total: float = Field(default=0, ge=0, allow_inf_nan=False)
+    note: str | None = Field(default=None, max_length=MAX_CART_NAME_CHARS)
+
+
+class CartAdjustment(BaseModel):
+    """A line under the subtotal: a discount (negative), a tax, a delivery fee."""
+
+    label: str = Field(min_length=1, max_length=MAX_CART_LABEL_CHARS)
+    amount: CartAmount
+
+
+def _money(value: Decimal) -> float:
+    return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def cart_totals(lines: list[CartLine], adjustments: list[CartAdjustment]) -> tuple[list[float], float, float]:
+    """The line totals, subtotal and total of a cart, to the cent (V6-23).
+
+    The one computation every writer uses (``cart_set``, ``update_block``), so a cart's totals
+    always add up: ``line_total = quantity times unit_price``, ``subtotal`` their sum, ``total`` the
+    subtotal plus every adjustment.
+    """
+    line_totals = [_money(Decimal(line.quantity) * Decimal(str(line.unit_price))) for line in lines]
+    subtotal = sum((Decimal(str(value)) for value in line_totals), Decimal(0))
+    total = subtotal + sum((Decimal(str(a.amount)) for a in adjustments), Decimal(0))
+    return line_totals, _money(subtotal), _money(total)
+
+
+class CartBlockState(BaseModel):
+    """A ``cart`` block's state (``cart_set``, V6-23): lines and totals the agent shows.
+
+    Display data: an order is placed by the agent's own tools, never by this block. The totals
+    must add up (:func:`cart_totals`), whoever writes the state, so the caller never sees a
+    total that is not the sum of the lines; the writers compute them.
+    """
+
+    currency: str = Field(default="USD", pattern=CURRENCY_PATTERN)
+    lines: list[CartLine] = Field(default=[], max_length=MAX_CART_LINES)
+    adjustments: list[CartAdjustment] = Field(default=[], max_length=MAX_CART_ADJUSTMENTS)
+    subtotal: float = Field(default=0, allow_inf_nan=False)
+    total: float = Field(default=0, allow_inf_nan=False)
+    updated_at: float | None = None
+
+    @field_validator("lines")
+    @classmethod
+    def _unique_lines(cls, value: list[CartLine]) -> list[CartLine]:
+        _unique([line.id for line in value], "line ids")
+        return value
+
+    @model_validator(mode="after")
+    def _totals_add_up(self) -> Self:
+        line_totals, subtotal, total = cart_totals(self.lines, self.adjustments)
+        for line, expected in zip(self.lines, line_totals, strict=True):
+            if abs(line.line_total - expected) > _CART_TOLERANCE:
+                raise ValueError(f"line {line.id!r}: line_total must be quantity times price ({expected})")
+        if abs(self.subtotal - subtotal) > _CART_TOLERANCE:
+            raise ValueError(f"subtotal must be the sum of the line totals ({subtotal})")
+        if abs(self.total - total) > _CART_TOLERANCE:
+            raise ValueError(f"total must be the subtotal plus the adjustments ({total})")
+        return self
+
+
 #: The field types ``request_form`` offers (V5-19 adds ``phone``, ``textarea`` and ``file``).
 #: How each lands in the form's JSON schema (``FormBlockState.schema``):
 #:
@@ -1265,7 +1543,10 @@ class UiRequest(BaseModel):
       (background, strokes and shapes) into a PNG of at most :data:`MAX_CANVAS_SNAPSHOT_BYTES`
       and send it on ``lkap.ui.upload`` with the attributes ``block_id`` (the canvas) and
       ``name``; ack at once with ``{}``. The worker takes the file only while it is waiting for
-      that snapshot and only for a canvas the caller may draw on.
+      that snapshot and only for a canvas the caller may draw on. V6-23: also ``{block_id}`` of a
+      ``signature`` block right after the caller tapped Sign: the page renders the signature it
+      holds (the strokes never leave the page before that) as a PNG of at most
+      :data:`MAX_SIGNATURE_BYTES`, stored as a session asset of kind ``signature``.
     """
 
     v: Literal[1] = 1

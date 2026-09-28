@@ -71,10 +71,10 @@ describe("preview scene registry", () => {
 
   it("V2-11: the blocks scene shoots every block type filled and empty, plus a submitted form", () => {
     const names = SCENES.blocks.combos.map((combo) => combo.name);
-    // 26 block types (V5-08 added choices, details, markdown, steps; V5-15 consent; V5-19 upload;
+    // 31 block types (V5-08 added choices, details, markdown, steps; V5-15 consent; V5-19 upload;
     // V5-31 captions; V5-32 handoff; V5-43 link, slots, cards; V6-08 notebook, layout; V6-12
-    // canvas) × filled/empty + the submitted form.
-    expect(names).toHaveLength(53);
+    // canvas; V6-23 signature, chart, timer, code, cart) × filled/empty + the submitted form.
+    expect(names).toHaveLength(63);
     expect(names).toContain("form-submitted");
     expect(names).toContain("document-filled");
     expect(names).toContain("kb_citations-empty");

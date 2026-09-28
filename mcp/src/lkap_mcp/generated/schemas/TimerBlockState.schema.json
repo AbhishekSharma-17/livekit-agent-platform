@@ -1,0 +1,92 @@
+{
+  "$id": "lkap-contracts/TimerBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``timer`` block's state (``start_timer``, V6-23).\n\n``countdown`` shows the time left until ``duration_s`` has passed since ``started_at``;\n``elapsed`` shows the time since ``started_at`` and ends after ``duration_s`` too (its cap).\nThe page counts on its own clock from the moment it sees ``running`` (``duration_s`` minus\nwhat has passed), so a clock difference between the worker and the browser does not matter;\n``ends_at`` is the worker's own end time. When the time is up the worker writes ``ended``\n(and ``ended_at``), records a ``timer_ended`` session event and tells the model in one line.",
+  "properties": {
+    "duration_s": {
+      "anyOf": [
+        {
+          "maximum": 14400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Duration S"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "ends_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ends At"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
+    "mode": {
+      "default": "countdown",
+      "enum": [
+        "countdown",
+        "elapsed"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "running",
+        "ended",
+        "stopped"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "title": "TimerBlockState",
+  "type": "object"
+}

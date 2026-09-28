@@ -23,9 +23,17 @@
     "notebook_check",
     "draw_on_canvas",
     "clear_canvas",
-    "read_canvas"
+    "read_canvas",
+    "request_signature",
+    "show_chart",
+    "start_timer",
+    "show_code",
+    "cart_set"
   ],
   "block_tool_types": {
+    "cart_set": [
+      "cart"
+    ],
     "check_item": [
       "checklist"
     ],
@@ -37,8 +45,11 @@
       "canvas",
       "captions",
       "cards",
+      "cart",
+      "chart",
       "checklist",
       "choices",
+      "code",
       "consent",
       "custom",
       "details",
@@ -52,10 +63,12 @@
       "markdown",
       "notebook",
       "notes",
+      "signature",
       "slots",
       "status",
       "steps",
       "table",
+      "timer",
       "transcript",
       "upload",
       "video"
@@ -84,6 +97,9 @@
     "request_form": [
       "form"
     ],
+    "request_signature": [
+      "signature"
+    ],
     "request_slot": [
       "slots"
     ],
@@ -111,17 +127,29 @@
     "show_cards": [
       "cards"
     ],
+    "show_chart": [
+      "chart"
+    ],
+    "show_code": [
+      "code"
+    ],
     "show_document": [
       "document"
     ],
     "show_text": [
       "markdown"
     ],
+    "start_timer": [
+      "timer"
+    ],
     "table_append": [
       "table"
     ],
     "update_block": [
       "cards",
+      "cart",
+      "chart",
+      "code",
       "custom",
       "details",
       "document",
@@ -173,6 +201,7 @@
     "pin_frame"
   ],
   "write_builtins": [
+    "cart_set",
     "check_item",
     "clear_canvas",
     "draw_on_canvas",
@@ -181,6 +210,9 @@
     "notebook_write",
     "notify_team",
     "send_sms",
-    "set_checklist"
+    "set_checklist",
+    "show_chart",
+    "show_code",
+    "start_timer"
   ]
 }

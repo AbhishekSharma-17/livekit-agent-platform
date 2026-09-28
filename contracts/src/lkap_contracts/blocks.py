@@ -55,6 +55,14 @@ schemas by a vitest parity test):
   ``max_strokes`` (≤ 2,000) and ``signature_mode`` (V6-12, D-V6-16);
   :func:`canvas_claim_issues` checks which notebook ``ink`` section shows each board and
   :func:`canvas_caller_can_draw` is the one "may the caller draw here" rule;
+* ``signature`` → ``disclosure_text`` (the wording the caller signs; empty lets the agent
+  write it for each request) and ``allow_decline`` (V6-23, D-V6-20);
+* ``chart`` → ``kind`` (``number`` / ``bar`` / ``line`` / ``pie`` / ``gauge``, what
+  ``show_chart`` draws when it names none) and ``show_table`` (the numbers also as a table);
+* ``timer`` → ``mode`` (``countdown`` / ``elapsed``) and ``max_seconds`` (the longest timer the
+  agent may start, at most 4 hours);
+* ``code`` → ``max_chars`` (at most 20,000) and ``wrap``;
+* ``cart`` → ``currency`` (an ISO 4217 code) and ``max_lines`` (at most 50);
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -86,20 +94,26 @@ from lkap_contracts.common import Issue
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, ConsentDeclineAction, ConsentKind
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN
 from lkap_contracts.ui_protocol import (
+    CURRENCY_PATTERN,
     DEFAULT_CANVAS_STROKES,
     DEFAULT_UPLOAD_MAX_BYTES,
     MAX_ALLOWED_HOSTS,
     MAX_CANVAS_STROKES,
     MAX_CARDS,
+    MAX_CART_LINES,
+    MAX_CODE_CHARS,
     MAX_NOTEBOOK_SECTIONS,
+    MAX_TIMER_SECONDS,
     MAX_UPLOAD_BYTES,
     MAX_UPLOAD_FILES,
     NOTEBOOK_ID_PATTERN,
     BlockSpec,
     BlockType,
     CaptionsPosition,
+    ChartKind,
     DetailsValueType,
     NotebookSectionKind,
+    TimerMode,
     normalize_hosts,
 )
 
@@ -116,8 +130,11 @@ __all__ = [
     "CanvasTool",
     "CaptionsBlockConfig",
     "CardsBlockConfig",
+    "CartBlockConfig",
+    "ChartBlockConfig",
     "ChecklistBlockConfig",
     "ChoicesBlockConfig",
+    "CodeBlockConfig",
     "ConsentBlockConfig",
     "CustomBlockConfig",
     "DetailsBlockConfig",
@@ -133,11 +150,13 @@ __all__ = [
     "NotebookFont",
     "NotebookPaper",
     "NotebookSectionConfig",
+    "SignatureBlockConfig",
     "SlotsBlockConfig",
     "StepConfig",
     "StepsBlockConfig",
     "TableBlockConfig",
     "TableColumnConfig",
+    "TimerBlockConfig",
     "TranscriptBlockConfig",
     "UploadBlockConfig",
     "VideoBlockConfig",
@@ -671,6 +690,65 @@ class CanvasBlockConfig(_StrictConfig):
         return value
 
 
+class SignatureBlockConfig(_StrictConfig):
+    """``signature``: wording the caller signs by hand on screen (V6-23, D-V6-20).
+
+    ``request_signature`` shows the wording over a small signing board and waits for the
+    caller to sign (or, with ``allow_decline``, to say "Not now"). ``disclosure_text`` fixes the
+    wording (public, like a consent block's): when set, the agent cannot change it; left empty,
+    the agent writes it for each request. The signature is kept as a picture of the session,
+    with the SHA-256 of the exact wording shown (a ``signature`` session event, like consent).
+    """
+
+    disclosure_text: str = Field(default="", max_length=MAX_CONSENT_TEXT_CHARS)
+    allow_decline: bool = True
+
+
+class ChartBlockConfig(_StrictConfig):
+    """``chart``: a chart the agent shows (``show_chart``, V6-23).
+
+    ``kind`` is what the block draws when ``show_chart`` names no kind: one big ``number``,
+    ``bar`` s, a ``line``, a ``pie`` or a ``gauge``. ``show_table`` also lists the numbers under
+    the chart (the console always offers them to screen readers).
+    """
+
+    kind: ChartKind = "bar"
+    show_table: bool = False
+
+
+class TimerBlockConfig(_StrictConfig):
+    """``timer``: a countdown or a stopwatch the agent starts (``start_timer``, V6-23).
+
+    ``mode`` is how the timer counts when ``start_timer`` names no mode; ``max_seconds`` is the
+    longest timer the agent may start (at most 4 hours). When a timer runs out the agent is told.
+    """
+
+    mode: TimerMode = "countdown"
+    max_seconds: int = Field(default=3600, ge=1, le=MAX_TIMER_SECONDS)
+
+
+class CodeBlockConfig(_StrictConfig):
+    """``code``: read-only code or text in a fixed-width font (``show_code``, V6-23).
+
+    Nothing shown here is ever run. ``max_chars`` is the longest text the agent may show (at
+    most 20,000); ``wrap`` wraps long lines instead of scrolling them.
+    """
+
+    max_chars: int = Field(default=8000, ge=200, le=MAX_CODE_CHARS)
+    wrap: bool = False
+
+
+class CartBlockConfig(_StrictConfig):
+    """``cart``: lines and totals the agent shows, such as an order to confirm (``cart_set``, V6-23).
+
+    ``currency`` is an ISO 4217 code (``USD``, ``EUR``, ``INR``); ``max_lines`` is the most lines
+    the cart shows (at most 50). The platform adds up the totals; the block places no order.
+    """
+
+    currency: str = Field(default="USD", min_length=3, max_length=3, pattern=CURRENCY_PATTERN)
+    max_lines: int = Field(default=20, ge=1, le=MAX_CART_LINES)
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -712,6 +790,12 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "notebook": NotebookBlockConfig,
     "layout": LayoutBlockConfig,
     "canvas": CanvasBlockConfig,
+    # V6-23
+    "signature": SignatureBlockConfig,
+    "chart": ChartBlockConfig,
+    "timer": TimerBlockConfig,
+    "code": CodeBlockConfig,
+    "cart": CartBlockConfig,
 }
 
 

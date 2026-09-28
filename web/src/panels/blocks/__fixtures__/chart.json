@@ -1,0 +1,15 @@
+{
+  "kind": "bar",
+  "title": "Claims by month",
+  "unit": "claims",
+  "points": [
+    { "label": "Jan", "value": 12, "series": null },
+    { "label": "Feb", "value": 9, "series": null },
+    { "label": "Mar", "value": 15, "series": null },
+    { "label": "Apr", "value": 11, "series": null }
+  ],
+  "gauge_min": 0,
+  "gauge_max": 100,
+  "caption": "Most claims came in March.",
+  "updated_at": 1777000100.0
+}

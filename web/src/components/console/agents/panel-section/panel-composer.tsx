@@ -25,6 +25,11 @@ import {
   NotebookPenIcon,
   PanelsTopLeftIcon,
   PencilLineIcon,
+  SignatureIcon,
+  ChartColumnIcon,
+  TimerIcon,
+  CodeIcon,
+  ShoppingCartIcon,
   ClipboardListIcon,
   FileTextIcon,
   GaugeIcon,
@@ -178,6 +183,11 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   notebook: NotebookPenIcon,
   layout: PanelsTopLeftIcon,
   canvas: PencilLineIcon,
+  signature: SignatureIcon,
+  chart: ChartColumnIcon,
+  timer: TimerIcon,
+  code: CodeIcon,
+  cart: ShoppingCartIcon,
 };
 
 /**

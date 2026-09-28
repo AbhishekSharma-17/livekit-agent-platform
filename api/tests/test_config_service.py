@@ -35,6 +35,7 @@ from lkap_api.config_service import (
     CLASSIFIER_NEEDS_MODEL_MESSAGE,
     ESCALATE_DISABLED_MESSAGE,
     MODERATION_NEEDS_KEY_MESSAGE,
+    SLOW_PATTERN_MESSAGE,
     ValidationContext,
     apps_issues,
     builtin_credential_ids,
@@ -1330,6 +1331,14 @@ def test_a_bad_pattern_is_an_error_on_its_field(pattern: str, fragment: str) -> 
 )
 def test_nested_repeat_flags_only_repeated_unbounded_groups(pattern: str, slow: bool) -> None:
     assert nested_repeat(pattern) is slow
+
+
+@pytest.mark.parametrize("pattern", ["(a|a)+b", "(a|aa)+b", "a*a*a*b", r"\w*\s*\w*"])
+def test_guardrail_pattern_with_alternation_blowup_is_refused(pattern: str) -> None:
+    """V6-21 (S6-4): the shapes V6-13's scanner missed are refused at save, on the pattern field."""
+    issues = _guard_issues(_guard_config(input=[{"kind": "regex", "name": "x", "pattern": pattern}]))
+
+    assert issues == [("error", "guardrails.input[0].pattern", SLOW_PATTERN_MESSAGE)]
 
 
 def test_a_classifier_without_a_model_is_an_error() -> None:

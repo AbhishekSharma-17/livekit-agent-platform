@@ -718,6 +718,9 @@ UNIT_UNKNOWN_NOTE = "no price (unit unknown)"
 #: D-V6-9's sanity bounds: a live speech price above either is refused as "unit unknown".
 STT_MAX_USD_PER_MIN = Decimal(1)
 TTS_MAX_USD_PER_1K_CHARS = Decimal(1)
+#: V6-21 (S6-24): a live catalogue price above this per unit (a token, a request,
+#: an image, a second of audio) is refused as "no price"; no OpenRouter unit costs a dollar.
+LIVE_MAX_USD_PER_UNIT = Decimal(1)
 
 # Bound-only constants (never used to price anything): the highest documented audio-token
 # rate (Gemini, 25 tokens per second of audio, https://ai.google.dev/gemini-api/docs/pricing),
@@ -929,7 +932,7 @@ def _live_quote(
     if not isinstance(pricing, Mapping) or key is None:
         return None
     value = _decimal(pricing.get(key))
-    if value is None:
+    if value is None or value > LIVE_MAX_USD_PER_UNIT:
         return None
     free = value == 0 and bool(model) and str(model).endswith(":free")
     stale = False

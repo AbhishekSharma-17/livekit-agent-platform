@@ -9,8 +9,7 @@
       "type": "boolean"
     },
     "item_id": {
-      "maxLength": 64,
-      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
       "title": "Item Id",
       "type": "string"
     }

@@ -220,6 +220,11 @@ def _read_json(text: str) -> tuple[list[str], list[list[object]]]:
         raise DatasetFileError(
             f"this JSON file could not be read (line {exc.lineno})", details={"reason": "unreadable"}
         ) from exc
+    except RecursionError as exc:
+        # V6-21 (S6-17): a deeply nested document is a 422, not a 500.
+        raise DatasetFileError(
+            "this JSON file is nested too deeply to read", details={"reason": "unreadable"}
+        ) from exc
     if isinstance(payload, Mapping):
         payload = next(
             (payload[key] for key in ("rows", "items", "data") if isinstance(payload.get(key), list)), None

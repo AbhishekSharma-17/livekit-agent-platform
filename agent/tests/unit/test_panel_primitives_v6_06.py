@@ -267,6 +267,22 @@ async def test_generate_image_degrades_to_a_note_when_no_picture_comes(
     assert "did not come through" in background.routine_notes[0][1]
 
 
+async def test_generate_image_drops_an_oversized_picture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """V6-21 (S6-25): a picture past the upload cap is never streamed; the model gets the note."""
+    from lkap_agent.tools.builtin import generate_image
+
+    monkeypatch.setattr(generate_image, "MAX_UPLOAD_BYTES", len(PNG) - 1)
+    image_gen = FakeImageGen(image_bytes=PNG)
+    background = FakeBackgroundRunner()
+    ctx, ui, room = _ctx([GALLERY], image_gen=image_gen, background=background)
+    await build_generate_image_tool(ctx)(_run(), prompt="a sketch")
+    await background.wait_idle()
+
+    assert ui.state.assets == [] and ui.state.blocks["pics"]["asset_ids"] == []
+    assert "did not come through" in background.routine_notes[0][1]
+    assert room.local_participant.byte_streams == []
+
+
 async def test_generate_image_refuses_without_a_gallery_or_a_prompt() -> None:
     ctx, _ui, _room = _ctx([GALLERY, SKETCHES])
     tool = build_generate_image_tool(ctx)
@@ -488,6 +504,58 @@ async def test_the_model_hears_a_caller_edit_fenced_once_then_the_pack_sees_it()
     )
     assert refused["ok"] is False
     session.generate_reply.assert_not_called()
+
+
+async def test_caller_edits_over_the_bound_are_refused_and_the_model_hears_nothing() -> None:
+    """V6-21 (S6-5, ask #27): one per-session bound for caller edits and card taps together."""
+    from lkap_agent.ui.channel import CALLER_ACTION_LIMITED, MAX_CALLER_ACTIONS_PER_MIN
+
+    cards = BlockSpec(id="offers", type="cards")
+    ctx, ui, room = _ctx([EDITABLE_DETAILS, cards])
+    await ui.set_block("offers", {"cards": [{"id": "a", "title": "Plan A"}]})
+    session = MagicMock()
+    PlatformAgent(ctx=_session_ctx(ctx, ui, room, session), pack=NullPack(), has_tts=True)
+
+    for index in range(MAX_CALLER_ACTIONS_PER_MIN):
+        edit = {"key": "claim_no", "value": f"X-{index}"}
+        assert (await _action(room, {"block_id": "claim", "name": "edit", "data": edit}))["ok"] is True
+    heard = session.generate_reply.call_count
+    over_edit = await _action(
+        room, {"block_id": "claim", "name": "edit", "data": {"key": "claim_no", "value": "X-99"}}
+    )
+    over_tap = await _action(room, {"block_id": "offers", "name": "select", "data": {"card_id": "a"}})
+    await asyncio.sleep(0)
+
+    assert heard == MAX_CALLER_ACTIONS_PER_MIN
+    assert (over_edit["ok"], over_edit["error"]) == (False, CALLER_ACTION_LIMITED)
+    assert (over_tap["ok"], over_tap["error"]) == (False, CALLER_ACTION_LIMITED)
+    assert session.generate_reply.call_count == heard  # the model hears nothing past the bound
+    row = next(r for r in ui.state.blocks["claim"]["items"] if r["key"] == "claim_no")
+    assert row["value"] == f"X-{MAX_CALLER_ACTIONS_PER_MIN - 1}"
+    assert ui.state.blocks["offers"].get("selected") is None
+
+
+@pytest.mark.parametrize(
+    ("block", "data"),
+    [
+        pytest.param("claim", {"key": "claim no <script>", "value": "1"}, id="details-key"),
+        pytest.param("todo", {"item_id": "photo'); drop", "done": True}, id="checklist-id"),
+    ],
+)
+async def test_a_caller_edit_with_an_odd_key_is_refused_by_the_contract_not_echoed(
+    block: str, data: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """V6-21 (S6-7): ids the agent made have the id shape; an odd one never reaches a log or an event."""
+    ctx, ui, room = _ctx([EDITABLE_DETAILS, EDITABLE_CHECKLIST])
+    odd = str(data.get("key") or data.get("item_id"))
+
+    result = await _action(room, {"block_id": block, "name": "edit", "data": data})
+
+    assert result["ok"] is False
+    assert odd not in result["error"]
+    refused = [p for kind, p in ctx.events if kind == "block_update" and p["op"] == "caller_edit_refused"]
+    assert len(refused) == 1 and odd not in json.dumps(refused)
+    assert odd not in caplog.text
 
 
 async def test_an_agent_with_no_editable_block_never_hears_about_edits() -> None:

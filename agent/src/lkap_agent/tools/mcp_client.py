@@ -26,6 +26,11 @@ V5-27 (S5-6, R-V5-15): every tool result is handed to the model inside an
 default shape (one item's JSON, or a JSON list of items). An `isError` result
 still becomes the SDK's `ToolError` with the server's text, unfenced.
 
+V6-21 (S6-3, ask #277): every tool's result also passes the session's `tool_output`
+guardrail (:func:`~lkap_agent.tools.execution.guard_tool_output`), as an HTTP, app or
+dataset tool's does through `run_with_policy`: :meth:`GuardedMCPServerHTTP._make_function_tool`
+wraps the SDK's per-tool function in one that always takes the call's `RunContext`.
+
 Importing this module imports `livekit.agents.llm.mcp`, which needs the
 optional `mcp` package: :func:`lkap_agent.tools.declarative.build_mcp_servers`
 imports it lazily, after probing for the extra.
@@ -38,10 +43,16 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 import httpx
-from livekit.agents import ToolError
-from livekit.agents.llm.mcp import MCPServerHTTP, MCPToolResultContext, MCPToolResultResolver
+from livekit.agents import RunContext, ToolError, function_tool
+from livekit.agents.llm.mcp import (
+    MCPServerHTTP,
+    MCPToolOptions,
+    MCPToolResultContext,
+    MCPToolResultResolver,
+)
 
 from lkap_agent.tools._http_safety import guarded_transport
+from lkap_agent.tools.execution import guard_tool_output
 from lkap_agent.tools.untrusted import fence
 
 TransportFactory = Callable[[], httpx.AsyncBaseTransport]
@@ -124,3 +135,33 @@ class GuardedMCPServerHTTP(MCPServerHTTP):
             kwargs["auth"] = auth
         self._http_client = httpx.AsyncClient(**kwargs)
         return self._http_client
+
+    def _make_function_tool(
+        self,
+        name: str,
+        description: str | None,
+        input_schema: dict[str, Any],
+        meta: dict[str, Any] | None,
+        *,
+        options: MCPToolOptions,
+    ) -> Any:
+        """The SDK's tool, its result passed through the ``tool_output`` guardrail (V6-21, S6-3).
+
+        The returned tool always takes ``(ctx, raw_arguments)``; it forwards ``ctx`` to the
+        SDK's function only when that one takes it (``report_progress``).
+        """
+        tool = super()._make_function_tool(name, description, input_schema, meta, options=options)
+        impl = tool._func
+        takes_ctx = bool(options.get("report_progress"))
+
+        async def _guarded(ctx: RunContext[Any], raw_arguments: dict[str, Any]) -> Any:
+            result = await (impl(ctx, raw_arguments) if takes_ctx else impl(raw_arguments))
+            return await guard_tool_output(ctx, result)
+
+        return function_tool(
+            _guarded,
+            raw_schema=dict(tool.info.raw_schema),
+            flags=options["flags"],
+            on_duplicate=options["on_duplicate"],
+            duplicate_scope=options["duplicate_scope"],
+        )

@@ -67,11 +67,12 @@ class FakeToolSession:
 
 
 class FakeFunctionCall:
-    """A `FunctionCall` stand-in: only `call_id` and `name` are read."""
+    """A `FunctionCall` stand-in: `call_id`, `name` and the `extra` dict tools write to."""
 
     def __init__(self, call_id: str = "call-1", name: str = "lookup_item") -> None:
         self.call_id = call_id
         self.name = name
+        self.extra: dict[str, Any] = {}
 
 
 class FakeRunContext:

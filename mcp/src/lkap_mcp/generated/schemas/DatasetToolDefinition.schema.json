@@ -36,8 +36,7 @@
       "type": "array"
     },
     "dataset_id": {
-      "maxLength": 64,
-      "minLength": 1,
+      "pattern": "^[0-9a-f]{32}$",
       "title": "Dataset Id",
       "type": "string"
     },

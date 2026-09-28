@@ -409,6 +409,131 @@ async def test_internal_lookup_needs_the_service_token(client: httpx.AsyncClient
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("status", ["ended", "failed"])
+async def test_internal_lookup_refuses_an_ended_session(
+    status: str, admin_client: httpx.AsyncClient, service_client: httpx.AsyncClient, database: Database
+) -> None:
+    """V6-21 (S6-16): only a live session looks anything up (the sibling worker routes' rule)."""
+    dataset = await _dataset(admin_client)
+    session_id = await _session_in(database, DEFAULT_WORKSPACE_ID)
+    path = f"/internal/v1/datasets/{dataset['id']}/lookup"
+    body = {"session_id": session_id, "keys": {"phone": "098765 43210"}}
+    assert (await service_client.post(path, json=body)).status_code == 200
+    async with database.session() as session:
+        row = await session.get(SessionRow, session_id)
+        assert row is not None
+        row.status = status
+
+    refused = await service_client.post(path, json=body)
+
+    assert refused.status_code == 404 and "rows" not in refused.text
+
+
+# ---------------------------------------------------------------------- V6-21: upload hardening
+
+
+async def test_upload_is_refused_by_quota_before_the_file_is_parsed(
+    admin_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S6-14: a workspace at its dataset quota is refused before the file is read or parsed."""
+    await _dataset(admin_client)
+    monkeypatch.setattr(dataset_service, "MAX_DATASETS_PER_WORKSPACE", 1)
+    parsed: list[object] = []
+    monkeypatch.setattr(
+        "lkap_api.routers.datasets.parse_dataset", lambda *args, **kwargs: parsed.append(args) or None
+    )
+
+    response = await _upload(admin_client, name="Demo — Second")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["details"]["limit"] == "datasets_per_workspace"
+    assert parsed == []
+
+
+async def test_dataset_upload_is_rate_limited_per_workspace(
+    admin_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S6-14: uploads (and the console's test lookups) share a per-workspace bucket each."""
+    from lkap_api.routers import datasets as datasets_router
+
+    monkeypatch.setattr(datasets_router, "DATASET_UPLOADS_PER_MIN", 2)
+    monkeypatch.setattr(datasets_router, "DATASET_LOOKUPS_PER_MIN", 1)
+
+    statuses = [(await _upload(admin_client, name=f"Demo — {i}")).status_code for i in range(3)]
+    dataset_id = (await admin_client.get("/v1/datasets")).json()["items"][0]["id"]
+    lookups = [
+        (
+            await admin_client.post(f"/v1/datasets/{dataset_id}/lookup", json={"keys": {"phone": "1"}})
+        ).status_code
+        for _ in range(2)
+    ]
+
+    assert statuses == [201, 201, 429]
+    assert lookups == [200, 429]
+
+
+async def test_a_deeply_nested_json_file_is_422_not_500(admin_client: httpx.AsyncClient) -> None:
+    """S6-17: ``json.loads`` raises ``RecursionError`` on deep nesting; that is an unreadable file."""
+    depth = 100_000
+    response = await _upload(
+        admin_client, "[" * depth + "]" * depth, filename="deep.json", keys={"phone": "phone"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"]["reason"] == "unreadable"
+
+
+async def test_a_very_long_filename_is_stored_under_a_bounded_key(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    """S6-18: the storage key is ``datasets/<ws>/<id>/source<suffix>``, never the upload's name."""
+    response = await _upload(admin_client, filename="p" * 440 + ".TSV", content=POLICIES.replace(",", "\t"))
+    assert response.status_code == 201, response.text
+    dataset_id = response.json()["id"]
+
+    async with database.session() as session:
+        row = await session.get(Dataset, dataset_id)
+    assert row is not None
+    assert row.storage_key == f"datasets/{DEFAULT_WORKSPACE_ID}/{dataset_id}/source.tsv"
+    assert (await admin_client.get(f"/v1/datasets/{dataset_id}")).json()["status"] == "ready"
+
+
+async def test_dataset_create_and_delete_write_audit_rows_without_values(
+    admin_client: httpx.AsyncClient, database: Database
+) -> None:
+    """S6-19: ``dataset.create``, ``dataset.delete`` and ``dataset.import_failed``: ids and counts only."""
+    from sqlalchemy import select
+
+    from lkap_api.db.models import AuditLog
+
+    created = await _dataset(admin_client)
+    dataset_id = str(created["id"])
+
+    class _Empty:
+        async def get(self, key: str) -> bytes:
+            raise FileNotFoundError(key)
+
+    await dataset_service.import_rows(database, _Empty(), dataset_id)  # type: ignore[arg-type]
+    assert (await admin_client.delete(f"/v1/datasets/{dataset_id}")).status_code == 204
+
+    async with database.session() as session:
+        rows = (
+            (await session.execute(select(AuditLog).where(AuditLog.action.startswith("dataset."))))
+            .scalars()
+            .all()
+        )
+    by_action = {row.action: row for row in rows}
+    assert set(by_action) == {"dataset.create", "dataset.import_failed", "dataset.delete"}
+    assert by_action["dataset.create"].payload == {"dataset_id": dataset_id, "rows": 3, "columns": 6}
+    assert by_action["dataset.delete"].payload == {"dataset_id": dataset_id}
+    assert by_action["dataset.import_failed"].actor_type == "system"
+    assert by_action["dataset.import_failed"].payload["dataset_id"] == dataset_id
+    assert all(row.target_id == dataset_id and row.workspace_id == DEFAULT_WORKSPACE_ID for row in rows)
+    text = json.dumps([row.payload for row in rows])
+    for value in ("PD-1001", "Asha", "98765", "HYPERLINK", "policies.csv"):
+        assert value not in text
+
+
 async def test_a_tool_cannot_read_another_workspaces_dataset(two: TwoWorkspaces) -> None:
     response = await two.bob.post("/v1/tools", json=_tool_payload(two.dataset_id))
 
@@ -518,7 +643,7 @@ def test_validator_reports_a_missing_dataset_and_unknown_columns() -> None:
     definition = {
         "kind": "dataset",
         "name": "lookup_policy",
-        "dataset_id": "d1",
+        "dataset_id": "0123456789abcdef0123456789abcdef",
         "key_columns": ["phone", "holder"],
         "return_columns": ["ghost"],
     }
@@ -530,7 +655,7 @@ def test_validator_reports_a_missing_dataset_and_unknown_columns() -> None:
     }
 
     missing = dataset_tool_issues(_ctx(definition, {}))
-    found = dataset_tool_issues(_ctx(definition, {"d1": dataset}))
+    found = dataset_tool_issues(_ctx(definition, {"0123456789abcdef0123456789abcdef": dataset}))
 
     assert [issue.path for issue in missing] == ["tools[0].definition.dataset_id"]
     assert {(issue.path, issue.severity) for issue in found} == {

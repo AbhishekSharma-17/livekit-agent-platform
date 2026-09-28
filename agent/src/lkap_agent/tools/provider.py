@@ -43,7 +43,7 @@ from lkap_contracts.tools import ProviderToolDefinition, ToolExecutionMode
 
 from lkap_agent.logging import get_logger
 from lkap_agent.tools._http_safety import guarded_transport
-from lkap_agent.tools.bindings import apply_bindings
+from lkap_agent.tools.bindings import HeldBindings
 from lkap_agent.tools.context import (
     ToolCallContext,
     check_readback,
@@ -159,6 +159,8 @@ def _request_body(definition: ProviderToolDefinition, arguments: dict[str, Any])
 
 
 Handler = Callable[[dict[str, object], RunContext[Any]], Any]
+#: The action's request; it holds its bound value for the handler (V6-21, S6-2).
+Body = Callable[[dict[str, object], RunContext[Any], HeldBindings], Any]
 
 
 def provider_parameters(definition: ProviderToolDefinition) -> dict[str, Any]:
@@ -181,7 +183,9 @@ def prepare_provider_arguments(
     """
     if not (definition.confirm_readback or definition.requires_vars or definition.pinned_arguments):
         return raw_arguments
-    arguments = check_readback(dict(raw_arguments), definition.confirm_readback, tool=definition.name)
+    arguments = check_readback(
+        dict(raw_arguments), definition.confirm_readback, tool=definition.name, context=tool_context
+    )
     check_requires(definition.requires_vars, tool_context, tool=definition.name)
     return pin_arguments(arguments, definition.pinned_arguments, tool_context, tool=definition.name)
 
@@ -190,10 +194,10 @@ def _request_for(
     definition: ProviderToolDefinition,
     transport_factory: TransportFactory,
     tool_context: ToolCallContext | None = None,
-) -> Handler:
+) -> Body:
     url = f"{EXECUTE_BASE}/{quote(definition.tool_slug, safe='')}"
 
-    async def request(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+    async def request(raw_arguments: dict[str, object], context: RunContext[Any], held: HeldBindings) -> str:
         arguments: dict[str, Any] = dict(raw_arguments)
         headers = {**definition.headers, "Content-Type": "application/json", "Accept": "application/json"}
         if any("{{" in value for value in definition.headers.values()):
@@ -238,20 +242,14 @@ def _request_for(
             extracted = _extract(body, definition.result_path)
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ToolError(f"the app's answer has no {definition.result_path!r}") from exc
-        if definition.bindings:
-            # V6-07 (D-V6-23): the action's answer reaches the panel before the model reads it.
-            await apply_bindings(
-                extracted,
-                definition.bindings,
-                tool_context,
-                tool=definition.name,
-                call_id=context.function_call.call_id,
-            )
         text = extracted if isinstance(extracted, str) else json.dumps(extracted)
         # V5-27 (S5-6, R-V5-15): an email or ticket body is data, never instructions.
-        return fence(
+        answer = fence(
             text, source=f"app:{definition.toolkit or 'unknown'}", max_chars=definition.max_result_chars
         )
+        # V6-07 (D-V6-23): the action's answer reaches the panel before the model reads it —
+        # held until the tool-output guardrail has passed it (V6-21, S6-2).
+        return held.hold(extracted, answer)
 
     return request
 
@@ -268,10 +266,14 @@ def _handler_for(
 
         return misconfigured_handler(definition.name, f"{issues[0].field}: {issues[0].message}")
     request = _request_for(definition, transport_factory, tool_context)
+    bindings = list(definition.bindings)
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
         arguments = prepare_provider_arguments(definition, raw_arguments, tool_context)
-        result: str = await run_with_policy(context, resolved, lambda: request(arguments, context))
+        held = HeldBindings()
+        result: str = await run_with_policy(context, resolved, lambda: request(arguments, context, held))
+        # V6-21 (S6-2): the bindings apply after the tool-output guardrail, never on a withheld result.
+        await held.apply(result, context, bindings, tool_context, tool=definition.name)
         return result
 
     return handler

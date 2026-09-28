@@ -38,8 +38,8 @@ Semantics (:func:`evaluate`):
   ``1``/``0`` text count too.
 * ``>=``, ``<=``, ``>``, ``<`` need a number on the right; a value that is not a number is false.
 * ``matches`` searches the value's text (the first :data:`MAX_SUBJECT_CHARS` characters).
-  A pattern that repeats a group which already repeats (``(a+)+``) is refused at parse
-  time: Python's ``re`` has no timeout.
+  A pattern that can backtrack for very long (``(a+)+``, ``(a|a)+``, ``a*a*``;
+  :func:`nested_repeat`) is refused at parse time: Python's ``re`` has no timeout.
 * ``tool.<name>.ok`` is true when the tool's latest call in this session succeeded;
   ``tool.<name>.failed`` when it failed. Neither is true before the first call.
 
@@ -165,41 +165,382 @@ Expr = IsSet | Compare | Matches | ToolOutcome | Not | And | Or
 
 
 # --------------------------------------------------------------------------- regex safety
+#
+# V6-21 (S6-4): a small, engine-independent scanner. It reads the pattern into items
+# (a character atom, a zero-width assertion or a group, each with its repeat bounds) and
+# refuses three shapes that backtrack for very long on a long text:
+#
+# * a repeated group that holds an unbounded repeat: ``(a+)+``, ``(\w*\s)*``;
+# * a repeated group that holds alternatives: ``(a|a)+``, ``(a|aa)+``;
+# * two unbounded repeats that can match the same character and can meet, looking through
+#   anything that may match nothing: ``a*a*``, ``\w*\s*\w*``, ``\d+\.?\d*``.
+#
+# Characters are modelled as ASCII code points plus four stand-ins for everything else
+# (a digit, a space, a letter, any other), so ``[a-z]+\d*`` and ``\w+\s\w+`` pass. The
+# console's copy (``web/src/components/console/agents/rules/condition.ts``,
+# ``hasNestedRepeat``) makes the same decisions; keep the two in step.
 
-_UNBOUNDED_RE: Final[re.Pattern[str]] = re.compile(r"[+*]|\{\d*,\}")
+_OTHER_DIGIT: Final[int] = 128
+_OTHER_SPACE: Final[int] = 129
+_OTHER_WORD: Final[int] = 130
+_OTHER_PUNCT: Final[int] = 131
+_ASCII: Final[frozenset[int]] = frozenset(range(128))
+_OTHERS: Final[frozenset[int]] = frozenset({_OTHER_DIGIT, _OTHER_SPACE, _OTHER_WORD, _OTHER_PUNCT})
+_UNIVERSE: Final[frozenset[int]] = _ASCII | _OTHERS
+_DIGITS: Final[frozenset[int]] = frozenset(range(ord("0"), ord("9") + 1))
+_LETTERS: Final[frozenset[int]] = frozenset(range(ord("a"), ord("z") + 1)) | frozenset(
+    range(ord("A"), ord("Z") + 1)
+)
+_WORDS: Final[frozenset[int]] = _DIGITS | _LETTERS | {ord("_")}
+_SPACES: Final[frozenset[int]] = frozenset(ord(c) for c in " \t\n\r\f\v\x1c\x1d\x1e\x1f")
+#: ``\d \D \w \W \s \S``; their non-ASCII part is exact (a negated class may remove it).
+_CATEGORIES: Final[dict[str, frozenset[int]]] = {
+    "d": _DIGITS | {_OTHER_DIGIT},
+    "D": (_ASCII - _DIGITS) | {_OTHER_SPACE, _OTHER_WORD, _OTHER_PUNCT},
+    "w": _WORDS | {_OTHER_DIGIT, _OTHER_WORD},
+    "W": (_ASCII - _WORDS) | {_OTHER_SPACE, _OTHER_PUNCT},
+    "s": _SPACES | {_OTHER_SPACE},
+    "S": (_ASCII - _SPACES) | {_OTHER_DIGIT, _OTHER_WORD, _OTHER_PUNCT},
+}
+_CONTROL_ESCAPES: Final[dict[str, int]] = {"n": 10, "t": 9, "r": 13, "f": 12, "v": 11, "a": 7}
+_HEX_LENGTH: Final[dict[str, int]] = {"x": 2, "u": 4, "U": 8}
+_HEX_DIGITS: Final[str] = "0123456789abcdefABCDEF"
+_BRACE_RE: Final[re.Pattern[str]] = re.compile(r"\{([0-9]*)(,?)([0-9]*)\}")
+
+
+def _code_chars(code: int) -> frozenset[int]:
+    """One character; both cases of an ASCII letter (a pattern may ignore case)."""
+    if code >= 128:
+        return _OTHERS
+    char = chr(code)
+    return frozenset({ord(char.lower()), ord(char.upper())})
+
+
+@dataclass(frozen=True, slots=True)
+class _Atom:
+    """One character out of ``chars``."""
+
+    chars: frozenset[int]
+
+
+@dataclass(frozen=True, slots=True)
+class _Zero:
+    """An assertion that matches no character (``^``, ``\\b``, inline flags, a comment)."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Group:
+    branches: tuple[tuple[_Item, ...], ...]
+    lookaround: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _Item:
+    node: _Atom | _Zero | _Group
+    low: int
+    #: ``None``: unbounded.
+    high: int | None
+
+
+_ZERO: Final = _Zero()
+
+
+@dataclass(frozen=True, slots=True)
+class _Escape:
+    #: ``None``: a zero-width assertion.
+    chars: frozenset[int] | None
+    #: The one character it stands for (a range end), else ``None``.
+    code: int | None
+    end: int
+    #: A category (``\d``): its non-ASCII part is exact, not a stand-in.
+    exact: bool = False
+
+
+def _escape(pattern: str, index: int, *, in_class: bool) -> _Escape:
+    if index + 1 >= len(pattern):
+        return _Escape(_code_chars(92), 92, len(pattern))
+    char = pattern[index + 1]
+    end = index + 2
+    if char in _CATEGORIES:
+        return _Escape(_CATEGORIES[char], None, end, exact=True)
+    if not in_class and char in "AZbBz":
+        return _Escape(None, None, end)
+    if in_class and char == "b":
+        return _Escape(_code_chars(8), 8, end)
+    if char in _CONTROL_ESCAPES:
+        code = _CONTROL_ESCAPES[char]
+        return _Escape(_code_chars(code), code, end)
+    if char in _HEX_LENGTH:
+        digits = pattern[end : end + _HEX_LENGTH[char]]
+        if len(digits) == _HEX_LENGTH[char] and all(d in _HEX_DIGITS for d in digits):
+            code = int(digits, 16)
+            return _Escape(_code_chars(code), code, end + len(digits))
+        return _Escape(_UNIVERSE, None, end)
+    if char == "N":
+        close = pattern.find("}", end)
+        return _Escape(_UNIVERSE, None, len(pattern) if close < 0 else close + 1)
+    if "0" <= char <= "9":
+        while end < len(pattern) and end < index + 4 and "0" <= pattern[end] <= "9":
+            end += 1
+        return _Escape(_UNIVERSE, None, end)
+    return _Escape(_code_chars(ord(char)), ord(char), end)
+
+
+class _RegexScan:
+    """Reads a pattern into :class:`_Item` sequences; never raises (a bad pattern is ``re``'s to refuse)."""
+
+    def __init__(self, pattern: str) -> None:
+        self.pattern = pattern
+        self.index = 0
+        self.depth = 0
+
+    def branches(self) -> tuple[tuple[_Item, ...], ...]:
+        pattern = self.pattern
+        found: list[tuple[_Item, ...]] = []
+        sequence: list[_Item] = []
+        while self.index < len(pattern):
+            char = pattern[self.index]
+            if char == "|":
+                found.append(tuple(sequence))
+                sequence = []
+                self.index += 1
+                continue
+            if char == ")" and self.depth > 0:
+                break
+            sequence.append(self._quantified(self._atom()))
+        found.append(tuple(sequence))
+        return tuple(found)
+
+    def _atom(self) -> _Atom | _Zero | _Group:
+        pattern = self.pattern
+        char = pattern[self.index]
+        if char == "(":
+            return self._group()
+        if char == "[":
+            return _Atom(self._class())
+        if char == "\\":
+            escape = _escape(pattern, self.index, in_class=False)
+            self.index = escape.end
+            return _ZERO if escape.chars is None else _Atom(escape.chars)
+        self.index += 1
+        if char == ".":
+            return _Atom(_UNIVERSE)
+        if char in "^$":
+            return _ZERO
+        return _Atom(_code_chars(ord(char)))
+
+    def _skip_past(self, stop: str, start: int) -> None:
+        close = self.pattern.find(stop, start)
+        self.index = len(self.pattern) if close < 0 else close + 1
+
+    def _group(self) -> _Atom | _Zero | _Group:
+        pattern = self.pattern
+        self.index += 1
+        lookaround = False
+        if pattern.startswith("?", self.index):
+            rest = pattern[self.index + 1 : self.index + 3]
+            if rest.startswith("#"):
+                self._skip_past(")", self.index)
+                return _ZERO
+            if rest == "P=":
+                self._skip_past(")", self.index)
+                return _Atom(_UNIVERSE)
+            if rest == "P<":
+                self._skip_past(">", self.index)
+            elif rest[:1] in ("=", "!"):
+                lookaround = True
+                self.index += 2
+            elif rest in ("<=", "<!"):
+                lookaround = True
+                self.index += 3
+            elif rest[:1] in (":", ">"):
+                self.index += 2
+            elif rest[:1] == "(":
+                self._skip_past(")", self.index + 2)
+            else:
+                end = self.index + 1
+                while end < len(pattern) and (pattern[end] == "-" or ord(pattern[end]) in _LETTERS):
+                    end += 1
+                if end < len(pattern) and pattern[end] == ")":
+                    self.index = end + 1
+                    return _ZERO
+                self.index = end + 1 if end < len(pattern) and pattern[end] == ":" else end
+        self.depth += 1
+        branches = self.branches()
+        self.depth -= 1
+        if self.index < len(pattern) and pattern[self.index] == ")":
+            self.index += 1
+        return _Group(branches, lookaround)
+
+    def _class(self) -> frozenset[int]:
+        pattern = self.pattern
+        index = self.index + 1
+        negate = index < len(pattern) and pattern[index] == "^"
+        if negate:
+            index += 1
+        members: set[int] = set()
+        exact_others: set[int] = set()
+        first = True
+        while index < len(pattern):
+            char = pattern[index]
+            if char == "]" and not first:
+                index += 1
+                break
+            first = False
+            if char == "\\":
+                escape = _escape(pattern, index, in_class=True)
+                chars = escape.chars if escape.chars is not None else _UNIVERSE
+                code, index, exact = escape.code, escape.end, escape.exact
+            else:
+                code, index, exact = ord(char), index + 1, False
+                chars = _code_chars(code)
+            if (
+                code is not None
+                and index + 1 < len(pattern)
+                and pattern[index] == "-"
+                and pattern[index + 1] != "]"
+            ):
+                if pattern[index + 1] == "\\":
+                    high_escape = _escape(pattern, index + 1, in_class=True)
+                    high, after = high_escape.code, high_escape.end
+                else:
+                    high, after = ord(pattern[index + 1]), index + 2
+                if high is not None:
+                    index = after
+                    for point in range(code, min(high, 127) + 1):
+                        members |= _code_chars(point)
+                    if high >= 128:
+                        members |= _OTHERS
+                    continue
+            members |= chars
+            if exact:
+                exact_others |= chars & _OTHERS
+        self.index = index
+        if negate:
+            return (_ASCII - members) | (_OTHERS - exact_others)
+        return frozenset(members)
+
+    def _quantified(self, node: _Atom | _Zero | _Group) -> _Item:
+        pattern = self.pattern
+        index = self.index
+        char = pattern[index] if index < len(pattern) else ""
+        brace = _BRACE_RE.match(pattern, index) if char == "{" else None
+        low: int
+        high: int | None
+        if char == "*":
+            low, high = 0, None
+        elif char == "+":
+            low, high = 1, None
+        elif char == "?":
+            low, high = 0, 1
+        elif brace is not None and (brace.group(1) or brace.group(2)):
+            low = int(brace.group(1) or "0")
+            high = (int(brace.group(3)) if brace.group(3) else None) if brace.group(2) else low
+            index = brace.end() - 1
+        else:
+            return _Item(node, 1, 1)
+        index += 1
+        if index < len(pattern) and pattern[index] in "?+":
+            index += 1
+        self.index = index
+        return _Item(node, low, high)
+
+
+def _repeats(item: _Item) -> bool:
+    return item.high is None or item.high > 1
+
+
+def _has_unbounded(group: _Group) -> bool:
+    return any(
+        item.high is None or (isinstance(item.node, _Group) and _has_unbounded(item.node))
+        for branch in group.branches
+        for item in branch
+    )
+
+
+def _has_alternatives(group: _Group) -> bool:
+    return len(group.branches) > 1 or any(
+        isinstance(item.node, _Group) and _has_alternatives(item.node)
+        for branch in group.branches
+        for item in branch
+    )
+
+
+def _chars_of(node: _Atom | _Zero | _Group) -> frozenset[int]:
+    if isinstance(node, _Atom):
+        return node.chars
+    if isinstance(node, _Zero):
+        return frozenset()
+    found: frozenset[int] = frozenset()
+    for branch in node.branches:
+        for item in branch:
+            found |= _chars_of(item.node)
+    return found
+
+
+def _may_be_empty(item: _Item) -> bool:
+    node = item.node
+    if item.low == 0 or isinstance(node, _Zero):
+        return True
+    if isinstance(node, _Atom):
+        return False
+    return node.lookaround or any(all(_may_be_empty(i) for i in branch) for branch in node.branches)
+
+
+def _step(
+    window: list[frozenset[int]], chars: frozenset[int], *, unbounded: bool, optional: bool
+) -> list[frozenset[int]] | None:
+    """The unbounded repeats the next item can still meet; ``None`` when two of them overlap."""
+    if unbounded and any(chars & earlier for earlier in window):
+        return None
+    if optional:
+        return [*window, chars] if unbounded else window
+    return [chars] if unbounded else []
+
+
+def _walk(items: tuple[_Item, ...], window: list[frozenset[int]]) -> list[frozenset[int]] | None:
+    """Walk one sequence from ``window``; the window it leaves, or ``None`` for a slow shape."""
+    for item in items:
+        node = item.node
+        after: list[frozenset[int]] | None
+        if isinstance(node, _Zero):
+            continue
+        if isinstance(node, _Atom):
+            after = _step(window, node.chars, unbounded=item.high is None, optional=item.low == 0)
+        elif node.lookaround:
+            if any(_walk(branch, []) is None for branch in node.branches):
+                return None
+            continue
+        elif _repeats(item):
+            if _has_unbounded(node) or _has_alternatives(node):
+                return None
+            after = _step(window, _chars_of(node), unbounded=item.high is None, optional=_may_be_empty(item))
+        else:
+            # At most once: each alternative carries on from where the sequence is.
+            after = []
+            for branch in node.branches:
+                out = _walk(branch, list(window))
+                if out is None:
+                    return None
+                after.extend(out)
+            if item.low == 0:
+                after.extend(window)
+        if after is None:
+            return None
+        window = after
+    return window
 
 
 def nested_repeat(pattern: str) -> bool:
-    """Whether ``pattern`` repeats a group that holds an unbounded repeat (``(a+)+``, ``(\\w*\\s)*``).
+    """Whether ``pattern`` has a shape that can backtrack for very long on a long text.
 
-    The same scanner as the guardrails check in the api (``config_service.nested_repeat``):
-    it tracks groups, skips escapes and character classes, and flags a group containing
-    ``+``, ``*`` or ``{n,}`` that is itself followed by ``+``, ``*`` or ``{``.
+    One scanner for rule patterns and the guardrails check in the api (``config_service``
+    imports it, ask #75). ``True`` for a repeated group holding an unbounded repeat
+    (``(a+)+``, ``(\\w*\\s)*``) or alternatives (``(a|a)+b``), and for two unbounded repeats
+    of overlapping characters that can meet (``a*a*b``, ``\\w*\\s*\\w*``); the comment above
+    describes the model. ``re`` cannot be interrupted, so this scanner is the bound.
     """
-    stack: list[bool] = []
-    index = 0
-    in_class = False
-    while index < len(pattern):
-        char = pattern[index]
-        if char == "\\":
-            index += 2
-            continue
-        if in_class:
-            in_class = char != "]"
-        elif char == "[":
-            in_class = True
-        elif char == "(":
-            stack.append(False)
-        elif char == ")" and stack:
-            inner = stack.pop()
-            if inner and pattern[index + 1 : index + 2] in ("+", "*", "{"):
-                return True
-            if stack:
-                stack[-1] = stack[-1] or inner
-        elif stack and _UNBOUNDED_RE.match(pattern, index):
-            stack[-1] = True
-        index += 1
-    return False
+    return any(_walk(branch, []) is None for branch in _RegexScan(pattern).branches())
 
 
 # --------------------------------------------------------------------------- tokens

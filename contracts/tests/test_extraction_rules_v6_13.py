@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pytest
@@ -171,6 +172,86 @@ def test_parse_condition_invalid_regex_is_refused() -> None:
 @pytest.mark.parametrize("pattern", ["fire|smoke", r"[a-z]+\d*", "(ab)+", r"(\w+)\s"])
 def test_nested_repeat_safe_patterns_pass(pattern: str) -> None:
     assert not nested_repeat(pattern)
+
+
+#: V6-21 (S6-4): the shapes the V6-13 scanner missed, and patterns it must keep accepting.
+#: `web/tests/rules-condition.test.ts` runs the same list against the console's copy.
+SLOW_SHAPES = [
+    "(a|a)+b",
+    "(a|aa)+b",
+    "a*a*a*b",
+    r"(\w+\s?)+$",
+    r"\w*\s*\w*",
+    r"\d+\.?\d*",
+    "a+a+b",
+    "(a*)(a*)b",
+    "(a*|b)a*",
+    "(?:fire|smoke)+",
+    "(?=(a+)+)x",
+    ".*.*x",
+]
+SAFE_SHAPES = [
+    r"\d{3}-\d{4}",
+    "(ab)+c",
+    "^[a-z]+@[a-z]+$",
+    "fire|smoke|gas",
+    r"[a-z]+\d*",
+    r"\w+\s\w+",
+    r"\d+(\.\d+)?",
+    r"\b(?:\d[ -]?){13,19}\b",
+    r"\(a+\)+",
+    ".*foo.*",
+    r"[^\d]+\d+",
+    r"(?P<policy>[A-Z]{2}-\d{6})",
+]
+
+
+@pytest.mark.parametrize(
+    ("pattern", "slow"),
+    [(pattern, True) for pattern in SLOW_SHAPES] + [(pattern, False) for pattern in SAFE_SHAPES],
+)
+def test_nested_repeat_refuses_alternation_and_adjacent_repeats(pattern: str, slow: bool) -> None:
+    assert nested_repeat(pattern) is slow
+    if slow:
+        with pytest.raises(ConditionError, match="repeats a group"):
+            parse_condition(f"var.a matches /{pattern}/")
+
+
+@pytest.mark.parametrize("pattern", ["(", ")", "[", "\\", "a{", "a{}", "(?", "[]a", "(?P<x", "x{2,1}"])
+def test_nested_repeat_never_raises_on_a_broken_pattern(pattern: str) -> None:
+    assert isinstance(nested_repeat(pattern), bool)
+
+
+#: Accepted patterns that stay linear on the hostile subject below. A single repeat that has
+#: to backtrack (``.*foo.*``, ``\w+\s\w+``) is quadratic, bounded by the 1,000-character
+#: subject cap rather than by the scanner (review R6-5), so it is not in this timing list.
+LINEAR_SHAPES = [
+    r"\d{3}-\d{4}",
+    "(ab)+c",
+    "^[a-z]+@[a-z]+$",
+    "fire|smoke|gas",
+    r"[a-z]+\d*",
+    r"\d+(\.\d+)?",
+    r"\b(?:\d[ -]?){13,19}\b",
+    r"\(a+\)+",
+    r"(?P<policy>[A-Z]{2}-\d{6})",
+    r"\bfire\b",
+]
+
+
+def test_evaluate_matches_finishes_fast_on_a_hostile_subject() -> None:
+    subject = {"x": "a" * 1000 + "!"}
+    accepted = [pattern for pattern in SLOW_SHAPES + LINEAR_SHAPES if not nested_repeat(pattern)]
+    assert accepted == LINEAR_SHAPES
+    for pattern in accepted:
+        for flag in ("", "i"):
+            condition = parse_condition(f"var.x matches /{pattern}/{flag}")
+            timings = []
+            for _ in range(3):
+                started = time.perf_counter()
+                evaluate(condition, subject)
+                timings.append(time.perf_counter() - started)
+            assert min(timings) < 0.05, pattern
 
 
 # --------------------------------------------------------------------------- evaluation

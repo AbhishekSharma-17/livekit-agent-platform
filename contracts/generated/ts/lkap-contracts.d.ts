@@ -4623,7 +4623,8 @@ export interface DetailsItem {
  * ``block_action {name: "edit", data}`` on a ``details`` block (V6-06).
  *
  * Changes the value of a row already on the card (``key``); the caller cannot add
- * rows or change labels. An empty ``value`` clears it.
+ * rows or change labels. An empty ``value`` clears it. ``key`` has the id shape (V6-21,
+ * S6-7): an odd value is refused by the contract, never echoed into a log line or an event.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "DetailsEdit".

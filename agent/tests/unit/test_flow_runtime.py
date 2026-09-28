@@ -212,7 +212,11 @@ async def test_three_node_flow_transitions_extracts_and_ends_with_a_disposition(
     # The next node was rendered with the variable extracted on the transition, and it
     # carries the conversation (the caller never repeats themselves).
     prompt_b, names_b, _ = conversation.calls[2]
-    assert "Confirm the name Ada Lovelace with the caller." in prompt_b
+    # V6-21 (S6-12): the step's own extracted value is the caller's words, so it is fenced.
+    assert (
+        'Confirm the name <untrusted source="extraction">Ada Lovelace</untrusted> with the caller.'
+        in prompt_b
+    )
     assert "My name is Ada Lovelace." in prompt_b
     assert "You work for Acme Insurance." in prompt_b  # global node prefix
     assert names_b == ["go_to_done"]

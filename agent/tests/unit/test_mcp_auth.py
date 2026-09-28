@@ -16,6 +16,7 @@ from typing import Any, cast
 import httpx
 import pytest
 from fakes.fake_api import FakeApi
+from fakes.fake_ctx import FakeRunContext
 from livekit.agents import ToolError, llm
 from livekit.agents.voice.events import ToolCallEnded, ToolCallStarted, ToolExecutionUpdatedEvent
 from lkap_contracts.agent_config import McpOAuthAccess, McpOAuthTokenIn, McpOAuthTokenOut
@@ -301,7 +302,7 @@ async def test_a_session_lists_and_calls_a_signed_in_server_with_the_bearer() ->
     server, route = FakeMcpServer(), FakeTokenRoute()
     toolset = await _toolset(server, route)
     try:
-        result = await _tool(toolset)(raw_arguments={})
+        result = await _tool(toolset)(ctx=FakeRunContext(), raw_arguments={})
     finally:
         await toolset.aclose()
 
@@ -317,7 +318,7 @@ async def test_after_a_revoke_the_next_call_fails_with_the_admin_message_and_the
     try:
         for _ in range(2):  # the connection survives: the second call gets the same sentence
             with pytest.raises(ToolError) as caught:
-                await _tool(toolset)(raw_arguments={})
+                await _tool(toolset)(ctx=FakeRunContext(), raw_arguments={})
             assert str(caught.value) == MCP_REAUTH_MESSAGE
     finally:
         await toolset.aclose()
@@ -331,7 +332,7 @@ async def test_insufficient_scope_on_a_call_is_the_spoken_safe_error() -> None:
     server.insufficient_scope = True
     try:
         with pytest.raises(ToolError) as caught:
-            await _tool(toolset)(raw_arguments={})
+            await _tool(toolset)(ctx=FakeRunContext(), raw_arguments={})
     finally:
         await toolset.aclose()
 

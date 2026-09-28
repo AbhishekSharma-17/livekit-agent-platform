@@ -313,6 +313,40 @@ async def test_confirm_readback_refuses_until_confirmed_and_strips_the_flag() ->
     assert json.loads(route.calls.last.request.content) == {"email": "ada@example.com"}
 
 
+@respx.mock
+async def test_confirm_readback_needs_a_caller_turn_after_the_readback() -> None:
+    """V6-21 (S6-10): ``confirmed=true`` counts only after the refusal and a caller turn since."""
+    from livekit.agents.llm import ChatContext
+
+    route = respx.post("https://api.example.com/contacts").mock(
+        return_value=httpx.Response(200, text="saved")
+    )
+    session = _session()
+    history = ChatContext.empty()
+    history.add_message(role="user", content="My email is ada@example.com.")
+    cast(Any, session).session.history = history
+    definition = _http(
+        method="POST",
+        url="https://api.example.com/contacts",
+        parameters={"type": "object", "properties": {"email": {"type": "string"}}},
+        confirm_readback=["email"],
+    )
+    (tool,) = build_http_tools([definition], context=_tool_context(session))
+    confirmed = {"email": "ada@example.com", "confirmed": True}
+
+    # Straight to confirmed=true, and again with no caller turn since: both refused.
+    for _ in range(2):
+        with pytest.raises(ToolError, match="read these back"):
+            await tool(raw_arguments=dict(confirmed), context=_run())
+    assert not route.called
+
+    history.add_message(role="assistant", content="That is a-d-a at example dot com, right?")
+    history.add_message(role="user", content="Yes, that's right.")
+    await tool(raw_arguments=dict(confirmed), context=_run())
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == {"email": "ada@example.com"}
+
+
 # ---------------------------------------------------------------------- bindings
 
 
@@ -402,6 +436,121 @@ async def test_apply_bindings_without_context_writes_nothing() -> None:
 
     report = await apply_bindings({"a": 1}, [ToolBinding(path="/a", to="var:a")], None, tool="t")
     assert report.applied == [] and report.skipped == []
+
+
+# ---------------------------------------------------------------------- V6-21 (S6-2): bind after the guard
+
+_SAFE = "Sorry, I can't share that."
+_HOLDER_BINDINGS = [
+    {"path": "/holder", "to": "details:card.holder"},
+    {"path": "/holder", "to": "var:holder_name"},
+]
+_HOLDER_ARGUMENTS: dict[str, dict[str, Any]] = {
+    "http": {"policy_no": "P1"},
+    "provider": {"title": "x", "timezone": "UTC"},
+    "dataset": {"policy_no": "P1"},
+}
+
+
+def _guarded_run(events: list[tuple[str, dict[str, Any]]]) -> Any:
+    """A call whose session has a real `tool_output` guardrail: one regex rule on `SECRET-<digits>`."""
+    from lkap_contracts.guardrails import GuardrailsConfig
+
+    from lkap_agent.guardrails import ensure_session_guardrails
+    from lkap_agent.tools.execution import set_tool_output_guard
+
+    run = FakeRunContext(name="lookup_policy")
+    config = GuardrailsConfig.model_validate(
+        {"safe_reply": _SAFE, "tool_output": [{"kind": "regex", "name": "Secrets", "pattern": r"SECRET-\d+"}]}
+    )
+    host = SimpleNamespace(
+        session_id="sess_demo",
+        session=run.session,
+        config=SimpleNamespace(guardrails=config),
+        userdata={},
+        record_event=lambda kind, payload: events.append((kind, payload)),
+    )
+    guard = ensure_session_guardrails(host)
+    assert guard is not None
+    set_tool_output_guard(run.session, guard.guard_tool_output)
+    return run
+
+
+def _holder_tool(kind: str, session: FakePackSessionContext, holder: str) -> Any:
+    """An HTTP, app or dataset tool answering ``{"holder": holder}``, bound to the card and a variable."""
+    from lkap_contracts.tools import DatasetToolDefinition
+
+    from lkap_agent.tools.dataset import build_dataset_tool
+
+    context = _tool_context(session)
+    if kind == "http":
+        respx.get("https://api.example.com/policies/P1").mock(
+            return_value=httpx.Response(200, json={"holder": holder})
+        )
+        (tool,) = build_http_tools([_http(bindings=_HOLDER_BINDINGS)], context=context)
+        return tool
+    if kind == "provider":
+
+        async def answer(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"data": {"holder": holder}, "successful": True})
+
+        return build_provider_tool(
+            _provider(bindings=_HOLDER_BINDINGS),
+            transport_factory=lambda: httpx.MockTransport(answer),
+            context=context,
+        )
+    definition = DatasetToolDefinition.model_validate(
+        {
+            "kind": "dataset",
+            "name": "lookup_policy",
+            "description": "Find the caller's policy.",
+            "dataset_id": "0123456789abcdef0123456789abcdef",
+            "key_columns": ["policy_no"],
+            "bindings": [{"path": f"/0{b['path']}", "to": b["to"]} for b in _HOLDER_BINDINGS],
+        }
+    )
+    return build_dataset_tool(definition, context=context, mock=[{"holder": holder}])
+
+
+@respx.mock
+@pytest.mark.parametrize("kind", ["http", "provider", "dataset"])
+async def test_a_tool_output_trip_applies_no_bindings(kind: str) -> None:
+    from lkap_agent.guardrails import TOOL_WITHHELD
+    from lkap_agent.tools.execution import WITHHELD_EXTRA, set_tool_output_guard
+
+    session = _session()
+    events: list[tuple[str, dict[str, Any]]] = []
+    run = _guarded_run(events)
+    tool = _holder_tool(kind, session, "SECRET-1234")
+    try:
+        result = await tool(raw_arguments=_HOLDER_ARGUMENTS[kind], context=run)
+    finally:
+        set_tool_output_guard(run.session, None)
+
+    assert result == TOOL_WITHHELD.format(safe_reply=_SAFE)
+    assert run.function_call.extra[WITHHELD_EXTRA] is True
+    assert not session.ui.state.blocks.get("card")  # the details block is unchanged
+    assert "holder_name" not in session.userdata[VARIABLES_USERDATA_KEY]
+    assert not [e for e in session.ui.state.activity if (e.detail or {}).get("event") == BINDINGS_EVENT]
+    assert [p["action"] for _, p in events if p.get("stage") == "tool_output"] == ["replaced"]
+
+
+@respx.mock
+@pytest.mark.parametrize("kind", ["http", "provider", "dataset"])
+async def test_a_clean_result_still_binds_after_the_guard(kind: str) -> None:
+    from lkap_agent.tools.execution import WITHHELD_EXTRA, set_tool_output_guard
+
+    session = _session()
+    run = _guarded_run([])
+    tool = _holder_tool(kind, session, "Ada Lovelace")
+    try:
+        await tool(raw_arguments=_HOLDER_ARGUMENTS[kind], context=run)
+    finally:
+        set_tool_output_guard(run.session, None)
+
+    assert WITHHELD_EXTRA not in run.function_call.extra
+    assert session.userdata[VARIABLES_USERDATA_KEY]["holder_name"] == "Ada Lovelace"
+    assert session.ui.state.blocks["card"]["items"][0]["value"] == "Ada Lovelace"
 
 
 # ---------------------------------------------------------------------- app actions
@@ -554,7 +703,7 @@ async def test_mcp_tool_without_tool_context_is_the_plain_sdk_tool() -> None:
     session = _session()
     server = _mcp_server(session, ToolContextSpec())
     tool = server._make_function_tool("other_tool", None, {"type": "object"}, None, options=_mcp_options())
-    await tool(raw_arguments={"q": 1})
+    await tool(ctx=_run("other_tool"), raw_arguments={"q": 1})
     assert server._client.calls == [("other_tool", {"q": 1})]
 
 

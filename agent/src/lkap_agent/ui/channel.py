@@ -199,8 +199,10 @@ __all__ = [
     "ASSET_CACHE_BYTES",
     "BARGE_IN",
     "CANVAS_SNAPSHOT_TIMEOUT_S",
+    "CALLER_ACTION_LIMITED",
     "CAPTION_INTERIM_INTERVAL_S",
     "INK_FLUSH_INTERVAL_S",
+    "MAX_CALLER_ACTIONS_PER_MIN",
     "CaptionStream",
     "CaptionsTextOutput",
     "caption_tap_for",
@@ -256,6 +258,32 @@ INK_FLUSH_INTERVAL_S: Final[float] = 0.1
 CANVAS_SNAPSHOT_TIMEOUT_S: Final[float] = 20.0
 #: The display kind of a drawing snapshot in `UiState.assets`.
 CANVAS_SNAPSHOT_KIND: Final[str] = "drawing"
+#: V6-21 (S6-5, ask #27): caller edits and card taps one session may make a minute, together
+#: (each can start a model reply); past it the action is refused and the model hears nothing.
+MAX_CALLER_ACTIONS_PER_MIN: Final[int] = 10
+#: What the page shows for an action past :data:`MAX_CALLER_ACTIONS_PER_MIN`.
+CALLER_ACTION_LIMITED: Final[str] = "Please wait a moment before changing that again."
+
+
+@dataclass
+class _ActionBudget:
+    """A token bucket of ``capacity`` actions, refilled at ``capacity`` a minute."""
+
+    capacity: float = float(MAX_CALLER_ACTIONS_PER_MIN)
+    tokens: float = float(MAX_CALLER_ACTIONS_PER_MIN)
+    last: float = 0.0
+
+    def take(self, now: float | None = None) -> bool:
+        """Spend one token if there is one."""
+        current = time.monotonic() if now is None else now
+        if self.last:
+            self.tokens = min(self.capacity, self.tokens + (current - self.last) * self.capacity / 60.0)
+        self.last = current
+        if self.tokens < 1:
+            return False
+        self.tokens -= 1
+        return True
+
 
 #: The state fields a browser answer may write, per requestable block type (S5-3). A
 #: `form` answer lands in `values` (its keys limited to the schema's properties); an
@@ -570,6 +598,8 @@ class UiChannel:
         # drawing snapshots `request_canvas_snapshot` awaits, by canvas id.
         self._ink_handler_registered = False
         self._ink_budget = InkBudget()
+        # V6-21 (S6-5): one bound shared by caller edits and card taps.
+        self._action_budget = _ActionBudget()
         self._ink_points = 0
         self._ink_accepted = 0
         self._ink_drops: dict[str, int] = {}
@@ -1821,7 +1851,12 @@ class UiChannel:
             name = str(action.payload.get("name", ""))
             data = dict(action.payload.get("data") or {})
             block_type = self._block_type(block_id)
-            if name == BLOCK_EDIT_ACTION and block_type is not None and block_type != "custom":
+            is_edit = name == BLOCK_EDIT_ACTION and block_type is not None and block_type != "custom"
+            if (is_edit or block_type == "cards") and not self._action_budget.take():
+                # V6-21 (S6-5): past the session's bound nothing is applied or told to the model.
+                self._log.info("caller action limited", block_id=block_id, block_type=block_type)
+                return AgentActionResult(ok=False, error=CALLER_ACTION_LIMITED)
+            if is_edit:
                 # V6-06: a caller's edit of a built-in block is checked and applied here; a
                 # pack-rendered block (custom, or a custom panel's own ids) stays the pack's.
                 refused, edited = await self._caller_edit(block_id, data)

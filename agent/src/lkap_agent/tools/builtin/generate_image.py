@@ -23,7 +23,7 @@ from typing import Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.blocks import sniff_mime
-from lkap_contracts.ui_protocol import UiPatchOp
+from lkap_contracts.ui_protocol import MAX_UPLOAD_BYTES, UiPatchOp
 from packs.base import PackSessionContext
 
 from lkap_agent.ui.blocks import block_path, describe_blocks, pick_block, session_block_specs
@@ -113,6 +113,10 @@ def build_generate_image_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
                 ctx.log.warning(
                     "builtin_tool.generate_image.failed", call_id=call_id, error=type(exc).__name__
                 )
+                return None
+            if len(data) > MAX_UPLOAD_BYTES:
+                # V6-21 (S6-25): nothing past the upload cap is streamed to the room.
+                ctx.log.warning("builtin_tool.generate_image.too_large", call_id=call_id, size=len(data))
                 return None
             mime = sniff_mime(data)
             if mime is None or not mime.startswith("image/"):

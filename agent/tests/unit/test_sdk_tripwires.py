@@ -112,6 +112,11 @@ def test_mcp_make_function_tool_surface_used_by_mcp_context() -> None:
     assert "async def _tool_called(raw_arguments" in source
     assert "async def _tool_called_nonblocking(" in source and "ctx: RunContext, raw_arguments" in source
     assert "asyncio.iscoroutine(resolved)" in source, "the result resolver may no longer be async"
+    # V6-21 (S6-3): the resolver runs inline in the tool's own call, so the context variable
+    # `mcp_context` holds the call's bound value in is the one the resolver sees.
+    assert source.count("return await _resolve(tool_result, raw_arguments)") == 2, (
+        "the MCP result resolver no longer runs inside the tool call: rework tools/mcp_context.py"
+    )
     from livekit.agents.llm.tool_context import RawFunctionTool
 
     assert "_func" in inspect.getsource(RawFunctionTool.__mro__[1].__init__), (

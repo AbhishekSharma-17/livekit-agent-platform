@@ -182,6 +182,11 @@ def _record(body: Any) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+#: V6-21 (S6-24): the most one generation may cost; a larger ``total_cost`` is counted as
+#: failed (the ledger column is ``Numeric(12, 6)``, and no single generation costs this much).
+MAX_GENERATION_USD = Decimal(10_000)
+
+
 def _usd(value: Any) -> Decimal | None:
     if isinstance(value, bool) or value is None:
         return None
@@ -189,7 +194,7 @@ def _usd(value: Any) -> Decimal | None:
         amount = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
-    return amount if amount.is_finite() and amount >= 0 else None
+    return amount if amount.is_finite() and 0 <= amount <= MAX_GENERATION_USD else None
 
 
 async def fetch_generations(

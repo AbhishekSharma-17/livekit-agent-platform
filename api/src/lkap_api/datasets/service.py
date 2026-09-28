@@ -35,6 +35,7 @@ from lkap_contracts.datasets import (
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lkap_api.auth.audit import record
 from lkap_api.datasets.normalise import normalise_key
 from lkap_api.datasets.parse import DatasetFileError, ParsedDataset, neutralise_cell, parse_dataset
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
@@ -77,9 +78,18 @@ class DatasetQuotaExceededError(ApiError):
     code = "quota_exceeded"
 
 
+#: The upload suffixes a storage key keeps (the import reads ``.tsv`` off the key).
+_STORED_SUFFIXES: Final = frozenset({".csv", ".tsv", ".json"})
+
+
 def storage_key_for(workspace_id: str, dataset_id: str, filename: str) -> str:
-    """Where a dataset's uploaded bytes live in the storage backend."""
-    return f"datasets/{workspace_id}/{dataset_id}/{filename}"
+    """Where a dataset's uploaded bytes live in the storage backend.
+
+    V6-21 (S6-18): ``datasets/<workspace>/<dataset>/source<suffix>``, bounded whatever the
+    upload was called (the name is never stored, echoed or used as a path).
+    """
+    suffix = PurePosixPath(filename.lower()).suffix
+    return f"datasets/{workspace_id}/{dataset_id}/source{suffix if suffix in _STORED_SUFFIXES else ''}"
 
 
 def _slug_base(name: str) -> str:
@@ -261,8 +271,11 @@ async def _clear_rows(session: AsyncSession, dataset_id: str) -> None:
     await session.execute(delete(DatasetRow).where(DatasetRow.dataset_id == dataset_id))
 
 
-async def _fail(session: AsyncSession, dataset_id: str, message: str) -> None:
-    """Undo a partial import and record why it failed (the dataset id, not the expired row)."""
+async def _fail(session: AsyncSession, dataset_id: str, workspace_id: str, message: str) -> None:
+    """Undo a partial import and record why it failed (the dataset id, not the expired row).
+
+    V6-21 (S6-19): one ``dataset.import_failed`` audit row with the reason, never a cell value.
+    """
     await session.rollback()
     await _clear_rows(session, dataset_id)
     await session.execute(
@@ -272,6 +285,16 @@ async def _fail(session: AsyncSession, dataset_id: str, message: str) -> None:
         .execution_options(**{CROSS_WORKSPACE_OPTION: True})
     )
     await _update_job(session, dataset_id, error=message)
+    record(
+        session,
+        workspace_id=workspace_id,
+        actor_type="system",
+        actor_id=None,
+        action="dataset.import_failed",
+        target_type="dataset",
+        target_id=dataset_id,
+        payload={"dataset_id": dataset_id, "reason": message[:200]},
+    )
     await session.commit()
     log.warning("dataset_import_failed", dataset_id=dataset_id, reason=message[:200])
 
@@ -293,10 +316,16 @@ async def import_rows(database: Database, storage: StorageBackend, dataset_id: s
         if dataset is None:
             log.info("dataset_import_gone", dataset_id=dataset_id)
             return
+        workspace_id = dataset.workspace_id  # read before a rollback expires the row
         try:
             data = await storage.get(dataset.storage_key)
         except FileNotFoundError:
-            await _fail(session, dataset_id, "the uploaded file is missing from storage; upload it again")
+            await _fail(
+                session,
+                dataset_id,
+                workspace_id,
+                "the uploaded file is missing from storage; upload it again",
+            )
             return
         key_spec: dict[str, DatasetKeyType] = {
             str(column["name"]): column["type"] for column in dataset.key_columns or []
@@ -306,7 +335,7 @@ async def import_rows(database: Database, storage: StorageBackend, dataset_id: s
             tab = PurePosixPath(dataset.storage_key).suffix.lower() == ".tsv"
             parsed = parse_dataset(data, fmt, key_spec, tab=tab)
         except (DatasetFileError, UnprocessableEntityError) as exc:
-            await _fail(session, dataset_id, exc.message)
+            await _fail(session, dataset_id, workspace_id, exc.message)
             return
         keys = [(column.name, column.type) for column in parsed.key_columns]
         total = len(parsed.rows)
@@ -343,7 +372,10 @@ async def import_rows(database: Database, storage: StorageBackend, dataset_id: s
             await session.commit()
         except Exception as exc:  # noqa: BLE001 - recorded on the dataset, never raised to the runner
             await _fail(
-                session, dataset_id, f"the import failed ({type(exc).__name__}); upload the file again"
+                session,
+                dataset_id,
+                workspace_id,
+                f"the import failed ({type(exc).__name__}); upload the file again",
             )
             return
     log.info("dataset_imported", dataset_id=dataset_id, rows=total, key_columns=[name for name, _ in keys])

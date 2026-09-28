@@ -101,6 +101,7 @@ from lkap_agent.flow.providers import NodeProviders
 from lkap_agent.flow.state import ScopedKbClient, attach_flow_state
 from lkap_agent.flow.tool_node import ToolNodeExecutor, ToolNodeResult
 from lkap_agent.flow.variables import (
+    EXTRACTED_VARIABLES_USERDATA_KEY,
     VariableValue,
     extract_variables,
     known_variables_block,
@@ -951,6 +952,12 @@ class FlowRuntime:
         if not values:
             return
         self.state.variables.update(values)
+        # V6-21 (S6-12): the caller's words, like live extraction's: fenced in later instructions.
+        userdata = getattr(self.services.ctx, "userdata", None)
+        if isinstance(userdata, dict):
+            marked = userdata.setdefault(EXTRACTED_VARIABLES_USERDATA_KEY, set())
+            if isinstance(marked, set):
+                marked.update(values)
         logger.info("flow variables captured", node=node_id, names=sorted(values))
         self._record("info", {"message": "flow variables captured", "node": node_id, "names": sorted(values)})
         agent = self.current_agent

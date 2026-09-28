@@ -5,6 +5,7 @@ import {
   conditionErrorMessage,
   conditionIssue,
   conditionToRows,
+  hasNestedRepeat,
   MAX_CONDITION_CHARS,
   parseCondition,
   rowsToCondition,
@@ -101,6 +102,71 @@ describe("parseCondition — invalid, with the api's exact wording", () => {
       "this pattern repeats a group that already repeats, which can take very long; simplify it",
     );
     expect(() => parseCondition("var.x matches /(\\w*\\s)*/")).toThrow(/repeats a group that already repeats/);
+  });
+
+  // V6-21 (S6-4): the same lists as `contracts/tests/test_extraction_rules_v6_13.py`
+  // (`SLOW_SHAPES`, `SAFE_SHAPES`, V6-13's and the api's older cases), so the console
+  // refuses exactly what `rules_expr.nested_repeat` refuses.
+  const slowShapes = [
+    "(a|a)+b",
+    "(a|aa)+b",
+    "a*a*a*b",
+    "(\\w+\\s?)+$",
+    "\\w*\\s*\\w*",
+    "\\d+\\.?\\d*",
+    "a+a+b",
+    "(a*)(a*)b",
+    "(a*|b)a*",
+    "(?:fire|smoke)+",
+    "(?=(a+)+)x",
+    ".*.*x",
+    "(a+)+",
+    "(\\w*\\s)*",
+    "(?:x{2,})+",
+    "((ab)+c)*",
+    "(\\d+)+$",
+  ];
+  const safeShapes = [
+    "\\d{3}-\\d{4}",
+    "(ab)+c",
+    "^[a-z]+@[a-z]+$",
+    "fire|smoke|gas",
+    "[a-z]+\\d*",
+    "\\w+\\s\\w+",
+    "\\d+(\\.\\d+)?",
+    "\\b(?:\\d[ -]?){13,19}\\b",
+    "\\(a+\\)+",
+    ".*foo.*",
+    "[^\\d]+\\d+",
+    "(?P<policy>[A-Z]{2}-\\d{6})",
+    "(ab)+",
+    "(\\w+)\\s",
+    "(ab){2,}",
+    "[(+]+",
+    "\\d{3}-\\d{2}-\\d{4}",
+    "\\bfire\\b",
+  ];
+
+  it.each(slowShapes)("V6-21: %s is refused like the api refuses it", (pattern) => {
+    expect(hasNestedRepeat(pattern)).toBe(true);
+    expect(() => parseCondition(`var.x matches /${pattern}/`)).toThrow(/repeats a group that already repeats/);
+  });
+
+  it.each(safeShapes)("V6-21: %s is accepted like the api accepts it", (pattern) => {
+    expect(hasNestedRepeat(pattern)).toBe(false);
+    expect(() => parseCondition(`var.x matches /${pattern}/`)).not.toThrow();
+  });
+
+  it.each(["(", ")", "[", "\\", "a{", "a{}", "(?", "[]a", "(?P<x", "x{2,1}", "😀+😀+"])(
+    "V6-21: the scanner never throws on %s",
+    (pattern) => {
+      expect(typeof hasNestedRepeat(pattern)).toBe("boolean");
+    },
+  );
+
+  it("V6-21: a character outside the BMP counts once, as the api's scanner reads it", () => {
+    expect(hasNestedRepeat("😀+😀+x")).toBe(true);
+    expect(hasNestedRepeat("😀+a+x")).toBe(false);
   });
 
   it("a pattern flag other than 'i'", () => {

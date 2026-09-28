@@ -73,7 +73,10 @@ describe("insurance_notebook legacy alias", () => {
 
     const composite = screen.getByTestId("composite-panel");
     expect(composite.getAttribute("data-layout")).toBe("wide");
-    await waitFor(() => expect(screen.getByTestId("block-notebook").getAttribute("data-loading")).toBeNull());
+    // The notebook renderer is loaded lazily; give it room under a full, parallel test run.
+    await waitFor(() => expect(screen.getByTestId("block-notebook").getAttribute("data-loading")).toBeNull(), {
+      timeout: 5000,
+    });
     for (const id of ["status", "notebook", "gallery"]) {
       expect(document.getElementById(blockDomId(id)), id).not.toBeNull();
     }

@@ -1,0 +1,93 @@
+{
+  "id": "sheet_crm_log",
+  "name": "Log the call",
+  "summary": "Writes a short summary and the outcome of each call to your own system, a spreadsheet or a CRM, once, near the end of the call.",
+  "default_prefix": "log",
+  "default_variant": "rest",
+  "defaults": [
+    {
+      "name": "base_url",
+      "label": "Log address",
+      "help": "Where each call's summary is sent (POST, with the summary, the outcome, the caller's name and the session).",
+      "kind": "url",
+      "required": true,
+      "example": "https://crm.example.com/api/call-logs",
+      "variants": ["rest"]
+    }
+  ],
+  "instructions_snippet": "Near the end of the call, once you know the outcome, log the call once with {{ kit.tool.log }}: a two-sentence summary, the outcome and the caller's name if they gave it. Do not tell the caller about the log.",
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_logged",
+      "label": "Note that the call was logged",
+      "when": "tool.{{ kit.tool.log }}.ok",
+      "then": [{"do": "note.push", "text": "The call was logged."}]
+    }
+  ],
+  "test_case": {
+    "name": "Logs the call once",
+    "persona_instructions": "You are a customer asking about opening hours. You are happy with the answer and say goodbye.",
+    "scenario": "Ask when the office is open, then end the call.",
+    "expectations": ["The agent answers the question and ends the call politely."]
+  },
+  "variants": [
+    {
+      "id": "rest",
+      "label": "Your own system",
+      "summary": "Sends the summary to your system's address (a key is optional; without one the call carries no key).",
+      "source": "http",
+      "requires": {"secret_names": ["API_KEY"]},
+      "tools": [
+        {
+          "key": "log",
+          "label": "Log the call",
+          "risk": "write",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_call",
+            "description": "Log this call once, near the end: a short summary, the outcome and the caller's name if known.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "summary": {"type": "string", "description": "Two sentences: what the caller wanted and what happened."},
+                "outcome": {"type": "string", "enum": ["resolved", "follow_up", "escalated", "no_action"], "description": "How the call ended."},
+                "caller_name": {"type": "string", "description": "The caller's name, if they gave it."}
+              },
+              "required": ["summary", "outcome"]
+            },
+            "method": "POST",
+            "url": "{{ kit.base_url }}",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "body_template": "{\"summary\": \"{{ summary }}\", \"outcome\": \"{{ outcome }}\", \"caller_name\": \"{{ caller_name }}\", \"channel\": \"{{ ctx.channel }}\", \"session_id\": \"{{ ctx.session_id }}\"}",
+            "timeout_s": 10,
+            "max_result_chars": 300
+          },
+          "fake": {"ok": true, "id": "DEMO-LOG-1"}
+        }
+      ]
+    },
+    {
+      "id": "composio",
+      "label": "A connected spreadsheet or CRM",
+      "summary": "Adds a row or record with a connected app's action (Google Sheets or Airtable). Connect the app under Apps first, then fix the sheet or table in the tool's settings.",
+      "source": "composio_action",
+      "requires": {"apps": ["googlesheets", "airtable"]},
+      "apps": [
+        {
+          "toolkit": "googlesheets",
+          "label": "Google Sheets",
+          "actions": [
+            {"slug": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND", "key": "log", "label": "Add a row", "fake": {"updates": {"updatedRows": 1}}}
+          ]
+        },
+        {
+          "toolkit": "airtable",
+          "label": "Airtable",
+          "actions": [
+            {"slug": "AIRTABLE_CREATE_RECORD", "key": "log", "label": "Add a record", "fake": {"id": "recDEMO1"}}
+          ]
+        }
+      ]
+    }
+  ]
+}

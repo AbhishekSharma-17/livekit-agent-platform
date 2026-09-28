@@ -98,6 +98,8 @@ RECIPE_NAMES: Final[tuple[str, ...]] = (
     "estimate-agent-cost",  # V4-15
     "add-booking-tool",  # V5-25
     "attach-app-actions",  # V5-47 (registered by V5-46, ask #23)
+    "add-kit",  # V6-18: tool kits
+    "record-lookup-from-a-spreadsheet",  # V6-18: the lookup kit on a dataset
 )
 
 #: The 7 prompts of AGENT-ACCESS.md §3.2.

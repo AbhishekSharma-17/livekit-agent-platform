@@ -1,0 +1,68 @@
+{
+  "id": "booking",
+  "name": "Book appointments",
+  "summary": "Checks free times, books, moves and cancels appointments in your Cal.com calendar, reading the time and email back before it books.",
+  "default_prefix": "booking",
+  "default_variant": "cal_com",
+  "defaults": [
+    {
+      "name": "event_type_id",
+      "label": "Event type id",
+      "help": "The number in the event type's link in Cal.com (Event Types → the event → its id).",
+      "kind": "integer",
+      "required": true,
+      "example": "123456"
+    }
+  ],
+  "blocks": [
+    {"id": "status", "type": "status", "config": {}, "shared": true}
+  ],
+  "instructions_snippet": "To book a time, check free times with {{ kit.tool.check }}, offer two or three of them, read the chosen time and the caller's email back, then book it with {{ kit.tool.create }}. To move or cancel a booking, find it first with {{ kit.tool.list }} using their email, and confirm before you change anything.",
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_booked",
+      "label": "Show that the time is booked",
+      "when": "tool.{{ kit.tool.create }}.ok",
+      "then": [{"do": "status.set", "label": "Booked", "tone": "success"}]
+    }
+  ],
+  "test_case": {
+    "name": "Books a time",
+    "persona_instructions": "You are Demo Rao (demo.rao@example.com) and want an appointment tomorrow afternoon. Accept the first afternoon time offered and confirm your email when it is read back.",
+    "scenario": "Ask for an appointment tomorrow afternoon.",
+    "expectations": [
+      "The agent offers free times before booking.",
+      "The agent reads the time and the email back before it books."
+    ]
+  },
+  "docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+  "variants": [
+    {
+      "id": "cal_com",
+      "label": "Cal.com",
+      "summary": "The six Cal.com booking tools, keyed by a Cal.com API key kept in a tool-secret key (without one the calls carry no key and Cal.com refuses them).",
+      "source": "http",
+      "requires": {"secret_names": ["CAL_API_KEY"]},
+      "tools": [
+        {
+          "key": "check",
+          "label": "Check free times",
+          "risk": "read",
+          "template": "cal_com.booking_check_availability",
+          "fake": {"slots": {"2026-10-01": [{"start": "2026-10-01T14:00:00Z"}, {"start": "2026-10-01T15:00:00Z"}]}}
+        },
+        {
+          "key": "create",
+          "label": "Book a time",
+          "risk": "write",
+          "template": "cal_com.booking_create",
+          "fake": {"uid": "demo-booking-1", "status": "accepted", "start": "2026-10-01T14:00:00Z"}
+        },
+        {"key": "list", "label": "Find the caller's bookings", "risk": "read", "template": "cal_com.booking_list", "fake": []},
+        {"key": "get", "label": "Read a booking", "risk": "read", "template": "cal_com.booking_get"},
+        {"key": "reschedule", "label": "Move a booking", "risk": "write", "template": "cal_com.booking_reschedule"},
+        {"key": "cancel", "label": "Cancel a booking", "risk": "write", "template": "cal_com.booking_cancel"}
+      ]
+    }
+  ]
+}

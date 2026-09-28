@@ -70,12 +70,29 @@ instructions). Routes: `GET /v1/tool-templates`,
 `POST /v1/tool-templates/{template_id}/instantiate`. The recipe
 `add-booking-tool` walks through it.
 
+## Tool kits
+
+A kit is a whole job in one step (V6-18): its tools, the panel blocks they
+fill, a short instruction snippet, extraction fields, rules, optional flow
+steps and a test case whose tools answer from fakes. `kit_list()` shows the
+catalogue — `record_lookup`, `case_ticket`, `structured_intake`,
+`verify_identity`, `payment_esign_link`, `notify_escalate`,
+`sheet_crm_log` and `booking` (the Cal.com set above) — each with variants
+(its own system, a lookup table, a connected app, a server to sign in to, or
+the panel only). `kit_add(kit_id=..., agent_id=..., settings={...},
+dry_run=true)` previews every change; without `dry_run` it adds them in one
+configuration version, and again with the same `block_prefix` adds nothing.
+No key is needed: without `secret_key_id` the HTTP tools carry no key
+header. Routes: `GET /v1/tool-kits`, `POST /v1/tool-kits/{kit_id}/instantiate`.
+Recipes `add-kit` and `record-lookup-from-a-spreadsheet`.
+
 ## Related tools
 
-`tool_templates`, `tool_create_from_template`, `agent_update`, `agent_attach`,
+`tool_templates`, `tool_create_from_template`, `kit_list`, `kit_add`, `agent_update`, `agent_attach`,
 `agent_validate`, `provider_key_create`, `tool_list`.
 
 ## Related schemas
 
-`ToolsConfig`, `NotifyTeamConfig`, `SmsTarget`, `TelephonyConfig`, `ToolExecution`,
+`ToolsConfig`, `NotifyTeamConfig`, `SmsTarget`, `TelephonyConfig`, `ToolExecution`, `ToolKit`,
+`ToolKitInstantiate`, `ToolKitInstantiated`,
 `ToolTemplate`, `ToolTemplateInstantiate`, `ToolTemplateInstantiated`.

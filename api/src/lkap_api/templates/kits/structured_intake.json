@@ -1,0 +1,74 @@
+{
+  "id": "structured_intake",
+  "name": "Take down the details",
+  "summary": "Captures the caller's name, reason, details, call-back number and time as they talk, shows them on a notebook or a details card, and keeps a list of what is still needed.",
+  "default_prefix": "intake",
+  "default_variant": "notebook",
+  "blocks": [
+    {"id": "checklist", "type": "checklist", "title": "Still needed", "config": {}, "shared": true}
+  ],
+  "instructions_snippet": "Take down the caller's details as you talk: their name, why they are calling, what happened, the best number to call back and when suits them. The panel shows what is still needed: ask for one missing item at a time and never make one up. Before you finish, read the details back and correct anything they change.",
+  "extraction": {"enabled": true, "still_needed": "checklist"},
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_complete",
+      "label": "Mark the intake complete",
+      "when": "var.caller_name is set and var.reason is set",
+      "then": [{"do": "status.set", "label": "Details taken", "tone": "success"}]
+    }
+  ],
+  "test_case": {
+    "name": "Takes down the details",
+    "persona_instructions": "You are Demo Rao. Your internet has been down since yesterday evening. You would like a call back tomorrow morning on 555 0100. Give details only when asked.",
+    "scenario": "Report the problem and ask for a call back.",
+    "expectations": [
+      "The agent asks for the caller's name.",
+      "The agent reads the details back before finishing."
+    ]
+  },
+  "variants": [
+    {
+      "id": "notebook",
+      "label": "Notebook",
+      "summary": "A notebook with a summary card and notes the agent writes as the caller talks.",
+      "source": "none",
+      "blocks": [
+        {
+          "id": "{{ kit.prefix }}_notebook",
+          "type": "notebook",
+          "title": "Notes",
+          "config": {
+            "paper": "ruled",
+            "sections": [
+              {"id": "summary", "title": "Summary", "kind": "details"},
+              {"id": "notes", "title": "Notes", "kind": "text"}
+            ]
+          }
+        }
+      ],
+      "variables": [
+        {"name": "caller_name", "label": "Name", "hint": "The caller's full name, as they give it", "required": true, "show_in": "notebook:{{ kit.prefix }}_notebook.summary"},
+        {"name": "reason", "label": "Reason for calling", "hint": "One sentence: why they are calling", "required": true, "show_in": "notebook:{{ kit.prefix }}_notebook.summary"},
+        {"name": "request_details", "label": "Details", "hint": "What happened or what they need, in a few sentences", "show_in": "notebook:{{ kit.prefix }}_notebook.summary"},
+        {"name": "callback_number", "type": "phone", "label": "Best number", "hint": "The number to call back on, if they give one", "sensitive": true, "show_in": "notebook:{{ kit.prefix }}_notebook.summary"},
+        {"name": "preferred_time", "label": "When to call back", "hint": "When suits them for a call back, in their words", "show_in": "notebook:{{ kit.prefix }}_notebook.summary"}
+      ]
+    },
+    {
+      "id": "details",
+      "label": "Details card",
+      "summary": "A plain card with one row per detail, filled in as the caller talks.",
+      "source": "none",
+      "blocks": [
+        {"id": "{{ kit.prefix }}_summary", "type": "details", "title": "Your details", "config": {"columns": 1}}
+      ],
+      "variables": [
+        {"name": "caller_name", "label": "Name", "hint": "The caller's full name, as they give it", "required": true, "show_in": "details:{{ kit.prefix }}_summary"},
+        {"name": "reason", "label": "Reason for calling", "hint": "One sentence: why they are calling", "required": true, "show_in": "details:{{ kit.prefix }}_summary"},
+        {"name": "request_details", "label": "Details", "hint": "What happened or what they need, in a few sentences", "show_in": "details:{{ kit.prefix }}_summary"},
+        {"name": "callback_number", "type": "phone", "label": "Best number", "hint": "The number to call back on, if they give one", "sensitive": true, "show_in": "details:{{ kit.prefix }}_summary"},
+        {"name": "preferred_time", "label": "When to call back", "hint": "When suits them for a call back, in their words", "show_in": "details:{{ kit.prefix }}_summary"}
+      ]
+    }
+  ]
+}

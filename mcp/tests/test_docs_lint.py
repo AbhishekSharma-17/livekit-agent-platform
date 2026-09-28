@@ -338,6 +338,9 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/templates/{template_id}",
     "/v1/tool-templates",  # V5-25
     "/v1/tool-templates/{template_id}/instantiate",  # V5-25
+    "/v1/tool-kits",  # V6-18
+    "/v1/tool-kits/{kit_id}",
+    "/v1/tool-kits/{kit_id}/instantiate",
     # V5-18: connected apps (`lkap_api/tool_providers/router.py`).
     "/v1/tool-providers/composio/callback",
     "/v1/tool-providers/composio/connections",
@@ -595,6 +598,25 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "tool_templates": frozenset(),  # V5-25
     "tool_create_from_template": frozenset(
         {"template_id", "secret_key_id", "defaults", "agent_id", "names", "plan"}
+    ),
+    # V6-18 tool kits
+    "kit_list": frozenset({"kit_id"}),
+    "kit_add": frozenset(
+        {
+            "kit_id",
+            "agent_id",
+            "variant",
+            "block_prefix",
+            "settings",
+            "secret_key_id",
+            "connection_id",
+            "dataset_id",
+            "key_columns",
+            "flow_anchor",
+            "add_test_case",
+            "dry_run",
+            "plan",
+        }
     ),
     # 4.7 test chat
     "chat_start": frozenset({"agent_id_or_slug", "participant_name", "wait_for_greeting", "timeout_s"}),

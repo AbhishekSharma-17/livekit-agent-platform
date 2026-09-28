@@ -1,0 +1,192 @@
+{
+  "id": "record_lookup",
+  "name": "Look up a record",
+  "summary": "Finds a customer, order or policy by its reference in one of your lookup tables or your own system, shows it on the panel and reads back only what the caller needs.",
+  "default_prefix": "record",
+  "default_variant": "dataset",
+  "defaults": [
+    {
+      "name": "base_url",
+      "label": "Records address",
+      "help": "The address of your records; the reference is added to its end (…/<reference>) and read with GET.",
+      "kind": "url",
+      "required": true,
+      "example": "https://records.example.com/api/records",
+      "variants": ["rest"]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "{{ kit.prefix }}_results",
+      "type": "table",
+      "title": "Record",
+      "config": {"columns": []}
+    }
+  ],
+  "instructions_snippet": "When the caller gives a reference, look the record up with {{ kit.tool.lookup }} before you answer. Read back only what they need, never the whole record. If nothing is found, say so and ask them to check the reference; never guess a record.",
+  "rules": [
+    {
+      "id": "{{ kit.prefix }}_found",
+      "label": "Show that a record was looked up",
+      "when": "tool.{{ kit.tool.lookup }}.ok",
+      "then": [{"do": "status.set", "label": "Record checked", "tone": "info"}],
+      "once": false
+    }
+  ],
+  "test_case": {
+    "name": "Finds a record by its reference",
+    "persona_instructions": "You are a customer checking on your account. Your reference is DEMO-1001. Answer briefly and politely.",
+    "scenario": "Ask what the status of your record is.",
+    "expectations": [
+      "The agent uses the reference before it says anything about the record.",
+      "The agent says the record is active."
+    ]
+  },
+  "variants": [
+    {
+      "id": "dataset",
+      "label": "Lookup table",
+      "summary": "Reads one of your workspace's lookup tables (a spreadsheet you upload as CSV or JSON).",
+      "source": "dataset",
+      "requires": {
+        "dataset": "A lookup table whose key column holds the reference (a customer number, an order number, a phone number)."
+      },
+      "tools": [
+        {
+          "key": "lookup",
+          "label": "Look a record up",
+          "risk": "read",
+          "definition": {
+            "kind": "dataset",
+            "name": "{{ kit.prefix }}_lookup",
+            "description": "Find a record in the lookup table by its reference. Ask the caller for the reference first and pass it as they said it.",
+            "dataset_id": "{{ kit.dataset_id }}",
+            "key_columns": ["{{ kit.key_column }}"],
+            "match": "exact",
+            "max_rows": 3,
+            "bindings": [{"path": "", "to": "table:{{ kit.prefix }}_results"}]
+          },
+          "fake": [{"{{ kit.key_column }}": "DEMO-1001", "name": "Demo — Asha Rao", "status": "Active"}]
+        }
+      ],
+      "flow_nodes": {
+        "nodes": [
+          {
+            "id": "{{ kit.prefix }}_lookup_step",
+            "kind": "tool",
+            "label": "Look the record up",
+            "tool": "{{ kit.tool.lookup }}",
+            "arguments": {"{{ kit.key_column }}": "{{ var.{{ kit.prefix }}_reference }}"},
+            "bindings": [{"path": "", "to": "table:{{ kit.prefix }}_results"}],
+            "on": {
+              "ok": "{{ kit.prefix }}_lookup_found",
+              "empty": "{{ kit.prefix }}_lookup_none",
+              "error": "{{ kit.prefix }}_lookup_failed"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "{{ kit.prefix }}_lookup_in",
+            "source": "@anchor",
+            "target": "{{ kit.prefix }}_lookup_step",
+            "condition": "The caller has given the reference of the record to look up"
+          },
+          {"id": "{{ kit.prefix }}_lookup_found", "source": "{{ kit.prefix }}_lookup_step", "target": "@anchor"},
+          {
+            "id": "{{ kit.prefix }}_lookup_none",
+            "source": "{{ kit.prefix }}_lookup_step",
+            "target": "@anchor",
+            "transition_speech": "I couldn't find a record with that reference."
+          },
+          {
+            "id": "{{ kit.prefix }}_lookup_failed",
+            "source": "{{ kit.prefix }}_lookup_step",
+            "target": "@anchor",
+            "transition_speech": "I couldn't reach the records just now."
+          }
+        ],
+        "variables": [
+          {"name": "{{ kit.prefix }}_reference", "type": "string", "description": "The reference of the record the caller asked about"}
+        ],
+        "anchor_extract": ["{{ kit.prefix }}_reference"]
+      }
+    },
+    {
+      "id": "rest",
+      "label": "Your own system",
+      "summary": "Reads a record from your own system's address with GET (a key is optional; without one the call carries no key).",
+      "source": "http",
+      "requires": {"secret_names": ["API_KEY"]},
+      "tools": [
+        {
+          "key": "lookup",
+          "label": "Look a record up",
+          "risk": "read",
+          "definition": {
+            "kind": "http",
+            "name": "{{ kit.prefix }}_lookup",
+            "description": "Find a record by its reference. Ask the caller for the reference first and pass it as they said it.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "reference": {"type": "string", "description": "The record's reference, as the caller gave it."}
+              },
+              "required": ["reference"]
+            },
+            "method": "GET",
+            "url": "{{ kit.base_url }}/{{ reference }}",
+            "headers": {"Authorization": "Bearer {{ secret.API_KEY }}"},
+            "timeout_s": 8,
+            "max_result_chars": 2000,
+            "execution": {"mode": "auto"},
+            "bindings": [{"path": "", "to": "table:{{ kit.prefix }}_results"}]
+          },
+          "fake": {"reference": "DEMO-1001", "name": "Demo — Asha Rao", "status": "Active"}
+        }
+      ],
+      "flow_nodes": {
+        "nodes": [
+          {
+            "id": "{{ kit.prefix }}_lookup_step",
+            "kind": "tool",
+            "label": "Look the record up",
+            "tool": "{{ kit.tool.lookup }}",
+            "arguments": {"reference": "{{ var.{{ kit.prefix }}_reference }}"},
+            "bindings": [{"path": "", "to": "table:{{ kit.prefix }}_results"}],
+            "on": {
+              "ok": "{{ kit.prefix }}_lookup_found",
+              "empty": "{{ kit.prefix }}_lookup_none",
+              "error": "{{ kit.prefix }}_lookup_failed"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "{{ kit.prefix }}_lookup_in",
+            "source": "@anchor",
+            "target": "{{ kit.prefix }}_lookup_step",
+            "condition": "The caller has given the reference of the record to look up"
+          },
+          {"id": "{{ kit.prefix }}_lookup_found", "source": "{{ kit.prefix }}_lookup_step", "target": "@anchor"},
+          {
+            "id": "{{ kit.prefix }}_lookup_none",
+            "source": "{{ kit.prefix }}_lookup_step",
+            "target": "@anchor",
+            "transition_speech": "I couldn't find a record with that reference."
+          },
+          {
+            "id": "{{ kit.prefix }}_lookup_failed",
+            "source": "{{ kit.prefix }}_lookup_step",
+            "target": "@anchor",
+            "transition_speech": "I couldn't reach the records just now."
+          }
+        ],
+        "variables": [
+          {"name": "{{ kit.prefix }}_reference", "type": "string", "description": "The reference of the record the caller asked about"}
+        ],
+        "anchor_extract": ["{{ kit.prefix }}_reference"]
+      }
+    }
+  ]
+}

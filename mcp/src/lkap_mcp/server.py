@@ -48,6 +48,7 @@ TOOL_MODULES: list[str] = [
     "lkap_mcp.tools.knowledge",
     "lkap_mcp.tools.tools",
     "lkap_mcp.tools.datasets",  # V6-16: datasets (lookup tables) and the dataset tool kind
+    "lkap_mcp.tools.kits",  # V6-18: tool kits
     "lkap_mcp.tools.sessions",
     "lkap_mcp.tools.webhooks",
     "lkap_mcp.tools.telephony",

@@ -400,3 +400,7 @@ Migrations applied to the dev DB (the coordinator appends: id · date · backup 
 ## 7. Rulings (R-V6-n, appended by Fable while the plan runs)
 
 None yet. Reserved: **R-V6-1** — the V6-04 spike verdict (D-V6-12); **R-V6-2** — the V6-20 sign-off (D-V6-29).
+
+**User decisions (2026-09-28, recorded by the coordinator):**
+- **U-V6-1 — the V6-04 spike is deferred.** The user will run the self-hosted LiveKit Inference test later (it needs a free LiveKit Cloud Build project and Docker). V6-04 stays `deferred (user runs later)`; V6-05 and V6-09 stay blocked on R-V6-1. The rest of the plan does not depend on them.
+- **U-V6-2 — D-V6-4 confirmed: streaming options for new agents only.** `use_realtime`, `use_websocket` and the PCM formats have no default for stored agents (they resolve exactly as before); the console pre-selects the recommended value only for a new agent or a newly picked provider (ask #16), with a tip on stored agents.

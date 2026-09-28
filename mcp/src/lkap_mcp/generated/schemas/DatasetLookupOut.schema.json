@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/DatasetLookupOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a lookup found (rows in file order, only the asked-for columns).",
+  "properties": {
+    "dataset_id": {
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "dataset_name": {
+      "title": "Dataset Name",
+      "type": "string"
+    },
+    "match": {
+      "enum": [
+        "exact",
+        "prefix"
+      ],
+      "title": "Match",
+      "type": "string"
+    },
+    "rows": {
+      "items": {
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": "object"
+      },
+      "title": "Rows",
+      "type": "array"
+    },
+    "truncated": {
+      "default": false,
+      "title": "Truncated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "dataset_id",
+    "dataset_name",
+    "match",
+    "rows"
+  ],
+  "title": "DatasetLookupOut",
+  "type": "object"
+}

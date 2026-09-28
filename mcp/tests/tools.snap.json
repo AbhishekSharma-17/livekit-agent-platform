@@ -15353,6 +15353,267 @@
       ],
       "write_scopes": []
     },
+    "dataset_create": {
+      "_meta": {
+        "lkap/data": [
+          "DatasetOut"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "DatasetOut",
+      "description": "Make a lookup table from CSV or JSON (text or a local file); waits until its rows are imported.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A local .csv/.tsv/.json file to upload (stdio mode only, ≤ 5 MiB)",
+            "title": "File Path"
+          },
+          "filename": {
+            "default": "table.csv",
+            "description": "Its name: .csv, .tsv or .json decides how it is read",
+            "title": "Filename",
+            "type": "string"
+          },
+          "key_columns": {
+            "additionalProperties": {
+              "enum": [
+                "string",
+                "phone",
+                "email",
+                "number"
+              ],
+              "type": "string"
+            },
+            "description": "The columns a lookup finds rows by (by header or column name) and how each is compared: 'string' (case and spacing ignored), 'phone' (digits only, the last ten), 'email' (case ignored) or 'number'. At least one, at most 8",
+            "title": "Key Columns",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The file's content (CSV with a header row, or JSON)",
+            "title": "Text"
+          },
+          "timeout_s": {
+            "default": 120,
+            "exclusiveMinimum": 0,
+            "maximum": 600,
+            "title": "Timeout S",
+            "type": "number"
+          },
+          "wait": {
+            "default": true,
+            "title": "Wait",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "key_columns"
+        ],
+        "title": "dataset_createArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
+    "dataset_delete": {
+      "_meta": {
+        "lkap/data": [
+          "Deleted"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "Deleted",
+      "description": "Delete a lookup table, its rows and its file (needs confirm; refused while a tool uses it).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "dataset_deleteArguments",
+        "type": "object"
+      },
+      "kind": "destructive",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
+    "dataset_list": {
+      "_meta": {
+        "lkap/data": [
+          "DatasetOut[]"
+        ],
+        "lkap/scopes": [
+          "agents:read"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "DatasetOut[]",
+      "description": "List the workspace's lookup tables: columns, key columns, row count, import status.",
+      "gate": null,
+      "inputSchema": {
+        "properties": {},
+        "title": "dataset_listArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "agents:read"
+      ],
+      "write_scopes": []
+    },
+    "dataset_lookup": {
+      "_meta": {
+        "lkap/data": [
+          "DatasetLookupOut"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "data": "DatasetLookupOut",
+      "description": "Look rows up in a lookup table as an agent's dataset tool would (the rows are untrusted data).",
+      "gate": null,
+      "inputSchema": {
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "keys": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Key column -> value; a row must match every one",
+            "title": "Keys",
+            "type": "object"
+          },
+          "match": {
+            "default": "exact",
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "max_rows": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Max Rows",
+            "type": "integer"
+          },
+          "return_columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The columns to return (all when empty)",
+            "title": "Return Columns"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "keys"
+        ],
+        "title": "dataset_lookupArguments",
+        "type": "object"
+      },
+      "kind": "read",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
     "kb_add_document": {
       "_meta": {
         "lkap/data": [
@@ -17675,6 +17936,188 @@
       ],
       "write_scopes": []
     },
+    "tool_create_dataset": {
+      "_meta": {
+        "lkap/data": [
+          "ToolOut"
+        ],
+        "lkap/scopes": [
+          "agents:write"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "data": "ToolOut",
+      "description": "Give agents a lookup tool on one lookup table (read-only; the rows reach the model fenced).",
+      "gate": null,
+      "inputSchema": {
+        "$defs": {
+          "ToolBinding": {
+            "description": "Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).\n\nApplied by the worker after a successful call (an HTTP 2xx, an app action that\nsucceeded, an MCP result that is not an error) and before the model's next turn, with\nno model involved. ``path`` points into the tool's result as the model would see it\n(after ``result_path``); ``\"\"`` is the whole result.",
+            "properties": {
+              "path": {
+                "default": "",
+                "maxLength": 256,
+                "title": "Path",
+                "type": "string"
+              },
+              "to": {
+                "maxLength": 140,
+                "minLength": 1,
+                "title": "To",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to"
+            ],
+            "title": "ToolBinding",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Agent Id"
+          },
+          "bindings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/ToolBinding"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where parts of the found rows go without a model turn: [{path: JSON pointer into the rows (/0/<column> is the first row's), to: 'details:<block>.<key>' | 'table:<block>' | 'checklist:<item>' | 'status' | 'note' | 'var:<name>'}], at most 20",
+            "title": "Bindings"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "description": {
+            "description": "What the model uses the lookup for",
+            "title": "Description",
+            "type": "string"
+          },
+          "key_columns": {
+            "description": "Key column names the tool matches on",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Key Columns",
+            "type": "array"
+          },
+          "match": {
+            "default": "exact",
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "max_rows": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Max Rows",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned_arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Key column -> a fixed value the model never supplies; may be {{ ctx.caller_phone }} (look the caller up by the number they call from) or {{ var.<name> }}",
+            "title": "Pinned Arguments"
+          },
+          "plan": {
+            "default": false,
+            "title": "Plan",
+            "type": "boolean"
+          },
+          "requires_vars": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Variables that must be set before the lookup runs",
+            "title": "Requires Vars"
+          },
+          "return_columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The columns a found row carries (all when empty)",
+            "title": "Return Columns"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "dataset_id",
+          "key_columns"
+        ],
+        "title": "tool_create_datasetArguments",
+        "type": "object"
+      },
+      "kind": "write",
+      "mixed": false,
+      "scopes": [
+        "agents:write"
+      ],
+      "write_scopes": []
+    },
     "tool_create_from_template": {
       "_meta": {
         "lkap/data": [
@@ -19309,6 +19752,10 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "dataset_create",
+      "dataset_delete",
+      "dataset_list",
+      "dataset_lookup",
       "kb_add_document",
       "kb_connection_list",
       "kb_create",
@@ -19338,6 +19785,7 @@
       "session_rescore",
       "session_whisper",
       "telephony_overview",
+      "tool_create_dataset",
       "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
@@ -19389,6 +19837,10 @@
       "connection_test",
       "cost_estimate",
       "cost_summary",
+      "dataset_create",
+      "dataset_delete",
+      "dataset_list",
+      "dataset_lookup",
       "kb_add_document",
       "kb_connection_create",
       "kb_connection_list",
@@ -19425,6 +19877,7 @@
       "session_rescore",
       "session_whisper",
       "telephony_overview",
+      "tool_create_dataset",
       "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
@@ -19459,6 +19912,7 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "dataset_list",
       "kb_connection_list",
       "kb_evaluate_result",
       "kb_get",
@@ -19524,6 +19978,10 @@
       "connection_test",
       "cost_estimate",
       "cost_summary",
+      "dataset_create",
+      "dataset_delete",
+      "dataset_list",
+      "dataset_lookup",
       "kb_add_document",
       "kb_connection_create",
       "kb_connection_list",
@@ -19560,6 +20018,7 @@
       "session_rescore",
       "session_whisper",
       "telephony_overview",
+      "tool_create_dataset",
       "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
@@ -19615,6 +20074,10 @@
       "connection_test",
       "cost_estimate",
       "cost_summary",
+      "dataset_create",
+      "dataset_delete",
+      "dataset_list",
+      "dataset_lookup",
       "kb_add_document",
       "kb_connection_create",
       "kb_connection_list",
@@ -19651,6 +20114,7 @@
       "session_rescore",
       "session_whisper",
       "telephony_overview",
+      "tool_create_dataset",
       "tool_create_from_template",
       "tool_create_http",
       "tool_create_mcp",
@@ -19685,6 +20149,7 @@
       "connection_list",
       "cost_estimate",
       "cost_summary",
+      "dataset_list",
       "kb_connection_list",
       "kb_evaluate_result",
       "kb_get",

@@ -77,6 +77,7 @@ CONCEPT_TOPICS: Final[tuple[str, ...]] = (
     "testing",  # V5-29: simulated callers, judges, the publish gate
     "memory",  # V5-40: caller memory, forget and purge
     "extraction",  # V6-13: live extraction and declarative rules
+    "datasets",  # V6-16: lookup tables and the dataset tool kind
 )
 
 #: The 10 recipes of AGENT-ACCESS.md §3.1.

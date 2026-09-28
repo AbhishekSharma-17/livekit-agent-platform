@@ -8,11 +8,19 @@ The built-in names are the single source the worker, the api and the web share
 """
 
 import json
+import re
 from datetime import datetime
 from typing import Annotated, Any, Final, Literal, Self, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from lkap_contracts.datasets import (
+    DATASET_COLUMN_NAME_PATTERN,
+    MAX_DATASET_COLUMNS,
+    MAX_DATASET_KEY_COLUMNS,
+    MAX_DATASET_LOOKUP_ROWS,
+    DatasetMatch,
+)
 from lkap_contracts.tool_context import (
     MAX_PINNED_ARGUMENTS,
     Bindings,
@@ -670,8 +678,63 @@ class ProviderToolDefinition(BaseModel):
         return self
 
 
+class DatasetToolDefinition(BaseModel):
+    """A lookup in one of the workspace's datasets (V6-16, D-V6-27; ``lkap_contracts.datasets``).
+
+    The model sees one string argument per key column (``key_columns``, minus the pinned
+    ones) and gets back at most ``max_rows`` rows with ``return_columns`` (all columns when
+    empty), matched ``exact`` or by ``prefix`` on the normalised value. The worker calls the
+    api's internal lookup route with the session, so a lookup never reads another
+    workspace's dataset, and fences the rows as ``dataset:<name>``. Read-only: nothing is
+    ever written to a dataset from a call. The tool always runs blocking (a lookup is quick).
+
+    V6-07: ``pinned_arguments`` fix a key column's value, hidden from the model (a string may
+    be ``{{ ctx.caller_phone }}`` or ``{{ var.policy_number }}``); ``requires_vars`` refuse
+    until variables are set; ``bindings`` copy a successful lookup onto the panel. The bound
+    (and model-visible) result is the list of rows, so ``/0/holder_name`` is the first row's
+    ``holder_name``.
+    """
+
+    kind: Literal["dataset"] = "dataset"
+    name: str = Field(pattern=TOOL_NAME_PATTERN)
+    description: str
+    dataset_id: str = Field(min_length=1, max_length=64)
+    key_columns: list[str] = Field(min_length=1, max_length=MAX_DATASET_KEY_COLUMNS)
+    """The dataset's key columns this tool matches on (each one a declared key column)."""
+    return_columns: list[str] = Field(default=[], max_length=MAX_DATASET_COLUMNS)
+    """The columns a found row carries (empty: all of them)."""
+    match: DatasetMatch = "exact"
+    max_rows: int = Field(default=5, ge=1, le=MAX_DATASET_LOOKUP_ROWS)
+    max_result_chars: int = Field(default=2000, ge=100, le=8000)
+    requires_vars: RequiresVars = []
+    """V6-07: variables that must be set before the lookup runs."""
+    bindings: Bindings = []
+    """V6-07: parts of the found rows copied onto the panel or into variables, no model turn."""
+    pinned_arguments: dict[str, PinnedValue] = Field(default={}, max_length=MAX_PINNED_ARGUMENTS)
+    """V6-07: key column → a fixed value the model never supplies (strings may use
+    ``{{ ctx.* }}`` and ``{{ var.* }}``)."""
+
+    @model_validator(mode="after")
+    def _columns(self) -> Self:
+        for column in (*self.key_columns, *self.return_columns):
+            if re.match(DATASET_COLUMN_NAME_PATTERN, column) is None:
+                raise ValueError(f"'{column}' is not a dataset column name (lower case letters, digits, _)")
+        if len(set(self.key_columns)) != len(self.key_columns):
+            raise ValueError("key_columns lists a column twice")
+        outside = sorted(set(self.pinned_arguments) - set(self.key_columns))
+        if outside:
+            raise ValueError(f"pinned_arguments names columns outside key_columns: {', '.join(outside)}")
+        return self
+
+    @model_validator(mode="after")
+    def _context_placeholders(self) -> Self:
+        _refuse_placeholder_issues(self)
+        return self
+
+
 ToolDefinition = Annotated[
-    HttpToolDefinition | McpServerDefinition | ProviderToolDefinition, Field(discriminator="kind")
+    HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition,
+    Field(discriminator="kind"),
 ]
 
 

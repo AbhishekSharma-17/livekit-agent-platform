@@ -653,6 +653,19 @@ session to its subject. The memories themselves live in the memory backend (Mem0
 pgvector table on Postgres, a local Qdrant collection under `LKAP_DATA_DIR/memory/qdrant` on SQLite),
 never in these tables; neither table stores a phone number or an identity.
 
+**Datasets (V6-16, D-V6-27, migration `v6_002_datasets`).** `datasets` (`id, workspace_id, name,
+slug` (unique per workspace), `format csv|json, columns JSON [{name, label, type, key}], key_columns
+JSON [{name, type}], row_count, storage_key, sha256, status pending|ready|failed, created_at,
+updated_at`) is a workspace's read-only lookup table; the uploaded bytes stay in the storage backend
+under `datasets/<workspace>/<id>/<file>`. `dataset_rows` (`id, dataset_id → datasets CASCADE, ordinal,
+keys JSON, row JSON`; index `(dataset_id, ordinal)`) holds the cells by column name and the row's
+normalised keys; `dataset_keys` (`row_id → dataset_rows CASCADE, column_name, dataset_id → datasets
+CASCADE, value VARCHAR(256)`; primary key `(row_id, column_name)`, index `(dataset_id, column_name,
+value)`) is the per-key lookup index (the ledger's `column`, renamed: a reserved word). The import's
+progress and error live on its `jobs` row (`kind = dataset_import`, `payload.done/total/error`). The
+same migration widens `tools.kind` to `('http','mcp','provider','dataset')`. Quotas
+(`lkap_api.limits`): 100 datasets and 1,000,000 rows per workspace.
+
 ---
 
 ## 6. Dispatch metadata and agent config (`lkap_contracts.dispatch`, `.agent_config`)
@@ -1000,6 +1013,18 @@ POST /v1/knowledge-bases/{id}/evaluate   -> KbEvalRunOut (202)                  
 GET  /v1/knowledge-bases/{id}/evaluate/latest | /evaluate/{job_id} -> KbEvalRunOut
 POST /v1/knowledge-bases/{id}/reindex    KbReindexIn -> KbReindexOut (202)      # V5-01: re-extract and re-chunk stored documents
 
+# ---- datasets (V6-16, D-V6-27; lkap_contracts.datasets; reads viewer + agents:read, writes builder + agents:write)
+POST /v1/datasets                        multipart file (.csv|.tsv|.json, <= 5 MiB) + name + key_columns (JSON {column: string|phone|email|number})
+                                         -> DatasetOut (201, status pending; 413 > 5 MiB, 415 another type, 422 with a plain reason:
+                                            > 50,000 rows, > 64 columns, unknown key column, key cell > 256 chars, unreadable; 409 quota)
+GET  /v1/datasets                        -> DatasetPage
+GET  /v1/datasets/{id}                   -> DatasetOut (progress, error from the dataset_import job)
+GET  /v1/datasets/{id}/rows?offset&limit -> DatasetPreviewOut (limit <= 200)
+GET  /v1/datasets/{id}/export            -> text/csv (formula-looking cells prefixed with ')
+DELETE /v1/datasets/{id}                 -> 204 (409 naming the tools that still use it)
+POST /v1/datasets/{id}/lookup            DatasetLookupIn {keys, match exact|prefix, return_columns, max_rows <= 20} -> DatasetLookupOut
+                                         (409 while importing or after a failed import; 422 a non-key column, a short prefix)
+
 # ---- knowledge connections (V5-20, V5-45; reads builder + providers:read, writes admin + providers:write)
 GET|POST /v1/knowledge-connections       -> KnowledgeConnectionPage | KnowledgeConnectionCreate -> KnowledgeConnectionOut (201)
 GET|PUT|DELETE /v1/knowledge-connections/{id}   KnowledgeConnectionUpdate -> KnowledgeConnectionOut (DELETE 409 while it stores knowledge bases)
@@ -1042,6 +1067,8 @@ class InternalKbSearchRequest(KbSearchOptions): kb_ids: list[str]; query: str (1
     purpose: Literal["tool","auto_inject"] | None = None   # auto_inject never uses a hosted re-ranker (D-V5-19)
                                                            # and skips managed search knowledge bases; the worker does not send it yet (ask #326)
 POST /internal/v1/kb/search              InternalKbSearchRequest -> KbSearchResponse
+POST /internal/v1/datasets/{id}/lookup   InternalDatasetLookupIn (DatasetLookupIn + session_id) -> DatasetLookupOut   # V6-16: the session's
+                                         # workspace only; another workspace's dataset or an unknown session is a 404
 POST /internal/v1/sessions/{id}/assets   multipart file (≤ 25 MB), kind upload|frame|signature, name?, meta? (JSON) -> SessionAssetOut (201)   # V5-19: type sniffed from the bytes, checked against the block; ≤ 50 files per session
 POST /internal/v1/sessions/{id}/assets/from-document  SessionAssetFromDocumentIn {document_id} -> SessionAssetOut (201 new, 200 already held; 404 outside the agent's knowledge bases; 415 not showable)   # R-V5-5
 GET  /internal/v1/sessions/{id}/assets/{asset_id}/content  -> bytes
@@ -1287,6 +1314,31 @@ class ToolContextSpec(BaseModel):  # one MCP tool's settings
 - **`requires_vars`** refuses before any request, listing the missing variables. **`confirm_readback`** refuses until the call carries `confirmed=true` (the refusal says what to read back, spelled for a voice); `confirmed` is stripped before the request.
 - **Bindings** apply after a successful call (HTTP 2xx, an app action that succeeded, an MCP result that is not an error) and before the result reaches the model. Only `details` and `table` blocks that are on the session's panel are written (so never a requestable, link, consent, upload, captions or handoff block); a missing checklist item or path is skipped. Caps: 20 bindings, 500 characters per value (control characters removed), 100 table rows. One `ActivityEvent` per call records `detail = {event: "tool_bindings_applied", applied: [targets], skipped: [{to, reason}]}` — never a value. A `var:` binding marks the name in `userdata["lkap.bound_variables"]` (third-party text). For MCP the bound value is the result's `structuredContent`, else a single text item parsed as JSON (or the text), else the list of items.
 - **Api validator** (`config_service.tool_context_issues`): a binding into a block the panel lacks, or into a block of another type → error; a status, note or checklist binding without that block → warning; on a flow agent, a required or referenced variable that no flow variable or binding sets → warning.
+
+### Dataset tools (V6-16, D-V6-27; `lkap_contracts.datasets`)
+
+```python
+class DatasetToolDefinition(BaseModel):  # kind "dataset"; always runs blocking
+    kind: Literal["dataset"] = "dataset"
+    name: str  # TOOL_NAME_PATTERN
+    description: str
+    dataset_id: str  # a dataset of the tool's workspace (checked at save and by agent validation)
+    key_columns: list[str]  # 1..8 of the dataset's declared key columns: the model's arguments
+    return_columns: list[str] = []  # the columns a found row carries (empty: all)
+    match: Literal["exact", "prefix"] = "exact"
+    max_rows: int = 5  # 1..20
+    max_result_chars: int = 2000  # 100..8000
+    requires_vars: list[str] = []  # V6-07
+    bindings: list[ToolBinding] = []  # V6-07; the bound result is the list of rows (/0/<column>)
+    pinned_arguments: dict[str, str | int | float | bool | None] = {}  # key column -> value, hidden; {{ ctx.* }}/{{ var.* }}
+```
+
+The worker (`lkap_agent.tools.dataset`) offers one string argument per unpinned key column, posts
+`POST /internal/v1/datasets/{id}/lookup` with the service token and the session id, and returns the rows
+inside `<untrusted source="dataset:<tool>">` (plus a plain note when more matched than `max_rows`); no rows
+is a plain "No matching record" answer. Key values are normalised the same way at import and lookup
+(`string`: NFKC, case-folded, spaces collapsed; `phone`: ASCII digits, leading zeros dropped, the last 10;
+`email`: case-folded; `number`: a canonical decimal). Key values are never logged.
 
 ---
 

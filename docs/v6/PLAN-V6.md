@@ -391,7 +391,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-13 | Opus | 3 | merged | 73dee86 | | |
 | V6-14 | Sonnet | 4 | planned | | | |
 | V6-15 | Sonnet | 4 | planned | | | |
-| V6-16 | Opus | 4 | planned | | | |
+| V6-16 | Opus | 4 | merged | b379030 | | |
 | V6-17 | Opus | 4 | merged | 53b4553 | | |
 | V6-18 | Opus | 5 | planned | | | |
 | V6-19 | Sonnet | 5 | planned | | | |
@@ -414,3 +414,4 @@ None yet. Reserved: **R-V6-1** — the V6-04 spike verdict (D-V6-12); **R-V6-2**
 **User decisions (2026-09-28, recorded by the coordinator):**
 - **U-V6-1 — the V6-04 spike is deferred.** The user will run the self-hosted LiveKit Inference test later (it needs a free LiveKit Cloud Build project and Docker). V6-04 stays `deferred (user runs later)`; V6-05 and V6-09 stay blocked on R-V6-1. The rest of the plan does not depend on them.
 - **U-V6-2 — D-V6-4 confirmed: streaming options for new agents only.** `use_realtime`, `use_websocket` and the PCM formats have no default for stored agents (they resolve exactly as before); the console pre-selects the recommended value only for a new agent or a newly picked provider (ask #16), with a tip on stored agents.
+- **U-V6-3 — migrations approved (2026-09-28).** The user approved applying V6 migrations to the dev database with the backup-first procedure (sqlite `.backup` to the scratchpad, `alembic upgrade head`, integrity check), for `v6_002_datasets` and later V6 migrations.

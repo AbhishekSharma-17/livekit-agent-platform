@@ -1575,7 +1575,8 @@ def _assemble(
         participant_identity=resolved.participant_identity or None,
         seed=seed_variables(resolved.variables),
     )
-    http_definitions = [t for t in resolved.tools if t.kind in ("http", "provider")]
+    # V6-16: a `dataset` lookup is built by the same declarative builder (it needs the context).
+    http_definitions = [t for t in resolved.tools if t.kind in ("http", "provider", "dataset")]
     http_context: dict[str, Any] = (
         {"context": tool_context} if any(uses_tool_context(t) for t in http_definitions) else {}
     )

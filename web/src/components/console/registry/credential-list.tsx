@@ -96,7 +96,9 @@ export function credentialUsage(agents: AgentOut[], tools: ToolOut[]): Map<strin
     }
   }
   for (const tool of tools) {
-    const credentialId = tool.definition?.credential_id;
+    // V6-16: a lookup-table tool binds no credential.
+    const credentialId =
+      tool.definition && "credential_id" in tool.definition ? tool.definition.credential_id : undefined;
     if (credentialId) entry(credentialId).tools.push({ id: tool.id, name: tool.name });
   }
   return map;

@@ -480,8 +480,8 @@ def _spec_issues(base: str, spec: Any, properties: set[str] | None) -> list[Plac
 def placeholder_issues(definition: Any) -> list[PlaceholderIssue]:
     """Where a tool definition uses session values or variables where it may not (D-V6-22).
 
-    Accepts a definition model or its JSON (``kind`` ``http``, ``provider`` or ``mcp``; any
-    other kind has nothing to check). Refused:
+    Accepts a definition model or its JSON (``kind`` ``http``, ``provider``, ``mcp`` or
+    ``dataset``; any other kind has nothing to check). Refused:
 
     * a ``{{ ctx.* }}``/``{{ var.* }}`` in a URL's scheme or authority (host, port, login) —
       it could send the request somewhere the host checks never saw — and anywhere in an
@@ -521,6 +521,11 @@ def placeholder_issues(definition: Any) -> list[PlaceholderIssue]:
         issues.extend(_spec_issues("", definition, _schema_properties(_get(definition, "parameters"))))
     elif kind == "provider":
         issues.extend(_spec_issues("", definition, _schema_properties(_get(definition, "parameters"))))
+    elif kind == "dataset":
+        # V6-16 (ask #35): a lookup's arguments are its key columns; pinned values are rendered.
+        keys = _get(definition, "key_columns") or []
+        columns = {str(key) for key in keys} if isinstance(keys, list | tuple) else None
+        issues.extend(_spec_issues("", definition, columns))
     elif kind == "mcp":
         issues.extend(_never_here("url", str(_get(definition, "url") or ""), "an MCP server's url"))
         auth = _get(definition, "auth")

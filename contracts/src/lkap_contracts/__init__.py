@@ -243,6 +243,16 @@ from lkap_contracts.compliance import (
     resolve_compliance,
 )
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
+from lkap_contracts.datasets import (
+    DatasetColumn,
+    DatasetKeyColumn,
+    DatasetLookupIn,
+    DatasetLookupOut,
+    DatasetOut,
+    DatasetPage,
+    DatasetPreviewOut,
+    InternalDatasetLookupIn,
+)
 from lkap_contracts.dispatch import DispatchMetadata
 from lkap_contracts.extraction import (
     EXTRACTION_EVENT,
@@ -368,6 +378,7 @@ from lkap_contracts.tools import (
     NEVER_BACKGROUND_TOOLS,
     UPDATABLE_BLOCK_TYPES,
     VISION_TOOL_NAMES,
+    DatasetToolDefinition,
     DuplicatePolicy,
     DuplicateScope,
     HttpToolDefinition,
@@ -658,6 +669,14 @@ __all__ = [
     "CredentialTestResult",
     "CredentialUpdate",
     "CustomBlockConfig",
+    "DatasetColumn",
+    "DatasetKeyColumn",
+    "DatasetLookupIn",
+    "DatasetLookupOut",
+    "DatasetOut",
+    "DatasetPage",
+    "DatasetPreviewOut",
+    "DatasetToolDefinition",
     "DetailsBlockConfig",
     "DetailsBlockState",
     "DetailsEdit",
@@ -710,6 +729,7 @@ __all__ = [
     "IdIssue",
     "InkMessage",
     "InkStroke",
+    "InternalDatasetLookupIn",
     "InternalKbSearchRequest",
     "InternalTransferIn",
     "InternalTransferOut",

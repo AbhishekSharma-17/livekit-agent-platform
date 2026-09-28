@@ -22,8 +22,10 @@ value is the ``error`` outcome and nothing is called. ``confirmed`` is never sup
 tool that reads values back first refuses, which is also ``error`` (the api refuses such a
 step at save).
 
-**Outcomes.** ``error`` — the call raised, refused, timed out or could not start; ``empty``
-— it succeeded with an empty result (nothing, ``null``, ``[]``, ``{}``), or the node has
+**Outcomes.** ``error`` — the call raised, refused, timed out or could not start, or an HTTP
+tool answered with a non-2xx status other than 404/410; ``empty`` — it succeeded with an empty
+result (nothing, ``null``, ``[]``, ``{}``), an HTTP tool answered 404 or 410 or a dataset lookup
+found no row (ask #116: the status is read from ``FunctionCall.extra``), or the node has
 bindings and none found a value (``BindingReport.applied == []``, ask #36); ``ok`` —
 anything else.
 
@@ -65,9 +67,11 @@ from lkap_agent.tools.context import (
     render_template,
     session_variables,
 )
+from lkap_agent.tools.declarative import HTTP_STATUS_EXTRA
 from lkap_agent.tools.execution import tool_label
 
 __all__ = [
+    "NOT_FOUND_STATUSES",
     "RESULT_PREVIEW_CHARS",
     "ToolNodeExecutor",
     "ToolNodeResult",
@@ -77,6 +81,9 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
+
+#: Ask #116: the HTTP statuses a tool step reads as "nothing found" (the ``empty`` outcome).
+NOT_FOUND_STATUSES: Final[frozenset[int]] = frozenset({404, 410})
 
 #: How much of a result the ``tool_call_ended`` event previews (the observer's own cut).
 RESULT_PREVIEW_CHARS: Final[int] = 240
@@ -95,6 +102,7 @@ class ToolNodeResult:
 
     outcome: ToolNodeOutcome
     #: A short code for events and logs: ``ok``, ``empty_result``, ``nothing_bound``,
+    #: ``not_found`` (HTTP 404/410, a lookup without rows), ``http_status`` (another non-2xx),
     #: ``tool_error``, ``timeout``, ``missing_values``, ``not_attached``, ``unavailable``.
     reason: str
     tool: str
@@ -220,7 +228,7 @@ class ToolNodeExecutor:
             return await self._ended(node, result, started, missing_message(missing, context))
 
         try:
-            output = await asyncio.wait_for(
+            output, status = await asyncio.wait_for(
                 self._execute(definition, name, arguments, call_id), timeout=node.timeout_s
             )
         except TimeoutError:
@@ -238,6 +246,14 @@ class ToolNodeExecutor:
         if output.is_error:
             result = ToolNodeResult("error", "tool_error", name, call_id)
             return await self._ended(node, result, started, output.output)
+        if status is not None and not 200 <= status < 300:
+            # Ask #116: an HTTP answer the tool returned without raising (a dataset lookup that
+            # found nothing reports 404); no binding applies to it.
+            if status in NOT_FOUND_STATUSES:
+                result = ToolNodeResult("empty", "not_found", name, call_id)
+            else:
+                result = ToolNodeResult("error", "http_status", name, call_id)
+            return await self._ended(node, result, started, output.output)
 
         parsed = parse_result(unfence(output.output))
         result = ToolNodeResult("ok", "ok", name, call_id)
@@ -252,8 +268,12 @@ class ToolNodeExecutor:
 
     async def _execute(
         self, definition: Any, name: str, arguments: dict[str, Any], call_id: str
-    ) -> lk_llm.FunctionCallOutput:
-        """Run the tool through livekit-agents' function-call path; the call's output."""
+    ) -> tuple[lk_llm.FunctionCallOutput, int | None]:
+        """Run the tool through livekit-agents' function-call path; the call's output and HTTP status.
+
+        The status is what an HTTP tool (or a dataset lookup) recorded in
+        ``FunctionCall.extra[HTTP_STATUS_EXTRA]`` (ask #116); ``None`` for any other tool.
+        """
         text = json.dumps(arguments, ensure_ascii=False, default=str)
         toolset: Any = None
         try:
@@ -286,7 +306,8 @@ class ToolNodeExecutor:
                 tool_context,
                 call_ctx=run_context,
             )
-            return executed.fnc_call_out
+            status = call.extra.get(HTTP_STATUS_EXTRA)
+            return executed.fnc_call_out, status if isinstance(status, int) else None
         finally:
             if toolset is not None:
                 try:

@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "DatasetColumn": {
+      "description": "One column of a dataset.",
+      "properties": {
+        "key": {
+          "default": false,
+          "title": "Key",
+          "type": "boolean"
+        },
+        "label": {
+          "maxLength": 200,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "phone",
+            "email",
+            "number"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "title": "DatasetColumn",
+      "type": "object"
+    },
+    "DatasetKeyColumn": {
+      "description": "A key column and how its cells are normalised.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "phone",
+            "email",
+            "number"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DatasetKeyColumn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/DatasetOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/datasets/{id}``: a dataset without its rows.",
+  "properties": {
+    "columns": {
+      "items": {
+        "$ref": "#/$defs/DatasetColumn"
+      },
+      "title": "Columns",
+      "type": "array"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "format": {
+      "enum": [
+        "csv",
+        "json"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "key_columns": {
+      "items": {
+        "$ref": "#/$defs/DatasetKeyColumn"
+      },
+      "title": "Key Columns",
+      "type": "array"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress"
+    },
+    "row_count": {
+      "title": "Row Count",
+      "type": "integer"
+    },
+    "sha256": {
+      "title": "Sha256",
+      "type": "string"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "ready",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "slug",
+    "format",
+    "columns",
+    "key_columns",
+    "row_count",
+    "sha256",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "DatasetOut",
+  "type": "object"
+}

@@ -86,8 +86,9 @@ __all__ = [
 
 logger = get_logger(__name__)
 
-#: ``provider`` = a connected app's action (V5-47, ``tools/provider.py``).
-ToolKind = Literal["builtin", "http", "mcp", "pack", "provider"]
+#: ``provider`` = a connected app's action (V5-47, ``tools/provider.py``); ``dataset`` = a
+#: lookup in a workspace dataset (V6-16, ``tools/dataset.py``), which always blocks.
+ToolKind = Literal["builtin", "http", "mcp", "pack", "provider", "dataset"]
 
 
 #: Flow-node tools stay blocking below this SDK (livekit/agents #7321: in 1.8.2 a

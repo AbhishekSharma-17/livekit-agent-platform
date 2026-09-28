@@ -70,6 +70,12 @@ MEMORY_REMEMBER = "memory_remember"
 #: gone; handler in `memory/jobs.py`.
 MEMORY_PURGE = "memory_purge"
 
+#: V6-16 (D-V6-27): imports an uploaded dataset's rows and normalised keys in batches,
+#: writing ``done``/``total`` (and ``error`` on failure) into the job row's own payload, then
+#: marks the dataset ``ready`` or ``failed``. Enqueued by ``POST /v1/datasets``; handler in
+#: `jobs/dataset_import.py`.
+DATASET_IMPORT = "dataset_import"
+
 #: Reserved for other packages' handlers (PLAN-V2 §"V2-08" scope line); this
 #: package never enqueues these itself.
 CONNECTION_PROBE = "connection_probe"

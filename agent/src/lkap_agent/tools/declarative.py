@@ -38,6 +38,7 @@ from livekit.agents.llm import RawFunctionTool
 from lkap_contracts.tool_context import PlaceholderRef, placeholder_issues
 from lkap_contracts.tool_providers import COMPOSIO_HOST
 from lkap_contracts.tools import (
+    DatasetToolDefinition,
     HttpToolDefinition,
     McpOAuthAuth,
     McpServerDefinition,
@@ -91,6 +92,19 @@ Handler = Callable[[dict[str, object], RunContext[Any]], Awaitable[str]]
 #: V5-29: ``ResolvedAgentConfig.tool_mocks`` — tool name → the fixture a test case's
 #: session returns instead of calling out. Empty for every real session.
 ToolMocks = Mapping[str, Any]
+
+#: Ask #116 (V6-17): the ``FunctionCall.extra`` key an HTTP tool records its answer's status in
+#: (a dataset lookup records 404 when it found nothing), so a flow ``tool`` step can branch on it
+#: (404/410 → ``empty``, other non-2xx → ``error``). Provider formatters send only their own
+#: ``extra`` keys (livekit-agents 1.8.3 ``_provider_format``), so it never reaches a model.
+HTTP_STATUS_EXTRA: Final = "lkap.http_status"
+
+
+def note_http_status(context: RunContext[Any], status: int) -> None:
+    """Record ``status`` on the call being run (:data:`HTTP_STATUS_EXTRA`); a no-op without ``extra``."""
+    extra = getattr(getattr(context, "function_call", None), "extra", None)
+    if isinstance(extra, dict):
+        extra[HTTP_STATUS_EXTRA] = status
 
 
 def mock_result_text(fixture: Any) -> str:
@@ -369,6 +383,7 @@ def _request_for(
         except httpx.HTTPError as exc:
             # V5-27: the exception text can carry the url, and the api substituted secrets into it.
             raise ToolError(f"HTTP request failed ({type(exc).__name__})") from exc
+        note_http_status(context, response.status_code)  # ask #116: a flow tool step reads it
 
         _log.debug(
             "declarative_tool.http_call",
@@ -480,7 +495,7 @@ def build_http_tool(
 
 
 def build_http_tools(
-    defs: list[HttpToolDefinition | ProviderToolDefinition],
+    defs: list[HttpToolDefinition | ProviderToolDefinition | DatasetToolDefinition],
     *,
     platform_allowed_hosts: list[str] | None = None,
     user_agent: str | None = None,
@@ -515,10 +530,32 @@ def build_http_tools(
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.
         A `ProviderToolDefinition` (a connected app's action, V5-47) is built by
         `lkap_agent.tools.provider` instead: it calls Composio's execute route on the
-        pinned Composio host, so the HTTP allowlists do not apply to it.
+        pinned Composio host, so the HTTP allowlists do not apply to it. A
+        `DatasetToolDefinition` (V6-16) is built by `lkap_agent.tools.dataset`: a lookup
+        through the api's own internal route, scoped to the session's workspace.
     """
     tools: list[RawFunctionTool[..., Any]] = []
     for definition in defs:
+        if isinstance(definition, DatasetToolDefinition):
+            from lkap_agent.tools.dataset import build_dataset_tool  # noqa: PLC0415 - avoids a cycle
+
+            if mocks and definition.name in mocks:
+                tools.append(
+                    build_dataset_tool(
+                        definition,
+                        execution_default=execution_default,
+                        flow_node=flow_node,
+                        context=context,
+                        mock=mocks[definition.name],
+                    )
+                )
+            else:
+                tools.append(
+                    build_dataset_tool(
+                        definition, execution_default=execution_default, flow_node=flow_node, context=context
+                    )
+                )
+            continue
         if isinstance(definition, ProviderToolDefinition):
             if mocks and definition.name in mocks:
                 tools.append(

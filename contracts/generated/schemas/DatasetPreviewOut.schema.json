@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "DatasetColumn": {
+      "description": "One column of a dataset.",
+      "properties": {
+        "key": {
+          "default": false,
+          "title": "Key",
+          "type": "boolean"
+        },
+        "label": {
+          "maxLength": 200,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "phone",
+            "email",
+            "number"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "title": "DatasetColumn",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/DatasetPreviewOut.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/datasets/{id}/rows``: a page of rows in file order.",
+  "properties": {
+    "columns": {
+      "items": {
+        "$ref": "#/$defs/DatasetColumn"
+      },
+      "title": "Columns",
+      "type": "array"
+    },
+    "dataset_id": {
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "offset": {
+      "title": "Offset",
+      "type": "integer"
+    },
+    "rows": {
+      "items": {
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": "object"
+      },
+      "title": "Rows",
+      "type": "array"
+    },
+    "total": {
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "dataset_id",
+    "columns",
+    "rows",
+    "total",
+    "offset"
+  ],
+  "title": "DatasetPreviewOut",
+  "type": "object"
+}

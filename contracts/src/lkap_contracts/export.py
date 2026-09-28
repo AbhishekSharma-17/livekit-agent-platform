@@ -84,6 +84,7 @@ from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, 
 from lkap_contracts.qa import QaField, QaVerdict, SessionQaIn
 from lkap_contracts.telephony import AmdConfig, SmsTarget, TelephonyConfig, TransferTarget, WarmTransferRoute
 from lkap_contracts.templates import StarterTemplate
+from lkap_contracts.tool_context import TOOL_CONTEXT_MODELS
 from lkap_contracts.tool_providers import TOOL_PROVIDER_MODELS
 from lkap_contracts.tools import (
     TOOL_TEMPLATE_MODELS,
@@ -472,6 +473,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "ProviderModelPage": api_models.ProviderModelPage,
     **TOOL_PROVIDER_MODELS,  # V5-18: connected apps (docs/v5/COMPOSIO.md §3)
     **TOOL_TEMPLATE_MODELS,  # V5-25: tool templates (the Cal.com set)
+    **TOOL_CONTEXT_MODELS,  # V6-07: tool context (placeholders, bindings, read-back)
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.

@@ -1211,6 +1211,33 @@ Note on tool secrets: `ProviderKind` includes `"secret_bag"`; the registry entry
 
 Agent-side construction (`lkap_agent.tools.declarative`): `function_tool(_http_handler_for(defn), raw_schema={"name": defn.name, "description": defn.description, "parameters": defn.parameters})` where `async def handler(raw_arguments: dict[str, object], context: RunContext) -> str`. MCP: one `MCPToolset(id=f"mcp_{defn.name}", mcp_server=GuardedMCPServerHTTP(url=..., transport_type="streamable_http", allowed_tools=..., headers=<resolved header auth>, timeout=..., sse_read_timeout=..., transport_factory=<the guarded transport, wrapped in ApiIssuedBearer for an oauth server>), tool_options={name: MCPToolOptions(...)})` per server (`lkap_agent.tools.mcp_client`, `.mcp_auth`), passed in `Agent(tools=[...])`; results are fenced as `mcp:<server>`. Provider tools: `lkap_agent.tools.provider` (§3).
 
+### Tool context: placeholders, bindings, `requires_vars`, `confirm_readback` (V6-07)
+
+`lkap_contracts.tool_context` (D-V6-22/23). Added fields, all defaulting to empty (a definition without them builds and sends exactly what it did before):
+
+```python
+class ToolBinding(BaseModel):
+    path: str = ""  # RFC 6901 pointer into the tool's result as the model sees it (after result_path); "" = all
+    to: str  # details:<block_id>.<key> | table:<block_id> | checklist:<item_id> | status | note | var:<name>
+
+
+class ToolContextSpec(BaseModel):  # one MCP tool's settings
+    requires_vars: list[str] = []  # <= 20 variable names
+    confirm_readback: list[str] = []  # <= 10 argument names; adds a `confirmed` parameter
+    bindings: list[ToolBinding] = []  # <= 20
+    pinned_arguments: dict[str, str | int | float | bool | None] = {}  # <= 20; hidden from the model
+
+
+# HttpToolDefinition: + requires_vars, confirm_readback, bindings
+# ProviderToolDefinition: + requires_vars, confirm_readback, bindings, pinned_arguments
+# McpServerDefinition: + tool_context: dict[str, ToolContextSpec] = {}  # keys within allowed_tools when set
+```
+
+- **Placeholders.** `{{ ctx.<name> }}` for `session_id`, `agent_id`, `caller_phone` (E.164, phone calls only), `caller_identity`, `language`, `timezone` (the caller's zone, R-V5-10), `channel` (`web` | `phone` | `text`: `sip_*` → phone, `text` → text, every other channel → web; `TOOL_CHANNEL_OF`), and `{{ var.<name> }}` (the session's variables: a flow's `FlowState.variables`, else the worker's `userdata["lkap.variables"]` store seeded from the session's variables, plus those a binding wrote). Allowed in an HTTP url's path and query (percent-encoded), its `body_template` (JSON-escaped) and in pinned arguments (as-is, sent as a JSON value). `placeholder_issues(definition)` refuses one in a url's scheme or authority, in any header, anywhere in an MCP server's url; an unknown `ctx` name; a malformed spelling. The definition models call it in a validator, so the api refuses such a definition at save (422); the worker checks again when it builds the tool (a refusing tool, or a skipped MCP server) and the agent validator reports a stored row. The worker renders arguments and context in **one pass** (a value is never re-scanned). A value the session lacks → the tool answers "I need <label> first …" and sends nothing.
+- **`requires_vars`** refuses before any request, listing the missing variables. **`confirm_readback`** refuses until the call carries `confirmed=true` (the refusal says what to read back, spelled for a voice); `confirmed` is stripped before the request.
+- **Bindings** apply after a successful call (HTTP 2xx, an app action that succeeded, an MCP result that is not an error) and before the result reaches the model. Only `details` and `table` blocks that are on the session's panel are written (so never a requestable, link, consent, upload, captions or handoff block); a missing checklist item or path is skipped. Caps: 20 bindings, 500 characters per value (control characters removed), 100 table rows. One `ActivityEvent` per call records `detail = {event: "tool_bindings_applied", applied: [targets], skipped: [{to, reason}]}` — never a value. A `var:` binding marks the name in `userdata["lkap.bound_variables"]` (third-party text). For MCP the bound value is the result's `structuredContent`, else a single text item parsed as JSON (or the text), else the list of items.
+- **Api validator** (`config_service.tool_context_issues`): a binding into a block the panel lacks, or into a block of another type → error; a status, note or checklist binding without that block → warning; on a flow agent, a required or referenced variable that no flow variable or binding sets → warning.
+
 ---
 
 ## 10. Agent ↔ UI protocol (`lkap_contracts.ui_protocol`; TS generated to `web/src/contracts/lkap-contracts.d.ts`)

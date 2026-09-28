@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
+from lkap_contracts.tool_context import ToolBinding, ToolContextSpec
 from lkap_contracts.tools import HttpToolDefinition, McpAuth, McpServerDefinition, ToolExecution
 from pydantic import Field
 
@@ -40,6 +41,30 @@ MCP_AUTH_HELP = (
 )
 #: The deprecated top-level mirrors of an MCP definition's header auth (V5-09).
 _MCP_LEGACY_AUTH_KEYS = ("headers", "credential_id")
+#: V6-07: the session values and variables a url or body may use, in one sentence.
+CONTEXT_HELP = (
+    "The url's path and query and the body may also use {{ ctx.session_id }}, {{ ctx.agent_id }}, "
+    "{{ ctx.caller_phone }}, {{ ctx.caller_identity }}, {{ ctx.language }}, {{ ctx.timezone }}, "
+    "{{ ctx.channel }} and {{ var.<name> }} (a flow variable); never the host or a header"
+)
+REQUIRES_VARS_HELP = (
+    "Variables that must be set before the tool calls out; until then it answers 'I need … first' "
+    "so the model asks the caller"
+)
+CONFIRM_READBACK_HELP = (
+    "Arguments the model must read back to the caller first (adds a `confirmed` argument; the tool "
+    "refuses until it is true)"
+)
+BINDINGS_HELP = (
+    "Where parts of a successful result go without a model turn: [{path: JSON pointer into the "
+    "result, to: 'details:<block>.<key>' | 'table:<block>' | 'checklist:<item>' | 'status' | 'note' "
+    "| 'var:<name>'}], at most 20"
+)
+MCP_TOOL_CONTEXT_HELP = (
+    "Per MCP tool name: requires_vars, confirm_readback, bindings (as for HTTP tools) and "
+    "pinned_arguments (fixed values hidden from the model; strings may use {{ ctx.* }} and "
+    "{{ var.* }}). Names must be in allowed_tools when set."
+)
 MCP_TOOL_OPTIONS_HELP = (
     "Per MCP tool name: how it runs (a ToolExecution; names must be in allowed_tools when set). "
     "MCP tools never follow the agent default; a background tool is announced only through the "
@@ -77,7 +102,9 @@ def register(registry: Registry) -> None:
         name: Annotated[str, Field(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")],
         description: str,
         parameters: Annotated[dict[str, Any], Field(description="JSON schema of the tool's arguments")],
-        url: Annotated[str, Field(description="May contain {{arg}} and {{ secret.NAME }} placeholders")],
+        url: Annotated[
+            str, Field(description="May contain {{arg}} and {{ secret.NAME }} placeholders. " + CONTEXT_HELP)
+        ],
         allowed_hosts: Annotated[
             list[str], Field(min_length=1, description="Hosts the tool may call (required)")
         ],
@@ -96,6 +123,9 @@ def register(registry: Registry) -> None:
             dict[str, Any] | None, Field(description="Arguments for a dry run right after creating")
         ] = None,
         execution: Annotated[ToolExecution | None, Field(description=EXECUTION_HELP)] = None,
+        requires_vars: Annotated[list[str] | None, Field(description=REQUIRES_VARS_HELP)] = None,
+        confirm_readback: Annotated[list[str] | None, Field(description=CONFIRM_READBACK_HELP)] = None,
+        bindings: Annotated[list[ToolBinding] | None, Field(description=BINDINGS_HELP)] = None,
         plan: bool = False,
     ) -> ToolResult:
         """Create an HTTP tool an agent can call (hosts allowlisted), optionally dry-running it."""
@@ -114,6 +144,9 @@ def register(registry: Registry) -> None:
             result_path=result_path,
             silent_reply=silent_reply,
             execution=execution or ToolExecution(),
+            requires_vars=requires_vars or [],
+            confirm_readback=confirm_readback or [],
+            bindings=bindings or [],
         )
         body = {
             "agent_id": agent_id,
@@ -152,6 +185,9 @@ def register(registry: Registry) -> None:
         tool_options: Annotated[
             dict[str, ToolExecution] | None, Field(description=MCP_TOOL_OPTIONS_HELP)
         ] = None,
+        tool_context: Annotated[
+            dict[str, ToolContextSpec] | None, Field(description=MCP_TOOL_CONTEXT_HELP)
+        ] = None,
         plan: bool = False,
     ) -> ToolResult:
         """Attach a remote MCP server as a tool source; check it with tool_test before a chat."""
@@ -167,6 +203,7 @@ def register(registry: Registry) -> None:
             allowed_tools=allowed_tools,
             timeout_s=timeout_s,
             tool_options=tool_options or {},
+            tool_context=tool_context or {},
             **({"auth": auth} if auth is not None else {}),
         )
         body = {

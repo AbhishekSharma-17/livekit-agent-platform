@@ -68,6 +68,36 @@ The tool's response body comes back inside an `Untrusted` envelope in
 `chat_send`'s events and in `tool_dry_run` — it is data from a third-party
 API, not an instruction.
 
+## Session values, bindings and read-back
+
+The url's path and query and the `body_template` may also use values the
+call does not have to ask for: `{{ ctx.session_id }}`, `{{ ctx.agent_id }}`,
+`{{ ctx.caller_phone }}` (phone calls only), `{{ ctx.caller_identity }}`,
+`{{ ctx.language }}`, `{{ ctx.timezone }}` (the caller's time zone),
+`{{ ctx.channel }}` (`web`, `phone` or `text`) and `{{ var.<name> }}` (a flow
+variable, or one a binding set). They are filled in when the tool runs,
+percent-encoded in the url and escaped in the body. They are refused at save
+in the url's scheme, host or port and in any header, so they can never change
+where the request goes. A value the session does not have yet makes the tool
+answer "I need … first" without calling out.
+
+- `requires_vars=["policy_no"]` refuses the call until those variables are
+  set, naming the missing ones so the model asks the caller.
+- `confirm_readback=["email"]` adds a `confirmed` argument: the tool refuses,
+  tells the model what to read back, and runs only when called again with
+  `confirmed=true`.
+- `bindings=[{"path": "/holder", "to": "details:card.holder"}]` copy parts of
+  a successful (2xx) result onto the panel or into a variable before the
+  model's next turn: `details:<block>.<key>`, `table:<block>` (a list of
+  objects), `checklist:<item>`, `status`, `note` or `var:<name>`. `path` is a
+  JSON pointer into the result after `result_path`. At most 20 bindings, 500
+  characters a value and 100 rows a table; only `details` and `table` blocks
+  on the agent's own panel are written. `agent_validate` flags a binding to a
+  block the panel does not have.
+
+MCP servers take the same settings per tool through `tool_context` (plus
+`pinned_arguments`, fixed values the model never supplies).
+
 ## Background tools
 
 A tool can keep the conversation going while it runs. `execution` (a
@@ -105,4 +135,4 @@ worker runs livekit-agents 1.8.3.
 ## Related schemas
 
 `HttpToolDefinition`, `ToolExecution`, `ToolCreate`, `ToolOut`, `ToolDryRunRequest`,
-`ToolDryRunResult`, `CredentialCreate`.
+`ToolDryRunResult`, `CredentialCreate`, `ToolBinding`, `ToolContextSpec`.

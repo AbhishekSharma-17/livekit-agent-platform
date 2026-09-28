@@ -105,6 +105,13 @@ from lkap_contracts.providers import (
     speech_streams,
     validate_model_id,
 )
+from lkap_contracts.tool_context import (
+    BINDING_BLOCK_TYPES,
+    FORBIDDEN_BINDING_BLOCK_TYPES,
+    context_placeholders,
+    parse_binding_target,
+    placeholder_issues,
+)
 from lkap_contracts.tool_providers import COMPOSIO_PROVIDER_ID, TOOL_PROVIDER_ACCOUNT, action_risk
 from lkap_contracts.tools import (
     BACKGROUNDABLE_BUILTINS,
@@ -517,6 +524,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(knowledge_auto_inject_issues(ctx))
     findings.extend(knowledge_retrieval_issues(ctx))
     findings.extend(tool_execution_issues(ctx))
+    findings.extend(tool_context_issues(ctx))
     findings.extend(apps_issues(ctx))
     findings.extend(conversation_preset_issues(ctx))
     findings.extend(telephony_noise_cancellation_issues(ctx))
@@ -1542,6 +1550,134 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
                         severity="warning",
                     )
                 )
+    return issues
+
+
+#: V6-07: the panel block type a status, note or checklist binding shows up in.
+_BINDING_DISPLAY_BLOCK: Final[dict[str, str]] = {
+    "status": "status",
+    "note": "notes",
+    "checklist": "checklist",
+}
+
+
+def _tool_context_specs(definition: Mapping[str, Any]) -> list[tuple[str, Mapping[str, Any]]]:
+    """``(path prefix, settings)`` of each place a definition keeps its V6-07 settings."""
+    kind = definition.get("kind", "http")
+    if kind in ("http", "provider"):
+        return [("", definition)]
+    per_tool = definition.get("tool_context") if kind == "mcp" else None
+    if not isinstance(per_tool, Mapping):
+        return []
+    return [(f"tool_context.{name}.", spec) for name, spec in per_tool.items() if isinstance(spec, Mapping)]
+
+
+def _binding_target_issue(to: str, blocks: Mapping[str, str], path: str, name: str) -> Issue | None:
+    try:
+        target = parse_binding_target(to)
+    except ValueError:
+        return None  # reported by placeholder_issues
+    if target.kind in BINDING_BLOCK_TYPES:
+        block_type = blocks.get(target.block_id or "")
+        if block_type is None:
+            return Issue(
+                path=path,
+                message=f"'{name}' fills block '{target.block_id}', which is not on this agent's panel",
+            )
+        if block_type != target.kind:
+            never = " (a caller's request, link, consent, upload, captions or handoff block is never written)"
+            return Issue(
+                path=path,
+                message=f"'{name}' fills block '{target.block_id}' as a {target.kind} block, but it is a "
+                f"{block_type} block; bindings write only details and table blocks"
+                + (never if block_type in FORBIDDEN_BINDING_BLOCK_TYPES else ""),
+            )
+        return None
+    shown_in = _BINDING_DISPLAY_BLOCK.get(target.kind)
+    if shown_in is not None and shown_in not in blocks.values():
+        return Issue(
+            path=path,
+            message=f"'{name}' fills the {target.kind}, but the panel has no {shown_in} block to show it",
+            severity="warning",
+        )
+    return None
+
+
+def tool_context_issues(ctx: ValidationContext) -> list[Issue]:
+    """The tool-context checks of V6-07 (D-V6-22/23), per attached tool row.
+
+    * A ``{{ ctx.* }}``/``{{ var.* }}`` where it may not be (scheme, host, port, a header, an
+      MCP url), an unknown ``ctx`` name, a bad read-back or binding target → error
+      (:func:`lkap_contracts.tool_context.placeholder_issues`; the contract refuses these at
+      save, this catches a row stored another way).
+    * A binding into a block that is not on the agent's panel, or into a block that is not
+      ``details``/``table`` for those targets (so never a link, consent or request block) → error.
+    * A status, note or checklist binding on a panel without that block → warning.
+    * On a flow agent, a ``requires_vars`` entry or a ``{{ var.* }}`` that neither a flow
+      variable nor any binding of the agent's tools sets → warning (the tool would refuse).
+
+    A definition without these features produces no issue.
+
+    Args:
+        ctx: The validation context (``tool_definitions_by_id`` read as stored JSON).
+
+    Returns:
+        Issues at ``tools[i].definition...``.
+    """
+    definitions = ctx.tool_definitions_by_id
+    if definitions is None:
+        return []
+    config = ctx.config
+    blocks = {block.id: str(block.type) for block in config.panel.blocks}
+    attached: list[tuple[int, Mapping[str, Any]]] = [
+        (index, definition)
+        for index, tool_id in enumerate(config.tools.tool_ids)
+        if isinstance(definition := definitions.get(tool_id), Mapping)
+    ]
+    settable: set[str] | None = None
+    if config.flow is not None:
+        settable = {variable.name for variable in config.flow.variables}
+        for _index, definition in attached:
+            for _prefix, spec in _tool_context_specs(definition):
+                for binding in spec.get("bindings") or []:
+                    to = str(binding.get("to") or "") if isinstance(binding, Mapping) else ""
+                    if to.startswith("var:"):
+                        settable.add(to.removeprefix("var:"))
+    issues: list[Issue] = []
+    for index, definition in attached:
+        base = f"tools[{index}].definition"
+        name = str(definition.get("name") or f"tools[{index}]")
+        for problem in placeholder_issues(definition):
+            issues.append(Issue(path=f"{base}.{problem.field}", message=f"'{name}': {problem.message}"))
+        for prefix, spec in _tool_context_specs(definition):
+            for position, binding in enumerate(spec.get("bindings") or []):
+                if not isinstance(binding, Mapping):
+                    continue
+                issue = _binding_target_issue(
+                    str(binding.get("to") or ""), blocks, f"{base}.{prefix}bindings[{position}].to", name
+                )
+                if issue is not None:
+                    issues.append(issue)
+            if settable is None:
+                continue
+            needed = [(f"{base}.{prefix}requires_vars", str(v)) for v in spec.get("requires_vars") or []]
+            for field in ("url", "body_template") if not prefix else ():
+                needed.extend(
+                    (f"{base}.{field}", ref.name)
+                    for ref in context_placeholders(definition.get(field))
+                    if ref.namespace == "var"
+                )
+            for path, variable in needed:
+                if variable not in settable:
+                    issues.append(
+                        Issue(
+                            path=path,
+                            message=f"'{name}' needs the variable '{variable}', which no flow variable or "
+                            "binding sets; the tool will refuse until something sets it",
+                            severity="warning",
+                        )
+                    )
+                    settable.add(variable)  # one warning per variable
     return issues
 
 

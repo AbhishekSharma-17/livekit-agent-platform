@@ -19,6 +19,11 @@ failure (an expired, missing or revoked connection) becomes
 :data:`REAUTH_MESSAGE`, which the session observer turns into a
 ``tool_needs_reauth`` event, and any URL in any error text is removed before
 the model sees it — a sign-in link is never read aloud.
+
+V6-07 (D-V6-22/23): ``pinned_arguments`` are applied over the model's arguments (string
+values rendered with ``{{ ctx.* }}``/``{{ var.* }}``) and hidden from its schema;
+``requires_vars`` and ``confirm_readback`` refuse before the execute call; ``bindings``
+copy a successful answer (after ``result_path``) onto the panel before the model reads it.
 """
 
 from __future__ import annotations
@@ -32,11 +37,21 @@ from urllib.parse import quote
 import httpx
 from livekit.agents import RunContext, ToolError, function_tool
 from livekit.agents.llm import RawFunctionTool
+from lkap_contracts.tool_context import placeholder_issues
 from lkap_contracts.tool_providers import COMPOSIO_HOST
 from lkap_contracts.tools import ProviderToolDefinition, ToolExecutionMode
 
 from lkap_agent.logging import get_logger
 from lkap_agent.tools._http_safety import guarded_transport
+from lkap_agent.tools.bindings import apply_bindings
+from lkap_agent.tools.context import (
+    ToolCallContext,
+    check_readback,
+    check_requires,
+    hide_pinned,
+    pin_arguments,
+    readback_parameters,
+)
 from lkap_agent.tools.execution import (
     ResolvedExecution,
     ToolPolicy,
@@ -146,7 +161,36 @@ def _request_body(definition: ProviderToolDefinition, arguments: dict[str, Any])
 Handler = Callable[[dict[str, object], RunContext[Any]], Any]
 
 
-def _request_for(definition: ProviderToolDefinition, transport_factory: TransportFactory) -> Handler:
+def provider_parameters(definition: ProviderToolDefinition) -> dict[str, Any]:
+    """The schema the model sees: pinned arguments hidden, ``confirmed`` added for a read-back."""
+    parameters = definition.parameters
+    if not isinstance(parameters, dict) or parameters.get("type") != "object":
+        parameters = {"type": "object", "properties": {}, **(parameters or {})}
+    parameters = hide_pinned(parameters, definition.pinned_arguments)
+    return readback_parameters(parameters, definition.confirm_readback)
+
+
+def prepare_provider_arguments(
+    definition: ProviderToolDefinition, raw_arguments: dict[str, object], tool_context: ToolCallContext | None
+) -> dict[str, object]:
+    """The V6-07 checks and pins before an action runs (a no-op for a definition without them).
+
+    Raises:
+        ToolError: Unconfirmed read-back, a missing required variable, or a pinned value that
+            names a session value or variable the session does not have. Nothing is sent.
+    """
+    if not (definition.confirm_readback or definition.requires_vars or definition.pinned_arguments):
+        return raw_arguments
+    arguments = check_readback(dict(raw_arguments), definition.confirm_readback, tool=definition.name)
+    check_requires(definition.requires_vars, tool_context, tool=definition.name)
+    return pin_arguments(arguments, definition.pinned_arguments, tool_context, tool=definition.name)
+
+
+def _request_for(
+    definition: ProviderToolDefinition,
+    transport_factory: TransportFactory,
+    tool_context: ToolCallContext | None = None,
+) -> Handler:
     url = f"{EXECUTE_BASE}/{quote(definition.tool_slug, safe='')}"
 
     async def request(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
@@ -194,6 +238,15 @@ def _request_for(definition: ProviderToolDefinition, transport_factory: Transpor
             extracted = _extract(body, definition.result_path)
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ToolError(f"the app's answer has no {definition.result_path!r}") from exc
+        if definition.bindings:
+            # V6-07 (D-V6-23): the action's answer reaches the panel before the model reads it.
+            await apply_bindings(
+                extracted,
+                definition.bindings,
+                tool_context,
+                tool=definition.name,
+                call_id=context.function_call.call_id,
+            )
         text = extracted if isinstance(extracted, str) else json.dumps(extracted)
         # V5-27 (S5-6, R-V5-15): an email or ticket body is data, never instructions.
         return fence(
@@ -204,12 +257,21 @@ def _request_for(definition: ProviderToolDefinition, transport_factory: Transpor
 
 
 def _handler_for(
-    definition: ProviderToolDefinition, resolved: ResolvedExecution, transport_factory: TransportFactory
+    definition: ProviderToolDefinition,
+    resolved: ResolvedExecution,
+    transport_factory: TransportFactory,
+    tool_context: ToolCallContext | None = None,
 ) -> Handler:
-    request = _request_for(definition, transport_factory)
+    issues = placeholder_issues(definition)
+    if issues:
+        from lkap_agent.tools.declarative import misconfigured_handler  # noqa: PLC0415 - avoids a cycle
+
+        return misconfigured_handler(definition.name, f"{issues[0].field}: {issues[0].message}")
+    request = _request_for(definition, transport_factory, tool_context)
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        result: str = await run_with_policy(context, resolved, lambda: request(raw_arguments, context))
+        arguments = prepare_provider_arguments(definition, raw_arguments, tool_context)
+        result: str = await run_with_policy(context, resolved, lambda: request(arguments, context))
         return result
 
     return handler
@@ -221,6 +283,7 @@ def build_provider_tool(
     execution_default: ToolExecutionMode = "blocking",
     flow_node: bool = False,
     transport_factory: TransportFactory | None = None,
+    context: ToolCallContext | None = None,
 ) -> RawFunctionTool[..., Any]:
     """Build one connected-app action as a raw-schema function tool under its execution policy.
 
@@ -233,14 +296,13 @@ def build_provider_tool(
         execution_default: The agent's ``tools.execution_default``.
         flow_node: The tool runs on a flow node (the 1.8.3 gate, R-V4-39).
         transport_factory: Builds the client transport; defaults to the guarded transport.
+        context: V6-07, the session's tool context (pinned values, variables, bindings).
 
     Returns:
         A ``RawFunctionTool`` carrying its ``ToolPolicy`` (rebindable to an agent default).
     """
     factory = transport_factory or guarded_transport
-    parameters = definition.parameters
-    if not isinstance(parameters, dict) or parameters.get("type") != "object":
-        parameters = {"type": "object", "properties": {}, **(parameters or {})}
+    parameters = provider_parameters(definition)
     resolved = resolve_execution(
         name=definition.name,
         kind="provider",
@@ -251,7 +313,7 @@ def build_provider_tool(
     )
     flags, on_duplicate, duplicate_scope = tool_flags(resolved)
     tool = function_tool(
-        _handler_for(definition, resolved, factory),
+        _handler_for(definition, resolved, factory, context),
         raw_schema={"name": definition.name, "description": definition.description, "parameters": parameters},
         flags=flags,
         on_duplicate=on_duplicate,
@@ -260,7 +322,11 @@ def build_provider_tool(
 
     def _rebind(default: ToolExecutionMode, flow: bool) -> RawFunctionTool[..., Any]:
         return build_provider_tool(
-            definition, execution_default=default, flow_node=flow, transport_factory=transport_factory
+            definition,
+            execution_default=default,
+            flow_node=flow,
+            transport_factory=transport_factory,
+            context=context,
         )
 
     attach_policy(
@@ -293,5 +359,7 @@ __all__ = [
     "REAUTH_MESSAGE",
     "build_provider_tool",
     "build_provider_tools",
+    "prepare_provider_arguments",
+    "provider_parameters",
     "spoken_safe",
 ]

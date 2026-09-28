@@ -67,6 +67,15 @@ announced only through the server's own progress messages, so set
 the server's `timeout_s`. The rest is as for HTTP tools
 (`lkap_explain("tools-http")`).
 
+## Session values, bindings and read-back
+
+`tool_context` maps a downstream tool's name (one of `allowed_tools` when
+that is set) to `requires_vars`, `confirm_readback` and `bindings`, which
+work as for HTTP tools, plus `pinned_arguments`: values the admin fixes, taken
+out of what the model sees, whose text may use `{{ ctx.* }}` and
+`{{ var.* }}` (for example `{"account": "{{ var.account_no }}"}`). The
+server's url and headers never take them.
+
 ## Related tools
 
 `tool_list`, `tool_get`, `tool_create_mcp`, `tool_test`, `tool_update`,

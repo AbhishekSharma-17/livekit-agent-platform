@@ -11,6 +11,14 @@
           "title": "Allowed Hosts",
           "type": "array"
         },
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
         "body_template": {
           "anyOf": [
             {
@@ -22,6 +30,14 @@
           ],
           "default": null,
           "title": "Body Template"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
         },
         "credential_id": {
           "anyOf": [
@@ -82,6 +98,14 @@
           "additionalProperties": true,
           "title": "Parameters",
           "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
         },
         "result_path": {
           "anyOf": [
@@ -367,6 +391,14 @@
           "title": "Timeout S",
           "type": "number"
         },
+        "tool_context": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolContextSpec"
+          },
+          "default": {},
+          "title": "Tool Context",
+          "type": "object"
+        },
         "tool_options": {
           "additionalProperties": {
             "$ref": "#/$defs/ToolExecution"
@@ -476,6 +508,22 @@
     "ProviderToolDefinition": {
       "description": "One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).\n\nCreated by materialisation (``POST /v1/tool-providers/composio/materialise``): the\nparameters are pinned from the provider's schema at import, the description is its first\nsentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``\non the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``\nplaceholder that the api substitutes from ``credential_id`` when a session resolves, as\nfor HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's\n``user_id`` copied from it.",
       "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
         "connected_account_id": {
           "anyOf": [
             {
@@ -541,11 +589,44 @@
           "title": "Parameters",
           "type": "object"
         },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
         "provider": {
           "const": "composio",
           "default": "composio",
           "title": "Provider",
           "type": "string"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
         },
         "result_path": {
           "anyOf": [
@@ -618,6 +699,84 @@
         "subject"
       ],
       "title": "ProviderToolDefinition",
+      "type": "object"
+    },
+    "ToolBinding": {
+      "description": "Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).\n\nApplied by the worker after a successful call (an HTTP 2xx, an app action that\nsucceeded, an MCP result that is not an error) and before the model's next turn, with\nno model involved. ``path`` points into the tool's result as the model would see it\n(after ``result_path``); ``\"\"`` is the whole result.",
+      "properties": {
+        "path": {
+          "default": "",
+          "maxLength": 256,
+          "title": "Path",
+          "type": "string"
+        },
+        "to": {
+          "maxLength": 140,
+          "minLength": 1,
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "ToolBinding",
+      "type": "object"
+    },
+    "ToolContextSpec": {
+      "description": "The tool-context settings of one MCP tool (``McpServerDefinition.tool_context``).",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        }
+      },
+      "title": "ToolContextSpec",
       "type": "object"
     },
     "ToolExecution": {

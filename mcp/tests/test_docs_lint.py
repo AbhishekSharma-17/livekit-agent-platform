@@ -537,6 +537,10 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
             "agent_id",
             "dry_run_args",
             "execution",
+            # V6-07: tool context
+            "requires_vars",
+            "confirm_readback",
+            "bindings",
             "plan",
         }
     ),
@@ -551,6 +555,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
             "timeout_s",
             "agent_id",
             "tool_options",
+            "tool_context",  # V6-07
             "plan",
         }
     ),

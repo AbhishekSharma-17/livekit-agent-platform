@@ -14,6 +14,14 @@ Raw HTTP tool construction is verified against livekit-agents==1.8.3
 bound to a parameter literally named `raw_arguments`, plus the injected
 `RunContext` — `async def handler(raw_arguments: dict[str, object], context:
 RunContext) -> str`, exactly as CONTRACTS §9 specifies.
+
+V6-07 (D-V6-22/23): with a session :class:`~lkap_agent.tools.context.ToolCallContext`, the
+url and body also take ``{{ ctx.* }}`` and ``{{ var.* }}``, rendered in the same single
+pass as the arguments (``tools.context.render_template``); ``requires_vars``, a missing
+``ctx``/``var`` value and an unconfirmed ``confirm_readback`` refuse the call before any
+request is sent; ``bindings`` copy a 2xx result onto the panel (``tools.bindings``) before
+the model reads it. A definition without these features builds and sends exactly what it
+did before.
 """
 
 from __future__ import annotations
@@ -27,6 +35,7 @@ from urllib.parse import quote
 import httpx
 from livekit.agents import RunContext, ToolError, function_tool
 from livekit.agents.llm import RawFunctionTool
+from lkap_contracts.tool_context import PlaceholderRef, placeholder_issues
 from lkap_contracts.tool_providers import COMPOSIO_HOST
 from lkap_contracts.tools import (
     HttpToolDefinition,
@@ -45,6 +54,16 @@ from lkap_agent.tools._http_safety import (
     check_url_public,
     guarded_transport,
     read_bounded,
+)
+from lkap_agent.tools.bindings import apply_bindings, parse_result
+from lkap_agent.tools.context import (
+    ToolCallContext,
+    check_readback,
+    check_requires,
+    missing_message,
+    missing_refs,
+    readback_parameters,
+    render_template,
 )
 from lkap_agent.tools.execution import (
     ResolvedExecution,
@@ -79,12 +98,29 @@ def mock_result_text(fixture: Any) -> str:
     return fixture if isinstance(fixture, str) else json.dumps(fixture, ensure_ascii=False, default=str)
 
 
-def _mocked_request(name: str, fixture: Any, *, source: str, max_chars: int) -> Handler:
-    """The body of a mocked tool (V5-29): the fixture, fenced like a real result, no network."""
+def _mocked_request(
+    name: str,
+    fixture: Any,
+    *,
+    source: str,
+    max_chars: int,
+    bindings: list[Any] | None = None,
+    tool_context: ToolCallContext | None = None,
+) -> Handler:
+    """The body of a mocked tool (V5-29): the fixture, fenced like a real result, no network.
+
+    V6-07: the definition's ``bindings`` apply to the fixture as to a real result.
+    """
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
         _log.debug("declarative_tool.mocked", tool=name, call_id=context.function_call.call_id)
-        return fence(mock_result_text(fixture), source=source, max_chars=max_chars)
+        text = mock_result_text(fixture)
+        if bindings:
+            result = fixture if not isinstance(fixture, str) else parse_result(fixture)
+            await apply_bindings(
+                result, bindings, tool_context, tool=name, call_id=context.function_call.call_id
+            )
+        return fence(text, source=source, max_chars=max_chars)
 
     return handler
 
@@ -101,18 +137,41 @@ def _render(template: str, arguments: dict[str, Any], *, escape: Callable[[str],
     return _ARG_PATTERN.sub(_sub, template)
 
 
-def _render_url(template: str, arguments: dict[str, Any]) -> str:
-    return _render(template, arguments, escape=lambda v: quote(v, safe=""))
+def _url_escape(value: str) -> str:
+    return quote(value, safe="")
 
 
-def _render_json_string(template: str, arguments: dict[str, Any]) -> str:
+def _json_escape(value: str) -> str:
+    return json.dumps(value)[1:-1]
+
+
+def _render_url(
+    template: str,
+    arguments: dict[str, Any],
+    tool_context: ToolCallContext | None = None,
+    missing: list[PlaceholderRef] | None = None,
+) -> str:
+    """Substitute arguments, ``ctx`` and ``var`` values into a url, percent-encoding each."""
+    return render_template(
+        template, arguments, tool_context, escape=_url_escape, missing=missing if missing is not None else []
+    )
+
+
+def _render_json_string(
+    template: str,
+    arguments: dict[str, Any],
+    tool_context: ToolCallContext | None = None,
+    missing: list[PlaceholderRef] | None = None,
+) -> str:
     """Substitute into a JSON-string `body_template`, JSON-escaping each value.
 
     `json.dumps(v)[1:-1]` yields the escaped *content* of a JSON string
-    (quotes stripped), so a `"` or newline in an argument can't break out of
-    the enclosing string in the template.
+    (quotes stripped), so a `"` or newline in an argument (or a session value) can't
+    break out of the enclosing string in the template.
     """
-    return _render(template, arguments, escape=lambda v: json.dumps(v)[1:-1])
+    return render_template(
+        template, arguments, tool_context, escape=_json_escape, missing=missing if missing is not None else []
+    )
 
 
 def _resolve_json_pointer(data: Any, pointer: str) -> Any:
@@ -162,6 +221,45 @@ def _reject_unresolved(rendered: str, *, where: str) -> None:
         raise ToolError(f"unresolved template in {where}")
 
 
+def misconfigured_handler(name: str, reason: str) -> Handler:
+    """A tool whose definition uses a session value where it may not (defense in depth, D-V6-22).
+
+    The contract refuses such a definition at save; one that reaches the worker anyway
+    (a row written around the api) is built as a tool that refuses every call, so the
+    session still starts with its other tools and nothing is ever sent.
+    """
+    _log.warning("declarative_tool.misconfigured", tool=name, reason=reason)
+
+    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+        raise ToolError("this tool is set up incorrectly and cannot run; tell the caller it is unavailable")
+
+    return handler
+
+
+def _prepare_http(
+    definition: HttpToolDefinition, raw_arguments: dict[str, object], tool_context: ToolCallContext | None
+) -> dict[str, object]:
+    """The V6-07 checks before an HTTP tool runs (a no-op for a definition without them).
+
+    Strips ``confirmed`` and refuses until it is true (``confirm_readback``), refuses a
+    missing ``requires_vars`` variable, then refuses when the url or body names a session
+    value or variable that has none — each before any request is sent.
+    """
+    if not (definition.confirm_readback or definition.requires_vars or tool_context is not None):
+        return raw_arguments
+    arguments = check_readback(dict(raw_arguments), definition.confirm_readback, tool=definition.name)
+    check_requires(definition.requires_vars, tool_context, tool=definition.name)
+    missing = missing_refs((definition.url, definition.body_template), tool_context)
+    if missing:
+        _log.debug(
+            "declarative_tool.context_missing",
+            tool=definition.name,
+            missing=[f"{ref.namespace}.{ref.name}" for ref in missing],
+        )
+        raise ToolError(missing_message(missing, tool_context))
+    return arguments
+
+
 def _handler_for(
     definition: HttpToolDefinition,
     *,
@@ -169,39 +267,64 @@ def _handler_for(
     user_agent: str | None = None,
     resolved: ResolvedExecution | None = None,
     mocks: ToolMocks | None = None,
+    tool_context: ToolCallContext | None = None,
 ) -> Handler:
     """The raw tool body; with ``resolved`` it runs through `run_with_policy` (BACKGROUND-TOOLS §4.2).
 
     V5-29: a tool named in ``mocks`` returns its fixture instead of sending the request.
+    V6-07: the read-back, required-variable and missing-value checks run first, outside the
+    execution policy, so a refused call is never announced as running in the background.
     """
+    issues = placeholder_issues(definition)
+    if issues:
+        return misconfigured_handler(definition.name, f"{issues[0].field}: {issues[0].message}")
     request = (
         _mocked_request(
             definition.name,
             mocks[definition.name],
             source=f"http:{definition.name}",
             max_chars=definition.max_result_chars,
+            bindings=list(definition.bindings),
+            tool_context=tool_context,
         )
         if mocks and definition.name in mocks
-        else _request_for(definition, platform_allowed_hosts=platform_allowed_hosts, user_agent=user_agent)
+        else _request_for(
+            definition,
+            platform_allowed_hosts=platform_allowed_hosts,
+            user_agent=user_agent,
+            tool_context=tool_context,
+        )
     )
     if resolved is None:
-        return request
+
+        async def unpoliced(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+            return await request(_prepare_http(definition, raw_arguments, tool_context), context)
+
+        return unpoliced
 
     policy = resolved
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        result: str = await run_with_policy(context, policy, lambda: request(raw_arguments, context))
+        arguments = _prepare_http(definition, raw_arguments, tool_context)
+        result: str = await run_with_policy(context, policy, lambda: request(arguments, context))
         return result
 
     return handler
 
 
 def _request_for(
-    definition: HttpToolDefinition, *, platform_allowed_hosts: list[str] | None, user_agent: str | None = None
+    definition: HttpToolDefinition,
+    *,
+    platform_allowed_hosts: list[str] | None,
+    user_agent: str | None = None,
+    tool_context: ToolCallContext | None = None,
 ) -> Handler:
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
         arguments: dict[str, Any] = _with_schema_defaults(definition.parameters, dict(raw_arguments))
-        url = _render_url(definition.url, arguments)
+        missing: list[PlaceholderRef] = []
+        url = _render_url(definition.url, arguments, tool_context, missing)
+        if missing:
+            raise ToolError(missing_message(missing, tool_context))
         _reject_unresolved(url, where="url")
 
         try:
@@ -220,10 +343,12 @@ def _request_for(
         body: str | None = None
         if definition.method in ("POST", "PUT", "PATCH"):
             body = (
-                _render_json_string(definition.body_template, arguments)
+                _render_json_string(definition.body_template, arguments, tool_context, missing)
                 if definition.body_template is not None
                 else json.dumps(arguments)
             )
+            if missing:
+                raise ToolError(missing_message(missing, tool_context))
             _reject_unresolved(body, where="body")
 
         request_headers = dict(headers)
@@ -256,12 +381,25 @@ def _request_for(
         )
 
         result_text = raw.decode(response.encoding or "utf-8", errors="replace")
+        extracted: Any = None
         if definition.result_path:
             try:
                 payload = json.loads(result_text)
-                result_text = json.dumps(_resolve_json_pointer(payload, definition.result_path))
+                extracted = _resolve_json_pointer(payload, definition.result_path)
+                result_text = json.dumps(extracted)
             except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
                 raise ToolError(f"could not extract result_path {definition.result_path!r}: {exc}") from exc
+
+        if definition.bindings and 200 <= response.status_code < 300:
+            # V6-07 (D-V6-23): the lookup reaches the panel before the model reads it.
+            result = extracted if definition.result_path else parse_result(result_text)
+            await apply_bindings(
+                result,
+                definition.bindings,
+                tool_context,
+                tool=definition.name,
+                call_id=context.function_call.call_id,
+            )
 
         # V5-27 (S5-6, R-V5-15): a third-party body is data, never instructions.
         return fence(result_text, source=f"http:{definition.name}", max_chars=definition.max_result_chars)
@@ -277,6 +415,7 @@ def build_http_tool(
     execution_default: ToolExecutionMode = "blocking",
     flow_node: bool = False,
     mocks: ToolMocks | None = None,
+    context: ToolCallContext | None = None,
 ) -> RawFunctionTool[..., Any]:
     """Build one HTTP tool under its execution policy (docs/v4/BACKGROUND-TOOLS.md §4.2).
 
@@ -287,10 +426,15 @@ def build_http_tool(
     runs through `run_with_policy`. The tool carries a `ToolPolicy` whose
     ``rebind`` rebuilds it for another agent default or flow-ness
     (`execution.bind_agent_policy`).
+
+    V6-07: ``context`` is the session's :class:`~lkap_agent.tools.context.ToolCallContext`
+    (``{{ ctx.* }}``, ``{{ var.* }}`` and the panel for ``bindings``); a ``confirm_readback``
+    tool's schema gains the ``confirmed`` parameter.
     """
     parameters = definition.parameters
     if not isinstance(parameters, dict) or parameters.get("type") != "object":
         parameters = {"type": "object", "properties": {}, **(parameters or {})}
+    parameters = readback_parameters(parameters, definition.confirm_readback)
     resolved = resolve_execution(
         name=definition.name,
         kind="http",
@@ -307,6 +451,7 @@ def build_http_tool(
             user_agent=user_agent,
             resolved=resolved,
             mocks=mocks,
+            tool_context=context,
         ),
         raw_schema={
             "name": definition.name,
@@ -326,6 +471,7 @@ def build_http_tool(
             execution_default=default,
             flow_node=flow,
             mocks=mocks,
+            context=context,
         )
 
     policy = ToolPolicy(resolved=resolved, rebind=_rebind, built_with=(execution_default, flow_node))
@@ -341,6 +487,7 @@ def build_http_tools(
     execution_default: ToolExecutionMode = "blocking",
     flow_node: bool = False,
     mocks: ToolMocks | None = None,
+    context: ToolCallContext | None = None,
 ) -> list[RawFunctionTool[..., Any]]:
     """Build one `@function_tool(raw_schema=...)` per `HttpToolDefinition`.
 
@@ -361,6 +508,8 @@ def build_http_tools(
         mocks: V5-29, ``ResolvedAgentConfig.tool_mocks``: a tool (HTTP or connected-app
             action) named here returns its fixture, fenced like a real result, and never
             calls out. Only a test case's scratch session has any.
+        context: V6-07, the session's tool context (placeholders, bindings); ``main.py``
+            passes it only when a definition uses those features.
 
     Returns:
         One `RawFunctionTool` per definition, ready to pass to `Agent(tools=...)`.
@@ -378,13 +527,16 @@ def build_http_tools(
                         mocks[definition.name],
                         execution_default=execution_default,
                         flow_node=flow_node,
+                        context=context,
                     )
                 )
                 continue
             from lkap_agent.tools.provider import build_provider_tool  # noqa: PLC0415 - avoids a cycle
 
             tools.append(
-                build_provider_tool(definition, execution_default=execution_default, flow_node=flow_node)
+                build_provider_tool(
+                    definition, execution_default=execution_default, flow_node=flow_node, context=context
+                )
             )
             continue
         tools.append(
@@ -395,6 +547,7 @@ def build_http_tools(
                 execution_default=execution_default,
                 flow_node=flow_node,
                 mocks=mocks,
+                context=context,
             )
         )
     return tools
@@ -406,15 +559,20 @@ def build_mocked_provider_tool(
     *,
     execution_default: ToolExecutionMode = "blocking",
     flow_node: bool = False,
+    context: ToolCallContext | None = None,
 ) -> RawFunctionTool[..., Any]:
     """A connected-app action that returns ``fixture`` instead of calling the vendor (V5-29).
 
     Same name, schema and execution policy as `tools.provider.build_provider_tool` builds,
-    so the model sees the tool it would see in a real session.
+    so the model sees the tool it would see in a real session (V6-07: the same checks and
+    pins before the call, the same bindings on the fixture).
     """
-    parameters = definition.parameters
-    if not isinstance(parameters, dict) or parameters.get("type") != "object":
-        parameters = {"type": "object", "properties": {}, **(parameters or {})}
+    from lkap_agent.tools.provider import (  # noqa: PLC0415 - avoids a cycle
+        prepare_provider_arguments,
+        provider_parameters,
+    )
+
+    parameters = provider_parameters(definition)
     resolved = resolve_execution(
         name=definition.name,
         kind="provider",
@@ -429,10 +587,14 @@ def build_mocked_provider_tool(
         fixture,
         source=f"app:{definition.toolkit or definition.provider}",
         max_chars=definition.max_result_chars,
+        bindings=list(definition.bindings),
+        tool_context=context,
     )
+    tool_context = context
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        result: str = await run_with_policy(context, resolved, lambda: request(raw_arguments, context))
+        arguments = prepare_provider_arguments(definition, raw_arguments, tool_context)
+        result: str = await run_with_policy(context, resolved, lambda: request(arguments, context))
         return result
 
     tool = function_tool(
@@ -444,7 +606,9 @@ def build_mocked_provider_tool(
     )
 
     def _rebind(default: ToolExecutionMode, flow: bool) -> RawFunctionTool[..., Any]:
-        return build_mocked_provider_tool(definition, fixture, execution_default=default, flow_node=flow)
+        return build_mocked_provider_tool(
+            definition, fixture, execution_default=default, flow_node=flow, context=tool_context
+        )
 
     attach_policy(
         tool, ToolPolicy(resolved=resolved, rebind=_rebind, built_with=(execution_default, flow_node))
@@ -508,6 +672,7 @@ def build_mcp_toolsets(
     flow_node: bool = False,
     host_ceiling: HostCeiling = FROM_SETTINGS,
     oauth: McpOAuthBinding | None = None,
+    context: ToolCallContext | None = None,
 ) -> list[Any]:
     """Build one `MCPToolset` over a guarded server per `McpServerDefinition` whose URL is public.
 
@@ -538,6 +703,7 @@ def build_mcp_toolsets(
             reads the worker's settings.
         oauth: The session's access to its signed-in servers (V5-16); without it an
             `oauth` server is skipped.
+        context: V6-07, the session's tool context for servers with a ``tool_context``.
 
     Returns:
         `MCPToolset` instances, ready to pass to `Agent(tools=...)`.
@@ -548,6 +714,7 @@ def build_mcp_toolsets(
         transport_factory=transport_factory,
         host_ceiling=host_ceiling,
         oauth=oauth,
+        context=context,
     )
     if not servers:
         return []
@@ -590,6 +757,7 @@ def build_mcp_servers(
     flow_node: bool = False,
     host_ceiling: HostCeiling = FROM_SETTINGS,
     oauth: McpOAuthBinding | None = None,
+    context: ToolCallContext | None = None,
 ) -> list[Any]:
     """Deprecated alias of :func:`build_mcp_toolsets` (kept for one release; warns once).
 
@@ -610,6 +778,7 @@ def build_mcp_servers(
         flow_node=flow_node,
         host_ceiling=host_ceiling,
         oauth=oauth,
+        context=context,
     )
 
 
@@ -647,6 +816,7 @@ def _guarded_mcp_servers(
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
     host_ceiling: HostCeiling = FROM_SETTINGS,
     oauth: McpOAuthBinding | None = None,
+    context: ToolCallContext | None = None,
 ) -> list[tuple[McpServerDefinition, Any]]:
     """Build one guarded `MCPServerHTTP` per `McpServerDefinition` whose URL is public.
 
@@ -688,6 +858,9 @@ def _guarded_mcp_servers(
             `guarded_transport`. Tests pass a fake.
         host_ceiling: `Settings.mcp_host_ceiling`, or :data:`FROM_SETTINGS` to read it.
         oauth: The session's access to its signed-in servers (V5-16).
+        context: V6-07: a server whose ``tool_context`` names tools is built as a
+            :class:`~lkap_agent.tools.mcp_context.ContextMCPServerHTTP` over this context;
+            one whose definition places a session value where it may not is refused.
 
     Returns:
         ``(definition, server)`` pairs; :func:`build_mcp_toolsets` wraps each server
@@ -705,6 +878,9 @@ def _guarded_mcp_servers(
             if definition.origin is not None:
                 check_origin_host(definition.url)
             check_mcp_host(definition.url, ceiling)
+            issues = placeholder_issues(definition)
+            if issues:
+                raise HttpToolSecurityError(f"{issues[0].field}: {issues[0].message}")
             if isinstance(definition.auth, McpOAuthAuth):
                 access = oauth.access_for(definition) if oauth is not None else None
                 if oauth is None or access is None:
@@ -740,19 +916,24 @@ def _guarded_mcp_servers(
             if token is not None
             else base
         )
-        built.append(
-            (
-                definition,
-                GuardedMCPServerHTTP(
-                    url=definition.url,
-                    transport_type="streamable_http",
-                    allowed_tools=definition.allowed_tools,
-                    headers=definition.headers,
-                    timeout=definition.timeout_s,
-                    sse_read_timeout=definition.sse_read_timeout_s,
-                    transport_factory=factory,
-                    server_name=definition.name,
-                ),
+        options: dict[str, Any] = {
+            "url": definition.url,
+            "transport_type": "streamable_http",
+            "allowed_tools": definition.allowed_tools,
+            "headers": definition.headers,
+            "timeout": definition.timeout_s,
+            "sse_read_timeout": definition.sse_read_timeout_s,
+            "transport_factory": factory,
+            "server_name": definition.name,
+        }
+        if definition.tool_context:
+            # V6-07: pinned arguments, required variables, read-back and bindings per tool.
+            from lkap_agent.tools.mcp_context import ContextMCPServerHTTP  # noqa: PLC0415 - optional extra
+
+            server: Any = ContextMCPServerHTTP(
+                tool_context=definition.tool_context, context=context, **options
             )
-        )
+        else:
+            server = GuardedMCPServerHTTP(**options)
+        built.append((definition, server))
     return built

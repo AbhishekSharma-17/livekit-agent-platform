@@ -626,11 +626,16 @@ def _wire_optional_modules(deps: Deps) -> None:
     try:
         from lkap_agent.tools.declarative import build_http_tools, build_mcp_toolsets  # noqa: PLC0415
 
-        def _make_http(defs: list[Any], mocks: Any = None) -> list[Any]:
+        def _make_http(defs: list[Any], mocks: Any = None, context: Any = None) -> list[Any]:
             # V5-29 (ask #191): a test case's scratch session answers mocked tools from fixtures.
+            # V6-07: `context` is the session's tool context, passed only when a tool uses it.
             return list(
                 build_http_tools(
-                    defs, platform_allowed_hosts=allowed_hosts, user_agent=user_agent, mocks=mocks
+                    defs,
+                    platform_allowed_hosts=allowed_hosts,
+                    user_agent=user_agent,
+                    mocks=mocks,
+                    context=context,
                 )
             )
 
@@ -1557,6 +1562,20 @@ def _assemble(
     session_ctx.userdata["lkap.builtin_providers"] = dict(resolved.builtin_providers)
     # V5-31: the per-language voices with their keys; `languages.ensure_session_languages` reads them.
     session_ctx.userdata["lkap.language_voices"] = dict(resolved.voices_by_language)
+    # V6-07 (D-V6-22): what `{{ ctx.* }}`/`{{ var.* }}` read and bindings write, read lazily at
+    # call time. The builders get it only when a definition uses it, so an agent without those
+    # features is built exactly as before.
+    from lkap_agent.tools.context import ToolCallContext, uses_tool_context  # noqa: PLC0415
+
+    tool_context = ToolCallContext.for_session(
+        session_ctx,
+        participant_identity=resolved.participant_identity or None,
+        seed=seed_variables(resolved.variables),
+    )
+    http_definitions = [t for t in resolved.tools if t.kind in ("http", "provider")]
+    http_context: dict[str, Any] = (
+        {"context": tool_context} if any(uses_tool_context(t) for t in http_definitions) else {}
+    )
 
     tools: list[lk_llm.Tool | lk_llm.Toolset] = [
         *deps.builtin_tools_builder(
@@ -1565,9 +1584,7 @@ def _assemble(
             resolved.config.tools.http_request_enabled,
         ),
         # V5-47: `provider` (a connected app's action) is built by the same declarative builder.
-        *deps.declarative_tools_builder(
-            [t for t in resolved.tools if t.kind in ("http", "provider")], mocks=resolved.tool_mocks
-        ),
+        *deps.declarative_tools_builder(http_definitions, mocks=resolved.tool_mocks, **http_context),
         *pack.tools(session_ctx),
         *(
             telephony.tools(config=resolved.config, shutdown=lambda reason: ctx.shutdown(reason=reason))
@@ -1598,6 +1615,9 @@ def _assemble(
             record_event=emit,
         )
         mcp_builder = functools.partial(deps.mcp_servers_builder, oauth=oauth)
+    if any(uses_tool_context(t) for t in resolved.tools if t.kind == "mcp"):
+        # V6-07: MCP tools with pinned arguments, required variables, read-back or bindings.
+        mcp_builder = functools.partial(mcp_builder, context=tool_context)
     mcp_toolsets = mcp_builder([t for t in resolved.tools if t.kind == "mcp"], on_skipped=_on_mcp_skipped)
 
     agent: PlatformAgent

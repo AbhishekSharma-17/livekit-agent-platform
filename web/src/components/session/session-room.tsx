@@ -44,7 +44,10 @@ import {
   screenShareSupported,
   toAgentUiState,
 } from "@/components/session/session-state";
-import type { AvatarFit, AvatarFraming } from "@/components/session/avatar-framing";
+import {
+  stageAvatarFraming,
+  type StageAvatarFraming,
+} from "@/components/session/avatar-framing";
 import { useAgentRpc } from "@/hooks/useAgentRpc";
 import { useUiRequests } from "@/hooks/useUiRequests";
 import { useUiState } from "@/hooks/useUiState";
@@ -87,17 +90,14 @@ export interface SessionRoomProps {
   embed?: boolean;
   /**
    * V6-26 avatar framing: `AvatarOptions.framing`/`.fit` plus the selected
-   * avatar provider's declared native aspect, resolved by whichever caller
-   * has the full agent config. `agent` above is always the public-safe
-   * `AgentPublicOut`, which does not carry this yet — docs/v6/_asks.md #151
-   * tracks exposing it end to end. Unset (every caller today) renders the
-   * crop-free `auto` + `contain` default.
+   * avatar provider's declared native aspect. An explicit override; when
+   * unset (every session surface today) it is read from
+   * `agent.avatar_framing` (V6-26b, docs/v6/_asks.md #151) — the connect
+   * response's copy once connected, so `/s/[slug]`, the embed and the
+   * console's `?mode=test` preview all get the api's value. Neither set
+   * renders the crop-free `auto` + `contain` default.
    */
-  avatarFraming?: {
-    framing?: AvatarFraming | null;
-    fit?: AvatarFit | null;
-    declaredAspect?: AvatarFraming | null;
-  };
+  avatarFraming?: StageAvatarFraming;
   onRetry: () => void;
   /** Leave without ending the call normally (the failure overlay). The
    * reason travels back so the pre-call card can show it above Start. */
@@ -138,6 +138,8 @@ export function SessionRoom({
   const connectionState = toPanelConnectionState(session.connectionState);
   const panel = resolvePanel(uiPanelId ?? agent.ui_panel_id);
   const capabilities = agent.capabilities;
+  // V6-26b: an explicit override wins, else the agent's own public display hints.
+  const stageFraming = avatarFraming ?? stageAvatarFraming(agent.avatar_framing);
 
   /* ------------------------- §5.4 state model --------------------------- */
 
@@ -378,9 +380,9 @@ export function SessionRoom({
           agentState={agentState}
           compact={layout === "wide"}
           suppressAgentVideo={avatarInPanel}
-          framing={avatarFraming?.framing}
-          fit={avatarFraming?.fit}
-          declaredAspect={avatarFraming?.declaredAspect}
+          framing={stageFraming?.framing}
+          fit={stageFraming?.fit}
+          declaredAspect={stageFraming?.declaredAspect}
           elapsedMs={elapsedMs}
           audioBlocked={connectionState === "connected" && !canPlayAudio}
           onEnableAudio={startAudioProps.onClick}

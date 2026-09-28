@@ -312,6 +312,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "AgentUpdate": api_models.AgentUpdate,
     "AgentOut": api_models.AgentOut,
     "AgentPublicOut": api_models.AgentPublicOut,
+    "AgentAvatarFraming": api_models.AgentAvatarFraming,  # V6-26b
     "ValidationResult": api_models.ValidationResult,
     "ConfigVersionOut": api_models.ConfigVersionOut,
     "FlowValidateRequest": api_models.FlowValidateRequest,

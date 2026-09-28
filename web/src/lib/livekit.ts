@@ -28,6 +28,7 @@
 import { ConnectionState, TokenSource } from "livekit-client";
 
 import type {
+  AgentAvatarFraming,
   AgentOut,
   AgentPublicOut,
   ConnectRequest,
@@ -198,6 +199,24 @@ export function toPublicAgent(agent: AgentOut): AgentPublicOut {
     capabilities: agent.config.capabilities ?? {},
     pipeline_mode: agent.config.pipeline.mode ?? "cascaded",
     panel: storedPanelLayout(agent.config.panel, agent.ui_panel_id),
+    avatar_framing: avatarFramingOf(agent),
+  };
+}
+
+/**
+ * V6-26b (docs/v6/_asks.md #151): the same display hints the api's public view
+ * carries — `AvatarOptions.framing`/`.fit` as stored, `null` without an avatar.
+ * `declared_aspect` (the provider registry's `avatar_aspect`) is not in
+ * `AgentOut`, so it stays `null` here; once connected, test mode renders from
+ * `ConnectResponse.agent`, which the api fills in completely.
+ */
+function avatarFramingOf(agent: AgentOut): AgentAvatarFraming | null {
+  const pipeline = agent.config.pipeline;
+  if (!pipeline.avatar) return null;
+  return {
+    framing: pipeline.avatar_options?.framing ?? null,
+    fit: pipeline.avatar_options?.fit ?? null,
+    declared_aspect: null,
   };
 }
 

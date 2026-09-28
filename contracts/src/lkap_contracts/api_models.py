@@ -22,6 +22,8 @@ from pydantic import (
 from lkap_contracts.agent_config import (
     AgentConfig,
     AgentLimits,
+    AvatarFit,
+    AvatarFraming,
     CapabilitiesConfig,
     PanelLayout,
     PipelineMode,
@@ -353,6 +355,25 @@ class AgentOut(BaseModel):
     last_session_at: datetime | None = None
 
 
+class AgentAvatarFraming(BaseModel):
+    """How the session stage should frame the agent's avatar video (V6-26b, docs/v6/_asks.md #151).
+
+    Display hints only: the agent's ``AvatarOptions.framing``/``.fit`` exactly as stored (``None``
+    on an agent saved before V6-26, which renders like ``auto`` + ``contain``) and the selected
+    avatar provider's registry ``ProviderCapabilities.avatar_aspect``. Never a provider id,
+    credential id or any other pipeline config.
+    """
+
+    framing: AvatarFraming | None = None
+    """``AvatarOptions.framing``; ``None``/``auto`` defers to ``declared_aspect``, then the real
+    track's aspect once a frame arrives."""
+    fit: AvatarFit | None = None
+    """``AvatarOptions.fit``; ``None`` renders like ``contain`` (the whole avatar visible)."""
+    declared_aspect: Literal["portrait", "landscape", "square"] | None = None
+    """The avatar provider's documented native aspect (``ProviderCapabilities.avatar_aspect``),
+    ``None`` when the vendor documents none."""
+
+
 class AgentPublicOut(BaseModel):
     """What an unauthenticated browser may see about a published agent.
 
@@ -372,6 +393,10 @@ class AgentPublicOut(BaseModel):
     panel: PanelLayout
     capabilities: CapabilitiesConfig
     pipeline_mode: PipelineMode
+    avatar_framing: AgentAvatarFraming | None = None
+    """V6-26b: the avatar's display framing, ``None`` when the agent has no avatar (and on an
+    api older than V6-26b) — the session stage then renders its crop-free ``auto`` + ``contain``
+    default."""
 
 
 class ValidationResult(BaseModel):

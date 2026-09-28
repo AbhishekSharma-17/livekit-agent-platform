@@ -19,6 +19,7 @@ export interface LkapContracts {
   ActivityEvent?: ActivityEvent;
   AgentAction?: AgentAction;
   AgentActionResult?: AgentActionResult;
+  AgentAvatarFraming?: AgentAvatarFraming;
   AgentConfig?: AgentConfig;
   AgentCreate?: AgentCreate;
   AgentLimits?: AgentLimits;
@@ -468,6 +469,22 @@ export interface AgentActionResult {
   payload?: {
     [k: string]: unknown;
   };
+}
+/**
+ * How the session stage should frame the agent's avatar video (V6-26b, docs/v6/_asks.md #151).
+ *
+ * Display hints only: the agent's ``AvatarOptions.framing``/``.fit`` exactly as stored (``None``
+ * on an agent saved before V6-26, which renders like ``auto`` + ``contain``) and the selected
+ * avatar provider's registry ``ProviderCapabilities.avatar_aspect``. Never a provider id,
+ * credential id or any other pipeline config.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "AgentAvatarFraming".
+ */
+export interface AgentAvatarFraming {
+  declared_aspect?: ("portrait" | "landscape" | "square") | null;
+  fit?: ("contain" | "cover") | null;
+  framing?: ("auto" | "portrait" | "landscape" | "square") | null;
 }
 /**
  * The full, admin-editable configuration of one agent (stored as JSON).
@@ -2729,6 +2746,7 @@ export interface AgentPage {
  * via the `definition` "AgentPublicOut".
  */
 export interface AgentPublicOut {
+  avatar_framing?: AgentAvatarFraming | null;
   capabilities: CapabilitiesConfig;
   description: string;
   id: string;

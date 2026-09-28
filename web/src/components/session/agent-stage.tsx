@@ -57,12 +57,9 @@ export interface AgentStageProps {
   /**
    * V6-26 avatar framing — `AvatarOptions.framing`/`.fit` and the selected
    * avatar provider's declared native aspect. Every value defaults to
-   * `undefined` (auto + contain, the crop-free default): today `agent` on
-   * every caller of `SessionRoom` is the public-safe `AgentPublicOut`, which
-   * carries none of this yet (docs/v6/_asks.md #151 tracks exposing it), so
-   * these only ever have a live value where a caller passes one explicitly
-   * (a preview, a test, or `SessionRoom`'s own `avatarFraming` prop once a
-   * future package wires that ask up).
+   * `undefined` (auto + contain, the crop-free default). `SessionRoom` fills
+   * them from `AgentPublicOut.avatar_framing` (V6-26b, docs/v6/_asks.md
+   * #151), or from its own `avatarFraming` override when a caller passes one.
    */
   framing?: AvatarFraming | null;
   fit?: AvatarFit | null;

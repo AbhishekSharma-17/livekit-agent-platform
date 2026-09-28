@@ -86,12 +86,15 @@ exactly as it always has, minus the crop). `fit` defaults to `contain`
 (the whole avatar visible, letterboxed on `bg-stage`); `cover` biases its
 `object-position` to the upper third so a face is the last thing lost.
 
-`AgentPublicOut` (the shape every public session surface renders from) does
-not carry `AvatarOptions.framing`/`.fit` or the provider's `avatar_aspect`
-yet — `SessionRoom`'s `avatarFraming` prop and `AgentStage`'s
-`framing`/`fit`/`declaredAspect` props exist for a caller that has them, but
-today none does (docs/v6/_asks.md #151 tracks exposing them end to end). A
-stored agent renders the crop-free `auto` + `contain` default regardless.
+`AgentPublicOut.avatar_framing` (V6-26b, docs/v6/_asks.md #151) carries
+`AvatarOptions.framing`/`.fit` as stored plus the avatar provider's registry
+`avatar_aspect` (`declared_aspect`), `null` without an avatar. `SessionRoom`
+maps it (`stageAvatarFraming()`) onto `AgentStage`'s
+`framing`/`fit`/`declaredAspect` props unless its own `avatarFraming`
+override is set. It reads `ConnectResponse.agent` once connected, so
+`/s/[slug]`, the embed and the console's `?mode=test` preview (whose
+pre-connect `toPublicAgent()` copy has no `declared_aspect`) all render the
+api's value. A `null` value keeps the crop-free `auto` + `contain` default.
 
 ## Audio priming (§5.2)
 

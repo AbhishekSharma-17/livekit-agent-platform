@@ -27,7 +27,7 @@ from lkap_api.auth.deps import WorkspaceContext, require
 from lkap_api.connections import service
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ConflictError, UnprocessableEntityError
-from lkap_api.fleet import registry
+from lkap_api.fleet import readiness, registry
 from lkap_api.logging import get_logger
 
 log = get_logger(__name__)
@@ -44,14 +44,16 @@ FleetAdminDep = Annotated[WorkspaceContext, Depends(require("admin", "connection
     summary="Worker fleet of a connection",
     description=(
         "The pool's desired size (supervised connections; 0 otherwise), the worker processes that "
-        "registered for this connection (live ones plus those gone in the last hour) and the union "
-        "of the provider ids the live workers can construct."
+        "registered for this connection (live ones plus those gone in the last hour), the union "
+        "of the provider ids the live workers can construct, `ready_workers` (ready and heard from "
+        "within 90 s) and `shared_agent_name_workers` (ready workers of other connections under the "
+        "same agent name on the same LiveKit server; a count only)."
     ),
 )
 async def get_fleet(connection_id: str, ctx: FleetReaderDep, db: DbDep) -> FleetStatus:
     """Return the fleet status of one connection."""
     row = await service.get_connection(db, ctx.workspace_id, connection_id)
-    return await registry.fleet_status(db, row)
+    return await readiness.fleet_status_with_workers(db, row)
 
 
 @router.post(
@@ -110,4 +112,4 @@ async def fleet_action(
         payload={"replicas": replicas},
     )
     log.info("fleet_action", connection_id=row.id, action=payload.action, replicas=replicas)
-    return await registry.fleet_status(db, row)
+    return await readiness.fleet_status_with_workers(db, row)

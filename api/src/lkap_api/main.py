@@ -30,6 +30,7 @@ from lkap_api.agent_tests.router import router as agent_tests_router
 from lkap_api.body_limit import BodySizeLimitMiddleware, RequestBodyTooLargeError, error_body
 from lkap_api.bootstrap import bootstrap
 from lkap_api.custom_models.router import router as model_test_router
+from lkap_api.db.models import utcnow
 from lkap_api.db.session import Database
 from lkap_api.errors import ApiError
 from lkap_api.jobs.handlers import load_all_handlers
@@ -333,6 +334,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description=DESCRIPTION,
         lifespan=lifespan,
     )
+    # V6-27: when this api process started; the call-start worker check waits out the
+    # first heartbeat round after a restart (lkap_api.fleet.readiness.STARTUP_GRACE).
+    app.state.started_at = utcnow()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolved.cors_origins_list,

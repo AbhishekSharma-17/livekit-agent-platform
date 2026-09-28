@@ -14,6 +14,7 @@ import {
   instanceStatusTone,
   visibleInstances,
 } from "@/components/console/connections/connection-model";
+import { WorkerStatusNotice } from "@/components/console/connections/worker-status-notice";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useConnectionFleet, useFleetAction } from "@/hooks/useConnections";
@@ -24,7 +25,7 @@ import type { ConnectionOut } from "@/contracts/lkap-contracts";
  * docs/v2/_asks.md #48, V2-04's hand-off): desired replicas stepper,
  * Start/Stop/Restart, and the instances table. Supervised connections only —
  * external/cloud-hosted pools have nothing here to manage (V2-04's fleet
- * routes 409 for them).
+ * routes 409 for them). Every mode shows V6-27's worker status first.
  */
 export function FleetCard({ connection }: { connection: ConnectionOut }) {
   const supervised = connection.deployment_mode === "supervised";
@@ -38,12 +39,15 @@ export function FleetCard({ connection }: { connection: ConnectionOut }) {
 
   if (!supervised) {
     return (
-      <Alert>
-        <AlertDescription>
-          This connection is {connection.deployment_mode === "cloud_hosted" ? "cloud-hosted" : "external"} — the
-          worker pool isn&apos;t managed here. {connection.deployment_mode === "external" ? "See the Deploy tab for the environment an external worker needs." : "See the Deploy tab for the deploy bundle."}
-        </AlertDescription>
-      </Alert>
+      <div className="flex flex-col gap-4">
+        <WorkerStatusNotice connection={connection} />
+        <Alert>
+          <AlertDescription>
+            This connection is {connection.deployment_mode === "cloud_hosted" ? "cloud-hosted" : "external"} — the
+            worker pool isn&apos;t managed here. {connection.deployment_mode === "external" ? "See the Deploy tab for the environment an external worker needs." : "See the Deploy tab for the deploy bundle."}
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
@@ -70,6 +74,7 @@ export function FleetCard({ connection }: { connection: ConnectionOut }) {
 
   return (
     <div className="flex flex-col gap-5">
+      <WorkerStatusNotice connection={connection} showStart={false} />
       {health.mixedManagement ? (
         <Alert variant="warning">
           <AlertDescription>

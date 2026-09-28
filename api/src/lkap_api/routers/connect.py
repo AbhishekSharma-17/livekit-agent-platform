@@ -60,13 +60,14 @@ from lkap_api.auth.deps import (
 from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.auth.roles import role_at_least, scope_allows
 from lkap_api.connections.clients import ClientFactoryDep
-from lkap_api.connections.service import mint_session_token
+from lkap_api.connections.service import mint_session_token, resolve_agent_connection
 from lkap_api.costs.snapshot import attach_estimate
 from lkap_api.db.models import Agent, new_id
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.deps import DbDep, SettingsDep
 from lkap_api.errors import ForbiddenError, NotFoundError, UnprocessableEntityError
+from lkap_api.fleet import readiness
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.limits import live_session_count as live_session_count
 from lkap_api.limits import reserve_session_slot
@@ -156,7 +157,9 @@ def _check_metadata(metadata: dict[str, str]) -> None:
         "and choose the participant identity. The dispatch and its ID-only metadata are "
         "decided here, never by the client; the token lives `max_session_duration_s`. "
         "`participant_metadata.timezone` (the browser's IANA timezone) becomes the caller's "
-        "timezone for the agent; an unknown name is ignored."
+        "timezone for the agent; an unknown name is ignored. 409 `no_worker_running` when no "
+        "worker of the agent's connection is running (external and supervised connections; "
+        "`LKAP_CALL_START_WORKER_CHECK`)."
     ),
 )
 async def connect(
@@ -185,6 +188,8 @@ async def connect(
         RateLimitedError: A rate-limit bucket is empty.
         AgentBusyError: ``max_concurrent_sessions`` reached.
         UnprocessableEntityError: ``participant_metadata`` over 2 KB.
+        NoWorkerRunningError: V6-27 — nothing would answer the call (see
+            :func:`lkap_api.fleet.readiness.ensure_worker_ready`).
     """
     agent = await load_agent(db, id_or_slug)
     privileged = await is_privileged(db, principal, agent)
@@ -217,6 +222,14 @@ async def connect(
             capacity=limits.rate_per_agent_per_min,
             what="connects per minute for this agent",
         )
+    # V6-27: fail fast, before the slot is taken, when no worker would answer the call.
+    await readiness.ensure_worker_ready(
+        db,
+        await resolve_agent_connection(db, agent),
+        mode=settings.call_start_worker_check,
+        privileged=privileged,
+        api_started_at=readiness.api_started_at(request),
+    )
     # R-V2-34: count, insert and commit under the agent's slot lock, so a burst
     # cannot read the same count twice; the webhook is emitted after it is released.
     async with reserve_session_slot(db, agent, limits):

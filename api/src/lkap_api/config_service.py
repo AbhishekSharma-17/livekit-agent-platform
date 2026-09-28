@@ -83,6 +83,7 @@ from lkap_contracts.compliance import (
     Jurisdiction,
 )
 from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
+from lkap_contracts.extraction import extraction_issues
 from lkap_contracts.guardrails import (
     ClassifierRule,
     GuardrailsConfig,
@@ -105,6 +106,7 @@ from lkap_contracts.providers import (
     speech_streams,
     validate_model_id,
 )
+from lkap_contracts.rules import rule_issues
 from lkap_contracts.tool_context import (
     BINDING_BLOCK_TYPES,
     FORBIDDEN_BINDING_BLOCK_TYPES,
@@ -536,6 +538,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(agent_test_issues(ctx))
     findings.extend(amd_and_transfer_issues(ctx))
     findings.extend(guardrails_issues(ctx))
+    findings.extend(extraction_rules_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1678,6 +1681,80 @@ def tool_context_issues(ctx: ValidationContext) -> list[Issue]:
                         )
                     )
                     settable.add(variable)  # one warning per variable
+    return issues
+
+
+# ------------------------------------------------- live extraction and rules (V6-13)
+
+
+def extraction_rules_issues(ctx: ValidationContext) -> list[Issue]:
+    """The checks of ``extraction`` and ``rules`` (V6-13, D-V6-24/25); nothing for an agent without them.
+
+    The contract already refused what cannot parse (a condition outside the grammar, a
+    catastrophic pattern, a bad ``show_in``); this adds what needs the whole config
+    (:func:`lkap_contracts.extraction.extraction_issues`,
+    :func:`lkap_contracts.rules.rule_issues`): targets on the panel and of the right type,
+    ``node_exit`` steps that exist, variables something sets, and — when every attached tool's
+    name is known and none is an MCP server (whose tools are named by the server) — tool
+    names the agent has.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        Issues at ``extraction…`` and ``rules[i]…``.
+    """
+    config = ctx.config
+    if not config.rules and not config.extraction.enabled and not config.extraction.fields:
+        return []
+    from lkap_api.flows.validation import allowed_tool_names  # noqa: PLC0415 - it imports this module
+
+    blocks = list(config.panel.blocks)
+    flow = config.flow if config.flow is not None and config.flow.nodes else None
+    node_ids = [node.id for node in flow.nodes] if flow is not None else None
+    flow_extracted: dict[str, str] = {}
+    flow_variables: set[str] = set()
+    if flow is not None:
+        flow_variables = {variable.name for variable in flow.variables}
+        for node in flow.nodes:
+            for name in getattr(node, "extract", None) or []:
+                flow_extracted.setdefault(name, node.id)
+    known_tools: set[str] | None = None
+    definitions = ctx.tool_definitions_by_id
+    names_by_id = ctx.tool_names_by_id
+    if names_by_id is not None and all(tool_id in names_by_id for tool_id in config.tools.tool_ids):
+        has_mcp = definitions is None or any(
+            isinstance(definitions.get(tool_id), Mapping) and definitions[tool_id].get("kind") == "mcp"
+            for tool_id in config.tools.tool_ids
+        )
+        if not has_mcp:
+            known_tools = allowed_tool_names(
+                config, tool_names_by_id=names_by_id, pack_tool_names=ctx.pack_tool_names or ()
+            )
+            if ctx.pack_tool_names is None:
+                known_tools = None  # the pack is unknown: its tools could be named
+    issues = extraction_issues(
+        config.extraction,
+        blocks,
+        flow_node_ids=node_ids,
+        flow_extracted=flow_extracted,
+        known_tools=known_tools,
+        builtin_disabled=config.tools.builtin_disabled,
+    )
+    variables = {spec.name for spec in config.extraction.fields} | flow_variables
+    for tool_id in config.tools.tool_ids:
+        definition = (definitions or {}).get(tool_id)
+        if not isinstance(definition, Mapping):
+            continue
+        for _prefix, spec in _tool_context_specs(definition):
+            for binding in spec.get("bindings") or []:
+                to = str(binding.get("to") or "") if isinstance(binding, Mapping) else ""
+                if to.startswith("var:"):
+                    variables.add(to.removeprefix("var:"))
+    known_variables: set[str] | None = variables if definitions is not None else None
+    issues.extend(
+        rule_issues(list(config.rules), blocks, known_variables=known_variables, known_tools=known_tools)
+    )
     return issues
 
 

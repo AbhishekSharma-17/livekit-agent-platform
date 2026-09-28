@@ -1,0 +1,339 @@
+"""The live extraction runner (V6-13, D-V6-24): the generic form of the insurance ``ClaimWorkflow``.
+
+One :class:`ExtractionRunner` per session. :meth:`ExtractionRunner.run` reads the
+conversation so far, and unless the transcript is unchanged since the last successful run
+(a SHA-256 of the transcript and the field list: unchanged text costs nothing) makes **one**
+prompt-for-JSON call on the session's ``workflow_llm`` within :data:`EXTRACTION_BUDGET_S`
+seconds. It never raises and is always started in the background by
+:class:`~lkap_agent.extraction.session.LiveStructure`, so the reply is never delayed.
+
+Writes, in order:
+
+1. the values into the session's variable store (``tools.context.session_variables``: a
+   flow's ``FlowState.variables``, else ``userdata["lkap.variables"]``; ask #32), a ``null``
+   never overwriting a value, and the names into ``userdata["lkap.extracted_variables"]``
+   (so a flow fences them in its instructions, ask #31). Names a flow step's own ``extract``
+   lists are left to the step;
+2. each field's ``show_in`` row (``details:<block>[.<key>]``; ``notebook:`` targets are
+   skipped until the notebook block exists);
+3. the "still needed" checklist items (``need_<field>``) when ``still_needed`` is
+   ``checklist``, keeping every other item;
+4. one ``extraction`` session event (names and whether each is set; values only on the
+   ``full`` storage tier and never for a ``sensitive`` field).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import time
+from collections.abc import MutableMapping
+from dataclasses import dataclass, field
+from typing import Any, Final, Literal
+
+from livekit.agents import llm as lk_llm
+from lkap_contracts.extraction import (
+    EXTRACTION_BUDGET_S,
+    EXTRACTION_EVENT,
+    ExtractionConfig,
+    ExtractionEvent,
+    ExtractionField,
+    parse_show_in,
+    still_needed_item_id,
+)
+from lkap_contracts.flow import AgentNode
+from lkap_contracts.rules_expr import is_set
+from lkap_contracts.ui_protocol import ChecklistItem, UiPatchOp
+from pydantic import BaseModel
+
+from lkap_agent.flow.variables import (
+    EXTRACTED_VARIABLES_USERDATA_KEY,
+    coerce_variable,
+    transcript_text,
+    variables_model,
+)
+from lkap_agent.logging import get_logger
+from lkap_agent.tools.context import session_variables
+
+__all__ = ["ExtractionRun", "ExtractionRunner", "Trigger", "field_label"]
+
+_log = get_logger(__name__)
+
+Trigger = Literal["turn", "tool", "node_exit", "manual"]
+
+#: Longest value an ``extraction`` event carries (``full`` tier only).
+_MAX_EVENT_VALUE_CHARS: Final[int] = 200
+#: A little slack over the budget for a model client that ignores ``timeout_s``.
+_GUARD_S: Final[float] = 0.25
+
+_INSTRUCTIONS: Final[str] = (
+    "Extract the following facts from the conversation between a voice agent (assistant) and a "
+    "caller (user). Only use what the caller actually said or confirmed; never guess. When the "
+    "caller corrected something, use the corrected value. Use null for anything not stated."
+)
+
+
+def field_label(spec: ExtractionField) -> str:
+    """What the panel and the checklist call a field."""
+    return spec.label.strip() or spec.name.replace("_", " ").strip().capitalize()
+
+
+@dataclass(slots=True)
+class ExtractionRun:
+    """What one :meth:`ExtractionRunner.run` did (``None`` from ``run`` means: unchanged, skipped)."""
+
+    status: Literal["ok", "failed", "timeout"]
+    changed: list[str] = field(default_factory=list)
+    still_needed: list[str] = field(default_factory=list)
+    duration_ms: int = 0
+
+
+def _flow_owned(config: Any) -> set[str]:
+    flow = getattr(config, "flow", None)
+    names: set[str] = set()
+    for node in getattr(flow, "nodes", None) or []:
+        if isinstance(node, AgentNode):
+            names.update(node.extract)
+    return names
+
+
+class ExtractionRunner:
+    """Extracts ``AgentConfig.extraction.fields`` for one session (see the module docstring)."""
+
+    def __init__(self, ctx: Any, config: ExtractionConfig, *, budget_s: float = EXTRACTION_BUDGET_S) -> None:
+        """Bind the runner to a session.
+
+        Args:
+            ctx: The session's ``SessionContext`` (``workflow_llm``, ``session``, ``ui``,
+                ``userdata``, ``config``, ``record_event``).
+            config: ``AgentConfig.extraction`` (on, with fields).
+            budget_s: The wall-clock budget of one extraction call.
+        """
+        self.ctx = ctx
+        self.config = config
+        self.budget_s = budget_s
+        owned = _flow_owned(getattr(ctx, "config", None))
+        self.fields: list[ExtractionField] = [spec for spec in config.fields if spec.name not in owned]
+        self._schema: type[BaseModel] | None = (
+            variables_model([self._with_hint(spec) for spec in self.fields]) if self.fields else None
+        )
+        self._signature = json.dumps([spec.model_dump(mode="json") for spec in self.fields], sort_keys=True)
+        self._last_key: str | None = None
+
+    @staticmethod
+    def _with_hint(spec: ExtractionField) -> ExtractionField:
+        if not spec.hint:
+            return spec
+        description = f"{spec.description or field_label(spec)}. {spec.hint}".strip()
+        return spec.model_copy(update={"description": description})
+
+    # ------------------------------------------------------------------ reading
+
+    def variables(self) -> MutableMapping[str, Any]:
+        """The session's variable store (shared with tools, bindings, flows and rules)."""
+        return session_variables(self.ctx)
+
+    def still_needed(self) -> list[str]:
+        """The required fields not captured yet."""
+        store = self.variables()
+        return [
+            spec.name for spec in self.config.fields if spec.required and not is_set(store.get(spec.name))
+        ]
+
+    def _transcript(self) -> str:
+        try:
+            history = self.ctx.session.history
+        except Exception:
+            return ""
+        return transcript_text(history) if isinstance(history, lk_llm.ChatContext) else ""
+
+    def _instructions(self) -> str:
+        lines = [
+            f"- {spec.name} ({spec.type}): {spec.description or field_label(spec)}" for spec in self.fields
+        ]
+        for spec in self.fields:
+            if spec.hint:
+                lines.append(f"  {spec.name}: {spec.hint}")
+            if spec.type == "enum" and spec.options:
+                lines.append(f"  {spec.name} must be one of: {', '.join(spec.options)}")
+        return f"{_INSTRUCTIONS}\nFacts:\n" + "\n".join(lines)
+
+    # ------------------------------------------------------------------ running
+
+    async def run(self, trigger: Trigger) -> ExtractionRun | None:
+        """Extract now, unless nothing changed since the last successful run.
+
+        Returns:
+            What happened; ``None`` when there is nothing to do (no fields, an empty
+            transcript, or the same transcript as last time). Never raises.
+        """
+        if self._schema is None:
+            return None
+        transcript = self._transcript()
+        if not transcript.strip():
+            return None
+        key = hashlib.sha256(f"{self._signature}\n{transcript}".encode()).hexdigest()
+        if key == self._last_key:
+            _log.debug("extraction.unchanged", trigger=trigger)
+            return None
+        started = time.monotonic()
+        try:
+            result = await asyncio.wait_for(
+                self.ctx.workflow_llm.extract(
+                    instructions=self._instructions(),
+                    input_text=transcript,
+                    schema=self._schema,
+                    timeout_s=self.budget_s,
+                ),
+                timeout=self.budget_s + _GUARD_S,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            timed_out = isinstance(exc, TimeoutError) or "timed out" in str(exc)
+            run = ExtractionRun(
+                status="timeout" if timed_out else "failed",
+                still_needed=self.still_needed(),
+                duration_ms=int((time.monotonic() - started) * 1000),
+            )
+            _log.info("extraction.failed", trigger=trigger, status=run.status, error_type=type(exc).__name__)
+            self._record(trigger, run)
+            return run
+        raw = result.model_dump() if isinstance(result, BaseModel) else dict(result or {})
+        changed = self._write(raw)
+        self._last_key = key
+        run = ExtractionRun(
+            status="ok",
+            changed=changed,
+            still_needed=self.still_needed(),
+            duration_ms=int((time.monotonic() - started) * 1000),
+        )
+        await self._show(changed)
+        await self._still_needed_checklist()
+        self._record(trigger, run)
+        _log.debug("extraction.ok", trigger=trigger, changed=changed, duration_ms=run.duration_ms)
+        return run
+
+    def _write(self, raw: dict[str, Any]) -> list[str]:
+        store = self.variables()
+        userdata = getattr(self.ctx, "userdata", None)
+        marked: set[str] | None = None
+        if isinstance(userdata, dict):
+            current = userdata.setdefault(EXTRACTED_VARIABLES_USERDATA_KEY, set())
+            marked = current if isinstance(current, set) else None
+        changed: list[str] = []
+        for spec in self.fields:
+            value = coerce_variable(spec, raw.get(spec.name))
+            if value is None:
+                continue  # a null never overwrites a captured value
+            if store.get(spec.name) != value:
+                store[spec.name] = value
+                changed.append(spec.name)
+            if marked is not None:
+                marked.add(spec.name)
+        return changed
+
+    # ------------------------------------------------------------------ the panel
+
+    def _block_types(self) -> dict[str, str]:
+        from lkap_agent.ui.blocks import session_block_specs  # noqa: PLC0415 - avoids an import cycle
+
+        panel = getattr(getattr(self.ctx, "config", None), "panel", None)
+        specs = session_block_specs(self.ctx.ui, panel) if panel is not None else []
+        return {spec.id: str(spec.type) for spec in specs}
+
+    async def _show(self, changed: list[str]) -> None:
+        """Write each changed field's ``show_in`` row (details blocks; notebook targets wait for V6-08)."""
+        wanted = [spec for spec in self.fields if spec.name in changed and spec.show_in]
+        if not wanted:
+            return
+        from lkap_agent.tools.builtin.set_details import DetailIn, detail_item  # noqa: PLC0415
+
+        types = self._block_types()
+        store = self.variables()
+        ops: dict[str, list[UiPatchOp]] = {}
+        for spec in wanted:
+            try:
+                target = parse_show_in(spec.show_in or "")
+            except ValueError:
+                continue
+            if target.kind != "details" or types.get(target.block_id) != "details":
+                _log.debug("extraction.show_in_skipped", field=spec.name, kind=target.kind)
+                continue
+            key = target.key or spec.name
+            state = self.ctx.ui.state.blocks.get(target.block_id) or {}
+            rows = state.get("items") if isinstance(state, dict) else None
+            existing = next((r for r in rows or [] if isinstance(r, dict) and r.get("key") == key), None)
+            value = store.get(spec.name)
+            text = ("yes" if value else "no") if isinstance(value, bool) else str(value)
+            row = detail_item(
+                DetailIn(key=key, value=text[:500], label=field_label(spec)), existing, now=time.time()
+            )
+            ops.setdefault(target.block_id, []).append(
+                UiPatchOp(op="upsert", path="/items", value=row, key=key)
+            )
+        for block_id, block_ops in ops.items():
+            try:
+                await self.ctx.ui.patch_block(block_id, block_ops)
+            except Exception:
+                _log.debug("extraction.show_failed", block_id=block_id, exc_info=True)
+
+    async def _still_needed_checklist(self) -> None:
+        """Merge the ``need_<field>`` items into the checklist, keeping every other item."""
+        if self.config.still_needed != "checklist":
+            return
+        store = self.variables()
+        current: list[ChecklistItem] = list(self.ctx.ui.state.checklist)
+        by_id = {item.id: index for index, item in enumerate(current)}
+        items = list(current)
+        for spec in self.config.fields:
+            if not spec.required:
+                continue
+            item_id = still_needed_item_id(spec.name)
+            done = is_set(store.get(spec.name))
+            index = by_id.get(item_id)
+            if index is None:
+                items.append(
+                    ChecklistItem(id=item_id, label=field_label(spec), done=done, hint=spec.hint or None)
+                )
+            elif items[index].done != done:
+                items[index] = items[index].model_copy(update={"done": done})
+        if items != current:
+            try:
+                await self.ctx.ui.set_checklist(items)
+            except Exception:
+                _log.debug("extraction.checklist_failed", exc_info=True)
+
+    async def refresh_panel(self) -> None:
+        """Show the still-needed list before the first extraction (the first caller turn)."""
+        await self._still_needed_checklist()
+
+    # ------------------------------------------------------------------ the event
+
+    def _record(self, trigger: Trigger, run: ExtractionRun) -> None:
+        store = self.variables()
+        privacy = getattr(getattr(self.ctx, "config", None), "privacy", None)
+        full = getattr(privacy, "storage_tier", "full") == "full"
+        values: dict[str, Any] | None = None
+        if full and run.changed:
+            sensitive = {spec.name for spec in self.config.fields if spec.sensitive}
+            values = {}
+            for name in run.changed:
+                if name in sensitive:
+                    continue
+                value = store.get(name)
+                values[name] = value[:_MAX_EVENT_VALUE_CHARS] if isinstance(value, str) else value
+        event = ExtractionEvent(
+            trigger=trigger,
+            status=run.status,
+            duration_ms=run.duration_ms,
+            fields={spec.name: is_set(store.get(spec.name)) for spec in self.config.fields},
+            changed=list(run.changed),
+            still_needed=list(run.still_needed),
+            values=values or None,
+        )
+        try:
+            self.ctx.record_event(EXTRACTION_EVENT, event.model_dump(mode="json", exclude_none=True))
+        except Exception:
+            _log.debug("extraction.event_failed", exc_info=True)

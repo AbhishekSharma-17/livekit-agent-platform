@@ -37,6 +37,7 @@ from .describe_current_frame import build_describe_current_frame_tool
 from .describe_panel import build_describe_panel_tool
 from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
+from .extract_now import build_extract_now_tool
 from .fetch_url import build_fetch_url_tool
 from .generate_image import build_generate_image_tool
 from .http_request import build_http_request_tool
@@ -83,6 +84,7 @@ __all__ = [
     "build_end_call_tool",
     "build_escalate_to_human_tool",
     "build_fetch_url_tool",
+    "build_extract_now_tool",
     "build_generate_image_tool",
     "build_http_request_tool",
     "build_notify_team_tool",
@@ -203,6 +205,8 @@ def build_builtin_tools(
         V6-06: `set_checklist` and `check_item` for a `checklist` block;
         `generate_image` when the session has an image model (`ctx.image_gen`,
         from `pipeline.image_gen`) and the panel has a `gallery` block.
+        V6-13: `extract_now` when `extraction` is on with a `manual` trigger; the
+        session's live extraction and rules are built (and start listening) here.
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -359,6 +363,13 @@ def build_builtin_tools(
         tools.append(build_check_item_tool(ctx))
     if getattr(ctx, "image_gen", None) is not None and "gallery" in block_types and _want("generate_image"):
         tools.append(build_generate_image_tool(ctx))
+    # V6-13: the session's live extraction and rules listen from here (every session is assembled
+    # through this builder before any tool runs); nothing is built for an agent without them.
+    from lkap_agent.extraction.session import live_structure, wants_extract_now  # noqa: PLC0415
+
+    live_structure(ctx)
+    if wants_extract_now(ctx.config) and _want("extract_now"):
+        tools.append(build_extract_now_tool(ctx))
     # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one.
     holds_pictures = bool(block_types & {"upload", "form"}) or has_vision
     if holds_pictures and _want("describe_asset") and vision_llm(ctx) is not None:

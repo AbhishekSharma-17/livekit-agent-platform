@@ -76,6 +76,7 @@ CONCEPT_TOPICS: Final[tuple[str, ...]] = (
     "tools",  # V5-25: built-ins and tool templates
     "testing",  # V5-29: simulated callers, judges, the publish gate
     "memory",  # V5-40: caller memory, forget and purge
+    "extraction",  # V6-13: live extraction and declarative rules
 )
 
 #: The 10 recipes of AGENT-ACCESS.md §3.1.

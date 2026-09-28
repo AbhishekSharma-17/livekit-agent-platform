@@ -316,6 +316,10 @@ def register(registry: Registry) -> None:
         Timezones (docs ``concepts/agents``): ``timezone`` is the business timezone (IANA name);
         ``patch={"locale": {"caller_timezone": "business"}}`` makes the agent use it for the
         caller too instead of detecting the caller's own zone (``detect``, the default).
+
+        Live extraction and rules (docs ``concepts/extraction``): ``patch={"extraction": {"enabled":
+        true, "fields": [...]}, "rules": [{"id", "when": "var.hazard matches /fire/i", "then": [...]}]}``
+        captures facts into the session's variables in the background and reacts to them.
         """
         if patch is not None and config is not None:
             return ToolResult.fail("invalid_input", "pass either patch or config, not both")

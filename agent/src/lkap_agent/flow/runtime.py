@@ -99,6 +99,7 @@ from lkap_agent.flow.variables import (
     referenced_variables,
     render_template,
     transcript_text,
+    untrusted_variable_sources,
 )
 from lkap_agent.locale import ensure_session_locale, session_locale
 from lkap_agent.logging import get_logger
@@ -363,13 +364,20 @@ class FlowRuntime:
         `instructions`.
         """
         variables = self.state.variables
+        # V6-13 (ask #31): bound and live-extracted values are fenced in the instructions.
+        untrusted = untrusted_variable_sources(getattr(self.services.ctx, "userdata", None))
+        unknown = "(not yet known)"
         parts: list[str] = [
-            render_template(self.services.ctx.config.instructions, variables, missing="(not yet known)")
+            render_template(
+                self.services.ctx.config.instructions, variables, missing=unknown, untrusted=untrusted
+            )
         ]
         if self._global is not None:
-            parts.append(render_template(self._global.instructions, variables, missing="(not yet known)"))
+            parts.append(
+                render_template(self._global.instructions, variables, missing=unknown, untrusted=untrusted)
+            )
         if isinstance(node, AgentNode):
-            parts.append(render_template(node.instructions, variables, missing="(not yet known)"))
+            parts.append(render_template(node.instructions, variables, missing=unknown, untrusted=untrusted))
         else:
             parts.append(ROUTER_INSTRUCTIONS)
         edges = self._out.get(node.id)
@@ -378,7 +386,7 @@ class FlowRuntime:
                 f"Conversation flow: you are in the step '{node.label or node.id}'. "
                 f"Your next steps: {self._transitions_text(edges)}. {TRANSITION_RULE}"
             )
-        known = known_variables_block(variables, self.spec.variables)
+        known = known_variables_block(variables, self.spec.variables, untrusted=untrusted)
         if known:
             parts.append(known)
         base = "\n\n".join(p.strip() for p in parts if p and p.strip())

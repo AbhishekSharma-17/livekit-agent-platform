@@ -10,13 +10,15 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
+import respx
 from fakes.fake_api import FakeApi, resolved_config
 from fakes.fake_llm import FakeLLM
 from livekit.agents import RunContext, ToolError, function_tool, llm
 from lkap_contracts.agent_config import ResolvedAgentConfig
 from lkap_contracts.flow import FlowSpec
-from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
+from lkap_contracts.tools import DatasetToolDefinition, HttpToolDefinition, McpServerDefinition
 from test_flow_runtime import ScriptedLLM, ToolCall, _FlowFactory, _history_kinds, _wait_for
 from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
 
@@ -25,7 +27,8 @@ from lkap_agent.flow.runtime import TOOL_STEP_FAILED_LINE
 from lkap_agent.flow.tool_node import is_empty_result, render_arguments, unfence
 from lkap_agent.main import run_session
 from lkap_agent.tools.context import BOUND_VARIABLES_USERDATA_KEY, ToolCallContext
-from lkap_agent.tools.declarative import build_http_tools
+from lkap_agent.tools.dataset import build_dataset_tool
+from lkap_agent.tools.declarative import build_http_tools, note_http_status
 from lkap_agent.tools.untrusted import fence
 
 # ------------------------------------------------------------------ pure helpers
@@ -485,3 +488,121 @@ async def test_tool_step_whose_server_does_not_start_takes_the_error_edge_and_st
     await ctx.fire_shutdown("done")
     (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
     assert (ended["outcome"], ended["reason"]) == ("error", "unavailable")
+
+
+# ------------------------------------------------------------------ ask #116: HTTP status and dataset lookups
+
+
+def _status_tool(calls: list[dict[str, Any]], status: int, body: str) -> Any:
+    """A raw tool that records an HTTP status on its call, as the declarative HTTP tool does."""
+
+    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+        calls.append(dict(raw_arguments))
+        note_http_status(context, status)
+        return fence(body, source="http:policy_lookup")
+
+    return function_tool(
+        handler,
+        raw_schema={
+            "name": "policy_lookup",
+            "description": "Look up a policy.",
+            "parameters": LOOKUP_ROW.parameters,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "target", "outcome", "reason"),
+    [
+        (404, "sorry", "empty", "not_found"),
+        (410, "sorry", "empty", "not_found"),
+        (500, "oops", "error", "http_status"),
+        (403, "oops", "error", "http_status"),
+        (200, "found", "ok", "ok"),
+    ],
+)
+async def test_tool_step_branches_on_the_http_status_the_tool_recorded(
+    status: int, target: str, outcome: str, reason: str
+) -> None:
+    """A 500 with a JSON body that the binding could read is still an error; a 404 is `empty`."""
+    calls: list[dict[str, Any]] = []
+    conversation = ScriptedLLM(["Hi.", ToolCall("go_to_lookup"), "Next step here."])
+    api, ctx, starter = await _start(
+        _config(_lookup_flow()),
+        conversation,
+        lambda _defs, **_: [_status_tool(calls, status, '{"holder": "Ada"}')],
+    )
+    session = starter.session
+    assert session is not None
+    await session.run(user_input="My policy number is P-1.")
+    await _wait_for(lambda: session.current_agent.id == target)
+    state = session.userdata
+    assert isinstance(state, FlowUserdata)
+    assert ("holder" in state.flow.variables) is (outcome == "ok")  # no binding off a non-2xx answer
+    await ctx.fire_shutdown("done")
+    (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
+    assert (ended["outcome"], ended["reason"]) == (outcome, reason)
+
+
+@respx.mock
+async def test_the_declarative_http_tool_records_its_status_for_the_tool_step() -> None:
+    respx.get("https://api.example.com/policies/P-1").mock(
+        return_value=httpx.Response(404, json={"holder": "Ada", "error": "no such policy"})
+    )
+    conversation = ScriptedLLM(["Hi.", ToolCall("go_to_lookup"), "Sorry."])
+    api, ctx, starter = await _start(_config(_lookup_flow()), conversation, _real_builder)
+    session = starter.session
+    assert session is not None
+    await session.run(user_input="It is P-1.")
+    await _wait_for(lambda: session.current_agent.id == "sorry")
+    await ctx.fire_shutdown("done")
+    (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
+    assert (ended["outcome"], ended["reason"]) == ("empty", "not_found")
+
+
+def _real_builder(defs: list[Any], **kwargs: Any) -> list[Any]:
+    return build_http_tools(defs, platform_allowed_hosts=["api.example.com"], **kwargs)
+
+
+DATASET_ROW = DatasetToolDefinition(
+    name="policy_lookup",
+    description="Look up a policy.",
+    dataset_id="ds1",
+    key_columns=["policy"],
+)
+
+
+@pytest.mark.parametrize(
+    ("rows", "target", "outcome"), [([], "sorry", "empty"), ([{"holder": "Ada"}], "found", "ok")]
+)
+async def test_a_dataset_lookup_that_finds_nothing_is_the_empty_outcome(
+    rows: list[dict[str, Any]], target: str, outcome: str
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def _factory() -> httpx.AsyncClient:
+        def handle(request: httpx.Request) -> httpx.Response:
+            sent.append(json.loads(request.content))
+            return httpx.Response(
+                200, json={"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": rows}
+            )
+
+        return httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handle))
+
+    def _builder(defs: list[Any], **kwargs: Any) -> list[Any]:
+        return [build_dataset_tool(d, context=kwargs.get("context"), client_factory=_factory) for d in defs]
+
+    flow = _lookup_flow(arguments={"policy": "{{ var.policy_no }}"})
+    lookup = next(n for n in flow["nodes"] if n["id"] == "lookup")
+    lookup["bindings"] = [{"path": "/0/holder", "to": "var:holder"}]
+    resolved = _config(flow).model_copy(update={"tools": [DATASET_ROW]})
+    conversation = ScriptedLLM(["Hi.", ToolCall("go_to_lookup"), "Next."])
+    api, ctx, starter = await _start(resolved, conversation, _builder)
+    session = starter.session
+    assert session is not None
+    await session.run(user_input="It is P-1.")
+    await _wait_for(lambda: session.current_agent.id == target)
+    await ctx.fire_shutdown("done")
+    assert sent and sent[0]["keys"] == {"policy": "P-1"} and sent[0]["session_id"]
+    (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
+    assert ended["outcome"] == outcome

@@ -93,6 +93,19 @@ Handler = Callable[[dict[str, object], RunContext[Any]], Awaitable[str]]
 #: session returns instead of calling out. Empty for every real session.
 ToolMocks = Mapping[str, Any]
 
+#: Ask #116 (V6-17): the ``FunctionCall.extra`` key an HTTP tool records its answer's status in
+#: (a dataset lookup records 404 when it found nothing), so a flow ``tool`` step can branch on it
+#: (404/410 → ``empty``, other non-2xx → ``error``). Provider formatters send only their own
+#: ``extra`` keys (livekit-agents 1.8.3 ``_provider_format``), so it never reaches a model.
+HTTP_STATUS_EXTRA: Final = "lkap.http_status"
+
+
+def note_http_status(context: RunContext[Any], status: int) -> None:
+    """Record ``status`` on the call being run (:data:`HTTP_STATUS_EXTRA`); a no-op without ``extra``."""
+    extra = getattr(getattr(context, "function_call", None), "extra", None)
+    if isinstance(extra, dict):
+        extra[HTTP_STATUS_EXTRA] = status
+
 
 def mock_result_text(fixture: Any) -> str:
     """A mock fixture as the tool's result text: a string as-is, anything else as JSON."""
@@ -370,6 +383,7 @@ def _request_for(
         except httpx.HTTPError as exc:
             # V5-27: the exception text can carry the url, and the api substituted secrets into it.
             raise ToolError(f"HTTP request failed ({type(exc).__name__})") from exc
+        note_http_status(context, response.status_code)  # ask #116: a flow tool step reads it
 
         _log.debug(
             "declarative_tool.http_call",

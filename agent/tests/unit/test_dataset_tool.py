@@ -24,7 +24,7 @@ from lkap_contracts.ui_protocol import BlockSpec
 
 from lkap_agent.tools.context import VARIABLES_USERDATA_KEY, ToolCallContext, uses_tool_context
 from lkap_agent.tools.dataset import build_dataset_tool, dataset_parameters
-from lkap_agent.tools.declarative import build_http_tools
+from lkap_agent.tools.declarative import HTTP_STATUS_EXTRA, build_http_tools
 from lkap_agent.tools.execution import policy_of
 
 PHONE = "+91 98765 43210"
@@ -233,3 +233,17 @@ async def test_the_declarative_builder_builds_a_mocked_lookup_from_its_fixture()
 
     assert result.startswith('<untrusted source="dataset:lookup_policy">')
     assert "PD-1001" in result
+
+
+@pytest.mark.parametrize(("rows", "status"), [(ROWS, 200), ([], 404)])
+async def test_the_lookup_records_found_or_not_found_on_the_call(rows: list[Any], status: int) -> None:
+    """Ask #116: a flow tool step reads "found nothing" as HTTP 404 (its `empty` outcome)."""
+    api = _Api(body={"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": rows})
+    tool = build_dataset_tool(_definition(), context=ToolCallContext(_session()), client_factory=api.factory)
+    run = FakeRunContext(name="lookup_policy", call_id="call-3")
+    extra: dict[str, Any] = {}
+    cast(Any, run.function_call).extra = extra
+
+    await tool(raw_arguments={"policy_number": "PD-1001"}, context=cast(RunContext[Any], run))
+
+    assert extra == {HTTP_STATUS_EXTRA: status}

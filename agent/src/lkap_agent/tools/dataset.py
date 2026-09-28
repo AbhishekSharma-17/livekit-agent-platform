@@ -38,6 +38,7 @@ from lkap_agent.logging import get_logger
 from lkap_agent.settings import get_settings
 from lkap_agent.tools.bindings import apply_bindings
 from lkap_agent.tools.context import ToolCallContext, check_requires, format_value, hide_pinned, pin_arguments
+from lkap_agent.tools.declarative import note_http_status
 from lkap_agent.tools.execution import (
     ToolPolicy,
     attach_policy,
@@ -209,6 +210,8 @@ def _request(
             match=definition.match,
             rows=len(rows),
         )
+        # Ask #116: a flow tool step reads "found nothing" like an HTTP 404 (the `empty` outcome).
+        note_http_status(context, 200 if rows else 404)
         if not rows:
             return "No matching record was found. Check the details with the caller before trying again."
         if definition.bindings:

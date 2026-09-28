@@ -41,6 +41,7 @@ _NODE_MODELS = {
     "global": "GlobalNode",
     "transfer": "TransferNode",
     "qa": "QaNode",
+    "tool": "ToolNode",
 }
 
 

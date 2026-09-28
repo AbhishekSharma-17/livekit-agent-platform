@@ -77,6 +77,7 @@ from lkap_contracts.flow import (
     GlobalNode,
     QaNode,
     StartNode,
+    ToolNode,
     TransferNode,
     VariableSpec,
 )
@@ -210,6 +211,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "GlobalNode": GlobalNode,
     "TransferNode": TransferNode,
     "QaNode": QaNode,
+    "ToolNode": ToolNode,
     # ui protocol
     "UiState": UiState,
     "UiSnapshot": UiSnapshot,

@@ -28,6 +28,14 @@ Two entry points:
   - **variables**: ``extract`` names an undeclared variable → ``error`` (the
     worker skips it); ``{{ name }}`` placeholders of undeclared variables →
     ``warning``.
+  - **tool steps (V6-17, D-V6-28)**: a ``tool`` node calls one of the agent's attached
+    tools (a built-in or pack tool is an ``error``); a server of tools needs ``mcp_tool``
+    (one it offers), any other tool must not have one; a tool that reads values back to
+    the caller first cannot run as a step (``error``); ``var:`` bindings write flow (or
+    captured) variables only; its bindings' blocks exist on the panel and are of the right
+    type; a ``{{ var.* }}`` nothing sets, an argument the tool requires and the step does
+    not give, an argument the tool does not have, and a step without an ``error`` path are
+    ``warning``s.
 
 * :func:`draft_flow_issues` — structural checks of an unsaved flow with an
   addressable path per finding (``FlowSpec``'s own validator raises one
@@ -53,13 +61,21 @@ from lkap_contracts.flow import (
     FlowSpec,
     GlobalNode,
     QaNode,
+    ToolNode,
     VariableSpec,
+    tool_only_cycles,
 )
 from lkap_contracts.providers import get
+from lkap_contracts.tool_context import context_placeholders
 from lkap_contracts.tools import BLOCK_TOOL_TYPES, BUILTIN_TOOL_NAMES, VISION_TOOL_NAMES
 from pydantic import TypeAdapter, ValidationError
 
-from lkap_api.config_service import INFERENCE_DEFAULT, ValidationContext, register_validator
+from lkap_api.config_service import (
+    INFERENCE_DEFAULT,
+    ValidationContext,
+    _binding_target_issue,
+    register_validator,
+)
 from lkap_api.packs import discover_manifests
 from lkap_api.settings import get_settings
 
@@ -343,8 +359,10 @@ def _variable_issues(flow: FlowSpec) -> list[Issue]:
                         severity="warning",
                     )
                 )
+    tool_steps = {node.id for node in flow.nodes if isinstance(node, ToolNode)}
     for j, edge in enumerate(flow.edges):
-        if not edge.condition.strip():
+        if not edge.condition.strip() and edge.source not in tool_steps:
+            # A tool step's paths are chosen by the outcome, never by the model (V6-17).
             issues.append(
                 Issue(
                     path=f"flow.edges[{j}].condition",
@@ -386,6 +404,174 @@ def _qa_issues(config: AgentConfig, flow: FlowSpec) -> list[Issue]:
     ]
 
 
+# ---------------------------------------------------------------------- tool steps
+def _settable_variables(ctx: ValidationContext, flow: FlowSpec) -> set[str]:
+    """Every variable something can set: flow variables, captured fields, ``var:`` bindings."""
+    config = ctx.config
+    names = {variable.name for variable in flow.variables}
+    names.update(field.name for field in config.extraction.fields)
+    bindings: list[Any] = [b.to for node in flow.nodes if isinstance(node, ToolNode) for b in node.bindings]
+    for definition in (ctx.tool_definitions_by_id or {}).values():
+        specs: list[Any] = [definition]
+        if definition.get("kind") == "mcp" and isinstance(definition.get("tool_context"), Mapping):
+            specs = list(definition["tool_context"].values())
+        for spec in specs:
+            for binding in (spec.get("bindings") or []) if isinstance(spec, Mapping) else []:
+                if isinstance(binding, Mapping):
+                    bindings.append(binding.get("to"))
+    names.update(
+        str(to).strip().removeprefix("var:") for to in bindings if str(to).strip().startswith("var:")
+    )
+    return names
+
+
+def _server_tool_names(definition: Mapping[str, Any]) -> set[str] | None:
+    """The tools a server offers as far as the api knows (``allowed_tools``, else the cached list)."""
+    allowed = definition.get("allowed_tools")
+    if isinstance(allowed, list) and allowed:
+        return {str(name) for name in allowed}
+    cached = definition.get("cached_tools")
+    if isinstance(cached, list) and cached:
+        return {str(tool.get("name")) for tool in cached if isinstance(tool, Mapping)}
+    return None
+
+
+def _definition_issues(node: ToolNode, definition: Mapping[str, Any], path: str) -> list[Issue]:
+    """What a tool step's definition allows: the server's tool, read-back, the arguments."""
+    issues: list[Issue] = []
+    kind = definition.get("kind", "http")
+    name = node.tool
+    spec: Mapping[str, Any] = definition
+    if kind == "mcp":
+        if not node.mcp_tool:
+            return [
+                Issue(path=f"{path}.mcp_tool", message=f"choose which of '{name}'s tools this step calls")
+            ]
+        offered = _server_tool_names(definition)
+        if offered is not None and node.mcp_tool not in offered:
+            issues.append(
+                Issue(path=f"{path}.mcp_tool", message=f"'{name}' does not offer a tool '{node.mcp_tool}'")
+            )
+        per_tool = definition.get("tool_context")
+        spec = per_tool.get(node.mcp_tool, {}) if isinstance(per_tool, Mapping) else {}
+        spec = spec if isinstance(spec, Mapping) else {}
+    elif node.mcp_tool:
+        issues.append(
+            Issue(path=f"{path}.mcp_tool", message=f"'{name}' is a single tool; leave the server tool empty")
+        )
+    if spec.get("confirm_readback"):
+        issues.append(
+            Issue(
+                path=f"{path}.tool",
+                message=f"'{node.mcp_tool or name}' reads values back to the caller before it runs, so it "
+                "cannot run as a tool step; call it from an agent step instead",
+            )
+        )
+    parameters = definition.get("parameters") if kind in ("http", "provider") else None
+    properties = parameters.get("properties") if isinstance(parameters, Mapping) else None
+    if isinstance(properties, Mapping):
+        pinned = definition.get("pinned_arguments") or {}
+        given = set(node.arguments) | set(pinned if isinstance(pinned, Mapping) else {})
+        for argument in node.arguments:
+            if argument not in properties:
+                issues.append(
+                    Issue(
+                        path=f"{path}.arguments.{argument}",
+                        message=f"'{name}' has no argument '{argument}', so it is ignored or refused",
+                        severity="warning",
+                    )
+                )
+        for required in parameters.get("required") or [] if isinstance(parameters, Mapping) else []:
+            schema = properties.get(required)
+            has_default = isinstance(schema, Mapping) and schema.get("default") is not None
+            if required not in given and not has_default:
+                issues.append(
+                    Issue(
+                        path=f"{path}.arguments",
+                        message=f"'{name}' needs '{required}', which this step does not give",
+                        severity="warning",
+                    )
+                )
+    return issues
+
+
+def _tool_step_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
+    """The save-time checks of ``tool`` nodes (V6-17; see the module docstring)."""
+    steps = [(i, node) for i, node in enumerate(flow.nodes) if isinstance(node, ToolNode)]
+    if not steps:
+        return []
+    config = ctx.config
+    blocks = {block.id: str(block.type) for block in config.panel.blocks}
+    declared = {variable.name for variable in flow.variables} | {f.name for f in config.extraction.fields}
+    settable = _settable_variables(ctx, flow)
+    attached: dict[str, str] = {}
+    if ctx.tool_names_by_id is not None:
+        attached = {
+            ctx.tool_names_by_id[tool_id]: tool_id
+            for tool_id in config.tools.tool_ids
+            if tool_id in ctx.tool_names_by_id
+        }
+    issues: list[Issue] = []
+    for i, node in steps:
+        path = f"flow.nodes[{i}]"
+        if ctx.tool_names_by_id is not None:
+            tool_id = attached.get(node.tool)
+            if tool_id is None:
+                built_in = node.tool in BUILTIN_TOOL_NAMES or node.tool in BLOCK_TOOL_TYPES
+                issues.append(
+                    Issue(
+                        path=f"{path}.tool",
+                        message=(
+                            f"'{node.tool}' is built in; a tool step calls one of the agent's own tools "
+                            "(Tools section)"
+                            if built_in
+                            else f"'{node.tool}' is not one of the agent's tools; attach it (Tools section)"
+                        ),
+                    )
+                )
+            elif ctx.tool_definitions_by_id is not None:
+                definition = ctx.tool_definitions_by_id.get(tool_id)
+                if isinstance(definition, Mapping):
+                    issues.extend(_definition_issues(node, definition, path))
+        for k, binding in enumerate(node.bindings):
+            where = f"{path}.bindings[{k}].to"
+            target = binding.target()
+            if target.kind == "var":
+                if target.key not in declared:
+                    issues.append(
+                        Issue(
+                            path=where,
+                            message=f"'{target.key}' is not a flow variable; add it under Variables",
+                        )
+                    )
+                continue
+            issue = _binding_target_issue(binding.to, blocks, where, node.label or node.id)
+            if issue is not None:
+                issues.append(issue)
+        for argument, value in node.arguments.items():
+            if not isinstance(value, str):
+                continue
+            for ref in context_placeholders(value):
+                if ref.namespace == "var" and ref.name not in settable:
+                    issues.append(
+                        Issue(
+                            path=f"{path}.arguments.{argument}",
+                            message=f"nothing sets '{ref.name}' (no flow variable or binding), so this step "
+                            "fails until something does",
+                            severity="warning",
+                        )
+                    )
+        if not node.on.error:
+            issues.append(
+                Issue(
+                    path=f"{path}.on.error",
+                    message="no path for when the tool fails: the call then ends with a short apology",
+                    severity="warning",
+                )
+            )
+    return issues
+
+
 # ----------------------------------------------------------------------- registry
 def flow_issues(ctx: ValidationContext) -> list[Issue]:
     """Every save-time flow finding for ``ctx.config`` (registered into ``VALIDATORS``).
@@ -402,6 +588,7 @@ def flow_issues(ctx: ValidationContext) -> list[Issue]:
         *_override_issues(ctx.config, flow),
         *_variable_issues(flow),
         *_qa_issues(ctx.config, flow),
+        *_tool_step_issues(ctx, flow),
     ]
 
 
@@ -417,7 +604,7 @@ def _loc(errors: list[Any]) -> str:
     for part in errors[0].get("loc", ()):
         if isinstance(part, int):
             suffix += f"[{part}]"
-        elif part not in ("start", "agent", "end", "global", "transfer", "qa"):
+        elif part not in ("start", "agent", "end", "global", "transfer", "qa", "tool"):
             suffix += f".{part}"
     return suffix
 
@@ -499,6 +686,8 @@ def draft_flow_issues(raw: Mapping[str, Any]) -> tuple[FlowSpec | None, list[Iss
         if kind_of.get(edge.source) == "end":
             issues.append(Issue(path=f"flow.edges[{j}]", message="an end node has no outgoing paths"))
 
+    issues.extend(_draft_tool_step_issues(nodes, edges))
+
     seen_vars: set[str] = set()
     for k, variable in variables:
         if variable.name in seen_vars:
@@ -522,6 +711,57 @@ def draft_flow_issues(raw: Mapping[str, Any]) -> tuple[FlowSpec | None, list[Iss
         nodes=[n for _i, n in nodes], edges=[e for _j, e in edges], variables=[v for _k, v in variables]
     )
     return spec, []
+
+
+def _draft_tool_step_issues(nodes: list[tuple[int, Any]], edges: list[tuple[int, FlowEdge]]) -> list[Issue]:
+    """``FlowSpec``'s tool-step rules (V6-17), each at an addressable path."""
+    issues: list[Issue] = []
+    edge_by_id = {edge.id: edge for _j, edge in edges}
+    for i, node in nodes:
+        if not isinstance(node, ToolNode):
+            continue
+        named = node.on.named()
+        if "ok" not in named:
+            issues.append(
+                Issue(
+                    path=f"flow.nodes[{i}].on.ok",
+                    message="a tool step needs a path for when the tool succeeds",
+                )
+            )
+        for outcome, edge_id in named.items():
+            edge = edge_by_id.get(edge_id)
+            if edge is None:
+                issues.append(
+                    Issue(path=f"flow.nodes[{i}].on.{outcome}", message=f"unknown path '{edge_id}'")
+                )
+            elif edge.source != node.id:
+                issues.append(
+                    Issue(
+                        path=f"flow.nodes[{i}].on.{outcome}",
+                        message=f"path '{edge_id}' does not start at this step",
+                    )
+                )
+        used = set(named.values())
+        for j, edge in edges:
+            if edge.source == node.id and edge.id not in used:
+                issues.append(
+                    Issue(
+                        path=f"flow.edges[{j}]",
+                        message="this path leaves a tool step, but no outcome of the step (success, "
+                        "nothing found, failure) uses it",
+                    )
+                )
+    index_of = {node.id: i for i, node in nodes}
+    for group in tool_only_cycles([node for _i, node in nodes], [edge for _j, edge in edges]):
+        for node_id in group:
+            issues.append(
+                Issue(
+                    path=f"flow.nodes[{index_of[node_id]}]",
+                    message="these tool steps go round in a loop with no agent step in between: "
+                    + ", ".join(group),
+                )
+            )
+    return issues
 
 
 def _reachable(start_id: str, edges: list[FlowEdge]) -> set[str]:

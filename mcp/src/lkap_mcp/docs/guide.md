@@ -35,7 +35,8 @@ block brings `notebook_write`, `agent_update(panel_preset="notebook")` sets up t
 Notebook panel, a layout block shows blocks as tabs or columns, and a canvas block is a
 drawing board the agent marks up with `draw_on_canvas` and reads with `read_canvas`) and, optionally, a **flow**
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
-...})`). Agents produce **sessions** (`session_list`, `session_get`,
+...})`; a `tool` node calls an attached tool with no model turn and branches
+on the outcome). Agents produce **sessions** (`session_list`, `session_get`,
 `session_memory`), which carry a transcript, QA score, cost lines and (if
 enabled) a recording. Live extraction and rules, guardrails, languages, caller memory,
 privacy, disclosure and conversation presets are agent config sections:

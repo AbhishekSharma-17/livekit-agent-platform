@@ -26,14 +26,15 @@ import {
   FlagIcon,
   GlobeIcon,
   LayoutGridIcon,
+  type LucideIcon,
   MessageSquareIcon,
   PhoneForwardedIcon,
   PlayIcon,
   PlusIcon,
   StarIcon,
   Trash2Icon,
+  WrenchIcon,
   XIcon,
-  type LucideIcon,
 } from "lucide-react";
 
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
@@ -117,6 +118,7 @@ const KIND_ICON: Record<FlowNodeKind, LucideIcon> = {
   transfer: PhoneForwardedIcon,
   global: GlobeIcon,
   qa: StarIcon,
+  tool: WrenchIcon,
 };
 
 const ADDABLE: FlowNodeKind[] = ["agent", "end", "transfer", "global", "qa"];
@@ -153,6 +155,8 @@ function subtitle(node: AnyFlowNode): string {
       return "Applies to every step";
     case "qa":
       return "Scores the call afterwards";
+    case "tool":
+      return "tool" in node && typeof node.tool === "string" && node.tool ? `Calls ${node.tool}` : "No tool yet";
   }
 }
 

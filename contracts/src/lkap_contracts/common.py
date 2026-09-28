@@ -17,6 +17,14 @@ from pydantic import BaseModel
 #: How a session reached the platform (CONTRACTS-V2 §4.6).
 SessionChannel = Literal["web", "test", "text", "sip_in", "sip_out", "widget", "api"]
 
+#: Flow node ids become part of a tool name (``go_to_{id}``), so they are short and strict.
+#: Documented (and re-exported) in ``flow``; here so ``tool_context`` and ``flow`` can both
+#: use them without importing each other (V6-17: a flow ``tool`` node carries bindings).
+NODE_ID_PATTERN: Final[str] = r"^[a-z][a-z0-9_]{0,31}$"
+
+#: Variable names are referenced from instructions as ``{{ name }}`` (re-exported in ``flow``).
+VARIABLE_NAME_PATTERN: Final[str] = r"^[a-z][a-z0-9_]{0,63}$"
+
 #: The participant attribute the api stamps with the caller's validated IANA timezone
 #: (R-V5-10). The api drops any client-sent ``lkap.*`` attribute before minting, so the
 #: worker can trust this one.

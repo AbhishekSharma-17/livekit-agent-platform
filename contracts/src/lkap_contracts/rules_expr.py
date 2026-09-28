@@ -39,7 +39,10 @@ Semantics (:func:`evaluate`):
 * ``>=``, ``<=``, ``>``, ``<`` need a number on the right; a value that is not a number is false.
 * ``matches`` searches the value's text (the first :data:`MAX_SUBJECT_CHARS` characters).
   A pattern that can backtrack for very long (``(a+)+``, ``(a|a)+``, ``a*a*``;
-  :func:`nested_repeat`) is refused at parse time: Python's ``re`` has no timeout.
+  :func:`nested_repeat`) is refused at parse time: Python's ``re`` has no timeout. A stored
+  rule is read with ``safe_patterns=False`` (grammar only, V6-28), so such a pattern is an
+  error on that rule (``rules.rule_issues``) rather than an unloadable config; the worker
+  parses with the default and skips the rule.
 * ``tool.<name>.ok`` is true when the tool's latest call in this session succeeded;
   ``tool.<name>.failed`` when it failed. Neither is true before the first call.
 
@@ -73,6 +76,7 @@ __all__ = [
     "is_set",
     "nested_repeat",
     "parse_condition",
+    "referenced_patterns",
     "referenced_tools",
     "referenced_variables",
 ]
@@ -685,11 +689,12 @@ def _tokens(text: str) -> list[_Token]:
 
 
 class _Parser:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, *, safe_patterns: bool = True) -> None:
         self.text = text
         self.tokens = _tokens(text)
         self.index = 0
         self.predicates = 0
+        self.safe_patterns = safe_patterns
 
     @property
     def current(self) -> _Token:
@@ -785,7 +790,7 @@ class _Parser:
                 raise ConditionError("after 'matches' write a /pattern/", regex.position)
             self._advance()
             pattern, ignore_case = regex.value
-            _check_pattern(pattern, regex.position)
+            _check_pattern(pattern, regex.position, safe=self.safe_patterns)
             return Matches(name, pattern, ignore_case)
         if follow.kind == "op":
             op: CompareOp = follow.text  # type: ignore[assignment]
@@ -811,12 +816,12 @@ class _Parser:
         )
 
 
-def _check_pattern(pattern: str, position: int) -> None:
+def _check_pattern(pattern: str, position: int, *, safe: bool = True) -> None:
     if not pattern:
         raise ConditionError("the pattern is empty", position)
     if len(pattern) > MAX_LITERAL_CHARS:
         raise ConditionError(f"a pattern is at most {MAX_LITERAL_CHARS} characters", position)
-    if nested_repeat(pattern):
+    if safe and nested_repeat(pattern):
         raise ConditionError(
             "this pattern repeats a group that already repeats, which can take very long; simplify it",
             position,
@@ -827,8 +832,15 @@ def _check_pattern(pattern: str, position: int) -> None:
         raise ConditionError(f"the pattern is not valid ({exc.msg})", position) from exc
 
 
-def parse_condition(text: str) -> Expr:
+def parse_condition(text: str, *, safe_patterns: bool = True) -> Expr:
     """Parse one condition.
+
+    Args:
+        text: The condition.
+        safe_patterns: Also refuse a ``matches`` pattern :func:`nested_repeat` flags (the
+            default, and what the worker uses). ``False`` checks the grammar only: the
+            contract reads a stored rule this way so a pattern the scanner refuses is an
+            error on that rule (``rules.rule_issues``), not a config that cannot load (V6-28).
 
     Raises:
         ConditionError: It does not parse or breaks a bound; the message says where and why
@@ -838,7 +850,7 @@ def parse_condition(text: str) -> Expr:
         raise ConditionError("the condition is empty")
     if len(text) > MAX_CONDITION_CHARS:
         raise ConditionError(f"a condition is at most {MAX_CONDITION_CHARS} characters")
-    return _Parser(text).parse()
+    return _Parser(text, safe_patterns=safe_patterns).parse()
 
 
 # --------------------------------------------------------------------------- analysis
@@ -856,6 +868,20 @@ def referenced_variables(expr: Expr) -> set[str]:
         case And(items=items) | Or(items=items):
             return set().union(*(referenced_variables(item) for item in items))
     return set()  # pragma: no cover - exhaustive
+
+
+def referenced_patterns(expr: Expr) -> list[str]:
+    """Every ``matches`` pattern of the condition, in the order written."""
+    match expr:
+        case Matches(pattern=pattern):
+            return [pattern]
+        case IsSet() | Compare() | ToolOutcome():
+            return []
+        case Not(item=item):
+            return referenced_patterns(item)
+        case And(items=items) | Or(items=items):
+            return [pattern for item in items for pattern in referenced_patterns(item)]
+    return []  # pragma: no cover - exhaustive
 
 
 def referenced_tools(expr: Expr) -> set[str]:

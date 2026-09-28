@@ -892,7 +892,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
         key: "signature_mode",
         label: "Signature board",
         kind: "boolean",
-        hint: "Kept for signatures; not used yet.",
+        hint: "Superseded by the Signature block; kept so older boards validate.",
         default: false,
       },
     ],

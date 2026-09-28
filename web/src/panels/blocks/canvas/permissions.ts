@@ -58,7 +58,10 @@ export function canvasMaxStrokes(config: unknown): number {
   return Math.min(2000, Math.floor(value));
 }
 
-/** `config.signature_mode` (V6-12, reserved for V6-23): a smaller board with a baseline, no shapes. */
+/**
+ * `config.signature_mode` (V6-12; superseded by the Signature block, kept so older boards
+ * validate — R-V6-3 #212): a smaller board with a baseline, no shapes.
+ */
 export function canvasSignatureMode(config: unknown): boolean {
   const record = isRecord(config) ? config : {};
   return record.signature_mode === true;

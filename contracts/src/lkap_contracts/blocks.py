@@ -52,7 +52,8 @@ schemas by a vitest parity test):
   (V6-08, D-V6-18); :func:`layout_issues` checks the children across the panel;
 * ``canvas`` → ``caller_can_draw``, ``tools`` (``pen`` / ``highlighter`` / ``eraser`` /
   ``box`` / ``arrow`` / ``text``), ``background`` (``none`` / ``asset`` / ``live_camera``),
-  ``max_strokes`` (≤ 2,000) and ``signature_mode`` (V6-12, D-V6-16);
+  ``max_strokes`` (≤ 2,000) and ``signature_mode`` (V6-12, D-V6-16; superseded by the
+  ``signature`` block, kept so older boards validate — R-V6-3 #212);
   :func:`canvas_claim_issues` checks which notebook ``ink`` section shows each board and
   :func:`canvas_caller_can_draw` is the one "may the caller draw here" rule;
 * ``signature`` → ``disclosure_text`` (the wording the caller signs; empty lets the agent
@@ -670,8 +671,10 @@ class CanvasBlockConfig(_StrictConfig):
     ``lkap.ui.ink``; the agent reads them with ``read_canvas``, a picture read by its vision
     model); without it only the agent draws (``draw_on_canvas``). ``tools`` is what the board
     offers the caller; ``max_strokes`` how many strokes the board holds before it says it is
-    full (at most 2,000). ``background`` is what the board starts on. ``signature_mode``
-    (reserved for the signature block, V6-23) shows a small board with a baseline and no shapes.
+    full (at most 2,000). ``background`` is what the board starts on. ``signature_mode`` is
+    superseded by the Signature block and kept so older boards validate (R-V6-3 #212; the
+    next contracts major removes it): a board in that mode still shows a baseline and takes no
+    agent shapes (``draw_on_canvas`` refuses them).
     A board shown in a notebook ``ink`` section may also be drawn on when that notebook sets
     ``caller_can_draw`` (:func:`canvas_caller_can_draw`).
     """
@@ -680,7 +683,10 @@ class CanvasBlockConfig(_StrictConfig):
     tools: list[CanvasTool] = Field(default=list(DEFAULT_CANVAS_TOOLS), min_length=1, max_length=6)
     background: CanvasBackground = "none"
     max_strokes: int = Field(default=DEFAULT_CANVAS_STROKES, ge=1, le=MAX_CANVAS_STROKES)
-    signature_mode: bool = False
+    signature_mode: bool = Field(
+        default=False,
+        description="Superseded by the Signature block; kept so older boards validate.",
+    )
 
     @field_validator("tools")
     @classmethod

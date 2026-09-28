@@ -27,6 +27,11 @@ of tool results (bindings are already applied by then), and after a rule's ``var
 ``once: false`` fires it each time its condition turns from false to true, never on every
 pass while it stays true. Each firing records a ``rule_fired`` session event
 (:class:`RuleFiredEvent`: the rule id and the kinds of its actions, never a value).
+
+A ``matches`` pattern the regex-safety scanner refuses (S6-4) does not make a stored config
+unloadable (V6-28, D-V6-31): the contract checks the grammar only, :func:`rule_issues` reports
+the pattern as an error at ``rules[i].when`` (so a save is still refused), and the worker's
+strict parse skips the rule, so it never fires.
 """
 
 from __future__ import annotations
@@ -42,7 +47,9 @@ from lkap_contracts.flow import VARIABLE_NAME_PATTERN
 from lkap_contracts.rules_expr import (
     MAX_CONDITION_CHARS,
     ConditionError,
+    nested_repeat,
     parse_condition,
+    referenced_patterns,
     referenced_tools,
     referenced_variables,
 )
@@ -69,6 +76,7 @@ __all__ = [
     "StatusSetAction",
     "VarSetAction",
     "rule_issues",
+    "slow_pattern_message",
 ]
 
 #: Most rules on one agent.
@@ -208,8 +216,10 @@ class Rule(BaseModel):
     @field_validator("when")
     @classmethod
     def _parses(cls, value: str) -> str:
+        # Grammar only (V6-28): a pattern the scanner refuses is an error of `rule_issues`,
+        # so a stored config that has one still loads (the worker skips the rule).
         try:
-            parse_condition(value)
+            parse_condition(value, safe_patterns=False)
         except ConditionError as exc:
             raise ValueError(f"the condition does not read: {exc}") from exc
         return value
@@ -248,6 +258,16 @@ def _placeholder_names(text: str | None) -> set[str]:
     return set(_VAR_PLACEHOLDER_RE.findall(text or ""))
 
 
+def slow_pattern_message(rule_id: str, pattern: str) -> str:
+    """The error on a rule whose ``matches`` pattern the regex-safety scanner refuses (V6-28)."""
+    return (
+        f"rule '{rule_id}': the pattern /{pattern}/ can stall the call (it repeats a group that "
+        "already repeats or holds alternatives, or two open-ended repeats can meet), so the rule "
+        "never runs until it is fixed; write it as a plain list of alternatives or with fixed "
+        "counts, e.g. /fire|smoke/ instead of /(fire|smoke)+/"
+    )
+
+
 def rule_issues(
     rules: list[Rule],
     blocks: Iterable[BlockSpec],
@@ -257,6 +277,9 @@ def rule_issues(
 ) -> list[Issue]:
     """The semantic checks of an agent's rules (the contract already refused what cannot parse).
 
+    * A ``matches`` pattern :func:`~lkap_contracts.rules_expr.nested_repeat` refuses → error
+      at ``rules[i].when`` (V6-28: the contract reads the grammar only, so a stored config
+      with one still loads; the worker skips the rule).
     * A ``details.set`` into a block that is not on the panel, or is not a ``details`` block;
       a ``note.push`` into a block that is not on the panel → error.
     * A ``checklist.*`` action on a panel without a ``checklist`` block → warning (nothing shows).
@@ -288,10 +311,13 @@ def rule_issues(
     for index, rule in enumerate(rules):
         base = f"rules[{index}]"
         try:
-            expr = parse_condition(rule.when)
+            expr = parse_condition(rule.when, safe_patterns=False)
         except ConditionError as exc:  # stored another way
             issues.append(Issue(path=f"{base}.when", message=f"the condition does not read: {exc}"))
             continue
+        for pattern in referenced_patterns(expr):
+            if nested_repeat(pattern):
+                issues.append(Issue(path=f"{base}.when", message=slow_pattern_message(rule.id, pattern)))
         used = referenced_variables(expr)
         for action in rule.then:
             if isinstance(action, DetailsSetAction | NotePushAction):

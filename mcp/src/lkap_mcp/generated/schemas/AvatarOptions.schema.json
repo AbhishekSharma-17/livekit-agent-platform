@@ -3,6 +3,40 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Publisher-side options applied to whichever avatar plugin is selected.",
   "properties": {
+    "fit": {
+      "anyOf": [
+        {
+          "enum": [
+            "contain",
+            "cover"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fit"
+    },
+    "framing": {
+      "anyOf": [
+        {
+          "enum": [
+            "auto",
+            "portrait",
+            "landscape",
+            "square"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Framing"
+    },
     "idle_timeout_s": {
       "anyOf": [
         {

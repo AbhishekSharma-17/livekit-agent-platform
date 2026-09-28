@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { Controller, useFormContext } from "react-hook-form";
-import { AudioWaveformIcon, ChevronRightIcon, EyeOffIcon, MessagesSquareIcon, PlusIcon, type LucideIcon } from "lucide-react";
+import {
+  AudioWaveformIcon,
+  ChevronRightIcon,
+  EyeOffIcon,
+  MessagesSquareIcon,
+  PlusIcon,
+  TriangleAlertIcon,
+  UserRoundIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -31,6 +40,12 @@ import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { EditorSectionProps } from "@/components/console/agents/editor/types";
 import type { FieldSpec, ProviderOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
+import {
+  aspectRatioStyle,
+  resolveFrame,
+  type AvatarFit,
+  type AvatarFraming,
+} from "@/components/session/avatar-framing";
 
 type SlotKey = "stt" | "llm" | "tts" | "realtime" | "avatar" | "image_gen" | "workflow_llm" | "vad" | "turn_detection" | "noise_cancellation";
 type PipelineMode = AgentEditorForm["config"]["pipeline"]["mode"];
@@ -294,7 +309,9 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
             {optionalShown.map(({ key }) => (
               <React.Fragment key={key}>
                 {renderSlot(key, true)}
-                {key === "avatar" && hasAvatar ? <AvatarOptionsFields /> : null}
+                {key === "avatar" && hasAvatar ? (
+                  <AvatarOptionsFields providerId={pipeline?.avatar?.provider_id ?? null} providers={providers} />
+                ) : null}
               </React.Fragment>
             ))}
           </div>
@@ -469,9 +486,53 @@ function VisionNote({ onShowVisionModels }: { onShowVisionModels: () => void }) 
 const VIDEO_QUALITIES = ["low", "medium", "high", "very_high"] as const;
 const NONE = "__none__";
 
-/** The avatar card's options (`AvatarOptions` — CONTRACTS-V2 §4.3), shown once an avatar provider is picked. */
-function AvatarOptionsFields() {
-  const { control } = useFormContext<AgentEditorForm>();
+const FRAMING_OPTIONS: { value: AvatarFraming; label: string }[] = [
+  { value: "auto", label: "Auto (recommended)" },
+  { value: "portrait", label: "Portrait" },
+  { value: "landscape", label: "Landscape" },
+  { value: "square", label: "Square" },
+];
+
+const FIT_OPTIONS: { value: AvatarFit; label: string }[] = [
+  { value: "contain", label: "Show the whole avatar" },
+  { value: "cover", label: "Fill the space" },
+];
+
+const FRAMING_LABEL: Record<AvatarFraming, string> = {
+  auto: "auto",
+  portrait: "portrait",
+  landscape: "landscape",
+  square: "square",
+};
+
+/**
+ * The avatar card's options (`AvatarOptions` — CONTRACTS-V2 §4.3), shown once
+ * an avatar provider is picked. V6-26 adds the framing/fit pair and a
+ * preview: since a `file`-type field like `bithuman-avatar`'s `avatar_image`
+ * is a path on the agent worker (never an upload the browser can read), the
+ * preview shows how the *chosen framing* looks rather than the true image's
+ * aspect (docs/v6/_asks.md #154 tracks adding a real upload for those
+ * fields), and warns only when the framing disagrees with the selected
+ * provider's own documented native aspect.
+ */
+function AvatarOptionsFields({
+  providerId,
+  providers,
+}: {
+  providerId: string | null;
+  providers: ProviderOut[];
+}) {
+  const { control, watch } = useFormContext<AgentEditorForm>();
+  const provider = providers.find((p) => p.id === providerId);
+  const declaredAspect = provider?.capabilities?.avatar_aspect ?? null;
+  const declaredNote = provider?.capabilities?.avatar_aspect_note ?? null;
+  const framing = watch("config.pipeline.avatar_options.framing");
+  const fit = watch("config.pipeline.avatar_options.fit");
+  const previewFraming: AvatarFraming = framing && framing !== "auto" ? framing : (declaredAspect ?? "auto");
+  const frame = resolveFrame({ framing: previewFraming, fit });
+  const mismatch = Boolean(
+    framing && framing !== "auto" && declaredAspect && framing !== declaredAspect,
+  );
   return (
     <div className="ml-4 flex flex-col gap-4 rounded-md border border-dashed border-border p-4 sm:ml-7">
       <h4 className="text-sm font-semibold text-foreground">Avatar options</h4>
@@ -538,6 +599,85 @@ function AvatarOptionsFields() {
             </Field>
           )}
         />
+        <Controller
+          control={control}
+          name="config.pipeline.avatar_options.framing"
+          render={({ field }) => (
+            <Field
+              label="Framing"
+              htmlFor="avatar-framing"
+              hint={
+                declaredNote
+                  ? declaredNote
+                  : "How the avatar's own shape is sized — matches it automatically by default."
+              }
+            >
+              <Select value={field.value ?? "auto"} onValueChange={field.onChange}>
+                <SelectTrigger id="avatar-framing" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FRAMING_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+        />
+        <Controller
+          control={control}
+          name="config.pipeline.avatar_options.fit"
+          render={({ field }) => (
+            <Field label="Fit" htmlFor="avatar-fit" hint="Filling the space can crop the top or sides.">
+              <Select value={field.value ?? "contain"} onValueChange={field.onChange}>
+                <SelectTrigger id="avatar-fit" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FIT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+        />
+      </div>
+
+      <div className="flex items-start gap-4">
+        <div
+          data-testid="avatar-framing-preview"
+          data-framing={previewFraming}
+          data-fit={frame.objectFit}
+          className="bg-stage flex w-24 shrink-0 items-center justify-center overflow-hidden rounded-md"
+          style={{ aspectRatio: aspectRatioStyle(frame.aspectRatio) }}
+        >
+          <Icon
+            as={UserRoundIcon}
+            size="lg"
+            className="text-stage-foreground/60"
+            style={frame.objectFit === "cover" ? { transform: "translateY(-20%)" } : undefined}
+          />
+        </div>
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <p>
+            Preview: {FRAMING_LABEL[previewFraming]} framing, {frame.objectFit === "cover" ? "filling the space" : "showing the whole avatar"}.
+          </p>
+          {mismatch && (
+            <p className="flex items-start gap-1.5 text-warning-text">
+              <Icon as={TriangleAlertIcon} size="sm" className="mt-0.5 shrink-0" />
+              <span>
+                This provider&rsquo;s avatar usually streams {FRAMING_LABEL[declaredAspect as AvatarFraming]} video —
+                picking {FRAMING_LABEL[framing as AvatarFraming]} may letterbox it. Auto matches it automatically.
+              </span>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

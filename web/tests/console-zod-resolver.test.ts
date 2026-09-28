@@ -25,7 +25,14 @@ const RECORDING = {
   require_consent: false,
   consent_text: null,
 };
-const AVATAR_OPTIONS = { participant_name: "Avatar", video_quality: null, idle_timeout_s: null, max_duration_s: null };
+const AVATAR_OPTIONS = {
+  participant_name: "Avatar",
+  video_quality: null,
+  idle_timeout_s: null,
+  max_duration_s: null,
+  framing: null,
+  fit: null,
+};
 const PANEL = { panel_id: "composite", layout: "side" as const, blocks: [] };
 const TELEPHONY = { transfer_targets: [] };
 // V4-13 (BACKGROUND-TOOLS.md §7): `voiceConfigSchema`/`toolsConfigSchema` gained

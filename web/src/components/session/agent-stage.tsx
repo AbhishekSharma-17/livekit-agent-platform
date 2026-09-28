@@ -21,6 +21,7 @@ import { Track } from "livekit-client";
 
 import type { AgentUiState } from "@/components/shared/agent-state";
 import { StageView } from "@/components/session/stage-view";
+import type { AvatarFit, AvatarFraming } from "@/components/session/avatar-framing";
 
 /** Track reference for a local source, or `undefined` when not publishing. */
 export function useLocalTrackRef(
@@ -53,6 +54,19 @@ export interface AgentStageProps {
    * same track a second time.
    */
   suppressAgentVideo?: boolean;
+  /**
+   * V6-26 avatar framing — `AvatarOptions.framing`/`.fit` and the selected
+   * avatar provider's declared native aspect. Every value defaults to
+   * `undefined` (auto + contain, the crop-free default): today `agent` on
+   * every caller of `SessionRoom` is the public-safe `AgentPublicOut`, which
+   * carries none of this yet (docs/v6/_asks.md #151 tracks exposing it), so
+   * these only ever have a live value where a caller passes one explicitly
+   * (a preview, a test, or `SessionRoom`'s own `avatarFraming` prop once a
+   * future package wires that ask up).
+   */
+  framing?: AvatarFraming | null;
+  fit?: AvatarFit | null;
+  declaredAspect?: AvatarFraming | null;
 }
 
 export function AgentStage({
@@ -66,6 +80,9 @@ export function AgentStage({
   onRetry,
   onLeave,
   suppressAgentVideo = false,
+  framing,
+  fit,
+  declaredAspect,
 }: AgentStageProps) {
   const { audioTrack, videoTrack } = useVoiceAssistant();
   const cameraTrack = useLocalTrackRef(Track.Source.Camera);
@@ -83,6 +100,9 @@ export function AgentStage({
       agentState={agentState}
       agentName={agentName}
       videoTrack={suppressAgentVideo ? undefined : videoTrack}
+      framing={framing}
+      fit={fit}
+      declaredAspect={declaredAspect}
       audioTrack={audioTrack}
       localTrack={localTrack}
       localLabel={screenTrack ? "Screen" : "You"}

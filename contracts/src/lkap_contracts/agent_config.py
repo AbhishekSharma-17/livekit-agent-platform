@@ -68,6 +68,8 @@ __all__ = [
     "AgentConfig",
     "AgentLimits",
     "AppsMode",
+    "AvatarFit",
+    "AvatarFraming",
     "AvatarOptions",
     "BuiltinProviderSlot",
     "CallerTimezoneMode",
@@ -118,6 +120,17 @@ __all__ = [
 ]
 
 
+#: Video framing (V6-26): the shape of box the avatar's video is given. ``auto`` sizes
+#: the well to the track's own dimensions (falling back to the provider's declared native aspect,
+#: `ProviderCapabilities.avatar_aspect`, before the first frame arrives). ``None`` on a stored
+#: `AvatarOptions` means "unset" — the same crop-free `auto` behaviour, never today's cropped one.
+AvatarFraming = Literal["auto", "portrait", "landscape", "square"]
+
+#: How the video fills its well: the whole avatar visible with letterboxing (``contain``, the
+#: default for avatars) or edge-to-edge with a face-safe focal point (``cover``, upper third).
+AvatarFit = Literal["contain", "cover"]
+
+
 class AvatarOptions(BaseModel):
     """Publisher-side options applied to whichever avatar plugin is selected."""
 
@@ -125,6 +138,13 @@ class AvatarOptions(BaseModel):
     video_quality: Literal["low", "medium", "high", "very_high"] | None = None
     idle_timeout_s: int | None = None
     max_duration_s: int | None = None
+    framing: AvatarFraming | None = None
+    """Unset (``None``) on every agent saved before V6-26: renders exactly like ``auto`` (the
+    crop-free default), never the old hard-cropped ``aspect-video`` well. The console pre-selects
+    ``auto`` for a newly created agent's form; the wire value stays unset until the builder saves."""
+    fit: AvatarFit | None = None
+    """Unset (``None``) renders like ``contain`` (whole avatar visible). The console pre-selects
+    ``contain`` for a newly created agent's form."""
 
 
 class PipelineConfig(BaseModel):

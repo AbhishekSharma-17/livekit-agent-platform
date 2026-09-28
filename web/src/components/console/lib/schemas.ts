@@ -32,12 +32,18 @@ export type ProviderRefForm = z.infer<typeof providerRefSchema>;
  * providers section's avatar card can edit it (`README.md` rule 2: a field
  * missing from the form until a section needs it). Logged as a V2-13 edit
  * outside its exclusive files in `docs/v2/_asks.md`.
+ *
+ * `framing`/`fit` (V6-26, PLAN-V6 §3 "Avatar framing") follow the same rule:
+ * a `z.object` here strips any key it doesn't list, so both must be typed or
+ * the avatar card's new selects would silently never persist.
  */
 export const avatarOptionsSchema = z.object({
   participant_name: z.string(),
   video_quality: z.enum(["low", "medium", "high", "very_high"]).nullable(),
   idle_timeout_s: z.number().int().nullable(),
   max_duration_s: z.number().int().nullable(),
+  framing: z.enum(["auto", "portrait", "landscape", "square"]).nullable(),
+  fit: z.enum(["contain", "cover"]).nullable(),
 });
 export type AvatarOptionsForm = z.infer<typeof avatarOptionsSchema>;
 

@@ -94,13 +94,18 @@ describe("buildAgentUpdate", () => {
     expect(body.config?.flow).toBeNull();
     expect(body.config?.pipeline.vad).toEqual(ref("silero-vad"));
     // avatar_options is now an editable form field (V2-13's providers section): the form always carries all
-    // four sub-fields (defaults fill in the ones a stored partial object omitted), unlike `pipeline.vad`/etc.
+    // six sub-fields (defaults fill in the ones a stored partial object omitted), unlike `pipeline.vad`/etc.
     // above, which stay untouched `ProviderRef`s because the form never edited them in this fixture.
+    // `framing`/`fit` (V6-26) are two more: the fixture's stored agent never set them, so the form
+    // fills the crop-free "auto"/"contain" default (`DEFAULT_AVATAR_OPTIONS`) and a save now writes
+    // that explicit value — semantically the same as the `null` it replaces (both render crop-free).
     expect(body.config?.pipeline.avatar_options).toEqual({
       participant_name: "Avatar",
       video_quality: "high",
       idle_timeout_s: null,
       max_duration_s: null,
+      framing: "auto",
+      fit: "contain",
     });
     expect(body.config?.voice?.first_speaker).toBe("user");
     expect(body.config?.capabilities?.dtmf).toBe(true);

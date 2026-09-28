@@ -40,7 +40,11 @@ level (`useTrackVolume`) and the local self-view, and passes them down.
 |---|---|---|
 | `agentState` | `AgentUiState` | The §5.4 state model. Drives the meter state, the caption, the `data-state` attribute and which overlay shows. |
 | `agentName` | `string` | Display name on the stage and in the overlays' copy. |
-| `videoTrack?` | `TrackReference` | **Avatar / agent video.** When present it fills the well (`object-cover`, letterboxed on `stage`) and replaces the meter; tapping toggles full-bleed. |
+| `videoTrack?` | `TrackReference` | **Avatar / agent video.** When present it fills the well, sized to the resolved frame (V6-26 — see below) and replaces the meter; tapping toggles a forced `cover`. |
+| `framing?` | `AvatarFraming \| null` | V6-26, `AvatarOptions.framing`. `undefined`/`"auto"`/`null` defers to `declaredAspect`, then a 16:9 guess. |
+| `fit?` | `AvatarFit \| null` | V6-26, `AvatarOptions.fit`. `undefined`/`null` renders like `"contain"` (the crop-free default). |
+| `declaredAspect?` | `AvatarFraming \| null` | V6-26, the selected avatar provider's `ProviderCapabilities.avatar_aspect` — a pre-connect guess so the well doesn't jump once the real frame arrives. |
+| `onAspectChange?` | `(ratio: number) => void` | V6-26. The resolved well aspect, for a caller with no shell box of its own (the `video` block) to size its own wrapper. |
 | `audioTrack?` | `TrackReference` | The agent's audio track. Kept in the contract for visualizer plug-ins; the level itself arrives as `level`. |
 | `localTrack?` | `TrackReference` | Camera or screen share → self-view PiP (144 px desktop / 96 px mobile, tap to grow to 50 %). |
 | `localLabel?` | `"You" \| "Screen"` | Chip on the self-view. |
@@ -64,6 +68,30 @@ Rules for anything plugging in:
 - **State belongs to `session-state.ts`.** `toAgentUiState()` is the only
   mapping from room + agent state to `AgentUiState`; add a state there and
   every surface (stage, strip, banner, controls) follows.
+
+## Avatar framing (V6-26, PLAN-V6 §3)
+
+`avatar-framing.ts` is the one place the well's aspect and fit/position are
+computed (`resolveFrame`) and the one place a track's real dimensions are
+measured (`useMeasuredVideoAspect`, via a `ref` on `VideoTrack` + the video
+element's `loadedmetadata`/`resize` events). It has no LiveKit import, so
+`components/console/**` shares it for the agent editor's framing preview
+without pulling the session bundle in.
+
+Precedence: the real measured aspect (once known) → an explicit `framing`
+(the admin's override) → `declaredAspect` (the provider registry's
+documented `avatar_aspect`, a pre-connect guess) → a 16:9 guess (the
+pre-V6-26 assumption, so a stored agent with none of this data renders
+exactly as it always has, minus the crop). `fit` defaults to `contain`
+(the whole avatar visible, letterboxed on `bg-stage`); `cover` biases its
+`object-position` to the upper third so a face is the last thing lost.
+
+`AgentPublicOut` (the shape every public session surface renders from) does
+not carry `AvatarOptions.framing`/`.fit` or the provider's `avatar_aspect`
+yet — `SessionRoom`'s `avatarFraming` prop and `AgentStage`'s
+`framing`/`fit`/`declaredAspect` props exist for a caller that has them, but
+today none does (docs/v6/_asks.md #151 tracks exposing them end to end). A
+stored agent renders the crop-free `auto` + `contain` default regardless.
 
 ## Audio priming (§5.2)
 

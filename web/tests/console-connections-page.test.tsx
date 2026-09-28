@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectionCreateForm } from "@/components/console/connections/connection-create-form";
+import { ConnectionOverview } from "@/components/console/connections/connection-overview";
 import { ConnectionsTable } from "@/components/console/connections/connections-table";
 import type { ConnectionOut, ConnectionPage } from "@/contracts/lkap-contracts";
 
@@ -94,6 +95,29 @@ describe("ConnectionsTable", () => {
     // `auth/me` query — the link only replaces the disabled fallback button
     // once it settles.
     expect(await screen.findByRole("link", { name: "New connection" })).toBeTruthy();
+  });
+});
+
+describe("ConnectionOverview (V6-03, D-V6-14: the LiveKit Inference credits line)", () => {
+  it("shows the credits line, with its as-of date, on a LiveKit Cloud connection", () => {
+    stubFetch(() => ({}));
+    renderWithClient(<ConnectionOverview connection={CONNECTION} />);
+    expect(screen.getByText(/LiveKit Inference credits/)).toBeTruthy();
+    expect(screen.getByText(/as of 2026-09-28/)).toBeTruthy();
+  });
+
+  it("says nothing about credits on a self-hosted connection (no billing relationship to LiveKit Cloud)", () => {
+    stubFetch(() => ({}));
+    const selfHosted: ConnectionOut = { ...CONNECTION, id: "conn-2", deployment_type: "self_hosted" };
+    renderWithClient(<ConnectionOverview connection={selfHosted} />);
+    expect(screen.queryByText(/LiveKit Inference credits/)).toBeNull();
+  });
+
+  it("treats a missing deployment_type as Cloud, matching the adjacent 'Type' row's own fallback", () => {
+    stubFetch(() => ({}));
+    const untyped: ConnectionOut = { ...CONNECTION, id: "conn-3", deployment_type: undefined };
+    renderWithClient(<ConnectionOverview connection={untyped} />);
+    expect(screen.getByText(/LiveKit Inference credits/)).toBeTruthy();
   });
 });
 

@@ -107,6 +107,7 @@ from lkap_contracts.providers import (
     validate_model_id,
 )
 from lkap_contracts.rules import rule_issues
+from lkap_contracts.rules_expr import nested_repeat  # V6-13 (ask #75): one regex-safety scanner
 from lkap_contracts.tool_context import (
     BINDING_BLOCK_TYPES,
     FORBIDDEN_BINDING_BLOCK_TYPES,
@@ -2001,7 +2002,6 @@ OPENAI_KEY_HOMES: Final[frozenset[str]] = frozenset(
 MODERATION_KEY_PROVIDER: Final[str] = "openai-llm"
 
 #: An unbounded repeat inside a group: ``+``, ``*`` or ``{n,}``.
-_UNBOUNDED_RE: Final[re.Pattern[str]] = re.compile(r"[+*]|\{\d*,\}")
 
 CLASSIFIER_NEEDS_MODEL_MESSAGE = (
     "A rule judged by a language model needs a model: choose one for the guardrails, or set the "
@@ -2019,40 +2019,6 @@ SLOW_PATTERN_MESSAGE = (
     "simplify it (for example, drop the outer repeat)."
 )
 _STAGES: Final[tuple[GuardrailStage, ...]] = ("input", "output", "tool_output")
-
-
-def nested_repeat(pattern: str) -> bool:
-    """Whether ``pattern`` repeats a group that holds an unbounded repeat (``(a+)+``, ``(\\w*\\s)*``).
-
-    Such a pattern can backtrack for a very long time on a long text, and Python's ``re``
-    has no timeout. A small scanner, not a full parser: it tracks groups, skips escapes
-    and character classes, and flags a group containing ``+``, ``*`` or ``{n,}`` that is
-    itself followed by ``+``, ``*`` or ``{``.
-    """
-    stack: list[bool] = []
-    index = 0
-    in_class = False
-    while index < len(pattern):
-        char = pattern[index]
-        if char == "\\":
-            index += 2
-            continue
-        if in_class:
-            in_class = char != "]"
-        elif char == "[":
-            in_class = True
-        elif char == "(":
-            stack.append(False)
-        elif char == ")" and stack:
-            inner = stack.pop()
-            if inner and pattern[index + 1 : index + 2] in ("+", "*", "{"):
-                return True
-            if stack:
-                stack[-1] = stack[-1] or inner
-        elif stack and _UNBOUNDED_RE.match(pattern, index):
-            stack[-1] = True
-        index += 1
-    return False
 
 
 def _classifier_has_model(config: AgentConfig) -> bool:

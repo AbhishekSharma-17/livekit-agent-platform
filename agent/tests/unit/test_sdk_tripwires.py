@@ -98,6 +98,27 @@ def test_mcp_toolset_surface_used_by_build_mcp_toolsets() -> None:
     )
 
 
+def test_mcp_make_function_tool_surface_used_by_mcp_context() -> None:
+    """V6-07: `tools.mcp_context.ContextMCPServerHTTP` wraps the SDK's per-tool builder."""
+    method = getattr(lk_mcp.MCPServer, "_make_function_tool", None)
+    assert method is not None, "MCPServer._make_function_tool is gone: rework tools/mcp_context.py"
+    parameters = inspect.signature(method).parameters
+    assert list(parameters)[:5] == ["self", "name", "description", "input_schema", "meta"], (
+        "MCPServer._make_function_tool changed its arguments: rework tools/mcp_context.py"
+    )
+    assert parameters["options"].kind is inspect.Parameter.KEYWORD_ONLY
+    source = inspect.getsource(method)
+    # The two impl arities the wrapper forwards to, and the awaited (async) result resolver.
+    assert "async def _tool_called(raw_arguments" in source
+    assert "async def _tool_called_nonblocking(" in source and "ctx: RunContext, raw_arguments" in source
+    assert "asyncio.iscoroutine(resolved)" in source, "the result resolver may no longer be async"
+    from livekit.agents.llm.tool_context import RawFunctionTool
+
+    assert "_func" in inspect.getsource(RawFunctionTool.__mro__[1].__init__), (
+        "RawFunctionTool no longer keeps its function in `_func`: rework tools/mcp_context.py"
+    )
+
+
 def test_the_pinned_livekit_agents_version_is_the_one_verified() -> None:
     """The facts above were read from 1.8.3; a new version means re-reading them (step 1)."""
     version = importlib.metadata.version("livekit-agents")

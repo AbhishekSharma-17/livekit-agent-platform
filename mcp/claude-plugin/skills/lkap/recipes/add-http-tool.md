@@ -77,6 +77,24 @@ Then `agent_validate`: it warns when the agent's `tools.max_tool_steps` is
 below 4 with a background default. A POST tool opts in the same way and then
 asks before running twice.
 
+## 6. Optional: show the answer on the panel, no model turn
+
+Send the caller's time zone along and put the customer's name straight onto a
+details block (`card` must be a `details` block on the agent's panel):
+
+`tool_update(...)`
+```json
+{
+  "tool_id": "<the tool id>",
+  "patch": {
+    "definition": {
+      "url": "https://api.example.com/customers?email={{ email }}&tz={{ ctx.timezone }}",
+      "bindings": [{ "path": "/name", "to": "details:card.customer" }]
+    }
+  }
+}
+```
+
 ## Related concepts
 
 `lkap_explain("tools-http")` (its "Background tools" section), `lkap_explain("providers-and-keys")`.

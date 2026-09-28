@@ -199,6 +199,14 @@ export function HttpToolEditorDialog({
       result_path: draft.result_path.trim() === "" ? null : draft.result_path,
       silent_reply: draft.silent_reply,
       execution: executionFromDraft(draft.execution),
+      // V6-07 (ask #40): fields this editor does not show yet (V6-11) survive a save.
+      ...(tool?.definition.kind === "http"
+        ? {
+            requires_vars: tool.definition.requires_vars,
+            confirm_readback: tool.definition.confirm_readback,
+            bindings: tool.definition.bindings,
+          }
+        : {}),
     };
 
     try {

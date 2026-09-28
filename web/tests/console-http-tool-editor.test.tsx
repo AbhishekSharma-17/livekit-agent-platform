@@ -281,3 +281,48 @@ describe("HttpToolEditorDialog", () => {
     });
   });
 });
+
+describe("HttpToolEditorDialog — fields the editor does not show yet (V6-07, ask #40)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps requires_vars, confirm_readback and bindings when an existing tool is saved", async () => {
+    const fetchMock = stubFetch();
+    const onSaved = vi.fn();
+    const tool = {
+      id: "tool_1",
+      agent_id: "agent_1",
+      kind: "http",
+      name: "lookup_policy",
+      enabled: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      definition: {
+        kind: "http",
+        name: "lookup_policy",
+        description: "Look up a policy",
+        parameters: { type: "object", properties: {} },
+        method: "GET",
+        url: "https://api.example.com/policies/{{ var.policy_no }}",
+        allowed_hosts: ["api.example.com"],
+        requires_vars: ["policy_no"],
+        confirm_readback: ["email"],
+        bindings: [{ pointer: "/holder", to: "details:card.holder" }],
+      },
+    } as unknown as React.ComponentProps<typeof HttpToolEditorDialog>["tool"];
+    const { getByText } = renderWithClient(
+      <HttpToolEditorDialog agentId="agent_1" tool={tool} secretBagSpec={undefined} onSaved={onSaved} trigger={<button>Edit tool</button>} />,
+    );
+    fireEvent.click(getByText("Edit tool"));
+    fireEvent.click(getByText("Save tool"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const [, init] = calls.find(([url]) => !url.includes("auth/me")) as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { definition: Record<string, unknown> };
+    expect(body.definition.requires_vars).toEqual(["policy_no"]);
+    expect(body.definition.confirm_readback).toEqual(["email"]);
+    expect(body.definition.bindings).toEqual([{ pointer: "/holder", to: "details:card.holder" }]);
+  });
+});

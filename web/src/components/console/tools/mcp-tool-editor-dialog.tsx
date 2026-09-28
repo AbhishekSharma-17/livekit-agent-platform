@@ -425,6 +425,8 @@ export function McpToolEditorDialog({
           .filter(([name]) => !validOptionNames || validOptionNames.has(name))
           .map(([name, option]) => [name, executionFromMcpOption(option)]),
       ),
+      // V6-07 (ask #40): the tool context this editor does not show yet (V6-11) survives a save.
+      ...(def?.tool_context !== undefined ? { tool_context: def.tool_context } : {}),
     };
 
     try {

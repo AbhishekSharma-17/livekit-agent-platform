@@ -1127,6 +1127,40 @@
           "AvatarOptions": {
             "description": "Publisher-side options applied to whichever avatar plugin is selected.",
             "properties": {
+              "fit": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "contain",
+                      "cover"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fit"
+              },
+              "framing": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "auto",
+                      "portrait",
+                      "landscape",
+                      "square"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Framing"
+              },
               "idle_timeout_s": {
                 "anyOf": [
                   {
@@ -2613,6 +2647,8 @@
               "avatar_options": {
                 "$ref": "#/$defs/AvatarOptions",
                 "default": {
+                  "fit": null,
+                  "framing": null,
                   "idle_timeout_s": null,
                   "max_duration_s": null,
                   "participant_name": "Avatar",
@@ -6363,6 +6399,40 @@
           "AvatarOptions": {
             "description": "Publisher-side options applied to whichever avatar plugin is selected.",
             "properties": {
+              "fit": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "contain",
+                      "cover"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fit"
+              },
+              "framing": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "auto",
+                      "portrait",
+                      "landscape",
+                      "square"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Framing"
+              },
               "idle_timeout_s": {
                 "anyOf": [
                   {
@@ -7849,6 +7919,8 @@
               "avatar_options": {
                 "$ref": "#/$defs/AvatarOptions",
                 "default": {
+                  "fit": null,
+                  "framing": null,
                   "idle_timeout_s": null,
                   "max_duration_s": null,
                   "participant_name": "Avatar",
@@ -11957,6 +12029,40 @@
           "AvatarOptions": {
             "description": "Publisher-side options applied to whichever avatar plugin is selected.",
             "properties": {
+              "fit": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "contain",
+                      "cover"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fit"
+              },
+              "framing": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "auto",
+                      "portrait",
+                      "landscape",
+                      "square"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Framing"
+              },
               "idle_timeout_s": {
                 "anyOf": [
                   {
@@ -13443,6 +13549,8 @@
               "avatar_options": {
                 "$ref": "#/$defs/AvatarOptions",
                 "default": {
+                  "fit": null,
+                  "framing": null,
                   "idle_timeout_s": null,
                   "max_duration_s": null,
                   "participant_name": "Avatar",

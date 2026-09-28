@@ -124,6 +124,13 @@ def test_a_kits_http_tools_are_https_and_name_only_their_listed_secrets(kit: Too
             assert named <= set(variant.requires.secret_names)
 
 
+@pytest.mark.parametrize("kit", load_kits(), ids=lambda kit: kit.id)
+def test_no_kit_rule_uses_a_pattern(kit: ToolKit) -> None:
+    """S6-4: a `matches` runs on the worker loop; the catalogue ships none, so no kit can stall it."""
+    rules = [*kit.rules, *(rule for variant in kit.variants for rule in variant.rules)]
+    assert rules == [] or all("matches" not in rule.when.lower() for rule in rules)
+
+
 def test_another_prefix_renames_what_the_kit_adds() -> None:
     raw = kits.raw_kit("record_lookup")
     assert raw is not None

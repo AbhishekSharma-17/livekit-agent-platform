@@ -187,6 +187,18 @@ export interface LkapContracts {
   KbSearchWarning?: KbSearchWarning;
   KbSeed?: KbSeed;
   KbSourceOut?: KbSourceOut;
+  KitApp?: KitApp;
+  KitAppAction?: KitAppAction;
+  KitBlock?: KitBlock;
+  KitChange?: KitChange;
+  KitExtraction?: KitExtraction;
+  KitFlowFragment?: KitFlowFragment;
+  KitRequires?: KitRequires;
+  KitSetting?: KitSetting;
+  KitTestCase?: KitTestCase;
+  KitTool?: KitTool;
+  KitToolPlan?: KitToolPlan;
+  KitVariant?: KitVariant;
   KnowledgeConnectionCapabilities?: KnowledgeConnectionCapabilities;
   KnowledgeConnectionCreate?: KnowledgeConnectionCreate;
   KnowledgeConnectionOut?: KnowledgeConnectionOut;
@@ -324,6 +336,10 @@ export interface LkapContracts {
   ToolDryRunRequest?: ToolDryRunRequest;
   ToolDryRunResult?: ToolDryRunResult;
   ToolExecution?: ToolExecution;
+  ToolKit?: ToolKit;
+  ToolKitInstantiate?: ToolKitInstantiate;
+  ToolKitInstantiated?: ToolKitInstantiated;
+  ToolKitsResponse?: ToolKitsResponse;
   ToolMeta?: ToolMeta;
   ToolNode?: ToolNode;
   ToolOut?: ToolOut;
@@ -5972,6 +5988,400 @@ export interface KbSourceOut {
   sources?: string[];
 }
 /**
+ * The actions a ``composio_action`` variant picks when the connected app is this one.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitApp".
+ */
+export interface KitApp {
+  /**
+   * @minItems 1
+   */
+  actions: [KitAppAction, ...KitAppAction[]];
+  label: string;
+  /**
+   * The app (lower case), e.g. `zendesk`
+   */
+  toolkit: string;
+}
+/**
+ * One action of a connected app a ``composio_action`` variant picks.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitAppAction".
+ */
+export interface KitAppAction {
+  fake?: unknown;
+  key: string;
+  label: string;
+  risk?: "read" | "write";
+  /**
+   * The provider's action slug
+   */
+  slug: string;
+}
+/**
+ * A block the kit adds to the panel.
+ *
+ * ``shared`` blocks are the panel's one-of-a-kind blocks (the "still needed" checklist, the
+ * status stamp): a panel that already has a block of that type keeps it and gains nothing.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitBlock".
+ */
+export interface KitBlock {
+  config?: {
+    [k: string]: unknown;
+  };
+  id: string;
+  order?: number;
+  shared?: boolean;
+  title?: string | null;
+  type:
+    | "status"
+    | "notes"
+    | "checklist"
+    | "activity"
+    | "form"
+    | "document"
+    | "gallery"
+    | "table"
+    | "transcript"
+    | "video"
+    | "kb_citations"
+    | "custom"
+    | "choices"
+    | "details"
+    | "markdown"
+    | "steps"
+    | "consent"
+    | "upload"
+    | "captions"
+    | "handoff"
+    | "link"
+    | "slots"
+    | "cards"
+    | "notebook"
+    | "layout"
+    | "canvas";
+}
+/**
+ * One thing an instantiation adds, keeps or leaves out.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitChange".
+ */
+export interface KitChange {
+  id: string;
+  kind:
+    | "tool"
+    | "block"
+    | "instructions"
+    | "variable"
+    | "extraction"
+    | "rule"
+    | "flow_node"
+    | "flow_edge"
+    | "flow_variable"
+    | "test_case"
+    | "notify_team";
+  label?: string;
+  note?: string | null;
+  status: "added" | "exists" | "skipped";
+}
+/**
+ * How the kit changes ``AgentConfig.extraction`` besides adding its fields.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitExtraction".
+ */
+export interface KitExtraction {
+  enabled?: boolean;
+  still_needed?: "checklist" | null;
+}
+/**
+ * Steps added to an agent's existing flow after one of its steps (:data:`KIT_FLOW_ANCHOR`).
+ *
+ * Added only when the request names that step (``flow_anchor``) and the agent has a flow;
+ * an agent without a flow never becomes one.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitFlowFragment".
+ */
+export interface KitFlowFragment {
+  anchor_extract?: string[];
+  edges?: FlowEdge[];
+  /**
+   * @minItems 1
+   */
+  nodes: [
+    StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode,
+    ...(StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode)[]
+  ];
+  variables?: VariableSpec[];
+}
+/**
+ * What a variant needs, for the gallery (nothing here is needed to add it).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitRequires".
+ */
+export interface KitRequires {
+  apps?: string[];
+  dataset?: string | null;
+  min_key_columns?: number;
+  secret_names?: string[];
+  sms?: boolean;
+}
+/**
+ * A value the admin gives when adding the kit (``ToolKit.defaults``): an address, a site, an id.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitSetting".
+ */
+export interface KitSetting {
+  default?: string | null;
+  example?: string | null;
+  help?: string | null;
+  kind?: "url" | "host" | "text" | "integer";
+  label: string;
+  /**
+   * Written `{{ kit.<name> }}` in the catalogue
+   */
+  name: string;
+  required?: boolean;
+  variants?: string[];
+}
+/**
+ * The simulated conversation the kit adds; its tools answer from their fakes.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitTestCase".
+ */
+export interface KitTestCase {
+  expectations?: string[];
+  name: string;
+  persona_instructions: string;
+  scenario?: string;
+}
+/**
+ * One tool a variant creates: a definition (or a tool template) and the fake a test uses.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitTool".
+ */
+export interface KitTool {
+  definition?: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition) | null;
+  fake?: unknown;
+  /**
+   * Written `{{ kit.tool.<key> }}` in snippets and rules
+   */
+  key: string;
+  label: string;
+  only_with?: "sms" | null;
+  risk?: "read" | "write";
+  template?: string | null;
+}
+/**
+ * A streamable-HTTP MCP server attached to the agent.
+ *
+ * ``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the
+ * pre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not
+ * moved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or
+ * with ``auth.kind == "none"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set
+ * they are filled from it (``credential_id`` also mirrors an OAuth credential), and a
+ * value that disagrees with ``auth`` is an error. Stored rows need no data migration:
+ * they load as header auth and re-save with ``auth``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpServerDefinition".
+ */
+export interface McpServerDefinition {
+  allowed_tools?: string[] | null;
+  auth?: McpNoAuth | McpHeaderAuth | McpOAuthAuth;
+  cached_at?: string | null;
+  cached_tools?: McpToolSnapshot[] | null;
+  credential_id?: string | null;
+  headers?: {
+    [k: string]: string;
+  };
+  kind?: "mcp";
+  name: string;
+  origin?: McpServerOrigin | null;
+  sse_read_timeout_s?: number;
+  timeout_s?: number;
+  tool_context?: {
+    [k: string]: ToolContextSpec;
+  };
+  tool_options?: {
+    [k: string]: ToolExecution;
+  };
+  url: string;
+}
+/**
+ * The MCP server needs no credentials (a public server).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpNoAuth".
+ */
+export interface McpNoAuth {
+  kind?: "none";
+}
+/**
+ * Static request headers, typically an API key (research-v4 tools §4.3.1).
+ *
+ * Header values may reference ``{{ secret.NAME }}``; the api substitutes them from
+ * ``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpHeaderAuth".
+ */
+export interface McpHeaderAuth {
+  credential_id?: string | null;
+  headers?: {
+    [k: string]: string;
+  };
+  kind?: "header";
+}
+/**
+ * Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).
+ *
+ * The api is the OAuth client: it runs discovery, registration, consent and the token
+ * exchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a
+ * short-lived access token at session start (research-v4 tools §4.3).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpOAuthAuth".
+ */
+export interface McpOAuthAuth {
+  client_id?: string | null;
+  client_secret_ref?: string | null;
+  credential_id?: string | null;
+  kind?: "oauth";
+  registration?: "auto" | "preregistered";
+  scopes?: string[] | null;
+  subject?: "workspace" | "agent";
+}
+/**
+ * One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpToolSnapshot".
+ */
+export interface McpToolSnapshot {
+  description?: string | null;
+  input_schema?: {
+    [k: string]: unknown;
+  } | null;
+  name: string;
+}
+/**
+ * Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "McpServerOrigin".
+ */
+export interface McpServerOrigin {
+  config_hash?: string | null;
+  kind: "server" | "router";
+  provider?: "composio";
+  remote_id: string;
+}
+/**
+ * The tool-context settings of one MCP tool (``McpServerDefinition.tool_context``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolContextSpec".
+ */
+export interface ToolContextSpec {
+  bindings?: ToolBinding[];
+  confirm_readback?: string[];
+  pinned_arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
+  requires_vars?: string[];
+}
+/**
+ * One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).
+ *
+ * Created by materialisation (``POST /v1/tool-providers/composio/materialise``): the
+ * parameters are pinned from the provider's schema at import, the description is its first
+ * sentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``
+ * on the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``
+ * placeholder that the api substitutes from ``credential_id`` when a session resolves, as
+ * for HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's
+ * ``user_id`` copied from it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ProviderToolDefinition".
+ */
+export interface ProviderToolDefinition {
+  bindings?: ToolBinding[];
+  confirm_readback?: string[];
+  connected_account_id?: string | null;
+  connection_id: string;
+  credential_id?: string | null;
+  description: string;
+  execution?: ToolExecution;
+  headers?: {
+    [k: string]: string;
+  };
+  kind?: "provider";
+  max_result_chars?: number;
+  name: string;
+  parameters: {
+    [k: string]: unknown;
+  };
+  pinned_arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
+  provider?: "composio";
+  requires_vars?: string[];
+  result_path?: string | null;
+  risk?: "read" | "write" | "destructive";
+  schema_version?: string | null;
+  silent_reply?: boolean;
+  subject: string;
+  timeout_s?: number;
+  tool_slug: string;
+  toolkit?: string;
+}
+/**
+ * A tool of the kit as it is (or would be) stored.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitToolPlan".
+ */
+export interface KitToolPlan {
+  definition?: (HttpToolDefinition | McpServerDefinition | ProviderToolDefinition | DatasetToolDefinition) | null;
+  key: string;
+  kind: "http" | "mcp" | "provider" | "dataset";
+  name: string;
+  status: "added" | "exists" | "skipped";
+  tool_id?: string | null;
+}
+/**
+ * One way to run the kit: where its tools come from, and what only this way adds.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "KitVariant".
+ */
+export interface KitVariant {
+  apps?: KitApp[];
+  blocks?: KitBlock[];
+  configures?: "notify_team"[];
+  flow_nodes?: KitFlowFragment | null;
+  id: string;
+  instructions_snippet?: string | null;
+  label: string;
+  requires?: KitRequires;
+  rules?: Rule[];
+  source: "http" | "mcp_preset" | "composio_action" | "dataset" | "none";
+  summary: string;
+  tools?: KitTool[];
+  variables?: ExtractionField[];
+}
+/**
  * What a connection can do, filled by ``Test connection`` (K §5.1 ``StoreCapabilities``).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -6228,50 +6638,6 @@ export interface MarkdownBlockState {
   updated_at?: number | null;
 }
 /**
- * Static request headers, typically an API key (research-v4 tools §4.3.1).
- *
- * Header values may reference ``{{ secret.NAME }}``; the api substitutes them from
- * ``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "McpHeaderAuth".
- */
-export interface McpHeaderAuth {
-  credential_id?: string | null;
-  headers?: {
-    [k: string]: string;
-  };
-  kind?: "header";
-}
-/**
- * The MCP server needs no credentials (a public server).
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "McpNoAuth".
- */
-export interface McpNoAuth {
-  kind?: "none";
-}
-/**
- * Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).
- *
- * The api is the OAuth client: it runs discovery, registration, consent and the token
- * exchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a
- * short-lived access token at session start (research-v4 tools §4.3).
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "McpOAuthAuth".
- */
-export interface McpOAuthAuth {
-  client_id?: string | null;
-  client_secret_ref?: string | null;
-  credential_id?: string | null;
-  kind?: "oauth";
-  registration?: "auto" | "preregistered";
-  scopes?: string[] | null;
-  subject?: "workspace" | "agent";
-}
-/**
  * ``POST /v1/tools/{id}/oauth/start``: begin signing in to an MCP server's OAuth provider.
  *
  * ``client_secret`` is for a pre-registered confidential client only. It is write-only:
@@ -6322,81 +6688,6 @@ export interface McpOauthStatusOut {
   scopes?: string[];
   status: "not_connected" | "connected" | "needs_reauth" | "revoked";
   worker_supported?: boolean;
-}
-/**
- * A streamable-HTTP MCP server attached to the agent.
- *
- * ``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the
- * pre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not
- * moved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or
- * with ``auth.kind == "none"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set
- * they are filled from it (``credential_id`` also mirrors an OAuth credential), and a
- * value that disagrees with ``auth`` is an error. Stored rows need no data migration:
- * they load as header auth and re-save with ``auth``.
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "McpServerDefinition".
- */
-export interface McpServerDefinition {
-  allowed_tools?: string[] | null;
-  auth?: McpNoAuth | McpHeaderAuth | McpOAuthAuth;
-  cached_at?: string | null;
-  cached_tools?: McpToolSnapshot[] | null;
-  credential_id?: string | null;
-  headers?: {
-    [k: string]: string;
-  };
-  kind?: "mcp";
-  name: string;
-  origin?: McpServerOrigin | null;
-  sse_read_timeout_s?: number;
-  timeout_s?: number;
-  tool_context?: {
-    [k: string]: ToolContextSpec;
-  };
-  tool_options?: {
-    [k: string]: ToolExecution;
-  };
-  url: string;
-}
-/**
- * One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "McpToolSnapshot".
- */
-export interface McpToolSnapshot {
-  description?: string | null;
-  input_schema?: {
-    [k: string]: unknown;
-  } | null;
-  name: string;
-}
-/**
- * Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "McpServerOrigin".
- */
-export interface McpServerOrigin {
-  config_hash?: string | null;
-  kind: "server" | "router";
-  provider?: "composio";
-  remote_id: string;
-}
-/**
- * The tool-context settings of one MCP tool (``McpServerDefinition.tool_context``).
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ToolContextSpec".
- */
-export interface ToolContextSpec {
-  bindings?: ToolBinding[];
-  confirm_readback?: string[];
-  pinned_arguments?: {
-    [k: string]: string | number | boolean | null;
-  };
-  requires_vars?: string[];
 }
 /**
  * ``POST /v1/tools/{id}/test``: connect, ``initialize``, ``tools/list``, store the snapshot.
@@ -7459,51 +7750,6 @@ export interface ProviderSpec {
   verified_at?: string | null;
   verified_note?: string | null;
   worker_image?: "slim" | "full" | "isolated";
-}
-/**
- * One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).
- *
- * Created by materialisation (``POST /v1/tool-providers/composio/materialise``): the
- * parameters are pinned from the provider's schema at import, the description is its first
- * sentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``
- * on the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``
- * placeholder that the api substitutes from ``credential_id`` when a session resolves, as
- * for HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's
- * ``user_id`` copied from it.
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ProviderToolDefinition".
- */
-export interface ProviderToolDefinition {
-  bindings?: ToolBinding[];
-  confirm_readback?: string[];
-  connected_account_id?: string | null;
-  connection_id: string;
-  credential_id?: string | null;
-  description: string;
-  execution?: ToolExecution;
-  headers?: {
-    [k: string]: string;
-  };
-  kind?: "provider";
-  max_result_chars?: number;
-  name: string;
-  parameters: {
-    [k: string]: unknown;
-  };
-  pinned_arguments?: {
-    [k: string]: string | number | boolean | null;
-  };
-  provider?: "composio";
-  requires_vars?: string[];
-  result_path?: string | null;
-  risk?: "read" | "write" | "destructive";
-  schema_version?: string | null;
-  silent_reply?: boolean;
-  subject: string;
-  timeout_s?: number;
-  tool_slug: string;
-  toolkit?: string;
 }
 /**
  * ``GET /v1/providers``.
@@ -8593,6 +8839,125 @@ export interface ToolDryRunResult {
   status_code?: number | null;
 }
 /**
+ * A catalogue kit (``GET /v1/tool-kits``), shown rendered with its default prefix.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolKit".
+ */
+export interface ToolKit {
+  blocks?: KitBlock[];
+  default_prefix: string;
+  default_variant: string;
+  defaults?: KitSetting[];
+  docs_url?: string | null;
+  extraction?: KitExtraction | null;
+  flow_nodes?: KitFlowFragment | null;
+  id: string;
+  instructions_snippet: string;
+  name: string;
+  rules?: Rule[];
+  summary: string;
+  test_case?: KitTestCase | null;
+  variables?: ExtractionField[];
+  /**
+   * @minItems 1
+   */
+  variants: [KitVariant, ...KitVariant[]];
+}
+/**
+ * ``POST /v1/tool-kits/{id}/instantiate``: add a kit to one agent (or preview it).
+ *
+ * ``credential_id`` is a tool-secret key holding the variant's ``requires.secret_names``
+ * (binding it needs ``admin`` and ``providers:write``); without it the HTTP tools are stored
+ * without their key headers. A ``composio_action`` variant needs ``connection_id`` (a
+ * connected app) and, like picking app actions, ``admin`` and ``providers:write``. A
+ * ``dataset`` variant needs ``dataset_id``; ``key_columns`` defaults to the table's key columns.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolKitInstantiate".
+ */
+export interface ToolKitInstantiate {
+  /**
+   * composio_action: the action slugs to pick instead of the kit's
+   */
+  actions?: string[] | null;
+  /**
+   * Add the kit's test case (its tools answer from fakes)
+   */
+  add_test_case?: boolean;
+  agent_id: string;
+  /**
+   * Names what the kit adds (default: the kit's)
+   */
+  block_prefix?: string | null;
+  connection_id?: string | null;
+  credential_id?: string | null;
+  dataset_id?: string | null;
+  /**
+   * Only say what would be added; change nothing
+   */
+  dry_run?: boolean;
+  /**
+   * Add the kit's flow steps after this step
+   */
+  flow_anchor?: string | null;
+  key_columns?: string[] | null;
+  /**
+   * Values of the kit's `defaults`, e.g. {'base_url': 'https://…'}
+   */
+  settings?: {
+    [k: string]: string | number | boolean;
+  };
+  /**
+   * A variant id (default: the kit's default)
+   */
+  variant?: string | null;
+}
+/**
+ * What ``POST /v1/tool-kits/{id}/instantiate`` added, kept and left out (or would, on a dry run).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolKitInstantiated".
+ */
+export interface ToolKitInstantiated {
+  changes: KitChange[];
+  config_version?: number | null;
+  dry_run: boolean;
+  instructions_snippet: string;
+  kit_id: string;
+  notes?: string[];
+  prefix: string;
+  tool_ids?: string[];
+  tools: KitToolPlan[];
+  validation: ValidationResult;
+  variant: string;
+}
+/**
+ * ``POST /v1/agents/{id}/validate``.
+ *
+ * ``errors``/``warnings`` are the flat v1 lists; ``issues`` carries the same
+ * findings with a ``path`` so the console can focus the offending field
+ * (UI_UX_SPEC §7.14).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ValidationResult".
+ */
+export interface ValidationResult {
+  errors?: string[];
+  issues?: Issue[];
+  ok: boolean;
+  warnings?: string[];
+}
+/**
+ * ``GET /v1/tool-kits``: every kit, in catalogue order.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolKitsResponse".
+ */
+export interface ToolKitsResponse {
+  items: ToolKit[];
+}
+/**
  * Runtime metadata for a pack code tool, used for reply control and UI labels.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -9038,22 +9403,6 @@ export interface UploadRejection {
   message: string;
   name: string;
   reason: "too_large" | "type_not_allowed" | "too_many_files" | "empty" | "not_requested" | "failed";
-}
-/**
- * ``POST /v1/agents/{id}/validate``.
- *
- * ``errors``/``warnings`` are the flat v1 lists; ``issues`` carries the same
- * findings with a ``path`` so the console can focus the offending field
- * (UI_UX_SPEC §7.14).
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ValidationResult".
- */
-export interface ValidationResult {
-  errors?: string[];
-  issues?: Issue[];
-  ok: boolean;
-  warnings?: string[];
 }
 /**
  * Which video track the block renders.

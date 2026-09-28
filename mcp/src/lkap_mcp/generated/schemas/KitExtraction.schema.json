@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/KitExtraction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "How the kit changes ``AgentConfig.extraction`` besides adding its fields.",
+  "properties": {
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "still_needed": {
+      "anyOf": [
+        {
+          "const": "checklist",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Still Needed"
+    }
+  },
+  "title": "KitExtraction",
+  "type": "object"
+}

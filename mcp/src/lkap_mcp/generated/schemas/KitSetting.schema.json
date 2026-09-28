@@ -1,0 +1,88 @@
+{
+  "$id": "lkap-contracts/KitSetting.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A value the admin gives when adding the kit (``ToolKit.defaults``): an address, a site, an id.",
+  "properties": {
+    "default": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default"
+    },
+    "example": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Example"
+    },
+    "help": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Help"
+    },
+    "kind": {
+      "default": "text",
+      "enum": [
+        "url",
+        "host",
+        "text",
+        "integer"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "name": {
+      "description": "Written `{{ kit.<name> }}` in the catalogue",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "required": {
+      "default": false,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "variants": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Variants",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "label"
+  ],
+  "title": "KitSetting",
+  "type": "object"
+}

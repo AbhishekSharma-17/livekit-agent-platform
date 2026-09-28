@@ -1,0 +1,3069 @@
+{
+  "$defs": {
+    "AgentNode": {
+      "description": "One conversational step with its own instructions, tools and extractions.",
+      "properties": {
+        "allow_interruptions": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Interruptions"
+        },
+        "extract": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Extract",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "agent",
+          "default": "agent",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "max_turns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Turns"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "providers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderRef"
+          },
+          "default": {},
+          "propertyNames": {
+            "enum": [
+              "llm",
+              "tts"
+            ]
+          },
+          "title": "Providers",
+          "type": "object"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "AgentNode",
+      "type": "object"
+    },
+    "ChecklistCheckAction": {
+      "description": "Tick (or, with ``done: false``, untick) an item that is already on the checklist.",
+      "properties": {
+        "do": {
+          "const": "checklist.check",
+          "default": "checklist.check",
+          "title": "Do",
+          "type": "string"
+        },
+        "done": {
+          "default": true,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ChecklistCheckAction",
+      "type": "object"
+    },
+    "ChecklistSetItemAction": {
+      "description": "Add or replace one item of the \"still needed\" checklist (the others are kept).",
+      "properties": {
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "do": {
+          "const": "checklist.set_item",
+          "default": "checklist.set_item",
+          "title": "Do",
+          "type": "string"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChecklistSetItemAction",
+      "type": "object"
+    },
+    "DatasetToolDefinition": {
+      "description": "A lookup in one of the workspace's datasets (V6-16, D-V6-27; ``lkap_contracts.datasets``).\n\nThe model sees one string argument per key column (``key_columns``, minus the pinned\nones) and gets back at most ``max_rows`` rows with ``return_columns`` (all columns when\nempty), matched ``exact`` or by ``prefix`` on the normalised value. The worker calls the\napi's internal lookup route with the session, so a lookup never reads another\nworkspace's dataset, and fences the rows as ``dataset:<name>``. Read-only: nothing is\never written to a dataset from a call. The tool always runs blocking (a lookup is quick).\n\nV6-07: ``pinned_arguments`` fix a key column's value, hidden from the model (a string may\nbe ``{{ ctx.caller_phone }}`` or ``{{ var.policy_number }}``); ``requires_vars`` refuse\nuntil variables are set; ``bindings`` copy a successful lookup onto the panel. The bound\n(and model-visible) result is the list of rows, so ``/0/holder_name`` is the first row's\n``holder_name``.",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "dataset_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "key_columns": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Key Columns",
+          "type": "array"
+        },
+        "kind": {
+          "const": "dataset",
+          "default": "dataset",
+          "title": "Kind",
+          "type": "string"
+        },
+        "match": {
+          "default": "exact",
+          "enum": [
+            "exact",
+            "prefix"
+          ],
+          "title": "Match",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 2000,
+          "maximum": 8000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "max_rows": {
+          "default": 5,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Rows",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "return_columns": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Return Columns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "dataset_id",
+        "key_columns"
+      ],
+      "title": "DatasetToolDefinition",
+      "type": "object"
+    },
+    "DetailsSetAction": {
+      "description": "Write one row of a ``details`` block (``value`` may name ``{{ var.<name> }}``).",
+      "properties": {
+        "block_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "do": {
+          "const": "details.set",
+          "default": "details.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "key": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "value": {
+          "maxLength": 500,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "block_id",
+        "key",
+        "value"
+      ],
+      "title": "DetailsSetAction",
+      "type": "object"
+    },
+    "DispositionSetAction": {
+      "description": "Set the session's outcome label (a flow's ``disposition``).",
+      "properties": {
+        "do": {
+          "const": "disposition.set",
+          "default": "disposition.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "DispositionSetAction",
+      "type": "object"
+    },
+    "EndNode": {
+      "description": "Terminal node: says farewell, records a disposition and ends the session.",
+      "properties": {
+        "disposition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disposition"
+        },
+        "farewell": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Farewell"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "end",
+          "default": "end",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "webhook_event": {
+          "default": true,
+          "title": "Webhook Event",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "EndNode",
+      "type": "object"
+    },
+    "EscalateAction": {
+      "description": "Flag the session for a person, as ``escalate_to_human`` does, with the rule's reason.",
+      "properties": {
+        "do": {
+          "const": "escalate",
+          "default": "escalate",
+          "title": "Do",
+          "type": "string"
+        },
+        "mode": {
+          "default": "transfer",
+          "enum": [
+            "transfer",
+            "takeover",
+            "listen_in",
+            "callback"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "urgency": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ],
+          "title": "Urgency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "EscalateAction",
+      "type": "object"
+    },
+    "ExtractionField": {
+      "description": "One fact to capture: a flow ``VariableSpec`` plus how to ask for it and where it shows.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "hint": {
+          "default": "",
+          "maxLength": 300,
+          "title": "Hint",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 80,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "sensitive": {
+          "default": false,
+          "title": "Sensitive",
+          "type": "boolean"
+        },
+        "show_in": {
+          "anyOf": [
+            {
+              "maxLength": 140,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Show In"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "enum",
+            "date",
+            "phone",
+            "email"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ExtractionField",
+      "type": "object"
+    },
+    "FlowEdge": {
+      "description": "A conditional transition; ``condition`` becomes the handoff tool description.",
+      "properties": {
+        "condition": {
+          "default": "",
+          "title": "Condition",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "priority": {
+          "default": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "transition_speech": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transition Speech"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target"
+      ],
+      "title": "FlowEdge",
+      "type": "object"
+    },
+    "GlobalNode": {
+      "description": "Instructions, tools and knowledge merged into every agent node.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "kb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Kb Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "global",
+          "default": "global",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "GlobalNode",
+      "type": "object"
+    },
+    "HttpToolDefinition": {
+      "description": "An HTTP call exposed to the model as a raw-schema function tool.",
+      "properties": {
+        "allowed_hosts": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "body_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body Template"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ToolExecution"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "http",
+          "default": "http",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 4000,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "method": {
+          "default": "POST",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "result_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Path"
+        },
+        "silent_reply": {
+          "default": false,
+          "title": "Silent Reply",
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "default": 10,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "parameters",
+        "url"
+      ],
+      "title": "HttpToolDefinition",
+      "type": "object"
+    },
+    "InstructAction": {
+      "description": "A system note for the model's next reply only (sent as written; no placeholders).",
+      "properties": {
+        "do": {
+          "const": "instruct",
+          "default": "instruct",
+          "title": "Do",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "InstructAction",
+      "type": "object"
+    },
+    "KitApp": {
+      "description": "The actions a ``composio_action`` variant picks when the connected app is this one.",
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/KitAppAction"
+          },
+          "minItems": 1,
+          "title": "Actions",
+          "type": "array"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "toolkit": {
+          "description": "The app (lower case), e.g. `zendesk`",
+          "pattern": "^[a-z0-9_]{1,64}$",
+          "title": "Toolkit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "toolkit",
+        "label",
+        "actions"
+      ],
+      "title": "KitApp",
+      "type": "object"
+    },
+    "KitAppAction": {
+      "description": "One action of a connected app a ``composio_action`` variant picks.",
+      "properties": {
+        "fake": {
+          "default": null,
+          "title": "Fake"
+        },
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The provider's action slug",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "key",
+        "label"
+      ],
+      "title": "KitAppAction",
+      "type": "object"
+    },
+    "KitBlock": {
+      "description": "A block the kit adds to the panel.\n\n``shared`` blocks are the panel's one-of-a-kind blocks (the \"still needed\" checklist, the\nstatus stamp): a panel that already has a block of that type keeps it and gains nothing.",
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Config",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "shared": {
+          "default": false,
+          "title": "Shared",
+          "type": "boolean"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "type": {
+          "enum": [
+            "status",
+            "notes",
+            "checklist",
+            "activity",
+            "form",
+            "document",
+            "gallery",
+            "table",
+            "transcript",
+            "video",
+            "kb_citations",
+            "custom",
+            "choices",
+            "details",
+            "markdown",
+            "steps",
+            "consent",
+            "upload",
+            "captions",
+            "handoff",
+            "link",
+            "slots",
+            "cards",
+            "notebook",
+            "layout",
+            "canvas"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "KitBlock",
+      "type": "object"
+    },
+    "KitExtraction": {
+      "description": "How the kit changes ``AgentConfig.extraction`` besides adding its fields.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "still_needed": {
+          "anyOf": [
+            {
+              "const": "checklist",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Still Needed"
+        }
+      },
+      "title": "KitExtraction",
+      "type": "object"
+    },
+    "KitFlowFragment": {
+      "description": "Steps added to an agent's existing flow after one of its steps (:data:`KIT_FLOW_ANCHOR`).\n\nAdded only when the request names that step (``flow_anchor``) and the agent has a flow;\nan agent without a flow never becomes one.",
+      "properties": {
+        "anchor_extract": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Anchor Extract",
+          "type": "array"
+        },
+        "edges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FlowEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/AgentNode",
+                "end": "#/$defs/EndNode",
+                "global": "#/$defs/GlobalNode",
+                "qa": "#/$defs/QaNode",
+                "start": "#/$defs/StartNode",
+                "tool": "#/$defs/ToolNode",
+                "transfer": "#/$defs/TransferNode"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StartNode"
+              },
+              {
+                "$ref": "#/$defs/AgentNode"
+              },
+              {
+                "$ref": "#/$defs/EndNode"
+              },
+              {
+                "$ref": "#/$defs/GlobalNode"
+              },
+              {
+                "$ref": "#/$defs/TransferNode"
+              },
+              {
+                "$ref": "#/$defs/QaNode"
+              },
+              {
+                "$ref": "#/$defs/ToolNode"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "variables": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VariableSpec"
+          },
+          "title": "Variables",
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes"
+      ],
+      "title": "KitFlowFragment",
+      "type": "object"
+    },
+    "KitRequires": {
+      "description": "What a variant needs, for the gallery (nothing here is needed to add it).",
+      "properties": {
+        "apps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Apps",
+          "type": "array"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset"
+        },
+        "min_key_columns": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Min Key Columns",
+          "type": "integer"
+        },
+        "secret_names": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Secret Names",
+          "type": "array"
+        },
+        "sms": {
+          "default": false,
+          "title": "Sms",
+          "type": "boolean"
+        }
+      },
+      "title": "KitRequires",
+      "type": "object"
+    },
+    "KitSetting": {
+      "description": "A value the admin gives when adding the kit (``ToolKit.defaults``): an address, a site, an id.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Example"
+        },
+        "help": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Help"
+        },
+        "kind": {
+          "default": "text",
+          "enum": [
+            "url",
+            "host",
+            "text",
+            "integer"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "description": "Written `{{ kit.<name> }}` in the catalogue",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "variants": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Variants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "title": "KitSetting",
+      "type": "object"
+    },
+    "KitTestCase": {
+      "description": "The simulated conversation the kit adds; its tools answer from their fakes.",
+      "properties": {
+        "expectations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Expectations",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "persona_instructions": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Persona Instructions",
+          "type": "string"
+        },
+        "scenario": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Scenario",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "persona_instructions"
+      ],
+      "title": "KitTestCase",
+      "type": "object"
+    },
+    "KitTool": {
+      "description": "One tool a variant creates: a definition (or a tool template) and the fake a test uses.",
+      "properties": {
+        "definition": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "dataset": "#/$defs/DatasetToolDefinition",
+                  "http": "#/$defs/HttpToolDefinition",
+                  "mcp": "#/$defs/McpServerDefinition",
+                  "provider": "#/$defs/ProviderToolDefinition"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/HttpToolDefinition"
+                },
+                {
+                  "$ref": "#/$defs/McpServerDefinition"
+                },
+                {
+                  "$ref": "#/$defs/ProviderToolDefinition"
+                },
+                {
+                  "$ref": "#/$defs/DatasetToolDefinition"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "fake": {
+          "default": null,
+          "title": "Fake"
+        },
+        "key": {
+          "description": "Written `{{ kit.tool.<key> }}` in snippets and rules",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "only_with": {
+          "anyOf": [
+            {
+              "const": "sms",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Only With"
+        },
+        "risk": {
+          "default": "read",
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,40}\\.[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "KitTool",
+      "type": "object"
+    },
+    "KitVariant": {
+      "description": "One way to run the kit: where its tools come from, and what only this way adds.",
+      "properties": {
+        "apps": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/KitApp"
+          },
+          "title": "Apps",
+          "type": "array"
+        },
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/KitBlock"
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "configures": {
+          "default": [],
+          "items": {
+            "const": "notify_team",
+            "type": "string"
+          },
+          "title": "Configures",
+          "type": "array"
+        },
+        "flow_nodes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KitFlowFragment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions_snippet": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instructions Snippet"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "requires": {
+          "$ref": "#/$defs/KitRequires",
+          "default": {
+            "apps": [],
+            "dataset": null,
+            "min_key_columns": 1,
+            "secret_names": [],
+            "sms": false
+          }
+        },
+        "rules": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "title": "Rules",
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "http",
+            "mcp_preset",
+            "composio_action",
+            "dataset",
+            "none"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/KitTool"
+          },
+          "title": "Tools",
+          "type": "array"
+        },
+        "variables": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExtractionField"
+          },
+          "title": "Variables",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "summary",
+        "source"
+      ],
+      "title": "KitVariant",
+      "type": "object"
+    },
+    "McpHeaderAuth": {
+      "description": "Static request headers, typically an API key (research-v4 tools §4.3.1).\n\nHeader values may reference ``{{ secret.NAME }}``; the api substitutes them from\n``credential_id`` (an ``http-tool-secret`` bag) when a session resolves.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "header",
+          "default": "header",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "McpHeaderAuth",
+      "type": "object"
+    },
+    "McpNoAuth": {
+      "description": "The MCP server needs no credentials (a public server).",
+      "properties": {
+        "kind": {
+          "const": "none",
+          "default": "none",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "McpNoAuth",
+      "type": "object"
+    },
+    "McpOAuthAuth": {
+      "description": "Sign in through the server's OAuth provider (V5-14; saved only once V5-14 lands).\n\nThe api is the OAuth client: it runs discovery, registration, consent and the token\nexchange, keeps the tokens in an ``mcp-oauth`` credential, and hands the worker a\nshort-lived access token at session start (research-v4 tools §4.3).",
+      "properties": {
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Id"
+        },
+        "client_secret_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Ref"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "kind": {
+          "const": "oauth",
+          "default": "oauth",
+          "title": "Kind",
+          "type": "string"
+        },
+        "registration": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "preregistered"
+          ],
+          "title": "Registration",
+          "type": "string"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scopes"
+        },
+        "subject": {
+          "default": "workspace",
+          "enum": [
+            "workspace",
+            "agent"
+          ],
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "title": "McpOAuthAuth",
+      "type": "object"
+    },
+    "McpServerDefinition": {
+      "description": "A streamable-HTTP MCP server attached to the agent.\n\n``auth`` says how the worker authenticates. ``headers`` and ``credential_id`` are the\npre-V5-09 shape, kept as **deprecated mirrors** of header auth so readers that have not\nmoved to ``auth`` yet keep working: a definition that sets them without ``auth`` (or\nwith ``auth.kind == \"none\"``) folds them into :class:`McpHeaderAuth`; with ``auth`` set\nthey are filled from it (``credential_id`` also mirrors an OAuth credential), and a\nvalue that disagrees with ``auth`` is an error. Stored rows need no data migration:\nthey load as header auth and re-save with ``auth``.",
+      "properties": {
+        "allowed_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Tools"
+        },
+        "auth": {
+          "discriminator": {
+            "mapping": {
+              "header": "#/$defs/McpHeaderAuth",
+              "none": "#/$defs/McpNoAuth",
+              "oauth": "#/$defs/McpOAuthAuth"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/McpNoAuth"
+            },
+            {
+              "$ref": "#/$defs/McpHeaderAuth"
+            },
+            {
+              "$ref": "#/$defs/McpOAuthAuth"
+            }
+          ],
+          "title": "Auth"
+        },
+        "cached_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached At"
+        },
+        "cached_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpToolSnapshot"
+              },
+              "maxItems": 200,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Tools"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "mcp",
+          "default": "mcp",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpServerOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sse_read_timeout_s": {
+          "default": 300,
+          "title": "Sse Read Timeout S",
+          "type": "number"
+        },
+        "timeout_s": {
+          "default": 5,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool_context": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolContextSpec"
+          },
+          "default": {},
+          "title": "Tool Context",
+          "type": "object"
+        },
+        "tool_options": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolExecution"
+          },
+          "default": {},
+          "title": "Tool Options",
+          "type": "object"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ],
+      "title": "McpServerDefinition",
+      "type": "object"
+    },
+    "McpServerOrigin": {
+      "description": "Where a provider-provisioned MCP server comes from (docs/v5/COMPOSIO.md §3).",
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "kind": {
+          "enum": [
+            "server",
+            "router"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "remote_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Remote Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "remote_id"
+      ],
+      "title": "McpServerOrigin",
+      "type": "object"
+    },
+    "McpToolSnapshot": {
+      "description": "One tool of a server's ``tools/list`` answer, as ``POST /v1/tools/{id}/test`` stored it.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpToolSnapshot",
+      "type": "object"
+    },
+    "NotePushAction": {
+      "description": "Push a note (``text`` may name ``{{ var.<name> }}``); in ``block_id``'s margin when given.",
+      "properties": {
+        "block_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Id"
+        },
+        "do": {
+          "const": "note.push",
+          "default": "note.push",
+          "title": "Do",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "NotePushAction",
+      "type": "object"
+    },
+    "ProviderRef": {
+      "description": "Points at a registry provider plus the credential and options to use.",
+      "properties": {
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "fields": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Fields",
+          "type": "object"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id"
+      ],
+      "title": "ProviderRef",
+      "type": "object"
+    },
+    "ProviderToolDefinition": {
+      "description": "One action of a connected app run through a tool provider (docs/v5/COMPOSIO.md §3, D-V5-C8).\n\nCreated by materialisation (``POST /v1/tool-providers/composio/materialise``): the\nparameters are pinned from the provider's schema at import, the description is its first\nsentence (editable). The worker runs it with ``POST /api/v3.1/tools/execute/{tool_slug}``\non the provider's host. ``headers`` carry the provider key as a ``{{ secret.NAME }}``\nplaceholder that the api substitutes from ``credential_id`` when a session resolves, as\nfor HTTP tools; ``connection_id`` is the connected-app row, ``subject`` the provider's\n``user_id`` copied from it.",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "connected_account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connected Account Id"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "credential_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Id"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ToolExecution"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "kind": {
+          "const": "provider",
+          "default": "provider",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_result_chars": {
+          "default": 1500,
+          "maximum": 20000,
+          "minimum": 100,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "provider": {
+          "const": "composio",
+          "default": "composio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        },
+        "result_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "data",
+          "title": "Result Path"
+        },
+        "risk": {
+          "default": "write",
+          "enum": [
+            "read",
+            "write",
+            "destructive"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Version"
+        },
+        "silent_reply": {
+          "default": false,
+          "title": "Silent Reply",
+          "type": "boolean"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 10,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool_slug": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "toolkit": {
+          "default": "",
+          "title": "Toolkit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "parameters",
+        "tool_slug",
+        "connection_id",
+        "subject"
+      ],
+      "title": "ProviderToolDefinition",
+      "type": "object"
+    },
+    "QaNode": {
+      "description": "Post-call scoring step; never part of the conversational graph.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "qa",
+          "default": "qa",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "rubric_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rubric Prompt"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "QaNode",
+      "type": "object"
+    },
+    "Rule": {
+      "description": "``when`` the condition holds, ``then`` run the actions (see the module docstring).",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Label",
+          "type": "string"
+        },
+        "once": {
+          "default": true,
+          "title": "Once",
+          "type": "boolean"
+        },
+        "then": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "checklist.check": "#/$defs/ChecklistCheckAction",
+                "checklist.set_item": "#/$defs/ChecklistSetItemAction",
+                "details.set": "#/$defs/DetailsSetAction",
+                "disposition.set": "#/$defs/DispositionSetAction",
+                "escalate": "#/$defs/EscalateAction",
+                "instruct": "#/$defs/InstructAction",
+                "note.push": "#/$defs/NotePushAction",
+                "status.set": "#/$defs/StatusSetAction",
+                "var.set": "#/$defs/VarSetAction"
+              },
+              "propertyName": "do"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ChecklistSetItemAction"
+              },
+              {
+                "$ref": "#/$defs/ChecklistCheckAction"
+              },
+              {
+                "$ref": "#/$defs/StatusSetAction"
+              },
+              {
+                "$ref": "#/$defs/DetailsSetAction"
+              },
+              {
+                "$ref": "#/$defs/NotePushAction"
+              },
+              {
+                "$ref": "#/$defs/VarSetAction"
+              },
+              {
+                "$ref": "#/$defs/EscalateAction"
+              },
+              {
+                "$ref": "#/$defs/InstructAction"
+              },
+              {
+                "$ref": "#/$defs/DispositionSetAction"
+              }
+            ]
+          },
+          "title": "Then",
+          "type": "array"
+        },
+        "when": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "When",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "when",
+        "then"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "StartNode": {
+      "description": "Entry point: greets the caller and hands off along its first matching edge.",
+      "properties": {
+        "greeting": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Greeting"
+        },
+        "greeting_mode": {
+          "default": "say",
+          "enum": [
+            "say",
+            "generate"
+          ],
+          "title": "Greeting Mode",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "start",
+          "default": "start",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "StartNode",
+      "type": "object"
+    },
+    "StatusSetAction": {
+      "description": "Set the status stamp.",
+      "properties": {
+        "do": {
+          "const": "status.set",
+          "default": "status.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "default": "info",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "StatusSetAction",
+      "type": "object"
+    },
+    "ToolBinding": {
+      "description": "Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).\n\nApplied by the worker after a successful call (an HTTP 2xx, an app action that\nsucceeded, an MCP result that is not an error) and before the model's next turn, with\nno model involved. ``path`` points into the tool's result as the model would see it\n(after ``result_path``); ``\"\"`` is the whole result.",
+      "properties": {
+        "path": {
+          "default": "",
+          "maxLength": 256,
+          "title": "Path",
+          "type": "string"
+        },
+        "to": {
+          "maxLength": 140,
+          "minLength": 1,
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "ToolBinding",
+      "type": "object"
+    },
+    "ToolContextSpec": {
+      "description": "The tool-context settings of one MCP tool (``McpServerDefinition.tool_context``).",
+      "properties": {
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "confirm_readback": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Confirm Readback",
+          "type": "array"
+        },
+        "pinned_arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Pinned Arguments",
+          "type": "object"
+        },
+        "requires_vars": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Vars",
+          "type": "array"
+        }
+      },
+      "title": "ToolContextSpec",
+      "type": "object"
+    },
+    "ToolExecution": {
+      "description": "How one tool runs relative to the conversation (BACKGROUND-TOOLS.md §2).\n\nThe agent-level default (``ToolsConfig.execution_default``) only ever reaches read\ntools: GET HTTP tools and the built-ins in :data:`BACKGROUNDABLE_BUILTINS`. The\ntools in :data:`NEVER_BACKGROUND_TOOLS` and the flow edge tools always block.",
+      "properties": {
+        "announce": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Announce"
+        },
+        "auto_threshold_ms": {
+          "default": 700,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Auto Threshold Ms",
+          "type": "integer"
+        },
+        "cancellable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cancellable"
+        },
+        "duplicate_scope": {
+          "default": "name_and_args",
+          "enum": [
+            "name",
+            "name_and_args"
+          ],
+          "title": "Duplicate Scope",
+          "type": "string"
+        },
+        "filler_delay_s": {
+          "default": 4.0,
+          "maximum": 30,
+          "minimum": 0.5,
+          "title": "Filler Delay S",
+          "type": "number"
+        },
+        "filler_interval_s": {
+          "default": 8.0,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Filler Interval S",
+          "type": "number"
+        },
+        "fillers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Fillers",
+          "type": "array"
+        },
+        "max_duration_s": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Max Duration S",
+          "type": "number"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "blocking",
+                "background",
+                "auto"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "on_duplicate": {
+          "anyOf": [
+            {
+              "enum": [
+                "allow",
+                "reject",
+                "replace",
+                "confirm"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Duplicate"
+        },
+        "report_progress": {
+          "default": false,
+          "title": "Report Progress",
+          "type": "boolean"
+        }
+      },
+      "title": "ToolExecution",
+      "type": "object"
+    },
+    "ToolKit": {
+      "description": "A catalogue kit (``GET /v1/tool-kits``), shown rendered with its default prefix.",
+      "properties": {
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/KitBlock"
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "default_prefix": {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "title": "Default Prefix",
+          "type": "string"
+        },
+        "default_variant": {
+          "title": "Default Variant",
+          "type": "string"
+        },
+        "defaults": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/KitSetting"
+          },
+          "title": "Defaults",
+          "type": "array"
+        },
+        "docs_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Docs Url"
+        },
+        "extraction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KitExtraction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "flow_nodes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KitFlowFragment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "instructions_snippet": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Instructions Snippet",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "rules": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "title": "Rules",
+          "type": "array"
+        },
+        "summary": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "test_case": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KitTestCase"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "variables": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExtractionField"
+          },
+          "title": "Variables",
+          "type": "array"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/KitVariant"
+          },
+          "minItems": 1,
+          "title": "Variants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "summary",
+        "default_prefix",
+        "default_variant",
+        "variants",
+        "instructions_snippet"
+      ],
+      "title": "ToolKit",
+      "type": "object"
+    },
+    "ToolNode": {
+      "description": "Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).\n\nThe worker runs the tool the moment the step is entered — through the same execution path\nas a call the model makes (blocking, the same guardrails and fences) — applies\n:attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The\nresult text itself never reaches the model: what the next steps need goes into variables\n(``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.",
+      "properties": {
+        "arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "tool",
+          "default": "tool",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "mcp_tool": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mcp Tool"
+        },
+        "on": {
+          "$ref": "#/$defs/ToolNodeOutcomes",
+          "default": {
+            "empty": null,
+            "error": null,
+            "ok": null
+          }
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "timeout_s": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30.0,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tool"
+      ],
+      "title": "ToolNode",
+      "type": "object"
+    },
+    "ToolNodeOutcomes": {
+      "additionalProperties": false,
+      "description": "Which outgoing edge a ``tool`` node takes for each outcome (edge ids).",
+      "properties": {
+        "empty": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Empty"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "ok": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ok"
+        }
+      },
+      "title": "ToolNodeOutcomes",
+      "type": "object"
+    },
+    "TransferNode": {
+      "description": "Hands the call to a human or another number.",
+      "properties": {
+        "announce": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Announce"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "transfer",
+          "default": "transfer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "mode": {
+          "default": "cold",
+          "enum": [
+            "cold",
+            "warm"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "to"
+      ],
+      "title": "TransferNode",
+      "type": "object"
+    },
+    "VarSetAction": {
+      "description": "Set a session variable.",
+      "properties": {
+        "do": {
+          "const": "var.set",
+          "default": "var.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "VarSetAction",
+      "type": "object"
+    },
+    "VariableSpec": {
+      "description": "One variable a flow extracts from the conversation.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "enum",
+            "date",
+            "phone",
+            "email"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "VariableSpec",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ToolKitsResponse.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/tool-kits``: every kit, in catalogue order.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ToolKit"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "ToolKitsResponse",
+  "type": "object"
+}

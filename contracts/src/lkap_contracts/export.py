@@ -83,6 +83,7 @@ from lkap_contracts.flow import (
     VariableSpec,
 )
 from lkap_contracts.guardrails import GuardrailEvent, GuardrailsConfig, GuardrailTimeoutEvent
+from lkap_contracts.kits import KIT_MODELS
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
@@ -496,6 +497,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     **EXTRACTION_MODELS,  # V6-13: live structured extraction
     **RULE_MODELS,  # V6-13: declarative rules
     **DATASET_MODELS,  # V6-16: datasets (lookup tables)
+    **KIT_MODELS,  # V6-18: tool kits
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.

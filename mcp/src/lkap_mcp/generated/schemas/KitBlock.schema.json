@@ -1,0 +1,77 @@
+{
+  "$id": "lkap-contracts/KitBlock.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A block the kit adds to the panel.\n\n``shared`` blocks are the panel's one-of-a-kind blocks (the \"still needed\" checklist, the\nstatus stamp): a panel that already has a block of that type keeps it and gains nothing.",
+  "properties": {
+    "config": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Config",
+      "type": "object"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "order": {
+      "default": 0,
+      "title": "Order",
+      "type": "integer"
+    },
+    "shared": {
+      "default": false,
+      "title": "Shared",
+      "type": "boolean"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "type": {
+      "enum": [
+        "status",
+        "notes",
+        "checklist",
+        "activity",
+        "form",
+        "document",
+        "gallery",
+        "table",
+        "transcript",
+        "video",
+        "kb_citations",
+        "custom",
+        "choices",
+        "details",
+        "markdown",
+        "steps",
+        "consent",
+        "upload",
+        "captions",
+        "handoff",
+        "link",
+        "slots",
+        "cards",
+        "notebook",
+        "layout",
+        "canvas"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "type"
+  ],
+  "title": "KitBlock",
+  "type": "object"
+}

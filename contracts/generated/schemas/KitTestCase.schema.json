@@ -1,0 +1,39 @@
+{
+  "$id": "lkap-contracts/KitTestCase.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The simulated conversation the kit adds; its tools answer from their fakes.",
+  "properties": {
+    "expectations": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Expectations",
+      "type": "array"
+    },
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "persona_instructions": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Persona Instructions",
+      "type": "string"
+    },
+    "scenario": {
+      "default": "",
+      "maxLength": 4000,
+      "title": "Scenario",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "persona_instructions"
+  ],
+  "title": "KitTestCase",
+  "type": "object"
+}

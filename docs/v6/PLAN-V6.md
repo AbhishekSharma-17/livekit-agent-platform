@@ -134,6 +134,7 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-25 | X | Closing: `ARCHITECTURE-V6.md`, RUNBOOK, CONTRACTS, MCP docs, `llms.txt`, the status table, the final review | Opus (docs) + Fable | 7 | everything above |
 | V6-26 | P | Avatar framing: size the agent video to the avatar's real aspect (portrait / square / landscape), `contain` by default, per-provider native aspect, custom/imported avatars, every surface incl. mobile | Sonnet (+ Opus contracts hunk) | 7 | none (user request 2026-09-28) |
 | V6-27 | P | Connections: catch agent-name clashes on the same LiveKit server (409 `agent_name_in_use`, inline on Test and Save) and make "each connection needs its own worker" obvious (create-form note, no-worker empty state, worker status in the agent picker, fail fast at call start); RUNBOOK §3 | Opus | 6 | none (user request 2026-09-28) |
+| V6-28 | S | Rules: a stored `matches` pattern the scanner refuses becomes a per-rule validation error instead of a load failure (#166); `CanvasBlockConfig.signature_mode` marked superseded (#212) | Opus | 7 | V6-24 merged; before V6-25 (R-V6-3) |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files; contracts commits still serialised in the listed order):
 
@@ -397,13 +398,14 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-18 | Opus | 5 | merged | b4d502b | | |
 | V6-19 | Sonnet | 5 | merged | 9652a2e | | #191, #192 |
 | V6-20 | Fable | 5 | merged | d1365cc | | |
-| V6-21 | Opus | 6 | merged | aea6a9b | | #162, #166 |
-| V6-22 | Opus | 6 | blocked (ask #229, awaiting R-V6-3) | | | |
+| V6-21 | Opus | 6 | merged | aea6a9b | | |
+| V6-22 | Opus | 6 | running (applying R-V6-3 #229) | | | |
 | V6-23 | Opus | 6 | merged | f365327 | | #211–#217 |
 | V6-24 | Sonnet | 7 | merged | 324db4b | | #241, #242 |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
 | V6-26 | Sonnet (+ Opus contracts hunk) | 7 | merged | 0f319ed (+ V6-26b 4f200ee) | | |
 | V6-27 | Opus | 6 | merged | 035b223 | | #177 |
+| V6-28 | Opus | 7 | running | | | #166, #212 |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): none yet.
 

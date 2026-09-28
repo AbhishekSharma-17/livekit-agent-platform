@@ -190,7 +190,14 @@ export function BindingsEditor({
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <BindingWhere row={row} detailsBlocks={detailsBlocks} tableBlocks={tableBlocks} onChange={(patch) => patchRow(index, patch)} rowIndex={index} />
+                  <BindingWhere
+                    uid={uid}
+                    row={row}
+                    detailsBlocks={detailsBlocks}
+                    tableBlocks={tableBlocks}
+                    onChange={(patch) => patchRow(index, patch)}
+                    rowIndex={index}
+                  />
                 </TableCell>
                 <TableCell>
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} aria-label={`Remove binding ${index + 1}`}>
@@ -219,12 +226,14 @@ export function BindingsEditor({
 }
 
 function BindingWhere({
+  uid,
   row,
   detailsBlocks,
   tableBlocks,
   onChange,
   rowIndex,
 }: {
+  uid: string;
   row: BindingRow;
   detailsBlocks: { id: string; title: string; fieldKeys: string[] }[];
   tableBlocks: { id: string; title: string }[];
@@ -261,12 +270,12 @@ function BindingWhere({
           value={row.key}
           onChange={(e) => onChange({ key: e.target.value })}
           placeholder="field key"
-          list={block && block.fieldKeys.length > 0 ? `${rowIndex}-details-keys` : undefined}
+          list={block && block.fieldKeys.length > 0 ? `${uid}-binding-${rowIndex}-details-keys` : undefined}
           aria-label={`Binding ${rowIndex + 1} — field key`}
           className="w-28 font-mono text-xs"
         />
         {block && block.fieldKeys.length > 0 ? (
-          <datalist id={`${rowIndex}-details-keys`}>
+          <datalist id={`${uid}-binding-${rowIndex}-details-keys`}>
             {block.fieldKeys.map((key) => (
               <option key={key} value={key} />
             ))}

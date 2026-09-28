@@ -1,0 +1,23 @@
+{
+  "$id": "lkap-contracts/NodeExitTrigger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "When a flow leaves one of these steps (empty: any step).",
+  "properties": {
+    "kind": {
+      "const": "node_exit",
+      "default": "node_exit",
+      "title": "Kind",
+      "type": "string"
+    },
+    "nodes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Nodes",
+      "type": "array"
+    }
+  },
+  "title": "NodeExitTrigger",
+  "type": "object"
+}

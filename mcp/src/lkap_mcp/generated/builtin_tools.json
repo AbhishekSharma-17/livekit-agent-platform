@@ -136,7 +136,8 @@
     "send_sms",
     "notify_team",
     "switch_language",
-    "generate_image"
+    "generate_image",
+    "extract_now"
   ],
   "configured_builtins": [
     "fetch_url",

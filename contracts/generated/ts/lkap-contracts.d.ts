@@ -71,7 +71,9 @@ export interface LkapContracts {
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
+  ChecklistCheckAction?: ChecklistCheckAction;
   ChecklistEdit?: ChecklistEdit;
+  ChecklistSetItemAction?: ChecklistSetItemAction;
   ChoicesBlockState?: ChoicesBlockState;
   ComplianceOut?: ComplianceOut;
   CompliancePreset?: CompliancePreset;
@@ -104,17 +106,24 @@ export interface LkapContracts {
   CredentialUpdate?: CredentialUpdate;
   DetailsBlockState?: DetailsBlockState;
   DetailsEdit?: DetailsEdit;
+  DetailsSetAction?: DetailsSetAction;
   DisclosureConfig?: DisclosureConfig;
   DispatchMetadata?: DispatchMetadata;
   DispatchRuleCreate?: DispatchRuleCreate;
   DispatchRuleOut?: DispatchRuleOut;
   DispatchRulePage?: DispatchRulePage;
+  DispositionSetAction?: DispositionSetAction;
   DocumentBlockState?: DocumentBlockState;
   EndNode?: EndNode;
   ErrorBody?: ErrorBody;
   ErrorResponse?: ErrorResponse;
+  EscalateAction?: EscalateAction;
   EscalationEvent?: EscalationEvent;
   EstimateLine?: EstimateLine;
+  EveryNTurnsTrigger?: EveryNTurnsTrigger;
+  ExtractionConfig?: ExtractionConfig;
+  ExtractionEvent?: ExtractionEvent;
+  ExtractionField?: ExtractionField;
   FleetActionIn?: FleetActionIn;
   FleetDesired?: FleetDesired;
   FleetStatus?: FleetStatus;
@@ -134,6 +143,7 @@ export interface LkapContracts {
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
   IdIssue?: IdIssue;
+  InstructAction?: InstructAction;
   InternalKbSearchRequest?: InternalKbSearchRequest;
   InternalTransferIn?: InternalTransferIn;
   InternalTransferOut?: InternalTransferOut;
@@ -179,6 +189,7 @@ export interface LkapContracts {
   LinkHookOut?: LinkHookOut;
   LocaleConfig?: LocaleConfig;
   LocaleEvent?: LocaleEvent;
+  ManualTrigger?: ManualTrigger;
   MarkdownBlockState?: MarkdownBlockState;
   McpHeaderAuth?: McpHeaderAuth;
   McpNoAuth?: McpNoAuth;
@@ -205,8 +216,10 @@ export interface LkapContracts {
   ModelTestRequest?: ModelTestRequest;
   ModelTestResult?: ModelTestResult;
   MoneyRange?: MoneyRange;
+  NodeExitTrigger?: NodeExitTrigger;
   NodeSpecSchema?: NodeSpecSchema;
   NodeSpecsResponse?: NodeSpecsResponse;
+  NotePushAction?: NotePushAction;
   NotifyTeamConfig?: NotifyTeamConfig;
   NumbersRefreshIn?: NumbersRefreshIn;
   NumbersRefreshOut?: NumbersRefreshOut;
@@ -250,6 +263,8 @@ export interface LkapContracts {
   RequestableState?: RequestableState;
   ResolvedAgentConfig?: ResolvedAgentConfig;
   ResolvedCompliance?: ResolvedCompliance;
+  Rule?: Rule;
+  RuleFiredEvent?: RuleFiredEvent;
   SessionAssetFromDocumentIn?: SessionAssetFromDocumentIn;
   SessionAssetOut?: SessionAssetOut;
   SessionAssetPage?: SessionAssetPage;
@@ -277,6 +292,7 @@ export interface LkapContracts {
   StartNode?: StartNode;
   StarterTemplate?: StarterTemplate;
   StateDeltaPayload?: StateDeltaPayload;
+  StatusSetAction?: StatusSetAction;
   StepsBlockState?: StepsBlockState;
   SupervisorPresenceEvent?: SupervisorPresenceEvent;
   SupervisorWhisperEvent?: SupervisorWhisperEvent;
@@ -301,6 +317,7 @@ export interface LkapContracts {
   ToolTemplateInstantiate?: ToolTemplateInstantiate;
   ToolTemplateInstantiated?: ToolTemplateInstantiated;
   ToolTemplatesResponse?: ToolTemplatesResponse;
+  ToolTrigger?: ToolTrigger;
   ToolkitOut?: ToolkitOut;
   ToolkitPage?: ToolkitPage;
   TranscriptBlockState?: TranscriptBlockState;
@@ -321,6 +338,7 @@ export interface LkapContracts {
   UploadBlockState?: UploadBlockState;
   UserOut?: UserOut;
   ValidationResult?: ValidationResult;
+  VarSetAction?: VarSetAction;
   VariableSpec?: VariableSpec;
   VideoBlockState?: VideoBlockState;
   VoicemailEvent?: VoicemailEvent;
@@ -431,6 +449,7 @@ export interface AgentActionResult {
 export interface AgentConfig {
   capabilities?: CapabilitiesConfig;
   disclosure?: DisclosureConfig;
+  extraction?: ExtractionConfig;
   flow?: FlowSpec | null;
   guardrails?: GuardrailsConfig;
   instructions: string;
@@ -446,6 +465,7 @@ export interface AgentConfig {
   publish_gate?: PublishGate;
   qa?: QaConfig;
   recording?: RecordingConfig;
+  rules?: Rule[];
   telephony?: TelephonyConfig;
   /**
    * Simulated conversations the agent is tested with (V5-29); they version with the config.
@@ -493,6 +513,75 @@ export interface DisclosureConfig {
    * The disclosure line; empty uses the workspace's (Settings → Compliance).
    */
   text?: string | null;
+}
+/**
+ * What the agent captures from the conversation while it talks (off by default).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ExtractionConfig".
+ */
+export interface ExtractionConfig {
+  enabled?: boolean;
+  fields?: ExtractionField[];
+  min_turn_chars?: number;
+  still_needed?: "checklist" | null;
+  triggers?: (EveryNTurnsTrigger | ToolTrigger | NodeExitTrigger | ManualTrigger)[];
+}
+/**
+ * One fact to capture: a flow ``VariableSpec`` plus how to ask for it and where it shows.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ExtractionField".
+ */
+export interface ExtractionField {
+  description?: string;
+  hint?: string;
+  label?: string;
+  name: string;
+  options?: string[] | null;
+  required?: boolean;
+  sensitive?: boolean;
+  show_in?: string | null;
+  type?: "string" | "number" | "boolean" | "enum" | "date" | "phone" | "email";
+}
+/**
+ * After every ``n``-th caller turn (``n = 1``: every turn).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EveryNTurnsTrigger".
+ */
+export interface EveryNTurnsTrigger {
+  kind?: "every_n_turns";
+  n?: number;
+}
+/**
+ * After one of these tools returns (built-in, attached or block tool names).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolTrigger".
+ */
+export interface ToolTrigger {
+  kind?: "tool";
+  tools: string[];
+}
+/**
+ * When a flow leaves one of these steps (empty: any step).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NodeExitTrigger".
+ */
+export interface NodeExitTrigger {
+  kind?: "node_exit";
+  nodes?: string[];
+}
+/**
+ * The agent gets the ``extract_now`` tool and decides when to run it.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ManualTrigger".
+ */
+export interface ManualTrigger {
+  kind?: "manual";
 }
 /**
  * The whole graph, validated structurally on construction.
@@ -1903,6 +1992,133 @@ export interface RecordingConfig {
   require_consent?: boolean;
   retention_days?: number | null;
   storage_config_id?: string | null;
+}
+/**
+ * ``when`` the condition holds, ``then`` run the actions (see the module docstring).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "Rule".
+ */
+export interface Rule {
+  enabled?: boolean;
+  id: string;
+  label?: string;
+  once?: boolean;
+  then: (
+    | ChecklistSetItemAction
+    | ChecklistCheckAction
+    | StatusSetAction
+    | DetailsSetAction
+    | NotePushAction
+    | VarSetAction
+    | EscalateAction
+    | InstructAction
+    | DispositionSetAction
+  )[];
+  when: string;
+}
+/**
+ * Add or replace one item of the "still needed" checklist (the others are kept).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChecklistSetItemAction".
+ */
+export interface ChecklistSetItemAction {
+  blocking?: boolean;
+  do?: "checklist.set_item";
+  done?: boolean;
+  hint?: string | null;
+  id: string;
+  label: string;
+}
+/**
+ * Tick (or, with ``done: false``, untick) an item that is already on the checklist.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChecklistCheckAction".
+ */
+export interface ChecklistCheckAction {
+  do?: "checklist.check";
+  done?: boolean;
+  id: string;
+}
+/**
+ * Set the status stamp.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "StatusSetAction".
+ */
+export interface StatusSetAction {
+  do?: "status.set";
+  label: string;
+  tone?: "neutral" | "info" | "success" | "warning" | "danger";
+}
+/**
+ * Write one row of a ``details`` block (``value`` may name ``{{ var.<name> }}``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DetailsSetAction".
+ */
+export interface DetailsSetAction {
+  block_id: string;
+  do?: "details.set";
+  key: string;
+  label?: string | null;
+  value: string;
+}
+/**
+ * Push a note (``text`` may name ``{{ var.<name> }}``); in ``block_id``'s margin when given.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "NotePushAction".
+ */
+export interface NotePushAction {
+  block_id?: string | null;
+  do?: "note.push";
+  text: string;
+}
+/**
+ * Set a session variable.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "VarSetAction".
+ */
+export interface VarSetAction {
+  do?: "var.set";
+  name: string;
+  value?: string | number | boolean | null;
+}
+/**
+ * Flag the session for a person, as ``escalate_to_human`` does, with the rule's reason.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "EscalateAction".
+ */
+export interface EscalateAction {
+  do?: "escalate";
+  mode?: "transfer" | "takeover" | "listen_in" | "callback";
+  reason: string;
+  urgency?: "low" | "normal" | "high";
+}
+/**
+ * A system note for the model's next reply only (sent as written; no placeholders).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InstructAction".
+ */
+export interface InstructAction {
+  do?: "instruct";
+  text: string;
+}
+/**
+ * Set the session's outcome label (a flow's ``disposition``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "DispositionSetAction".
+ */
+export interface DispositionSetAction {
+  do?: "disposition.set";
+  value: string;
 }
 /**
  * Phone-call settings of an agent (``AgentConfig.telephony``).
@@ -4220,6 +4436,25 @@ export interface EscalationEvent {
   mode?: "transfer" | "takeover" | "listen_in" | "callback";
   reason: string;
   urgency?: "low" | "normal" | "high";
+}
+/**
+ * The ``extraction`` session event: one run of the live extraction.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ExtractionEvent".
+ */
+export interface ExtractionEvent {
+  changed?: string[];
+  duration_ms?: number;
+  fields?: {
+    [k: string]: boolean;
+  };
+  status: "ok" | "failed" | "timeout";
+  still_needed?: string[];
+  trigger: "turn" | "tool" | "node_exit" | "manual";
+  values?: {
+    [k: string]: unknown;
+  } | null;
 }
 /**
  * ``POST /v1/connections/{id}/fleet`` (supervised connections only).
@@ -7006,6 +7241,19 @@ export interface WarmTransferRoute {
    * The LiveKit outbound trunk id
    */
   trunk_id: string;
+}
+/**
+ * The ``rule_fired`` session event: which rule, and the kinds of what it did. Never a value.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "RuleFiredEvent".
+ */
+export interface RuleFiredEvent {
+  actions?: string[];
+  label?: string;
+  rule_id: string;
+  skipped?: string[];
+  trigger?: "extraction" | "tool" | "variables" | "turn";
 }
 /**
  * ``POST /internal/v1/sessions/{id}/assets/from-document``: the cited KB document to copy (R-V5-5).

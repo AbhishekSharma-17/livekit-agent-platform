@@ -75,6 +75,12 @@ export const BUILTIN_TOOLS: BuiltinToolInfo[] = [
     label: "Make pictures",
     help: "Lets the agent make a picture, such as a sketch, and show it in the panel's gallery. Needs a picture model.",
   },
+  // V6-13: offered only when the agent captures details "when the agent asks" (a manual trigger).
+  {
+    name: "extract_now",
+    label: "Capture details now",
+    help: "Lets the agent note the details it collects from the conversation right away, instead of after the caller's next turn.",
+  },
 ];
 
 export const PROVIDER_KIND_LABELS: Record<string, string> = {

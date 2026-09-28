@@ -1,0 +1,413 @@
+{
+  "$defs": {
+    "ChecklistCheckAction": {
+      "description": "Tick (or, with ``done: false``, untick) an item that is already on the checklist.",
+      "properties": {
+        "do": {
+          "const": "checklist.check",
+          "default": "checklist.check",
+          "title": "Do",
+          "type": "string"
+        },
+        "done": {
+          "default": true,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ChecklistCheckAction",
+      "type": "object"
+    },
+    "ChecklistSetItemAction": {
+      "description": "Add or replace one item of the \"still needed\" checklist (the others are kept).",
+      "properties": {
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "do": {
+          "const": "checklist.set_item",
+          "default": "checklist.set_item",
+          "title": "Do",
+          "type": "string"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "ChecklistSetItemAction",
+      "type": "object"
+    },
+    "DetailsSetAction": {
+      "description": "Write one row of a ``details`` block (``value`` may name ``{{ var.<name> }}``).",
+      "properties": {
+        "block_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Block Id",
+          "type": "string"
+        },
+        "do": {
+          "const": "details.set",
+          "default": "details.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "key": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "value": {
+          "maxLength": 500,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "block_id",
+        "key",
+        "value"
+      ],
+      "title": "DetailsSetAction",
+      "type": "object"
+    },
+    "DispositionSetAction": {
+      "description": "Set the session's outcome label (a flow's ``disposition``).",
+      "properties": {
+        "do": {
+          "const": "disposition.set",
+          "default": "disposition.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "DispositionSetAction",
+      "type": "object"
+    },
+    "EscalateAction": {
+      "description": "Flag the session for a person, as ``escalate_to_human`` does, with the rule's reason.",
+      "properties": {
+        "do": {
+          "const": "escalate",
+          "default": "escalate",
+          "title": "Do",
+          "type": "string"
+        },
+        "mode": {
+          "default": "transfer",
+          "enum": [
+            "transfer",
+            "takeover",
+            "listen_in",
+            "callback"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "urgency": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ],
+          "title": "Urgency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "EscalateAction",
+      "type": "object"
+    },
+    "InstructAction": {
+      "description": "A system note for the model's next reply only (sent as written; no placeholders).",
+      "properties": {
+        "do": {
+          "const": "instruct",
+          "default": "instruct",
+          "title": "Do",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "InstructAction",
+      "type": "object"
+    },
+    "NotePushAction": {
+      "description": "Push a note (``text`` may name ``{{ var.<name> }}``); in ``block_id``'s margin when given.",
+      "properties": {
+        "block_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Id"
+        },
+        "do": {
+          "const": "note.push",
+          "default": "note.push",
+          "title": "Do",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "NotePushAction",
+      "type": "object"
+    },
+    "StatusSetAction": {
+      "description": "Set the status stamp.",
+      "properties": {
+        "do": {
+          "const": "status.set",
+          "default": "status.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "default": "info",
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "StatusSetAction",
+      "type": "object"
+    },
+    "VarSetAction": {
+      "description": "Set a session variable.",
+      "properties": {
+        "do": {
+          "const": "var.set",
+          "default": "var.set",
+          "title": "Do",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "VarSetAction",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/Rule.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``when`` the condition holds, ``then`` run the actions (see the module docstring).",
+  "properties": {
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "maxLength": 120,
+      "title": "Label",
+      "type": "string"
+    },
+    "once": {
+      "default": true,
+      "title": "Once",
+      "type": "boolean"
+    },
+    "then": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "checklist.check": "#/$defs/ChecklistCheckAction",
+            "checklist.set_item": "#/$defs/ChecklistSetItemAction",
+            "details.set": "#/$defs/DetailsSetAction",
+            "disposition.set": "#/$defs/DispositionSetAction",
+            "escalate": "#/$defs/EscalateAction",
+            "instruct": "#/$defs/InstructAction",
+            "note.push": "#/$defs/NotePushAction",
+            "status.set": "#/$defs/StatusSetAction",
+            "var.set": "#/$defs/VarSetAction"
+          },
+          "propertyName": "do"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ChecklistSetItemAction"
+          },
+          {
+            "$ref": "#/$defs/ChecklistCheckAction"
+          },
+          {
+            "$ref": "#/$defs/StatusSetAction"
+          },
+          {
+            "$ref": "#/$defs/DetailsSetAction"
+          },
+          {
+            "$ref": "#/$defs/NotePushAction"
+          },
+          {
+            "$ref": "#/$defs/VarSetAction"
+          },
+          {
+            "$ref": "#/$defs/EscalateAction"
+          },
+          {
+            "$ref": "#/$defs/InstructAction"
+          },
+          {
+            "$ref": "#/$defs/DispositionSetAction"
+          }
+        ]
+      },
+      "title": "Then",
+      "type": "array"
+    },
+    "when": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "When",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "when",
+    "then"
+  ],
+  "title": "Rule",
+  "type": "object"
+}

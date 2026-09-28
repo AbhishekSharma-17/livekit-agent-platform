@@ -231,6 +231,13 @@ from lkap_contracts.compliance import (
 )
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.extraction import (
+    EXTRACTION_EVENT,
+    ExtractionConfig,
+    ExtractionEvent,
+    ExtractionField,
+    ExtractionTrigger,
+)
 from lkap_contracts.fleet import (
     FleetDesired,
     ReplicaHandle,
@@ -310,6 +317,7 @@ from lkap_contracts.qa import (
     QaVerdict,
     SessionQaIn,
 )
+from lkap_contracts.rules import RULE_FIRED_EVENT, Rule, RuleAction, RuleFiredEvent
 from lkap_contracts.telephony import (
     AMD_MACHINE_RESULTS,
     AMD_RESULTS,
@@ -489,6 +497,7 @@ __all__ = [
     "DTMF_PATTERN",
     "E164_PATTERN",
     "EDITABLE_BLOCK_TYPES",
+    "EXTRACTION_EVENT",
     "FORM_FIELD_TYPES",
     "GUARDRAIL_EVENT",
     "GUARDRAIL_TIMEOUT_EVENT",
@@ -504,6 +513,7 @@ __all__ = [
     "REGISTRY",
     "RPC_AGENT_ACTION",
     "RPC_UI_REQUEST",
+    "RULE_FIRED_EVENT",
     "SECRET_PREFIXES",
     "SNAPSHOT_EVERY_N_PATCHES",
     "TEMPLATE_ID_PATTERN",
@@ -633,6 +643,10 @@ __all__ = [
     "EndNode",
     "ErrorBody",
     "ErrorResponse",
+    "ExtractionConfig",
+    "ExtractionEvent",
+    "ExtractionField",
+    "ExtractionTrigger",
     "FieldSpec",
     "FieldType",
     "FleetActionIn",
@@ -778,6 +792,9 @@ __all__ = [
     "ResolvedAgentConfig",
     "ResolvedCompliance",
     "ResolvedProvider",
+    "Rule",
+    "RuleAction",
+    "RuleFiredEvent",
     "SessionAssetKind",
     "SessionChannel",
     "SessionCost",

@@ -1,0 +1,26 @@
+{
+  "$id": "lkap-contracts/ToolTrigger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "After one of these tools returns (built-in, attached or block tool names).",
+  "properties": {
+    "kind": {
+      "const": "tool",
+      "default": "tool",
+      "title": "Kind",
+      "type": "string"
+    },
+    "tools": {
+      "items": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "title": "ToolTrigger",
+  "type": "object"
+}

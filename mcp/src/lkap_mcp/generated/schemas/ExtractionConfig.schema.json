@@ -1,0 +1,235 @@
+{
+  "$defs": {
+    "EveryNTurnsTrigger": {
+      "description": "After every ``n``-th caller turn (``n = 1``: every turn).",
+      "properties": {
+        "kind": {
+          "const": "every_n_turns",
+          "default": "every_n_turns",
+          "title": "Kind",
+          "type": "string"
+        },
+        "n": {
+          "default": 1,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "title": "EveryNTurnsTrigger",
+      "type": "object"
+    },
+    "ExtractionField": {
+      "description": "One fact to capture: a flow ``VariableSpec`` plus how to ask for it and where it shows.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "hint": {
+          "default": "",
+          "maxLength": 300,
+          "title": "Hint",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 80,
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "sensitive": {
+          "default": false,
+          "title": "Sensitive",
+          "type": "boolean"
+        },
+        "show_in": {
+          "anyOf": [
+            {
+              "maxLength": 140,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Show In"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "enum",
+            "date",
+            "phone",
+            "email"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ExtractionField",
+      "type": "object"
+    },
+    "ManualTrigger": {
+      "description": "The agent gets the ``extract_now`` tool and decides when to run it.",
+      "properties": {
+        "kind": {
+          "const": "manual",
+          "default": "manual",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ManualTrigger",
+      "type": "object"
+    },
+    "NodeExitTrigger": {
+      "description": "When a flow leaves one of these steps (empty: any step).",
+      "properties": {
+        "kind": {
+          "const": "node_exit",
+          "default": "node_exit",
+          "title": "Kind",
+          "type": "string"
+        },
+        "nodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Nodes",
+          "type": "array"
+        }
+      },
+      "title": "NodeExitTrigger",
+      "type": "object"
+    },
+    "ToolTrigger": {
+      "description": "After one of these tools returns (built-in, attached or block tool names).",
+      "properties": {
+        "kind": {
+          "const": "tool",
+          "default": "tool",
+          "title": "Kind",
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tools"
+      ],
+      "title": "ToolTrigger",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/ExtractionConfig.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What the agent captures from the conversation while it talks (off by default).",
+  "properties": {
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "fields": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ExtractionField"
+      },
+      "title": "Fields",
+      "type": "array"
+    },
+    "min_turn_chars": {
+      "default": 12,
+      "maximum": 200,
+      "minimum": 0,
+      "title": "Min Turn Chars",
+      "type": "integer"
+    },
+    "still_needed": {
+      "anyOf": [
+        {
+          "const": "checklist",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Still Needed"
+    },
+    "triggers": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "every_n_turns": "#/$defs/EveryNTurnsTrigger",
+            "manual": "#/$defs/ManualTrigger",
+            "node_exit": "#/$defs/NodeExitTrigger",
+            "tool": "#/$defs/ToolTrigger"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/EveryNTurnsTrigger"
+          },
+          {
+            "$ref": "#/$defs/ToolTrigger"
+          },
+          {
+            "$ref": "#/$defs/NodeExitTrigger"
+          },
+          {
+            "$ref": "#/$defs/ManualTrigger"
+          }
+        ]
+      },
+      "title": "Triggers",
+      "type": "array"
+    }
+  },
+  "title": "ExtractionConfig",
+  "type": "object"
+}

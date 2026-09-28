@@ -1,0 +1,48 @@
+{
+  "$id": "lkap-contracts/DetailsSetAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Write one row of a ``details`` block (``value`` may name ``{{ var.<name> }}``).",
+  "properties": {
+    "block_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "Block Id",
+      "type": "string"
+    },
+    "do": {
+      "const": "details.set",
+      "default": "details.set",
+      "title": "Do",
+      "type": "string"
+    },
+    "key": {
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "Key",
+      "type": "string"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
+    "value": {
+      "maxLength": 500,
+      "title": "Value",
+      "type": "string"
+    }
+  },
+  "required": [
+    "block_id",
+    "key",
+    "value"
+  ],
+  "title": "DetailsSetAction",
+  "type": "object"
+}

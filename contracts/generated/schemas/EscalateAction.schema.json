@@ -1,0 +1,45 @@
+{
+  "$id": "lkap-contracts/EscalateAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Flag the session for a person, as ``escalate_to_human`` does, with the rule's reason.",
+  "properties": {
+    "do": {
+      "const": "escalate",
+      "default": "escalate",
+      "title": "Do",
+      "type": "string"
+    },
+    "mode": {
+      "default": "transfer",
+      "enum": [
+        "transfer",
+        "takeover",
+        "listen_in",
+        "callback"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "urgency": {
+      "default": "normal",
+      "enum": [
+        "low",
+        "normal",
+        "high"
+      ],
+      "title": "Urgency",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "EscalateAction",
+  "type": "object"
+}

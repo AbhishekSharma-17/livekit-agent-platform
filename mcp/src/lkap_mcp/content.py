@@ -49,6 +49,7 @@ ConceptTopic = Literal[
     "tools",  # V5-25: built-ins and tool templates
     "testing",  # V5-29 (docs/v5/_asks.md)
     "memory",  # V5-40 (docs/v5/_asks.md)
+    "extraction",  # V6-13: live extraction and declarative rules
 ]
 CONCEPT_TOPICS: tuple[str, ...] = get_args(ConceptTopic)
 

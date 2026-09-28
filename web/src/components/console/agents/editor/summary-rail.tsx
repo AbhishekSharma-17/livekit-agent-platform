@@ -301,6 +301,10 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
     generate_image:
       Boolean(pipeline?.image_gen) &&
       ((config?.panel ?? agent.config.panel)?.blocks ?? []).some((block) => block.type === "gallery"),
+    // V6-13: registered only when the saved extraction is on with a "when the agent asks" trigger.
+    extract_now:
+      Boolean(agent.config.extraction?.enabled) &&
+      (agent.config.extraction?.triggers ?? []).some((trigger) => trigger.kind === "manual"),
   };
   const toolCounts = {
     builtin: BUILTIN_TOOLS.filter(

@@ -282,12 +282,12 @@ describe("HttpToolEditorDialog", () => {
   });
 });
 
-describe("HttpToolEditorDialog — fields the editor does not show yet (V6-07, ask #40)", () => {
+describe("HttpToolEditorDialog — V6-11's real editors keep the V6-07 fields (ask #40) round-tripping", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps requires_vars, confirm_readback and bindings when an existing tool is saved", async () => {
+  it("keeps requires_vars, confirm_readback and bindings when an existing tool is saved untouched", async () => {
     const fetchMock = stubFetch();
     const onSaved = vi.fn();
     const tool = {
@@ -302,13 +302,18 @@ describe("HttpToolEditorDialog — fields the editor does not show yet (V6-07, a
         kind: "http",
         name: "lookup_policy",
         description: "Look up a policy",
-        parameters: { type: "object", properties: {} },
+        // V6-11's `ReadbackField` picks from the tool's own arguments when the schema
+        // declares them (`email` here) — an empty `properties` would make `confirm_readback`
+        // fail its own inline validation ("not one of the tool's arguments").
+        parameters: { type: "object", properties: { email: { type: "string" } }, required: [] },
         method: "GET",
         url: "https://api.example.com/policies/{{ var.policy_no }}",
         allowed_hosts: ["api.example.com"],
         requires_vars: ["policy_no"],
         confirm_readback: ["email"],
-        bindings: [{ pointer: "/holder", to: "details:card.holder" }],
+        // `path` (not the pre-V6-11 stub round-trip's `pointer`) — V6-11's `BindingsEditor`
+        // reads the field the contract actually defines (`ToolBinding.path`).
+        bindings: [{ path: "/holder", to: "details:card.holder" }],
       },
     } as unknown as React.ComponentProps<typeof HttpToolEditorDialog>["tool"];
     const { getByText } = renderWithClient(
@@ -323,6 +328,6 @@ describe("HttpToolEditorDialog — fields the editor does not show yet (V6-07, a
     const body = JSON.parse(init.body as string) as { definition: Record<string, unknown> };
     expect(body.definition.requires_vars).toEqual(["policy_no"]);
     expect(body.definition.confirm_readback).toEqual(["email"]);
-    expect(body.definition.bindings).toEqual([{ pointer: "/holder", to: "details:card.holder" }]);
+    expect(body.definition.bindings).toEqual([{ path: "/holder", to: "details:card.holder" }]);
   });
 });

@@ -1,0 +1,15 @@
+{
+  "$id": "lkap-contracts/ManualTrigger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The agent gets the ``extract_now`` tool and decides when to run it.",
+  "properties": {
+    "kind": {
+      "const": "manual",
+      "default": "manual",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "ManualTrigger",
+  "type": "object"
+}

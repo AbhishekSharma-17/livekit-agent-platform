@@ -58,6 +58,7 @@ from lkap_contracts.compliance import (
 )
 from lkap_contracts.connections import ConnectionCapabilities, ConnectionInfo
 from lkap_contracts.dispatch import DispatchMetadata
+from lkap_contracts.extraction import EXTRACTION_MODELS
 from lkap_contracts.fleet import (
     FleetDesired,
     ReplicaHandle,
@@ -84,6 +85,7 @@ from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import Price, PriceQuote, WorkspacePrice
 from lkap_contracts.providers import CatalogFilter, IdIssue, ModelCapabilities, PageSpec, ProviderSpec
 from lkap_contracts.qa import QaField, QaVerdict, SessionQaIn
+from lkap_contracts.rules import RULE_MODELS
 from lkap_contracts.telephony import AmdConfig, SmsTarget, TelephonyConfig, TransferTarget, WarmTransferRoute
 from lkap_contracts.templates import StarterTemplate
 from lkap_contracts.tool_context import TOOL_CONTEXT_MODELS
@@ -486,6 +488,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     **TOOL_PROVIDER_MODELS,  # V5-18: connected apps (docs/v5/COMPOSIO.md §3)
     **TOOL_TEMPLATE_MODELS,  # V5-25: tool templates (the Cal.com set)
     **TOOL_CONTEXT_MODELS,  # V6-07: tool context (placeholders, bindings, read-back)
+    **EXTRACTION_MODELS,  # V6-13: live structured extraction
+    **RULE_MODELS,  # V6-13: declarative rules
 }
 
 #: Discriminated unions are not ``BaseModel`` subclasses; they go through TypeAdapter.

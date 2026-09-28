@@ -38,7 +38,20 @@ import {
   silentReplyConflictMessage,
   type ExecutionDraft,
 } from "@/components/console/tools/execution-fields";
-import type { HttpToolDefinition, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
+import { BindingsEditor, bindingsHaveIssues } from "@/components/console/tools/bindings-editor";
+import { InsertValueMenu, neverOfferedHint } from "@/components/console/tools/insert-value-menu";
+import { ReadbackField, confirmReadbackHasIssues } from "@/components/console/tools/readback-field";
+import { RequiresVarsField, requiresVarsHaveIssues } from "@/components/console/tools/requires-vars-field";
+import { useAgentToolContextOptions } from "@/components/console/tools/use-agent-tool-context";
+import { useInsertableField } from "@/components/console/tools/use-insertable-field";
+import {
+  URL_AUTHORITY_MESSAGE,
+  caretInUrlAuthority,
+  placeholderFieldIssues,
+  schemaProperties,
+  urlAuthorityHasPlaceholder,
+} from "@/components/console/tools/tool-context";
+import type { HttpToolDefinition, ProviderSpec, ToolBinding, ToolOut } from "@/contracts/lkap-contracts";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -73,6 +86,9 @@ interface Draft {
   silent_reply: boolean;
   enabled: boolean;
   execution: ExecutionDraft;
+  requires_vars: string[];
+  confirm_readback: string[];
+  bindings: ToolBinding[];
 }
 
 function draftFromTool(tool: ToolOut | undefined): Draft {
@@ -93,6 +109,9 @@ function draftFromTool(tool: ToolOut | undefined): Draft {
     silent_reply: def?.silent_reply ?? false,
     enabled: tool?.enabled ?? true,
     execution: executionDraftFromValue(def?.execution),
+    requires_vars: def?.requires_vars ?? [],
+    confirm_readback: def?.confirm_readback ?? [],
+    bindings: def?.bindings ?? [],
   };
 }
 
@@ -102,6 +121,8 @@ interface DraftErrors {
   headersJson?: string;
   allowed_hosts?: string;
   execution?: string;
+  url?: string;
+  body_template?: string;
 }
 
 /**
@@ -136,6 +157,24 @@ export function HttpToolEditorDialog({
   // docs/v2/_asks.md V2-21-2) — stricter than the `builder` floor for the
   // rest of the tool editor.
   const { canWrite: canBindCredential } = useWriteAccess("admin");
+  const agentContext = useAgentToolContextOptions(agentId);
+  const urlField = useInsertableField<HTMLInputElement>(draft.url, (url) =>
+    setDraft((d) => {
+      if (d.allowed_hosts.trim() !== "") return { ...d, url };
+      const host = hostnameOf(url);
+      return host ? { ...d, url, allowed_hosts: host } : { ...d, url };
+    }),
+  );
+  const bodyField = useInsertableField<HTMLTextAreaElement>(draft.body_template, (body_template) =>
+    setDraft((d) => ({ ...d, body_template })),
+  );
+  const parametersProperties = React.useMemo(() => {
+    try {
+      return schemaProperties(JSON.parse(draft.parametersJson));
+    } catch {
+      return null;
+    }
+  }, [draft.parametersJson]);
 
   React.useEffect(() => {
     if (open) {
@@ -180,6 +219,22 @@ export function HttpToolEditorDialog({
       nextErrors.execution = silentReplyConflictMessage(draft.name);
     }
 
+    // V6-11 (D-V6-22): mirrors `placeholder_issues` — a `{{ ctx.* }}`/`{{ var.* }}` in the
+    // url's scheme, host or port, or an unknown ctx name / malformed var name anywhere.
+    const urlIssues = [
+      ...(urlAuthorityHasPlaceholder(draft.url) ? [URL_AUTHORITY_MESSAGE] : []),
+      ...placeholderFieldIssues(draft.url),
+    ];
+    if (urlIssues.length > 0) nextErrors.url = urlIssues[0];
+    const bodyIssues = placeholderFieldIssues(draft.body_template);
+    if (bodyIssues.length > 0) nextErrors.body_template = bodyIssues[0];
+
+    const properties = parameters ? schemaProperties(parameters) : null;
+    if (requiresVarsHaveIssues(draft.requires_vars)) nextErrors.execution ??= "Fix the required variables below.";
+    if (confirmReadbackHasIssues(draft.confirm_readback, properties ? Array.from(properties) : null))
+      nextErrors.execution ??= "Fix the read-back arguments below.";
+    if (bindingsHaveIssues(draft.bindings)) nextErrors.execution ??= "Finish the bindings below.";
+
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0 || !parameters || !headers) return;
 
@@ -199,14 +254,9 @@ export function HttpToolEditorDialog({
       result_path: draft.result_path.trim() === "" ? null : draft.result_path,
       silent_reply: draft.silent_reply,
       execution: executionFromDraft(draft.execution),
-      // V6-07 (ask #40): fields this editor does not show yet (V6-11) survive a save.
-      ...(tool?.definition.kind === "http"
-        ? {
-            requires_vars: tool.definition.requires_vars,
-            confirm_readback: tool.definition.confirm_readback,
-            bindings: tool.definition.bindings,
-          }
-        : {}),
+      requires_vars: draft.requires_vars,
+      confirm_readback: draft.confirm_readback,
+      bindings: draft.bindings,
     };
 
     try {
@@ -303,22 +353,43 @@ export function HttpToolEditorDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="URL template" htmlFor={`${uid}-url`}>
-                <Input
-                  id={`${uid}-url`}
-                  className="font-mono text-sm"
-                  value={draft.url}
-                  onChange={(e) => {
-                    const url = e.target.value;
-                    setDraft((d) => {
-                      if (d.allowed_hosts.trim() !== "") return { ...d, url };
-                      const host = hostnameOf(url);
-                      return host ? { ...d, url, allowed_hosts: host } : { ...d, url };
-                    });
-                  }}
-                  placeholder="https://api.example.com/items/{{ item_id }}"
-                />
-              </Field>
+              <div data-slot="field" className="flex flex-col gap-1.5">
+                <label htmlFor={`${uid}-url`} className="text-sm leading-5 font-medium text-foreground">
+                  URL template
+                </label>
+                <div className="flex items-start gap-2">
+                  <Input
+                    id={`${uid}-url`}
+                    ref={urlField.ref}
+                    className="font-mono text-sm"
+                    value={draft.url}
+                    aria-describedby={errors.url ? `${uid}-url-error` : undefined}
+                    aria-invalid={Boolean(errors.url)}
+                    onChange={(e) => {
+                      const url = e.target.value;
+                      setDraft((d) => {
+                        if (d.allowed_hosts.trim() !== "") return { ...d, url };
+                        const host = hostnameOf(url);
+                        return host ? { ...d, url, allowed_hosts: host } : { ...d, url };
+                      });
+                    }}
+                    onSelect={urlField.trackCaret}
+                    onClick={urlField.trackCaret}
+                    onKeyUp={urlField.trackCaret}
+                    placeholder="https://api.example.com/items/{{ item_id }}"
+                  />
+                  <InsertValueMenu
+                    variableNames={agentContext.variableNames}
+                    onInsert={urlField.insert}
+                    disabledReason={caretInUrlAuthority(draft.url, urlField.caret) ? URL_AUTHORITY_MESSAGE : undefined}
+                  />
+                </div>
+                {errors.url ? (
+                  <p id={`${uid}-url-error`} className="text-[0.8125rem] leading-[1.125rem] text-danger-text">
+                    {errors.url}
+                  </p>
+                ) : null}
+              </div>
               <Field label="Parameters (JSON Schema)" htmlFor={`${uid}-parameters`} error={errors.parametersJson}>
                 <Textarea
                   id={`${uid}-parameters`}
@@ -327,19 +398,35 @@ export function HttpToolEditorDialog({
                   onChange={(e) => setDraft((d) => ({ ...d, parametersJson: e.target.value }))}
                 />
               </Field>
-              <Field
-                label="Body template"
-                htmlFor={`${uid}-body-template`}
-                optional
-                hint={"JSON with {{ arg }} placeholders. Default: JSON of all arguments."}
-              >
-                <Textarea
-                  id={`${uid}-body-template`}
-                  className="min-h-20 font-mono text-xs"
-                  value={draft.body_template}
-                  onChange={(e) => setDraft((d) => ({ ...d, body_template: e.target.value }))}
-                />
-              </Field>
+              <div data-slot="field" className="flex flex-col gap-1.5">
+                <label htmlFor={`${uid}-body-template`} className="text-sm leading-5 font-medium text-foreground">
+                  Body template
+                </label>
+                <p id={`${uid}-body-template-hint`} className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+                  <span className="font-medium">Optional</span> · JSON with {"{{ arg }}"} placeholders. Default: JSON of all
+                  arguments.
+                </p>
+                <div className="flex items-start gap-2">
+                  <Textarea
+                    id={`${uid}-body-template`}
+                    ref={bodyField.ref}
+                    className="min-h-20 font-mono text-xs"
+                    value={draft.body_template}
+                    aria-describedby={`${uid}-body-template-hint${errors.body_template ? ` ${uid}-body-template-error` : ""}`}
+                    aria-invalid={Boolean(errors.body_template)}
+                    onChange={(e) => setDraft((d) => ({ ...d, body_template: e.target.value }))}
+                    onSelect={bodyField.trackCaret}
+                    onClick={bodyField.trackCaret}
+                    onKeyUp={bodyField.trackCaret}
+                  />
+                  <InsertValueMenu variableNames={agentContext.variableNames} onInsert={bodyField.insert} />
+                </div>
+                {errors.body_template ? (
+                  <p id={`${uid}-body-template-error`} className="text-[0.8125rem] leading-[1.125rem] text-danger-text">
+                    {errors.body_template}
+                  </p>
+                ) : null}
+              </div>
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
@@ -347,7 +434,7 @@ export function HttpToolEditorDialog({
               <Field
                 label="Headers"
                 htmlFor={`${uid}-headers`}
-                hint={"JSON; values may use {{ secret.NAME }}."}
+                hint={"JSON. " + neverOfferedHint("headers — they may carry secrets") + " Use {{ secret.NAME }} instead."}
                 error={errors.headersJson}
               >
                 <Textarea
@@ -419,6 +506,34 @@ export function HttpToolEditorDialog({
                   />
                 </Field>
               </div>
+            </section>
+
+            <section className="flex flex-col gap-5 border-t border-border pt-5">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Session and variables</h3>
+              <RequiresVarsField
+                uid={uid}
+                values={draft.requires_vars}
+                onChange={(requires_vars) => setDraft((d) => ({ ...d, requires_vars }))}
+                knownVariables={agentContext.variableNames}
+              />
+              <ReadbackField
+                uid={uid}
+                values={draft.confirm_readback}
+                onChange={(confirm_readback) => setDraft((d) => ({ ...d, confirm_readback }))}
+                argumentNames={parametersProperties ? Array.from(parametersProperties) : null}
+              />
+              <BindingsEditor
+                uid={uid}
+                values={draft.bindings}
+                onChange={(bindings) => setDraft((d) => ({ ...d, bindings }))}
+                detailsBlocks={agentContext.detailsBlocks}
+                tableBlocks={agentContext.tableBlocks}
+              />
+              {!agentId ? (
+                <p className="text-[0.8125rem] text-muted-foreground">
+                  Attach this tool to an agent to pick from its panel blocks and flow variables.
+                </p>
+              ) : null}
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">

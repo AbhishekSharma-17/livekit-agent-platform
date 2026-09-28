@@ -1,0 +1,53 @@
+{
+  "$id": "lkap-contracts/ChecklistSetItemAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Add or replace one item of the \"still needed\" checklist (the others are kept).",
+  "properties": {
+    "blocking": {
+      "default": false,
+      "title": "Blocking",
+      "type": "boolean"
+    },
+    "do": {
+      "const": "checklist.set_item",
+      "default": "checklist.set_item",
+      "title": "Do",
+      "type": "string"
+    },
+    "done": {
+      "default": false,
+      "title": "Done",
+      "type": "boolean"
+    },
+    "hint": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hint"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "label"
+  ],
+  "title": "ChecklistSetItemAction",
+  "type": "object"
+}

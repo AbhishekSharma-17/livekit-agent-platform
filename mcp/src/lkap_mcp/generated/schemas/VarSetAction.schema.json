@@ -1,0 +1,44 @@
+{
+  "$id": "lkap-contracts/VarSetAction.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Set a session variable.",
+  "properties": {
+    "do": {
+      "const": "var.set",
+      "default": "var.set",
+      "title": "Do",
+      "type": "string"
+    },
+    "name": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "VarSetAction",
+  "type": "object"
+}

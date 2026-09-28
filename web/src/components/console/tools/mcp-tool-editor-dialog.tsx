@@ -30,11 +30,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronRightIcon } from "lucide-react";
 import { useCreateTool, useTestMcpTool, useUpdateTool } from "@/components/console/lib/api-hooks";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { AVAILABLE_MCP_PRESETS, MCP_PRESET_AUTH_LABEL, mcpPresetById, type McpPresetAuthMode } from "@/components/console/tools/mcp-presets";
 import { McpOauthStatusPanel } from "@/components/console/tools/mcp-oauth-status";
+import { BindingsEditor, bindingsHaveIssues } from "@/components/console/tools/bindings-editor";
+import { PinnedArgumentsEditor, pinnedArgumentsHaveIssues, type PinnedValue } from "@/components/console/tools/pinned-arguments-editor";
+import { ReadbackField, confirmReadbackHasIssues } from "@/components/console/tools/readback-field";
+import { RequiresVarsField, requiresVarsHaveIssues } from "@/components/console/tools/requires-vars-field";
+import { useAgentToolContextOptions } from "@/components/console/tools/use-agent-tool-context";
+import { schemaProperties } from "@/components/console/tools/tool-context";
 import type {
   McpHeaderAuth,
   McpNoAuth,
@@ -42,9 +54,12 @@ import type {
   McpServerDefinition,
   McpTestResult,
   ProviderSpec,
+  ToolContextSpec,
   ToolExecution,
   ToolOut,
 } from "@/contracts/lkap-contracts";
+
+const EMPTY_TOOL_CONTEXT: ToolContextSpec = { requires_vars: [], confirm_readback: [], bindings: [], pinned_arguments: {} };
 
 type McpAuth = McpNoAuth | McpHeaderAuth | McpOAuthAuth;
 
@@ -129,6 +144,7 @@ interface DraftErrors {
   url?: string;
   headersJson?: string;
   oauthClientId?: string;
+  toolContext?: string;
 }
 
 /**
@@ -225,6 +241,23 @@ export function McpToolEditorDialog({
     Object.fromEntries(Object.entries(existingOptions).map(([name, exec]) => [name, mcpOptionFromExecution(exec)])),
   );
   const [freeTextRow, setFreeTextRow] = React.useState("");
+  // V6-11 (D-V6-22, ask #40): `requires_vars`/`confirm_readback`/`bindings`/`pinned_arguments`
+  // per allowed tool — same "only rows the admin touched" convention as `toolOptions`.
+  const [toolContext, setToolContext] = React.useState<Record<string, ToolContextSpec>>(() => def?.tool_context ?? {});
+  const [openContextRow, setOpenContextRow] = React.useState<string | null>(null);
+  const agentContext = useAgentToolContextOptions(agentId);
+  const cachedSchemas = React.useMemo(
+    () => new Map((def?.cached_tools ?? []).map((snapshot) => [snapshot.name, schemaProperties(snapshot.input_schema)])),
+    [def?.cached_tools],
+  );
+
+  function contextFor(name: string): ToolContextSpec {
+    return toolContext[name] ?? EMPTY_TOOL_CONTEXT;
+  }
+
+  function patchContext(name: string, patch: Partial<ToolContextSpec>) {
+    setToolContext((current) => ({ ...current, [name]: { ...contextFor(name), ...patch } }));
+  }
 
   // Full reset, but only on the transition to `open` — never on a `tool` identity change
   // while the dialog is already open. Test connection's own success handler invalidates
@@ -244,6 +277,8 @@ export function McpToolEditorDialog({
     );
     setDiscovered((nextDef?.cached_tools ?? []).map((t) => t.name));
     setFreeTextRow("");
+    setToolContext(nextDef?.tool_context ?? {});
+    setOpenContextRow(null);
     setErrors({});
     setPresetId(null);
     setTestResult(null);
@@ -369,9 +404,6 @@ export function McpToolEditorDialog({
     // client id comes after that, on a second save. `clientIdSet` below is what actually
     // gates Sign in.
 
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-
     const allowedTools = draft.allowed_tools
       .split(",")
       .map((t) => t.trim())
@@ -380,6 +412,25 @@ export function McpToolEditorDialog({
     // otherwise still post an override for a name the server rejects
     // ("not one of this server's allowed_tools").
     const validOptionNames = allowedTools.length > 0 ? new Set(allowedTools) : null;
+
+    // V6-11 (D-V6-22): each tool's own requires_vars/confirm_readback/bindings/pinned_arguments.
+    const contextEntries = Object.entries(toolContext).filter(
+      ([name]) => !validOptionNames || validOptionNames.has(name),
+    );
+    const contextHasIssues = contextEntries.some(([name, spec]) => {
+      const pinnedNames = Object.keys(spec.pinned_arguments ?? {});
+      const properties = cachedSchemas.get(name);
+      return (
+        requiresVarsHaveIssues(spec.requires_vars ?? []) ||
+        confirmReadbackHasIssues(spec.confirm_readback ?? [], properties ? Array.from(properties) : null, pinnedNames) ||
+        bindingsHaveIssues(spec.bindings ?? []) ||
+        pinnedArgumentsHaveIssues(spec.pinned_arguments ?? {})
+      );
+    });
+    if (contextHasIssues) nextErrors.toolContext = "Fix the tool context below (open each tool's settings to see what's wrong).";
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
 
     let auth: McpAuth;
     switch (draft.authKind) {
@@ -425,8 +476,7 @@ export function McpToolEditorDialog({
           .filter(([name]) => !validOptionNames || validOptionNames.has(name))
           .map(([name, option]) => [name, executionFromMcpOption(option)]),
       ),
-      // V6-07 (ask #40): the tool context this editor does not show yet (V6-11) survives a save.
-      ...(def?.tool_context !== undefined ? { tool_context: def.tool_context } : {}),
+      ...(contextEntries.length > 0 ? { tool_context: Object.fromEntries(contextEntries) } : {}),
     };
 
     try {
@@ -791,6 +841,73 @@ export function McpToolEditorDialog({
                 </div>
               ) : null}
             </div>
+
+            {optionRows.length > 0 ? (
+              <div className="flex flex-col gap-2 border-t border-border pt-4">
+                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Tool context</h3>
+                <p className="text-[0.8125rem] text-muted-foreground">
+                  Per tool: session values it can use, what it needs first, what it reads back, where a result goes,
+                  and any fixed values.
+                </p>
+                {errors.toolContext ? <p className="text-[0.8125rem] text-danger-text">{errors.toolContext}</p> : null}
+                {!agentId ? (
+                  <p className="text-[0.8125rem] text-muted-foreground">
+                    Attach this server to an agent to pick from its panel blocks and flow variables.
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-1.5">
+                  {optionRows.map((name) => {
+                    const spec = contextFor(name);
+                    const properties = cachedSchemas.get(name);
+                    const pinnedNames = Object.keys(spec.pinned_arguments ?? {});
+                    return (
+                      <Collapsible
+                        key={name}
+                        open={openContextRow === name}
+                        onOpenChange={(next) => setOpenContextRow(next ? name : null)}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button type="button" variant="outline" size="sm" className="w-fit justify-start gap-1.5 text-xs">
+                            <ChevronRightIcon
+                              className={`size-3.5 shrink-0 transition-transform ${openContextRow === name ? "rotate-90" : ""}`}
+                              aria-hidden="true"
+                            />
+                            {`Tool context — ${name}`}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="flex flex-col gap-5 rounded-md border border-border p-3 pt-4">
+                          <RequiresVarsField
+                            uid={`${uid}-${name}`}
+                            values={spec.requires_vars ?? []}
+                            onChange={(requires_vars) => patchContext(name, { requires_vars })}
+                            knownVariables={agentContext.variableNames}
+                          />
+                          <ReadbackField
+                            uid={`${uid}-${name}`}
+                            values={spec.confirm_readback ?? []}
+                            onChange={(confirm_readback) => patchContext(name, { confirm_readback })}
+                            argumentNames={properties ? Array.from(properties) : null}
+                            pinnedNames={pinnedNames}
+                          />
+                          <BindingsEditor
+                            uid={`${uid}-${name}`}
+                            values={spec.bindings ?? []}
+                            onChange={(bindings) => patchContext(name, { bindings })}
+                            detailsBlocks={agentContext.detailsBlocks}
+                            tableBlocks={agentContext.tableBlocks}
+                          />
+                          <PinnedArgumentsEditor
+                            values={(spec.pinned_arguments ?? {}) as Record<string, PinnedValue>}
+                            onChange={(pinned_arguments) => patchContext(name, { pinned_arguments })}
+                            variableNames={agentContext.variableNames}
+                          />
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Timeout" htmlFor={`${uid}-timeout`} hint="Seconds.">

@@ -1320,6 +1320,10 @@ class PlatformAgent(Agent):
         rules start as a task that overlaps the injection and is awaited before the
         time note and the pack hook. A trip speaks the safe reply and raises
         `StopResponse`, so the SDK neither keeps the caller's message nor replies.
+
+        V6-13: a rule's pending `instruct` notes join this turn's context only (a one-turn
+        system note); the live extraction itself runs in the background from the session's
+        events (`lkap_agent.extraction.session`), never here.
         """
         guard = self._guardrails
         pending: asyncio.Task[Trip | None] | None = None
@@ -1341,6 +1345,11 @@ class PlatformAgent(Agent):
             if pending is not None and not pending.done():
                 pending.cancel()
         await self._refresh_time(turn_ctx)
+        from lkap_agent.extraction.session import live_structure  # noqa: PLC0415 - flow imports this module
+
+        structure = live_structure(self._ctx)
+        if structure is not None:
+            structure.add_instructions(turn_ctx)
         try:
             await self._pack.on_user_turn_completed(self._ctx, turn_ctx, new_message)
         except Exception:

@@ -11,6 +11,13 @@ reach later prompts): the next node's instructions, transition speech and
 farewell are rendered from `FlowState.variables` *after* the extraction that
 the transition triggered has settled, and every node prompt carries a short
 "known so far" block.
+
+V6-13 (ask #31): a variable whose value came from a third party (a tool result bound with
+``var:``) or from the live extraction (the caller's words, restated) is fenced where it
+reaches the **instructions** (``render_template(..., untrusted=...)`` and
+:func:`known_variables_block`), never where it is spoken (transition speech, farewell,
+announcements render without ``untrusted``). :func:`untrusted_variable_sources` says which
+names those are, from the session's ``userdata``.
 """
 
 from __future__ import annotations
@@ -25,14 +32,20 @@ from packs.base import StructuredLLM
 from pydantic import BaseModel, Field, create_model
 
 from lkap_agent.logging import get_logger
+from lkap_agent.tools.untrusted import fence
 
 __all__ = [
+    "BOUND_SOURCE",
+    "EXTRACTED_SOURCE",
+    "EXTRACTED_VARIABLES_USERDATA_KEY",
     "VariableValue",
+    "coerce_variable",
     "extract_variables",
     "known_variables_block",
     "referenced_variables",
     "render_template",
     "transcript_text",
+    "untrusted_variable_sources",
     "variables_model",
 ]
 
@@ -47,6 +60,18 @@ _PLACEHOLDER_RE: Final[re.Pattern[str]] = re.compile(r"\{\{\s*([a-z][a-z0-9_]{0,
 #: Longest transcript excerpt sent to the extraction model (the tail is kept).
 _MAX_TRANSCRIPT_CHARS: Final[int] = 12_000
 
+#: ``SessionContext.userdata`` key of the set of variable names the live extraction wrote (V6-13).
+EXTRACTED_VARIABLES_USERDATA_KEY: Final[str] = "lkap.extracted_variables"
+#: The fence ``source`` of a variable a tool result binding wrote.
+BOUND_SOURCE: Final[str] = "tool_binding"
+#: The fence ``source`` of a variable the live extraction wrote.
+EXTRACTED_SOURCE: Final[str] = "extraction"
+#: The ``SessionContext.userdata`` key of the bound names (``tools.context.BOUND_VARIABLES_USERDATA_KEY``,
+#: repeated here so this module does not import the tool context).
+_BOUND_VARIABLES_KEY: Final[str] = "lkap.bound_variables"
+#: Longest fenced variable value in the instructions.
+_MAX_FENCED_VALUE_CHARS: Final[int] = 500
+
 _EXTRACT_INSTRUCTIONS: Final[str] = (
     "Extract the following variables from the conversation between a voice agent "
     "(assistant) and a caller (user). Only use what the caller actually said or "
@@ -54,21 +79,59 @@ _EXTRACT_INSTRUCTIONS: Final[str] = (
 )
 
 
-def render_template(text: str, variables: Mapping[str, VariableValue], *, missing: str = "") -> str:
+def untrusted_variable_sources(userdata: Any) -> dict[str, str]:
+    """Each variable name whose value is not the admin's, with its fence source.
+
+    Names a tool result binding wrote (``lkap.bound_variables``) are ``tool_binding``; names the
+    live extraction wrote (:data:`EXTRACTED_VARIABLES_USERDATA_KEY`) are ``extraction``. A name
+    in both reads ``tool_binding``.
+    """
+    if not isinstance(userdata, Mapping):
+        return {}
+    sources: dict[str, str] = {}
+    for key, source in (
+        (EXTRACTED_VARIABLES_USERDATA_KEY, EXTRACTED_SOURCE),
+        (_BOUND_VARIABLES_KEY, BOUND_SOURCE),
+    ):
+        names = userdata.get(key)
+        if isinstance(names, set | frozenset | list | tuple):
+            for name in names:
+                sources[str(name)] = source
+    return sources
+
+
+def _render_value(name: str, value: VariableValue, untrusted: Mapping[str, str] | None) -> str:
+    text = _format_value(value)
+    source = untrusted.get(name) if untrusted else None
+    if source is None:
+        return text
+    return fence(text, source=source, max_chars=_MAX_FENCED_VALUE_CHARS)
+
+
+def render_template(
+    text: str,
+    variables: Mapping[str, VariableValue],
+    *,
+    missing: str = "",
+    untrusted: Mapping[str, str] | None = None,
+) -> str:
     """Replace every `{{ name }}` in `text` with the variable's value.
 
     Args:
         text: Authored text (instructions, transition speech, farewell, greeting).
         variables: `FlowState.variables`.
         missing: Substituted for a name that is unset or `None`.
+        untrusted: Name → fence source (:func:`untrusted_variable_sources`); those values are
+            fenced. Pass it only for text that becomes instructions, never for spoken text.
 
     Returns:
         The rendered text.
     """
 
     def _sub(match: re.Match[str]) -> str:
-        value = variables.get(match.group(1))
-        return missing if value is None else _format_value(value)
+        name = match.group(1)
+        value = variables.get(name)
+        return missing if value is None else _render_value(name, value, untrusted)
 
     return _PLACEHOLDER_RE.sub(_sub, text)
 
@@ -85,16 +148,22 @@ def _format_value(value: VariableValue) -> str:
 
 
 def known_variables_block(
-    variables: Mapping[str, VariableValue], specs: Iterable[VariableSpec]
+    variables: Mapping[str, VariableValue],
+    specs: Iterable[VariableSpec],
+    *,
+    untrusted: Mapping[str, str] | None = None,
 ) -> str | None:
-    """A prompt block listing every captured variable, or `None` when nothing is known yet."""
+    """A prompt block listing every captured variable, or `None` when nothing is known yet.
+
+    Values named in ``untrusted`` (:func:`untrusted_variable_sources`) are fenced.
+    """
     descriptions = {spec.name: spec.description for spec in specs}
     lines = []
     for name, value in variables.items():
         if value is None:
             continue
         note = f" ({descriptions[name]})" if descriptions.get(name) else ""
-        lines.append(f"- {name}{note}: {_format_value(value)}")
+        lines.append(f"- {name}{note}: {_render_value(name, value, untrusted)}")
     if not lines:
         return None
     return (
@@ -196,6 +265,11 @@ async def extract_variables(
             values[spec.name] = value
     logger.debug("flow variables extracted", names=sorted(values))
     return values
+
+
+def coerce_variable(spec: VariableSpec, value: Any) -> VariableValue:
+    """Normalise one extracted value; `None` for anything that does not fit the spec."""
+    return _coerce(spec, value)
 
 
 def _coerce(spec: VariableSpec, value: Any) -> VariableValue:

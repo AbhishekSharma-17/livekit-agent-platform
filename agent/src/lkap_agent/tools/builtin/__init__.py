@@ -39,6 +39,7 @@ from .describe_panel import build_describe_panel_tool
 from .draw_on_canvas import build_draw_on_canvas_tool
 from .end_call import build_end_call_tool
 from .escalate_to_human import Urgency, build_escalate_to_human_tool
+from .extract_now import build_extract_now_tool
 from .fetch_url import build_fetch_url_tool
 from .generate_image import build_generate_image_tool
 from .http_request import build_http_request_tool
@@ -90,6 +91,7 @@ __all__ = [
     "build_end_call_tool",
     "build_escalate_to_human_tool",
     "build_fetch_url_tool",
+    "build_extract_now_tool",
     "build_generate_image_tool",
     "build_http_request_tool",
     "build_notebook_check_tool",
@@ -217,6 +219,8 @@ def build_builtin_tools(
         V6-12: `draw_on_canvas`, `clear_canvas` and `read_canvas` for a `canvas` block (which also
         lets `describe_asset` re-read a drawing snapshot, and gives `pin_frame` its
         `canvas_block_id`).
+        V6-13: `extract_now` when `extraction` is on with a `manual` trigger; the
+        session's live extraction and rules are built (and start listening) here.
     """
     skip = set(disabled)
     has_vision = ctx.config.capabilities.camera or ctx.config.capabilities.screen_share
@@ -385,6 +389,13 @@ def build_builtin_tools(
         tools.append(build_clear_canvas_tool(ctx))
     if "canvas" in block_types and _want("read_canvas"):
         tools.append(build_read_canvas_tool(ctx))
+    # V6-13: the session's live extraction and rules listen from here (every session is assembled
+    # through this builder before any tool runs); nothing is built for an agent without them.
+    from lkap_agent.extraction.session import live_structure, wants_extract_now  # noqa: PLC0415
+
+    live_structure(ctx)
+    if wants_extract_now(ctx.config) and _want("extract_now"):
+        tools.append(build_extract_now_tool(ctx))
     # V5-19: reading a stored picture needs a vision LLM and a way for the session to hold one
     # (V6-12: a drawing board's snapshot is one).
     holds_pictures = bool(block_types & {"upload", "form", "canvas"}) or has_vision

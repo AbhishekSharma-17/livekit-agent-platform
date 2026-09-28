@@ -49,7 +49,8 @@ def test_the_worker_registers_exactly_the_contract_block_tools() -> None:
 
 #: R-V5-15: built-in tools that hand third-party text to the model; each fences it.
 FENCED_BUILTIN_TOOLS: frozenset[str] = frozenset(
-    {"search_knowledge", "http_request", "web_search", "fetch_url"}
+    # V6-13: `extract_now` reads back the caller's words as the extraction model restated them.
+    {"search_knowledge", "http_request", "web_search", "fetch_url", "extract_now"}
 )
 #: Built-in tools whose result is the platform's own words, the caller's own input or a
 #: vendor receipt, never third-party content. `describe_asset` frames an uploaded file's

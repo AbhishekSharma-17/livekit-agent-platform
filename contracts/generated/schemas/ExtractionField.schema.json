@@ -1,0 +1,86 @@
+{
+  "$id": "lkap-contracts/ExtractionField.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One fact to capture: a flow ``VariableSpec`` plus how to ask for it and where it shows.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "hint": {
+      "default": "",
+      "maxLength": 300,
+      "title": "Hint",
+      "type": "string"
+    },
+    "label": {
+      "default": "",
+      "maxLength": 80,
+      "title": "Label",
+      "type": "string"
+    },
+    "name": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "options": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Options"
+    },
+    "required": {
+      "default": false,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "sensitive": {
+      "default": false,
+      "title": "Sensitive",
+      "type": "boolean"
+    },
+    "show_in": {
+      "anyOf": [
+        {
+          "maxLength": 140,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Show In"
+    },
+    "type": {
+      "default": "string",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "enum",
+        "date",
+        "phone",
+        "email"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "ExtractionField",
+  "type": "object"
+}

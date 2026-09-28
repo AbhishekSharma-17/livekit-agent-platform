@@ -50,7 +50,9 @@ def test_generate_image_is_a_write_built_in_that_never_joins_the_background_sett
 
 def test_existing_tool_order_is_kept() -> None:
     """New names go at the end: the api and web read the lists in order."""
-    assert tools.BUILTIN_TOOL_NAMES[-1] == "generate_image"
+    # V6-13 appended `extract_now` after it.
+    builtins = tools.BUILTIN_TOOL_NAMES
+    assert builtins.index("generate_image") == builtins.index("switch_language") + 1
     # V6-08 appends the notebook tools after them.
     names = tools.BLOCK_TOOL_NAMES
     assert names[names.index("set_checklist") : names.index("set_checklist") + 2] == (

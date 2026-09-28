@@ -84,6 +84,7 @@ from lkap_contracts.compliance import (
     Jurisdiction,
 )
 from lkap_contracts.connections import ConnectionCapabilities, DeploymentType
+from lkap_contracts.extraction import extraction_issues
 from lkap_contracts.guardrails import (
     ClassifierRule,
     GuardrailsConfig,
@@ -106,6 +107,8 @@ from lkap_contracts.providers import (
     speech_streams,
     validate_model_id,
 )
+from lkap_contracts.rules import rule_issues
+from lkap_contracts.rules_expr import nested_repeat  # V6-13 (ask #75): one regex-safety scanner
 from lkap_contracts.tool_context import (
     BINDING_BLOCK_TYPES,
     FORBIDDEN_BINDING_BLOCK_TYPES,
@@ -538,6 +541,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(amd_and_transfer_issues(ctx))
     findings.extend(guardrails_issues(ctx))
     findings.extend(canvas_vision_issues(ctx))  # V6-12
+    findings.extend(extraction_rules_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1740,6 +1744,80 @@ def tool_context_issues(ctx: ValidationContext) -> list[Issue]:
     return issues
 
 
+# ------------------------------------------------- live extraction and rules (V6-13)
+
+
+def extraction_rules_issues(ctx: ValidationContext) -> list[Issue]:
+    """The checks of ``extraction`` and ``rules`` (V6-13, D-V6-24/25); nothing for an agent without them.
+
+    The contract already refused what cannot parse (a condition outside the grammar, a
+    catastrophic pattern, a bad ``show_in``); this adds what needs the whole config
+    (:func:`lkap_contracts.extraction.extraction_issues`,
+    :func:`lkap_contracts.rules.rule_issues`): targets on the panel and of the right type,
+    ``node_exit`` steps that exist, variables something sets, and — when every attached tool's
+    name is known and none is an MCP server (whose tools are named by the server) — tool
+    names the agent has.
+
+    Args:
+        ctx: The validation context.
+
+    Returns:
+        Issues at ``extraction…`` and ``rules[i]…``.
+    """
+    config = ctx.config
+    if not config.rules and not config.extraction.enabled and not config.extraction.fields:
+        return []
+    from lkap_api.flows.validation import allowed_tool_names  # noqa: PLC0415 - it imports this module
+
+    blocks = list(config.panel.blocks)
+    flow = config.flow if config.flow is not None and config.flow.nodes else None
+    node_ids = [node.id for node in flow.nodes] if flow is not None else None
+    flow_extracted: dict[str, str] = {}
+    flow_variables: set[str] = set()
+    if flow is not None:
+        flow_variables = {variable.name for variable in flow.variables}
+        for node in flow.nodes:
+            for name in getattr(node, "extract", None) or []:
+                flow_extracted.setdefault(name, node.id)
+    known_tools: set[str] | None = None
+    definitions = ctx.tool_definitions_by_id
+    names_by_id = ctx.tool_names_by_id
+    if names_by_id is not None and all(tool_id in names_by_id for tool_id in config.tools.tool_ids):
+        has_mcp = definitions is None or any(
+            isinstance(definitions.get(tool_id), Mapping) and definitions[tool_id].get("kind") == "mcp"
+            for tool_id in config.tools.tool_ids
+        )
+        if not has_mcp:
+            known_tools = allowed_tool_names(
+                config, tool_names_by_id=names_by_id, pack_tool_names=ctx.pack_tool_names or ()
+            )
+            if ctx.pack_tool_names is None:
+                known_tools = None  # the pack is unknown: its tools could be named
+    issues = extraction_issues(
+        config.extraction,
+        blocks,
+        flow_node_ids=node_ids,
+        flow_extracted=flow_extracted,
+        known_tools=known_tools,
+        builtin_disabled=config.tools.builtin_disabled,
+    )
+    variables = {spec.name for spec in config.extraction.fields} | flow_variables
+    for tool_id in config.tools.tool_ids:
+        definition = (definitions or {}).get(tool_id)
+        if not isinstance(definition, Mapping):
+            continue
+        for _prefix, spec in _tool_context_specs(definition):
+            for binding in spec.get("bindings") or []:
+                to = str(binding.get("to") or "") if isinstance(binding, Mapping) else ""
+                if to.startswith("var:"):
+                    variables.add(to.removeprefix("var:"))
+    known_variables: set[str] | None = variables if definitions is not None else None
+    issues.extend(
+        rule_issues(list(config.rules), blocks, known_variables=known_variables, known_tools=known_tools)
+    )
+    return issues
+
+
 # ------------------------------------------------------------ curated built-ins (V5-25)
 #: The `ToolsConfig` field of each network built-in's vendor, the registry kind it takes and
 #: the built-in it switches on.
@@ -1983,7 +2061,6 @@ OPENAI_KEY_HOMES: Final[frozenset[str]] = frozenset(
 MODERATION_KEY_PROVIDER: Final[str] = "openai-llm"
 
 #: An unbounded repeat inside a group: ``+``, ``*`` or ``{n,}``.
-_UNBOUNDED_RE: Final[re.Pattern[str]] = re.compile(r"[+*]|\{\d*,\}")
 
 CLASSIFIER_NEEDS_MODEL_MESSAGE = (
     "A rule judged by a language model needs a model: choose one for the guardrails, or set the "
@@ -2001,40 +2078,6 @@ SLOW_PATTERN_MESSAGE = (
     "simplify it (for example, drop the outer repeat)."
 )
 _STAGES: Final[tuple[GuardrailStage, ...]] = ("input", "output", "tool_output")
-
-
-def nested_repeat(pattern: str) -> bool:
-    """Whether ``pattern`` repeats a group that holds an unbounded repeat (``(a+)+``, ``(\\w*\\s)*``).
-
-    Such a pattern can backtrack for a very long time on a long text, and Python's ``re``
-    has no timeout. A small scanner, not a full parser: it tracks groups, skips escapes
-    and character classes, and flags a group containing ``+``, ``*`` or ``{n,}`` that is
-    itself followed by ``+``, ``*`` or ``{``.
-    """
-    stack: list[bool] = []
-    index = 0
-    in_class = False
-    while index < len(pattern):
-        char = pattern[index]
-        if char == "\\":
-            index += 2
-            continue
-        if in_class:
-            in_class = char != "]"
-        elif char == "[":
-            in_class = True
-        elif char == "(":
-            stack.append(False)
-        elif char == ")" and stack:
-            inner = stack.pop()
-            if inner and pattern[index + 1 : index + 2] in ("+", "*", "{"):
-                return True
-            if stack:
-                stack[-1] = stack[-1] or inner
-        elif stack and _UNBOUNDED_RE.match(pattern, index):
-            stack[-1] = True
-        index += 1
-    return False
 
 
 def _classifier_has_model(config: AgentConfig) -> bool:

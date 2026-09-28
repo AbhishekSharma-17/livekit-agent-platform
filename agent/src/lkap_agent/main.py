@@ -111,6 +111,7 @@ from lkap_agent.config_client import (
     SessionEndedError,
     SessionNotFoundError,
 )
+from lkap_agent.extraction import LIVE_STRUCTURE_USERDATA_KEY
 from lkap_agent.flow import FlowServices, build_flow_agent, is_flow, prepare_flow_resolved
 from lkap_agent.knowledge import prefetch_listener, search_options
 from lkap_agent.logging import configure_logging, get_logger
@@ -125,6 +126,7 @@ from lkap_agent.platform_agent import (
 from lkap_agent.providers.factory import BuiltProviders, ProviderFactory
 from lkap_agent.qa import build_judge, score_session
 from lkap_agent.registration import FleetClient, WorkerRegistration
+from lkap_agent.rules import DISPOSITION_USERDATA_KEY
 from lkap_agent.session_builder import (
     SessionBuilder,
     SessionPlan,
@@ -151,6 +153,7 @@ from lkap_agent.telephony import (
     wait_for_sip_participant,
 )
 from lkap_agent.text_mode import handle_agent_action as handle_text_mode_action
+from lkap_agent.tools.context import VARIABLES_USERDATA_KEY
 from lkap_agent.tools.mcp_auth import McpOAuthBinding
 from lkap_agent.workflow_llm import PromptJsonStructuredLLM
 
@@ -1871,10 +1874,16 @@ def _shutdown_callback(
         # R-V2-8: `on_pack_session_end` (above) settled a flow's extractions; its final
         # `FlowState` rides in the summary. Prompt agents have no "flow" userdata.
         flow_state = agent.context.userdata.get("flow")
+        # V6-13 (ask #72): a prompt agent's live extraction/rules keep their values in userdata.
+        userdata = agent.context.userdata
+        captured = userdata.get(VARIABLES_USERDATA_KEY) if LIVE_STRUCTURE_USERDATA_KEY in userdata else None
+        outcome = userdata.get(DISPOSITION_USERDATA_KEY) if LIVE_STRUCTURE_USERDATA_KEY in userdata else None
         await observer.shutdown(
             reason=reason,
             final_ui_state=agent.context.ui.state,
             flow=flow_state if isinstance(flow_state, FlowState) else None,
+            disposition=outcome if isinstance(outcome, str) else None,
+            variables=captured if isinstance(captured, dict) else None,
         )
         # Everything below runs after the summary is posted, so neither the
         # Egress poll (up to 5 s) nor the QA judge (R-V2-5, up to 30 s) delays

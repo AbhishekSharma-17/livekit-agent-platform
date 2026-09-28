@@ -840,6 +840,40 @@ export const createCredentialFormSchema = z.object({
 });
 export type CreateCredentialForm = z.infer<typeof createCredentialFormSchema>;
 
+/**
+ * V6-11 (D-V6-22, D-V6-23): mirrors of `lkap_contracts.tool_context`'s models and caps, for
+ * the tool editors' inline validation (`tools/tool-context.ts` has the actual placeholder and
+ * binding-target checks — plain functions, not zod, since neither `httpToolFormSchema` nor
+ * `mcpToolFormSchema` below is wired into react-hook-form; the editors validate their own
+ * `Draft` state by hand, same as before this package). Kept here as the shapes' one source of
+ * truth in this file, and to extend the two form schemas below.
+ */
+export const MAX_BINDINGS = 20;
+export const MAX_REQUIRES_VARS = 20;
+export const MAX_CONFIRM_READBACK = 10;
+export const MAX_PINNED_ARGUMENTS = 20;
+
+export const toolBindingSchema = z.object({
+  path: z.string().max(256).refine((value) => value === "" || value.startsWith("/"), "empty, or starting with '/'"),
+  to: z.string().min(1).max(140),
+});
+export type ToolBindingForm = z.infer<typeof toolBindingSchema>;
+
+const requiresVarsSchema = z.array(z.string()).max(MAX_REQUIRES_VARS);
+const confirmReadbackSchema = z.array(z.string()).max(MAX_CONFIRM_READBACK);
+const bindingsSchema = z.array(toolBindingSchema).max(MAX_BINDINGS);
+const pinnedArgumentsSchema = z
+  .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+  .refine((value) => Object.keys(value).length <= MAX_PINNED_ARGUMENTS, `at most ${MAX_PINNED_ARGUMENTS} pinned arguments`);
+
+export const toolContextSpecSchema = z.object({
+  requires_vars: requiresVarsSchema.default([]),
+  confirm_readback: confirmReadbackSchema.default([]),
+  bindings: bindingsSchema.default([]),
+  pinned_arguments: pinnedArgumentsSchema.default({}),
+});
+export type ToolContextSpecForm = z.infer<typeof toolContextSpecSchema>;
+
 export const httpToolFormSchema = z.object({
   name: z
     .string()
@@ -873,6 +907,11 @@ export const httpToolFormSchema = z.object({
   result_path: z.string().nullable().optional(),
   silent_reply: z.boolean(),
   enabled: z.boolean(),
+  // V6-11: requires_vars/confirm_readback/bindings — no pinned_arguments (ask #34: that
+  // field exists on app actions and MCP tools only, never a raw HTTP tool).
+  requires_vars: requiresVarsSchema.optional(),
+  confirm_readback: confirmReadbackSchema.optional(),
+  bindings: bindingsSchema.optional(),
 });
 export type HttpToolForm = z.infer<typeof httpToolFormSchema>;
 
@@ -918,5 +957,7 @@ export const mcpToolFormSchema = z.object({
   timeout_s: z.number().min(1).max(120),
   sse_read_timeout_s: z.number().min(1).max(3600),
   enabled: z.boolean(),
+  // V6-11: one `ToolContextSpec` per allowed tool name (`McpServerDefinition.tool_context`).
+  tool_context: z.record(z.string(), toolContextSpecSchema).optional(),
 });
 export type McpToolForm = z.infer<typeof mcpToolFormSchema>;

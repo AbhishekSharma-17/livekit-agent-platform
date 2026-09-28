@@ -566,6 +566,8 @@ class SessionObserver:
         error: str | None = None,
         final_ui_state: UiState | None = None,
         flow: FlowState | None = None,
+        disposition: str | None = None,
+        variables: dict[str, Any] | None = None,
     ) -> None:
         """Flush events and `PUT` the session summary. Safe to call twice.
 
@@ -628,8 +630,10 @@ class SessionObserver:
             transcript=transcript,
             final_ui_state=final_ui_state,
             error=error,
-            disposition=flow.disposition if flow is not None else None,
-            variables=dict(flow.variables) if flow is not None else {},
+            # A prompt agent with live extraction/rules (V6-13, ask #72) passes its captured
+            # `disposition`/`variables`; a flow's own state wins when there is one.
+            disposition=flow.disposition if flow is not None else disposition,
+            variables=dict(flow.variables) if flow is not None else dict(variables or {}),
         )
         await self._client.put_summary(self._session_id, summary)
         logger.info(

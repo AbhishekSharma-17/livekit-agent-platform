@@ -44,6 +44,14 @@ export const TOPIC_UI_ACTIVITY = "lkap.ui.activity";
 export const TOPIC_UI_ASSET = "lkap.ui.asset";
 export const RPC_UI_REQUEST = "lkap.ui.request";
 export const RPC_AGENT_ACTION = "lkap.agent.action";
+/**
+ * The drawing board's caller → agent text stream (V6-14, ask #92; CONTRACTS §10
+ * D-V6-16): `room.localParticipant.sendText(json, {topic: TOPIC_UI_INK, compress:
+ * false})` (`composite/ink-stream.ts`). `compress: false` until a live check shows the
+ * worker (livekit 1.1.18's FFI) decodes a compressed text stream — sending compressed
+ * risks every stroke arriving as `malformed` in the worker log.
+ */
+export const TOPIC_UI_INK = "lkap.ui.ink";
 
 /* -------------------------------------------------------------------------- */
 /* Public API access                                                          */

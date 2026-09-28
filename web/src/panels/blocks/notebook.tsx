@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * `notebook` block (V6-08 → V6-10, D-V6-15) — a sectioned notebook the agent
+ * `notebook` block (V6-08 → V6-10 → V6-14, D-V6-15) — a sectioned notebook the agent
  * writes in as the call goes, and the caller may too: paper themes (`plain` /
  * `ruled` / `grid` / `legal`), a print or handwritten font, and up to
  * `MAX_NOTEBOOK_SECTIONS` sections of `text` / `checklist` / `details` / `ink`
- * (the drawing board, "coming soon" until V6-12).
+ * (the drawing board; `notebook/sections.tsx`'s `InkSectionView` renders the section's
+ * claimed `canvas` block, or "Drawing board coming soon" while it names none).
  *
  * `config.sections` orders the sections; each one's content comes from
  * `data.sections[<id>]` when present and of the matching kind, else its own

@@ -1,4 +1,7 @@
-import { BrainIcon, FlaskConicalIcon, MessageCircleIcon, ShieldAlertIcon, ShieldIcon } from "lucide-react";
+import { BrainIcon, FlaskConicalIcon, MessageCircleIcon, ScanSearchIcon, ShieldAlertIcon, ShieldIcon, SplitIcon } from "lucide-react";
+
+import { ExtractionTab } from "@/components/console/agents/tabs/extraction-tab";
+import { RulesTab } from "@/components/console/agents/tabs/rules-tab";
 
 import { BUILTIN_SECTIONS } from "./builtin-sections";
 import { EDITOR_EXTENSIONS } from "./extensions";
@@ -145,9 +148,55 @@ const guardrailsSectionExtension: EditorExtension = {
 };
 
 /**
+ * V6-15 (D-V6-24): the Extraction section ("Capture details" — ask #74's plain-words
+ * headline; the nav label stays the plainer noun "Extraction" so the nav itself reads as
+ * a list of topics, matching every other built-in). Same rationale as V5-11's own
+ * extension above — this package's exclusive files are `sections.ts`/`tabs/extraction-tab.tsx`,
+ * not `extensions.ts`. `order: 55` sits between "Tools" (50, tool triggers) and
+ * "Knowledge" (60): extraction reads the panel's blocks (`show_in`) the way "Panel" (40)
+ * and "Tools" (50) do, and it depends on both being configured first.
+ */
+const extractionSectionExtension: EditorExtension = {
+  id: "V6-15",
+  sections: [
+    {
+      id: "extraction",
+      label: "Extraction",
+      icon: ScanSearchIcon,
+      order: 55,
+      Component: ExtractionTab,
+      issuePaths: ["extraction"],
+      issueKeywords: /\b(captur|still needed|extract)/i,
+      issueKeywordPriority: 27,
+    },
+  ],
+};
+
+/**
+ * V6-15 (D-V6-25): the Rules section (when → then rows). `order: 57` sits right after
+ * "Extraction" (55) — rules commonly react to a just-captured value — and before
+ * "Knowledge" (60).
+ */
+const rulesSectionExtension: EditorExtension = {
+  id: "V6-15",
+  sections: [
+    {
+      id: "rules",
+      label: "Rules",
+      icon: SplitIcon,
+      order: 57,
+      Component: RulesTab,
+      issuePaths: ["rules"],
+      issueKeywords: /\b(rule|condition does not read|checklist\.set_item|checklist\.check|disposition)/i,
+      issueKeywordPriority: 28,
+    },
+  ],
+};
+
+/**
  * The editor's section registry (docs/UI_UX_SPEC.md §7.4 item 3): built-ins
- * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's, V5-34's, V5-42's and
- * V5-41's own extensions above, resolved once at module load.
+ * plus `EDITOR_EXTENSIONS` plus V5-11's, V5-33's, V5-34's, V5-42's, V5-41's
+ * and V6-15's own extensions above, resolved once at module load.
  */
 export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   ...EDITOR_EXTENSIONS,
@@ -156,6 +205,8 @@ export const EDITOR_SECTIONS = resolveEditorSections(BUILTIN_SECTIONS, [
   privacySectionExtension,
   memorySectionExtension,
   guardrailsSectionExtension,
+  extractionSectionExtension,
+  rulesSectionExtension,
 ]);
 export const EDITOR_SLOTS = resolveEditorSlots(EDITOR_EXTENSIONS);
 

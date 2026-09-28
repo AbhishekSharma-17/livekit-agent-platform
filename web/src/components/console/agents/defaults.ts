@@ -3,6 +3,7 @@ import type {
   AvatarOptions,
   CapabilitiesConfig,
   DisclosureConfig,
+  ExtractionConfig,
   GuardrailsConfig,
   KnowledgeConfig,
   LocaleConfig,
@@ -164,6 +165,20 @@ export const DEFAULT_TELEPHONY: Required<TelephonyConfig> = {
   sms_targets: [],
   // V5-32: answering-machine detection on outbound calls, off (V5-36's Voicemail card).
   amd: { enabled: false, on_machine: "hangup", message: null, ivr_detection: false },
+};
+
+/**
+ * `ExtractionConfig` defaults (V6-15, D-V6-24): off, no fields, extraction runs after
+ * every caller turn once turned on (`_default_triggers` on the api: `EveryNTurnsTrigger(n=1)`).
+ * V6-15's edit outside its exclusive files (`agents/defaults.ts`), same rationale as
+ * `DEFAULT_DISCLOSURE`/`DEFAULT_RECORDING`'s own notes above; ratified in `docs/v6/_asks.md`.
+ */
+export const DEFAULT_EXTRACTION: Required<ExtractionConfig> = {
+  enabled: false,
+  fields: [],
+  triggers: [{ kind: "every_n_turns", n: 1 }],
+  min_turn_chars: 12,
+  still_needed: null,
 };
 
 /** `AgentLimits` defaults (CONTRACTS-V2 §3.3). */

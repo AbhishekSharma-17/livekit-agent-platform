@@ -374,12 +374,12 @@ export const LAYOUT_KINDS = [
   { value: "columns", label: "Side by side" },
 ] as const;
 
-/** `notebook.sections[].kind` values (V6-08 → V6-10; `NotebookSectionKind`). */
+/** `notebook.sections[].kind` values (V6-08 → V6-10 → V6-14; `NotebookSectionKind`). */
 export const NOTEBOOK_SECTION_KINDS = [
   { value: "text", label: "Notes" },
   { value: "checklist", label: "Checklist" },
   { value: "details", label: "Summary" },
-  { value: "ink", label: "Drawing board (coming soon)" },
+  { value: "ink", label: "Drawing board" },
 ] as const;
 
 /** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */

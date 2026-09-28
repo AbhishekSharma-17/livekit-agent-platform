@@ -342,8 +342,10 @@ async def test_public_get_returns_the_public_projection(
         "panel",
         "capabilities",
         "pipeline_mode",
+        "avatar_framing",
     }
     assert "config" not in body
+    assert body["avatar_framing"] is None
 
 
 async def test_public_get_of_an_unpublished_agent_is_forbidden(

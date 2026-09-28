@@ -23,6 +23,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Response, 
 from lkap_contracts import providers as provider_registry
 from lkap_contracts.agent_config import AgentConfig, AgentLimits
 from lkap_contracts.api_models import (
+    AgentAvatarFraming,
     AgentCreate,
     AgentOut,
     AgentPage,
@@ -238,7 +239,27 @@ def to_public(row: Agent, settings: Settings) -> AgentPublicOut:
         panel=layout,
         capabilities=config.capabilities,
         pipeline_mode=config.pipeline.mode,
+        avatar_framing=_public_avatar_framing(config),
     )
+
+
+def _public_avatar_framing(config: AgentConfig) -> AgentAvatarFraming | None:
+    """The avatar's display hints for the session stage (V6-26b, docs/v6/_asks.md #151).
+
+    `AvatarOptions.framing`/`.fit` as stored (unset stays `None`, which the stage renders as
+    `auto` + `contain`) plus the avatar provider's registry `avatar_aspect`. Never the provider
+    id or any other pipeline config. `None` when no avatar is configured; an id the registry no
+    longer knows only loses its declared aspect, it never fails the public route.
+    """
+    avatar = config.pipeline.avatar
+    if avatar is None:
+        return None
+    try:
+        declared_aspect = provider_registry.get(avatar.provider_id).capabilities.avatar_aspect
+    except KeyError:
+        declared_aspect = None
+    options = config.pipeline.avatar_options
+    return AgentAvatarFraming(framing=options.framing, fit=options.fit, declared_aspect=declared_aspect)
 
 
 async def load_agent(db: AsyncSession, id_or_slug: str) -> Agent:

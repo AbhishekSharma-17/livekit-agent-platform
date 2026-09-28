@@ -17,7 +17,6 @@
  */
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { Streamdown } from "streamdown";
 
 import { DescriptionList } from "@/components/shared/description-list";
 import { Button } from "@/components/ui/button";
@@ -30,6 +29,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { SafeMarkdown } from "@/lib/safe-markdown";
 
 /** What `openPacketDialog()` was able to do. */
 export type PacketOpenOutcome = "opened" | "empty" | "absent";
@@ -117,7 +117,9 @@ export function PacketDialog({
             className="prose-sm max-w-none [&_h1]:mt-0 [&_h1]:mb-3 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_li]:my-1 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
             data-testid="notebook-packet-body"
           >
-            <Streamdown>{markdown}</Streamdown>
+            {/* V6-10 (ask #333): the workflow's own Markdown, https links only, no images
+                (no `assets` map — the packet carries none of its own). */}
+            <SafeMarkdown text={markdown} allowLinks />
           </div>
         </DialogBody>
       </DialogContent>

@@ -24,10 +24,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateAgent, useCredentials, useProviders } from "@/components/console/lib/api-hooks";
+import { usePanelPresets } from "@/components/console/agents/panel-section/use-panel-presets";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { useConnections } from "@/hooks/useConnections";
-import type { AgentCreate, TemplateOut } from "@/contracts/lkap-contracts";
-import { ApiError } from "@/lib/api";
+import type { AgentCreate, PanelPreset, TemplateOut } from "@/contracts/lkap-contracts";
+import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { TemplatePreview } from "./template-preview";
@@ -142,12 +143,17 @@ function CreateAgentSteps({
   const providersQuery = useProviders();
   const keysQuery = useCredentials();
   const createAgent = useCreateAgent();
+  // V6-10 (ask #56): "Notebook" (or any other ready-made panel) as a starting
+  // point — applied with a second `PUT` right after creation, since
+  // `AgentCreate` seeds `config` from the starter alone.
+  const presetsQuery = usePanelPresets();
 
   const [step, setStep] = React.useState<Step>("choose");
   const [selectedId, setSelectedId] = React.useState<string>("");
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [connectionId, setConnectionId] = React.useState<string>("");
+  const [panelPresetId, setPanelPresetId] = React.useState<string>("");
   const [nameTouched, setNameTouched] = React.useState(false);
   const [createError, setCreateError] = React.useState<CreateError | null>(null);
 
@@ -192,6 +198,17 @@ function CreateAgentSteps({
     if (connectionId) body.connection_id = connectionId;
     try {
       const agent = await createAgent.mutateAsync(body);
+      const preset = panelPresetId ? presetsQuery.data?.find((p) => p.id === panelPresetId) : undefined;
+      if (preset) {
+        try {
+          await api.put(`agents/${agent.id}`, {
+            config: { ...agent.config, panel: preset.panel },
+            ui_panel_id: preset.panel.panel_id,
+          });
+        } catch {
+          // Best-effort: the agent still exists with its starter's own panel.
+        }
+      }
       const notes = gatedDifferences(selected, agent.config, providers);
       toast.success(`Created from ${selected.template.name}`, notes.length > 0 ? { description: notes.join(" ") } : undefined);
       onCreated?.(agent.id);
@@ -209,6 +226,8 @@ function CreateAgentSteps({
         name={name}
         description={description}
         connectionId={connectionId}
+        panelPresetId={panelPresetId}
+        panelPresets={presetsQuery.data ?? []}
         nameTouched={nameTouched}
         pending={createAgent.isPending}
         error={createError}
@@ -216,6 +235,7 @@ function CreateAgentSteps({
         onNameBlur={() => setNameTouched(true)}
         onDescription={setDescription}
         onConnection={setConnectionId}
+        onPanelPreset={setPanelPresetId}
         onBack={() => {
           setCreateError(null);
           setStep("choose");
@@ -401,6 +421,9 @@ interface NameStepProps {
   name: string;
   description: string;
   connectionId: string;
+  /** V6-10: the chosen ready-made panel's id, or `""` for the starter's own panel. */
+  panelPresetId: string;
+  panelPresets: PanelPreset[];
   nameTouched: boolean;
   pending: boolean;
   error: CreateError | null;
@@ -408,15 +431,21 @@ interface NameStepProps {
   onNameBlur: () => void;
   onDescription: (value: string) => void;
   onConnection: (value: string) => void;
+  onPanelPreset: (value: string) => void;
   onBack: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }
+
+/** No preset — the starter's own panel, unchanged. */
+const NO_PANEL_PRESET = "__none__";
 
 function NameStep({
   item,
   name,
   description,
   connectionId,
+  panelPresetId,
+  panelPresets,
   nameTouched,
   pending,
   error,
@@ -424,6 +453,7 @@ function NameStep({
   onNameBlur,
   onDescription,
   onConnection,
+  onPanelPreset,
   onBack,
   onSubmit,
 }: NameStepProps) {
@@ -535,6 +565,32 @@ function NameStep({
                     <SelectItem key={connection.id} value={connection.id}>
                       {connection.name}
                       {connection.is_default ? " (default)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+
+          {panelPresets.length > 0 ? (
+            <Field
+              label="Starting panel"
+              htmlFor={`${uid}-panel-preset`}
+              optional
+              hint="Replaces what the caller sees next to the call. You can change it afterwards."
+            >
+              <Select
+                value={panelPresetId || NO_PANEL_PRESET}
+                onValueChange={(value) => onPanelPreset(value === NO_PANEL_PRESET ? "" : value)}
+              >
+                <SelectTrigger id={`${uid}-panel-preset`} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PANEL_PRESET}>{template.name}&rsquo;s own panel</SelectItem>
+                  {panelPresets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

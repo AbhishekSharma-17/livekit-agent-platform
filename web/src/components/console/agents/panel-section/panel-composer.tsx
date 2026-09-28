@@ -55,12 +55,20 @@ import { Section, SectionRow } from "@/components/shared/section";
 import { StatusChip } from "@/components/shared/status-chip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { usePacks } from "@/components/console/lib/api-hooks";
 import { BLOCK_TOOLS } from "@/components/console/lib/constants";
 import type { AgentEditorForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import { PANEL_META, panelMeta } from "@/components/shared/panel-meta";
-import type { AgentOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, PanelPreset } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 import { BLOCK_CATALOG, BLOCK_TYPES, blockTitle } from "@/panels/blocks/catalog";
 import { COMPOSITE_PANEL_ID, LEGACY_GENERIC_PANEL_ID, type BlockType } from "@/panels/composite/layout";
@@ -71,6 +79,77 @@ import { addBlock, blockToolStatus, moveBlock, removeBlock, switchPanel } from "
 // the editor's first load stays free of the session surface.
 const ComposerPreview = React.lazy(() => import("./composer-preview"));
 import { SessionCapabilities } from "./session-capabilities";
+import { usePanelPresets } from "./use-panel-presets";
+
+/** A `PanelPreset.panel` (contracts `PanelLayout`) as the form the composer edits. */
+export function presetToForm(preset: PanelPreset): PanelLayoutForm {
+  return {
+    panel_id: COMPOSITE_PANEL_ID,
+    layout: preset.panel.layout === "wide" ? "wide" : "side",
+    blocks: (preset.panel.blocks ?? []).map((block, order) => ({
+      id: block.id,
+      type: block.type,
+      title: block.title ?? null,
+      config: (block.config ?? {}) as Record<string, unknown>,
+      order: block.order ?? order,
+    })),
+  };
+}
+
+/**
+ * "Start from a preset" (V6-10, ask #56): `GET /v1/panels/presets`, the
+ * Notebook today. Hidden when the api has no such route (a 404) or lists
+ * none. Replacing a panel that already has blocks asks first — it is not
+ * additive, and there is no undo.
+ */
+function PanelPresets({ panel, onChange }: { panel: PanelLayoutForm; onChange: (next: PanelLayoutForm) => void }) {
+  const presetsQuery = usePanelPresets();
+  const [pending, setPending] = React.useState<PanelPreset | null>(null);
+  const presets = presetsQuery.data ?? [];
+  if (presets.length === 0) return null;
+
+  function apply(preset: PanelPreset) {
+    onChange(presetToForm(preset));
+    setPending(null);
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {presets.map((preset) => (
+          <Button
+            key={preset.id}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => (panel.blocks.length > 0 ? setPending(preset) : apply(preset))}
+          >
+            Start from the {preset.name} preset
+          </Button>
+        ))}
+      </div>
+      <Dialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replace the current blocks?</DialogTitle>
+            <DialogDescription>
+              Starting from the {pending?.name} preset replaces every block on this panel. This can&rsquo;t be undone
+              once you save.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPending(null)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => pending && apply(pending)}>
+              Replace blocks
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   status: GaugeIcon,
@@ -573,6 +652,7 @@ export function PanelComposer({ agent }: { agent: AgentOut }) {
               <StateDeltaSwitch panel={panel} onChange={update} />
             </SectionRow>
             <SectionRow className="flex flex-col gap-4" data-issue-path="panel.blocks">
+              <PanelPresets panel={panel} onChange={update} />
               <BlockList panel={panel} onChange={update} idErrors={idErrors} />
             </SectionRow>
           </Section>

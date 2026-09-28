@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { BlockSpecForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import type { TableColumn } from "@/contracts/lkap-contracts";
-import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, LANGUAGE_OPTIONS, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
+import { BLOCK_CATALOG, DETAILS_FIELD_TYPES, LANGUAGE_OPTIONS, NOTEBOOK_SECTION_KINDS, TABLE_COLUMN_TYPES, type BlockConfigField } from "@/panels/blocks/catalog";
 import { normalizeHost } from "@/panels/blocks/types";
 
 import { setBlockConfig, updateBlock } from "./composer-model";
@@ -44,6 +44,9 @@ const DETAILS_TYPE_LABEL: Record<(typeof DETAILS_FIELD_TYPES)[number], string> =
 
 /** `key`/`id` fields read as identifiers: no spaces. Everything else is free text. */
 const IDENTIFIER_ITEM_KEYS = new Set(["key", "id"]);
+
+/** Radix `Select` needs a non-empty value; this stands for "no board chosen yet" (V6-12). */
+const NO_CANVAS_BOARD = "__none__";
 
 function isColumns(value: unknown): value is TableColumn[] {
   return Array.isArray(value) && value.every((c) => typeof c === "object" && c !== null && "key" in c);
@@ -335,6 +338,198 @@ function HostsEditor({
   );
 }
 
+/**
+ * A `notebook`'s sections (V6-10, D-V6-15): id, title and a `kind` restricted
+ * to the four real section kinds — the plain `ListEditor` treats every
+ * `itemKeys` entry as free text, which would let a builder type a `kind` the
+ * worker refuses at save.
+ */
+function NotebookSectionsEditor({
+  idBase,
+  value,
+  onChange,
+  canvasBlocks,
+}: {
+  idBase: string;
+  value: Record<string, unknown>[];
+  onChange: (next: Record<string, unknown>[]) => void;
+  /** `canvas`-type blocks of the same panel, for an `ink` section's board picker (V6-12). */
+  canvasBlocks: readonly BlockSpecForm[];
+}) {
+  function patch(index: number, key: string, next: unknown) {
+    onChange(
+      value.map((item, i) => {
+        if (i !== index) return item;
+        const patched = { ...item, [key]: next };
+        // A board only ever shows on an ink section (the api's own rule): changing away
+        // from ink drops it, so the row never saves an invalid combination.
+        if (key === "kind" && next !== "ink") delete patched.canvas_block_id;
+        return patched;
+      }),
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2" data-slot="notebook-sections-editor">
+      {value.map((section, index) => {
+        const id = typeof section.id === "string" ? section.id : "";
+        const sectionTitle = typeof section.title === "string" ? section.title : "";
+        const kind = typeof section.kind === "string" ? section.kind : "text";
+        const canvasBlockId = typeof section.canvas_block_id === "string" ? section.canvas_block_id : "";
+        return (
+          <div key={index} className="flex flex-wrap items-center gap-2">
+            <Input
+              aria-label={`Section ${index + 1} id`}
+              placeholder="ID"
+              value={id}
+              onChange={(event) => patch(index, "id", event.target.value.replace(/\s+/g, "_"))}
+              className="w-32 font-mono text-sm"
+            />
+            <Input
+              aria-label={`Section ${index + 1} title`}
+              placeholder="Title"
+              value={sectionTitle}
+              onChange={(event) => patch(index, "title", event.target.value)}
+              className="min-w-32 flex-1"
+            />
+            <Select value={kind} onValueChange={(next) => patch(index, "kind", next)}>
+              <SelectTrigger aria-label={`Section ${index + 1} kind`} className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {NOTEBOOK_SECTION_KINDS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {kind === "ink" && (
+              <Select value={canvasBlockId || NO_CANVAS_BOARD} onValueChange={(next) => patch(index, "canvas_block_id", next === NO_CANVAS_BOARD ? "" : next)}>
+                <SelectTrigger aria-label={`Section ${index + 1} board`} className="w-44">
+                  <SelectValue placeholder="No board yet" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CANVAS_BOARD}>No board yet</SelectItem>
+                  {canvasBlocks.map((block) => (
+                    <SelectItem key={block.id} value={block.id}>
+                      {block.title || BLOCK_CATALOG.canvas.label} · {block.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Remove section ${index + 1}`}
+              onClick={() => onChange(value.filter((_, i) => i !== index))}
+            >
+              <Icon as={Trash2Icon} size="sm" />
+            </Button>
+          </div>
+        );
+      })}
+      <Button
+        id={`${idBase}-add-section`}
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start"
+        onClick={() => onChange([...value, { id: `section_${value.length + 1}`, title: "", kind: "text" }])}
+      >
+        <Icon as={PlusIcon} size="sm" />
+        Add section
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * A `layout`'s children (V6-10, D-V6-18): each row picks another block of
+ * this same panel — never this `layout` itself, never another `layout` (a
+ * layout cannot hold another layout, `layout_issues`) — plus an optional tab
+ * label. `otherBlocks` is already filtered to that choice set.
+ */
+function LayoutChildrenEditor({
+  idBase,
+  value,
+  onChange,
+  otherBlocks,
+}: {
+  idBase: string;
+  value: Record<string, unknown>[];
+  onChange: (next: Record<string, unknown>[]) => void;
+  otherBlocks: readonly BlockSpecForm[];
+}) {
+  function patch(index: number, key: string, next: unknown) {
+    onChange(value.map((item, i) => (i === index ? { ...item, [key]: next } : item)));
+  }
+  const available = otherBlocks.filter((block) => !value.some((child) => child.block_id === block.id));
+  return (
+    <div className="flex flex-col gap-2" data-slot="layout-children-editor">
+      {value.map((child, index) => {
+        const blockId = typeof child.block_id === "string" ? child.block_id : "";
+        const label = typeof child.label === "string" ? child.label : "";
+        const spec = otherBlocks.find((block) => block.id === blockId);
+        return (
+          <div key={index} className="flex flex-wrap items-center gap-2">
+            <Select value={blockId} onValueChange={(next) => patch(index, "block_id", next)}>
+              <SelectTrigger aria-label={`Block ${index + 1}`} className="w-56">
+                <SelectValue placeholder="Choose a block" />
+              </SelectTrigger>
+              <SelectContent>
+                {spec && !available.includes(spec) && (
+                  <SelectItem value={spec.id}>{spec.title || BLOCK_CATALOG[spec.type].label}</SelectItem>
+                )}
+                {available.map((block) => (
+                  <SelectItem key={block.id} value={block.id}>
+                    {block.title || BLOCK_CATALOG[block.type].label} · {block.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              aria-label={`Block ${index + 1} tab label`}
+              placeholder="Tab label (optional)"
+              value={label}
+              onChange={(event) => patch(index, "label", event.target.value === "" ? null : event.target.value)}
+              className="min-w-32 flex-1"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Remove block ${index + 1}`}
+              onClick={() => onChange(value.filter((_, i) => i !== index))}
+            >
+              <Icon as={Trash2Icon} size="sm" />
+            </Button>
+          </div>
+        );
+      })}
+      <Button
+        id={`${idBase}-add-child`}
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start"
+        disabled={available.length === 0}
+        onClick={() => {
+          const next = available[0];
+          if (next) onChange([...value, { block_id: next.id, label: null }]);
+        }}
+      >
+        <Icon as={PlusIcon} size="sm" />
+        Add a block
+      </Button>
+      {available.length === 0 && value.length === 0 && (
+        <p className="text-muted-foreground text-[0.8125rem]">Add another block to this panel first.</p>
+      )}
+    </div>
+  );
+}
+
 function ConfigFieldControl({
   field,
   id,
@@ -348,7 +543,14 @@ function ConfigFieldControl({
 }) {
   switch (field.kind) {
     case "boolean":
-      return <Switch id={id} checked={value === true} onCheckedChange={(checked) => onChange(checked)} />;
+      return (
+        <Switch
+          id={id}
+          checked={value === true}
+          disabled={field.disabled}
+          onCheckedChange={(checked) => onChange(checked)}
+        />
+      );
     case "integer":
       return (
         <Input
@@ -510,6 +712,49 @@ export function BlockConfigForm({
                 itemKeys={field.itemKeys}
                 value={isRecordArray(value) ? value : []}
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+              />
+              {field.hint ? (
+                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                  {field.hint}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        }
+        if (field.kind === "sections") {
+          const canvasBlocks = panel.blocks.filter((other) => other.type === "canvas");
+          return (
+            <fieldset key={field.key} className="flex flex-col gap-1.5" aria-describedby={`${id}-hint`}>
+              <legend className="mb-1.5 text-sm leading-5 font-medium">{field.label}</legend>
+              <NotebookSectionsEditor
+                idBase={id}
+                value={isRecordArray(value) ? value : []}
+                onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+                canvasBlocks={canvasBlocks}
+              />
+              {field.hint ? (
+                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                  {field.hint}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        }
+        if (field.kind === "children") {
+          const otherBlocks = panel.blocks.filter((other) => other.id !== block.id && other.type !== "layout");
+          return (
+            <fieldset
+              key={field.key}
+              className="flex flex-col gap-1.5"
+              aria-describedby={`${id}-hint`}
+              data-issue-path={`panel.blocks.${index}.config.children`}
+            >
+              <legend className="mb-1.5 text-sm leading-5 font-medium">{field.label}</legend>
+              <LayoutChildrenEditor
+                idBase={id}
+                value={isRecordArray(value) ? value : []}
+                onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+                otherBlocks={otherBlocks}
               />
               {field.hint ? (
                 <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">

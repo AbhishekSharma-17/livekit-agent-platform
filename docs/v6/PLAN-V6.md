@@ -385,7 +385,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-07 | Opus | 2 | merged | 7954165 | | |
 | V6-08 | Opus | 2 | merged | 6a6f8a8 | | |
 | V6-09 | Sonnet | 3 | planned (gated on R-V6-1) | | | |
-| V6-10 | Sonnet | 3 | planned | | | |
+| V6-10 | Sonnet | 3 | merged | e6f1283 | | |
 | V6-11 | Sonnet | 3 | merged | 158346c | | |
 | V6-12 | Opus | 3 | merged | f374804 | | |
 | V6-13 | Opus | 3 | merged | 73dee86 | | |

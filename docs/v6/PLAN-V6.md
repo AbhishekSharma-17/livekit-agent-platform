@@ -133,6 +133,7 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-24 | P | Console: the five next-block renderers, composer forms, previews | Sonnet | 7 | V6-23's contracts commit |
 | V6-25 | X | Closing: `ARCHITECTURE-V6.md`, RUNBOOK, CONTRACTS, MCP docs, `llms.txt`, the status table, the final review | Opus (docs) + Fable | 7 | everything above |
 | V6-26 | P | Avatar framing: size the agent video to the avatar's real aspect (portrait / square / landscape), `contain` by default, per-provider native aspect, custom/imported avatars, every surface incl. mobile | Sonnet (+ Opus contracts hunk) | 7 | none (user request 2026-09-28) |
+| V6-27 | P | Connections: catch agent-name clashes on the same LiveKit server (409 `agent_name_in_use`, inline on Test and Save) and make "each connection needs its own worker" obvious (create-form note, no-worker empty state, worker status in the agent picker, fail fast at call start); RUNBOOK §3 | Opus | 6 | none (user request 2026-09-28) |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files; contracts commits still serialised in the listed order):
 
@@ -401,7 +402,8 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-23 | Opus | 6 | planned | | | |
 | V6-24 | Sonnet | 7 | planned | | | |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
-| V6-26 | Sonnet (+ Opus contracts hunk) | 7 | planned | | | |
+| V6-26 | Sonnet (+ Opus contracts hunk) | 7 | running | | | |
+| V6-27 | Opus | 6 | running | | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): none yet.
 

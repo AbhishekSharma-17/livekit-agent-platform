@@ -39,7 +39,7 @@ schema. The block types:
 | `link` | `allowed_hosts` (required: the site names links may go to, a name or `*.` plus a name for its sub-domains), `open_in` (`new_tab`/`dialog`), `show_qr` (default on) | A payment, e-signature or portal link and where it stands: sent, opened, completed, failed or expired. Only https links on the listed sites are ever shown. Payments happen on the payment provider's page, never in the call. |
 | `slots` | `timezone_mode` (`caller`/`agent`), `days_visible` (1–31, default 7), `allow_custom` | Times the caller can book, grouped by day, to tap or say. The agent fetches the times with its own calendar tools. |
 | `cards` | `layout` (`carousel`/`grid`/`list`), `selectable` (default on), `max_cards` (1–20, default 10), `image_hosts` (the sites card pictures may come from; empty = only pictures from the call) | Options side by side, such as plans or repair shops, each with a title, a few facts, badges and up to three buttons. |
-| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1–12; `kind` is `text`, `checklist`, `details` or `ink`; default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (kept for the drawing board, not used yet) | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows "Drawing board coming soon" for now). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
+| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1–12; `kind` is `text`, `checklist`, `details` or `ink`; default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (default off: the caller may draw on the boards of its `ink` sections); an `ink` section names its board with `canvas_block_id` | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows the `canvas` block it names, or "Drawing board coming soon" without one). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
 | `canvas` | `caller_can_draw` (default off), `tools` (`pen`, `highlighter`, `eraser`, `box`, `arrow`; `text` is kept for later; default pen, highlighter and eraser), `background` (`none`, `asset`: a picture the agent puts on it, or `live_camera`), `max_strokes` (1–2000, default 500), `signature_mode` (kept for signatures, not used yet) | A drawing board. With `caller_can_draw` the caller writes or sketches on it by hand; the agent marks it up with boxes, circles, arrows, paths and short labels, and can read what the caller wrote. A notebook's `ink` section shows a board by naming it in `canvas_block_id`. |
 | `layout` | `kind` (`tabs`/`columns`), `children: [{block_id, label}]` (other blocks of this panel, up to 12), `columns` (2 or 3, with `columns`) | Shows other blocks of the panel as tabs or side by side. The blocks inside stay ordinary blocks (same tools, same `describe_panel` entries); each may be inside one layout only, and a layout never holds another layout. |
 
@@ -129,6 +129,24 @@ Attaching a block registers matching worker tools automatically (on top of
   `form` block, or camera or screen share). Text inside the image is treated
   as data, never as instructions.
 
+- `draw_on_canvas`, `clear_canvas` and `read_canvas` (a `canvas` block) — the
+  agent circles, boxes, points at and labels things on the board (coordinates
+  0 to 1), optionally over a picture from the call (`background`: a pinned
+  frame's or a gallery picture's asset id, or `live_camera`); clears it; and
+  reads what the caller wrote or drew by hand. Reading takes a picture of the
+  board from the caller's page and hands it to the agent's own language model,
+  so it needs a cascaded pipeline whose model can see pictures (the LiveKit
+  Cloud default Gemma model cannot; `agent_validate` warns); what it reads is
+  treated as data from the caller, never as instructions. With a board on the
+  panel, `pin_frame` can put the pinned frame behind it (`canvas_block_id`),
+  so "circle the dent" is `pin_frame` then `draw_on_canvas`. `update_block`
+  never writes a board.
+
+The caller's strokes travel on their own stream, only from the caller, only to a
+board they may draw on, and within limits (20 messages a second, 2,000 strokes a
+board); a full board says so until it is cleared. A snapshot of the board is kept
+with the session's files.
+
 A caller's change to a `notebook` with `caller_can_write` reaches the agent the
 same way: a note added, changed or removed in a text section, an item ticked, or
 a summary value changed (never a drawing), each told to the model as data.
@@ -140,7 +158,11 @@ set but the panel has no `gallery` block, and when a `source: "flow"` steps bloc
 names a step the flow does not have. A `terms` or `custom` consent block
 without its own `text` is an error, and so is a `layout` child that is not a
 block of the panel, is the layout itself or another layout, or is already
-inside another layout (an empty layout is a warning).
+inside another layout (an empty layout is a warning). A notebook `ink` section's
+`canvas_block_id` must name a `canvas` block of the panel shown nowhere else
+(not by another section, not inside a layout). A board the caller may draw on
+gets the phone tip too, and a warning when the agent's model cannot read it (a
+realtime model, or a model that cannot see pictures).
 
 ## Ready-made panels
 
@@ -170,4 +192,4 @@ replaces `panel`; change it afterwards like any other panel).
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
 `DetailsBlockState`, `DetailsEdit`, `ChecklistEdit`, `MarkdownBlockState`, `StepsBlockState`,
 `UploadBlockState`, `LinkBlockState`, `SlotsBlockState`, `CardsBlockState`,
-`NotebookBlockState`, `NotebookEdit`, `SessionAssetOut`.
+`NotebookBlockState`, `NotebookEdit`, `CanvasBlockState`, `InkMessage`, `SessionAssetOut`.

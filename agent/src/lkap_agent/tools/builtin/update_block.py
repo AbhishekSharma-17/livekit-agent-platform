@@ -2,7 +2,8 @@
 
 Registered only when the agent's panel has a block this tool can write (see
 `tools.builtin.build_builtin_tools`). A `notebook` (V6-08) is written by its own tools and a
-`layout` holds no state, so both are refused by name. The model passes the changed fields as a
+`layout` holds no state, so both are refused by name; so is a `canvas` (V6-12: the caller's
+ink and `draw_on_canvas` / `clear_canvas` write it). The model passes the changed fields as a
 JSON-object **string**: a free-form `dict` parameter becomes a Gemini
 function declaration of type OBJECT with no properties, which Gemini rejects
 for the whole tool list.
@@ -80,6 +81,9 @@ def build_update_block_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             raise ToolError(f"Block {block_id!r} is a notebook; use notebook_write or notebook_check.")
         if spec.type == "layout":
             raise ToolError(f"Block {block_id!r} only groups other blocks; change those blocks instead.")
+        # V6-12: a drawing board holds the caller's strokes; only its own tools write it.
+        if spec.type == "canvas":
+            raise ToolError(f"Block {block_id!r} is a drawing board; use draw_on_canvas or clear_canvas.")
         fields = parse_json_object(patch, "patch")
         if not fields:
             raise ToolError("patch is empty; pass the fields to change.")

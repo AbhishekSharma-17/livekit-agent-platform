@@ -60,6 +60,8 @@ FENCED_SITES: Final[tuple[str, ...]] = (
     "lkap_agent.platform_agent",
     # V6-06: a caller's edit of a block (`caller_edit`), told to the model as data.
     "lkap_agent.ui.blocks",
+    # V6-12: what the vision model read off the caller's drawing board (`canvas:<block id>`).
+    "lkap_agent.tools.builtin.read_canvas",
 )
 
 _TAG_RE = re.compile(r"<\s*/?\s*untrusted", re.IGNORECASE)

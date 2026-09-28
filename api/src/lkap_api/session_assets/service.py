@@ -8,6 +8,13 @@ key (``sessions/<session id>/<random id><ext>``, :func:`storage_key_for`); the
 caller's filename is only ever a sanitised display name. Nothing here logs a
 filename, a document's text or any extracted value: ids, sizes and types only.
 
+V6-12 (D-V6-16): a drawing snapshot is a ``frame`` whose ``meta.source`` is ``"ink"`` (the
+worker sets it; the page never does). It is stored only when ``meta.block_id`` names a
+``canvas`` block of the session's panel that the caller may draw on
+(:func:`lkap_contracts.blocks.canvas_caller_can_draw`, the rule the worker applies too), and
+only as a PNG of at most :data:`~lkap_contracts.ui_protocol.MAX_CANVAS_SNAPSHOT_BYTES`; the
+session's caps apply as to any file.
+
 Downloads: an S3-compatible backend answers with its own presigned GET (the
 existing signed-URL path); the local backend, whose ``/internal/v1/storage/local``
 URL no route serves (REVIEW-V2 R2-25; the proxy refuses ``/internal/*`` from
@@ -32,10 +39,17 @@ from lkap_contracts.blocks import (
     UPLOAD_EXTENSIONS,
     UploadBlockConfig,
     accept_allows,
+    canvas_caller_can_draw,
     safe_filename,
     sniff_mime,
 )
-from lkap_contracts.ui_protocol import MAX_UPLOAD_BYTES, BlockSpec, SessionAssetKind
+from lkap_contracts.ui_protocol import (
+    CANVAS_SNAPSHOT_SOURCE,
+    MAX_CANVAS_SNAPSHOT_BYTES,
+    MAX_UPLOAD_BYTES,
+    BlockSpec,
+    SessionAssetKind,
+)
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -195,6 +209,9 @@ def _clean_meta(meta: dict[str, Any] | None) -> dict[str, str]:
 
 def _limits_for(kind: str, block: BlockSpec | None) -> tuple[list[str], int]:
     """``(accept, max_bytes)`` a file of ``kind`` for ``block`` must fit."""
+    if kind == "frame" and block is not None and block.type == "canvas":
+        # V6-12: a drawing snapshot is a PNG the page rendered.
+        return ["image/png"], MAX_CANVAS_SNAPSHOT_BYTES
     if kind in ("frame", "signature"):
         return ["image/*"], MAX_UPLOAD_BYTES
     if block is not None and block.type == "upload":
@@ -206,6 +223,26 @@ def _limits_for(kind: str, block: BlockSpec | None) -> tuple[list[str], int]:
     # A form's file field: its limits live in the schema the tool wrote at run time, which
     # the api never sees, so the platform's own ceiling applies (images and PDFs, 25 MiB).
     return [], MAX_UPLOAD_BYTES
+
+
+async def _drawing_board(
+    db: AsyncSession, settings: Settings, session: SessionRow, block_id: str | None
+) -> BlockSpec:
+    """The canvas a drawing snapshot belongs to, when the caller may draw on it (V6-12).
+
+    Raises:
+        UnprocessableEntityError: 422 without a ``block_id``, or when it names no canvas of
+            the session's panel the caller may draw on.
+    """
+    if not block_id:
+        raise UnprocessableEntityError("a drawing names its board (meta.block_id)")
+    blocks = await _panel_blocks(db, settings, session)
+    block = next((b for b in blocks if b.id == block_id), None)
+    if block is None or block.type != "canvas" or not canvas_caller_can_draw(block_id, blocks):
+        raise UnprocessableEntityError(
+            f"'{block_id}' is not a drawing board of this session's panel that the caller may draw on"
+        )
+    return block
 
 
 async def _session_totals(db: AsyncSession, session: SessionRow) -> tuple[int, int]:
@@ -298,15 +335,17 @@ async def store_upload(
         data: The file's bytes, already capped at 25 MiB.
         kind: ``upload``, ``frame`` or ``signature``.
         name: The caller's filename (sanitised here, display only).
-        meta: ``block_id`` (required for an upload), ``field``, ``caption``, ``source``.
+        meta: ``block_id`` (required for an upload and a drawing), ``field``, ``caption``,
+            ``source`` (``"ink"`` marks a drawing snapshot, V6-12).
 
     Returns:
         The stored row (flushed).
 
     Raises:
         ConflictError: 409 when the session has ended or already holds 50 files.
-        UnprocessableEntityError: 422 for an empty file, an unknown kind, or an upload
-            without an ``upload`` / ``form`` block of the session's panel.
+        UnprocessableEntityError: 422 for an empty file, an unknown kind, an upload
+            without an ``upload`` / ``form`` block of the session's panel, or a drawing
+            without a canvas of the panel the caller may draw on.
         UnsupportedMediaTypeError: 415 when the bytes are not an allowed type or not one
             the block accepts.
         UploadTooLargeError: 413 over the block's ``max_bytes`` or the session's room.
@@ -327,6 +366,8 @@ async def store_upload(
             raise UnprocessableEntityError(
                 f"'{block_id}' is not an upload or form block of this session's panel"
             )
+    elif kind == "frame" and cleaned.get("source") == CANVAS_SNAPSHOT_SOURCE:
+        block = await _drawing_board(db, settings, session, cleaned.get("block_id"))
     mime = sniff_mime(data)
     accept, max_bytes = _limits_for(kind, block)
     if mime is None or not accept_allows(accept, mime):

@@ -512,7 +512,7 @@ async def test_describe_panel_lists_the_sections_in_order_and_marks_the_callers_
     }
     assert sections[1]["ticked_by_caller"] == ["Photo: done"] and sections[1]["done"] == 1
     assert sections[2]["rows"] == [{"label": "Claim no", "value": "C-1"}]
-    assert sections[3]["drawing"] == "not available yet"
+    assert sections[3]["drawing"] == "no drawing board yet"  # V6-12: the section names no board
     # A layout says what it holds; the blocks inside keep their own entries.
     assert by_id["tabs"] == {"id": "tabs", "type": "layout", "shows_as": "tabs", "holds": ["card", "recap"]}
     assert {"card", "recap"} <= set(by_id)

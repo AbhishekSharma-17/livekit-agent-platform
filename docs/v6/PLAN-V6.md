@@ -394,16 +394,16 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-15 | Sonnet | 4 | merged | 7f68a6c | | |
 | V6-16 | Opus | 4 | merged | b379030 | | |
 | V6-17 | Opus | 4 | merged | 53b4553 | | |
-| V6-18 | Opus | 5 | planned | | | |
-| V6-19 | Sonnet | 5 | planned | | | |
+| V6-18 | Opus | 5 | merged | b4d502b | | |
+| V6-19 | Sonnet | 5 | running | | | |
 | V6-20 | Fable | 5 | merged | d1365cc | | |
-| V6-21 | Opus | 6 | running | | | |
+| V6-21 | Opus | 6 | merged | aea6a9b | | #162, #166 |
 | V6-22 | Opus | 6 | planned | | | |
 | V6-23 | Opus | 6 | planned | | | |
 | V6-24 | Sonnet | 7 | planned | | | |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
-| V6-26 | Sonnet (+ Opus contracts hunk) | 7 | running | | | |
-| V6-27 | Opus | 6 | running | | | |
+| V6-26 | Sonnet (+ Opus contracts hunk) | 7 | merged | 0f319ed (+ V6-26b 4f200ee) | | |
+| V6-27 | Opus | 6 | merged | 035b223 | | #177 |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): none yet.
 

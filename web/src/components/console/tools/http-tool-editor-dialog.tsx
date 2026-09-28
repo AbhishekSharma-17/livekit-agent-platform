@@ -434,7 +434,7 @@ export function HttpToolEditorDialog({
               <Field
                 label="Headers"
                 htmlFor={`${uid}-headers`}
-                hint={neverOfferedHint("headers — they may carry secrets") + ' Use {{ secret.NAME }} instead.'}
+                hint={"JSON. " + neverOfferedHint("headers — they may carry secrets") + " Use {{ secret.NAME }} instead."}
                 error={errors.headersJson}
               >
                 <Textarea

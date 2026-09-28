@@ -137,6 +137,43 @@ describe("McpToolEditorDialog — per-tool context (V6-11)", () => {
     expect(body.definition.tool_context).toBeUndefined();
   });
 
+  it("keeps a stored tool_context unchanged when its disclosure isn't touched", async () => {
+    const fetchMock = stubFetch();
+    const onSaved = vi.fn();
+    const tool: ToolOut = {
+      ...EXISTING_TOOL,
+      definition: {
+        ...EXISTING_TOOL.definition,
+        tool_context: {
+          lookup_invoice: {
+            requires_vars: ["account_id"],
+            confirm_readback: ["email"],
+            bindings: [{ path: "/holder", to: "status" }],
+            pinned_arguments: { invoice_id: "INV-1" },
+          },
+        },
+      },
+    };
+    const { getByText } = renderWithClient(
+      <McpToolEditorDialog agentId="agent_1" tool={tool} secretBagSpec={undefined} onSaved={onSaved} trigger={<button>Edit server</button>} />,
+    );
+    fireEvent.click(getByText("Edit server"));
+    fireEvent.click(getByText("Save server"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const [, init] = calls.find(([url]) => !url.includes("auth/me")) as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      definition: { tool_context?: Record<string, { requires_vars?: string[]; confirm_readback?: string[]; bindings?: unknown; pinned_arguments?: unknown }> };
+    };
+    expect(body.definition.tool_context?.lookup_invoice).toEqual({
+      requires_vars: ["account_id"],
+      confirm_readback: ["email"],
+      bindings: [{ path: "/holder", to: "status" }],
+      pinned_arguments: { invoice_id: "INV-1" },
+    });
+  });
+
   it("adds a fixed (pinned) value under a tool's disclosure", async () => {
     const fetchMock = stubFetch();
     const onSaved = vi.fn();

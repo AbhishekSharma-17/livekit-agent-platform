@@ -22,8 +22,9 @@ value is the ``error`` outcome and nothing is called. ``confirmed`` is never sup
 tool that reads values back first refuses, which is also ``error`` (the api refuses such a
 step at save).
 
-**Outcomes.** ``error`` — the call raised, refused, timed out or could not start, or an HTTP
-tool answered with a non-2xx status other than 404/410; ``empty`` — it succeeded with an empty
+**Outcomes.** ``error`` — the call raised, refused, timed out or could not start, an HTTP
+tool answered with a non-2xx status other than 404/410, or the tool-output guardrail withheld
+the result (V6-21, S6-2: ``withheld``, and nothing is bound); ``empty`` — it succeeded with an empty
 result (nothing, ``null``, ``[]``, ``{}``), an HTTP tool answered 404 or 410 or a dataset lookup
 found no row (ask #116: the status is read from ``FunctionCall.extra``), or the node has
 bindings and none found a value (``BindingReport.applied == []``, ask #36); ``ok`` —
@@ -68,7 +69,7 @@ from lkap_agent.tools.context import (
     session_variables,
 )
 from lkap_agent.tools.declarative import HTTP_STATUS_EXTRA
-from lkap_agent.tools.execution import tool_label
+from lkap_agent.tools.execution import WITHHELD_EXTRA, tool_label
 
 __all__ = [
     "NOT_FOUND_STATUSES",
@@ -103,7 +104,8 @@ class ToolNodeResult:
     outcome: ToolNodeOutcome
     #: A short code for events and logs: ``ok``, ``empty_result``, ``nothing_bound``,
     #: ``not_found`` (HTTP 404/410, a lookup without rows), ``http_status`` (another non-2xx),
-    #: ``tool_error``, ``timeout``, ``missing_values``, ``not_attached``, ``unavailable``.
+    #: ``tool_error``, ``timeout``, ``missing_values``, ``not_attached``, ``unavailable``,
+    #: ``withheld`` (the tool-output guardrail replaced the result, V6-21).
     reason: str
     tool: str
     call_id: str
@@ -228,7 +230,7 @@ class ToolNodeExecutor:
             return await self._ended(node, result, started, missing_message(missing, context))
 
         try:
-            output, status = await asyncio.wait_for(
+            output, status, withheld = await asyncio.wait_for(
                 self._execute(definition, name, arguments, call_id), timeout=node.timeout_s
             )
         except TimeoutError:
@@ -245,6 +247,10 @@ class ToolNodeExecutor:
 
         if output.is_error:
             result = ToolNodeResult("error", "tool_error", name, call_id)
+            return await self._ended(node, result, started, output.output)
+        if withheld:
+            # V6-21 (S6-2): a result the tool-output guardrail replaced binds nothing.
+            result = ToolNodeResult("error", "withheld", name, call_id)
             return await self._ended(node, result, started, output.output)
         if status is not None and not 200 <= status < 300:
             # Ask #116: an HTTP answer the tool returned without raising (a dataset lookup that
@@ -268,11 +274,13 @@ class ToolNodeExecutor:
 
     async def _execute(
         self, definition: Any, name: str, arguments: dict[str, Any], call_id: str
-    ) -> tuple[lk_llm.FunctionCallOutput, int | None]:
-        """Run the tool through livekit-agents' function-call path; the call's output and HTTP status.
+    ) -> tuple[lk_llm.FunctionCallOutput, int | None, bool]:
+        """Run the tool through livekit-agents' function-call path; its output, HTTP status and withheld flag.
 
         The status is what an HTTP tool (or a dataset lookup) recorded in
-        ``FunctionCall.extra[HTTP_STATUS_EXTRA]`` (ask #116); ``None`` for any other tool.
+        ``FunctionCall.extra[HTTP_STATUS_EXTRA]`` (ask #116); ``None`` for any other tool. The
+        flag is ``FunctionCall.extra[WITHHELD_EXTRA]``: the tool-output guardrail replaced the
+        result (V6-21).
         """
         text = json.dumps(arguments, ensure_ascii=False, default=str)
         toolset: Any = None
@@ -307,7 +315,8 @@ class ToolNodeExecutor:
                 call_ctx=run_context,
             )
             status = call.extra.get(HTTP_STATUS_EXTRA)
-            return executed.fnc_call_out, status if isinstance(status, int) else None
+            withheld = call.extra.get(WITHHELD_EXTRA) is True
+            return executed.fnc_call_out, status if isinstance(status, int) else None, withheld
         finally:
             if toolset is not None:
                 try:

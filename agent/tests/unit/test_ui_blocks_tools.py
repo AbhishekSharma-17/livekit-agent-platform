@@ -232,6 +232,83 @@ async def test_update_block_rejects_bad_calls(block_id: str, patch: str, message
         await tool(context=_run_ctx(), block_id=block_id, patch=patch)
 
 
+#: V6-21 (S6-1): every block type outside `UPDATABLE_BLOCK_TYPES | {"form"}`. The review's list
+#: also names `cards` and `kb_citations`; both are on the allow-list (a card's picture is
+#: host-checked below), see ask #162.
+_NOT_UPDATABLE = [
+    "consent",
+    "link",
+    "upload",
+    "slots",
+    "choices",
+    "handoff",
+    "captions",
+    "notebook",
+    "layout",
+    "canvas",
+    "status",
+    "notes",
+    "checklist",
+    "activity",
+]
+
+
+@pytest.mark.parametrize("block_type", _NOT_UPDATABLE)
+async def test_update_block_refuses_every_type_outside_the_allow_list(block_type: str) -> None:
+    ctx, channel, _room = _ctx(
+        [BlockSpec(id="target", type=block_type), BlockSpec(id="claim", type="details")]
+    )
+    tool = build_update_block_tool(ctx)
+    before = json.dumps(channel.state.model_dump(mode="json"), sort_keys=True)
+
+    with pytest.raises(ToolError):
+        await tool(
+            context=_run_ctx(), block_id="target", patch='{"accepted": true, "url": "https://x.example"}'
+        )
+
+    assert json.dumps(channel.state.model_dump(mode="json"), sort_keys=True) == before
+
+
+def test_update_block_allow_list_covers_every_block_type() -> None:
+    """Each block type is either on the allow-list or refused by the test above; none slips between."""
+    from lkap_contracts.tools import ALL_BLOCK_TYPES  # noqa: PLC0415 - this test only
+
+    from lkap_agent.tools.builtin.update_block import UPDATABLE_BLOCK_TYPES  # noqa: PLC0415
+
+    assert set(ALL_BLOCK_TYPES) == set(UPDATABLE_BLOCK_TYPES) | {"form"} | set(_NOT_UPDATABLE)
+
+
+async def test_update_block_cannot_write_a_link_url() -> None:
+    link = BlockSpec(id="pay", type="link", config={"allowed_hosts": ["pay.example.com"]})
+    ctx, channel, _room = _ctx([link, BlockSpec(id="claim", type="details")])
+    tool = build_update_block_tool(ctx)
+    before = channel.state.blocks.get("pay")
+
+    with pytest.raises(ToolError, match="send_link"):
+        await tool(
+            context=_run_ctx(),
+            block_id="pay",
+            patch='{"url": "https://elsewhere.example.net/pay", "label": "Pay now"}',
+        )
+
+    assert channel.state.blocks.get("pay") == before
+
+
+async def test_update_block_checks_a_card_picture_against_the_block_hosts() -> None:
+    cards = BlockSpec(id="offers", type="cards", config={"image_hosts": ["img.example.com"]})
+    ctx, channel, _room = _ctx([cards])
+    tool = build_update_block_tool(ctx)
+    card = {"id": "a", "title": "Plan A", "image_url": "https://elsewhere.example.net/a.png"}
+
+    with pytest.raises(ToolError, match="picture"):
+        await tool(context=_run_ctx(), block_id="offers", patch=json.dumps({"cards": [card]}))
+    card["image_url"] = "https://img.example.com/a.png"
+    assert await tool(context=_run_ctx(), block_id="offers", patch=json.dumps({"cards": [card]})) == (
+        "Updated offers."
+    )
+    assert channel.state.blocks["offers"]["cards"][0]["image_url"] == "https://img.example.com/a.png"
+
+
 # ------------------------------------------------------------ table_append
 
 

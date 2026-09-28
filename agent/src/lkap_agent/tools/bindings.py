@@ -1,10 +1,12 @@
 """Result bindings: a tool's result onto the panel or into variables, no model turn (V6-07, D-V6-23).
 
 :func:`apply_bindings` runs after a **successful** call (an HTTP 2xx, an app action that
-succeeded, an MCP result that is not an error) and before the result is handed back to the
-model, so the caller sees the lookup on the panel while the model is still composing its
-sentence. Each ``ToolBinding`` resolves a JSON pointer against the tool's result (the value
-the model sees, after ``result_path``) and writes:
+succeeded, an MCP result that is not an error) and after the tool-output guardrail
+(V6-21, S6-2, ask #38): a tool body *holds* its bound value (:class:`HeldBindings`) and its
+handler applies it once ``run_with_policy`` has returned, only when the guard handed the
+result through unchanged — a withheld result binds nothing. The caller sees the lookup on the
+panel while the model is still composing its sentence. Each ``ToolBinding`` resolves a JSON
+pointer against the tool's result (the value the model sees, after ``result_path``) and writes:
 
 * ``details:<block>.<key>`` — one row of a ``details`` block (upserted by key, the row's
   label and type kept, as ``set_details`` writes it);
@@ -45,11 +47,13 @@ from lkap_contracts.ui_protocol import ActivityEvent, ChecklistItem, UiPatchOp
 
 from lkap_agent.logging import get_logger
 from lkap_agent.tools.context import ToolCallContext
+from lkap_agent.tools.execution import result_withheld
 from lkap_agent.tools.untrusted import strip_control
 
 __all__ = [
     "BINDINGS_EVENT",
     "BindingReport",
+    "HeldBindings",
     "apply_bindings",
     "binding_value",
     "parse_result",
@@ -332,3 +336,41 @@ async def _record(context: ToolCallContext, report: BindingReport, *, tool: str,
         await context.ui.activity(event)
     except Exception:
         _log.debug("tool_bindings.activity_failed", tool=tool, exc_info=True)
+
+
+@dataclass(slots=True)
+class HeldBindings:
+    """A tool body's bound value, held until the tool-output guardrail has run (V6-21, S6-2).
+
+    The body calls :meth:`hold` with the value its bindings point into and the text it
+    returns; the handler calls :meth:`apply` with what ``run_with_policy`` returned. The
+    bindings apply only when that is the body's own text (the guard did not replace it) and
+    the call is not marked withheld (``execution.WITHHELD_EXTRA``).
+    """
+
+    value: Any = None
+    answer: Any = None
+    held: bool = False
+
+    def hold[T](self, value: Any, answer: T) -> T:
+        """Keep ``value`` for the bindings; returns ``answer`` (the body's result) unchanged."""
+        self.value, self.answer, self.held = value, answer, True
+        return answer
+
+    async def apply(
+        self,
+        result: Any,
+        context: Any,
+        bindings: Sequence[ToolBinding],
+        tool_context: ToolCallContext | None,
+        *,
+        tool: str,
+    ) -> BindingReport | None:
+        """Apply the held value's bindings unless nothing was held or the result was withheld."""
+        if not self.held or not bindings:
+            return None
+        if result is not self.answer or result_withheld(context):
+            _log.info("tool_bindings.withheld", tool=tool, bindings=len(bindings))
+            return None
+        call_id = getattr(getattr(context, "function_call", None), "call_id", None)
+        return await apply_bindings(self.value, bindings, tool_context, tool=tool, call_id=call_id)

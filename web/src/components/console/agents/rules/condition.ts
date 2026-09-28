@@ -18,11 +18,12 @@
  * reported as invalid; length and nested-repeat are checked exactly as the api does,
  * since both are pure string checks.
  *
- * `hasNestedRepeat` below is a second copy of `guardrails/pattern-tester.tsx`'s function
- * of the same name (itself a copy of `config_service.py::nested_repeat`, which V6-13's
- * ask #75 consolidated with `rules_expr.nested_repeat` on the Python side) rather than an
- * import of it: that file carries `"use client"`, and this module is imported from
- * `lib/schemas.ts`, which is not itself client-scoped.
+ * `hasNestedRepeat` below is a port of `rules_expr.nested_repeat` (the one Python scanner
+ * the api's guardrails check also uses, ask #75). V6-21 (S6-4) widened the Python scanner
+ * (alternatives inside a repeated group, adjacent overlapping repeats); this port makes the
+ * same decisions, pinned by the shared list in `web/tests/rules-condition.test.ts`, so the
+ * console never accepts a pattern the api refuses. `guardrails/pattern-tester.tsx` keeps an
+ * older, narrower copy (ask #161).
  */
 
 //: Longest condition (`rules_expr.MAX_CONDITION_CHARS`).
@@ -404,40 +405,406 @@ class Parser {
   }
 }
 
-/**
- * Whether `pattern` repeats a group that itself holds an unbounded repeat (`(a+)+`,
- * `(\w*\s)*`) — mirrors `rules_expr.nested_repeat` / `guardrails/pattern-tester.tsx`'s
- * `hasNestedRepeat` (see the file header for why this is a second copy, not an import).
- */
-function hasNestedRepeat(pattern: string): boolean {
-  const unbounded = /[+*]|\{\d*,\}/y;
-  const stack: boolean[] = [];
-  let index = 0;
-  let inClass = false;
-  while (index < pattern.length) {
-    const char = pattern[index];
-    if (char === "\\") {
-      index += 2;
-      continue;
+// ----------------------------------------------------------------------------- regex safety
+//
+// V6-21 (S6-4): a port of `rules_expr.nested_repeat` — same model, same decisions (see the
+// comment above the Python scanner). The pattern is read by code point, as Python does.
+// Characters are ASCII code points plus four stand-ins for everything else.
+
+const OTHER_DIGIT = 128;
+const OTHER_SPACE = 129;
+const OTHER_WORD = 130;
+const OTHER_PUNCT = 131;
+
+type CharSet = ReadonlySet<number>;
+
+function span(low: number, high: number): number[] {
+  const out: number[] = [];
+  for (let point = low; point <= high; point += 1) out.push(point);
+  return out;
+}
+
+function union(...sets: Iterable<number>[]): Set<number> {
+  const out = new Set<number>();
+  for (const set of sets) for (const point of set) out.add(point);
+  return out;
+}
+
+function minus(from: CharSet, drop: CharSet): Set<number> {
+  const out = new Set<number>();
+  for (const point of from) if (!drop.has(point)) out.add(point);
+  return out;
+}
+
+function overlaps(a: CharSet, b: CharSet): boolean {
+  for (const point of a) if (b.has(point)) return true;
+  return false;
+}
+
+const ASCII: CharSet = new Set(span(0, 127));
+const OTHERS: CharSet = new Set([OTHER_DIGIT, OTHER_SPACE, OTHER_WORD, OTHER_PUNCT]);
+const UNIVERSE: CharSet = union(ASCII, OTHERS);
+const DIGITS: CharSet = new Set(span(48, 57));
+const LETTERS: CharSet = new Set([...span(97, 122), ...span(65, 90)]);
+const WORDS: CharSet = union(DIGITS, LETTERS, [95]);
+const SPACES: CharSet = new Set([9, 10, 11, 12, 13, 28, 29, 30, 31, 32]);
+/** `\d \D \w \W \s \S`; their non-ASCII part is exact (a negated class may remove it). */
+const CATEGORIES: ReadonlyMap<string, CharSet> = new Map([
+  ["d", union(DIGITS, [OTHER_DIGIT])],
+  ["D", union(minus(ASCII, DIGITS), [OTHER_SPACE, OTHER_WORD, OTHER_PUNCT])],
+  ["w", union(WORDS, [OTHER_DIGIT, OTHER_WORD])],
+  ["W", union(minus(ASCII, WORDS), [OTHER_SPACE, OTHER_PUNCT])],
+  ["s", union(SPACES, [OTHER_SPACE])],
+  ["S", union(minus(ASCII, SPACES), [OTHER_DIGIT, OTHER_WORD, OTHER_PUNCT])],
+]);
+const CONTROL_ESCAPES: ReadonlyMap<string, number> = new Map([
+  ["n", 10],
+  ["t", 9],
+  ["r", 13],
+  ["f", 12],
+  ["v", 11],
+  ["a", 7],
+]);
+const HEX_LENGTH: ReadonlyMap<string, number> = new Map([
+  ["x", 2],
+  ["u", 4],
+  ["U", 8],
+]);
+const HEX_DIGITS = "0123456789abcdefABCDEF";
+
+const isDigit = (char: string | undefined): boolean => char !== undefined && char >= "0" && char <= "9";
+
+/** One character; both cases of an ASCII letter (a pattern may ignore case). */
+function codeChars(code: number): CharSet {
+  if (code >= 128) return OTHERS;
+  const char = String.fromCharCode(code);
+  return new Set([char.toLowerCase().charCodeAt(0), char.toUpperCase().charCodeAt(0)]);
+}
+
+type RegexNode =
+  | { kind: "atom"; chars: CharSet }
+  | { kind: "zero" }
+  | { kind: "group"; branches: RegexItem[][]; lookaround: boolean };
+
+interface RegexItem {
+  node: RegexNode;
+  low: number;
+  /** `null`: unbounded. */
+  high: number | null;
+}
+
+interface RegexEscape {
+  /** `null`: a zero-width assertion. */
+  chars: CharSet | null;
+  /** The one character it stands for (a range end), else `null`. */
+  code: number | null;
+  end: number;
+  /** A category (`\d`): its non-ASCII part is exact, not a stand-in. */
+  exact: boolean;
+}
+
+const ZERO: RegexNode = { kind: "zero" };
+
+function readEscape(chars: string[], index: number, inClass: boolean): RegexEscape {
+  if (index + 1 >= chars.length) return { chars: codeChars(92), code: 92, end: chars.length, exact: false };
+  const char = chars[index + 1];
+  let end = index + 2;
+  const category = CATEGORIES.get(char);
+  if (category !== undefined) return { chars: category, code: null, end, exact: true };
+  if (!inClass && "AZbBz".includes(char)) return { chars: null, code: null, end, exact: false };
+  if (inClass && char === "b") return { chars: codeChars(8), code: 8, end, exact: false };
+  const control = CONTROL_ESCAPES.get(char);
+  if (control !== undefined) return { chars: codeChars(control), code: control, end, exact: false };
+  const hexLength = HEX_LENGTH.get(char);
+  if (hexLength !== undefined) {
+    const digits = chars.slice(end, end + hexLength);
+    if (digits.length === hexLength && digits.every((d) => HEX_DIGITS.includes(d))) {
+      const code = parseInt(digits.join(""), 16);
+      return { chars: codeChars(code), code, end: end + hexLength, exact: false };
     }
-    if (inClass) {
-      inClass = char !== "]";
-    } else if (char === "[") {
-      inClass = true;
-    } else if (char === "(") {
-      stack.push(false);
-    } else if (char === ")" && stack.length > 0) {
-      const inner = stack.pop() as boolean;
-      const next = pattern.slice(index + 1, index + 2);
-      if (inner && (next === "+" || next === "*" || next === "{")) return true;
-      if (stack.length > 0) stack[stack.length - 1] = stack[stack.length - 1] || inner;
-    } else if (stack.length > 0) {
-      unbounded.lastIndex = index;
-      if (unbounded.test(pattern)) stack[stack.length - 1] = true;
+    return { chars: UNIVERSE, code: null, end, exact: false };
+  }
+  if (char === "N") {
+    const close = chars.indexOf("}", end);
+    return { chars: UNIVERSE, code: null, end: close < 0 ? chars.length : close + 1, exact: false };
+  }
+  if (isDigit(char)) {
+    while (end < chars.length && end < index + 4 && isDigit(chars[end])) end += 1;
+    return { chars: UNIVERSE, code: null, end, exact: false };
+  }
+  const code = char.codePointAt(0) as number;
+  return { chars: codeChars(code), code, end, exact: false };
+}
+
+/** Reads a pattern into item sequences; never throws (a bad pattern is the worker's `re` to refuse). */
+class RegexScan {
+  private readonly chars: string[];
+  private index = 0;
+  private depth = 0;
+
+  constructor(pattern: string) {
+    this.chars = Array.from(pattern);
+  }
+
+  branches(): RegexItem[][] {
+    const found: RegexItem[][] = [];
+    let sequence: RegexItem[] = [];
+    while (this.index < this.chars.length) {
+      const char = this.chars[this.index];
+      if (char === "|") {
+        found.push(sequence);
+        sequence = [];
+        this.index += 1;
+        continue;
+      }
+      if (char === ")" && this.depth > 0) break;
+      sequence.push(this.quantified(this.atom()));
+    }
+    found.push(sequence);
+    return found;
+  }
+
+  private atom(): RegexNode {
+    const char = this.chars[this.index];
+    if (char === "(") return this.group();
+    if (char === "[") return { kind: "atom", chars: this.charClass() };
+    if (char === "\\") {
+      const escape = readEscape(this.chars, this.index, false);
+      this.index = escape.end;
+      return escape.chars === null ? ZERO : { kind: "atom", chars: escape.chars };
+    }
+    this.index += 1;
+    if (char === ".") return { kind: "atom", chars: UNIVERSE };
+    if (char === "^" || char === "$") return ZERO;
+    return { kind: "atom", chars: codeChars(char.codePointAt(0) as number) };
+  }
+
+  private skipPast(stop: string, start: number): void {
+    const close = this.chars.indexOf(stop, start);
+    this.index = close < 0 ? this.chars.length : close + 1;
+  }
+
+  private group(): RegexNode {
+    const chars = this.chars;
+    this.index += 1;
+    let lookaround = false;
+    if (chars[this.index] === "?") {
+      const rest = chars.slice(this.index + 1, this.index + 3).join("");
+      if (rest.startsWith("#")) {
+        this.skipPast(")", this.index);
+        return ZERO;
+      }
+      if (rest === "P=") {
+        this.skipPast(")", this.index);
+        return { kind: "atom", chars: UNIVERSE };
+      }
+      if (rest === "P<") {
+        this.skipPast(">", this.index);
+      } else if (rest.startsWith("=") || rest.startsWith("!")) {
+        lookaround = true;
+        this.index += 2;
+      } else if (rest === "<=" || rest === "<!") {
+        lookaround = true;
+        this.index += 3;
+      } else if (rest.startsWith(":") || rest.startsWith(">")) {
+        this.index += 2;
+      } else if (rest.startsWith("(")) {
+        this.skipPast(")", this.index + 2);
+      } else {
+        let end = this.index + 1;
+        while (end < chars.length && (chars[end] === "-" || LETTERS.has(chars[end].codePointAt(0) as number))) {
+          end += 1;
+        }
+        if (end < chars.length && chars[end] === ")") {
+          this.index = end + 1;
+          return ZERO;
+        }
+        this.index = end < chars.length && chars[end] === ":" ? end + 1 : end;
+      }
+    }
+    this.depth += 1;
+    const branches = this.branches();
+    this.depth -= 1;
+    if (this.index < chars.length && chars[this.index] === ")") this.index += 1;
+    return { kind: "group", branches, lookaround };
+  }
+
+  private charClass(): CharSet {
+    const chars = this.chars;
+    let index = this.index + 1;
+    const negate = index < chars.length && chars[index] === "^";
+    if (negate) index += 1;
+    const members = new Set<number>();
+    const exactOthers = new Set<number>();
+    let first = true;
+    while (index < chars.length) {
+      const char = chars[index];
+      if (char === "]" && !first) {
+        index += 1;
+        break;
+      }
+      first = false;
+      let set: CharSet;
+      let code: number | null;
+      let exact: boolean;
+      if (char === "\\") {
+        const escape = readEscape(chars, index, true);
+        set = escape.chars ?? UNIVERSE;
+        code = escape.code;
+        index = escape.end;
+        exact = escape.exact;
+      } else {
+        code = char.codePointAt(0) as number;
+        index += 1;
+        exact = false;
+        set = codeChars(code);
+      }
+      if (code !== null && index + 1 < chars.length && chars[index] === "-" && chars[index + 1] !== "]") {
+        let high: number | null;
+        let after: number;
+        if (chars[index + 1] === "\\") {
+          const highEscape = readEscape(chars, index + 1, true);
+          high = highEscape.code;
+          after = highEscape.end;
+        } else {
+          high = chars[index + 1].codePointAt(0) as number;
+          after = index + 2;
+        }
+        if (high !== null) {
+          index = after;
+          for (let point = code; point <= Math.min(high, 127); point += 1) {
+            for (const member of codeChars(point)) members.add(member);
+          }
+          if (high >= 128) for (const member of OTHERS) members.add(member);
+          continue;
+        }
+      }
+      for (const member of set) members.add(member);
+      if (exact) for (const member of set) if (OTHERS.has(member)) exactOthers.add(member);
+    }
+    this.index = index;
+    if (negate) return union(minus(ASCII, members), minus(OTHERS, exactOthers));
+    return members;
+  }
+
+  private quantified(node: RegexNode): RegexItem {
+    const chars = this.chars;
+    let index = this.index;
+    const char = index < chars.length ? chars[index] : "";
+    let low: number;
+    let high: number | null;
+    if (char === "*") {
+      low = 0;
+      high = null;
+    } else if (char === "+") {
+      low = 1;
+      high = null;
+    } else if (char === "?") {
+      low = 0;
+      high = 1;
+    } else {
+      const brace = char === "{" ? readBrace(chars, index) : null;
+      if (brace === null) return { node, low: 1, high: 1 };
+      low = brace.low;
+      high = brace.high;
+      index = brace.end - 1;
     }
     index += 1;
+    if (index < chars.length && (chars[index] === "?" || chars[index] === "+")) index += 1;
+    this.index = index;
+    return { node, low, high };
   }
-  return false;
+}
+
+/** `{m}`, `{m,}`, `{,n}`, `{m,n}` (Python's `\{([0-9]*)(,?)([0-9]*)\}` with a digit or a comma). */
+function readBrace(chars: string[], start: number): { low: number; high: number | null; end: number } | null {
+  let index = start + 1;
+  let first = "";
+  while (isDigit(chars[index])) first += chars[index++];
+  const comma = chars[index] === ",";
+  if (comma) index += 1;
+  let second = "";
+  while (isDigit(chars[index])) second += chars[index++];
+  if (chars[index] !== "}" || (first === "" && !comma)) return null;
+  const low = Number(first || "0");
+  const high = comma ? (second ? Number(second) : null) : low;
+  return { low, high, end: index + 1 };
+}
+
+const repeats = (item: RegexItem): boolean => item.high === null || item.high > 1;
+
+function hasUnbounded(node: RegexNode): boolean {
+  if (node.kind !== "group") return false;
+  return node.branches.some((branch) => branch.some((item) => item.high === null || hasUnbounded(item.node)));
+}
+
+function hasAlternatives(node: RegexNode): boolean {
+  if (node.kind !== "group") return false;
+  return node.branches.length > 1 || node.branches.some((branch) => branch.some((item) => hasAlternatives(item.node)));
+}
+
+function charsOf(node: RegexNode): CharSet {
+  if (node.kind === "atom") return node.chars;
+  if (node.kind === "zero") return new Set();
+  const found = new Set<number>();
+  for (const branch of node.branches) for (const item of branch) for (const point of charsOf(item.node)) found.add(point);
+  return found;
+}
+
+function mayBeEmpty(item: RegexItem): boolean {
+  const node = item.node;
+  if (item.low === 0 || node.kind === "zero") return true;
+  if (node.kind === "atom") return false;
+  return node.lookaround || node.branches.some((branch) => branch.every(mayBeEmpty));
+}
+
+/** The unbounded repeats the next item can still meet; `null` when two of them overlap. */
+function step(window: CharSet[], chars: CharSet, unbounded: boolean, optional: boolean): CharSet[] | null {
+  if (unbounded && window.some((earlier) => overlaps(chars, earlier))) return null;
+  if (optional) return unbounded ? [...window, chars] : window;
+  return unbounded ? [chars] : [];
+}
+
+/** Walk one sequence from `window`; the window it leaves, or `null` for a slow shape. */
+function walk(items: RegexItem[], start: CharSet[]): CharSet[] | null {
+  let window = start;
+  for (const item of items) {
+    const node = item.node;
+    let after: CharSet[] | null;
+    if (node.kind === "zero") continue;
+    if (node.kind === "atom") {
+      after = step(window, node.chars, item.high === null, item.low === 0);
+    } else if (node.lookaround) {
+      if (node.branches.some((branch) => walk(branch, []) === null)) return null;
+      continue;
+    } else if (repeats(item)) {
+      if (hasUnbounded(node) || hasAlternatives(node)) return null;
+      after = step(window, charsOf(node), item.high === null, mayBeEmpty(item));
+    } else {
+      // At most once: each alternative carries on from where the sequence is.
+      const collected: CharSet[] = [];
+      for (const branch of node.branches) {
+        const out = walk(branch, [...window]);
+        if (out === null) return null;
+        collected.push(...out);
+      }
+      if (item.low === 0) collected.push(...window);
+      after = collected;
+    }
+    if (after === null) return null;
+    window = after;
+  }
+  return window;
+}
+
+/**
+ * Whether `pattern` has a shape that can backtrack for very long on a long text: a repeated
+ * group holding an unbounded repeat (`(a+)+`, `(\w*\s)*`) or alternatives (`(a|a)+b`), or two
+ * unbounded repeats of overlapping characters that can meet (`a*a*b`, `\w*\s*\w*`) — the port
+ * of `rules_expr.nested_repeat` (see the file header).
+ */
+export function hasNestedRepeat(pattern: string): boolean {
+  return new RegexScan(pattern).branches().some((branch) => walk(branch, []) === null);
 }
 
 /**

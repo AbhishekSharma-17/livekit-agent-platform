@@ -36,7 +36,7 @@ def _definition(**overrides: Any) -> DatasetToolDefinition:
         "kind": "dataset",
         "name": "lookup_policy",
         "description": "Find the caller's policy.",
-        "dataset_id": "ds1",
+        "dataset_id": "0123456789abcdef0123456789abcdef",
         "key_columns": ["phone", "policy_number"],
         "return_columns": ["policy_number", "holder_name"],
         "max_rows": 3,
@@ -71,7 +71,12 @@ class _Api:
     def __init__(self, status: int = 200, body: Any = None) -> None:
         self.status = status
         self.body = (
-            {"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": ROWS}
+            {
+                "dataset_id": "0123456789abcdef0123456789abcdef",
+                "dataset_name": "Demo",
+                "match": "exact",
+                "rows": ROWS,
+            }
             if body is None
             else body
         )
@@ -123,13 +128,19 @@ def test_a_dataset_tool_always_gets_the_session_context_and_blocks() -> None:
 
 async def test_lookup_posts_the_session_and_fences_the_rows() -> None:
     api = _Api(
-        body={"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": ROWS, "truncated": True}
+        body={
+            "dataset_id": "0123456789abcdef0123456789abcdef",
+            "dataset_name": "Demo",
+            "match": "exact",
+            "rows": ROWS,
+            "truncated": True,
+        }
     )
 
     result = await _call(_definition(), api, policy_number=" PD-1001 ")
 
     request = api.requests[-1]
-    assert request.url.path == "/internal/v1/datasets/ds1/lookup"
+    assert request.url.path == "/internal/v1/datasets/0123456789abcdef0123456789abcdef/lookup"
     assert api.sent == {
         "session_id": "sess_demo",
         "keys": {"policy_number": "PD-1001"},
@@ -186,7 +197,14 @@ async def test_no_rows_is_a_plain_answer_and_binds_nothing() -> None:
 
     result = await _call(
         definition,
-        _Api(body={"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": []}),
+        _Api(
+            body={
+                "dataset_id": "0123456789abcdef0123456789abcdef",
+                "dataset_name": "Demo",
+                "match": "exact",
+                "rows": [],
+            }
+        ),
         session,
         policy_number="x",
     )
@@ -198,7 +216,16 @@ async def test_no_rows_is_a_plain_answer_and_binds_nothing() -> None:
 @pytest.mark.parametrize(
     ("status", "body", "fragment"),
     [
-        (404, {"error": {"code": "not_found", "message": "unknown lookup table 'ds1'"}}, "not available"),
+        (
+            404,
+            {
+                "error": {
+                    "code": "not_found",
+                    "message": "unknown lookup table '0123456789abcdef0123456789abcdef'",
+                }
+            },
+            "not available",
+        ),
         (
             409,
             {"error": {"code": "conflict", "message": "this lookup table is still being imported"}},
@@ -238,7 +265,14 @@ async def test_the_declarative_builder_builds_a_mocked_lookup_from_its_fixture()
 @pytest.mark.parametrize(("rows", "status"), [(ROWS, 200), ([], 404)])
 async def test_the_lookup_records_found_or_not_found_on_the_call(rows: list[Any], status: int) -> None:
     """Ask #116: a flow tool step reads "found nothing" as HTTP 404 (its `empty` outcome)."""
-    api = _Api(body={"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": rows})
+    api = _Api(
+        body={
+            "dataset_id": "0123456789abcdef0123456789abcdef",
+            "dataset_name": "Demo",
+            "match": "exact",
+            "rows": rows,
+        }
+    )
     tool = build_dataset_tool(_definition(), context=ToolCallContext(_session()), client_factory=api.factory)
     run = FakeRunContext(name="lookup_policy", call_id="call-3")
     extra: dict[str, Any] = {}

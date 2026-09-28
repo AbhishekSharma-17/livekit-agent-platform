@@ -56,7 +56,7 @@ from lkap_agent.tools._http_safety import (
     guarded_transport,
     read_bounded,
 )
-from lkap_agent.tools.bindings import apply_bindings, parse_result
+from lkap_agent.tools.bindings import HeldBindings, parse_result
 from lkap_agent.tools.context import (
     ToolCallContext,
     check_readback,
@@ -88,6 +88,9 @@ MAX_HTTP_RESPONSE_BYTES: Final = MAX_RESPONSE_BYTES
 _ARG_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
 
 Handler = Callable[[dict[str, object], RunContext[Any]], Awaitable[str]]
+#: A tool's body (the request, or a V5-29 fixture): it *holds* the value its bindings point
+#: into, and its handler applies them after the tool-output guardrail (V6-21, S6-2).
+Body = Callable[[dict[str, object], RunContext[Any], HeldBindings], Awaitable[str]]
 
 #: V5-29: ``ResolvedAgentConfig.tool_mocks`` — tool name → the fixture a test case's
 #: session returns instead of calling out. Empty for every real session.
@@ -118,23 +121,47 @@ def _mocked_request(
     *,
     source: str,
     max_chars: int,
-    bindings: list[Any] | None = None,
-    tool_context: ToolCallContext | None = None,
-) -> Handler:
+) -> Body:
     """The body of a mocked tool (V5-29): the fixture, fenced like a real result, no network.
 
-    V6-07: the definition's ``bindings`` apply to the fixture as to a real result.
+    V6-07: the definition's ``bindings`` apply to the fixture as to a real result (held for
+    the handler, V6-21).
+    """
+
+    async def handler(raw_arguments: dict[str, object], context: RunContext[Any], held: HeldBindings) -> str:
+        _log.debug("declarative_tool.mocked", tool=name, call_id=context.function_call.call_id)
+        text = fence(mock_result_text(fixture), source=source, max_chars=max_chars)
+        return held.hold(fixture if not isinstance(fixture, str) else parse_result(fixture), text)
+
+    return handler
+
+
+def guarded_handler(
+    body: Body,
+    prepare: Callable[[dict[str, object]], dict[str, object]],
+    bindings: list[Any],
+    tool_context: ToolCallContext | None,
+    *,
+    name: str,
+    policy: ResolvedExecution | None,
+) -> Handler:
+    """A tool's handler: ``body`` under its execution policy, then its bindings (V6-21, S6-2).
+
+    The bindings apply after ``run_with_policy`` (and so the tool-output guardrail) has
+    returned, and only when the guard handed the body's own result through; without a policy
+    no guard runs and they apply straight after the body.
     """
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        _log.debug("declarative_tool.mocked", tool=name, call_id=context.function_call.call_id)
-        text = mock_result_text(fixture)
-        if bindings:
-            result = fixture if not isinstance(fixture, str) else parse_result(fixture)
-            await apply_bindings(
-                result, bindings, tool_context, tool=name, call_id=context.function_call.call_id
-            )
-        return fence(text, source=source, max_chars=max_chars)
+        arguments = prepare(raw_arguments)
+        held = HeldBindings()
+        result: str
+        if policy is None:
+            result = await body(arguments, context, held)
+        else:
+            result = await run_with_policy(context, policy, lambda: body(arguments, context, held))
+        await held.apply(result, context, bindings, tool_context, tool=name)
+        return result
 
     return handler
 
@@ -298,8 +325,6 @@ def _handler_for(
             mocks[definition.name],
             source=f"http:{definition.name}",
             max_chars=definition.max_result_chars,
-            bindings=list(definition.bindings),
-            tool_context=tool_context,
         )
         if mocks and definition.name in mocks
         else _request_for(
@@ -309,21 +334,14 @@ def _handler_for(
             tool_context=tool_context,
         )
     )
-    if resolved is None:
-
-        async def unpoliced(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-            return await request(_prepare_http(definition, raw_arguments, tool_context), context)
-
-        return unpoliced
-
-    policy = resolved
-
-    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        arguments = _prepare_http(definition, raw_arguments, tool_context)
-        result: str = await run_with_policy(context, policy, lambda: request(arguments, context))
-        return result
-
-    return handler
+    return guarded_handler(
+        request,
+        lambda raw_arguments: _prepare_http(definition, raw_arguments, tool_context),
+        list(definition.bindings),
+        tool_context,
+        name=definition.name,
+        policy=resolved,
+    )
 
 
 def _request_for(
@@ -332,8 +350,8 @@ def _request_for(
     platform_allowed_hosts: list[str] | None,
     user_agent: str | None = None,
     tool_context: ToolCallContext | None = None,
-) -> Handler:
-    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+) -> Body:
+    async def handler(raw_arguments: dict[str, object], context: RunContext[Any], held: HeldBindings) -> str:
         arguments: dict[str, Any] = _with_schema_defaults(definition.parameters, dict(raw_arguments))
         missing: list[PlaceholderRef] = []
         url = _render_url(definition.url, arguments, tool_context, missing)
@@ -405,19 +423,13 @@ def _request_for(
             except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
                 raise ToolError(f"could not extract result_path {definition.result_path!r}: {exc}") from exc
 
-        if definition.bindings and 200 <= response.status_code < 300:
-            # V6-07 (D-V6-23): the lookup reaches the panel before the model reads it.
-            result = extracted if definition.result_path else parse_result(result_text)
-            await apply_bindings(
-                result,
-                definition.bindings,
-                tool_context,
-                tool=definition.name,
-                call_id=context.function_call.call_id,
-            )
-
         # V5-27 (S5-6, R-V5-15): a third-party body is data, never instructions.
-        return fence(result_text, source=f"http:{definition.name}", max_chars=definition.max_result_chars)
+        answer = fence(result_text, source=f"http:{definition.name}", max_chars=definition.max_result_chars)
+        if definition.bindings and 200 <= response.status_code < 300:
+            # V6-07 (D-V6-23): the lookup reaches the panel before the model reads it — held
+            # until the tool-output guardrail has passed it (V6-21, S6-2).
+            held.hold(extracted if definition.result_path else parse_result(result_text), answer)
+        return answer
 
     return handler
 
@@ -624,15 +636,16 @@ def build_mocked_provider_tool(
         fixture,
         source=f"app:{definition.toolkit or definition.provider}",
         max_chars=definition.max_result_chars,
-        bindings=list(definition.bindings),
-        tool_context=context,
     )
     tool_context = context
-
-    async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        arguments = prepare_provider_arguments(definition, raw_arguments, tool_context)
-        result: str = await run_with_policy(context, resolved, lambda: request(arguments, context))
-        return result
+    handler = guarded_handler(
+        request,
+        lambda raw_arguments: prepare_provider_arguments(definition, raw_arguments, tool_context),
+        list(definition.bindings),
+        tool_context,
+        name=definition.name,
+        policy=resolved,
+    )
 
     tool = function_tool(
         handler,

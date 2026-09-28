@@ -36,7 +36,7 @@ from lkap_contracts.tools import DatasetToolDefinition, ToolExecutionMode
 
 from lkap_agent.logging import get_logger
 from lkap_agent.settings import get_settings
-from lkap_agent.tools.bindings import apply_bindings
+from lkap_agent.tools.bindings import HeldBindings
 from lkap_agent.tools.context import ToolCallContext, check_requires, format_value, hide_pinned, pin_arguments
 from lkap_agent.tools.declarative import note_http_status
 from lkap_agent.tools.execution import (
@@ -187,8 +187,8 @@ def _request(
     tool_context: ToolCallContext | None,
     client_factory: ClientFactory,
     mock: object,
-) -> Callable[[dict[str, str], RunContext[Any]], Any]:
-    async def request(keys: dict[str, str], context: RunContext[Any]) -> str:
+) -> Callable[[dict[str, str], RunContext[Any], HeldBindings], Any]:
+    async def request(keys: dict[str, str], context: RunContext[Any], held: HeldBindings) -> str:
         call_id = context.function_call.call_id
         if mock is not _NO_MOCK:
             # V5-29: a test case's scratch session answers from the fixture, fenced the same way.
@@ -214,12 +214,9 @@ def _request(
         note_http_status(context, 200 if rows else 404)
         if not rows:
             return "No matching record was found. Check the details with the caller before trying again."
-        if definition.bindings:
-            # V6-07 (D-V6-23): the found record reaches the panel before the model reads it.
-            await apply_bindings(
-                rows, definition.bindings, tool_context, tool=definition.name, call_id=call_id
-            )
-        return _answer(definition, rows, truncated=truncated)
+        # V6-07 (D-V6-23): the found record reaches the panel before the model reads it — held
+        # until the tool-output guardrail has passed it (V6-21, S6-2).
+        return held.hold(rows, _answer(definition, rows, truncated=truncated))
 
     return request
 
@@ -259,10 +256,14 @@ def build_dataset_tool(
     )
     flags, on_duplicate, duplicate_scope = tool_flags(resolved)
     request = _request(definition, tool_context, factory, mock)
+    bindings = list(definition.bindings)
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
         keys = lookup_keys(definition, raw_arguments, tool_context)
-        result: str = await run_with_policy(context, resolved, lambda: request(keys, context))
+        held = HeldBindings()
+        result: str = await run_with_policy(context, resolved, lambda: request(keys, context, held))
+        # V6-21 (S6-2): the bindings apply after the tool-output guardrail, never on a withheld result.
+        await held.apply(result, context, bindings, tool_context, tool=definition.name)
         return result
 
     issues = placeholder_issues(definition)

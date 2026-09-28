@@ -564,10 +564,45 @@ def _real_builder(defs: list[Any], **kwargs: Any) -> list[Any]:
     return build_http_tools(defs, platform_allowed_hosts=["api.example.com"], **kwargs)
 
 
+@respx.mock
+async def test_a_withheld_result_is_the_error_outcome_and_binds_nothing() -> None:
+    """V6-21 (S6-2): the tool-output guardrail withholds the answer; the step errs and binds nothing."""
+    from lkap_contracts.guardrails import GuardrailsConfig
+
+    respx.get("https://api.example.com/policies/P-1").mock(
+        return_value=httpx.Response(200, json={"holder": "SECRET-1234"})
+    )
+    resolved = _config(_lookup_flow())
+    guardrails = GuardrailsConfig.model_validate(
+        {"tool_output": [{"kind": "regex", "name": "Secrets", "pattern": r"SECRET-\d+"}]}
+    )
+    resolved = resolved.model_copy(
+        update={"config": resolved.config.model_copy(update={"guardrails": guardrails})}
+    )
+    conversation = ScriptedLLM(["Hi.", ToolCall("go_to_lookup"), "Sorry."])
+    api, ctx, starter = await _start(resolved, conversation, _real_builder)
+    session = starter.session
+    assert session is not None
+    await session.run(user_input="It is P-1.")
+    await _wait_for(lambda: session.current_agent.id == "oops")
+
+    state = session.userdata
+    assert isinstance(state, FlowUserdata)
+    assert "holder" not in state.flow.variables
+    assert "holder" not in starter.agent.runtime.services.ctx.userdata.get(
+        BOUND_VARIABLES_USERDATA_KEY, set()
+    )
+    await ctx.fire_shutdown("done")
+    (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
+    assert (ended["outcome"], ended["reason"]) == ("error", "withheld")
+    assert "SECRET" not in json.dumps(ended)
+    assert [e.payload["action"] for e in api.events_of("guardrail")] == ["replaced"]
+
+
 DATASET_ROW = DatasetToolDefinition(
     name="policy_lookup",
     description="Look up a policy.",
-    dataset_id="ds1",
+    dataset_id="0123456789abcdef0123456789abcdef",
     key_columns=["policy"],
 )
 
@@ -584,7 +619,13 @@ async def test_a_dataset_lookup_that_finds_nothing_is_the_empty_outcome(
         def handle(request: httpx.Request) -> httpx.Response:
             sent.append(json.loads(request.content))
             return httpx.Response(
-                200, json={"dataset_id": "ds1", "dataset_name": "Demo", "match": "exact", "rows": rows}
+                200,
+                json={
+                    "dataset_id": "0123456789abcdef0123456789abcdef",
+                    "dataset_name": "Demo",
+                    "match": "exact",
+                    "rows": rows,
+                },
             )
 
         return httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handle))

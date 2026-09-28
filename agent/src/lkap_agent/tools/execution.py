@@ -61,6 +61,7 @@ __all__ = [
     "FLOW_BACKGROUND_MIN_SDK",
     "SDK_ASYNC_TOOLS",
     "SLOW_BLOCKING_S",
+    "WITHHELD_EXTRA",
     "ResolvedExecution",
     "ToolActivityFeed",
     "ToolKind",
@@ -76,6 +77,7 @@ __all__ = [
     "policy_of",
     "register_policies",
     "resolve_execution",
+    "result_withheld",
     "run_with_policy",
     "sdk_version_at_least",
     "set_tool_output_guard",
@@ -463,12 +465,26 @@ def set_tool_output_guard(session: Any, guard: ToolOutputGuard | None) -> None:
         logger.debug("tool-output guard not registered: the session cannot be weakly referenced")
 
 
+#: V6-21 (S6-2, ask #38): the ``FunctionCall.extra`` key :func:`guard_tool_output` sets to
+#: ``True`` when the tool-output guardrail withheld the result. A tool's bindings and a flow
+#: ``tool`` step read it (:func:`result_withheld`) so a withheld result binds nothing.
+#: Provider formatters send only their own ``extra`` keys, so it never reaches a model.
+WITHHELD_EXTRA: Final = "lkap.withheld"
+
+
+def result_withheld(context: Any) -> bool:
+    """Whether the tool-output guardrail withheld the result of ``context``'s call."""
+    extra = getattr(getattr(context, "function_call", None), "extra", None)
+    return isinstance(extra, dict) and extra.get(WITHHELD_EXTRA) is True
+
+
 async def guard_tool_output(context: RunContext[Any], result: Any) -> Any:
     """The tool-output hook of :func:`run_with_policy` (V5-39): the result the model should read.
 
     Without a guard for the call's session (every agent without ``guardrails.tool_output``
     rules) the result is returned as it is, with no await on anything else. The guard never
-    raises (``guardrails.SessionGuardrails.guard_tool_output`` fails open).
+    raises (``guardrails.SessionGuardrails.guard_tool_output`` fails open). When it replaces
+    the result, the call is marked withheld (:data:`WITHHELD_EXTRA`, V6-21).
     """
     session = getattr(context, "session", None)
     try:
@@ -478,7 +494,12 @@ async def guard_tool_output(context: RunContext[Any], result: Any) -> Any:
     if guard is None:
         return result
     name = getattr(getattr(context, "function_call", None), "name", None)
-    return await guard(name if isinstance(name, str) else "tool", result)
+    guarded = await guard(name if isinstance(name, str) else "tool", result)
+    if guarded is not result:
+        extra = getattr(getattr(context, "function_call", None), "extra", None)
+        if isinstance(extra, dict):
+            extra[WITHHELD_EXTRA] = True
+    return guarded
 
 
 async def run_with_policy(

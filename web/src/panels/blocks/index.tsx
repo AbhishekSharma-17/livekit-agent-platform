@@ -90,18 +90,15 @@ const LayoutBlock = lazy(() => import("./layout"));
 // a further dynamic import of `perfect-freehand` (`canvas/freehand.ts`);
 // kept out of the first load the same way, for a panel with no drawing board.
 const CanvasBlock = lazy(() => import("./canvas"));
-
-/**
- * A block type this web build has no renderer for yet (R-V5-7): V6-23 added the
- * `signature`, `chart`, `timer`, `code` and `cart` blocks to the contract; V6-24 renders them.
- */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
+// V6-24: the five next blocks (V6-23's contract). `signature` also needs
+// `@livekit/components-react` for its upload room, same reason as `video`/`upload`/`canvas`
+// above; `chart`, `timer`, `code` and `cart` have no such dependency but stay out of the
+// first load anyway, for a panel with none of them (the same policy `table` follows).
+const SignatureBlock = lazy(() => import("./signature"));
+const ChartBlock = lazy(() => import("./chart"));
+const TimerBlock = lazy(() => import("./timer"));
+const CodeBlock = lazy(() => import("./code"));
+const CartBlock = lazy(() => import("./cart"));
 
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
@@ -133,12 +130,12 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   layout: LayoutBlock as AnyBlockComponent,
   // V6-12 added the drawing board to the contract; V6-14 is its real renderer (lazy, see above).
   canvas: CanvasBlock as AnyBlockComponent,
-  // V6-23 added these types to the contract; their renderers come with V6-24.
-  signature: NotRenderedYetBlock,
-  chart: NotRenderedYetBlock,
-  timer: NotRenderedYetBlock,
-  code: NotRenderedYetBlock,
-  cart: NotRenderedYetBlock,
+  // V6-23 added these types to the contract; V6-24 is their real renderer (lazy, see above).
+  signature: SignatureBlock as AnyBlockComponent,
+  chart: ChartBlock as AnyBlockComponent,
+  timer: TimerBlock as AnyBlockComponent,
+  code: CodeBlock as AnyBlockComponent,
+  cart: CartBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
@@ -154,6 +151,11 @@ export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
   "notebook",
   "layout",
   "canvas",
+  "signature",
+  "chart",
+  "timer",
+  "code",
+  "cart",
 ]);
 
 export interface BlockProps extends PanelProps {

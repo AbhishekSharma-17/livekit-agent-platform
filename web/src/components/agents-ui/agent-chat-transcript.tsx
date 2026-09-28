@@ -2,7 +2,7 @@
 
 import { type ComponentProps } from 'react';
 import { type AgentState, type ReceivedMessage } from '@livekit/components-react';
-import { Streamdown } from 'streamdown';
+import { SafeMarkdown } from '@/lib/safe-markdown';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import { Message, MessageContent } from '@/components/ui/message';
 import { Marker, MarkerContent, MarkerIcon } from '@/components/ui/marker';
@@ -134,7 +134,11 @@ export function AgentChatTranscript({
                         variant={isUser ? 'secondary' : 'ghost'}
                       >
                         <BubbleContent>
-                          <Streamdown>{message}</Streamdown>
+                          {/* S6-8 (asks #81): the shared `SafeMarkdown` helper, not a bare
+                              `<Streamdown>` — no `assets` (no image renders from a transcript
+                              message, model or caller), links off (a caller's own text on a
+                              text session is untrusted the same as anything else here). */}
+                          <SafeMarkdown text={message} />
                         </BubbleContent>
                       </Bubble>
                     </MessageContent>

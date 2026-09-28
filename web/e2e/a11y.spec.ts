@@ -28,6 +28,13 @@ const ROUTES = [
   "/console/preview/panels?scene=session&layout=side&state=reconnecting&test=0&embed=0&surface=dark",
   "/console/preview/panels?scene=session&layout=wide&state=reconnecting&test=0&embed=0&surface=dark",
   "/console/preview/panels?scene=session&layout=side&state=listening&test=0&embed=1&surface=dark",
+  // V6-24: the five next-block renderers (V6-23's contract), filled state — the card's own
+  // acceptance ("axe on each").
+  "/console/preview/panels?scene=blocks&type=signature&state=filled&surface=dark",
+  "/console/preview/panels?scene=blocks&type=chart&state=filled&surface=dark",
+  "/console/preview/panels?scene=blocks&type=timer&state=filled&surface=dark",
+  "/console/preview/panels?scene=blocks&type=code&state=filled&surface=dark",
+  "/console/preview/panels?scene=blocks&type=cart&state=filled&surface=dark",
 ];
 
 for (const route of ROUTES) {

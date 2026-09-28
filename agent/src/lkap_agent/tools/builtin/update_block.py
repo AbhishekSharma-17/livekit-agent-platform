@@ -24,7 +24,7 @@ import json
 from typing import Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
-from lkap_contracts.blocks import CardsBlockConfig, CartBlockConfig
+from lkap_contracts.blocks import CardsBlockConfig, CartBlockConfig, CodeBlockConfig
 from lkap_contracts.ui_protocol import BlockType, UiPatchOp, https_url_problem
 from packs.base import PackSessionContext
 from pydantic import ValidationError
@@ -145,6 +145,19 @@ def _priced_cart_ops(
     return [UiPatchOp(op="set", path=f"/{key}", value=value) for key, value in state.items()]
 
 
+def _check_code_length(fields: dict[str, Any], config: dict[str, Any]) -> None:
+    """A patched code block's text stays within the block's `max_chars` (as `show_code` checks it)."""
+    code = fields.get("code")
+    if not isinstance(code, str):
+        return
+    try:
+        max_chars = CodeBlockConfig.model_validate(config).max_chars
+    except ValidationError:
+        max_chars = CodeBlockConfig().max_chars
+    if len(code) > max_chars:
+        raise ToolError(f"The code is {len(code)} characters; this block shows at most {max_chars}.")
+
+
 def parse_json_object(raw: str, what: str) -> dict[str, Any]:
     """Parse a model-supplied JSON-object string or raise a model-readable `ToolError`."""
     try:
@@ -182,6 +195,8 @@ def build_update_block_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             raise ToolError("A form's status and values are set by the user; use request_form to ask.")
         if spec.type == "cards":
             _check_card_images(fields, spec.config)
+        if spec.type == "code":
+            _check_code_length(fields, spec.config)
         ops = [UiPatchOp(op="set", path=f"/{key}", value=value) for key, value in fields.items()]
         if spec.type == "cart":
             current = ctx.ui.state.blocks.get(block_id)

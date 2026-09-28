@@ -585,6 +585,15 @@ async def test_show_code_keeps_lines_and_strips_other_control_characters() -> No
     assert state["code"] == '{\n\t"a": 1[31m\n}' and state["language"] == "json"
 
 
+async def test_update_block_keeps_a_code_block_within_its_max_chars() -> None:
+    s = _setup()
+    tool = build_update_block_tool(s.ctx)
+    with pytest.raises(ToolError, match="at most 200"):
+        await tool(context=_run_ctx(), block_id="snippet", patch=json.dumps({"code": "x" * 201}))
+    assert s.ui.state.blocks["snippet"]["code"] == ""
+    assert await tool(context=_run_ctx(), block_id="snippet", patch='{"code": "x = 1"}') == "Updated snippet."
+
+
 @pytest.mark.parametrize(
     ("code", "language", "message"),
     [("x" * 201, "", "at most 200"), ("print(1)", "<script>", "label"), ("   ", "", "Pass the code")],

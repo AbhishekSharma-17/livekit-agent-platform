@@ -5,6 +5,7 @@ import type {
   FlowSpec,
   GlobalNode,
   QaNode,
+  ToolNode,
   StartNode,
   TransferNode,
   VariableSpec,
@@ -20,8 +21,8 @@ import type {
  * the editor's main chunk.
  */
 
-export type FlowNodeKind = "start" | "agent" | "end" | "global" | "transfer" | "qa";
-export type AnyFlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode;
+export type FlowNodeKind = "start" | "agent" | "end" | "global" | "transfer" | "qa" | "tool";
+export type AnyFlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode;
 
 export interface FlowDraft {
   v: 1;
@@ -48,6 +49,8 @@ export const NODE_KIND_LABEL: Record<FlowNodeKind, string> = {
   transfer: "Transfer",
   global: "Global rules",
   qa: "QA scoring",
+  // V6-17 (ask #117): shown and labelled; adding one from the canvas comes with V6-19.
+  tool: "Tool step",
 };
 
 /** Kinds that never take an edge (merged into every node / run after the call). */
@@ -128,15 +131,17 @@ export function newNode(kind: FlowNodeKind, existingIds: Iterable<string>, posit
       return { id, kind, label, position, instructions: "" };
     case "qa":
       return { id, kind, label, position, rubric_prompt: null };
+    case "tool":
+      return { id, kind, label, position, tool: "", arguments: {}, bindings: [], on: { ok: "" } };
   }
 }
 
 export function canHaveOutgoing(kind: FlowNodeKind): boolean {
-  return kind === "start" || kind === "agent";
+  return kind === "start" || kind === "agent" || kind === "tool";
 }
 
 export function canHaveIncoming(kind: FlowNodeKind): boolean {
-  return kind === "agent" || kind === "end" || kind === "transfer";
+  return kind === "agent" || kind === "end" || kind === "transfer" || kind === "tool";
 }
 
 /** Remove a node and every edge touching it. */

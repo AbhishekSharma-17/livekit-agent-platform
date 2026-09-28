@@ -398,9 +398,9 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-19 | Sonnet | 5 | merged | 9652a2e | | #191, #192 |
 | V6-20 | Fable | 5 | merged | d1365cc | | |
 | V6-21 | Opus | 6 | merged | aea6a9b | | #162, #166 |
-| V6-22 | Opus | 6 | running | | | |
+| V6-22 | Opus | 6 | blocked (ask #229, awaiting R-V6-3) | | | |
 | V6-23 | Opus | 6 | merged | f365327 | | #211–#217 |
-| V6-24 | Sonnet | 7 | running | | | |
+| V6-24 | Sonnet | 7 | merged | 324db4b | | #241, #242 |
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
 | V6-26 | Sonnet (+ Opus contracts hunk) | 7 | merged | 0f319ed (+ V6-26b 4f200ee) | | |
 | V6-27 | Opus | 6 | merged | 035b223 | | #177 |

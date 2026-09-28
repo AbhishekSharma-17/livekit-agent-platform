@@ -121,7 +121,7 @@ class ContextMCPServerHTTP(GuardedMCPServerHTTP):
         bindings = list(spec.bindings)
 
         async def _called(ctx: RunContext[Any], raw_arguments: dict[str, Any]) -> Any:
-            arguments = check_readback(dict(raw_arguments), spec.confirm_readback, tool=name)
+            arguments = check_readback(dict(raw_arguments), spec.confirm_readback, tool=name, context=session)
             check_requires(spec.requires_vars, session, tool=name)
             arguments = pin_arguments(arguments, spec.pinned_arguments, session, tool=name)
             held = HeldBindings()

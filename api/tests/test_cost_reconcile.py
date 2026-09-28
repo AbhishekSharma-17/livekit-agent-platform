@@ -423,6 +423,25 @@ async def test_fetch_generations_stops_on_a_refused_key_without_echoing_it() -> 
     assert SECRET not in str(info.value)
 
 
+async def test_fetch_generations_rejects_an_absurd_total_cost() -> None:
+    """V6-21 (S6-24): a vendor total above the per-generation cap is failed, never written."""
+    costs = {"gen-aaa": "1e9", "gen-bbb": "10000", "gen-ccc": "10000.000001"}
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        gen_id = request.url.params["id"]
+        return httpx.Response(200, json={"data": {"id": gen_id, "model": MODEL, "total_cost": costs[gen_id]}})
+
+    with respx.mock:
+        respx.get(GEN_URL).mock(side_effect=respond)
+        async with httpx.AsyncClient() as http:
+            lookup = await fetch_generations(
+                http, api_key=SECRET, ids=IDS, policy=NetPolicy(), sleep=_no_sleep
+            )
+
+    assert sorted(lookup.failed) == ["gen-aaa", "gen-ccc"]
+    assert lookup.found["gen-bbb"].total_cost == Decimal(10_000)
+
+
 async def test_fetch_generations_accepts_a_bare_record_and_rejects_a_missing_cost() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
         if request.url.params["id"] == "gen-aaa":

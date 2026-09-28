@@ -264,6 +264,19 @@ def test_build_rejects_a_provider_of_the_wrong_kind_for_the_slot() -> None:
         ProviderFactory().build("stt", provider)
 
 
+def test_build_of_a_withdrawn_provider_fails_with_the_vendor_reason() -> None:
+    """V6-21 (S6-23): a stored ref to a `removed` entry fails with its note, before any import."""
+    spec = registry.get("fireworksai-stt")
+    assert spec.availability == "removed" and spec.notes
+    provider = ResolvedProvider(provider_id=spec.id, python_class=spec.python_class, model=None, kwargs={})
+
+    with pytest.raises(ProviderBuildError) as info:
+        ProviderFactory().build("stt", provider)
+
+    assert str(info.value) == spec.notes
+    assert "import" not in str(info.value)
+
+
 def test_build_rejects_an_unknown_provider_id() -> None:
     """A provider id not in the registry cannot be built."""
     provider = ResolvedProvider(

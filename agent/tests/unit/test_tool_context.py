@@ -313,6 +313,40 @@ async def test_confirm_readback_refuses_until_confirmed_and_strips_the_flag() ->
     assert json.loads(route.calls.last.request.content) == {"email": "ada@example.com"}
 
 
+@respx.mock
+async def test_confirm_readback_needs_a_caller_turn_after_the_readback() -> None:
+    """V6-21 (S6-10): ``confirmed=true`` counts only after the refusal and a caller turn since."""
+    from livekit.agents.llm import ChatContext
+
+    route = respx.post("https://api.example.com/contacts").mock(
+        return_value=httpx.Response(200, text="saved")
+    )
+    session = _session()
+    history = ChatContext.empty()
+    history.add_message(role="user", content="My email is ada@example.com.")
+    cast(Any, session).session.history = history
+    definition = _http(
+        method="POST",
+        url="https://api.example.com/contacts",
+        parameters={"type": "object", "properties": {"email": {"type": "string"}}},
+        confirm_readback=["email"],
+    )
+    (tool,) = build_http_tools([definition], context=_tool_context(session))
+    confirmed = {"email": "ada@example.com", "confirmed": True}
+
+    # Straight to confirmed=true, and again with no caller turn since: both refused.
+    for _ in range(2):
+        with pytest.raises(ToolError, match="read these back"):
+            await tool(raw_arguments=dict(confirmed), context=_run())
+    assert not route.called
+
+    history.add_message(role="assistant", content="That is a-d-a at example dot com, right?")
+    history.add_message(role="user", content="Yes, that's right.")
+    await tool(raw_arguments=dict(confirmed), context=_run())
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == {"email": "ada@example.com"}
+
+
 # ---------------------------------------------------------------------- bindings
 
 

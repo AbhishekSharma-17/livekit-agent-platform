@@ -112,6 +112,7 @@ from lkap_agent.config_client import (
     SessionNotFoundError,
 )
 from lkap_agent.extraction import LIVE_STRUCTURE_USERDATA_KEY
+from lkap_agent.extraction.runner import summary_variables
 from lkap_agent.flow import FlowServices, build_flow_agent, is_flow, prepare_flow_resolved
 from lkap_agent.knowledge import prefetch_listener, search_options
 from lkap_agent.logging import configure_logging, get_logger
@@ -1884,7 +1885,10 @@ def _shutdown_callback(
             final_ui_state=agent.context.ui.state,
             flow=flow_state if isinstance(flow_state, FlowState) else None,
             disposition=outcome if isinstance(outcome, str) else None,
-            variables=captured if isinstance(captured, dict) else None,
+            # V6-21 (S6-11): sensitive fields ride in the summary on the full tier only.
+            variables=summary_variables(agent.context.config, captured)
+            if isinstance(captured, dict)
+            else None,
         )
         # Everything below runs after the summary is posted, so neither the
         # Egress poll (up to 5 s) nor the QA judge (R-V2-5, up to 30 s) delays

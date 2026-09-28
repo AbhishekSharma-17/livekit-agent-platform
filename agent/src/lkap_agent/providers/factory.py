@@ -384,6 +384,9 @@ class ProviderFactory:
             spec = get_spec(provider.provider_id)
         except KeyError as exc:
             raise ProviderBuildError(str(exc)) from exc
+        if spec.availability == "removed":
+            # V6-21 (S6-23): a stored ref to a withdrawn provider fails with the vendor's reason.
+            raise ProviderBuildError(spec.notes or f"{spec.id} was withdrawn by its vendor")
         if spec.kind not in CONSTRUCTIBLE_KINDS:
             raise ProviderBuildError(
                 f"{provider.provider_id} has kind {spec.kind!r}, which the agent cannot construct"

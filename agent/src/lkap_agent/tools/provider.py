@@ -183,7 +183,9 @@ def prepare_provider_arguments(
     """
     if not (definition.confirm_readback or definition.requires_vars or definition.pinned_arguments):
         return raw_arguments
-    arguments = check_readback(dict(raw_arguments), definition.confirm_readback, tool=definition.name)
+    arguments = check_readback(
+        dict(raw_arguments), definition.confirm_readback, tool=definition.name, context=tool_context
+    )
     check_requires(definition.requires_vars, tool_context, tool=definition.name)
     return pin_arguments(arguments, definition.pinned_arguments, tool_context, tool=definition.name)
 

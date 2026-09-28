@@ -28,11 +28,12 @@ from typing import Any, Final
 
 from livekit.agents import llm as lk_llm
 from lkap_contracts.flow import VariableSpec
+from lkap_contracts.tool_context import MAX_BINDING_VALUE_CHARS
 from packs.base import StructuredLLM
 from pydantic import BaseModel, Field, create_model
 
 from lkap_agent.logging import get_logger
-from lkap_agent.tools.untrusted import fence
+from lkap_agent.tools.untrusted import fence, strip_control
 
 __all__ = [
     "BOUND_SOURCE",
@@ -290,5 +291,6 @@ def _coerce(spec: VariableSpec, value: Any) -> VariableValue:
                 return lowered.get(text.lower())
             return text or None
         case _:
-            text = str(value).strip()
+            # V6-21 (S6-13): the caller's words are stored cut and without control characters.
+            text = strip_control(str(value)).strip()[:MAX_BINDING_VALUE_CHARS].strip()
             return text or None

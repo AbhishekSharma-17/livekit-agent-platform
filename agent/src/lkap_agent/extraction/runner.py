@@ -15,7 +15,8 @@ Writes, in order:
    (so a flow fences them in its instructions, ask #31). Names a flow step's own ``extract``
    lists are left to the step;
 2. each field's ``show_in``: a ``details`` block's row, or a notebook section's row (a
-   ``details`` section) or keyed note (a ``text`` section);
+   ``details`` section) or keyed note (a ``text`` section); a ``sensitive`` field shows
+   :data:`SENSITIVE_MASK`, never its value (V6-21, S6-11);
 3. the "still needed" checklist items (``need_<field>``) when ``still_needed`` is
    ``checklist``, keeping every other item;
 4. one ``extraction`` session event (names and whether each is set; values only on the
@@ -28,7 +29,7 @@ import asyncio
 import hashlib
 import json
 import time
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal
 
@@ -56,7 +57,14 @@ from lkap_agent.flow.variables import (
 from lkap_agent.logging import get_logger
 from lkap_agent.tools.context import session_variables
 
-__all__ = ["ExtractionRun", "ExtractionRunner", "Trigger", "field_label"]
+__all__ = [
+    "SENSITIVE_MASK",
+    "ExtractionRun",
+    "ExtractionRunner",
+    "Trigger",
+    "field_label",
+    "summary_variables",
+]
 
 _log = get_logger(__name__)
 
@@ -66,6 +74,8 @@ Trigger = Literal["turn", "tool", "node_exit", "manual"]
 _MAX_EVENT_VALUE_CHARS: Final[int] = 200
 #: A little slack over the budget for a model client that ignores ``timeout_s``.
 _GUARD_S: Final[float] = 0.25
+#: V6-21 (S6-11): what the panel shows for a captured ``sensitive`` field.
+SENSITIVE_MASK: Final[str] = "••••"
 
 _INSTRUCTIONS: Final[str] = (
     "Extract the following facts from the conversation between a voice agent (assistant) and a "
@@ -77,6 +87,20 @@ _INSTRUCTIONS: Final[str] = (
 def field_label(spec: ExtractionField) -> str:
     """What the panel and the checklist call a field."""
     return spec.label.strip() or spec.name.replace("_", " ").strip().capitalize()
+
+
+def summary_variables(config: Any, variables: Mapping[str, Any]) -> dict[str, Any]:
+    """The captured variables the session summary may carry (V6-21, S6-11).
+
+    Every one on the ``full`` storage tier; on any other tier the ``sensitive`` extraction
+    fields are left out (``sessions.variables`` is not scrubbed by tier).
+    """
+    tier = getattr(getattr(config, "privacy", None), "storage_tier", "full")
+    if tier == "full":
+        return dict(variables)
+    fields = getattr(getattr(config, "extraction", None), "fields", None) or []
+    sensitive = {spec.name for spec in fields if getattr(spec, "sensitive", False)}
+    return {name: value for name, value in variables.items() if name not in sensitive}
 
 
 @dataclass(slots=True)
@@ -277,6 +301,8 @@ class ExtractionRunner:
                 continue
             value = store.get(wanted_field.name)
             text = (("yes" if value else "no") if isinstance(value, bool) else str(value))[:500]
+            if wanted_field.sensitive:
+                text = SENSITIVE_MASK  # V6-21 (S6-11): captured, never shown or read back
             if target.kind == "details":
                 key = target.key or wanted_field.name
                 existing = next((r for r in self._rows(block.id, None) if r.get("key") == key), None)

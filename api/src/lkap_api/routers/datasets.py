@@ -5,7 +5,12 @@ Admin routes under ``/v1/datasets`` follow the tools rule (``auth.roles``): a vi
 lookup. Every one is scoped to the caller's workspace; another workspace's dataset is a 404.
 
 ``POST /internal/v1/datasets/{id}/lookup`` is the worker's (service token): the session decides
-the workspace, so a session of one workspace never reads another workspace's rows.
+the workspace, so a session of one workspace never reads another workspace's rows, and only a
+live session may look anything up (V6-21, S6-16).
+
+V6-21: an upload checks the workspace's quota before it reads the file and is rate limited per
+workspace, as is the console's test lookup (S6-14); creating and deleting a dataset writes an
+audit row with ids and counts, never a value (S6-19).
 """
 
 from __future__ import annotations
@@ -29,8 +34,11 @@ from lkap_contracts.datasets import (
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 
+from lkap_api.auth.audit import record
+from lkap_api.auth.ratelimit import RateLimiterDep, enforce
 from lkap_api.datasets.parse import dataset_format, parse_dataset
 from lkap_api.datasets.service import (
+    check_quota,
     create_dataset,
     dataset_out,
     delete_dataset,
@@ -62,6 +70,10 @@ _KEY_SPEC: TypeAdapter[dict[str, DatasetKeyType]] = TypeAdapter(dict[str, Datase
 _UNSAFE_CATEGORIES: Final = frozenset({"Cc", "Cf"})
 #: The most rows ``GET …/rows`` returns at once.
 MAX_PREVIEW_ROWS: Final = 200
+#: V6-21 (S6-14): uploads a workspace may start a minute (each one parses up to 5 MiB).
+DATASET_UPLOADS_PER_MIN = 10
+#: V6-21 (S6-14): the console's test lookups a workspace may run a minute.
+DATASET_LOOKUPS_PER_MIN = 60
 
 
 def _basename(filename: str | None) -> str:
@@ -121,6 +133,7 @@ async def upload_dataset(
     jobs: JobsDep,
     background_tasks: BackgroundTasks,
     ctx: AdminCtxDep,
+    limiter: RateLimiterDep,
     file: Annotated[UploadFile, File(description="A .csv, .tsv or .json file, at most 5 MiB")],
     name: Annotated[str, Form(min_length=1, max_length=200, description="The table's name")],
     key_columns: Annotated[
@@ -133,9 +146,17 @@ async def upload_dataset(
     """Check the upload, store it and enqueue the import."""
     if file.size is not None and file.size > MAX_DATASET_BYTES:
         raise _too_large()
+    await enforce(
+        limiter,
+        f"dataset_uploads:{ctx.workspace_id}",
+        capacity=DATASET_UPLOADS_PER_MIN,
+        what="lookup table uploads",
+    )
     filename = _basename(file.filename)
     fmt = dataset_format(filename)
     spec = _key_spec(key_columns)
+    # V6-21 (S6-14): a workspace at its quota is refused before a byte is parsed.
+    await check_quota(db, ctx.workspace_id, 0)
     data = await _read_capped(file)
     parsed = parse_dataset(data, fmt, spec, tab=PurePosixPath(filename.lower()).suffix == ".tsv")
     row = await create_dataset(
@@ -148,6 +169,16 @@ async def upload_dataset(
         filename=filename,
         parsed=parsed,
         data=data,
+    )
+    record(
+        db,
+        workspace_id=ctx.workspace_id,
+        actor_type=ctx.actor.actor_type,
+        actor_id=ctx.actor.id,
+        action="dataset.create",
+        target_type="dataset",
+        target_id=row.id,
+        payload={"dataset_id": row.id, "rows": len(parsed.rows), "columns": len(parsed.columns)},
     )
     return await dataset_out(db, row)
 
@@ -230,6 +261,16 @@ async def remove_dataset(dataset_id: str, db: DbDep, storage: StorageDep, ctx: A
     """Delete a dataset no tool uses."""
     dataset = await load_dataset(db, ctx.workspace_id, dataset_id)
     await delete_dataset(db, storage, dataset)
+    record(
+        db,
+        workspace_id=ctx.workspace_id,
+        actor_type=ctx.actor.actor_type,
+        actor_id=ctx.actor.id,
+        action="dataset.delete",
+        target_type="dataset",
+        target_id=dataset_id,
+        payload={"dataset_id": dataset_id},
+    )
     log.info("dataset_deleted", dataset_id=dataset_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -245,9 +286,15 @@ async def remove_dataset(dataset_id: str, db: DbDep, storage: StorageDep, ctx: A
     ),
 )
 async def lookup_dataset(
-    dataset_id: str, payload: DatasetLookupIn, db: DbDep, ctx: AdminCtxDep
+    dataset_id: str, payload: DatasetLookupIn, db: DbDep, ctx: AdminCtxDep, limiter: RateLimiterDep
 ) -> DatasetLookupOut:
     """A test lookup in one of the caller's datasets."""
+    await enforce(
+        limiter,
+        f"dataset_lookups:{ctx.workspace_id}",
+        capacity=DATASET_LOOKUPS_PER_MIN,
+        what="lookup table test lookups",
+    )
     dataset = await load_dataset(db, ctx.workspace_id, dataset_id)
     return await lookup(db, dataset, payload)
 
@@ -266,10 +313,13 @@ async def internal_lookup_dataset(
 ) -> DatasetLookupOut:
     """A lookup in the session's workspace (worker-only)."""
     try:
-        workspace_id = (await load_session_any(db, payload.session_id)).workspace_id
+        session = await load_session_any(db, payload.session_id)
     except NotFoundError:
         raise NotFoundError(f"unknown lookup table '{dataset_id}'") from None
-    dataset = await load_dataset(db, workspace_id, dataset_id)
+    if session.status in {"ended", "failed"}:
+        # V6-21 (S6-16): only a live session looks anything up (the sibling worker routes' rule).
+        raise NotFoundError(f"unknown lookup table '{dataset_id}'")
+    dataset = await load_dataset(db, session.workspace_id, dataset_id)
     result = await lookup(
         db, dataset, DatasetLookupIn.model_validate(payload.model_dump(exclude={"session_id"}))
     )

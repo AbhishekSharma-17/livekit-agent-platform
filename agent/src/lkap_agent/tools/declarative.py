@@ -288,7 +288,9 @@ def _prepare_http(
     """
     if not (definition.confirm_readback or definition.requires_vars or tool_context is not None):
         return raw_arguments
-    arguments = check_readback(dict(raw_arguments), definition.confirm_readback, tool=definition.name)
+    arguments = check_readback(
+        dict(raw_arguments), definition.confirm_readback, tool=definition.name, context=tool_context
+    )
     check_requires(definition.requires_vars, tool_context, tool=definition.name)
     missing = missing_refs((definition.url, definition.body_template), tool_context)
     if missing:

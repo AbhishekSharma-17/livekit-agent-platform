@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Callable, Iterable, Mapping, MutableMapping
 from typing import Any, Final
 
@@ -44,6 +45,7 @@ from lkap_agent.logging import get_logger
 
 __all__ = [
     "BOUND_VARIABLES_USERDATA_KEY",
+    "READBACK_ASKED_USERDATA_KEY",
     "SIP_PHONE_ATTRIBUTE",
     "TOOL_CONTEXT_USERDATA_KEY",
     "VARIABLES_USERDATA_KEY",
@@ -69,6 +71,9 @@ VARIABLES_USERDATA_KEY: Final[str] = "lkap.variables"
 BOUND_VARIABLES_USERDATA_KEY: Final[str] = "lkap.bound_variables"
 #: ``SessionContext.userdata`` key of the session's :class:`ToolCallContext`.
 TOOL_CONTEXT_USERDATA_KEY: Final[str] = "lkap.tool_context"
+#: V6-21 (S6-10): per tool, when its read-back was asked for (``time.time()``). A later
+#: ``confirmed=true`` counts only when the caller has spoken since (the S5-4 pattern).
+READBACK_ASKED_USERDATA_KEY: Final[str] = "lkap.readback_asked"
 #: The participant attribute LiveKit SIP sets to the caller's number (E.164).
 SIP_PHONE_ATTRIBUTE: Final[str] = "sip.phoneNumber"
 _SIP_CHANNELS: Final[frozenset[str]] = frozenset({"sip_in", "sip_out"})
@@ -376,23 +381,63 @@ def readback_parameters(parameters: dict[str, Any], names: list[str]) -> dict[st
     return {**parameters, "properties": properties}
 
 
-def check_readback(arguments: dict[str, Any], names: list[str], *, tool: str) -> dict[str, Any]:
+def _readback_stamps(context: ToolCallContext | None) -> dict[str, float] | None:
+    """The session's read-back stamps (:data:`READBACK_ASKED_USERDATA_KEY`), or ``None`` without a session."""
+    userdata = getattr(getattr(context, "session", None), "userdata", None)
+    if not isinstance(userdata, dict):
+        return None
+    stamps = userdata.setdefault(READBACK_ASKED_USERDATA_KEY, {})
+    return stamps if isinstance(stamps, dict) else None
+
+
+def _caller_spoke_since(context: ToolCallContext | None, asked_at: float) -> bool | None:
+    """Whether the history holds a caller message newer than ``asked_at``; ``None`` when unreadable."""
+    history = getattr(getattr(getattr(context, "session", None), "session", None), "history", None)
+    items = getattr(history, "items", None)
+    if not isinstance(items, list):
+        return None
+    return any(
+        getattr(item, "role", None) == "user"
+        and float(getattr(item, "created_at", 0.0) or 0.0) >= asked_at
+        and bool(getattr(item, "text_content", None))
+        for item in items
+    )
+
+
+def check_readback(
+    arguments: dict[str, Any], names: list[str], *, tool: str, context: ToolCallContext | None = None
+) -> dict[str, Any]:
     """Refuse until the model confirms a read-back; return the arguments without ``confirmed``.
+
+    V6-21 (S6-10): with the session's ``context``, ``confirmed`` counts only after this tool
+    asked for the read-back and the caller has spoken since (a message in the history newer
+    than the refusal), so a model cannot skip the spoken check. Without a session (or a
+    history to read) a confirmation after the refusal is taken as before.
 
     Args:
         arguments: The call's arguments (may carry ``confirmed``).
         names: ``confirm_readback``: the arguments to read back.
         tool: The tool name (for the message).
+        context: The session's tool context (the read-back stamps and the history).
 
     Raises:
-        ToolError: ``confirmed`` is not true: the message says what to read back, spelled out
-            where it helps a voice (``spell_back``'s wording).
+        ToolError: ``confirmed`` is not true, or no caller turn followed the read-back: the
+            message says what to read back, spelled out where it helps a voice
+            (``spell_back``'s wording).
     """
     if not names:
         return arguments
     confirmed = arguments.pop(CONFIRMED_PARAMETER, False)
+    stamps = _readback_stamps(context)
     if confirmed is True or (isinstance(confirmed, str) and confirmed.strip().lower() == "true"):
-        return arguments
+        if stamps is None:
+            return arguments
+        asked_at = stamps.get(tool)
+        heard = _caller_spoke_since(context, asked_at) if asked_at is not None else False
+        if heard is None or heard:
+            stamps.pop(tool, None)
+            return arguments
+        _log.info("tool_context.readback_unheard", tool=tool, asked=asked_at is not None)
     from lkap_agent.tools.builtin.spell_back import spell  # noqa: PLC0415 - avoids an import cycle
 
     parts: list[str] = []
@@ -409,6 +454,8 @@ def check_readback(arguments: dict[str, Any], names: list[str], *, tool: str) ->
         said = f" (say it as: {spoken})" if spoken != text else ""
         parts.append(f"{variable_label(name)}: {text}{said}")
     _log.debug("tool_context.readback_requested", tool=tool, names=list(names))
+    if stamps is not None:
+        stamps[tool] = time.time()
     raise ToolError(
         "Before this runs, read these back to the caller and ask them to confirm: "
         + "; ".join(parts)

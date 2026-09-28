@@ -10,18 +10,15 @@
  * ask #34's "next plan" analogue: promote to a generated constant if a second surface needs
  * the same list (see `provider-meta.ts`'s `RECOMMENDED_STACK`, ask #42).
  */
-import { VARIABLE_NAME_PATTERN } from "@/components/console/flow/flow-model";
+import { CTX_PLACEHOLDERS, VARIABLE_NAME_PATTERN } from "@/components/console/flow/flow-model";
 
-/** `lkap_contracts.tool_context.ToolContextPlaceholder`, in the order the console lists them. */
-export const CTX_PLACEHOLDERS = [
-  "session_id",
-  "agent_id",
-  "caller_phone",
-  "caller_identity",
-  "language",
-  "timezone",
-  "channel",
-] as const;
+/**
+ * `lkap_contracts.tool_context.ToolContextPlaceholder`, in the order the console lists them.
+ * Defined in `flow-model.ts` (V6-19): a `tool` node's argument templates need the same list,
+ * and this module already imports (and re-exports below) `VARIABLE_NAME_PATTERN` from there —
+ * keeping the source of truth on one side avoids a cycle between the two modules.
+ */
+export { CTX_PLACEHOLDERS };
 export type CtxPlaceholder = (typeof CTX_PLACEHOLDERS)[number];
 
 /** `lkap_contracts.tool_context.CTX_LABELS` — plain words, shown in the Insert-value menu. */

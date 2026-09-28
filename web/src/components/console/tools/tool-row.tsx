@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { StatusChip } from "@/components/shared/status-chip";
 import { useDeleteTool } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
+import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { mcpAuthChip } from "@/components/console/tools/mcp-oauth-status";
@@ -129,6 +130,25 @@ export function ToolRow({
           // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
           <ProviderToolEditorDialog
             tool={tool as ToolOut & { definition: ProviderToolDefinition }}
+            onSaved={onSaved}
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
+                <PencilIcon className="size-3.5" />
+              </Button>
+            }
+          />
+        ) : tool.kind === "dataset" ? (
+          // V6-19: a lookup-table tool (`DatasetToolDefinition`, D-V6-27) — its own editor, never the MCP one.
+          <DatasetToolEditorDialog
+            agentId={agentId}
+            tool={tool}
             onSaved={onSaved}
             trigger={
               <Button

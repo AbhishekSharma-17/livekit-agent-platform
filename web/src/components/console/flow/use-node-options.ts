@@ -5,11 +5,11 @@ import { useFormContext, useWatch } from "react-hook-form";
 
 import { useKbs, usePacks, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
-import type { AgentOut } from "@/contracts/lkap-contracts";
+import type { AgentOut, BlockSpec } from "@/contracts/lkap-contracts";
 
 import { kindOf, type AnyFlowNode } from "./flow-model";
 import type { Option, ProviderOption } from "./node-form";
-import { nodeToolOptions, type NodeToolOption } from "./tool-options";
+import { nodeToolOptions, toolNodeOptions, type NodeToolOption, type ToolNodeOption } from "./tool-options";
 
 /**
  * The knowledge a step searches (R-V4-29), as the worker computes it: when no
@@ -68,15 +68,31 @@ export function useAgentKbIds(): string[] {
   return React.useMemo(() => knowledge?.kb_ids ?? [], [knowledge]);
 }
 
+/** `details.tsx`: `config.fields` seeds the block's starting rows (`DetailsItem[]`-shaped). Mirrors `use-agent-tool-context.ts`'s own copy (that one reads the query cache; this reads the live form). */
+function fieldKeysOf(config: Record<string, unknown> | undefined): string[] {
+  const fields = config?.fields;
+  if (!Array.isArray(fields)) return [];
+  return fields
+    .map((field) => (field && typeof field === "object" ? (field as { key?: unknown }).key : undefined))
+    .filter((key): key is string => typeof key === "string" && key.length > 0);
+}
+
 /**
  * What the node pickers may offer, from the live form (R-V2-10: exactly the
  * agent-level selections) — tools, the agent's knowledge bases, and the
- * available LLM/TTS providers for per-node overrides (R-V2-9).
+ * available LLM/TTS providers for per-node overrides (R-V2-9); a `tool` node
+ * (V6-19, ask #117) additionally gets the agent's attached tool rows (no
+ * built-ins) and the panel's `details`/`table` blocks for its bindings —
+ * the same shape `useAgentToolContextOptions` gives the tool editors, but
+ * from the live form rather than the query cache (the editor's own data).
  */
 export function useNodeOptions(agent: AgentOut): {
   toolOptions: NodeToolOption[];
+  toolNodeOptions: ToolNodeOption[];
   kbOptions: Option[];
   providerOptions: ProviderOption[];
+  detailsBlocks: { id: string; title: string; fieldKeys: string[] }[];
+  tableBlocks: { id: string; title: string }[];
 } {
   const { control } = useFormContext<AgentEditorForm>();
   const tools = useWatch({ control, name: "config.tools" });
@@ -104,6 +120,11 @@ export function useNodeOptions(agent: AgentOut): {
     });
   }, [agent.pack_id, capabilities, packs.data, panel, toolRows.data, tools]);
 
+  const toolStepOptions = React.useMemo(
+    () => toolNodeOptions(tools?.tool_ids ?? [], toolRows.data?.items ?? []),
+    [tools?.tool_ids, toolRows.data],
+  );
+
   const kbOptions = React.useMemo(() => {
     const byId = new Map((kbs.data?.items ?? []).map((kb) => [kb.id, kb.name]));
     return (knowledge?.kb_ids ?? []).map((id) => ({ value: id, label: byId.get(id) ?? id }));
@@ -127,5 +148,17 @@ export function useNodeOptions(agent: AgentOut): {
     [providers.data],
   );
 
-  return { toolOptions, kbOptions, providerOptions };
+  const { detailsBlocks, tableBlocks } = React.useMemo(() => {
+    const blocks: BlockSpec[] = panel?.blocks ?? [];
+    return {
+      detailsBlocks: blocks
+        .filter((block) => block.type === "details")
+        .map((block) => ({ id: block.id, title: block.title ?? block.id, fieldKeys: fieldKeysOf(block.config) })),
+      tableBlocks: blocks
+        .filter((block) => block.type === "table")
+        .map((block) => ({ id: block.id, title: block.title ?? block.id })),
+    };
+  }, [panel]);
+
+  return { toolOptions, toolNodeOptions: toolStepOptions, kbOptions, providerOptions, detailsBlocks, tableBlocks };
 }

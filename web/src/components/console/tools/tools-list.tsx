@@ -14,6 +14,7 @@ import { useAgents, useDeleteTool, useProviders, useToolProviderConnections, use
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
@@ -55,6 +56,7 @@ function kindLabel(tool: ToolOut): string {
   const origin = originOf(tool);
   if (origin === "server") return "App server";
   if (origin === "router") return "Tool finder";
+  if (tool.kind === "dataset") return "Lookup table";
   return tool.kind === "http" ? "HTTP" : "MCP";
 }
 
@@ -125,6 +127,20 @@ export function ToolsList() {
                 title={canWrite ? undefined : writeReason}
               >
                 <PlusIcon className="size-3.5" /> Add MCP server
+              </Button>
+            }
+          />
+          <DatasetToolEditorDialog
+            agentId={null}
+            onSaved={refetch}
+            trigger={
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canWrite}
+                title={canWrite ? undefined : writeReason}
+              >
+                <PlusIcon className="size-3.5" /> Add lookup tool
               </Button>
             }
           />
@@ -350,6 +366,25 @@ function ToolActions({
         // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
         <ProviderToolEditorDialog
           tool={tool as ToolOut & { definition: ProviderToolDefinition }}
+          onSaved={onRefetch}
+          trigger={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${tool.name}`}
+              disabled={!canWrite}
+              title={canWrite ? undefined : writeReason}
+            >
+              <PencilIcon className="size-3.5" />
+            </Button>
+          }
+        />
+      ) : tool.kind === "dataset" ? (
+        // V6-19: a lookup-table tool (`DatasetToolDefinition`, D-V6-27) — its own editor, never the MCP one.
+        <DatasetToolEditorDialog
+          agentId={tool.agent_id ?? null}
+          tool={tool}
           onSaved={onRefetch}
           trigger={
             <Button

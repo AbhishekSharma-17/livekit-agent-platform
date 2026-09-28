@@ -10,6 +10,7 @@ import {
   Plug,
   Puzzle,
   Settings2,
+  Table2,
   Wrench,
 } from "lucide-react";
 
@@ -62,6 +63,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Agents", href: "/console/agents", icon: Bot },
       { label: "Knowledge", href: "/console/knowledge", icon: BookOpen },
       { label: "Tools", href: "/console/tools", icon: Wrench },
+      // V6-19: lookup tables (`datasets` in code and paths; "lookup table" everywhere the caller sees it).
+      { label: "Lookup tables", href: "/console/datasets", icon: Table2 },
     ],
   },
   {

@@ -9,9 +9,13 @@ import {
   issueTarget,
   mentionQuery,
   normalizeFlow,
+  outcomeForEdge,
+  outgoingEdges,
   removeNode,
   renameVariable,
   seedFlow,
+  setToolOutcome,
+  toolArgumentIssues,
   uniqueNodeId,
   type FlowDraft,
 } from "@/components/console/flow/flow-model";
@@ -160,5 +164,76 @@ describe("tool steps (V6-17, ask #117)", () => {
     const node = newNode("tool", ["start"], [0, 0]);
     expect(node).toMatchObject({ kind: "tool", tool: "", on: { ok: "" } });
     expect(canHaveIncoming("tool") && canHaveOutgoing("tool")).toBe(true);
+  });
+});
+
+describe("tool node outcomes (V6-19, D-V6-28, ask #117)", () => {
+  function toolFlow(): FlowDraft {
+    return normalizeFlow({
+      nodes: [
+        { id: "start", kind: "start" },
+        { id: "lookup", kind: "tool", label: "Look up", tool: "record_lookup", arguments: {}, bindings: [], on: {} },
+        { id: "found", kind: "agent", instructions: "Tell them." },
+        { id: "missing", kind: "agent", instructions: "Apologise." },
+      ],
+      edges: [
+        { id: "e_start_lookup", source: "start", target: "lookup", condition: "always" },
+        { id: "e_ok", source: "lookup", target: "found", condition: "" },
+        { id: "e_error", source: "lookup", target: "missing", condition: "" },
+      ],
+      variables: [],
+    });
+  }
+
+  it("requires an 'ok' outcome that names a real outgoing edge", () => {
+    const flow = toolFlow();
+    const grouped = groupIssues(flowDraftIssues(flow), flow);
+    expect(grouped.nodes.get("lookup")?.errors.some((issue) => /Found/.test(issue.message))).toBe(true);
+    // Every outgoing edge with no outcome is also flagged, on the edge itself.
+    expect(grouped.edges.get("e_ok")?.errors[0]?.message).toMatch(/outcome/i);
+    expect(grouped.edges.get("e_error")?.errors[0]?.message).toMatch(/outcome/i);
+  });
+
+  it("accepts a tool node once every outgoing edge is assigned an outcome", () => {
+    const flow = toolFlow();
+    flow.nodes[1] = { ...flow.nodes[1], on: { ok: "e_ok", error: "e_error" } } as FlowDraft["nodes"][number];
+    expect(hasErrors(flowDraftIssues(flow))).toBe(false);
+  });
+
+  it("never warns about a tool-sourced edge's empty condition", () => {
+    const flow = toolFlow();
+    flow.nodes[1] = { ...flow.nodes[1], on: { ok: "e_ok", error: "e_error" } } as FlowDraft["nodes"][number];
+    const issues = flowDraftIssues(flow);
+    expect(issues.some((issue) => issue.path.includes("condition"))).toBe(false);
+  });
+
+  it("outgoingEdges/outcomeForEdge/setToolOutcome round-trip", () => {
+    const flow = toolFlow();
+    expect(outgoingEdges("lookup", flow.edges).map((edge) => edge.id)).toEqual(["e_ok", "e_error"]);
+    const on = setToolOutcome(setToolOutcome({}, "ok", "e_ok"), "error", "e_error");
+    expect(on).toEqual({ ok: "e_ok", error: "e_error" });
+    expect(outcomeForEdge(on, "e_ok")).toBe("ok");
+    expect(outcomeForEdge(on, "e_error")).toBe("error");
+    expect(outcomeForEdge(on, "e_start_lookup")).toBeNull();
+    expect(setToolOutcome(on, "error", null)).toEqual({ ok: "e_ok", error: null });
+  });
+});
+
+describe("toolArgumentIssues (D-V6-28)", () => {
+  it("accepts ctx and var placeholders, and plain text", () => {
+    expect(toolArgumentIssues("{{ ctx.caller_phone }}")).toEqual([]);
+    expect(toolArgumentIssues("{{ var.policy_number }}")).toEqual([]);
+    expect(toolArgumentIssues("a plain literal")).toEqual([]);
+  });
+
+  it("refuses a bare {{ name }} — a tool step has no arguments of its own", () => {
+    const issues = toolArgumentIssues("{{ policy_number }}");
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatch(/write \{\{ var\.policy_number \}\}/);
+  });
+
+  it("refuses an unknown ctx name and a malformed var name", () => {
+    expect(toolArgumentIssues("{{ ctx.nope }}")[0]).toMatch(/not a session value/);
+    expect(toolArgumentIssues("{{ var.Not_Ok }}")[0]).toMatch(/not a variable name/);
   });
 });

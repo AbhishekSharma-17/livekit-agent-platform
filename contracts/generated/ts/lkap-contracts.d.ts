@@ -284,6 +284,8 @@ export interface LkapContracts {
   TemplateOut?: TemplateOut;
   TemplatesResponse?: TemplatesResponse;
   TextSessionCreate?: TextSessionCreate;
+  ToolBinding?: ToolBinding;
+  ToolContextSpec?: ToolContextSpec;
   ToolCreate?: ToolCreate;
   ToolDefinition?: ToolDefinition;
   ToolDryRunRequest?: ToolDryRunRequest;
@@ -4396,7 +4398,9 @@ export interface HealthResponse {
  */
 export interface HttpToolDefinition {
   allowed_hosts?: string[];
+  bindings?: ToolBinding[];
   body_template?: string | null;
+  confirm_readback?: string[];
   credential_id?: string | null;
   description: string;
   execution?: ToolExecution;
@@ -4410,10 +4414,26 @@ export interface HttpToolDefinition {
   parameters: {
     [k: string]: unknown;
   };
+  requires_vars?: string[];
   result_path?: string | null;
   silent_reply?: boolean;
   timeout_s?: number;
   url: string;
+}
+/**
+ * Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).
+ *
+ * Applied by the worker after a successful call (an HTTP 2xx, an app action that
+ * succeeded, an MCP result that is not an error) and before the model's next turn, with
+ * no model involved. ``path`` points into the tool's result as the model would see it
+ * (after ``result_path``); ``""`` is the whole result.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolBinding".
+ */
+export interface ToolBinding {
+  path?: string;
+  to: string;
 }
 /**
  * What :func:`validate_id_value` found wrong with an id-like value (R-V4-31). Value-free.
@@ -5720,6 +5740,9 @@ export interface McpServerDefinition {
   origin?: McpServerOrigin | null;
   sse_read_timeout_s?: number;
   timeout_s?: number;
+  tool_context?: {
+    [k: string]: ToolContextSpec;
+  };
   tool_options?: {
     [k: string]: ToolExecution;
   };
@@ -5749,6 +5772,20 @@ export interface McpServerOrigin {
   kind: "server" | "router";
   provider?: "composio";
   remote_id: string;
+}
+/**
+ * The tool-context settings of one MCP tool (``McpServerDefinition.tool_context``).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolContextSpec".
+ */
+export interface ToolContextSpec {
+  bindings?: ToolBinding[];
+  confirm_readback?: string[];
+  pinned_arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
+  requires_vars?: string[];
 }
 /**
  * ``POST /v1/tools/{id}/test``: connect, ``initialize``, ``tools/list``, store the snapshot.
@@ -6645,6 +6682,8 @@ export interface ProviderSpec {
  * via the `definition` "ProviderToolDefinition".
  */
 export interface ProviderToolDefinition {
+  bindings?: ToolBinding[];
+  confirm_readback?: string[];
   connected_account_id?: string | null;
   connection_id: string;
   credential_id?: string | null;
@@ -6659,7 +6698,11 @@ export interface ProviderToolDefinition {
   parameters: {
     [k: string]: unknown;
   };
+  pinned_arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
   provider?: "composio";
+  requires_vars?: string[];
   result_path?: string | null;
   risk?: "read" | "write" | "destructive";
   schema_version?: string | null;

@@ -13,6 +13,15 @@ from typing import Annotated, Any, Final, Literal, Self, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from lkap_contracts.tool_context import (
+    MAX_PINNED_ARGUMENTS,
+    Bindings,
+    ConfirmReadback,
+    PinnedValue,
+    RequiresVars,
+    ToolContextSpec,
+    placeholder_issues,
+)
 from lkap_contracts.tool_providers import ToolProviderId
 from lkap_contracts.ui_protocol import BlockType
 
@@ -302,6 +311,14 @@ def never_background(name: str) -> bool:
     return name in NEVER_BACKGROUND_TOOLS or name.startswith(EDGE_TOOL_PREFIX)
 
 
+def _refuse_placeholder_issues(definition: BaseModel) -> None:
+    """V6-07 (D-V6-22): raise on the first misplaced ``{{ ctx.* }}``/``{{ var.* }}`` (save-time refusal)."""
+    issues = placeholder_issues(definition)
+    if issues:
+        first = issues[0]
+        raise ValueError(f"{first.field}: {first.message}")
+
+
 class HttpToolDefinition(BaseModel):
     """An HTTP call exposed to the model as a raw-schema function tool."""
 
@@ -322,6 +339,14 @@ class HttpToolDefinition(BaseModel):
     execution: ToolExecution = Field(default_factory=ToolExecution)
     """How the tool runs (docs/v4/BACKGROUND-TOOLS.md). A GET tool without a ``mode`` follows
     the agent's ``tools.execution_default``; any other method blocks unless it sets one."""
+    requires_vars: RequiresVars = []
+    """V6-07: variables that must be set before the tool calls out (the refusal names the
+    missing ones so the model asks for them)."""
+    confirm_readback: ConfirmReadback = []
+    """V6-07: arguments the model reads back to the caller first; adds a ``confirmed``
+    parameter and the tool refuses until it is true."""
+    bindings: Bindings = []
+    """V6-07: parts of a 2xx result copied onto the panel or into variables, no model turn."""
 
     @model_validator(mode="after")
     def _silent_reply_blocks(self) -> Self:
@@ -330,6 +355,11 @@ class HttpToolDefinition(BaseModel):
                 "silent_reply cannot be combined with a background or automatic execution mode: "
                 "the silenced reply would swallow the tool's announcement"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _context_placeholders(self) -> Self:
+        _refuse_placeholder_issues(self)
         return self
 
 
@@ -466,6 +496,9 @@ class McpServerDefinition(BaseModel):
     The worker still lists tools itself at session start (research-v4 tools §4.3.7)."""
     cached_at: datetime | None = None
     """When ``cached_tools`` was stored."""
+    tool_context: dict[str, ToolContextSpec] = {}
+    """V6-07: per MCP tool name, its required variables, read-back, bindings and pinned
+    arguments (a subset of ``allowed_tools`` when that is set)."""
 
     @model_validator(mode="after")
     def _fold_legacy_auth(self) -> Self:
@@ -497,6 +530,15 @@ class McpServerDefinition(BaseModel):
             unknown = sorted(set(self.tool_options) - set(self.allowed_tools))
             if unknown:
                 raise ValueError(f"tool_options names tools outside allowed_tools: {', '.join(unknown)}")
+        return self
+
+    @model_validator(mode="after")
+    def _tool_context_is_allowed(self) -> Self:
+        if self.allowed_tools is not None:
+            unknown = sorted(set(self.tool_context) - set(self.allowed_tools))
+            if unknown:
+                raise ValueError(f"tool_context names tools outside allowed_tools: {', '.join(unknown)}")
+        _refuse_placeholder_issues(self)
         return self
 
 
@@ -544,6 +586,15 @@ class ProviderToolDefinition(BaseModel):
     """The provider's tool version at import; ``None`` runs the latest."""
     risk: Literal["read", "write", "destructive"] = "write"
     """How risky the action is (D-V5-C7); destructive actions always block."""
+    requires_vars: RequiresVars = []
+    """V6-07: variables that must be set before the action runs."""
+    confirm_readback: ConfirmReadback = []
+    """V6-07: arguments the model reads back to the caller first (adds ``confirmed``)."""
+    bindings: Bindings = []
+    """V6-07: parts of a successful result copied onto the panel or into variables."""
+    pinned_arguments: dict[str, PinnedValue] = Field(default={}, max_length=MAX_PINNED_ARGUMENTS)
+    """V6-07: arguments fixed by the admin, hidden from the model; string values may use
+    ``{{ ctx.* }}`` and ``{{ var.* }}``."""
 
     @model_validator(mode="after")
     def _silent_reply_blocks(self) -> Self:
@@ -554,6 +605,11 @@ class ProviderToolDefinition(BaseModel):
             )
         if self.risk == "destructive" and self.execution.mode in NON_BLOCKING_MODES:
             raise ValueError("a destructive action always runs blocking")
+        return self
+
+    @model_validator(mode="after")
+    def _context_placeholders(self) -> Self:
+        _refuse_placeholder_issues(self)
         return self
 
 

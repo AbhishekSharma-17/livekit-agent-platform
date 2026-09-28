@@ -2,7 +2,7 @@
   "id": "insurance_claim",
   "name": "Insurance claim intake",
   "tagline": "The advanced example: a full code pack for first-notice-of-loss claim intake.",
-  "description": "The full insurance code pack: first-notice-of-loss intake with policy lookup, claim extraction and classification, a document checklist, camera evidence and an incident sketch in a custom notebook panel, plus two seeded knowledge bases. An example of what a code pack adds on top of configuration.",
+  "description": "The full insurance code pack: first-notice-of-loss intake with policy lookup, claim extraction and classification, a document checklist, camera evidence and an incident sketch in a custom notebook panel, plus two seeded knowledge bases. An example of what a code pack adds on top of configuration. Legacy: kept for agents already made from it; new agents start from the Claims intake starter.",
   "category": "example",
   "chips": [
     "code_tools",

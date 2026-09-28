@@ -183,6 +183,16 @@ class TemplatesResponse(BaseModel):
 
 Export: `StarterTemplate`, `TemplateOut`, `TemplatesResponse` join `EXPORTED_MODELS`; the contracts gate (`PLAN-V3` definitions) regenerates the `.d.ts` and the MCP's copies.
 
+### 2.1 V6-22 additions (ask #105)
+
+`StarterTemplate` gains five fields, all empty by default (every earlier entry validates unchanged):
+`extraction` (an `ExtractionConfig`), `rules`, `tests` (`AgentTest` cases) — set on the seeded config before
+any kit, so a kit keeps a field or rule of the same name the starter declares — and `dataset_seeds`
+(`DatasetSeed {name, file, key_columns}`: a lookup table read from `seeds/<file>`) and `kits`
+(`TemplateKit {kit_id, variant, block_prefix, settings, dataset, key_columns, add_test_case}`: a tool kit added
+at create time as `POST /v1/tool-kits/{id}/instantiate` adds it, minus the key and the connected app, which a
+starter never binds).
+
 ## 3. Catalogue layout and loading
 
 ```
@@ -224,6 +234,15 @@ seed_from_template(template, manifest, *, credentials_by_provider, connection) -
 7. **Validate** with `validate_stored_config(pack_id=template.pack_id)`; errors → 422 exactly as today.
 
 `requirements_from_pipeline(pipeline) -> list[RequiredKey]`: every `ProviderRef` in the recommended pipeline whose `ProviderSpec` needs a credential (`realtime`, `stt`, `llm`, `tts`, `avatar`, `image_gen`, `workflow_llm`), with `optional=True` for `avatar`/`image_gen` (the slots seeding drops rather than substitutes). The catalogue test asserts `template.requires.provider_keys == requirements_from_pipeline(template.pipeline or manifest.recommended_pipeline)` so the "Needs keys" badge can never lie.
+
+### 4.1 V6-22: lookup tables and kits (step 6, extended)
+
+After the agent row is flushed, `seed.apply_template_rows` creates, in order: the HTTP tool seeds; each
+`dataset_seeds` table — reused when the workspace has a table of that name that did not fail and keys on the
+same columns, else read like an upload (the same parser and key normalisation, within the dataset quota) and
+stored `ready` in the creation's own transaction (no import job), so validation sees it; then each kit through
+`kit_apply.add_kit_to_new_agent` (the kit endpoint's plan and `POST /v1/tools` checks, without a version of
+its own). The agent is validated once and version 1 is snapshotted as before.
 
 ## 5. The v1 catalogue
 
@@ -313,12 +332,26 @@ Common to every generic-pack template unless stated: `pipeline` = cascaded LiveK
 - **Needs.** Nothing.
 
 ### 5.8 `insurance_claim` — Insurance claim intake (advanced example pack)
+
+Legacy since V6-22: shown only when `LKAP_PACKS` lists `packs.insurance_claim` (no longer the default).
+
 - **Story.** The full code pack: FNOL intake with policy lookup, claim extraction and classification, a document checklist, camera evidence and an incident sketch in a custom notebook panel, plus two seeded knowledge bases. Shown as the **advanced example**, last in the gallery.
 - **Config.** `pack_id: insurance_claim`; every overlay field `None` (the manifest is the whole config: cascaded Inference with the vision LLM, `camera true`, the pack's five disabled built-ins, `google-image-gen` for sketches, two `kb_seeds`, the `insurance_notebook` panel). `category: example`, `order: 900`, `chips: ["code_tools", "knowledge_seeds", "camera", "image_gen"]`.
 - **Gallery.** `sample_prompts`: "I had a small kitchen fire last night.", "My policy number is H0-44721.", "Can I show you the damage on camera?" `next_steps`: "Optional: add a Google key for incident sketches" (providers), "Read the pack's instructions" (instructions), "Make a test call with the camera on".
 - **Needs.** `requires.provider_keys: [{provider_id: "google-image-gen", optional: true, purpose: "incident sketches"}]` → "Needs a key (optional)" badge; the test derives the same list from the manifest's pipeline.
 
 Deferred candidates (not in v1, recorded so nobody re-argues them): `realtime_voice` (Gemini Live / OpenAI Realtime, needs a key — the first template that would show a **required** key badge), `avatar_presenter` (an avatar provider, full worker image), `outbound_reminder` (a `CallCreate`-driven flow with seed variables). See §9.
+
+### 5.9 `claims_intake` — Claims intake (V6-22)
+
+The insurance first-notice-of-loss experience built from the generic pack, blocks and tool kits, no pack
+code (D-V6-21): the Notebook preset (its notebook named `claim_notebook`, so the `structured_intake` kit's
+block and fields land in it), live extraction of the claim facts into the notebook's summary, the rules
+ported from the legacy pack's `rules.py` (claim type → document checklist, safety → escalate, the coverage
+caveat as an `instruct`, the lapsed-policy and high-loss notes, the hand-off note), three kits
+(`record_lookup` on the seeded `Demo — Policy directory` table, `structured_intake`, `notify_escalate`),
+`generate_image` and `pin_frame` in the instructions, two knowledge bases and three FNOL golden test cases.
+`docs/INSURANCE_PACK_MAPPING.md` §5 maps each behaviour.
 
 ## 6. Console: the "New agent" dialog
 

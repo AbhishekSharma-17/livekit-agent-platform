@@ -40,7 +40,7 @@ preset or higher (`agents:write` + `sessions:write` + `connections:read`).
 
 1. **Connect** a LiveKit project: `connection_create(url, api_key,
    api_secret, ...)`, `test_first=true`.
-2. **Build** an agent: `agent_create(pack_id="insurance_claim")` or
+2. **Build** an agent: `agent_create(template_id="claims_intake")` or
    `agent_create(pack_id="generic")` seeds a full config; `agent_update(
    patch={...})` changes it from there.
 3. **Add knowledge and tools**: `kb_create` + `kb_add_document(kb_id, ...)`,

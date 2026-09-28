@@ -1,7 +1,8 @@
 # Recipe: build an insurance intake agent
 
-Goal: a first-notice-of-loss voice agent from the `insurance_claim` pack,
-with a knowledge base and an HTTP tool, tested and published. Do
+Goal: a first-notice-of-loss voice agent from the `claims_intake` starter
+(the generic pack, blocks and tool kits), with a knowledge base and an HTTP
+tool, tested and published. Do
 `connect-livekit` first if there is no connection yet.
 
 ## 1. Create the agent from the starter
@@ -10,20 +11,27 @@ with a knowledge base and an HTTP tool, tested and published. Do
 ```json
 {
   "name": "FNOL intake",
-  "template_id": "insurance_claim",
+  "template_id": "claims_intake",
   "description": "First notice of loss intake for home claims"
 }
 ```
-The `insurance_claim` starter is the full `insurance_claim` code pack, so
-this seeds `config` from its `PackManifest`: the cascaded LiveKit Inference
-pipeline (works with no vendor key), the pack's default greeting and
-instructions, and the two knowledge bases from its `kb_seeds`
-("Insurance policy lines", "Intake playbook"), created, attached and filled
-from the pack's `policy_lines.md` and `intake_playbook.md`. Check `kb_get`
-for `ready` before relying on them. The pack's incident sketches need a
-Google key (`google-image-gen`); it is optional — without one the
+The `claims_intake` starter needs no code pack. It seeds the cascaded
+LiveKit Inference pipeline (works with no vendor key; the model can see the
+camera), a greeting that asks about safety first, the Notebook panel (a claim
+notebook, a drawing board, pictures), live extraction of the claim into the
+notebook's summary, rules that list the documents each kind of claim needs,
+never confirm coverage and hand safety concerns to a person, and three
+test conversations (`agent_tests_run`). It also adds three tool kits: the
+policy lookup (`policy_lookup` on the `Demo — Policy directory` lookup table,
+created once per workspace), the details intake and the hand-over; and two
+knowledge bases ("Claims intake · Policy lines", "Claims intake · Intake
+playbook"). Check `kb_get` for `ready` before relying on them. The sketch
+needs a Google key (`google-image-gen`); it is optional — without one the
 `image_gen` slot is left empty and everything else works. Add it later with
 `provider_key_create`.
+
+The older `insurance_claim` code pack is kept for agents made from it; it
+only appears when the deployment lists it in `LKAP_PACKS`.
 
 ## 2. Add knowledge
 

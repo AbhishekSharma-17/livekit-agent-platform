@@ -556,7 +556,7 @@ async def test_the_fnol_golden_chat_passes_offline_with_every_d_v6_30_behaviour_
         judge_key = Credential(
             provider_id="openai-llm",
             label="judge key",
-            ciphertext=Vault(default_packs.master_key).encrypt({"api_key": "sk-test-placeholder"}),
+            ciphertext=Vault(default_packs.master_key).encrypt({"api_key": "test-placeholder-judge-key"}),
             fingerprint="…test",
         )
         db.add(judge_key)

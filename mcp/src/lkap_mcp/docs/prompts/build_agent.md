@@ -8,7 +8,7 @@ recipes: insurance-intake-agent, generic-assistant
 Build an agent named "{name}" of kind "{kind}".
 
 If `{kind}` is about insurance, claims or first-notice-of-loss, follow the
-"insurance-intake-agent" recipe below (`pack_id="insurance_claim"`).
+"insurance-intake-agent" recipe below (`template_id="claims_intake"`).
 Otherwise follow "generic-assistant" (`pack_id="generic"`). Call `me()`
 first if you have not already this session. After `agent_create`, always
 `agent_validate` before telling the user it's ready, and offer to test it

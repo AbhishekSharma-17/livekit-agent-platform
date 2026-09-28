@@ -228,7 +228,7 @@ def register(registry: Registry) -> None:
             Field(
                 description=(
                     "A starter id from lkap://templates (blank, knowledge_assistant, receptionist, "
-                    "vision_assistant, phone_agent, lead_qualification, survey_intake, insurance_claim); "
+                    "vision_assistant, claims_intake, phone_agent, lead_qualification, survey_intake); "
                     "it seeds the config, knowledge bases and HTTP tools and wins over pack_id"
                 )
             ),

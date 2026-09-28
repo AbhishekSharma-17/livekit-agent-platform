@@ -1,5 +1,14 @@
 # Insurance Claim pack — feature parity mapping (old Gemini Live demo → LKAP pack)
 
+> **Deprecated (V6-22, D-V6-21).** `packs.insurance_claim` ships one more release as the reference and for
+> agents already made from it (`pack_id="insurance_claim"` keeps working unchanged when a deployment lists
+> the pack). It is no longer loaded by default: `LKAP_PACKS` defaults to `packs.generic`, so a deployment
+> that keeps the pack sets `LKAP_PACKS=packs.insurance_claim,packs.generic` on the api and every worker
+> (`docs/RUNBOOK.md` §9.8). New agents start from the **Claims intake** starter
+> (`api/src/lkap_api/templates/catalog/claims_intake/`), built from the generic pack, blocks and tool kits
+> with no pack code; §5 below maps each behaviour. The pack's React panel is gone: `insurance_notebook` is a
+> legacy alias in `web/src/panels/registry.ts` that renders the Notebook preset in the wide layout.
+
 > **Amended (2026-09-18):** per `docs/DECISIONS-W2.md`: #3 greeting is `say()` only when the pipeline has a TTS, else `generate_reply` (D-W2-9d); #4 typed turns go through `platform_text_input_cb` → `on_user_turn_completed` → `generate_reply`, not the SDK's default `TextInputOptions` handler (D-W2-9p); #6 cascaded vision attaches a ≤ 512 px JPEG data URL, one image per LLM call, with auto-degrade (D-W2-8); frame source follows the UI's `set_video_source` selection (D-W2-4); #1/#6 the cascaded LLM slot is `google/gemini-3.5-flash`, the registry's first `supports_video` model, because the camera is on and `google/gemma-4-31b-it` silently ignores images on Inference (D-W2-10).
 
 Source of truth for "old": `../` (`live_demo/server.py`, `live_demo/live_tools.py`, `agent.py`, `policies.py`, `schemas.py`, `policy_directory.py`, `live_demo/app.js`, `index.html`, `styles.css`). Target: `packs/src/packs/insurance_claim/` + `web/src/panels/insurance_notebook/`.
@@ -65,3 +74,31 @@ Parity bar: a claimant can do everything they could do before, on both pipeline 
 ## 4. Pack file inventory (`packs/src/packs/insurance_claim/`)
 
 `pack.py` (PACK, manifest, hooks), `instructions.py`, `schemas.py`, `rules.py`, `policy_directory.py`, `workflow.py`, `tools.py`, `ui_state.py`, `prompts.py` (extraction/classification/sketch prompts), `seeds/policy_lines.md`, `seeds/intake_playbook.md`.
+
+## 5. The pack's behaviours in the Claims intake starter (V6-22, D-V6-30)
+
+The acceptance bar is the caller-visible behaviour, not `rules.py` byte for byte. Each line names the
+generic part that carries it and the test that shows it (`agent/tests/unit/test_claims_intake_golden_v6_22.py`
+drives the worker's real extraction and rules engines; `api/tests/test_claims_intake_v6_22.py` runs the
+golden cases through the V5-29 test runner offline).
+
+| Pack behaviour | In the starter | Shown by |
+|---|---|---|
+| Greeting asks about safety first (`DEFAULT_GREETING`) | The same greeting, `voice.greeting` | `test_the_greeting_asks_about_safety_before_anything_else`; the golden runs' first turn |
+| `lookup_policy` on `policy_directory.py` | Kit `record_lookup` (`variant: dataset`, prefix `policy`) on the seeded `Demo — Policy directory` lookup table (`seeds/policy_directory.csv`, the six `POLICY_RECORDS` rows); key columns `policy_number`, `policyholder_name`, so by number or by name | `test_a_policy_is_found_in_the_lookup_table_by_number_or_by_name_and_shown_on_the_panel`, `test_the_policy_table_finds_a_policy_by_number_or_by_name` |
+| Claim narrative and classification (`workflow.py`, two LLM calls) | Live extraction (`extraction.fields`: the claim facts, `claim_type` as an enum of the six `TYPE_REQUIRED_DOCS` kinds), after every caller turn, shown in the notebook's Summary (`notebook:claim_notebook.summary`) | `test_the_narrative_and_claim_type_reach_the_notebook_summary_on_the_turn_they_are_said` |
+| Required fields → the still-needed list (`validate_required_claim_fields`) | `required: true` on the six blocking facts + `extraction.still_needed: checklist` | same test (the `need_*` items) |
+| Claim type → document checklist (`TYPE_REQUIRED_DOCS`) | Six rules `documents_<type>`: `checklist.set_item` per document, with the reason as the hint | `test_the_claim_type_drives_the_document_checklist_and_the_coverage_caveat`, `test_the_document_rules_are_the_legacy_document_table` |
+| Coverage notes, never a promise | Each claim-type rule's `instruct` (the type's caveat, "I can't confirm coverage"); rule `coverage_caveat` on `var.asked_about_coverage` (fires each time the caller asks); the instructions | `test_a_coverage_question_gets_the_caveat_every_time_it_is_asked` |
+| Injury or unsafe scene → escalate (`SAFE-001`, `SAFE-002`) | Extraction `safety_concern` (boolean: the model judges "no one is hurt" as false, where the pack used negation regexes) + rule `safety_first` (`escalate`, status "Safety review", the emergency-services `instruct`); kit `notify_escalate` for a caller who asks for a person | `test_a_safety_concern_escalates_to_a_person_with_the_emergency_line` |
+| Lapsed policy → human review | Extraction `policy_status` + rule `policy_lapsed` (status, note, `instruct`) | rule in `template.json` |
+| High estimated loss (`LOSS-001`) | Rule `high_loss` on `var.estimated_loss_usd >= 25000` | rule in `template.json` |
+| `draw_incident_sketch` | Built-in `generate_image` into the Pictures gallery; the pack's pen-sketch style is in the instructions (ask #30) | `test_the_sketch_and_the_evidence_photo_are_the_built_in_tools_the_panel_shows` |
+| `pin_evidence_photo` | Built-in `pin_frame` with the caption as the note (camera on) | same test |
+| `sync_claim_packet` → adjuster packet | Rule `packet_ready` (a hand-off note in the notebook's margin once the core facts are in, status "Ready for an adjuster", an `instruct` to summarise and `notebook_write` the full summary into Notes) | `test_the_hand_off_summary_lands_in_the_notebook_once_the_core_facts_are_in` |
+| Two knowledge bases | `kb_seeds` "Claims intake · Policy lines", "Claims intake · Intake playbook" (the same files, the same golden questions) | `test_claims_intake_creates_validates_and_seeds_its_table_kits_and_tests` |
+
+Not carried over: the O-versus-zero repair of `normalize_policy_number` (the lookup table normalises case
+and spaces only; the instructions ask for the number as printed, and the name is the fallback — ask #228),
+the routing decision labels as a separate field (the status stamp carries them), and the adjuster packet
+dialog (the hand-off is a notebook note).

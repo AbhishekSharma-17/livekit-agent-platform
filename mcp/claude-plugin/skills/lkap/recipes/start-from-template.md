@@ -18,11 +18,12 @@ a table and two HTTP tools), `vision_assistant` (camera and screen share),
 `phone_agent` (keypad menu, messages, transfer, QA), `lead_qualification`
 (a qualification flow whose variables reach your CRM through a webhook),
 `survey_intake` (a voice questionnaire with an on-screen form) and
-`insurance_claim` (the advanced example, a full code pack). Each entry's
-`requires` says what the workspace needs: `provider_keys` (none, except an
-optional Google key on `insurance_claim`), `telephony` or
-`webhook_endpoint`. Everything except `insurance_claim` runs on LiveKit
-Inference with no vendor key.
+`claims_intake` (an insurance claim taken in a notebook, built from blocks
+and tool kits). `insurance_claim` (the legacy code pack) appears only when
+the deployment lists that pack in `LKAP_PACKS`. Each entry's `requires` says
+what the workspace needs: `provider_keys` (none, except an optional Google
+key for pictures on `claims_intake`), `telephony` or `webhook_endpoint`.
+Every starter runs on LiveKit Inference with no vendor key.
 
 ## 2. Create the agent
 

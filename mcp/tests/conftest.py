@@ -57,6 +57,9 @@ REQUIRED_ENV: dict[str, str] = {
     "LKAP_MASTER_KEY": "TWk5rQ2mE4b3W6z8n1F0pQhV9xY7cJdKzL5aRtUvWo8=",
     "LKAP_ADMIN_TOKEN": "test-admin",
     "LKAP_SERVICE_TOKEN": "test-service",
+    # V6-22: the api now defaults to the generic pack only; the scratch api lists the legacy
+    # insurance pack too, as a deployment keeping it does, so the code-pack starter tests run.
+    "LKAP_PACKS": "packs.insurance_claim,packs.generic",
 }
 
 #: The console presets (R-V3-9).

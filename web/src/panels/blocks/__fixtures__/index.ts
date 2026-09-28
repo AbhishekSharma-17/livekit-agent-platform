@@ -34,6 +34,7 @@ import kbCitationsState from "./kb_citations.json";
 import layout from "./layout.json";
 import linkState from "./link.json";
 import markdownState from "./markdown.json";
+import notebookState from "./notebook.json";
 import slotsState from "./slots.json";
 import stepsState from "./steps.json";
 import tableState from "./table.json";
@@ -64,6 +65,7 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   link: linkState,
   slots: slotsState,
   cards: cardsState,
+  notebook: notebookState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */
@@ -93,6 +95,8 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   link: { type: "link", state: linkState },
   slots: { type: "slots", state: slotsState },
   cards: { type: "cards", state: cardsState },
+  // V6-08: the notebook state (renderer and scenes come with V6-10); a layout has no state.
+  notebook: { type: "notebook", state: notebookState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -160,6 +164,8 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     payment: linkState,
     inspection: slotsState,
     plans: cardsState,
+    notebook: notebookState,
+    tabs: {},
   };
 }
 

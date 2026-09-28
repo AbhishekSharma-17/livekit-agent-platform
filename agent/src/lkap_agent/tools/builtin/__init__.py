@@ -41,6 +41,8 @@ from .extract_now import build_extract_now_tool
 from .fetch_url import build_fetch_url_tool
 from .generate_image import build_generate_image_tool
 from .http_request import build_http_request_tool
+from .notebook_check import build_notebook_check_tool
+from .notebook_write import build_notebook_write_tool
 from .notify_team import ESCALATION_TIMEOUT_S, build_notify_team_tool, post_team_notification
 from .pin_frame import build_pin_frame_tool
 from .push_note import build_push_note_tool
@@ -87,6 +89,8 @@ __all__ = [
     "build_extract_now_tool",
     "build_generate_image_tool",
     "build_http_request_tool",
+    "build_notebook_check_tool",
+    "build_notebook_write_tool",
     "build_notify_team_tool",
     "build_pin_frame_tool",
     "build_push_note_tool",
@@ -205,6 +209,7 @@ def build_builtin_tools(
         V6-06: `set_checklist` and `check_item` for a `checklist` block;
         `generate_image` when the session has an image model (`ctx.image_gen`,
         from `pipeline.image_gen`) and the panel has a `gallery` block.
+        V6-08: `notebook_write` and `notebook_check` for a `notebook` block.
         V6-13: `extract_now` when `extraction` is on with a `manual` trigger; the
         session's live extraction and rules are built (and start listening) here.
     """
@@ -363,6 +368,11 @@ def build_builtin_tools(
         tools.append(build_check_item_tool(ctx))
     if getattr(ctx, "image_gen", None) is not None and "gallery" in block_types and _want("generate_image"):
         tools.append(build_generate_image_tool(ctx))
+    # V6-08: writing in a notebook block.
+    if "notebook" in block_types and _want("notebook_write"):
+        tools.append(build_notebook_write_tool(ctx))
+    if "notebook" in block_types and _want("notebook_check"):
+        tools.append(build_notebook_check_tool(ctx))
     # V6-13: the session's live extraction and rules listen from here (every session is assembled
     # through this builder before any tool runs); nothing is built for an agent without them.
     from lkap_agent.extraction.session import live_structure, wants_extract_now  # noqa: PLC0415

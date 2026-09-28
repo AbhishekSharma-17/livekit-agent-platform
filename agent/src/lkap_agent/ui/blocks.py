@@ -10,6 +10,12 @@ check a `block_action {name: "edit"}` against the block (a `details` value or a
 `checklist` tick, only with `caller_can_edit`); `caller_edit_message` is the one
 line the model hears, the change fenced as `<untrusted source="caller_edit">`.
 
+Notebooks (V6-08, D-V6-15): `notebook_sections` reads a notebook's sections from its
+config (the order they render in); its state keys each section's content by id, seeded
+empty by `initial_block_state`. A caller may edit a notebook with `caller_can_write`: add
+or change a note in a text section, tick an item, change a details value; never an ink
+section. A `layout` block (D-V6-18) holds no state.
+
 Block state lives in `UiState.blocks[<BlockSpec.id>]` as **plain JSON
 dicts** (never model instances): `FormBlockState.schema_` carries the alias
 `schema`, and `UiSnapshot.model_dump_json()` does not dump by alias, so a
@@ -18,15 +24,19 @@ stored model would put `schema_` on the wire.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
 from lkap_contracts.agent_config import PanelLayout
+from lkap_contracts.blocks import NotebookBlockConfig, NotebookSectionConfig
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.ui_protocol import (
+    CALLER_EDIT_FLAGS,
     EDITABLE_BLOCK_TYPES,
     MAX_CALLER_EDIT_CHARS,
+    MAX_NOTEBOOK_ENTRIES,
     BlockSpec,
     BlockType,
     CaptionsBlockState,
@@ -47,6 +57,8 @@ from lkap_contracts.ui_protocol import (
     KbCitationsBlockState,
     LinkBlockState,
     MarkdownBlockState,
+    NotebookBlockState,
+    NotebookEdit,
     SlotsBlockState,
     StepsBlockState,
     TableBlockState,
@@ -97,6 +109,12 @@ __all__ = [
     "initial_block_state",
     "initial_block_states",
     "jsonable",
+    "NOTEBOOK_ENTRY_ID_PREFIX",
+    "empty_notebook_sections",
+    "new_notebook_entry_id",
+    "notebook_section_ops",
+    "notebook_section_state",
+    "notebook_sections",
     "resolve_block_specs",
     "validate_block_state",
 ]
@@ -134,6 +152,8 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "link": LinkBlockState,
     "slots": SlotsBlockState,
     "cards": CardsBlockState,
+    # V6-08: a notebook's sections (a `layout` holds no state and starts as `{}`).
+    "notebook": NotebookBlockState,
 }
 
 #: `block_action` name a `cards` block sends when the caller taps a card itself (V5-43).
@@ -232,6 +252,9 @@ def initial_block_state(spec: BlockSpec) -> dict[str, Any]:
     model = BLOCK_STATE_MODELS.get(spec.type)
     if model is None:
         return {}
+    if spec.type == "notebook":
+        # V6-08: the config lists the sections; the state keys each one's content by id.
+        return _dump(NotebookBlockState.model_validate({"sections": empty_notebook_sections(spec)}))
     seed = {k: v for k, v in spec.config.items() if _is_field(model, k)}
     if spec.type == "details":
         # `details.fields` (the starting rows) seed `items` with no value yet (V5-08).
@@ -634,7 +657,8 @@ def caller_edit_refusal(spec: BlockSpec | None) -> str | None:
         return "unknown block"
     if spec.type not in EDITABLE_BLOCK_TYPES:
         return f"a {spec.type} block cannot be changed from the page"
-    if spec.config.get("caller_can_edit") is not True:
+    # V6-08: each editable type names its own flag (`caller_can_write` on a notebook).
+    if spec.config.get(CALLER_EDIT_FLAGS.get(spec.type, "caller_can_edit")) is not True:
         return "this block cannot be changed from the page"
     return None
 
@@ -719,7 +743,150 @@ def check_caller_edit(
         new_item = item.model_copy(update={"done": tick.done, "edited_by": "caller"})
         op = UiPatchOp(op="upsert", path="/checklist", value=new_item, key=item.id)
         return CallerEdit(block_type="checklist", envelope_ops=[op], data=ticked)
+    if spec.type == "notebook":
+        return _check_notebook_edit(spec, state, data, now=now)
     return f"a {spec.type} block cannot be changed from the page"  # pragma: no cover - refused earlier
+
+
+def _list_of(content: Mapping[str, Any], key: str) -> list[Any]:
+    value = content.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _check_notebook_edit(
+    spec: BlockSpec, state: Mapping[str, Any], data: Mapping[str, Any], *, now: float
+) -> CallerEdit | str:
+    """A caller's :class:`NotebookEdit` checked against the notebook's sections (V6-08)."""
+    try:
+        edit = NotebookEdit.model_validate(data)
+    except ValidationError:
+        return (
+            "a change names the section and one change: a note of at most "
+            f"{MAX_CALLER_EDIT_CHARS} characters, a tick, or a row's value"
+        )
+    section = next((s for s in notebook_sections(spec) if s.id == edit.section_id), None)
+    if section is None:
+        return f"the notebook has no section {edit.section_id!r}"
+    wanted = {"note": "text", "tick": "checklist", "row": "details"}[edit.change]
+    if section.kind == "ink":
+        return "drawings cannot be changed this way"
+    if section.kind != wanted:
+        return f"the section {section.id!r} holds a {section.kind}, not a {wanted}"
+    title = section.title or section.id
+    content = notebook_section_state(state, section)
+    base = f"/sections/{section.id}"
+    ops = notebook_section_ops(state, section)
+    summary: dict[str, Any] = {"section_id": section.id, "section": title}
+    if edit.change == "tick":
+        items = _list_of(content, "items")
+        item = next((i for i in items if isinstance(i, dict) and i.get("id") == edit.item_id), None)
+        if item is None:
+            return f"the list has no item {edit.item_id!r}"
+        summary.update(item_id=item["id"], label=str(item.get("label") or item["id"]), done=edit.done)
+        if bool(item.get("done")) == edit.done:
+            return CallerEdit(block_type="notebook", data=summary, changed=False)
+        updated = {**item, "done": edit.done, "edited_by": "caller"}
+        ops.append(UiPatchOp(op="upsert", path=f"{base}/items", value=updated, key=item["id"]))
+    elif edit.change == "row":
+        rows = _list_of(content, "items")
+        row = next((r for r in rows if isinstance(r, dict) and r.get("key") == edit.key), None)
+        if row is None:
+            return f"the summary has no row {edit.key!r}"
+        text = _clean_caller_text(edit.value or "")
+        value = _details_value(text, str(row.get("type") or "string"))
+        summary.update(key=row["key"], label=str(row.get("label") or row["key"]), value=text)
+        if row.get("value") == value:
+            return CallerEdit(block_type="notebook", data=summary, changed=False)
+        updated = {**row, "value": value, "updated_at": now, "edited_by": "caller"}
+        ops.append(UiPatchOp(op="upsert", path=f"{base}/items", value=updated, key=row["key"]))
+    else:
+        entries = _list_of(content, "entries")
+        text = _clean_caller_text(edit.text or "")
+        if edit.entry_id is None:
+            if not text:
+                return "write something first"
+            if len(entries) >= MAX_NOTEBOOK_ENTRIES:
+                return "this section is full"
+            entry = {"id": new_notebook_entry_id(), "text": text, "author": "caller", "ts": now}
+            ops.append(UiPatchOp(op="append", path=f"{base}/entries", value=entry))
+            summary.update(key=entry["id"], change="added", text=text)
+        else:
+            current = next((e for e in entries if isinstance(e, dict) and e.get("id") == edit.entry_id), None)
+            if current is None:
+                return f"the section has no note {edit.entry_id!r}"
+            summary.update(key=current["id"])
+            if not text:
+                ops.append(UiPatchOp(op="remove", path=f"{base}/entries", key=current["id"]))
+                summary.update(change="removed", text=_clean_caller_text(str(current.get("text") or "")))
+            elif text == current.get("text"):
+                return CallerEdit(
+                    block_type="notebook", data={**summary, "change": "changed", "text": text}, changed=False
+                )
+            else:
+                edited = "caller" if current.get("author") != "caller" else current.get("edited_by")
+                updated = {**current, "text": text, "edited_by": edited}
+                ops.append(UiPatchOp(op="upsert", path=f"{base}/entries", value=updated, key=current["id"]))
+                summary.update(change="changed", text=text)
+    ops.append(UiPatchOp(op="set", path="/updated_at", value=now))
+    return CallerEdit(block_type="notebook", block_ops=ops, data=summary)
+
+
+# --------------------------------------------------------------------- notebook (V6-08)
+
+#: Prefix of the ids the platform gives notebook entries. Keys the agent chooses never contain
+#: `:` (`notebook_write` refuses one), so an entry's id never matches another entry's key.
+NOTEBOOK_ENTRY_ID_PREFIX: Final[str] = "n:"
+
+
+def new_notebook_entry_id() -> str:
+    """A fresh, unguessable notebook entry id (``n:`` and 10 hex characters)."""
+    return f"{NOTEBOOK_ENTRY_ID_PREFIX}{uuid.uuid4().hex[:10]}"
+
+
+def notebook_sections(spec: BlockSpec) -> list[NotebookSectionConfig]:
+    """The sections a notebook block's config lists, in order (none when the config is invalid)."""
+    try:
+        return list(NotebookBlockConfig.model_validate(spec.config).sections)
+    except ValidationError:
+        logger.warning("notebook config does not validate", block_id=spec.id)
+        return []
+
+
+def _empty_section(section: NotebookSectionConfig) -> dict[str, Any]:
+    match section.kind:
+        case "text":
+            return {"kind": "text", "entries": []}
+        case "checklist" | "details":
+            return {"kind": section.kind, "items": []}
+        case _:
+            return {"kind": "ink", "canvas_block_id": None}
+
+
+def empty_notebook_sections(spec: BlockSpec) -> dict[str, Any]:
+    """The empty content of every section of a notebook block, keyed by section id."""
+    return {section.id: _empty_section(section) for section in notebook_sections(spec)}
+
+
+def notebook_section_state(state: Mapping[str, Any], section: NotebookSectionConfig) -> dict[str, Any]:
+    """A section's current content, or its empty content when the state lacks it or it has another kind."""
+    sections = state.get("sections")
+    content = sections.get(section.id) if isinstance(sections, dict) else None
+    if isinstance(content, dict) and content.get("kind") == section.kind:
+        return content
+    return _empty_section(section)
+
+
+def notebook_section_ops(state: Mapping[str, Any], section: NotebookSectionConfig) -> list[UiPatchOp]:
+    """Ops (relative to the block) that give `section` its empty content when the state lacks it.
+
+    A config changed after the session started, or a state written before it, may miss a
+    section or hold another kind under its id; writing into it starts it afresh.
+    """
+    sections = state.get("sections")
+    content = sections.get(section.id) if isinstance(sections, dict) else None
+    if isinstance(content, dict) and content.get("kind") == section.kind:
+        return []
+    return [UiPatchOp(op="set", path=f"/sections/{section.id}", value=_empty_section(section))]
 
 
 def caller_edit_message(spec: BlockSpec, data: Mapping[str, Any]) -> str:
@@ -730,7 +897,9 @@ def caller_edit_message(spec: BlockSpec, data: Mapping[str, Any]) -> str:
     """
     label = str(data.get("label") or data.get("key") or data.get("item_id") or "")
     where = spec.title or spec.id
-    if spec.type == "checklist":
+    if spec.type == "notebook":
+        change = _notebook_change(where, data)
+    elif spec.type == "checklist":
         change = f'ticked "{label}"' if data.get("done") else f'unticked "{label}"'
         change += f" on the checklist {where}"
     else:
@@ -741,6 +910,29 @@ def caller_edit_message(spec: BlockSpec, data: Mapping[str, Any]) -> str:
         f"[The caller edited the panel on screen: {body}. Take it into account, confirm it with "
         "the caller if it matters, and carry on.]"
     )
+
+
+def _notebook_change(where: str, data: Mapping[str, Any]) -> str:
+    """What a caller's notebook edit did, in words (V6-08); the caller's text is quoted as is."""
+    section = f'the notebook section "{data.get("section") or data.get("section_id") or ""}"'
+    if "item_id" in data:
+        label = str(data.get("label") or data.get("item_id"))
+        verb = "ticked" if data.get("done") else "unticked"
+        return f'{verb} "{label}" in {section} of {where}'
+    if "value" in data:
+        label = str(data.get("label") or data.get("key"))
+        value = str(data.get("value") or "")
+        if value:
+            return f'changed "{label}" in {section} of {where} to "{value}"'
+        return f'cleared "{label}" in {section} of {where}'
+    text = str(data.get("text") or "")
+    match data.get("change"):
+        case "added":
+            return f'added a note to {section} of {where}: "{text}"'
+        case "removed":
+            return f'removed the note "{text}" from {section} of {where}'
+        case _:
+            return f'changed a note in {section} of {where} to "{text}"'
 
 
 def _dump(instance: BaseModel) -> dict[str, Any]:

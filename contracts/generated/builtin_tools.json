@@ -18,7 +18,9 @@
     "resolve_slot",
     "show_cards",
     "set_checklist",
-    "check_item"
+    "check_item",
+    "notebook_write",
+    "notebook_check"
   ],
   "block_tool_types": {
     "check_item": [
@@ -38,8 +40,10 @@
       "gallery",
       "handoff",
       "kb_citations",
+      "layout",
       "link",
       "markdown",
+      "notebook",
       "notes",
       "slots",
       "status",
@@ -48,6 +52,12 @@
       "transcript",
       "upload",
       "video"
+    ],
+    "notebook_check": [
+      "notebook"
+    ],
+    "notebook_write": [
+      "notebook"
     ],
     "record_consent": [
       "consent"
@@ -152,6 +162,8 @@
   "write_builtins": [
     "check_item",
     "generate_image",
+    "notebook_check",
+    "notebook_write",
     "notify_team",
     "send_sms",
     "set_checklist"

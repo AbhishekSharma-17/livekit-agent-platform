@@ -24,6 +24,23 @@
     { "id": "handoff", "type": "handoff", "title": "Talking to a person", "config": { "show_queue": true }, "order": 19 },
     { "id": "payment", "type": "link", "title": "Payment", "config": { "allowed_hosts": ["example.com"] }, "order": 20 },
     { "id": "inspection", "type": "slots", "title": "Book an inspection", "config": {}, "order": 21 },
-    { "id": "plans", "type": "cards", "title": "Your options", "config": { "image_hosts": ["example.com"] }, "order": 22 }
+    { "id": "plans", "type": "cards", "title": "Your options", "config": { "image_hosts": ["example.com"] }, "order": 22 },
+    {
+      "id": "notebook",
+      "type": "notebook",
+      "title": "Notebook",
+      "config": {
+        "font": "handwritten",
+        "sections": [
+          { "id": "notes", "title": "Notes", "kind": "text" },
+          { "id": "still_needed", "title": "Still needed", "kind": "checklist" },
+          { "id": "summary", "title": "Summary", "kind": "details" },
+          { "id": "sketch", "title": "Sketch", "kind": "ink" }
+        ],
+        "caller_can_write": true
+      },
+      "order": 23
+    },
+    { "id": "tabs", "type": "layout", "title": null, "config": { "kind": "tabs", "children": [{ "block_id": "claim", "label": "Claim" }, { "block_id": "recap", "label": "Recap" }] }, "order": 24 }
   ]
 }

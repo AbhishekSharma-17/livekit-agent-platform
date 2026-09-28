@@ -5,7 +5,7 @@ instead of the default four-block layout.
 
 ## 1. Design the block list
 
-Pick from the sixteen block types (`lkap_explain("panels-and-blocks")`); a
+Pick from the block types (`lkap_explain("panels-and-blocks")`); a
 support-triage agent might want a checklist, a table it appends to, and the
 transcript with tool calls visible:
 
@@ -56,6 +56,24 @@ where the caller is might add the newer blocks instead:
 The agent gets `request_choice` / `resolve_choice`, `set_details` and
 `show_text` for them; the `steps` block follows the agent's flow on its own
 (give it `"source": "manual"` and it gets `set_steps` instead).
+
+To keep the card and the recap in one place, add a `layout` block that shows
+them as tabs (the two blocks stay in the list; the layout only claims them):
+`{"id": "claim_tabs", "type": "layout", "config": {"kind": "tabs", "children":
+[{"block_id": "claim_details", "label": "Claim"}, {"block_id": "recap", "label":
+"Recap"}]}}`.
+
+### Or start from the Notebook
+
+A note-taking agent can take the ready-made Notebook panel instead (a wide
+panel: a status stamp, a notebook with Notes, Still needed, Summary and Sketch
+sections that the caller may write in too, and a gallery). The agent gets
+`notebook_write` and `notebook_check`:
+
+`agent_update(...)`
+```json
+{ "id_or_slug": "<agent>", "panel_preset": "notebook" }
+```
 
 ## 2. Validate
 

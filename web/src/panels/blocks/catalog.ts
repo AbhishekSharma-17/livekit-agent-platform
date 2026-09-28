@@ -45,6 +45,8 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "link",
   "slots",
   "cards",
+  "notebook",
+  "layout",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -76,7 +78,9 @@ export type BlockToolName =
   | "resolve_slot"
   | "show_cards"
   | "set_checklist"
-  | "check_item";
+  | "check_item"
+  | "notebook_write"
+  | "notebook_check";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -125,6 +129,9 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   // V6-06
   set_checklist: new Set<BlockType>(["checklist"]),
   check_item: new Set<BlockType>(["checklist"]),
+  // V6-08
+  notebook_write: new Set<BlockType>(["notebook"]),
+  notebook_check: new Set<BlockType>(["notebook"]),
 };
 
 /** One field of a block's config form. */
@@ -291,6 +298,26 @@ export const CARDS_LAYOUTS = [
   { value: "carousel", label: "Carousel" },
   { value: "grid", label: "Grid" },
   { value: "list", label: "List" },
+] as const;
+
+/** `notebook.paper` values (V6-08). */
+export const NOTEBOOK_PAPERS = [
+  { value: "plain", label: "Plain" },
+  { value: "ruled", label: "Ruled" },
+  { value: "grid", label: "Grid" },
+  { value: "legal", label: "Legal pad" },
+] as const;
+
+/** `notebook.font` values (V6-08): typed notes in a handwriting font are a look, not real handwriting. */
+export const NOTEBOOK_FONTS = [
+  { value: "print", label: "Print" },
+  { value: "handwritten", label: "Handwriting" },
+] as const;
+
+/** `layout.kind` values (V6-08). */
+export const LAYOUT_KINDS = [
+  { value: "tabs", label: "Tabs" },
+  { value: "columns", label: "Side by side" },
 ] as const;
 
 /** `DetailsItem.type` (`contracts/generated/schemas/BlockConfig_details.schema.json`). */
@@ -661,6 +688,62 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       },
     ],
     filledBy: "show_cards",
+  },
+  // V6-08: minimal entries (PLAN-V5 §0.1, R-V5-7); the renderers, the section and child
+  // editors and previews come with V6-10.
+  notebook: {
+    type: "notebook",
+    label: "Notebook",
+    description: "A notebook the agent writes in as the call goes: notes, a checklist, a summary and a drawing board.",
+    defaultTitle: "Notebook",
+    idStem: "notebook",
+    configFields: [
+      { key: "paper", label: "Paper", kind: "select", default: "ruled", options: NOTEBOOK_PAPERS },
+      { key: "font", label: "Writing", kind: "select", default: "print", options: NOTEBOOK_FONTS },
+      {
+        key: "sections",
+        label: "Sections",
+        kind: "list",
+        hint: "What the notebook holds, in order: notes, a checklist, a summary card or a drawing board.",
+        default: [{ id: "notes", title: "Notes", kind: "text" }],
+        itemKeys: ["id", "title", "kind"],
+      },
+      {
+        key: "caller_can_write",
+        label: "The caller can write in it",
+        kind: "boolean",
+        hint: "The caller can add notes, tick items and change values. The agent is told about each change.",
+        default: false,
+      },
+      {
+        key: "caller_can_draw",
+        label: "The caller can draw",
+        kind: "boolean",
+        hint: "Drawing is not available yet.",
+        default: false,
+      },
+    ],
+    filledBy: "notebook_write",
+  },
+  layout: {
+    type: "layout",
+    label: "Tabs or columns",
+    description: "Shows other blocks of the panel as tabs or side by side.",
+    defaultTitle: null,
+    idStem: "layout",
+    configFields: [
+      { key: "kind", label: "Show as", kind: "select", default: "tabs", options: LAYOUT_KINDS },
+      {
+        key: "children",
+        label: "Blocks inside",
+        kind: "list",
+        hint: "Other blocks of this panel to show here. Each block can be inside one of these only.",
+        default: [],
+        itemKeys: ["block_id", "label"],
+      },
+      { key: "columns", label: "Columns", kind: "integer", hint: "Used when shown side by side.", default: 2, min: 2 },
+    ],
+    filledBy: "the blocks you put in it",
   },
 };
 

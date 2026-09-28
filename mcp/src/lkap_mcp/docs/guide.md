@@ -30,7 +30,9 @@ bases** (`kb_create`, `kb_add_document`; own stores `kb_connection_create`;
 golden questions `kb_evals_set`, `kb_evaluate`), a
 **panel** (composite blocks, or a pack's own UI; a checklist block brings
 `set_checklist`, a gallery plus a picture model brings `generate_image`, and
-`caller_can_edit` lets callers change a details or checklist block) and, optionally, a **flow**
+`caller_can_edit` lets callers change a details or checklist block; a notebook
+block brings `notebook_write`, `agent_update(panel_preset="notebook")` sets up the
+Notebook panel, and a layout block shows blocks as tabs or columns) and, optionally, a **flow**
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
 ...})`). Agents produce **sessions** (`session_list`, `session_get`,
 `session_memory`), which carry a transcript, QA score, cost lines and (if

@@ -407,7 +407,9 @@
             "handoff",
             "link",
             "slots",
-            "cards"
+            "cards",
+            "notebook",
+            "layout"
           ],
           "title": "Type",
           "type": "string"

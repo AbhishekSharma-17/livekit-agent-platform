@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "BlockSpec": {
+      "description": "One block of a composite panel (CONTRACTS-V2 §4.4).\n\n``id`` keys the block's state in :attr:`UiState.blocks`; ``config`` is\nblock-type specific and rendered by the matching React component.",
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Config",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "type": {
+          "enum": [
+            "status",
+            "notes",
+            "checklist",
+            "activity",
+            "form",
+            "document",
+            "gallery",
+            "table",
+            "transcript",
+            "video",
+            "kb_citations",
+            "custom",
+            "choices",
+            "details",
+            "markdown",
+            "steps",
+            "consent",
+            "upload",
+            "captions",
+            "handoff",
+            "link",
+            "slots",
+            "cards",
+            "notebook",
+            "layout"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "BlockSpec",
+      "type": "object"
+    },
+    "PanelLayout": {
+      "description": "Which panel renders the session, and (for ``composite``) its blocks.",
+      "properties": {
+        "accept_state_delta": {
+          "default": false,
+          "description": "Let the caller's page change what some panel blocks show (V5-43, ruling on ask #309). On, the page may send an AG-UI `STATE_DELTA` (`AgentAction.action == \"state_delta\"`) that writes the display blocks `update_block` may write, except `kb_citations` and `custom`; requestable, link, consent, upload, captions and handoff blocks are never writable from the page. Off (the default), every such change is refused, so the page cannot alter what `describe_panel` hands the model or what the console's live view shows.",
+          "title": "Accept State Delta",
+          "type": "boolean"
+        },
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BlockSpec"
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "layout": {
+          "default": "side",
+          "enum": [
+            "side",
+            "wide"
+          ],
+          "title": "Layout",
+          "type": "string"
+        },
+        "panel_id": {
+          "default": "composite",
+          "title": "Panel Id",
+          "type": "string"
+        }
+      },
+      "title": "PanelLayout",
+      "type": "object"
+    },
+    "PanelPreset": {
+      "description": "A ready-made panel a builder can start from (V6-08): ``GET /v1/panels/presets``.\n\nChoosing one replaces the agent's ``panel`` with ``panel`` (a copy); the builder\nthen changes it like any other panel.",
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "panel": {
+          "$ref": "#/$defs/PanelLayout"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "panel"
+      ],
+      "title": "PanelPreset",
+      "type": "object"
+    }
+  },
+  "$id": "lkap-contracts/PanelPresetsResponse.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``GET /v1/panels/presets``: the ready-made panels, in the order the console offers them.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/PanelPreset"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "PanelPresetsResponse",
+  "type": "object"
+}

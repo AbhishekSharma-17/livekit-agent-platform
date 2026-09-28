@@ -22,6 +22,8 @@ import {
   CalendarClockIcon,
   GalleryHorizontalIcon,
   LinkIcon,
+  NotebookPenIcon,
+  PanelsTopLeftIcon,
   ClipboardListIcon,
   FileTextIcon,
   GaugeIcon,
@@ -93,6 +95,8 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   link: LinkIcon,
   slots: CalendarClockIcon,
   cards: GalleryHorizontalIcon,
+  notebook: NotebookPenIcon,
+  layout: PanelsTopLeftIcon,
 };
 
 /**

@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Any, Literal
 
-from lkap_contracts.agent_config import AgentConfig, AgentLimits
+from lkap_contracts.agent_config import AgentConfig, AgentLimits, panel_preset
 from lkap_contracts.common import Issue
 from lkap_contracts.flow import FlowSpec
 from lkap_contracts.tool_providers import AppsMode, AppsRouterOptions
@@ -167,6 +167,12 @@ def run_next_steps(agent: dict[str, Any], run: dict[str, Any]) -> list[str]:
             return [f'agent_tests_result("{ref}", run_id="{run.get("id")}", include_transcripts=true)']
 
 
+def panel_preset_layout(preset_id: str) -> dict[str, Any] | None:
+    """The ready-made panel ``preset_id`` as config JSON (V6-08), or ``None`` when there is none."""
+    layout = panel_preset(preset_id)
+    return layout.model_dump(mode="json") if layout is not None else None
+
+
 def register(registry: Registry) -> None:
     """Declare the agent tools."""
     ctx = registry.ctx
@@ -300,6 +306,15 @@ def register(registry: Registry) -> None:
         name: str | None = None,
         description: str | None = None,
         connection_id: str | None = None,
+        panel_preset: Annotated[
+            Literal["notebook"] | None,
+            Field(
+                description=(
+                    "A ready-made panel (GET /v1/panels/presets) that replaces the agent's panel: "
+                    '"notebook" is a wide panel with a status stamp, a notebook and a gallery'
+                )
+            ),
+        ] = None,
         validate_first: bool = True,
         save_with_errors: bool = False,
         plan: bool = False,
@@ -317,12 +332,19 @@ def register(registry: Registry) -> None:
         ``patch={"locale": {"caller_timezone": "business"}}`` makes the agent use it for the
         caller too instead of detecting the caller's own zone (``detect``, the default).
 
+        Ready-made panels (docs ``concepts/panels-and-blocks``): ``panel_preset="notebook"`` replaces
+        ``panel`` with the Notebook preset; it combines with a ``patch`` that has no ``panel`` key.
         Live extraction and rules (docs ``concepts/extraction``): ``patch={"extraction": {"enabled":
         true, "fields": [...]}, "rules": [{"id", "when": "var.hazard matches /fire/i", "then": [...]}]}``
         captures facts into the session's variables in the background and reacts to them.
         """
         if patch is not None and config is not None:
             return ToolResult.fail("invalid_input", "pass either patch or config, not both")
+        preset = panel_preset_layout(panel_preset) if panel_preset is not None else None
+        if preset is not None and ("panel" in (patch or {}) or config is not None):
+            return ToolResult.fail(
+                "invalid_input", "pass panel_preset or a panel (in patch or config), not both"
+            )
         agent = await resolve_agent(client, id_or_slug)
         body: dict[str, Any] = {
             key: value
@@ -333,12 +355,14 @@ def register(registry: Registry) -> None:
             }.items()
             if value is not None
         }
-        if patch is not None or config is not None:
+        if patch is not None or config is not None or preset is not None:
             candidate = (
-                merge_patch(agent.get("config") or {}, patch)
-                if patch is not None
-                else config.model_dump(mode="json")  # type: ignore[union-attr]
+                merge_patch(agent.get("config") or {}, patch or {})
+                if config is None
+                else config.model_dump(mode="json")
             )
+            if preset is not None:
+                candidate["panel"] = preset
             if validate_first and not save_with_errors:
                 try:
                     AgentConfig.model_validate(candidate)
@@ -351,7 +375,8 @@ def register(registry: Registry) -> None:
             body["config"] = candidate
         if not body:
             return ToolResult.fail(
-                "invalid_input", "nothing to change: pass patch, config, name, description or connection_id"
+                "invalid_input",
+                "nothing to change: pass patch, config, panel_preset, name, description or connection_id",
             )
         path = f"/v1/agents/{seg(agent['id'])}"
         if plan:

@@ -69,6 +69,8 @@ describe("toPublicAgent", () => {
       ui_panel_id: "generic",
       capabilities: { camera: true, screen_share: false },
       pipeline_mode: "realtime",
+      // V6-26b: no avatar configured → no framing hints.
+      avatar_framing: null,
       // R-V2-7: the stored layout; a block panel with no blocks shows the default four.
       panel: {
         panel_id: "composite",

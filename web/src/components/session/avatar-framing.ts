@@ -21,6 +21,8 @@
  */
 import * as React from "react";
 
+import type { AgentAvatarFraming } from "@/contracts/lkap-contracts";
+
 /** `AvatarOptions.framing` (`contracts/src/lkap_contracts/agent_config.py`). */
 export type AvatarFraming = "auto" | "portrait" | "landscape" | "square";
 
@@ -96,6 +98,29 @@ export function resolveFrame({
     return { aspectRatio: ASPECT_RATIO_FOR[declaredAspect], objectFit, objectPosition, measured: false };
   }
   return { aspectRatio: DEFAULT_ASPECT_RATIO, objectFit, objectPosition, measured: false };
+}
+
+/** The framing props `SessionRoom` hands to `AgentStage` → `StageView`. */
+export interface StageAvatarFraming {
+  framing?: AvatarFraming | null;
+  fit?: AvatarFit | null;
+  declaredAspect?: AvatarFraming | null;
+}
+
+/**
+ * V6-26b (docs/v6/_asks.md #151): `AgentPublicOut.avatar_framing` → the stage's
+ * props. `null`/absent (no avatar, or an api older than V6-26b) yields
+ * `undefined`, i.e. the crop-free `auto` + `contain` default.
+ */
+export function stageAvatarFraming(
+  value: AgentAvatarFraming | null | undefined,
+): StageAvatarFraming | undefined {
+  if (!value) return undefined;
+  return {
+    framing: value.framing ?? null,
+    fit: value.fit ?? null,
+    declaredAspect: value.declared_aspect ?? null,
+  };
 }
 
 /** CSS `aspect-ratio` value as a string, e.g. `"1.7777777777777777"` — a number is valid CSS. */

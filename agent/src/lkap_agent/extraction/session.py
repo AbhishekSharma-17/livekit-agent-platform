@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Mapping
 from typing import Any, Final
 
 from livekit.agents import llm as lk_llm
@@ -161,13 +162,22 @@ class LiveStructure:
 
     def on_function_tools_executed(self, ev: Any) -> None:
         """Record the tools' outcomes, run a ``tool`` trigger, re-evaluate the rules."""
-        names: set[str] = set()
+        outcomes: dict[str, bool] = {}
         try:
             for call, output in ev.zipped():
-                self._outcomes[call.name] = not bool(getattr(output, "is_error", False))
-                names.add(call.name)
+                outcomes[call.name] = not bool(getattr(output, "is_error", False))
         except Exception:
             _log.debug("live_structure.tool_outcomes_failed", exc_info=True)
+        self.on_tool_outcomes(outcomes)
+
+    def on_tool_outcomes(self, outcomes: Mapping[str, bool]) -> None:
+        """Record tool outcomes (``True`` = succeeded), run a ``tool`` trigger, re-evaluate the rules.
+
+        The model's calls arrive through :meth:`on_function_tools_executed`; a flow ``tool``
+        step, which runs with no model turn, calls this directly (V6-17).
+        """
+        self._outcomes.update(outcomes)
+        names = set(outcomes)
         if self.runner is not None and names & self._tool_triggers:
             self.request("tool")
         elif self.engine is not None and names:

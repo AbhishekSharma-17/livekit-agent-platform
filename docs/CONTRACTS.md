@@ -886,6 +886,26 @@ The condition grammar (`rules_expr.parse_condition` → a frozen-dataclass tree,
 
 Validation rules (api, at save): every `ProviderRef.provider_id` exists and matches the slot kind; `credential_id` present iff required and credential's `provider_id` matches; `model` in `spec.models` **or** free text (warn, not error — Inference lists churn); a realtime provider whose `spec.capabilities.video_input` is false combined with `capabilities.camera`/`screen_share` = warning (the model will not see frames; frames still reach the UI/pin path); avatar works with both modes.
 
+### Flow `tool` node (V6-17, D-V6-28; `lkap_contracts.flow`)
+
+```python
+NodeKind = Literal["start", "agent", "end", "global", "transfer", "qa", "tool"]
+
+class ToolNode(NodeBase):                   # kind="tool"
+    tool: str                               # the `name` of an attached tool row (config.tools.tool_ids)
+    mcp_tool: str | None = None             # an MCP server row: the one server tool to call
+    arguments: dict[str, str | int | float | bool | None] = {}   # ≤ 20; text may use {{ var.* }} / {{ ctx.* }}
+    bindings: list[ToolBinding] = []        # ≤ 20, V6-07's targets (var:, details:, table:, checklist:, status, note)
+    timeout_s: float = 10                   # 0 < t ≤ 30
+    on: ToolNodeOutcomes = {}               # {ok, error, empty} → edge ids leaving this node
+```
+
+Structure (`FlowSpec`, and `draft_flow_issues` with paths): `on.ok` is required; each named edge exists and leaves the node; every edge leaving a tool node is named by an outcome (its `condition` is not used); no loop consists of tool nodes only (`tool_only_cycles`). `argument_template_issues` refuses a bare `{{ name }}`, an unknown `ctx.` name or a bad variable name. `NODE_ID_PATTERN` and `VARIABLE_NAME_PATTERN` live in `common` (re-exported by `flow`) so `flow` can import `tool_context`.
+
+Worker (`agent/flow/tool_node.py`, `FlowRuntime.transition`): entering a tool node speaks the incoming edge's `transition_speech`, settles pending extractions, renders the arguments in V6-07's single pass (a text that is exactly `{{ var.x }}` passes the stored value as is; a missing value is `error` and nothing is called; `confirmed` is never supplied), then runs the tool through livekit-agents' `execute_function_call` with a standalone `RunContext` on the session (the tool's own checks, execution policy, output guardrail and fence apply; the node waits up to `timeout_s`; an MCP row gets a toolset built for the one call). Outcome: `error` (raised, refused, timed out, not in the session), `empty` (a result that is nothing, `null`, blank, `[]` or `{}`, or bindings of which none found a value), else `ok`. The node's `bindings` apply to the unfenced, parsed result; the result text never reaches the model (bound variables reach later instructions fenced as `tool_binding`). The runtime takes `on.<outcome>` (`empty` falls back to `ok`); a tool node after a tool node runs in the same transition (at most 10). `error` without an `error` edge: a `flow_error` event `{node, tool, outcome, reason, message}`, the fixed apology `TOOL_STEP_FAILED_LINE`, and the job ends. A `start` node whose single edge leads to a tool node greets, then takes it itself (no edge tool, no routing instruction). Records: `handoff` into and out of the node (`reason` = the incoming reason, then the outcome), `tool_call_started {call_id, tool, args_redacted (the templates, never rendered values), flow_node}`, `tool_call_ended {…, status, outcome, reason, flow_node}`, an activity row, and the outcome for the rules engine's `tool.<name>.ok` (`LiveStructure.on_tool_outcomes`).
+
+Api (`lkap_api.flows.validation`): `tool` must be an attached row (a built-in or pack name is an error); an MCP row needs `mcp_tool` from its `allowed_tools` (else `cached_tools`), any other row must not have one; a tool with `confirm_readback` cannot be a step (error); a `var:` binding must name a flow variable or an extraction field (error); binding blocks as V6-07; a `{{ var.* }}` nothing sets, an argument the tool lacks, a required argument not given and a missing `error` path are warnings. `GET /v1/flows/node-specs` lists the node as "Tool step".
+
 ---
 
 ## 7. API endpoints (`lkap_api`) — request/response models in `lkap_contracts.api_models`

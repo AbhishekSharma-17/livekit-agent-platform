@@ -38,7 +38,24 @@ one `start`) before saving — this call never writes anything.
 The agent's mode becomes `"flow"` automatically; `agent_get` now returns
 `config.flow` populated.
 
-## 3. Test, then decide
+## 3. Optional: look the record up without a model turn
+
+Once a lookup tool is attached (`add-http-tool`), a `tool` node calls it
+as soon as the caller has given the number, stores what it found and
+branches on the outcome. Add it between `collect` and `wrap_up`:
+```json
+{ "id": "lookup", "kind": "tool", "tool": "<your lookup tool's name>",
+  "arguments": { "policy": "{{ var.policy_number }}" },
+  "bindings": [ { "path": "/holder", "to": "var:holder" } ],
+  "on": { "ok": "found", "empty": "not_found", "error": "lookup_failed" } }
+```
+Point edge `e2` at `lookup` instead of `wrap_up`, add three edges leaving
+`lookup` — `found` (to `wrap_up`), `not_found` (back to `collect`) and
+`lookup_failed` (to `wrap_up`); no condition needed — and declare `holder`
+under `variables`. `agent_flow_validate` says which tool
+names the step may use and warns when there is no `error` path.
+
+## 4. Test, then decide
 
 Run `test-and-publish`. To go back to a prompt agent later:
 `agent_update(patch={"flow": null})`.

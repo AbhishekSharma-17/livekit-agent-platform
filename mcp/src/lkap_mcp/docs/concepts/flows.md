@@ -29,6 +29,25 @@ database and run in `agent_validate`/`agent_flow_validate`.
 - `qa` — a post-call scoring step (`rubric_prompt`); never part of the
   conversational graph itself, only referenced by the QA resolution rule
   (`lkap_explain("qa-and-evals")`).
+- `tool` — calls one of the agent's attached tools the moment the flow
+  reaches it, with no model turn, then branches on the outcome. Fields:
+  `tool` (the tool row's `name`; for an MCP server also `mcp_tool`, the one
+  server tool to call), `arguments` (literals, or text with
+  `{{ var.<name> }}` / `{{ ctx.<name> }}`; exactly `{{ var.<name> }}` passes
+  the value as it is), `bindings` (as a tool's own: `var:<name>`,
+  `details:<block>.<key>`, `table:<block>`, `status`, `note`,
+  `checklist:<item>`), `timeout_s` (≤ 30) and `on: {ok, error, empty}` —
+  edge ids. `empty` means the tool succeeded but returned nothing, or no
+  binding found a value; without an `empty` edge the `ok` edge is taken.
+  Without an `error` edge a failure ends the call with a short apology and a
+  `flow_error` session event. The result never reaches the model: later
+  steps read what the bindings stored (`{{ holder }}` in instructions,
+  fenced as tool data). A tool with `confirm_readback` cannot be a step (it
+  must read values to the caller first); a missing variable is `error`.
+  Every edge leaving a `tool` node must be named in `on`, its `condition`
+  is ignored, and a loop of `tool` nodes with no `agent` node in it is
+  refused. A `start` node whose only edge leads to a `tool` node greets,
+  then runs it.
 
 Both `tools` (a `global`/`agent` node's tool-name list) and a node's `kb_ids`
 name built-in tools, block tools, pack tools or the `name` of a
@@ -57,4 +76,4 @@ of the conversation, referenced from instructions as `{{ name }}`.
 ## Related schemas
 
 `FlowSpec`, `FlowEdge`, `FlowState`, `VariableSpec`, `StartNode`,
-`AgentNode`, `EndNode`, `GlobalNode`, `TransferNode`, `QaNode`.
+`AgentNode`, `EndNode`, `GlobalNode`, `TransferNode`, `QaNode`, `ToolNode`.

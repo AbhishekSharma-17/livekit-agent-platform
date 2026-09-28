@@ -10,12 +10,22 @@ from __future__ import annotations
 from typing import Final
 
 from lkap_contracts.api_models import NodeSpecSchema, NodeSpecsResponse
-from lkap_contracts.flow import AgentNode, EndNode, GlobalNode, NodeBase, QaNode, StartNode, TransferNode
+from lkap_contracts.flow import (
+    AgentNode,
+    EndNode,
+    GlobalNode,
+    NodeBase,
+    QaNode,
+    StartNode,
+    ToolNode,
+    TransferNode,
+)
 
 #: Every node kind in palette order, with its builder label.
 NODE_KINDS: Final[tuple[tuple[str, str, type[NodeBase]], ...]] = (
     ("start", "Start", StartNode),
     ("agent", "Agent step", AgentNode),
+    ("tool", "Tool step", ToolNode),
     ("end", "End", EndNode),
     ("transfer", "Transfer", TransferNode),
     ("global", "Global rules", GlobalNode),

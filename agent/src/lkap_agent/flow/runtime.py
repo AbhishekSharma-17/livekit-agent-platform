@@ -32,6 +32,12 @@ installed SDK):
   background with the session's `workflow_llm`; the next node waits for it
   (bounded) in `on_enter`, then renders its `{{ name }}` placeholders and the
   "already collected" block before it speaks.
+* **Tool nodes** (V6-17, D-V6-28) never become an agent: taking an edge to one runs its
+  tool inside the same transition, with no model turn (:mod:`lkap_agent.flow.tool_node`),
+  then follows the edge its `on` names for the outcome — to an agent node (a normal
+  handoff), an end or transfer node, or another tool node. `error` with no `error` edge
+  records `flow_error` and ends the call with a short apology. A start node whose only
+  edge leads to a tool node greets, then takes that edge itself (:meth:`follow_start_edge`).
 * **End nodes** end the call from the tool: the pending extraction settles,
   `FlowState.disposition` is set, the farewell is spoken and awaited, then the
   job shuts down (the same route as the `end_call` built-in).
@@ -82,6 +88,7 @@ from lkap_contracts.flow import (
     FlowState,
     GlobalNode,
     StartNode,
+    ToolNode,
     TransferNode,
     VariableSpec,
     edge_tool_name,
@@ -92,6 +99,7 @@ from packs.base import Pack
 from lkap_agent.flow.edges import build_edge_tools, condition_clause, group_edges_by_target
 from lkap_agent.flow.providers import NodeProviders
 from lkap_agent.flow.state import ScopedKbClient, attach_flow_state
+from lkap_agent.flow.tool_node import ToolNodeExecutor, ToolNodeResult
 from lkap_agent.flow.variables import (
     VariableValue,
     extract_variables,
@@ -116,10 +124,12 @@ CALLER_TIMEZONE_VARIABLE = "caller_timezone"
 __all__ = [
     "CANCELLED_BY_STEP_CHANGE",
     "EXTRACTION_TIMEOUT_S",
+    "MAX_TOOL_CHAIN",
     "NO_CONDITION_CLAUSE",
     "ROUTER_INSTRUCTIONS",
     "SETTLE_TIMEOUT_S",
     "TEARDOWN_SETTLE_TIMEOUT_S",
+    "TOOL_STEP_FAILED_LINE",
     "TRANSITION_RULE",
     "ConversationNode",
     "FlowRuntime",
@@ -141,6 +151,8 @@ SETTLE_TIMEOUT_S: Final[float] = 6.0
 TEARDOWN_SETTLE_TIMEOUT_S: Final[float] = 4.0
 #: Upper bound on awaiting the end node's farewell playout.
 _FAREWELL_PLAYOUT_TIMEOUT_S: Final[float] = 30.0
+#: Upper bound on waiting for `AgentSession.start` before the start node hands off (V6-17).
+_START_WAIT_S: Final[float] = 15.0
 
 #: `custom` blocks with this `config.kind` mirror the flow position (CONTRACTS-V2 §4.5).
 FLOW_PROGRESS_KIND: Final[str] = "flow_progress"
@@ -162,6 +174,15 @@ CANCELLED_BY_STEP_CHANGE: Final[str] = (
     "Cancelled: the conversation moved to the next step before this lookup finished. "
     "Call it again if the caller still needs it."
 )
+
+#: What the caller hears when a tool step fails and the flow has no `error` path (V6-17).
+TOOL_STEP_FAILED_LINE: Final[str] = (
+    "I'm sorry, something went wrong on our side and I can't continue this call right now. "
+    "Please try again a little later."
+)
+#: Most tool steps one transition runs back to back (a backstop: the contract refuses loops of
+#: tool steps with no agent step).
+MAX_TOOL_CHAIN: Final[int] = 10
 
 #: A node that talks: an agent node, or the start node acting as a router.
 ConversationNode = AgentNode | StartNode
@@ -253,6 +274,7 @@ class FlowRuntime:
         self._global = next((n for n in spec.nodes if isinstance(n, GlobalNode)), None)
         self._specs: dict[str, VariableSpec] = {v.name: v for v in spec.variables}
         order = {edge.id: index for index, edge in enumerate(spec.edges)}
+        self._edges_by_id: dict[str, FlowEdge] = {edge.id: edge for edge in spec.edges}
         self._out: dict[str, list[FlowEdge]] = {}
         for edge in sorted(spec.edges, key=lambda e: (-e.priority, order[e.id])):
             self._out.setdefault(edge.source, []).append(edge)
@@ -273,6 +295,17 @@ class FlowRuntime:
             if name:
                 self._tools_by_name.setdefault(name, tool)
         self._mcp_by_name = {d.name: d for d in services.mcp_definitions}
+        # V6-17: `tool` steps call the agent's attached tools by name, with no model turn.
+        self._tool_steps = ToolNodeExecutor(
+            ctx=ctx,
+            definitions={d.name: d for d in services.resolved.tools},
+            tools_by_name=self._tools_by_name,
+            mcp_servers_builder=services.mcp_servers_builder,
+            record_event=self._record,
+        )
+        #: V6-17: the start node's one edge when it leads to a tool step; the start node then
+        #: greets and takes it itself, with no routing turn (:meth:`follow_start_edge`).
+        self._start_edge: FlowEdge | None = None
         self._allowed_kb_ids = set(services.resolved.kb_ids)
         #: R-V4-29: whether any global/agent node narrows knowledge; if none does, every node
         #: searches all of the agent's resolved knowledge bases.
@@ -322,7 +355,14 @@ class FlowRuntime:
                 return self.build_node_agent(
                     target, chat_ctx=None, entry=True, handoff=(self._start.id, edges[0].id, "start")
                 )
+            if isinstance(target, ToolNode):
+                # V6-17: the start node greets, then runs the tool step itself (no routing turn).
+                self._start_edge = edges[0]
         return self.build_node_agent(self._start, chat_ctx=None, entry=True, handoff=None)
+
+    def start_edge_for(self, node: ConversationNode) -> FlowEdge | None:
+        """The edge the start node takes on its own after greeting (its single edge, to a tool step)."""
+        return self._start_edge if node.id == self._start.id else None
 
     def build_node_agent(
         self,
@@ -376,11 +416,12 @@ class FlowRuntime:
             parts.append(
                 render_template(self._global.instructions, variables, missing=unknown, untrusted=untrusted)
             )
+        auto = self.start_edge_for(node) is not None
         if isinstance(node, AgentNode):
             parts.append(render_template(node.instructions, variables, missing=unknown, untrusted=untrusted))
-        else:
+        elif not auto:
             parts.append(ROUTER_INSTRUCTIONS)
-        edges = self._out.get(node.id)
+        edges = None if auto else self._out.get(node.id)
         if edges:
             parts.append(
                 f"Conversation flow: you are in the step '{node.label or node.id}'. "
@@ -427,7 +468,8 @@ class FlowRuntime:
                     node=node.id,
                     tool=name,
                 )
-        tools.extend(build_edge_tools(self, node.id, self._out.get(node.id, [])))
+        if self.start_edge_for(node) is None:
+            tools.extend(build_edge_tools(self, node.id, self._out.get(node.id, [])))
         return tools
 
     def mcp_toolsets_for(self, node: ConversationNode) -> list[Any]:
@@ -544,6 +586,12 @@ class FlowRuntime:
         logger.info(
             "flow transition", source=source.node.id, target=target.id, edge_id=edge.id, reason=reason
         )
+        if isinstance(target, ToolNode):
+            # V6-17: run the tool step(s) with no model turn, then go on along the outcome's edge.
+            landed = await self._run_tool_steps(source, edge, target, reason)
+            if landed is None:
+                return None
+            edge, target, reason = landed
         match target:
             case AgentNode() | StartNode():
                 if edge.transition_speech:
@@ -555,7 +603,7 @@ class FlowRuntime:
                     target,
                     chat_ctx=source.chat_ctx,
                     entry=False,
-                    handoff=(source.node.id, edge.id, reason),
+                    handoff=(edge.source, edge.id, reason),
                 )
             case EndNode():
                 await self._finish(source, target, edge, reason)
@@ -736,28 +784,106 @@ class FlowRuntime:
             self._caller_node = result
             source.session.update_agent(result)
 
+    async def follow_start_edge(self, source: FlowNodeAgent) -> None:
+        """The start node's own step to its tool step (V6-17), after the greeting; no model turn."""
+        edge = self.start_edge_for(source.node)
+        if edge is None or self._finished:
+            return
+        result = await self.transition(source, edge, reason="start")
+        if result is not None and not isinstance(result, str):
+            self._caller_node = result
+            # `on_enter` runs inside `session.start()`; a hand-off before the session counts as
+            # started would only swap the agent without starting it (livekit-agents 1.8.3).
+            await _session_started(source.session)
+            source.session.update_agent(result)
+
+    # ------------------------------------------------------------ tool steps
+
+    async def _run_tool_steps(
+        self, source: FlowNodeAgent, edge: FlowEdge, node: ToolNode, reason: str
+    ) -> tuple[FlowEdge, FlowNode, str] | None:
+        """Run `node` (and any tool steps straight after it); where the flow goes next (V6-17).
+
+        Each step: its incoming edge's `transition_speech` is spoken first (variables filled
+        in; spoken, so never fenced), pending extractions settle (the arguments usually name
+        what the previous step collected), the tool runs (:class:`ToolNodeExecutor`), and the
+        edge the node names for the outcome is taken. `handoff` events record the step's entry
+        and exit like any other node's.
+
+        Returns:
+            `(edge, target, reason)` for the first node that is not a tool step (the caller
+            enters it as usual, `reason` being the last outcome), or `None` when the flow ended
+            here: an `error` with no `error` path (:meth:`_fail_tool_step`).
+        """
+        for _ in range(MAX_TOOL_CHAIN):
+            if edge.transition_speech:
+                self._speak(render_template(edge.transition_speech, self.state.variables))
+            self.state.current_node = node.id
+            self.state.path.append(node.id)
+            entry = {"from": edge.source, "to": node.id, "edge_id": edge.id, "reason": reason}
+            self._record("handoff", entry)
+            self.publish_progress()
+            await self.settle()
+            result = await self._tool_steps.run(node)
+            edge_id = node.on.edge_for(result.outcome)
+            next_edge = self._edges_by_id.get(edge_id) if edge_id else None
+            target = self._nodes.get(next_edge.target) if next_edge is not None else None
+            if next_edge is None or target is None or next_edge.source != node.id:
+                await self._fail_tool_step(node, result)
+                return None
+            edge, reason = next_edge, result.outcome
+            if not isinstance(target, ToolNode):
+                return edge, target, reason
+            node = target
+        logger.warning("flow ran too many tool steps in a row", node=node.id, limit=MAX_TOOL_CHAIN)
+        await self._fail_tool_step(
+            node, ToolNodeResult("error", "too_many_steps", node.mcp_tool or node.tool, call_id="")
+        )
+        return None
+
+    async def _fail_tool_step(self, node: ToolNode, result: ToolNodeResult) -> None:
+        """A tool step failed with no `error` path: `flow_error`, a short apology, the call ends."""
+        self._finished = True
+        await self.settle()
+        payload = {
+            "node": node.id,
+            "tool": result.tool,
+            "outcome": result.outcome,
+            "reason": result.reason,
+            "message": "the tool step failed and the flow has no error path",
+        }
+        self._record("flow_error", payload)
+        logger.warning("flow tool step failed with no error path; ending the call", node=node.id)
+        self.publish_progress()
+        await self._end_call([TOOL_STEP_FAILED_LINE], f"flow tool step {node.id} failed")
+
     async def _finish(self, source: FlowNodeAgent, end: EndNode, edge: FlowEdge, reason: str) -> None:
         self._finished = True
         await self.settle()
         self.state.current_node = end.id
         self.state.path.append(end.id)
         self.state.disposition = end.disposition
-        self._record("handoff", {"from": source.node.id, "to": end.id, "edge_id": edge.id, "reason": reason})
+        self._record("handoff", {"from": edge.source, "to": end.id, "edge_id": edge.id, "reason": reason})
         logger.info("flow reached an end node", node=end.id, disposition=end.disposition)
         self.publish_progress()
         texts = [edge.transition_speech, end.farewell]
-        for text in texts:
-            if not text:
-                continue
-            handle = self._speak(render_template(text, self.state.variables))
+        await self._end_call(
+            [render_template(text, self.state.variables) for text in texts if text],
+            f"flow reached end node {end.id}",
+        )
+
+    async def _end_call(self, lines: list[str], reason: str) -> None:
+        """Speak `lines` (each awaited, bounded), then end the job."""
+        for text in lines:
+            handle = self._speak(text)
             if handle is not None and inspect.isawaitable(handle):
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(_await(handle), _FAREWELL_PLAYOUT_TIMEOUT_S)
         shutdown = self.services.shutdown or _default_shutdown
         try:
-            shutdown(f"flow reached end node {end.id}")
+            shutdown(reason)
         except Exception:
-            logger.warning("could not end the job after the flow's end node", exc_info=True)
+            logger.warning("could not end the job after the flow ended", exc_info=True)
 
     async def _transfer(self, source: FlowNodeAgent, node: TransferNode, edge: FlowEdge, reason: str) -> Any:
         handler = self.services.transfer
@@ -773,7 +899,7 @@ class FlowRuntime:
             self._speak(render_template(node.announce, self.state.variables))
         self.state.current_node = node.id
         self.state.path.append(node.id)
-        self._record("handoff", {"from": source.node.id, "to": node.id, "edge_id": edge.id, "reason": reason})
+        self._record("handoff", {"from": edge.source, "to": node.id, "edge_id": edge.id, "reason": reason})
         try:
             started = await handler(node, self.state)
         except Exception as exc:
@@ -941,6 +1067,31 @@ class FlowRuntime:
             return
         self._warned.add(key)
         logger.warning(message, **fields)
+
+
+async def _session_started(session: Any, timeout_s: float = _START_WAIT_S) -> None:
+    """Wait (bounded) until the session has left `initializing` (`AgentSession.start` finished).
+
+    livekit-agents 1.8.3 marks the session started, then sets the agent state to `listening`,
+    with no await in between, so the first state change after `initializing` means started.
+    """
+    if getattr(session, "agent_state", None) != "initializing":
+        return
+    loop = asyncio.get_running_loop()
+    started: asyncio.Future[None] = loop.create_future()
+
+    def _on_state(ev: Any) -> None:
+        if getattr(ev, "new_state", None) != "initializing" and not started.done():
+            started.set_result(None)
+
+    session.on("agent_state_changed", _on_state)
+    try:
+        if getattr(session, "agent_state", None) == "initializing":
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(started, timeout_s)
+    finally:
+        with contextlib.suppress(Exception):
+            session.off("agent_state_changed", _on_state)
 
 
 def _audio_output_on(session: Any) -> bool:

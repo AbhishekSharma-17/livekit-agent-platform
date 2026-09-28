@@ -125,6 +125,9 @@ class FlowNodeAgent(PlatformAgent):
         await self.refresh_instructions()
         if self._entry:
             await super().on_enter()
+            if self._runtime.start_edge_for(self._node) is not None:
+                # V6-17: a start node whose one edge leads to a tool step takes it itself.
+                self._runtime.spawn(self._runtime.follow_start_edge(self))
             return
         self.session.generate_reply()
 

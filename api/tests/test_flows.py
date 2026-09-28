@@ -80,7 +80,7 @@ async def test_node_specs_list_every_kind_with_its_schema(admin_client: httpx.As
 
     assert response.status_code == 200
     body = response.json()
-    assert [n["kind"] for n in body["nodes"]] == ["start", "agent", "end", "transfer", "global", "qa"]
+    assert [n["kind"] for n in body["nodes"]] == ["start", "agent", "tool", "end", "transfer", "global", "qa"]
     agent = next(n for n in body["nodes"] if n["kind"] == "agent")
     assert set(agent["json_schema"]["properties"]) == set(AgentNode.model_fields)
 

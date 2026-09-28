@@ -2,8 +2,22 @@
   "$defs": {
     "NotebookSectionConfig": {
       "additionalProperties": false,
-      "description": "One section of a ``notebook``: its id (what the tools name), heading and kind (V6-08).",
+      "description": "One section of a ``notebook``: its id (what the tools name), heading and kind (V6-08).\n\nV6-12: an ``ink`` section shows the panel's ``canvas`` block named by ``canvas_block_id``\n(the console draws the board inside the notebook, not in the panel's flow;\n:func:`canvas_claim_issues` checks it). Left empty, the section has no board yet. Only an\n``ink`` section may name one.",
       "properties": {
+        "canvas_block_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canvas Block Id"
+        },
         "id": {
           "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
           "title": "Id",
@@ -37,7 +51,7 @@
   "$id": "lkap-contracts/BlockConfig_notebook.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "``notebook``: a sectioned notebook the agent writes in, and the caller may too (V6-08, D-V6-15).\n\n``sections`` lists what the notebook holds, in order: ``text`` notes\n(``notebook_write``), a ``checklist`` (``notebook_write`` then ``notebook_check``), a\n``details`` card (``notebook_write`` with fields) or an ``ink`` drawing board (the\n``canvas`` block of V6-12; until then it shows \"Drawing board coming soon\").\n``caller_can_write`` lets the caller add and change notes, tick items and change\nvalues on screen; the agent is told about each change (as data, never as\ninstructions). ``caller_can_draw`` is reserved for the drawing board (V6-12).",
+  "description": "``notebook``: a sectioned notebook the agent writes in, and the caller may too (V6-08, D-V6-15).\n\n``sections`` lists what the notebook holds, in order: ``text`` notes\n(``notebook_write``), a ``checklist`` (``notebook_write`` then ``notebook_check``), a\n``details`` card (``notebook_write`` with fields) or an ``ink`` drawing board (the\n``canvas`` block its ``canvas_block_id`` names, V6-12; without one it shows \"Drawing\nboard coming soon\").\n``caller_can_write`` lets the caller add and change notes, tick items and change\nvalues on screen; the agent is told about each change (as data, never as\ninstructions). ``caller_can_draw`` (V6-12) lets the caller draw on the boards its\n``ink`` sections show, as the board's own ``caller_can_draw`` does\n(:func:`canvas_caller_can_draw`).",
   "properties": {
     "caller_can_draw": {
       "default": false,

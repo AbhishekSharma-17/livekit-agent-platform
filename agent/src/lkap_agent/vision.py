@@ -23,6 +23,12 @@ V5-19 adds :func:`describe_image`, the schema-constrained vision call behind
 validated against the task's schema and one repair round when it does not fit.
 The image is untrusted (a caller sent it): the prompt says text inside it is
 data, and the answer can only fill the schema's fields.
+
+V6-12 adds the ``read_drawing`` task behind ``read_canvas``: a drawing board the caller
+wrote or sketched on (a PNG the page renders), read with a handwriting-oriented prompt into
+``{text, description}``. It is not one of ``describe_asset``'s tasks (its tool schema is
+unchanged). The "locate" half of the card (boxes from ``describe_current_frame``) is not
+built: nobody verified that a vision model returns usable normalised boxes (ask #95).
 """
 
 from __future__ import annotations
@@ -48,6 +54,7 @@ from lkap_agent.logging import get_logger
 __all__ = [
     "ID_DOCUMENT_FIELDS",
     "DescribeTask",
+    "VisionTask",
     "ExtractField",
     "FrameBuffer",
     "VisionAnswerError",
@@ -244,6 +251,8 @@ def encode_jpeg_data_url(frame: rtc.VideoFrame, max_px: int = 512) -> str:
 
 #: What `describe_asset` is asked to do with a stored image.
 DescribeTask = Literal["describe", "extract_fields", "extract_id"]
+#: Every task `describe_image` runs: `describe_asset`'s, and `read_drawing` (`read_canvas`, V6-12).
+VisionTask = Literal["describe", "extract_fields", "extract_id", "read_drawing"]
 #: The value types an extracted field may have (a date is an ISO `YYYY-MM-DD` string).
 ExtractFieldType = Literal["string", "number", "date", "boolean"]
 
@@ -288,13 +297,25 @@ _DESCRIBE_FIELDS: Final[tuple[ExtractField, ...]] = (
     ExtractField(name="description", description="what the image shows, in two or three sentences"),
 )
 
+#: V6-12: what `read_drawing` reads off a drawing board.
+DRAWING_FIELDS: Final[tuple[ExtractField, ...]] = (
+    ExtractField(
+        name="text",
+        description=(
+            "every word, number and symbol written by hand, in reading order, exactly as written "
+            "(keep digits and letters exactly); null when nothing is written"
+        ),
+    ),
+    ExtractField(name="description", description="what is drawn or marked, in one or two sentences"),
+)
+
 
 class VisionAnswerError(RuntimeError):
     """The model's answer did not match the schema even after the repair round, or the image is unreadable."""
 
 
 def task_schema(
-    task: DescribeTask, fields: Sequence[ExtractField] = ()
+    task: VisionTask, fields: Sequence[ExtractField] = ()
 ) -> tuple[type[BaseModel], dict[str, Any]]:
     """The answer model and JSON schema of a `describe_asset` task.
 
@@ -309,6 +330,8 @@ def task_schema(
             chosen: Sequence[ExtractField] = _DESCRIBE_FIELDS
         case "extract_id":
             chosen = ID_DOCUMENT_FIELDS
+        case "read_drawing":
+            chosen = DRAWING_FIELDS
         case _:
             chosen = fields
             names = [f.name for f in chosen]
@@ -362,12 +385,18 @@ async def _complete(model: llm.LLM[Any], chat_ctx: llm.ChatContext) -> str:
     return "".join(parts)
 
 
-def _task_instructions(task: DescribeTask, question: str) -> str:
+def _task_instructions(task: VisionTask, question: str) -> str:
     match task:
         case "describe":
             line = "Describe what the image shows."
         case "extract_id":
             line = "The image should be an identity document. Read the fields of the schema off it."
+        case "read_drawing":
+            line = (
+                "The image is a drawing board the caller wrote or sketched on by hand, perhaps over a "
+                "photo; red marks were drawn by the assistant. Read the handwriting carefully, character "
+                "by character, and say what is drawn."
+            )
         case _:
             line = "Read the fields of the schema off the image."
     if question.strip():
@@ -380,7 +409,7 @@ async def describe_image(
     data: bytes,
     mime: str,
     *,
-    task: DescribeTask = "describe",
+    task: VisionTask = "describe",
     fields: Sequence[ExtractField] = (),
     question: str = "",
     timeout_s: float = 45.0,
@@ -392,7 +421,7 @@ async def describe_image(
         model: The agent's cascaded LLM (it must accept images).
         data: The image bytes (a stored session file).
         mime: Its sniffed type.
-        task: `describe`, `extract_fields` (with `fields`) or `extract_id`.
+        task: `describe`, `extract_fields` (with `fields`), `extract_id` or `read_drawing`.
         fields: The fields for `extract_fields`.
         question: An optional focus for the model.
         timeout_s: Per model call.

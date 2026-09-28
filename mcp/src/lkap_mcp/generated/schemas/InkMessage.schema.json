@@ -1,0 +1,88 @@
+{
+  "$id": "lkap-contracts/InkMessage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One message on :data:`TOPIC_UI_INK` (V6-12, D-V6-16): a piece of the caller's drawing.\n\n* ``add`` — ``stroke_id`` and at least one point. A new id starts a stroke (``tool``,\n  ``color`` and ``width`` are taken from this first message); the id of a stroke the\n  caller already drew continues it, its points appended (a long stroke is sent in pieces).\n* ``erase`` — ``stroke_id`` of one of the caller's strokes, no points.\n* ``clear`` — no points: every stroke of the caller on the block goes.\n\nAt most :data:`MAX_INK_MESSAGE_BYTES` of JSON and :data:`MAX_INK_POINTS_PER_MESSAGE`\npoints; the page batches a stroke's points (about every 50 ms) rather than sending each\none. Strict: an unknown key, text, or a point outside 0..1 makes the whole message dropped.",
+  "properties": {
+    "block_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Block Id",
+      "type": "string"
+    },
+    "color": {
+      "default": "#1f2937",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "title": "Color",
+      "type": "string"
+    },
+    "op": {
+      "default": "add",
+      "enum": [
+        "add",
+        "erase",
+        "clear"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "points": {
+      "default": [],
+      "items": {
+        "items": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "maxItems": 3,
+        "minItems": 2,
+        "type": "array"
+      },
+      "maxItems": 128,
+      "title": "Points",
+      "type": "array"
+    },
+    "stroke_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stroke Id"
+    },
+    "tool": {
+      "default": "pen",
+      "enum": [
+        "pen",
+        "highlighter",
+        "box",
+        "arrow"
+      ],
+      "title": "Tool",
+      "type": "string"
+    },
+    "v": {
+      "const": 1,
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    },
+    "width": {
+      "default": 3,
+      "maximum": 40,
+      "minimum": 0.5,
+      "title": "Width",
+      "type": "number"
+    }
+  },
+  "required": [
+    "block_id"
+  ],
+  "title": "InkMessage",
+  "type": "object"
+}

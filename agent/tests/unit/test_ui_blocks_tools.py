@@ -126,6 +126,8 @@ def test_block_tools_registered_only_for_blocks_that_need_them() -> None:
         BlockSpec(id="todo", type="checklist", order=15),
         # V6-08: the notebook tools.
         BlockSpec(id="book", type="notebook", order=16),
+        # V6-12: the canvas tools.
+        BlockSpec(id="board", type="canvas", order=17),
     ]
     ctx, _ch, _room = _ctx([*BLOCKS, *wave10])
     names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}

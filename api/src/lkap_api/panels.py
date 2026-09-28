@@ -41,6 +41,12 @@ V6-08: the ``notebook`` and ``layout`` configs are checked the same way; a noteb
 block's children are checked across the panel (:func:`lkap_contracts.blocks.layout_issues`:
 a child that does not exist, the layout itself, another layout, or a block already claimed
 by a layout is an error at ``panel.blocks[i].config.children[j].block_id``).
+
+V6-12: the ``canvas`` config is checked the same way; a notebook ``ink`` section's
+``canvas_block_id`` must name a canvas of the panel shown nowhere else
+(:func:`lkap_contracts.blocks.canvas_claim_issues`, an error at
+``panel.blocks[i].config.sections[j].canvas_block_id``); and a board the caller may draw on,
+on an agent set up for phone calls, gets the phone tip (:data:`DRAWING_ON_PHONE_MESSAGE`).
 """
 
 from __future__ import annotations
@@ -48,7 +54,12 @@ from __future__ import annotations
 from typing import Final
 
 from lkap_contracts.agent_config import AgentConfig, PanelLayout
-from lkap_contracts.blocks import layout_issues, validate_panel_block_configs
+from lkap_contracts.blocks import (
+    canvas_caller_can_draw,
+    canvas_claim_issues,
+    layout_issues,
+    validate_panel_block_configs,
+)
 from lkap_contracts.common import Issue
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.ui_protocol import CALLER_EDIT_FLAGS, EDITABLE_BLOCK_TYPES
@@ -65,6 +76,11 @@ LINK_ON_PHONE_MESSAGE: Final[str] = (
 #: A block the caller may edit on an agent set up for phone calls (V6-06, a tip).
 CALLER_EDIT_ON_PHONE_MESSAGE: Final[str] = (
     "Tip: callers on a phone line cannot see the panel, so only callers on the web page can change this block"
+)
+#: A drawing board the caller may draw on, on an agent set up for phone calls (V6-12, a tip).
+DRAWING_ON_PHONE_MESSAGE: Final[str] = (
+    "Tip: callers on a phone line cannot see the drawing board, so only callers on the web page can "
+    "draw on it"
 )
 #: A picture model on a panel with no gallery block (V6-06, a tip).
 PICTURES_NEED_A_GALLERY_MESSAGE: Final[str] = (
@@ -121,6 +137,8 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
     issues = validate_panel_block_configs(ctx.config.panel.blocks)
     # V6-08 (D-V6-18): what each layout block claims, across the panel.
     issues += layout_issues(ctx.config.panel.blocks)
+    # V6-12 (ask #57): which board each notebook ink section shows.
+    issues += canvas_claim_issues(ctx.config.panel.blocks)
     config = ctx.config
     on_phone = config.capabilities.dtmf or bool(config.telephony.transfer_targets)
     if on_phone and config.tools.sms is None:
@@ -139,6 +157,15 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
             )
             for index, block in enumerate(config.panel.blocks)
             if block.type in EDITABLE_BLOCK_TYPES and block.config.get(CALLER_EDIT_FLAGS[block.type]) is True
+        ]
+        issues += [
+            Issue(
+                path=f"panel.blocks[{index}].config.caller_can_draw",
+                message=DRAWING_ON_PHONE_MESSAGE,
+                severity="warning",
+            )
+            for index, block in enumerate(config.panel.blocks)
+            if block.type == "canvas" and canvas_caller_can_draw(block.id, config.panel.blocks)
         ]
     panel = config.panel
     if (

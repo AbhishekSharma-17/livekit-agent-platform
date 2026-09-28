@@ -45,10 +45,16 @@ schemas by a vitest parity test):
   (``print`` / ``handwritten``: typed notes in a handwriting font are a theme, not ink),
   ``sections: [{id, title, kind}]`` (``text`` / ``checklist`` / ``details`` / ``ink``),
   ``caller_can_write`` (the caller may add and change notes, tick items and change
-  values) and ``caller_can_draw`` (reserved for the drawing board, V6-12) (V6-08);
+  values) and ``caller_can_draw`` (the caller may draw on the boards of its ``ink``
+  sections) (V6-08); V6-12: an ``ink`` section names its board with ``canvas_block_id``;
 * ``layout`` → ``kind`` (``tabs`` / ``columns``), ``children: [{block_id, label}]``
   (other top-level blocks of the panel, shown inside this one) and ``columns`` (2 or 3)
   (V6-08, D-V6-18); :func:`layout_issues` checks the children across the panel;
+* ``canvas`` → ``caller_can_draw``, ``tools`` (``pen`` / ``highlighter`` / ``eraser`` /
+  ``box`` / ``arrow`` / ``text``), ``background`` (``none`` / ``asset`` / ``live_camera``),
+  ``max_strokes`` (≤ 2,000) and ``signature_mode`` (V6-12, D-V6-16);
+  :func:`canvas_claim_issues` checks which notebook ``ink`` section shows each board and
+  :func:`canvas_caller_can_draw` is the one "may the caller draw here" rule;
 * ``custom`` → ``kind`` (e.g. ``"flow_progress"``, R-V2-14) plus any
   pack-declared JSON, which is public too.
 
@@ -63,16 +69,27 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable, Sequence
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from lkap_contracts.common import Issue
 from lkap_contracts.compliance import MAX_CONSENT_TEXT_CHARS, ConsentDeclineAction, ConsentKind
 from lkap_contracts.providers import LANGUAGE_CODE_PATTERN
 from lkap_contracts.ui_protocol import (
+    DEFAULT_CANVAS_STROKES,
     DEFAULT_UPLOAD_MAX_BYTES,
     MAX_ALLOWED_HOSTS,
+    MAX_CANVAS_STROKES,
     MAX_CARDS,
     MAX_NOTEBOOK_SECTIONS,
     MAX_UPLOAD_BYTES,
@@ -88,10 +105,15 @@ from lkap_contracts.ui_protocol import (
 
 __all__ = [
     "BLOCK_CONFIG_MODELS",
+    "CANVAS_TOOLS",
+    "DEFAULT_CANVAS_TOOLS",
     "DEFAULT_UPLOAD_ACCEPT",
     "MAX_LAYOUT_CHILDREN",
     "UPLOAD_EXTENSIONS",
     "UPLOAD_MIME_TYPES",
+    "CanvasBackground",
+    "CanvasBlockConfig",
+    "CanvasTool",
     "CaptionsBlockConfig",
     "CardsBlockConfig",
     "ChecklistBlockConfig",
@@ -121,6 +143,9 @@ __all__ = [
     "VideoBlockConfig",
     "accept_allows",
     "block_config_schema_name",
+    "canvas_caller_can_draw",
+    "canvas_claim_issues",
+    "canvas_host",
     "layout_issues",
     "safe_filename",
     "sniff_mime",
@@ -512,11 +537,38 @@ NotebookFont = Literal["print", "handwritten"]
 
 
 class NotebookSectionConfig(_StrictConfig):
-    """One section of a ``notebook``: its id (what the tools name), heading and kind (V6-08)."""
+    """One section of a ``notebook``: its id (what the tools name), heading and kind (V6-08).
+
+    V6-12: an ``ink`` section shows the panel's ``canvas`` block named by ``canvas_block_id``
+    (the console draws the board inside the notebook, not in the panel's flow;
+    :func:`canvas_claim_issues` checks it). Left empty, the section has no board yet. Only an
+    ``ink`` section may name one.
+    """
 
     id: str = Field(pattern=NOTEBOOK_ID_PATTERN)
     title: str = Field(default="", max_length=80)
     kind: NotebookSectionKind = "text"
+    canvas_block_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @model_serializer(mode="wrap")
+    def _omit_no_board(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave ``canvas_block_id`` off while it is unset, so a section dumps as before V6-12."""
+        data: dict[str, Any] = handler(self)
+        if data.get("canvas_block_id") is None:
+            data.pop("canvas_block_id", None)
+        return data
+
+    @field_validator("canvas_block_id", mode="before")
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        """The composer's empty field means "no board yet"."""
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def _board_only_on_ink(self) -> NotebookSectionConfig:
+        if self.canvas_block_id is not None and self.kind != "ink":
+            raise ValueError("only an ink section shows a drawing board (canvas_block_id)")
+        return self
 
 
 class NotebookBlockConfig(_StrictConfig):
@@ -525,10 +577,13 @@ class NotebookBlockConfig(_StrictConfig):
     ``sections`` lists what the notebook holds, in order: ``text`` notes
     (``notebook_write``), a ``checklist`` (``notebook_write`` then ``notebook_check``), a
     ``details`` card (``notebook_write`` with fields) or an ``ink`` drawing board (the
-    ``canvas`` block of V6-12; until then it shows "Drawing board coming soon").
+    ``canvas`` block its ``canvas_block_id`` names, V6-12; without one it shows "Drawing
+    board coming soon").
     ``caller_can_write`` lets the caller add and change notes, tick items and change
     values on screen; the agent is told about each change (as data, never as
-    instructions). ``caller_can_draw`` is reserved for the drawing board (V6-12).
+    instructions). ``caller_can_draw`` (V6-12) lets the caller draw on the boards its
+    ``ink`` sections show, as the board's own ``caller_can_draw`` does
+    (:func:`canvas_caller_can_draw`).
     """
 
     paper: NotebookPaper = "ruled"
@@ -576,6 +631,46 @@ class LayoutBlockConfig(_StrictConfig):
     columns: Literal[2, 3] = 2
 
 
+#: What the drawing board offers the caller (V6-12): ``pen``, ``highlighter``, ``eraser``
+#: (removes a whole stroke), ``box`` and ``arrow`` (drawn by hand). ``text`` is reserved: a
+#: stroke never carries text (D-V6-16), so the board draws no typed labels yet.
+CanvasTool = Literal["pen", "highlighter", "eraser", "box", "arrow", "text"]
+CANVAS_TOOLS: Final[tuple[str, ...]] = get_args(CanvasTool)
+#: ``tools`` of a canvas whose config sets none.
+DEFAULT_CANVAS_TOOLS: Final[tuple[CanvasTool, ...]] = ("pen", "highlighter", "eraser")
+#: What a board starts on: ``none`` (blank paper), ``asset`` (a picture the agent puts on it:
+#: a pinned frame or a gallery picture, ``pin_frame`` / ``draw_on_canvas``), or ``live_camera``
+#: (the marks overlay the caller's camera).
+CanvasBackground = Literal["none", "asset", "live_camera"]
+
+
+class CanvasBlockConfig(_StrictConfig):
+    """``canvas``: a drawing board the caller writes on and the agent marks up (V6-12, D-V6-16).
+
+    ``caller_can_draw`` lets the caller draw (their strokes reach the worker on
+    ``lkap.ui.ink``; the agent reads them with ``read_canvas``, a picture read by its vision
+    model); without it only the agent draws (``draw_on_canvas``). ``tools`` is what the board
+    offers the caller; ``max_strokes`` how many strokes the board holds before it says it is
+    full (at most 2,000). ``background`` is what the board starts on. ``signature_mode``
+    (reserved for the signature block, V6-23) shows a small board with a baseline and no shapes.
+    A board shown in a notebook ``ink`` section may also be drawn on when that notebook sets
+    ``caller_can_draw`` (:func:`canvas_caller_can_draw`).
+    """
+
+    caller_can_draw: bool = False
+    tools: list[CanvasTool] = Field(default=list(DEFAULT_CANVAS_TOOLS), min_length=1, max_length=6)
+    background: CanvasBackground = "none"
+    max_strokes: int = Field(default=DEFAULT_CANVAS_STROKES, ge=1, le=MAX_CANVAS_STROKES)
+    signature_mode: bool = False
+
+    @field_validator("tools")
+    @classmethod
+    def _unique_tools(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("list each tool once")
+        return value
+
+
 class CustomBlockConfig(BaseModel):
     """``custom``: a pack-rendered block — ``kind`` plus any pack-declared JSON (public).
 
@@ -616,6 +711,7 @@ BLOCK_CONFIG_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "cards": CardsBlockConfig,
     "notebook": NotebookBlockConfig,
     "layout": LayoutBlockConfig,
+    "canvas": CanvasBlockConfig,
 }
 
 
@@ -732,6 +828,96 @@ def layout_issues(blocks: Sequence[BlockSpec], *, path: str = "panel.blocks") ->
                 )
             else:
                 claimed[target] = spec.id
+                continue
+            issues.append(Issue(path=where, message=message))
+    return issues
+
+
+def canvas_host(
+    canvas_id: str, blocks: Sequence[BlockSpec]
+) -> tuple[BlockSpec, NotebookSectionConfig] | None:
+    """The notebook and ``ink`` section that show the board ``canvas_id`` (V6-12), if any.
+
+    The first claim wins (:func:`canvas_claim_issues` refuses a second one at save).
+    """
+    for spec in blocks:
+        if spec.type != "notebook":
+            continue
+        try:
+            config = NotebookBlockConfig.model_validate(spec.config)
+        except ValidationError:
+            continue
+        for section in config.sections:
+            if section.kind == "ink" and section.canvas_block_id == canvas_id:
+                return spec, section
+    return None
+
+
+def canvas_caller_can_draw(canvas_id: str, blocks: Sequence[BlockSpec]) -> bool:
+    """Whether the caller may draw on the board ``canvas_id`` (V6-12, D-V6-16).
+
+    The one rule the worker's ink handler, the worker's snapshot acceptance and the api's
+    snapshot check all call: ``canvas_id`` names a ``canvas`` block of the panel whose config
+    sets ``caller_can_draw``, or one shown in a notebook ``ink`` section whose notebook sets
+    ``caller_can_draw``. A config that does not validate allows nothing.
+    """
+    spec = next((b for b in blocks if b.id == canvas_id), None)
+    if spec is None or spec.type != "canvas":
+        return False
+    try:
+        if CanvasBlockConfig.model_validate(spec.config).caller_can_draw:
+            return True
+    except ValidationError:
+        return False
+    host = canvas_host(canvas_id, blocks)
+    return host is not None and host[0].config.get("caller_can_draw") is True
+
+
+def canvas_claim_issues(blocks: Sequence[BlockSpec], *, path: str = "panel.blocks") -> list[Issue]:
+    """Check which board each notebook ``ink`` section shows (V6-12, ask #57).
+
+    ``canvas_block_id`` must name a ``canvas`` block of the same panel, claimed by one ``ink``
+    section only and not also shown inside a ``layout`` (a board is shown in one place). An
+    ``ink`` section without a board is valid ("coming soon"). A notebook whose config does not
+    validate is skipped (:func:`validate_block_config` reports it).
+
+    Returns:
+        One ``error`` per bad claim at ``<path>[i].config.sections[j].canvas_block_id``.
+    """
+    types = {spec.id: spec.type for spec in blocks}
+    in_layouts: set[str] = set()
+    for spec in blocks:
+        if spec.type != "layout":
+            continue
+        try:
+            in_layouts.update(c.block_id for c in LayoutBlockConfig.model_validate(spec.config).children)
+        except ValidationError:
+            continue
+    claimed: dict[str, str] = {}
+    issues: list[Issue] = []
+    for i, spec in enumerate(blocks):
+        if spec.type != "notebook":
+            continue
+        try:
+            config = NotebookBlockConfig.model_validate(spec.config)
+        except ValidationError:
+            continue
+        for j, section in enumerate(config.sections):
+            target = section.canvas_block_id
+            if target is None:
+                continue
+            where = f"{path}[{i}].config.sections[{j}].canvas_block_id"
+            owner = f"{spec.id}.{section.id}"
+            if target not in types:
+                message = f"there is no block {target!r} on this panel"
+            elif types[target] != "canvas":
+                message = f"{target!r} is a {types[target]} block; an ink section shows a canvas block"
+            elif target in claimed:
+                message = f"{target!r} is already shown in {claimed[target]!r}"
+            elif target in in_layouts:
+                message = f"{target!r} is already shown inside a layout block"
+            else:
+                claimed[target] = owner
                 continue
             issues.append(Issue(path=where, message=message))
     return issues

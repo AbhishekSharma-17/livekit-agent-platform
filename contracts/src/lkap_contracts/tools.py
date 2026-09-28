@@ -89,6 +89,9 @@ WRITE_BUILTINS: Final[frozenset[str]] = frozenset(
         "generate_image",
         "notebook_write",
         "notebook_check",
+        # V6-12: marking up and clearing a drawing board.
+        "draw_on_canvas",
+        "clear_canvas",
     }
 )
 
@@ -141,12 +144,18 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     # V6-08: writing in a notebook block (notes, its checklist and details sections).
     "notebook_write",
     "notebook_check",
+    # V6-12: a drawing board: mark it up, clear it, read what the caller wrote on it.
+    "draw_on_canvas",
+    "clear_canvas",
+    "read_canvas",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
 #: choices have their own tools: a request's status belongs to the request). V6-08: a
 #: ``notebook`` is written by ``notebook_write`` / ``notebook_check`` only (so neither
 #: ``update_block`` nor a page's ``state_delta`` reaches it) and a ``layout`` holds no state.
+#: V6-12: a ``canvas`` is written by the caller's ink stream and ``draw_on_canvas`` /
+#: ``clear_canvas`` only.
 UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
     {
         "document",
@@ -195,6 +204,9 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "check_item": frozenset({"checklist"}),
     "notebook_write": frozenset({"notebook"}),
     "notebook_check": frozenset({"notebook"}),
+    "draw_on_canvas": frozenset({"canvas"}),
+    "clear_canvas": frozenset({"canvas"}),
+    "read_canvas": frozenset({"canvas"}),
 }
 
 
@@ -327,6 +339,11 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         # V6-08: writing in the notebook is instant.
         "notebook_write",
         "notebook_check",
+        # V6-12: marking up the board is instant; reading it is what the model's next
+        # sentence needs (and reads the caller's handwriting).
+        "draw_on_canvas",
+        "clear_canvas",
+        "read_canvas",
         "escalate_to_human",
         "update_block",
         "show_document",

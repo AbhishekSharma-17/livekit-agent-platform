@@ -262,7 +262,8 @@
             "slots",
             "cards",
             "notebook",
-            "layout"
+            "layout",
+            "canvas"
           ],
           "title": "Type",
           "type": "string"
@@ -523,6 +524,7 @@
                 "global": "#/$defs/GlobalNode",
                 "qa": "#/$defs/QaNode",
                 "start": "#/$defs/StartNode",
+                "tool": "#/$defs/ToolNode",
                 "transfer": "#/$defs/TransferNode"
               },
               "propertyName": "kind"
@@ -545,6 +547,9 @@
               },
               {
                 "$ref": "#/$defs/QaNode"
+              },
+              {
+                "$ref": "#/$defs/ToolNode"
               }
             ]
           },
@@ -2412,6 +2417,163 @@
         }
       },
       "title": "ToolExecution",
+      "type": "object"
+    },
+    "ToolNode": {
+      "description": "Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).\n\nThe worker runs the tool the moment the step is entered — through the same execution path\nas a call the model makes (blocking, the same guardrails and fences) — applies\n:attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The\nresult text itself never reaches the model: what the next steps need goes into variables\n(``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.",
+      "properties": {
+        "arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "maxProperties": 20,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolBinding"
+          },
+          "title": "Bindings",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "tool",
+          "default": "tool",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "mcp_tool": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mcp Tool"
+        },
+        "on": {
+          "$ref": "#/$defs/ToolNodeOutcomes",
+          "default": {
+            "empty": null,
+            "error": null,
+            "ok": null
+          }
+        },
+        "position": {
+          "default": [
+            0.0,
+            0.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "timeout_s": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30.0,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "tool": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tool"
+      ],
+      "title": "ToolNode",
+      "type": "object"
+    },
+    "ToolNodeOutcomes": {
+      "additionalProperties": false,
+      "description": "Which outgoing edge a ``tool`` node takes for each outcome (edge ids).",
+      "properties": {
+        "empty": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Empty"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "ok": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ok"
+        }
+      },
+      "title": "ToolNodeOutcomes",
       "type": "object"
     },
     "ToolSeed": {

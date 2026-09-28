@@ -150,3 +150,15 @@ describe("node tool pickers (R-V2-10)", () => {
     }
   });
 });
+
+describe("tool steps (V6-17, ask #117)", () => {
+  it("labels, creates and connects a tool node", async () => {
+    const { NODE_KIND_LABEL, newNode, canHaveIncoming, canHaveOutgoing } = await import(
+      "@/components/console/flow/flow-model"
+    );
+    expect(NODE_KIND_LABEL.tool).toBe("Tool step");
+    const node = newNode("tool", ["start"], [0, 0]);
+    expect(node).toMatchObject({ kind: "tool", tool: "", on: { ok: "" } });
+    expect(canHaveIncoming("tool") && canHaveOutgoing("tool")).toBe(true);
+  });
+});

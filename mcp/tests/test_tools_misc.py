@@ -209,6 +209,19 @@ async def test_discovery_tools_serve_the_guide_concepts_schemas_and_search(
     assert workspace["data"]["slug"] == "default"
 
 
+async def test_lkap_describe_node_explains_the_tool_step(key: Any, mcp_session: Any) -> None:
+    """V6-17: the `tool` flow node is described from the api's node specs (and offline)."""
+    raw = await key(READ_ONLY_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        node = await mcp.call("lkap_describe", kind="node", id="tool")
+        missing = await mcp.call("lkap_describe", kind="node", id="teleport")
+
+    assert node["data"]["kind"] == "tool"
+    assert {"tool", "arguments", "bindings", "on"} <= set(node["data"]["json_schema"]["properties"])
+    assert "tool" in missing["error"]["details"]["known"]
+
+
 async def test_resources_and_prompts_are_listed_and_readable(key: Any, mcp_session: Any) -> None:
     raw = await key(READ_ONLY_SCOPES)
 

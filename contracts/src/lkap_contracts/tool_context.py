@@ -42,8 +42,7 @@ from typing import Annotated, Any, Final, Literal, get_args
 
 from pydantic import AfterValidator, BaseModel, Field, field_validator
 
-from lkap_contracts.common import SessionChannel
-from lkap_contracts.flow import VARIABLE_NAME_PATTERN
+from lkap_contracts.common import VARIABLE_NAME_PATTERN, SessionChannel
 
 __all__ = [
     "BINDING_BLOCK_TYPES",

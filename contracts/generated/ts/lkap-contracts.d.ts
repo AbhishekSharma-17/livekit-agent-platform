@@ -8,7 +8,7 @@
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "FlowNode".
  */
-export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode;
+export type FlowNode = StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode;
 /**
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "ToolDefinition".
@@ -65,6 +65,7 @@ export interface LkapContracts {
   CallPage?: CallPage;
   CallReportIn?: CallReportIn;
   CallTransferIn?: CallTransferIn;
+  CanvasBlockState?: CanvasBlockState;
   CaptionSegment?: CaptionSegment;
   CaptionsBlockState?: CaptionsBlockState;
   CardsBlockState?: CardsBlockState;
@@ -151,6 +152,7 @@ export interface LkapContracts {
   HealthResponse?: HealthResponse;
   HttpToolDefinition?: HttpToolDefinition;
   IdIssue?: IdIssue;
+  InkMessage?: InkMessage;
   InstructAction?: InstructAction;
   InternalDatasetLookupIn?: InternalDatasetLookupIn;
   InternalKbSearchRequest?: InternalKbSearchRequest;
@@ -323,6 +325,7 @@ export interface LkapContracts {
   ToolDryRunResult?: ToolDryRunResult;
   ToolExecution?: ToolExecution;
   ToolMeta?: ToolMeta;
+  ToolNode?: ToolNode;
   ToolOut?: ToolOut;
   ToolPage?: ToolPage;
   ToolTemplate?: ToolTemplate;
@@ -605,7 +608,7 @@ export interface ManualTrigger {
  */
 export interface FlowSpec {
   edges?: FlowEdge[];
-  nodes?: (StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode)[];
+  nodes?: (StartNode | AgentNode | EndNode | GlobalNode | TransferNode | QaNode | ToolNode)[];
   v?: 1;
   variables?: VariableSpec[];
 }
@@ -757,6 +760,62 @@ export interface QaNode {
    */
   position?: [unknown, unknown];
   rubric_prompt?: string | null;
+}
+/**
+ * Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).
+ *
+ * The worker runs the tool the moment the step is entered — through the same execution path
+ * as a call the model makes (blocking, the same guardrails and fences) — applies
+ * :attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The
+ * result text itself never reaches the model: what the next steps need goes into variables
+ * (``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolNode".
+ */
+export interface ToolNode {
+  arguments?: {
+    [k: string]: string | number | boolean | null;
+  };
+  bindings?: ToolBinding[];
+  id: string;
+  kind?: "tool";
+  label?: string;
+  mcp_tool?: string | null;
+  on?: ToolNodeOutcomes;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  position?: [unknown, unknown];
+  timeout_s?: number;
+  tool: string;
+}
+/**
+ * Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).
+ *
+ * Applied by the worker after a successful call (an HTTP 2xx, an app action that
+ * succeeded, an MCP result that is not an error) and before the model's next turn, with
+ * no model involved. ``path`` points into the tool's result as the model would see it
+ * (after ``result_path``); ``""`` is the whole result.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolBinding".
+ */
+export interface ToolBinding {
+  path?: string;
+  to: string;
+}
+/**
+ * Which outgoing edge a ``tool`` node takes for each outcome (edge ids).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ToolNodeOutcomes".
+ */
+export interface ToolNodeOutcomes {
+  empty?: string | null;
+  error?: string | null;
+  ok?: string | null;
 }
 /**
  * One variable a flow extracts from the conversation.
@@ -1778,7 +1837,8 @@ export interface BlockSpec {
     | "slots"
     | "cards"
     | "notebook"
-    | "layout";
+    | "layout"
+    | "canvas";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -3310,6 +3370,92 @@ export interface CallTransferIn {
   to: string;
 }
 /**
+ * A ``canvas`` block's state (V6-12, D-V6-16): the caller's strokes and the agent's shapes.
+ *
+ * Every coordinate is normalised to the board (0..1), so ``width`` and ``height`` only fix
+ * its shape (and the pixel unit of a mark's ``width``). ``background`` is ``none``,
+ * ``live_camera`` (the marks overlay the caller's camera) or ``asset:<id>`` (a picture of
+ * this session, e.g. a pinned frame: "circle the dent"). ``strokes`` are written by the
+ * worker from the caller's :class:`InkMessage` s; ``shapes`` by ``draw_on_canvas``;
+ * ``snapshot_asset_id`` is the stored PNG ``read_canvas`` last read; ``limit_reached`` says
+ * the board is full (the caller's next strokes are dropped until it is cleared).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CanvasBlockState".
+ */
+export interface CanvasBlockState {
+  background?: string;
+  height?: number;
+  limit_reached?: boolean;
+  /**
+   * @maxItems 200
+   */
+  shapes?: CanvasShape[];
+  snapshot_asset_id?: string | null;
+  /**
+   * @maxItems 2000
+   */
+  strokes?: InkStroke[];
+  updated_at?: number | null;
+  width?: number;
+}
+/**
+ * One mark the agent drew on a canvas (``draw_on_canvas``, V6-12). ``draw_on_canvas``
+ * upserts shapes by ``id``.
+ *
+ * * ``box`` and ``circle``: ``x``, ``y`` (the top-left corner), ``w`` and ``h``, all 0..1 and
+ *   inside the board (a circle is the ellipse inside that box);
+ * * ``arrow``: ``points`` — from and to;
+ * * ``path``: ``points`` — two or more;
+ * * ``text``: ``x``, ``y`` and ``text``.
+ *
+ * ``label`` is a short caption next to any shape. Both texts are the agent's own words.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CanvasShape".
+ */
+export interface CanvasShape {
+  author?: "agent" | "caller";
+  color?: string;
+  h?: number | null;
+  id: string;
+  kind: "box" | "circle" | "arrow" | "text" | "path";
+  label?: string | null;
+  /**
+   * @maxItems 200
+   */
+  points?: [number, number][];
+  text?: string | null;
+  ts?: number | null;
+  w?: number | null;
+  width?: number;
+  x?: number | null;
+  y?: number | null;
+}
+/**
+ * One of the caller's strokes on a canvas (V6-12), as the worker stored it.
+ *
+ * ``points`` are normalised to the board (``[x, y]`` or ``[x, y, pressure]``); ``width`` is
+ * in board pixels (``CanvasBlockState.width``). Written by the worker only, from
+ * :class:`InkMessage` s it accepted; a stroke carries no text.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InkStroke".
+ */
+export interface InkStroke {
+  author?: "agent" | "caller";
+  color?: string;
+  id: string;
+  /**
+   * @minItems 1
+   * @maxItems 1000
+   */
+  points: [[number, number] | [number, number, number], ...([number, number] | [number, number, number])[]];
+  tool?: "pen" | "highlighter" | "box" | "arrow";
+  ts: number;
+  width?: number;
+}
+/**
  * One live caption message on ``lkap.captions`` (V5-31).
  *
  * ``id`` names the utterance: interim messages (``final: false``) carry the text so
@@ -4427,21 +4573,6 @@ export interface DatasetToolDefinition {
   return_columns?: string[];
 }
 /**
- * Copy one part of a successful tool result onto the panel or into a variable (D-V6-23).
- *
- * Applied by the worker after a successful call (an HTTP 2xx, an app action that
- * succeeded, an MCP result that is not an error) and before the model's next turn, with
- * no model involved. ``path`` points into the tool's result as the model would see it
- * (after ``result_path``); ``""`` is the whole result.
- *
- * This interface was referenced by `LkapContracts`'s JSON-Schema
- * via the `definition` "ToolBinding".
- */
-export interface ToolBinding {
-  path?: string;
-  to: string;
-}
-/**
  * A key-value summary card, "what we have so far" (``set_details``, V5-08).
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
@@ -4877,6 +5008,35 @@ export interface HttpToolDefinition {
 export interface IdIssue {
   reason: string;
   severity: "error" | "warning";
+}
+/**
+ * One message on :data:`TOPIC_UI_INK` (V6-12, D-V6-16): a piece of the caller's drawing.
+ *
+ * * ``add`` — ``stroke_id`` and at least one point. A new id starts a stroke (``tool``,
+ *   ``color`` and ``width`` are taken from this first message); the id of a stroke the
+ *   caller already drew continues it, its points appended (a long stroke is sent in pieces).
+ * * ``erase`` — ``stroke_id`` of one of the caller's strokes, no points.
+ * * ``clear`` — no points: every stroke of the caller on the block goes.
+ *
+ * At most :data:`MAX_INK_MESSAGE_BYTES` of JSON and :data:`MAX_INK_POINTS_PER_MESSAGE`
+ * points; the page batches a stroke's points (about every 50 ms) rather than sending each
+ * one. Strict: an unknown key, text, or a point outside 0..1 makes the whole message dropped.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "InkMessage".
+ */
+export interface InkMessage {
+  block_id: string;
+  color?: string;
+  op?: "add" | "erase" | "clear";
+  /**
+   * @maxItems 128
+   */
+  points?: [number, number] | [number, number, number][];
+  stroke_id?: string | null;
+  tool?: "pen" | "highlighter" | "box" | "arrow";
+  v?: 1;
+  width?: number;
 }
 /**
  * ``POST /internal/v1/datasets/{id}/lookup`` (the worker): the session decides the workspace.
@@ -6625,10 +6785,13 @@ export interface NotebookDetailsSection {
   kind?: "details";
 }
 /**
- * An ``ink`` section: a drawing board. ``canvas_block_id`` is reserved for V6-12 (D-V6-16).
+ * An ``ink`` section: a drawing board (D-V6-16).
  *
- * Until the ``canvas`` block lands the section stays empty and the console shows
- * "Drawing board coming soon"; nothing writes it.
+ * V6-12: ``canvas_block_id`` names the panel's ``canvas`` block the section shows; the worker
+ * seeds it from the section's config (``NotebookSectionConfig.canvas_block_id``) and nothing
+ * else writes it. The strokes live in that canvas block's own state (``CanvasBlockState``);
+ * the console renders the canvas inside the notebook and leaves it out of the panel's flow.
+ * ``None`` is a section with no board yet ("Drawing board coming soon").
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "NotebookInkSection".
@@ -8761,12 +8924,26 @@ export interface UiPatchOp {
  *   The block's state already shows ``status: "requested"``, so the browser
  *   acks at once (``{}``) and answers later with ``block_submit``; an inline
  *   ``{values}`` or ``{cancelled: true}`` result is accepted too.
+ * * ``snapshot`` — ``{block_id}`` (V6-12, D-V6-16): draw the ``canvas`` block as it shows
+ *   (background, strokes and shapes) into a PNG of at most :data:`MAX_CANVAS_SNAPSHOT_BYTES`
+ *   and send it on ``lkap.ui.upload`` with the attributes ``block_id`` (the canvas) and
+ *   ``name``; ack at once with ``{}``. The worker takes the file only while it is waiting for
+ *   that snapshot and only for a canvas the caller may draw on.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "UiRequest".
  */
 export interface UiRequest {
-  method: "open_dialog" | "focus" | "request_video_source" | "toast" | "form" | "show_block" | "navigate" | "request";
+  method:
+    | "open_dialog"
+    | "focus"
+    | "request_video_source"
+    | "toast"
+    | "form"
+    | "show_block"
+    | "navigate"
+    | "request"
+    | "snapshot";
   payload?: {
     [k: string]: unknown;
   };

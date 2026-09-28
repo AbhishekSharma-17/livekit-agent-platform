@@ -16,6 +16,12 @@ empty by `initial_block_state`. A caller may edit a notebook with `caller_can_wr
 or change a note in a text section, tick an item, change a details value; never an ink
 section. A `layout` block (D-V6-18) holds no state.
 
+Canvases (V6-12, D-V6-16): a `canvas` block's state (`CanvasBlockState`) starts blank, or on
+the live camera when its config says so (a config `background: "asset"` waits for the agent to
+put a picture on it); `canvas_config` reads its config. A notebook `ink` section's state names
+the board its config names (`canvas_block_id`). The caller's strokes are written by the
+channel's ink handler (`lkap_agent.ui.ink`), never by a caller edit.
+
 Block state lives in `UiState.blocks[<BlockSpec.id>]` as **plain JSON
 dicts** (never model instances): `FormBlockState.schema_` carries the alias
 `schema`, and `UiSnapshot.model_dump_json()` does not dump by alias, so a
@@ -30,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
 from lkap_contracts.agent_config import PanelLayout
-from lkap_contracts.blocks import NotebookBlockConfig, NotebookSectionConfig
+from lkap_contracts.blocks import CanvasBlockConfig, NotebookBlockConfig, NotebookSectionConfig
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.ui_protocol import (
     CALLER_EDIT_FLAGS,
@@ -39,6 +45,7 @@ from lkap_contracts.ui_protocol import (
     MAX_NOTEBOOK_ENTRIES,
     BlockSpec,
     BlockType,
+    CanvasBlockState,
     CaptionsBlockState,
     CardsBlockState,
     ChecklistEdit,
@@ -96,6 +103,7 @@ __all__ = [
     "VOICE_ONLY_CHANNELS",
     "block_ids_of_type",
     "block_path",
+    "canvas_config",
     "choice_selection_error",
     "citation_note",
     "describe_blocks",
@@ -154,6 +162,8 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "cards": CardsBlockState,
     # V6-08: a notebook's sections (a `layout` holds no state and starts as `{}`).
     "notebook": NotebookBlockState,
+    # V6-12: a drawing board.
+    "canvas": CanvasBlockState,
 }
 
 #: `block_action` name a `cards` block sends when the caller taps a card itself (V5-43).
@@ -255,6 +265,11 @@ def initial_block_state(spec: BlockSpec) -> dict[str, Any]:
     if spec.type == "notebook":
         # V6-08: the config lists the sections; the state keys each one's content by id.
         return _dump(NotebookBlockState.model_validate({"sections": empty_notebook_sections(spec)}))
+    if spec.type == "canvas":
+        # V6-12: the config's `background` says what the board starts on; only the live camera
+        # is a state value from the start (a picture is put on it by the agent, per session).
+        live = canvas_config(spec).background == "live_camera"
+        return _dump(CanvasBlockState(background="live_camera" if live else "none"))
     seed = {k: v for k, v in spec.config.items() if _is_field(model, k)}
     if spec.type == "details":
         # `details.fields` (the starting rows) seed `items` with no value yet (V5-08).
@@ -859,7 +874,8 @@ def _empty_section(section: NotebookSectionConfig) -> dict[str, Any]:
         case "checklist" | "details":
             return {"kind": section.kind, "items": []}
         case _:
-            return {"kind": "ink", "canvas_block_id": None}
+            # V6-12: the section shows the board its config names (ask #57).
+            return {"kind": "ink", "canvas_block_id": section.canvas_block_id}
 
 
 def empty_notebook_sections(spec: BlockSpec) -> dict[str, Any]:
@@ -933,6 +949,15 @@ def _notebook_change(where: str, data: Mapping[str, Any]) -> str:
             return f'removed the note "{text}" from {section} of {where}'
         case _:
             return f'changed a note in {section} of {where} to "{text}"'
+
+
+def canvas_config(spec: BlockSpec) -> CanvasBlockConfig:
+    """A canvas block's config (V6-12); the defaults (nothing the caller may do) when it is invalid."""
+    try:
+        return CanvasBlockConfig.model_validate(spec.config)
+    except ValidationError:
+        logger.warning("canvas config does not validate", block_id=spec.id)
+        return CanvasBlockConfig()
 
 
 def _dump(instance: BaseModel) -> dict[str, Any]:

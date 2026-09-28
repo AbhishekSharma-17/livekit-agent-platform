@@ -22,6 +22,10 @@ V6-08: a ``notebook`` lists its sections in the config's order, each with its to
 at most five short notes, items or rows (what the caller wrote or changed is marked "by
 the caller"); a ``layout`` says how it shows its blocks and which ones. The blocks inside
 a layout keep their own entries, so a layout never hides one from the model.
+
+V6-12: a ``canvas`` says how many strokes the caller drew (never their points: handwriting is
+read with ``read_canvas``), lists the agent's own marks by kind and label, what is behind them
+and whether the caller may draw; a notebook ``ink`` section names its board.
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ from typing import Any, Final
 from urllib.parse import urlsplit
 
 from livekit.agents import FunctionTool, RunContext, function_tool
-from lkap_contracts.blocks import NotebookSectionConfig
+from lkap_contracts.blocks import NotebookSectionConfig, canvas_caller_can_draw
 from lkap_contracts.ui_protocol import BlockSpec
 from packs.base import PackSessionContext
 
@@ -102,7 +106,33 @@ def _site(url: Any) -> str | None:
         return None
 
 
-def _summary(spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, Any]) -> dict[str, Any]:
+def _background(value: Any) -> str | None:
+    """What is behind a canvas's marks, in words (V6-12)."""
+    text = str(value or "none")
+    if text == "none":
+        return None
+    return "the caller's live camera" if text == "live_camera" else "a picture from this call"
+
+
+def _canvas(spec: BlockSpec, state: Mapping[str, Any], specs: list[BlockSpec]) -> dict[str, Any]:
+    """A drawing board (V6-12): counts and the agent's own marks, never the caller's strokes."""
+    shapes = [s for s in _list(state.get("shapes")) if isinstance(s, dict)]
+    marks = [
+        f"{s.get('kind')} {_short(s.get('label') or s.get('text') or s.get('id'))}"
+        for s in shapes[:MAX_LIST_ITEMS]
+    ]
+    return {
+        "caller_can_draw": canvas_caller_can_draw(spec.id, specs),
+        "caller_strokes": _count(state.get("strokes")),
+        "your_marks": marks,
+        "behind": _background(state.get("background")),
+        "full": True if state.get("limit_reached") is True else None,
+    }
+
+
+def _summary(
+    spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, Any], specs: list[BlockSpec]
+) -> dict[str, Any]:
     """The type-specific fields of one block (status fields, counts and a few labels)."""
     s = state
     match spec.type:
@@ -216,6 +246,8 @@ def _summary(spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, A
                 "shows_as": _text(spec.config.get("kind") or "tabs"),
                 "holds": [_text(_dict(c).get("block_id")) for c in children[: MAX_LIST_ITEMS * 2]],
             }
+        case "canvas":
+            return _canvas(spec, s, specs)
         case _:
             return {}
 
@@ -271,7 +303,8 @@ def _notebook_section(section: NotebookSectionConfig, state: Mapping[str, Any]) 
             if len(rows) > MAX_NOTEBOOK_LIST:
                 entry["more_rows"] = len(rows) - MAX_NOTEBOOK_LIST
         case _:
-            entry["drawing"] = "not available yet" if not content.get("canvas_block_id") else "on the board"
+            board = content.get("canvas_block_id")
+            entry["drawing"] = f"on the board {_short(board)}" if board else "no drawing board yet"
     return {k: v for k, v in entry.items() if v not in (None, [], "")}
 
 
@@ -283,6 +316,7 @@ def describe_panel_state(specs: Iterable[BlockSpec], state: Mapping[str, Any]) -
         pinned = _dict(note).get("block_id")
         if isinstance(pinned, str) and pinned:
             margin[pinned] = margin.get(pinned, 0) + 1
+    specs = list(specs)
     out: list[dict[str, Any]] = []
     for spec in specs:
         block_state = blocks.get(spec.id)
@@ -291,7 +325,7 @@ def describe_panel_state(specs: Iterable[BlockSpec], state: Mapping[str, Any]) -
         status = block_state.get("status")
         if isinstance(status, str):
             entry["status"] = status
-        entry.update(_summary(spec, block_state, state))
+        entry.update(_summary(spec, block_state, state, specs))
         if margin.get(spec.id):
             entry["margin_notes"] = margin[spec.id]
         out.append({k: v for k, v in entry.items() if v not in (None, [], {}, "")})

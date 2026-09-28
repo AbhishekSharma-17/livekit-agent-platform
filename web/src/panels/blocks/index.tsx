@@ -116,6 +116,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   // V6-08 added these types to the contract; their renderers come with V6-10.
   notebook: NotRenderedYetBlock,
   layout: NotRenderedYetBlock,
+  // V6-12 added the drawing board to the contract; its renderer comes with V6-14.
+  canvas: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

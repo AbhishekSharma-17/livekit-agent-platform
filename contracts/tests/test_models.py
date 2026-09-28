@@ -347,6 +347,7 @@ def test_topics_match_the_documented_wire_values() -> None:
         "RPC_UI_REQUEST": RPC_UI_REQUEST,
         "RPC_AGENT_ACTION": RPC_AGENT_ACTION,
         "TOPIC_UI_LINK": "lkap.ui.link",  # V5-43: server -> agent link outcomes
+        "TOPIC_UI_INK": "lkap.ui.ink",  # V6-12: browser -> agent pen strokes (text stream)
     }
 
 

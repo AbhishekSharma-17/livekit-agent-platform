@@ -34,9 +34,11 @@ tables from a CSV or JSON file: `dataset_create`, `dataset_lookup`, then
 `set_checklist`, a gallery plus a picture model brings `generate_image`, and
 `caller_can_edit` lets callers change a details or checklist block; a notebook
 block brings `notebook_write`, `agent_update(panel_preset="notebook")` sets up the
-Notebook panel, and a layout block shows blocks as tabs or columns) and, optionally, a **flow**
+Notebook panel, a layout block shows blocks as tabs or columns, and a canvas block is a
+drawing board the agent marks up with `draw_on_canvas` and reads with `read_canvas`) and, optionally, a **flow**
 (a node graph replacing free-form prompting; `agent_update(patch={"flow":
-...})`). Agents produce **sessions** (`session_list`, `session_get`,
+...})`; a `tool` node calls an attached tool with no model turn and branches
+on the outcome). Agents produce **sessions** (`session_list`, `session_get`,
 `session_memory`), which carry a transcript, QA score, cost lines and (if
 enabled) a recording. Live extraction and rules, guardrails, languages, caller memory,
 privacy, disclosure and conversation presets are agent config sections:

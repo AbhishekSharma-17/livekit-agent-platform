@@ -31,7 +31,7 @@ import httpx
 import pytest
 import respx
 from fastapi import FastAPI
-from lkap_contracts.agent_config import NOTEBOOK_PRESET, AgentConfig, ProviderRef
+from lkap_contracts.agent_config import AgentConfig, ProviderRef
 from lkap_contracts.datasets import DatasetLookupIn
 from sqlalchemy import func, select
 

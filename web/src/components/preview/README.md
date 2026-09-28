@@ -84,7 +84,7 @@ change.
 | Scene | Params | Notes |
 |---|---|---|
 | `session` | `layout` (side\|wide), `state` (every `AgentUiState` + `audio-blocked`), `test` (0\|1) | Real `SessionShell` + `StageView` + `ConnectionBanner` + the real `TestModeBar`, a static transcript placeholder, `ControlBarPlaceholder` (the vendored control bar needs a room — see below). `wide` uses the insurance notebook, `side` the generic panel, matching production pairing. The `listening` combo also ships a `surface=light` shot per §2.2 ("the preview route renders the session shell in both to prove it"); every other state is dark-only (the session surface is dark, fixed). |
-| `notebook` | `fixture` (blank\|auto\|flood) | `resolvePanel("insurance_notebook")` — since V6-22 the legacy alias that renders the Notebook preset — against the WP-9 golden fixtures (`web/tests/fixtures/`). |
+| `notebook` | `fixture` (blank\|auto\|flood) | `resolvePanel("insurance_notebook")` against the WP-9 golden fixtures (`web/tests/fixtures/`). |
 | `generic` | — | `resolvePanel("generic")` against its one fixture. |
 | `precall` | `devices` (idle\|requesting\|granted\|denied\|unsupported), `test` (0\|1) | The real, injectable `PreCallCard` — no `getUserMedia` call. |
 | `ended` | `test` (0\|1) | The real `EndOfCallCard`. |

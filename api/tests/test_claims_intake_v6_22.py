@@ -65,7 +65,6 @@ from lkap_api.vault import Vault
 
 REPO = Path(__file__).resolve().parents[2]
 WORKER_FIXTURE = REPO / "agent" / "tests" / "fixtures" / "claims_intake_config.json"
-WEB_PRESET = REPO / "web" / "src" / "panels" / "notebook-preset.json"
 LEGACY_PACKS = "packs.insurance_claim,packs.generic"
 CHAT_URL = "https://api.openai.com/v1/chat/completions"
 AGENT_IDENTITY = "agent-fake"
@@ -332,11 +331,6 @@ def test_the_starter_carries_every_d_v6_30_behaviour() -> None:
     assert "generate_image" in (template.instructions or "")
     assert "pin_frame" in (template.instructions or "")
     assert "notebook_write" in (template.instructions or "")
-
-
-def test_the_web_alias_preset_is_the_notebook_preset() -> None:
-    """``web/src/panels/notebook-preset.json`` (the ``insurance_notebook`` alias) is ``NOTEBOOK_PRESET``."""
-    assert json.loads(WEB_PRESET.read_text(encoding="utf-8")) == NOTEBOOK_PRESET.model_dump(mode="json")
 
 
 # --------------------------------------------------------------------------- the legacy pack

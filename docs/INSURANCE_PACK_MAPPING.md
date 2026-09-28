@@ -6,8 +6,9 @@
 > that keeps the pack sets `LKAP_PACKS=packs.insurance_claim,packs.generic` on the api and every worker
 > (`docs/RUNBOOK.md` §9.8). New agents start from the **Claims intake** starter
 > (`api/src/lkap_api/templates/catalog/claims_intake/`), built from the generic pack, blocks and tool kits
-> with no pack code; §5 below maps each behaviour. The pack's React panel is gone: `insurance_notebook` is a
-> legacy alias in `web/src/panels/registry.ts` that renders the Notebook preset in the wide layout.
+> with no pack code; §5 below maps each behaviour. The pack's own notebook panel
+> (`web/src/panels/insurance_notebook/`) ships with the pack for the same release and is removed with it;
+> `insurance_notebook` then becomes an alias of the Notebook preset (R-V6-3).
 
 > **Amended (2026-09-18):** per `docs/DECISIONS-W2.md`: #3 greeting is `say()` only when the pipeline has a TTS, else `generate_reply` (D-W2-9d); #4 typed turns go through `platform_text_input_cb` → `on_user_turn_completed` → `generate_reply`, not the SDK's default `TextInputOptions` handler (D-W2-9p); #6 cascaded vision attaches a ≤ 512 px JPEG data URL, one image per LLM call, with auto-degrade (D-W2-8); frame source follows the UI's `set_video_source` selection (D-W2-4); #1/#6 the cascaded LLM slot is `google/gemini-3.5-flash`, the registry's first `supports_video` model, because the camera is on and `google/gemma-4-31b-it` silently ignores images on Inference (D-W2-10).
 

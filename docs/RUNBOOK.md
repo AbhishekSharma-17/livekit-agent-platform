@@ -394,7 +394,7 @@ never set the variable changes (D-V6-31). **To keep the legacy pack, set
 `LKAP_PACKS=packs.insurance_claim,packs.generic`** on the api **and** every worker (the supervisor hands the
 api's value to its pools), then restart both. With the default, an agent made from the insurance pack
 (`pack_id="insurance_claim"`) no longer gets the pack's tools and the gallery no longer shows the
-"Insurance claim intake" starter; its `insurance_notebook` panel id still renders (the Notebook preset).
+"Insurance claim intake" starter; its notebook panel still renders, but stays empty without the pack's tools.
 
 New agents for the same job start from the **Claims intake** starter (the generic pack, the Notebook
 preset and three tool kits; `docs/INSURANCE_PACK_MAPPING.md` §5). Creating it once adds a
@@ -502,7 +502,7 @@ Use Chrome on `http://localhost:3000`, allow the microphone and camera, and hang
 | 7a | Camera/screen → pin | `/s/smoke-vision`, camera on, type "Pin what you see with the caption 'test pin'." Then screen share and repeat. | Image with caption in the panel; `meta.source` is `camera`, then `screen`. |
 | 7b | Model sees the frame | Hold up an object: "What am I holding?" | Correct answer on `google/gemini-3.5-flash`. On gemma: no image is sent and one `info` event appears (by design). |
 | 8 | Knowledge base | `/s/smoke-kb`, typed: "What does policy AUTO-11111's status say?" / "Search the knowledge base for flood coverage." | First answer says lapsed without a tool call; second calls `search_knowledge(query)` and names `policy_lines.md`. |
-| 9 | Insurance end to end (legacy pack; since V6-22 only with `LKAP_PACKS` listing it, §9.8 — the Claims intake starter walk is `docs/v6/_briefs/v6-22-live.md` §3) | Create from pack `insurance_claim`, publish, `/s/<slug>`. Call 1, type or say: "Policy H0-44721, my basement flooded yesterday in Denver, nobody was hurt." Camera on: "Please pin what you see as evidence." Call 2: "Policy AUTO-11111, I was rear-ended on I-25 and my passenger's neck hurts." | Call 1: policy note ≤ 5 s, Claim writer running→done, stamp, still-needed list and %, **Read the adjuster packet** dialog with markdown, a polaroid evidence photo (before V6-22; the `insurance_notebook` alias now shows the Notebook preset with the status stamp only, ask #229). Call 2: lapsed-policy note, stamp **Escalate to human** (danger), and an urgent spoken reply containing "emergency". |
+| 9 | Insurance end to end (legacy pack; since V6-22 only with `LKAP_PACKS` listing it, §9.8 — the Claims intake starter walk is `docs/v6/_briefs/v6-22-live.md` §3) | Create from pack `insurance_claim`, publish, `/s/<slug>`. Call 1, type or say: "Policy H0-44721, my basement flooded yesterday in Denver, nobody was hurt." Camera on: "Please pin what you see as evidence." Call 2: "Policy AUTO-11111, I was rear-ended on I-25 and my passenger's neck hurts." | Call 1: policy note ≤ 5 s, Claim writer running→done, stamp, still-needed list and %, **Read the adjuster packet** dialog with markdown, a polaroid evidence photo. Call 2: lapsed-policy note, stamp **Escalate to human** (danger), and an urgent spoken reply containing "emergency". |
 | 9b | Sketch (optional) | Needs a `google-image-gen` credential: "Draw a sketch of the incident." | Polaroid "Does this look right?" → confirm round-trip. |
 
 ---

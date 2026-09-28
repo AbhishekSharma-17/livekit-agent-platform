@@ -2,15 +2,16 @@
  * The `notebook` block's paper: four backgrounds (`plain` / `ruled` / `grid` /
  * `legal`) and two writing themes (`print` / `handwritten`) — V6-10 (D-V6-15).
  *
- * A CSS string injected by the block itself, not a `.css` import: the
+ * A CSS string injected by the block itself, the same reason
+ * `insurance_notebook/notebook-styles.ts` is one and not a `.css` import: the
  * web package's PostCSS config uses Next's string-plugin entries, which Vite
  * (and so `pnpm test`) cannot load. Scoped under `.lkap-notebook-paper` so
  * nothing leaks into the session shell; a fixed cream/ink palette on purpose,
  * in both light and dark shell themes — real paper does not follow the
- * console's theme.
+ * console's theme, exactly like the insurance pack's own notebook.
  *
- * `--font-hand` is set by `next/font/google`
- * (it sets it on the session/preview layout); the `cursive`
+ * `--font-hand` is the same variable `insurance_notebook` reads
+ * (`next/font/google` sets it on the session/preview layout); the `cursive`
  * fallback keeps the handwritten theme legible wherever it is unset (tests,
  * other surfaces).
  */

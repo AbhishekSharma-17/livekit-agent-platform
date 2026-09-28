@@ -1,10 +1,10 @@
-# V6-22 live check — the claims intake starter, the `insurance_notebook` alias and the default flip
+# V6-22 live check — the claims intake starter and the default flip
 
 Prerequisites. **No migration.** The contracts changed additively (`StarterTemplate` gained
 `extraction`, `rules`, `tests`, `dataset_seeds`, `kits`; regenerated). Restart the **api** (the catalogue
 and the seed path load at import), the **worker** (its `LKAP_PACKS` default changed) and the **MCP server**
 (its docs and the `agent_create` template list changed); rebuild nothing on the web beyond the usual dev
-reload (`insurance_notebook` is now an alias in `panels/registry.ts`). The PLAN's live rules apply:
+reload (the web's only change is the console label of the pack's notebook panel). The PLAN's live rules apply:
 `Demo — ` objects only, a Builder key minted for the run and revoked after, fictional names and
 `example.com` addresses.
 
@@ -58,10 +58,7 @@ the status reads "Policy needs review".
 
 ## 4. The legacy agent still runs
 
-Open the existing insurance `Demo — ` agent's session page: the panel is the Notebook preset in the wide
-layout (the alias; the pack's custom notebook is gone — ask #229). A call still runs the pack's tools
-(`lookup_policy`, `sync_claim_packet`, `pin_evidence_photo`, `draw_incident_sketch`) and the status stamp
-shows; the pack's notebook fields and packet dialog no longer render.
+Open the flagship's session page (`demo-insurance-claim-intake`): the pack's notebook renders exactly as before (fields, photos, sketch card, packet dialog). A call still runs the pack's tools (`lookup_policy`, `sync_claim_packet`, `pin_evidence_photo`, `draw_incident_sketch`).
 
 ## 5. The golden cases through the test runner (optional)
 

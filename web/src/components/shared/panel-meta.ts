@@ -39,7 +39,7 @@ export const PANEL_META: Record<string, PanelMeta> = {
   insurance_notebook: {
     label: "Claim notebook",
     description:
-      "The older claim notebook, now shown as the Notebook preset. New agents: build from blocks with the Notebook preset.",
+      "The adjuster's notebook: handwritten notes, taped photos, sketch and stamp. Needs the insurance pack's tools. New agents use the Notebook preset.",
     layout: "wide",
     legacy: true,
   },

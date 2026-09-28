@@ -124,3 +124,48 @@ def test_the_pinned_livekit_agents_version_is_the_one_verified() -> None:
     version = importlib.metadata.version("livekit-agents")
 
     assert version == "1.8.3", f"livekit-agents {version}: re-verify mcp_client.py, then bump this test"
+
+
+# ------------------------------------------------------------------ speech (V6-02)
+#: What V6-02 relies on from livekit-agents 1.8.3. When one fails, re-read the plugin source,
+#: then fix the registry entry (`contracts/src/lkap_contracts/providers.py`) or the worker hunk
+#: named in the message, and update the expectation here.
+SPEECH_FIX = "re-read the 1.8.3 plugin source and update the V6-02 registry entry / worker hunk"
+
+
+def test_stt_turn_detection_is_a_turn_detection_mode() -> None:
+    """`session_builder.STT_TURN_DETECTION` (Deepgram Flux ends the turn itself)."""
+    from livekit.agents.voice import turn  # noqa: PLC0415
+
+    from lkap_agent.session_builder import STT_TURN_DETECTION  # noqa: PLC0415
+
+    modes: set[str] = set()
+    for member in typing.get_args(turn.TurnDetectionMode):
+        modes |= {arg for arg in typing.get_args(member) if isinstance(arg, str)}
+    assert STT_TURN_DETECTION in modes, f"TurnDetectionMode lost 'stt' ({sorted(modes)}): {SPEECH_FIX}"
+
+
+def test_the_speech_kwargs_the_registry_passes_still_exist() -> None:
+    from livekit.plugins import deepgram, elevenlabs, openai  # noqa: PLC0415
+
+    expected: dict[type, set[str]] = {
+        deepgram.STTv2: {"model", "api_key", "eot_threshold", "eager_eot_threshold", "eot_timeout_ms"},
+        openai.STT: {"use_realtime", "model", "language", "detect_language"},
+        elevenlabs.TTS: {"encoding", "voice_id", "model"},
+    }
+    for cls, names in expected.items():
+        parameters = set(inspect.signature(cls.__init__).parameters)
+        missing = names - parameters
+        assert not missing, f"{cls.__qualname__}.__init__ lost {sorted(missing)}: {SPEECH_FIX}"
+
+
+def test_the_streaming_defaults_the_registry_records_still_hold() -> None:
+    """`openai-stt` streams only with `use_realtime`; Flux always streams (placeholder keys, offline)."""
+    from livekit.plugins import deepgram, openai  # noqa: PLC0415
+
+    batch = openai.STT(api_key="sk-placeholder", model="gpt-4o-mini-transcribe")
+    live = openai.STT(api_key="sk-placeholder", model="gpt-4o-mini-transcribe", use_realtime=True)
+    flux = deepgram.STTv2(api_key="dg-placeholder-key")
+    assert batch.capabilities.streaming is False, SPEECH_FIX
+    assert live.capabilities.streaming is True, SPEECH_FIX
+    assert flux.capabilities.streaming is True, SPEECH_FIX

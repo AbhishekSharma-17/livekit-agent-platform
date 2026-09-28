@@ -70,7 +70,9 @@ __all__ = [
     "ProviderFactory",
     "SLOT_KINDS",
     "AUTO_DETECT_LANGUAGE_CODES",
+    "DEEPGRAM_FLUX_STT_CLASS",
     "OPENAI_TRANSCRIPTION_STT_CLASS",
+    "deepgram_flux_kwargs",
     "openai_transcription_language_kwargs",
     "stt_redact_kwargs",
     "TELEPHONY_VARIANT_DROPPED_KWARGS",
@@ -435,7 +437,33 @@ class ProviderFactory:
             kwargs = _openrouter_llm_kwargs(kwargs)
         if spec.python_class == OPENAI_TRANSCRIPTION_STT_CLASS:
             kwargs = openai_transcription_language_kwargs(kwargs)
+        if spec.python_class == DEEPGRAM_FLUX_STT_CLASS:
+            kwargs = deepgram_flux_kwargs(kwargs)
         return kwargs
+
+
+#: The class behind ``deepgram-flux-stt`` (V6-02): Deepgram's ``/v2/listen`` transcriber.
+DEEPGRAM_FLUX_STT_CLASS: Final[str] = "livekit.plugins.deepgram.STTv2"
+
+
+def deepgram_flux_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Make ``eot_timeout_ms`` the whole number ``STTv2`` sends in its query string.
+
+    A registry ``number`` field reaches the worker as JSON, so ``3000`` may arrive
+    as ``3000.0``; livekit-plugins-deepgram 1.8.3 ``stt_v2.py`` types it ``int`` and
+    puts it in the ``/v2/listen`` URL as written. The two thresholds are floats and
+    pass through unchanged.
+
+    Args:
+        kwargs: The resolved constructor kwargs of a ``deepgram.STTv2``.
+
+    Returns:
+        A copy with ``eot_timeout_ms`` as an ``int`` when it is a whole number.
+    """
+    timeout = kwargs.get("eot_timeout_ms")
+    if isinstance(timeout, float) and timeout.is_integer():
+        return {**kwargs, "eot_timeout_ms": int(timeout)}
+    return kwargs
 
 
 #: The STT class behind ``openai-stt`` and ``openrouter-stt``; both endpoints take one ISO-639-1 code.

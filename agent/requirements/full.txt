@@ -37,7 +37,6 @@ livekit-plugins-deepgram==1.8.3
 livekit-plugins-did==1.8.3
 livekit-plugins-elevenlabs==1.8.3
 livekit-plugins-fal==1.8.3
-livekit-plugins-fireworksai==1.8.3
 livekit-plugins-fishaudio==1.8.3
 livekit-plugins-gladia==1.8.3
 livekit-plugins-gnani==1.8.3
@@ -51,6 +50,7 @@ livekit-plugins-lemonslice==1.8.3
 livekit-plugins-liveavatar==1.8.3
 livekit-plugins-lmnt==1.8.3
 livekit-plugins-meta==1.8.3
+livekit-plugins-minimax-ai==1.8.3
 livekit-plugins-mistralai==1.8.3
 livekit-plugins-murf==1.8.3
 livekit-plugins-neuphonic==1.8.3

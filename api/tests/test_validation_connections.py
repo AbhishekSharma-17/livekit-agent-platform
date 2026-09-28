@@ -102,7 +102,7 @@ def test_validate_without_connection_keeps_the_v1_rules() -> None:
 
 
 def test_validate_deferred_provider_is_not_available_even_on_a_full_connection() -> None:
-    deferred = next(p for p in REGISTRY if p.kind == "stt" and p.availability != "available")
+    deferred = next(p for p in REGISTRY if p.kind == "stt" and p.availability == "deferred")
     config = inference_config()
     config.pipeline.stt = ProviderRef(provider_id=deferred.id, credential_id="c")
 

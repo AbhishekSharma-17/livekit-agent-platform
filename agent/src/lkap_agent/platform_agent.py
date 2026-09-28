@@ -269,6 +269,10 @@ _SUPERVISOR_KEY: Final[str] = "_lkap_supervisor_wired"
 _LINK_KEY: Final[str] = "_lkap_link_wired"
 #: The fence source of panel words (card titles, link labels) in the messages below (V5-43).
 PANEL_SOURCE: Final[str] = "panel"
+#: The fence source of a late answer from the page (V6-29, S6-26): the caller's values.
+CALLER_ANSWER_SOURCE: Final[str] = "caller_answer"
+#: Longest late answer (its JSON) the model is shown; the rest is cut (V6-29, S6-26).
+MAX_CALLER_ANSWER_CHARS: Final[int] = 700
 #: What each link outcome means for the caller (V5-43).
 _LINK_OUTCOME_WORDS: Final[dict[str, str]] = {
     "completed": "was completed",
@@ -1246,15 +1250,20 @@ class PlatformAgent(Agent):
         """An answer arrived after its tool stopped waiting: let the model react to it.
 
         Block-type neutral (R-V5-1): the same wording for a late form and a late choice.
+        V6-29 (S6-26, ask #214): the values are the caller's, so they reach the model as a
+        user message with the values fenced as ``caller_answer`` and cut to
+        :data:`MAX_CALLER_ANSWER_CHARS` — never inside the reply's (system) instructions.
         """
-        instructions = (
-            f"The user just submitted the {block_id} block on screen with these values: "
-            f"{json.dumps(values)}. Acknowledge them briefly and continue."
+        body = fence(
+            json.dumps(values, ensure_ascii=False, default=str),
+            source=CALLER_ANSWER_SOURCE,
+            max_chars=MAX_CALLER_ANSWER_CHARS,
         )
-        try:
-            self.session.generate_reply(instructions=instructions)
-        except Exception:
-            logger.warning("could not reply to a late form submission", block_id=block_id, exc_info=True)
+        message = (
+            f"[The caller answered the {block_id} block on screen after it had stopped waiting: "
+            f"{body}. Acknowledge it briefly, confirm it with the caller if it matters, and carry on.]"
+        )
+        self._tell_model(message, what="a late answer")
 
     async def _cite(self, hits: list[KbHit]) -> None:
         """Implicit `cite_sources` for auto-injected knowledge (best effort)."""

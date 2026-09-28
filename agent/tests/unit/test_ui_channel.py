@@ -389,7 +389,7 @@ async def test_request_block_resolves_with_the_submitted_values() -> None:
     assert isinstance(channel.state.blocks["pick"]["submitted_at"], float)
     assert events[-1] == (
         "block_update",
-        {"block_id": "pick", "block_type": "custom", "op": "block_submitted", "values": {"choice": "b"}},
+        {"block_id": "pick", "block_type": "custom", "op": "block_submitted", "keys": ["choice"]},
     )
     assert channel.pending_requests == {}
 
@@ -577,6 +577,63 @@ async def test_late_block_submit_goes_to_the_unsolicited_handler() -> None:
     await _action(room, "block_submit", {"block_id": "pick", "values": {"x": "late"}})
     assert late == [("pick", {"x": "late"})]
     assert channel.state.blocks["pick"]["status"] == "submitted"
+
+
+async def test_unsolicited_submits_share_the_caller_action_bound() -> None:
+    """V6-29 (S6-26, ask #214): a submit nobody awaits takes the S6-5 bound; an awaited one never."""
+    from lkap_agent.ui.channel import CALLER_ACTION_LIMITED, MAX_CALLER_ACTIONS_PER_MIN
+
+    late: list[tuple[str, dict[str, Any]]] = []
+
+    async def on_late(block_id: str, values: dict[str, Any]) -> None:
+        late.append((block_id, values))
+
+    channel, room, events = _request_channel()
+    channel.bind(on_unsolicited_form=on_late)
+
+    # An answer to a pending request is not charged, however many came before it.
+    task = asyncio.create_task(channel.request_block("pick", timeout_s=5))
+    await _until(lambda: channel.pending_requests == {"pick": "request"})
+    assert (await _action(room, "block_submit", {"block_id": "pick", "values": {"x": 0}})).ok is True
+    assert await task == {"x": 0}
+
+    # Late block submits, late form submits and cancels all spend the one session budget.
+    for index in range(MAX_CALLER_ACTIONS_PER_MIN):
+        match index % 3:
+            case 0:
+                result = await _action(room, "block_submit", {"block_id": "pick", "values": {"x": index}})
+            case 1:
+                result = await _action(room, "form_submit", {"block_id": "intake", "values": {"name": "A"}})
+            case _:
+                result = await _action(room, "block_submit", {"block_id": "pick", "cancelled": True})
+        assert result.ok is True, index
+    told = len(late)
+    recorded = len(events)
+    patches = len(room.local_participant.sent_text)
+
+    over_block = await _action(room, "block_submit", {"block_id": "pick", "values": {"x": "over"}})
+    over_form = await _action(room, "form_submit", {"block_id": "intake", "values": {"name": "B"}})
+    over_cancel = await _action(room, "block_submit", {"block_id": "pick", "cancelled": True})
+    await asyncio.sleep(0)
+
+    for over in (over_block, over_form, over_cancel):
+        assert (over.ok, over.error) == (False, CALLER_ACTION_LIMITED)
+    assert len(late) == told  # the model is told nothing past the bound
+    assert len(events) == recorded and len(room.local_participant.sent_text) == patches
+    assert channel.state.blocks["intake"]["values"] == {"name": "A"}
+
+    # The bound is shared with caller edits and card taps: it is spent for them too.
+    assert channel._action_budget.take() is False
+
+
+async def test_a_submitted_event_names_the_answer_keys_never_the_values() -> None:
+    """V6-29 (S6-26): the `block_submitted` event carries bounded key names only."""
+    channel, room, events = _request_channel()
+    values = {f"k{index:02d}-" + "x" * 100: "secret value" for index in range(30)}
+    await _action(room, "block_submit", {"block_id": "pick", "values": values})
+    (payload,) = [p for kind, p in events if kind == "block_update" and p.get("op") == "block_submitted"]
+    assert "values" not in payload and "secret value" not in json.dumps(payload)
+    assert len(payload["keys"]) == 20 and all(len(key) == 64 for key in payload["keys"])
 
 
 async def test_request_block_is_released_on_session_close() -> None:

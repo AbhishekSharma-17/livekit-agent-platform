@@ -171,17 +171,19 @@ async def test_channel_events_go_to_the_session_record_event() -> None:
     assert events == [("block_update", {"block_id": "g", "block_type": "gallery", "op": "set"})]
 
 
-async def test_late_form_submission_prompts_a_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_late_form_submission_prompts_a_reply() -> None:
     panel = PanelLayout(blocks=[BlockSpec(id="f", type="form")])
-    agent, _channel, room, events = _agent(_config(panel))
     replies: list[str] = []
-    fake_session = SimpleNamespace(generate_reply=lambda **kw: replies.append(kw["instructions"]))
-    monkeypatch.setattr(PlatformAgent, "session", property(lambda self: fake_session))
+    fake_session = SimpleNamespace(generate_reply=lambda **kw: replies.append(kw["user_input"]))
+    agent, _channel, room, events = _agent(_config(panel), session=fake_session)
 
     raw = AgentAction(action="form_submit", payload={"block_id": "f", "values": {"a": 1}}).model_dump_json()
     await room.local_participant.invoke_rpc(RPC_AGENT_ACTION, raw, caller_identity="user-guest")
 
+    # V6-29 (S6-26): a user message with the values fenced as the caller's answer.
     assert len(replies) == 1 and '"a": 1' in replies[0]
+    assert '<untrusted source="caller_answer">' in replies[0]
+    del agent
     assert ("form_submitted", {"block_id": "f", "values": {"a": 1}}) in events
 
 
@@ -331,11 +333,10 @@ async def test_barge_in_cancels_a_pending_choice_but_not_a_pending_form() -> Non
     del agent
 
 
-async def test_late_choice_submission_prompts_a_block_neutral_reply(monkeypatch: pytest.MonkeyPatch) -> None:
-    agent, channel, room, _events = _agent(_config(CHOICE_PANEL))
+async def test_late_choice_submission_prompts_a_block_neutral_reply() -> None:
     replies: list[str] = []
-    fake_session = SimpleNamespace(generate_reply=lambda **kw: replies.append(kw["instructions"]))
-    monkeypatch.setattr(PlatformAgent, "session", property(lambda self: fake_session))
+    fake_session = SimpleNamespace(generate_reply=lambda **kw: replies.append(kw["user_input"]))
+    agent, channel, room, _events = _agent(_config(CHOICE_PANEL), session=fake_session)
     await channel.patch_block(
         "pick", [UiPatchOp(op="set", path="/options", value=[{"id": "no", "label": "No"}])]
     )

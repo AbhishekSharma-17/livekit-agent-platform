@@ -275,7 +275,11 @@ SIGNATURE_ASSET_KIND: Final[str] = "signature"
 SNAPSHOT_BLOCK_TYPES: Final[frozenset[str]] = frozenset({"canvas", "signature"})
 #: V6-21 (S6-5, ask #27): caller edits and card taps one session may make a minute, together
 #: (each can start a model reply); past it the action is refused and the model hears nothing.
+#: V6-29 (S6-26): a `block_submit` / `form_submit` nobody is waiting for shares the bound.
 MAX_CALLER_ACTIONS_PER_MIN: Final[int] = 10
+#: V6-29 (S6-26): the most answer keys a `block_submitted` event names, and their longest name.
+_MAX_EVENT_ANSWER_KEYS: Final[int] = 20
+_MAX_EVENT_ANSWER_KEY_CHARS: Final[int] = 64
 #: What the page shows for an action past :data:`MAX_CALLER_ACTIONS_PER_MIN`.
 CALLER_ACTION_LIMITED: Final[str] = "Please wait a moment before changing that again."
 
@@ -1975,11 +1979,15 @@ class UiChannel:
         if self._block_type(block_id) not in (None, "form"):
             return AgentActionResult(ok=False, error=f"block {block_id!r} is not a form")
         if payload.get("cancelled") is True:
+            if self._unsolicited_over_bound(block_id):
+                return AgentActionResult(ok=False, error=CALLER_ACTION_LIMITED)
             await self._submit(block_id, None)
             return AgentActionResult(ok=True)
         values = payload.get("values")
         if not isinstance(values, dict):
             return AgentActionResult(ok=False, error="form_submit needs a values object")
+        if self._unsolicited_over_bound(block_id):
+            return AgentActionResult(ok=False, error=CALLER_ACTION_LIMITED)
         await self._submit(block_id, values)
         return AgentActionResult(ok=True)
 
@@ -1996,8 +2004,25 @@ class UiChannel:
             return AgentActionResult(ok=False, error=f"unknown block: {block_id!r}")
         if block_id not in self._pending and not self._is_requestable(block_id):
             return AgentActionResult(ok=False, error=f"block {block_id!r} cannot be submitted")
+        if self._unsolicited_over_bound(block_id):
+            return AgentActionResult(ok=False, error=CALLER_ACTION_LIMITED)
         await self._submit(block_id, None if submit.cancelled else submit.values)
         return AgentActionResult(ok=True)
+
+    def _unsolicited_over_bound(self, block_id: str) -> bool:
+        """Whether a browser answer nobody is waiting for is past the caller-action bound.
+
+        V6-29 (S6-26, ask #214): an answer to a pending request is never charged; one with
+        nothing pending (a late or unsolicited submit, which can start a model reply) takes a
+        token of the session's shared bound (S6-5). Past it nothing is applied or told.
+        """
+        entry = self._pending.get(block_id)
+        if entry is not None and not entry.future.done():
+            return False
+        if self._action_budget.take():
+            return False
+        self._log.info("caller action limited", block_id=block_id, block_type=self._block_type(block_id))
+        return True
 
     async def _handle_state_delta(self, payload: dict[str, Any]) -> AgentActionResult:
         """`state_delta` (V5-43): an AG-UI `STATE_DELTA` on the blocks a caller may write.
@@ -2259,13 +2284,15 @@ class UiChannel:
             UiPatchOp(op="set", path=block_path(block_id, "submitted_at"), value=time.time()),
         ]
         await self.patch(ops)
+        # V6-29 (S6-26): the event names the answer's keys only, never the browser's values.
+        keys = sorted(str(key)[:_MAX_EVENT_ANSWER_KEY_CHARS] for key in values)[:_MAX_EVENT_ANSWER_KEYS]
         self._record(
             "block_update",
             {
                 "block_id": block_id,
                 "block_type": self._block_type(block_id),
                 "op": "block_submitted",
-                "values": values,
+                "keys": keys,
             },
         )
         await self._deliver(block_id, values, notify=notify)

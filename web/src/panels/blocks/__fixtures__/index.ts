@@ -35,6 +35,11 @@ import layout from "./layout.json";
 import linkState from "./link.json";
 import markdownState from "./markdown.json";
 import canvasState from "./canvas.json";
+import cartState from "./cart.json";
+import chartState from "./chart.json";
+import codeState from "./code.json";
+import signatureState from "./signature.json";
+import timerState from "./timer.json";
 import notebookState from "./notebook.json";
 import slotsState from "./slots.json";
 import stepsState from "./steps.json";
@@ -68,6 +73,11 @@ export const BLOCK_FIXTURE_STATES: Partial<Record<BlockType, Record<string, unkn
   cards: cardsState,
   notebook: notebookState,
   canvas: canvasState,
+  signature: signatureState,
+  chart: chartState,
+  timer: timerState,
+  code: codeState,
+  cart: cartState,
 };
 
 /** Every JSON state fixture by file stem, for the schema check. */
@@ -101,6 +111,12 @@ export const STATE_FIXTURES: Record<string, { type: BlockType; state: Record<str
   notebook: { type: "notebook", state: notebookState },
   // V6-12: the drawing board's state (renderer and scenes come with V6-14).
   canvas: { type: "canvas", state: canvasState },
+  // V6-23: the five next blocks' states (renderers and scenes come with V6-24).
+  signature: { type: "signature", state: signatureState },
+  chart: { type: "chart", state: chartState },
+  timer: { type: "timer", state: timerState },
+  code: { type: "code", state: codeState },
+  cart: { type: "cart", state: cartState },
 };
 
 export const FORM_SUBMITTED_STATE: Record<string, unknown> = formSubmitted;
@@ -171,6 +187,11 @@ export function fixtureBlocks(): Record<string, Record<string, unknown>> {
     notebook: notebookState,
     tabs: {},
     board: canvasState,
+    sign: signatureState,
+    claims_chart: chartState,
+    timer: timerState,
+    record: codeState,
+    order: cartState,
   };
 }
 

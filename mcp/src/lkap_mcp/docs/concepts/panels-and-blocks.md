@@ -42,6 +42,11 @@ schema. The block types:
 | `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1–12; `kind` is `text`, `checklist`, `details` or `ink`; default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (default off: the caller may draw on the boards of its `ink` sections); an `ink` section names its board with `canvas_block_id` | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows the `canvas` block it names, or "Drawing board coming soon" without one). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
 | `canvas` | `caller_can_draw` (default off), `tools` (`pen`, `highlighter`, `eraser`, `box`, `arrow`; `text` is kept for later; default pen, highlighter and eraser), `background` (`none`, `asset`: a picture the agent puts on it, or `live_camera`), `max_strokes` (1–2000, default 500), `signature_mode` (kept for signatures, not used yet) | A drawing board. With `caller_can_draw` the caller writes or sketches on it by hand; the agent marks it up with boxes, circles, arrows, paths and short labels, and can read what the caller wrote. A notebook's `ink` section shows a board by naming it in `canvas_block_id`. |
 | `layout` | `kind` (`tabs`/`columns`), `children: [{block_id, label}]` (other blocks of this panel, up to 12), `columns` (2 or 3, with `columns`) | Shows other blocks of the panel as tabs or side by side. The blocks inside stay ordinary blocks (same tools, same `describe_panel` entries); each may be inside one layout only, and a layout never holds another layout. |
+| `signature` | `disclosure_text` (up to 2000 characters; empty lets the agent write the wording for each request; set, the agent cannot change it), `allow_decline` (default on: a "Not now" button) | Wording the caller signs by hand on a small signing board. The signature is kept with the session's files, with the SHA-256 of the exact wording shown. |
+| `chart` | `kind` (`number`/`bar`/`line`/`pie`/`gauge`, default `bar`: what the agent draws when it names no kind), `show_table` (the numbers also as a table) | A chart of up to 200 points, drawn on the page (one big number, bars, lines, a pie, or a gauge on a scale). |
+| `timer` | `mode` (`countdown`/`elapsed`, default `countdown`), `max_seconds` (1–14400, default 3600: the longest timer the agent may start) | A countdown or a stopwatch the agent starts; when it runs out the agent is told. |
+| `code` | `max_chars` (200–20000, default 8000), `wrap` | Read-only code or text in a fixed-width font with a language label. Nothing shown here is ever run. |
+| `cart` | `currency` (a three-letter code such as `USD`), `max_lines` (1–50, default 20) | Lines, quantities, prices, discounts or tax, and totals the platform adds up, such as an order to confirm. The block places no order. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
 panel has a `document` block, the agent copies that knowledge-base document
@@ -66,7 +71,8 @@ Attaching a block registers matching worker tools automatically (on top of
 
 - `update_block` — writes state into any of `document`, `gallery`, `table`,
   `transcript`, `video`, `kb_citations`, `custom`, `details`, `markdown`,
-  `steps`, `cards`.
+  `steps`, `cards`, `chart`, `code`, `cart` (a cart's totals are always added up
+  again; a `signature` or a `timer` is never written this way).
   `show_document` — points a `document` block at a url. `table_append` —
   appends one row to a `table` block. `request_form` — asks the user to
   fill in a `form` block and returns their answers.
@@ -142,6 +148,29 @@ Attaching a block registers matching worker tools automatically (on top of
   so "circle the dent" is `pin_frame` then `draw_on_canvas`. `update_block`
   never writes a board.
 
+- `request_signature` (a `signature` block) — shows the wording over a small
+  signing board and waits for Sign or "Not now". The block's own
+  `disclosure_text` wins over the agent's. On Sign the page sends a picture of
+  the signature, kept with the session's files; every answer (signed or not) is
+  stored as a `signature` session event with the SHA-256 of the exact wording.
+  If the caller starts speaking while it is up, the request is withdrawn, like
+  a choice. Nothing can be signed on a phone call or in a text chat.
+- `show_chart` (a `chart` block) — draws up to 200 points (a 201st is refused):
+  one big number, bars, lines (up to 8 series), a pie, or a gauge on a scale.
+- `start_timer` (a `timer` block) — starts a countdown or a stopwatch (up to
+  the block's `max_seconds`); another call replaces it, 0 seconds stops it.
+  When it runs out the platform marks it ended, stores a `timer_ended` session
+  event and tells the agent in one line.
+- `show_code` (a `code` block) — shows read-only code or text with a language
+  label, up to the block's `max_chars`. Nothing shown is ever run.
+- `cart_set` (a `cart` block) — shows lines (name, quantity, price of one) and
+  any discount, tax or fee; the platform adds up the line totals, subtotal and
+  total. It orders or charges nothing.
+
+These four write quietly on a realtime model; on a phone call a chart, code or
+cart is not shown (the agent says it instead), while a timer still runs.
+`describe_panel` reports each one (a code block by its language and size only).
+
 The caller's strokes travel on their own stream, only from the caller, only to a
 board they may draw on, and within limits (20 messages a second, 2,000 strokes a
 board); a full board says so until it is cleared. A snapshot of the board is kept
@@ -162,7 +191,8 @@ inside another layout (an empty layout is a warning). A notebook `ink` section's
 `canvas_block_id` must name a `canvas` block of the panel shown nowhere else
 (not by another section, not inside a layout). A board the caller may draw on
 gets the phone tip too, and a warning when the agent's model cannot read it (a
-realtime model, or a model that cannot see pictures).
+realtime model, or a model that cannot see pictures). A `signature` block on an
+agent set up for phone calls gets the phone tip as well.
 
 ## Ready-made panels
 
@@ -192,4 +222,6 @@ replaces `panel`; change it afterwards like any other panel).
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
 `DetailsBlockState`, `DetailsEdit`, `ChecklistEdit`, `MarkdownBlockState`, `StepsBlockState`,
 `UploadBlockState`, `LinkBlockState`, `SlotsBlockState`, `CardsBlockState`,
-`NotebookBlockState`, `NotebookEdit`, `CanvasBlockState`, `InkMessage`, `SessionAssetOut`.
+`NotebookBlockState`, `NotebookEdit`, `CanvasBlockState`, `InkMessage`,
+`SignatureBlockState`, `SignatureEvent`, `ChartBlockState`, `TimerBlockState`,
+`CodeBlockState`, `CartBlockState`, `SessionAssetOut`.

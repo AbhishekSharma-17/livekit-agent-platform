@@ -92,6 +92,11 @@ WRITE_BUILTINS: Final[frozenset[str]] = frozenset(
         # V6-12: marking up and clearing a drawing board.
         "draw_on_canvas",
         "clear_canvas",
+        # V6-23: a chart, a timer, code and a cart on screen.
+        "show_chart",
+        "start_timer",
+        "show_code",
+        "cart_set",
     }
 )
 
@@ -148,6 +153,12 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
     "draw_on_canvas",
     "clear_canvas",
     "read_canvas",
+    # V6-23: a signature request, a chart, a timer, read-only code and a cart.
+    "request_signature",
+    "show_chart",
+    "start_timer",
+    "show_code",
+    "cart_set",
 )
 
 #: Block types whose state ``update_block`` may write (envelope blocks, forms and
@@ -155,7 +166,10 @@ BLOCK_TOOL_NAMES: Final[tuple[str, ...]] = (
 #: ``notebook`` is written by ``notebook_write`` / ``notebook_check`` only (so neither
 #: ``update_block`` nor a page's ``state_delta`` reaches it) and a ``layout`` holds no state.
 #: V6-12: a ``canvas`` is written by the caller's ink stream and ``draw_on_canvas`` /
-#: ``clear_canvas`` only.
+#: ``clear_canvas`` only. V6-23: ``chart``, ``code`` and ``cart`` are display data the agent
+#: writes, so ``update_block`` may change them too (a cart's totals are recomputed; the state
+#: models cap every list and string); a ``signature`` is a request (its answer is the caller's)
+#: and a ``timer`` is run by the worker (``start_timer``), so neither is updatable.
 UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
     {
         "document",
@@ -170,6 +184,10 @@ UPDATABLE_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
         "steps",
         # V5-43: cards are display data (a tap arrives as a block action, never as state).
         "cards",
+        # V6-23 (S6-1: added to the allow-list deliberately).
+        "chart",
+        "code",
+        "cart",
     }
 )
 
@@ -207,6 +225,11 @@ BLOCK_TOOL_TYPES: Final[dict[str, frozenset[str]]] = {
     "draw_on_canvas": frozenset({"canvas"}),
     "clear_canvas": frozenset({"canvas"}),
     "read_canvas": frozenset({"canvas"}),
+    "request_signature": frozenset({"signature"}),
+    "show_chart": frozenset({"chart"}),
+    "start_timer": frozenset({"timer"}),
+    "show_code": frozenset({"code"}),
+    "cart_set": frozenset({"cart"}),
 }
 
 
@@ -344,6 +367,13 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "draw_on_canvas",
         "clear_canvas",
         "read_canvas",
+        # V6-23: a signature request waits for the caller; the others write the panel (a
+        # timer's end runs as its own job, so starting one answers at once).
+        "request_signature",
+        "show_chart",
+        "start_timer",
+        "show_code",
+        "cart_set",
         "escalate_to_human",
         "update_block",
         "show_document",

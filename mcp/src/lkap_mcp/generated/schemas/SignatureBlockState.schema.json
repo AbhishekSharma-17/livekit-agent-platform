@@ -1,0 +1,88 @@
+{
+  "$id": "lkap-contracts/SignatureBlockState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A ``signature`` block's state (V6-23, D-V6-20): wording the caller signs by hand.\n\n``request_signature`` shows ``disclosure_text`` (the block config's wording when it sets\none, else the agent's) over a small drawing board and waits (``status`` is the request\nlifecycle every requestable block shares). The caller's strokes stay on the page; when the\ncaller taps Sign the page answers ``block_submit {values: {signed: true}}`` (``false`` for\n\"Not now\"), the worker asks for the picture (``UiRequest.method=\"snapshot\"``) and stores the\nPNG as a session asset of kind ``signature``. Only then are ``signed``, ``asset_id``, ``at``\nand ``text_hash`` (the SHA-256 of the wording shown, ``compliance.consent_text_hash``)\nwritten, by the worker: a browser answer never writes them, and an answer with no request\nwaiting is dropped.",
+  "properties": {
+    "asset_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Asset Id"
+    },
+    "at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "At"
+    },
+    "disclosure_text": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Disclosure Text",
+      "type": "string"
+    },
+    "signed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signed"
+    },
+    "status": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "requested",
+        "submitted",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    },
+    "text_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text Hash"
+    }
+  },
+  "title": "SignatureBlockState",
+  "type": "object"
+}

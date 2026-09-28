@@ -91,6 +91,18 @@ const LayoutBlock = lazy(() => import("./layout"));
 // kept out of the first load the same way, for a panel with no drawing board.
 const CanvasBlock = lazy(() => import("./canvas"));
 
+/**
+ * A block type this web build has no renderer for yet (R-V5-7): V6-23 added the
+ * `signature`, `chart`, `timer`, `code` and `cart` blocks to the contract; V6-24 renders them.
+ */
+function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
+  return (
+    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
+      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
+    </BlockFrame>
+  );
+}
+
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -121,6 +133,12 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   layout: LayoutBlock as AnyBlockComponent,
   // V6-12 added the drawing board to the contract; V6-14 is its real renderer (lazy, see above).
   canvas: CanvasBlock as AnyBlockComponent,
+  // V6-23 added these types to the contract; their renderers come with V6-24.
+  signature: NotRenderedYetBlock,
+  chart: NotRenderedYetBlock,
+  timer: NotRenderedYetBlock,
+  code: NotRenderedYetBlock,
+  cart: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

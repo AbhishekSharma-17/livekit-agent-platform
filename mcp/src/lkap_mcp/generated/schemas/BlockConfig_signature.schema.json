@@ -1,0 +1,21 @@
+{
+  "$id": "lkap-contracts/BlockConfig_signature.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``signature``: wording the caller signs by hand on screen (V6-23, D-V6-20).\n\n``request_signature`` shows the wording over a small signing board and waits for the\ncaller to sign (or, with ``allow_decline``, to say \"Not now\"). ``disclosure_text`` fixes the\nwording (public, like a consent block's): when set, the agent cannot change it; left empty,\nthe agent writes it for each request. The signature is kept as a picture of the session,\nwith the SHA-256 of the exact wording shown (a ``signature`` session event, like consent).",
+  "properties": {
+    "allow_decline": {
+      "default": true,
+      "title": "Allow Decline",
+      "type": "boolean"
+    },
+    "disclosure_text": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Disclosure Text",
+      "type": "string"
+    }
+  },
+  "title": "BlockConfig_signature",
+  "type": "object"
+}

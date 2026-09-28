@@ -237,9 +237,16 @@ _KB_PREFIX: Final[str] = "Relevant knowledge from the attached documents:"
 
 #: Built-in tools whose reply realtime models skip (D-W2-9i): `request_form`,
 #: `request_choice`, `request_consent` and `request_upload` (R-V5-1, ask #1) return
-#: `None` and their result arrives later as a background result.
+#: `None` and their result arrives later as a background result. V6-23: `request_signature` too.
 _REALTIME_SILENT_BUILTINS: Final[frozenset[str]] = frozenset(
-    {"request_form", "request_choice", "request_consent", "request_upload", "request_slot"}
+    {
+        "request_form",
+        "request_choice",
+        "request_consent",
+        "request_upload",
+        "request_slot",
+        "request_signature",
+    }
 )
 
 #: `SessionContext.userdata` key: the barge-in handler is registered (once per session, V5-08).
@@ -487,7 +494,8 @@ class PlatformAgent(Agent):
             if getattr(ctx, "channel", "web") in VOICE_ONLY_CHANNELS:
                 # On a phone call `request_choice` / `request_consent` / `request_upload` show
                 # nothing and answer at once (`{"channel": "voice_only"}`): keep the model's reply.
-                silent -= {"request_choice", "request_consent", "request_upload"}
+                # V6-23: so does `request_signature` (nothing can be signed on a phone call).
+                silent -= {"request_choice", "request_consent", "request_upload", "request_signature"}
         self._silent_reply_tools = frozenset(silent)
         self._greeting_mode = resolve_greeting_mode(ctx.config.voice.greeting_mode, has_tts=has_tts)
         # R-V5-10: a caller-supplied prompt (a flow node's) is recomposed by its owner.

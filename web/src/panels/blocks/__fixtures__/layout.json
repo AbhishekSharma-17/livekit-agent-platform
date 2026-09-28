@@ -42,6 +42,11 @@
       "order": 23
     },
     { "id": "tabs", "type": "layout", "title": null, "config": { "kind": "tabs", "children": [{ "block_id": "claim", "label": "Claim" }, { "block_id": "recap", "label": "Recap" }] }, "order": 24 },
-    { "id": "board", "type": "canvas", "title": "Drawing board", "config": { "caller_can_draw": true }, "order": 25 }
+    { "id": "board", "type": "canvas", "title": "Drawing board", "config": { "caller_can_draw": true }, "order": 25 },
+    { "id": "sign", "type": "signature", "title": "Sign here", "config": {}, "order": 26 },
+    { "id": "claims_chart", "type": "chart", "title": "Claims", "config": { "kind": "bar" }, "order": 27 },
+    { "id": "timer", "type": "timer", "title": "Timer", "config": {}, "order": 28 },
+    { "id": "record", "type": "code", "title": null, "config": {}, "order": 29 },
+    { "id": "order", "type": "cart", "title": "Your order", "config": { "currency": "USD" }, "order": 30 }
   ]
 }

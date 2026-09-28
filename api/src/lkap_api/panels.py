@@ -47,6 +47,13 @@ V6-12: the ``canvas`` config is checked the same way; a notebook ``ink`` section
 (:func:`lkap_contracts.blocks.canvas_claim_issues`, an error at
 ``panel.blocks[i].config.sections[j].canvas_block_id``); and a board the caller may draw on,
 on an agent set up for phone calls, gets the phone tip (:data:`DRAWING_ON_PHONE_MESSAGE`).
+
+V6-23: the ``signature``, ``chart``, ``timer``, ``code`` and ``cart`` configs are checked the
+same way (strict, every bound from :mod:`lkap_contracts.blocks`: a chart kind that does not
+exist, a timer longer than 4 hours, a code block over 20,000 characters, a currency that is not
+a three-letter code, a signature wording over 2,000 characters), and a ``signature`` block on an
+agent set up for phone calls gets its own tip (:data:`SIGNATURE_ON_PHONE_MESSAGE`: nothing can
+be signed on a phone call).
 """
 
 from __future__ import annotations
@@ -81,6 +88,11 @@ CALLER_EDIT_ON_PHONE_MESSAGE: Final[str] = (
 DRAWING_ON_PHONE_MESSAGE: Final[str] = (
     "Tip: callers on a phone line cannot see the drawing board, so only callers on the web page can "
     "draw on it"
+)
+#: A signature block on an agent set up for phone calls (V6-23, a tip).
+SIGNATURE_ON_PHONE_MESSAGE: Final[str] = (
+    "Tip: callers on a phone line cannot see the panel, so they cannot sign; only callers on the web "
+    "page can sign here"
 )
 #: A picture model on a panel with no gallery block (V6-06, a tip).
 PICTURES_NEED_A_GALLERY_MESSAGE: Final[str] = (
@@ -166,6 +178,11 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
             )
             for index, block in enumerate(config.panel.blocks)
             if block.type == "canvas" and canvas_caller_can_draw(block.id, config.panel.blocks)
+        ]
+        issues += [
+            Issue(path=f"panel.blocks[{index}]", message=SIGNATURE_ON_PHONE_MESSAGE, severity="warning")
+            for index, block in enumerate(config.panel.blocks)
+            if block.type == "signature"
         ]
     panel = config.panel
     if (

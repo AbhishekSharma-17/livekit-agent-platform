@@ -48,9 +48,12 @@ from lkap_contracts.ui_protocol import (
     CanvasBlockState,
     CaptionsBlockState,
     CardsBlockState,
+    CartBlockState,
+    ChartBlockState,
     ChecklistEdit,
     ChecklistItem,
     ChoicesBlockState,
+    CodeBlockState,
     ConsentBlockState,
     DetailsBlockState,
     DetailsEdit,
@@ -66,9 +69,11 @@ from lkap_contracts.ui_protocol import (
     MarkdownBlockState,
     NotebookBlockState,
     NotebookEdit,
+    SignatureBlockState,
     SlotsBlockState,
     StepsBlockState,
     TableBlockState,
+    TimerBlockState,
     TranscriptBlockState,
     UiPatchOp,
     UploadBlockState,
@@ -164,6 +169,13 @@ BLOCK_STATE_MODELS: Final[dict[BlockType, type[BaseModel]]] = {
     "notebook": NotebookBlockState,
     # V6-12: a drawing board.
     "canvas": CanvasBlockState,
+    # V6-23: a signature request, a chart, a timer, read-only code and a cart (the config keys
+    # `disclosure_text`, `kind`, `mode` and `currency` seed the state of the same name).
+    "signature": SignatureBlockState,
+    "chart": ChartBlockState,
+    "timer": TimerBlockState,
+    "code": CodeBlockState,
+    "cart": CartBlockState,
 }
 
 #: `block_action` name a `cards` block sends when the caller taps a card itself (V5-43).

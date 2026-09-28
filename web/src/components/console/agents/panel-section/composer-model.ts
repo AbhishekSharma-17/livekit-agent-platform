@@ -161,6 +161,11 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
   draw_on_canvas: "Add a drawing board first",
   clear_canvas: "Add a drawing board first",
   read_canvas: "Add a drawing board first",
+  request_signature: "Add a signature block first",
+  show_chart: "Add a chart block first",
+  start_timer: "Add a timer block first",
+  show_code: "Add a code block first",
+  cart_set: "Add a cart block first",
 };
 
 /**

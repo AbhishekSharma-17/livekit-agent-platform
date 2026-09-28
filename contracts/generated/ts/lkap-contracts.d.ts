@@ -70,13 +70,16 @@ export interface LkapContracts {
   CaptionSegment?: CaptionSegment;
   CaptionsBlockState?: CaptionsBlockState;
   CardsBlockState?: CardsBlockState;
+  CartBlockState?: CartBlockState;
   CatalogFilter?: CatalogFilter;
   CatalogItem?: CatalogItem;
   CatalogResponse?: CatalogResponse;
+  ChartBlockState?: ChartBlockState;
   ChecklistCheckAction?: ChecklistCheckAction;
   ChecklistEdit?: ChecklistEdit;
   ChecklistSetItemAction?: ChecklistSetItemAction;
   ChoicesBlockState?: ChoicesBlockState;
+  CodeBlockState?: CodeBlockState;
   ComplianceOut?: ComplianceOut;
   CompliancePreset?: CompliancePreset;
   ComplianceSettings?: ComplianceSettings;
@@ -315,6 +318,8 @@ export interface LkapContracts {
   SessionSummaryIn?: SessionSummaryIn;
   SessionWhisperIn?: SessionWhisperIn;
   SessionWhisperOut?: SessionWhisperOut;
+  SignatureBlockState?: SignatureBlockState;
+  SignatureEvent?: SignatureEvent;
   SlotsBlockState?: SlotsBlockState;
   SmsTarget?: SmsTarget;
   StartNode?: StartNode;
@@ -330,6 +335,7 @@ export interface LkapContracts {
   TemplateOut?: TemplateOut;
   TemplatesResponse?: TemplatesResponse;
   TextSessionCreate?: TextSessionCreate;
+  TimerBlockState?: TimerBlockState;
   ToolBinding?: ToolBinding;
   ToolContextSpec?: ToolContextSpec;
   ToolCreate?: ToolCreate;
@@ -1871,7 +1877,12 @@ export interface BlockSpec {
     | "cards"
     | "notebook"
     | "layout"
-    | "canvas";
+    | "canvas"
+    | "signature"
+    | "chart"
+    | "timer"
+    | "code"
+    | "cart";
 }
 /**
  * Which providers fill which slot, and how turns are handled.
@@ -3651,6 +3662,60 @@ export interface CardFact {
   value: string;
 }
 /**
+ * A ``cart`` block's state (``cart_set``, V6-23): lines and totals the agent shows.
+ *
+ * Display data: an order is placed by the agent's own tools, never by this block. The totals
+ * must add up (:func:`cart_totals`), whoever writes the state, so the caller never sees a
+ * total that is not the sum of the lines; the writers compute them.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CartBlockState".
+ */
+export interface CartBlockState {
+  /**
+   * @maxItems 5
+   */
+  adjustments?:
+    | []
+    | [CartAdjustment]
+    | [CartAdjustment, CartAdjustment]
+    | [CartAdjustment, CartAdjustment, CartAdjustment]
+    | [CartAdjustment, CartAdjustment, CartAdjustment, CartAdjustment]
+    | [CartAdjustment, CartAdjustment, CartAdjustment, CartAdjustment, CartAdjustment];
+  currency?: string;
+  /**
+   * @maxItems 50
+   */
+  lines?: CartLine[];
+  subtotal?: number;
+  total?: number;
+  updated_at?: number | null;
+}
+/**
+ * A line under the subtotal: a discount (negative), a tax, a delivery fee.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CartAdjustment".
+ */
+export interface CartAdjustment {
+  amount: number;
+  label: string;
+}
+/**
+ * One line of a cart: what, how many, the price of one, and the line's total (computed).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CartLine".
+ */
+export interface CartLine {
+  id: string;
+  line_total?: number;
+  name: string;
+  note?: string | null;
+  quantity?: number;
+  unit_price: number;
+}
+/**
  * Which vendor list items a registry entry keeps (D-V4-25, R-V4-28).
  *
  * Applied by the api after the adapter fetch, so one vendor adapter can
@@ -3699,6 +3764,45 @@ export interface CatalogResponse {
   kind: "models" | "voices" | "avatars" | "personas";
   source?: "vendor" | "static";
   total?: number | null;
+}
+/**
+ * A ``chart`` block's state (``show_chart``, V6-23): display data the agent shows.
+ *
+ * * ``number`` and ``gauge`` show one value (at most one point); a gauge draws it on the scale
+ *   ``gauge_min`` .. ``gauge_max``;
+ * * ``bar`` and ``line`` draw the points in order, grouped by ``series`` (at most 8);
+ * * ``pie`` draws one slice per point; its values are 0 or more.
+ *
+ * At most :data:`MAX_CHART_POINTS` points (a 201st is refused), every text capped. The
+ * agent's own words: ``describe_panel`` reads them back fenced like every block state.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChartBlockState".
+ */
+export interface ChartBlockState {
+  caption?: string | null;
+  gauge_max?: number;
+  gauge_min?: number;
+  kind?: "number" | "bar" | "line" | "pie" | "gauge";
+  /**
+   * @maxItems 200
+   */
+  points?: ChartPoint[];
+  title?: string | null;
+  unit?: string | null;
+  updated_at?: number | null;
+}
+/**
+ * One value of a chart: its ``label`` (an x value or a slice name) and, for several lines or
+ * bar groups, its ``series``.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "ChartPoint".
+ */
+export interface ChartPoint {
+  label: string;
+  series?: string | null;
+  value: number;
 }
 /**
  * ``block_action {name: "edit", data}`` on a ``checklist`` block (V6-06): tick or untick an item.
@@ -3751,6 +3855,21 @@ export interface ChoiceOption {
 export interface ChoiceReveal {
   correct?: string[];
   explanation?: string | null;
+}
+/**
+ * A ``code`` block's state (``show_code``, V6-23): read-only code or text in a fixed-width font.
+ *
+ * Display only: never run, never a link. ``language`` is a label (the console may colour
+ * by it); the console renders ``code`` as the text of a code block, never as Markdown or HTML.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "CodeBlockState".
+ */
+export interface CodeBlockState {
+  code?: string;
+  language?: string | null;
+  title?: string | null;
+  updated_at?: number | null;
 }
 /**
  * ``GET /v1/workspaces/{id}/compliance``: the stored settings, the effective texts and every preset.
@@ -6088,7 +6207,12 @@ export interface KitBlock {
     | "cards"
     | "notebook"
     | "layout"
-    | "canvas";
+    | "canvas"
+    | "signature"
+    | "chart"
+    | "timer"
+    | "code"
+    | "cart";
 }
 /**
  * One thing an instantiation adds, keeps or leaves out.
@@ -8520,6 +8644,48 @@ export interface SessionWhisperOut {
   id: string;
 }
 /**
+ * A ``signature`` block's state (V6-23, D-V6-20): wording the caller signs by hand.
+ *
+ * ``request_signature`` shows ``disclosure_text`` (the block config's wording when it sets
+ * one, else the agent's) over a small drawing board and waits (``status`` is the request
+ * lifecycle every requestable block shares). The caller's strokes stay on the page; when the
+ * caller taps Sign the page answers ``block_submit {values: {signed: true}}`` (``false`` for
+ * "Not now"), the worker asks for the picture (``UiRequest.method="snapshot"``) and stores the
+ * PNG as a session asset of kind ``signature``. Only then are ``signed``, ``asset_id``, ``at``
+ * and ``text_hash`` (the SHA-256 of the wording shown, ``compliance.consent_text_hash``)
+ * written, by the worker: a browser answer never writes them, and an answer with no request
+ * waiting is dropped.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SignatureBlockState".
+ */
+export interface SignatureBlockState {
+  asset_id?: string | null;
+  at?: number | null;
+  disclosure_text?: string;
+  signed?: boolean | null;
+  status?: "idle" | "requested" | "submitted" | "cancelled";
+  submitted_at?: number | null;
+  text_hash?: string | null;
+}
+/**
+ * The ``signature`` session event (V6-23): what was signed, never the picture's bytes.
+ *
+ * ``text_hash`` ties the answer to the exact wording shown; ``asset_id`` names the stored
+ * picture (kind ``signature``) of a signed request. A declined request is recorded too
+ * (``signed: false``, no picture).
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "SignatureEvent".
+ */
+export interface SignatureEvent {
+  asset_id?: string | null;
+  block_id: string;
+  method?: "drawn";
+  signed: boolean;
+  text_hash: string;
+}
+/**
  * A calendar slot picker the caller taps or answers by voice (``request_slot``, V5-43).
  *
  * The agent fetches availability with its own tools and offers ``slots``;
@@ -8834,6 +9000,28 @@ export interface TextSessionCreate {
    * The browser's IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`); an unknown name is ignored. Wins over `participant_metadata.timezone`.
    */
   timezone?: string | null;
+}
+/**
+ * A ``timer`` block's state (``start_timer``, V6-23).
+ *
+ * ``countdown`` shows the time left until ``duration_s`` has passed since ``started_at``;
+ * ``elapsed`` shows the time since ``started_at`` and ends after ``duration_s`` too (its cap).
+ * The page counts on its own clock from the moment it sees ``running`` (``duration_s`` minus
+ * what has passed), so a clock difference between the worker and the browser does not matter;
+ * ``ends_at`` is the worker's own end time. When the time is up the worker writes ``ended``
+ * (and ``ended_at``), records a ``timer_ended`` session event and tells the model in one line.
+ *
+ * This interface was referenced by `LkapContracts`'s JSON-Schema
+ * via the `definition` "TimerBlockState".
+ */
+export interface TimerBlockState {
+  duration_s?: number | null;
+  ended_at?: number | null;
+  ends_at?: number | null;
+  label?: string | null;
+  mode?: "countdown" | "elapsed";
+  started_at?: number | null;
+  status?: "idle" | "running" | "ended" | "stopped";
 }
 /**
  * ``POST /v1/tools``. ``agent_id=None`` makes the tool shared.
@@ -9326,7 +9514,10 @@ export interface UiPatchOp {
  *   (background, strokes and shapes) into a PNG of at most :data:`MAX_CANVAS_SNAPSHOT_BYTES`
  *   and send it on ``lkap.ui.upload`` with the attributes ``block_id`` (the canvas) and
  *   ``name``; ack at once with ``{}``. The worker takes the file only while it is waiting for
- *   that snapshot and only for a canvas the caller may draw on.
+ *   that snapshot and only for a canvas the caller may draw on. V6-23: also ``{block_id}`` of a
+ *   ``signature`` block right after the caller tapped Sign: the page renders the signature it
+ *   holds (the strokes never leave the page before that) as a PNG of at most
+ *   :data:`MAX_SIGNATURE_BYTES`, stored as a session asset of kind ``signature``.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "UiRequest".

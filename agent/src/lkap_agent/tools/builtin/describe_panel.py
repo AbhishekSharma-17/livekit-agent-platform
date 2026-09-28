@@ -26,11 +26,18 @@ a layout keep their own entries, so a layout never hides one from the model.
 V6-12: a ``canvas`` says how many strokes the caller drew (never their points: handwriting is
 read with ``read_canvas``), lists the agent's own marks by kind and label, what is behind them
 and whether the caller may draw; a notebook ``ink`` section names its board.
+
+V6-23: a ``signature`` says whether it was signed and whether the picture is saved, with the
+start of the wording; a ``chart`` its kind, heading, unit, how many points and series and the
+first few ``label: value`` pairs; a ``timer`` its mode, label, status and the seconds left (or
+gone); a ``code`` block its language, heading and size (never the code: the model wrote it);
+a ``cart`` its currency, the first few lines as ``quantity x name`` and its total.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Iterable, Mapping
 from typing import Any, Final
 from urllib.parse import urlsplit
@@ -127,6 +134,43 @@ def _canvas(spec: BlockSpec, state: Mapping[str, Any], specs: list[BlockSpec]) -
         "your_marks": marks,
         "behind": _background(state.get("background")),
         "full": True if state.get("limit_reached") is True else None,
+    }
+
+
+def _chart(state: Mapping[str, Any]) -> dict[str, Any]:
+    """A chart (V6-23): its kind, heading, sizes and the first few values."""
+    points = [p for p in _list(state.get("points")) if isinstance(p, dict)]
+    series = {p.get("series") for p in points if p.get("series")}
+    return {
+        "kind": state.get("kind"),
+        "heading": _text(state.get("title")),
+        "unit": _text(state.get("unit")),
+        "points": len(points),
+        "series": len(series) or None,
+        "values": [f"{_short(p.get('label'))}: {p.get('value')}" for p in points[:MAX_LIST_ITEMS]],
+    }
+
+
+def _timer(state: Mapping[str, Any], now: float) -> dict[str, Any]:
+    """A timer (V6-23): its mode, label and status, and the seconds left or gone while it runs."""
+    entry: dict[str, Any] = {"mode": state.get("mode"), "label": _short(state.get("label"))}
+    if state.get("status") == "running":
+        ends_at, started_at = state.get("ends_at"), state.get("started_at")
+        if state.get("mode") == "elapsed" and isinstance(started_at, int | float):
+            entry["seconds_gone"] = max(0, round(now - started_at))
+        elif isinstance(ends_at, int | float):
+            entry["seconds_left"] = max(0, round(ends_at - now))
+    return entry
+
+
+def _cart(state: Mapping[str, Any]) -> dict[str, Any]:
+    """A cart (V6-23): its currency, the first few lines and its total."""
+    lines = [line for line in _list(state.get("lines")) if isinstance(line, dict)]
+    return {
+        "currency": state.get("currency"),
+        "lines": [f"{line.get('quantity')} x {_short(line.get('name'))}" for line in lines[:MAX_LIST_ITEMS]],
+        "more_lines": len(lines) - MAX_LIST_ITEMS if len(lines) > MAX_LIST_ITEMS else None,
+        "total": state.get("total"),
     }
 
 
@@ -248,6 +292,25 @@ def _summary(
             }
         case "canvas":
             return _canvas(spec, s, specs)
+        case "signature":
+            return {
+                "wording_starts": _short(s.get("disclosure_text")),
+                "signed": s.get("signed"),
+                "picture_saved": True if s.get("asset_id") else None,
+            }
+        case "chart":
+            return _chart(s)
+        case "timer":
+            return _timer(s, time.time())
+        case "code":
+            code = str(s.get("code") or "")
+            return {
+                "language": s.get("language"),
+                "heading": _text(s.get("title")),
+                "lines": code.count("\n") + 1 if code else 0,
+            }
+        case "cart":
+            return _cart(s)
         case _:
             return {}
 

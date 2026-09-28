@@ -1,0 +1,27 @@
+{
+  "$id": "lkap-contracts/BlockConfig_chart.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``chart``: a chart the agent shows (``show_chart``, V6-23).\n\n``kind`` is what the block draws when ``show_chart`` names no kind: one big ``number``,\n``bar`` s, a ``line``, a ``pie`` or a ``gauge``. ``show_table`` also lists the numbers under\nthe chart (the console always offers them to screen readers).",
+  "properties": {
+    "kind": {
+      "default": "bar",
+      "enum": [
+        "number",
+        "bar",
+        "line",
+        "pie",
+        "gauge"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "show_table": {
+      "default": false,
+      "title": "Show Table",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_chart",
+  "type": "object"
+}

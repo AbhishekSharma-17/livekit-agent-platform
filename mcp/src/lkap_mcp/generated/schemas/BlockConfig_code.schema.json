@@ -1,0 +1,22 @@
+{
+  "$id": "lkap-contracts/BlockConfig_code.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``code``: read-only code or text in a fixed-width font (``show_code``, V6-23).\n\nNothing shown here is ever run. ``max_chars`` is the longest text the agent may show (at\nmost 20,000); ``wrap`` wraps long lines instead of scrolling them.",
+  "properties": {
+    "max_chars": {
+      "default": 8000,
+      "maximum": 20000,
+      "minimum": 200,
+      "title": "Max Chars",
+      "type": "integer"
+    },
+    "wrap": {
+      "default": false,
+      "title": "Wrap",
+      "type": "boolean"
+    }
+  },
+  "title": "BlockConfig_code",
+  "type": "object"
+}

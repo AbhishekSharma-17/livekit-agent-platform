@@ -226,6 +226,96 @@ describe("ProvidersSection", () => {
     expect(within(sttCard).queryByRole("radio", { name: /Deepgram/ })).toBeNull();
   });
 
+  describe("avatar framing (V6-26)", () => {
+    const AVATAR_PROVIDER: ProviderOut = {
+      v: 2,
+      id: "lemonslice-avatar",
+      kind: "avatar",
+      label: "LemonSlice",
+      vendor: "LemonSlice",
+      status: "mvp",
+      availability: "available",
+      worker_image: "full",
+      enabled: true,
+      installed_on: ["conn-a"],
+      package: "livekit-plugins-lemonslice",
+      python_class: "livekit.plugins.lemonslice.AvatarSession",
+      requires_credential: true,
+      secret_fields: [],
+      fields: [],
+      models: [],
+      default_model: null,
+      capabilities: {
+        tool_calling: false,
+        avatar_aspect: "portrait",
+        avatar_aspect_note: "LemonSlice avatars render as 368x560 pixel videos (~9:16 portrait).",
+      },
+    };
+    const AVATAR_OPTIONS = {
+      participant_name: "Avatar",
+      video_quality: null,
+      idle_timeout_s: null,
+      max_duration_s: null,
+      framing: null,
+      fit: null,
+    };
+
+    it("pre-selects Auto and shows the whole avatar for a newly created agent (D-V6-30)", async () => {
+      stubApi([TTS_PROVIDER, AVATAR_PROVIDER], [CONNECTION_A]);
+      render(
+        <Harness
+          connectionId="conn-a"
+          pipeline={{ avatar: ref("lemonslice-avatar"), avatar_options: { ...AVATAR_OPTIONS, framing: "auto", fit: "contain" } }}
+        />,
+      );
+      expect(await screen.findByText("Avatar options")).toBeTruthy();
+      expect((screen.getByLabelText("Framing") as HTMLElement).textContent).toMatch(/Auto/);
+      expect((screen.getByLabelText("Fit") as HTMLElement).textContent).toMatch(/whole avatar/i);
+    });
+
+    it("names the provider's documented native aspect as the Framing hint", async () => {
+      stubApi([TTS_PROVIDER, AVATAR_PROVIDER], [CONNECTION_A]);
+      render(<Harness connectionId="conn-a" pipeline={{ avatar: ref("lemonslice-avatar"), avatar_options: AVATAR_OPTIONS }} />);
+      expect(await screen.findByText(/368x560/)).toBeTruthy();
+    });
+
+    it("warns when the chosen framing disagrees with the provider's documented native aspect", async () => {
+      stubApi([TTS_PROVIDER, AVATAR_PROVIDER], [CONNECTION_A]);
+      render(
+        <Harness
+          connectionId="conn-a"
+          pipeline={{ avatar: ref("lemonslice-avatar"), avatar_options: { ...AVATAR_OPTIONS, framing: "landscape" } }}
+        />,
+      );
+      expect(await screen.findByText(/usually streams portrait video/)).toBeTruthy();
+    });
+
+    it("shows no mismatch warning once Auto is chosen", async () => {
+      stubApi([TTS_PROVIDER, AVATAR_PROVIDER], [CONNECTION_A]);
+      render(
+        <Harness
+          connectionId="conn-a"
+          pipeline={{ avatar: ref("lemonslice-avatar"), avatar_options: { ...AVATAR_OPTIONS, framing: "auto" } }}
+        />,
+      );
+      await screen.findByText("Avatar options");
+      expect(screen.queryByText(/usually streams/)).toBeNull();
+    });
+
+    it("renders a preview box sized to the resolved framing", async () => {
+      stubApi([TTS_PROVIDER, AVATAR_PROVIDER], [CONNECTION_A]);
+      render(
+        <Harness
+          connectionId="conn-a"
+          pipeline={{ avatar: ref("lemonslice-avatar"), avatar_options: { ...AVATAR_OPTIONS, framing: "auto", fit: "contain" } }}
+        />,
+      );
+      const preview = await screen.findByTestId("avatar-framing-preview");
+      expect(preview.getAttribute("data-framing")).toBe("portrait");
+      expect(preview.getAttribute("data-fit")).toBe("contain");
+    });
+  });
+
   describe("endpoint fields (V2-22, R-V2-33)", () => {
     const COMPATIBLE_LLM: ProviderOut = {
       ...LLM_PROVIDER,

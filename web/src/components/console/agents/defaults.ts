@@ -149,12 +149,20 @@ export const DEFAULT_GUARDRAILS: Required<GuardrailsConfig> = {
   budget_ms: 300,
 };
 
-/** `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar card). */
+/**
+ * `AvatarOptions` defaults (CONTRACTS-V2 §4.3; added by V2-13 for the providers section's avatar
+ * card). `framing`/`fit` (V6-26) default to `"auto"`/`"contain"` here for the *form* only — the
+ * wire value stays `null` (unset) until the builder saves, so a stored agent nobody has touched
+ * yet is unaffected; `null` already renders identically to `"auto"`/`"contain"` (the crop-free
+ * default), so this is display-only, not a behaviour change.
+ */
 export const DEFAULT_AVATAR_OPTIONS: Required<AvatarOptions> = {
   participant_name: "Avatar",
   video_quality: null,
   idle_timeout_s: null,
   max_duration_s: null,
+  framing: "auto",
+  fit: "contain",
 };
 
 /** `TelephonyConfig` defaults (R-V2-21): no transfer destinations. */

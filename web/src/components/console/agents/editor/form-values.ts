@@ -165,7 +165,16 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       pipeline: {
         ...config.pipeline,
         mode: config.pipeline.mode ?? "cascaded",
-        avatar_options: { ...DEFAULT_AVATAR_OPTIONS, ...config.pipeline.avatar_options },
+        avatar_options: {
+          ...DEFAULT_AVATAR_OPTIONS,
+          ...config.pipeline.avatar_options,
+          // V6-26: the api serializes an unset `framing`/`fit` as an explicit `null`, which a
+          // plain spread would keep (masking the form's "auto"/"contain" default). Coalesce
+          // instead, so a stored agent that never set these still shows the crop-free default
+          // rather than a blank select.
+          framing: config.pipeline.avatar_options?.framing ?? DEFAULT_AVATAR_OPTIONS.framing,
+          fit: config.pipeline.avatar_options?.fit ?? DEFAULT_AVATAR_OPTIONS.fit,
+        },
       },
       voice: { ...DEFAULT_VOICE, ...config.voice },
       capabilities: { ...DEFAULT_CAPABILITIES, ...config.capabilities },

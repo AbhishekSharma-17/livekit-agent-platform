@@ -120,7 +120,7 @@ __all__ = [
 ]
 
 
-#: Video framing (V6-26, D-V6-30): the shape of box the avatar's video is given. ``auto`` sizes
+#: Video framing (V6-26): the shape of box the avatar's video is given. ``auto`` sizes
 #: the well to the track's own dimensions (falling back to the provider's declared native aspect,
 #: `ProviderCapabilities.avatar_aspect`, before the first frame arrives). ``None`` on a stored
 #: `AvatarOptions` means "unset" — the same crop-free `auto` behaviour, never today's cropped one.

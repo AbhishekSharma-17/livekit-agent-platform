@@ -572,7 +572,7 @@ class ProviderCapabilities(BaseModel):
     avatar_aspect: Literal["portrait", "landscape", "square"] | None = Field(
         None,
         description=(
-            "Avatar only (V6-26, D-V6-30): the vendor's documented native video aspect, cited in "
+            "Avatar only (V6-26): the vendor's documented native video aspect, cited in "
             "`avatar_aspect_note`. The console (and the session stage, once a package threads it "
             "through `AgentPublicOut` — docs/v6/_asks.md #151) sizes the video well to this before "
             "the first frame arrives, so the layout does not jump. `None` = not documented (most "

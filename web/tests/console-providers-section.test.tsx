@@ -260,7 +260,7 @@ describe("ProvidersSection", () => {
       fit: null,
     };
 
-    it("pre-selects Auto and shows the whole avatar for a newly created agent (D-V6-30)", async () => {
+    it("pre-selects Auto and shows the whole avatar for a newly created agent (V6-26)", async () => {
       stubApi([TTS_PROVIDER, AVATAR_PROVIDER], [CONNECTION_A]);
       render(
         <Harness

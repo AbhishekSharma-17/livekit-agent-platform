@@ -48,7 +48,7 @@ def test_pipeline_config_avatar_options_unset_is_compatible_with_a_pre_v6_26_dic
 
 
 def test_provider_capabilities_avatar_aspect_defaults_to_none() -> None:
-    """Unset (`auto`, D-V6-30) is the honest default: most vendors document no fixed resolution."""
+    """Unset (`auto`) is the honest default: most vendors document no fixed resolution."""
     caps = ProviderCapabilities()
     assert caps.avatar_aspect is None
     assert caps.avatar_aspect_note is None

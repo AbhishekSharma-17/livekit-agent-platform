@@ -176,8 +176,7 @@ def test_deepgram_short_names_match_their_canonical_ids() -> None:
     assert set(aliases.values()) <= canonical
     items = [CatalogItem(id=name, label=name) for name in sorted(canonical)]
     missing, new, _ = drift.compare(spec, items)
-    assert {m.model for m in missing} == {"flux-general-en"}
-    assert missing[0].expected is not None
+    assert missing == []  # V6-02: Flux (a /v2/listen model) moved to deepgram-flux-stt
     assert new is not None
     assert "nova-3-general" not in new.ids and "nova-2-general" not in new.ids
     assert new.total == len(canonical) - len(aliases)
@@ -206,7 +205,7 @@ async def test_keyless_run_from_fixtures_covers_openrouter_deepgram_and_rime(tmp
     assert checked["deepgram-stt"].upstream_count == 42
 
     missing = {(row.provider_id, row.model) for row in report.registry_not_upstream}
-    assert missing == {("deepgram-stt", "flux-general-en")}
+    assert missing == set()  # V6-02: Flux moved to its own uncatalogued entry
 
     new = {row.provider_id: row for row in report.upstream_new}
     assert new["openrouter-llm"].ids == ["vendor/newest-model", "vendor/old-model", "vendor/undated-model"]

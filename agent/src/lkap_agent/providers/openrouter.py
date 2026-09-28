@@ -58,6 +58,13 @@ logger = get_logger(__name__)
 DEFAULT_PCM_SAMPLE_RATE: Final[int] = 24_000
 DEFAULT_NUM_CHANNELS: Final[int] = 1
 
+#: The PCM parameters a response may declare (docs/v5/_asks.md #331, S5-37): a server-sent
+#: ``rate`` outside this range, or more channels than this, is clamped (and logged) so a bad
+#: header cannot make the emitter allocate absurd frames or mix hundreds of channels.
+MIN_PCM_SAMPLE_RATE: Final[int] = 8_000
+MAX_PCM_SAMPLE_RATE: Final[int] = 48_000
+MAX_PCM_CHANNELS: Final[int] = 8
+
 #: OpenRouter TTS models that reject ``pcm`` (the OpenRouter TTS tutorial: Voxtral "accepts MP3 only").
 _MP3_ONLY_MODEL_PREFIXES: Final[tuple[str, ...]] = ("mistralai/voxtral",)
 
@@ -128,7 +135,14 @@ def parse_audio_content_type(content_type: str | None, *, requested_format: str)
     rate = _positive_int(params.get("rate"))
     if rate is None:
         logger.debug("pcm response without a rate parameter; assuming 24 kHz", content_type=content_type)
+    elif not MIN_PCM_SAMPLE_RATE <= rate <= MAX_PCM_SAMPLE_RATE:
+        clamped = min(max(rate, MIN_PCM_SAMPLE_RATE), MAX_PCM_SAMPLE_RATE)
+        logger.warning("pcm sample rate out of range; clamped", declared=rate, clamped=clamped)
+        rate = clamped
     channels = _positive_int(params.get("channels"))
+    if channels is not None and channels > MAX_PCM_CHANNELS:
+        logger.warning("pcm channel count out of range; clamped", declared=channels, clamped=MAX_PCM_CHANNELS)
+        channels = MAX_PCM_CHANNELS
     return AudioFormat(
         mime_type="audio/pcm",
         sample_rate=rate or DEFAULT_PCM_SAMPLE_RATE,

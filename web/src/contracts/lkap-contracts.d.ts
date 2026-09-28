@@ -6509,6 +6509,10 @@ export interface ProviderCapabilities {
    */
   detect_languages?: string[];
   /**
+   * STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram Flux). The worker then runs the session with the SDK's `turn_detection="stt"` instead of the platform's default turn detector.
+   */
+  end_of_turn?: boolean;
+  /**
    * STT only (V5-31): the value of the entry's `language` field that makes the transcriber detect the language itself (`multi` for Deepgram and LiveKit Inference, `unknown` for Sarvam; the worker maps `multi` to `detect_language` for the OpenAI transcriptions class). Unset = the entry cannot be asked to detect the language.
    */
   language_detection?: string | null;
@@ -6520,6 +6524,18 @@ export interface ProviderCapabilities {
   platforms?: string[];
   redaction?: string[];
   silent_tool_reply?: boolean;
+  /**
+   * STT and TTS only (V6-02, D-V6-2): whether the entry streams with its registry defaults, from the plugin's `STTCapabilities`/`TTSCapabilities(streaming=...)` at livekit-agents 1.8.3. A transcriber that streams gives live partial transcripts; a voice that streams starts speaking before the whole sentence is written. `false` = one whole request per utterance or sentence (the SDK wraps it in a `StreamAdapter`). `null` = not recorded; `streaming_note` then says why. See `speech_streams()` for a stored reference.
+   */
+  streaming?: boolean | null;
+  /**
+   * STT and TTS only (V6-02): the boolean field that turns streaming on when it is off by default (`use_realtime` on `openai-stt`, `use_websocket` on `rime-tts`). A reference streams when it sets that field true.
+   */
+  streaming_field?: string | null;
+  /**
+   * STT and TTS only (V6-02): when streaming depends on something else (a model, a voice, an endpoint), in plain words.
+   */
+  streaming_note?: string | null;
   text_modality?: boolean;
   tool_calling?: boolean;
   video_input?: boolean;
@@ -6563,6 +6579,10 @@ export interface FieldSpec {
   options?: string[] | null;
   placeholder?: string | null;
   positional?: boolean;
+  /**
+   * The value the console pre-selects for a new agent (V6-02, D-V6-4c). `default` stays the value a stored reference without the field resolves to (the plugin's own behaviour), so an existing agent never changes; `recommended` is what a new one should use.
+   */
+  recommended?: string | number | boolean | null;
   required?: boolean;
   type: "string" | "secret" | "number" | "boolean" | "enum" | "json" | "model" | "file" | "catalog";
 }
@@ -6573,6 +6593,10 @@ export interface FieldSpec {
  * via the `definition` "ModelSpec".
  */
 export interface ModelSpec {
+  /**
+   * The vendor deprecated this id (V6-02, D-V6-4a). It stays listed so a stored reference still resolves; the validator warns and the console offers the entry's `default_model`.
+   */
+  deprecated?: boolean;
   id: string;
   label: string;
   note?: string | null;

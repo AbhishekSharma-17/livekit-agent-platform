@@ -80,9 +80,10 @@ EXPECTED_DEFERRED_AVAILABILITY_IDS = [
     "spitch-tts",
 ]
 
-EXPECTED_INCOMPATIBLE_IDS = ["minimax-tts"]
+EXPECTED_INCOMPATIBLE_IDS: list[str] = []
 
-EXPECTED_REMOVED_IDS: list[str] = []
+#: V6-02 (D-V6-6): Fireworks deprecated its audio inference on 2026-06-10.
+EXPECTED_REMOVED_IDS: list[str] = ["fireworksai-stt"]
 
 
 def test_registry_ids_are_unique() -> None:
@@ -136,8 +137,11 @@ def test_hedra_is_not_registered() -> None:
     assert all("hedra" not in spec.id for spec in REGISTRY)
 
 
-def test_minimax_is_marked_incompatible_not_merely_deferred() -> None:
-    assert get("minimax-tts").availability == "incompatible"
+def test_minimax_is_offered_from_its_1_8_package() -> None:
+    """V6-02: the 1.8.x plugin is `livekit-plugins-minimax-ai`; the stale `-minimax` 1.3.0 is never used."""
+    spec = get("minimax-tts")
+    assert spec.availability == "available"
+    assert spec.package == "livekit-plugins-minimax-ai"
 
 
 def test_every_new_full_image_entry_carries_worker_image_full() -> None:
@@ -297,9 +301,15 @@ def test_credential_home_resolves_aliases_and_passes_other_ids_through() -> None
     assert credential_home("not-a-provider") == "not-a-provider"
 
 
-def test_only_the_four_non_llm_openrouter_entries_have_a_home() -> None:
+def test_only_the_four_non_llm_openrouter_entries_and_deepgram_flux_have_a_home() -> None:
     aliased = {s.id for s in REGISTRY if s.credential_provider is not None}
-    assert aliased == {"openrouter-stt", "openrouter-tts", "openrouter-embedding", "openrouter-image-gen"}
+    assert aliased == {
+        "openrouter-stt",
+        "openrouter-tts",
+        "openrouter-embedding",
+        "openrouter-image-gen",
+        "deepgram-flux-stt",  # V6-02: one Deepgram key serves Nova and Flux
+    }
 
 
 # --------------------------------------------------------------------------- OpenRouter (D-V4-9, R-V4-8)
@@ -351,9 +361,10 @@ def test_openrouter_llm_models_promoted_on_the_vision_probe_support_vision(model
 
 # ------------------------------------------------ custom model ids, live catalogs (V4-07)
 #: The 26 string-typed ``model`` fields retyped ``type="model"`` (R-V4-22), plus the two
-#: hosted re-rankers (V5-20). bitHuman's ``model`` is a genuine two-value enum (its runtime
-#: mode), not a vendor model id, and stays ``type="enum"``.
-EXPECTED_MODEL_FIELD_COUNT = 28
+#: hosted re-rankers (V5-20), minus MiniMax's (V6-02 moved it to ``models``). bitHuman's
+#: ``model`` is a genuine two-value enum (its runtime mode), not a vendor model id, and stays
+#: ``type="enum"``.
+EXPECTED_MODEL_FIELD_COUNT = 27
 
 
 def test_every_string_model_field_is_typed_model() -> None:

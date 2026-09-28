@@ -110,10 +110,9 @@ REGISTRY_ALIASES: dict[str, dict[str, str]] = {
 #: Registry ids a vendor's list is known not to carry, with the reason. They are
 #: still reported under ``registry_not_upstream`` (so a change is visible), but
 #: marked as expected. Deepgram's ``/v1/models`` has no Flux entry (live fetch,
-#: 2026-09-25); Flux is a ``/v2/listen`` model.
-KNOWN_UNLISTED: dict[str, dict[str, str]] = {
-    "deepgram-stt": {"flux-general-en": "Deepgram's /v1/models does not list Flux (a /v2/listen model)"},
-}
+#: 2026-09-25; Flux is a ``/v2/listen`` model), which is why V6-02 moved Flux to its
+#: own uncatalogued entry, ``deepgram-flux-stt``; nothing is known-unlisted now.
+KNOWN_UNLISTED: dict[str, dict[str, str]] = {}
 
 _PROVIDER_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 

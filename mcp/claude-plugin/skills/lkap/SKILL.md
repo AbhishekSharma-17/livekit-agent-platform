@@ -52,9 +52,9 @@ skill deterministically every time (R-V3-41).
    `agent_create(template_id="receptionist")` (or `blank`,
    `knowledge_assistant`, …) seeds a complete config with its knowledge
    bases and tools — `lkap_describe("recipe", "start-from-template")`.
-   From a pack — `agent_create(pack_id="insurance_claim"
-   )` or `agent_create(pack_id="generic")` — seeds a complete, working
-   config; `agent_create(pack_id="generic")` plus `agent_update(patch={...})`
+   An insurance claim intake is `agent_create(template_id="claims_intake")`
+   (the older `insurance_claim` pack loads only where the operator lists it);
+   `agent_create(pack_id="generic")` plus `agent_update(patch={...})`
    builds one from scratch. `lkap_describe("recipe", "insurance-intake-agent"
    )` and `lkap_describe("recipe", "generic-assistant")` are full worked
    examples.

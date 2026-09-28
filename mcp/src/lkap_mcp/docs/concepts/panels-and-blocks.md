@@ -3,10 +3,10 @@
 `config.panel` (`PanelLayout{panel_id, layout, blocks}`) decides what the
 session page shows next to (or below, per `layout: "side"|"wide"`) the
 call controls. `panel_id="composite"` is the no-code panel built from a list
-of `BlockSpec{id, type, config}`; a pack may instead set its own
-`ui_panel_id` (the `insurance_claim` pack ships a custom "insurance_notebook"
-React panel and an empty `blocks` list — its state comes entirely from pack
-code, not the block system).
+of `BlockSpec{id, type, config}`. New agents use it (the `claims_intake`
+starter is the Notebook preset plus kits); the legacy `insurance_claim` pack
+keeps its own "insurance_notebook" panel, filled by pack code only and loaded
+only when the operator lists that pack.
 
 ## Block catalog
 

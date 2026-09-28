@@ -1755,8 +1755,9 @@ def tool_context_issues(ctx: ValidationContext) -> list[Issue]:
 def extraction_rules_issues(ctx: ValidationContext) -> list[Issue]:
     """The checks of ``extraction`` and ``rules`` (V6-13, D-V6-24/25); nothing for an agent without them.
 
-    The contract already refused what cannot parse (a condition outside the grammar, a
-    catastrophic pattern, a bad ``show_in``); this adds what needs the whole config
+    The contract already refused what cannot parse (a condition outside the grammar, a bad
+    ``show_in``); a pattern the regex-safety scanner refuses is an error from ``rule_issues``
+    (V6-28). This adds what needs the whole config
     (:func:`lkap_contracts.extraction.extraction_issues`,
     :func:`lkap_contracts.rules.rule_issues`): targets on the panel and of the right type,
     ``node_exit`` steps that exist, variables something sets, and — when every attached tool's

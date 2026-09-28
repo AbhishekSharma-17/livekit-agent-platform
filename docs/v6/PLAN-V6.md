@@ -405,7 +405,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-25 | Opus (docs) + Fable | 7 | planned | | | |
 | V6-26 | Sonnet (+ Opus contracts hunk) | 7 | merged | 0f319ed (+ V6-26b 4f200ee) | | |
 | V6-27 | Opus | 6 | merged | 035b223 | | #177 |
-| V6-28 | Opus | 7 | running | | | #166, #212 |
+| V6-28 | Opus | 7 | merged | 780d650 | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): none yet.
 

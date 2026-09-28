@@ -400,6 +400,11 @@ New agents for the same job start from the **Claims intake** starter (the generi
 preset and three tool kits; `docs/INSURANCE_PACK_MAPPING.md` §5). Creating it once adds a
 `Demo — Policy directory` lookup table to the workspace (reused by later ones). No migration.
 
+**Rule patterns (V6-28, D-V6-31).** A rule whose `matches` pattern the stricter safety check (added in v6)
+refuses stops running and shows as an error on that rule; the agent still loads. Find them with
+`lkap_contracts.rules_expr.nested_repeat` over each stored `config.rules[*].when` pattern, and rewrite each one
+(for example `(fire|smoke)+` → `fire|smoke`).
+
 ## 10. Smoke test
 
 `scripts/smoke_v2.sh` runs end to end against compose dev:

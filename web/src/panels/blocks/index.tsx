@@ -86,15 +86,10 @@ const NotebookBlock = lazy(() => import("./notebook"));
 // module (`./layout`) is where the child-resolution logic lives, not here —
 // see that file's docblock for why it safely imports `Block` back from here.
 const LayoutBlock = lazy(() => import("./layout"));
-
-/** A block type this web build has no renderer for yet (V6-12's `canvas`; its renderer comes with V6-14). */
-function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
-  return (
-    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
-      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
-    </BlockFrame>
-  );
-}
+// `canvas` (V6-14) pulls in its own pointer/SVG toolkit and, on first draw,
+// a further dynamic import of `perfect-freehand` (`canvas/freehand.ts`);
+// kept out of the first load the same way, for a panel with no drawing board.
+const CanvasBlock = lazy(() => import("./canvas"));
 
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
@@ -124,8 +119,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   // V6-10 (D-V6-15, D-V6-18): both lazy (see above).
   notebook: NotebookBlock as AnyBlockComponent,
   layout: LayoutBlock as AnyBlockComponent,
-  // V6-12 added the drawing board to the contract; its renderer comes with V6-14.
-  canvas: NotRenderedYetBlock,
+  // V6-12 added the drawing board to the contract; V6-14 is its real renderer (lazy, see above).
+  canvas: CanvasBlock as AnyBlockComponent,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */
@@ -140,6 +135,7 @@ export const LAZY_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
   "transcript",
   "notebook",
   "layout",
+  "canvas",
 ]);
 
 export interface BlockProps extends PanelProps {

@@ -119,6 +119,7 @@ describe("block catalog", () => {
     // `layout` joins it too — `radix-ui`'s Tabs primitive.
     expect([...LAZY_BLOCK_TYPES].sort()).toEqual([
       "activity",
+      "canvas",
       "captions",
       "document",
       "layout",

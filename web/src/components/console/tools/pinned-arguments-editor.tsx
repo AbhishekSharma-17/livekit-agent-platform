@@ -50,14 +50,24 @@ export function PinnedArgumentsEditor({
   values,
   onChange,
   variableNames,
+  title = "Fixed values",
+  description = "Set once here and hidden from the model — it never sees these arguments or chooses them.",
+  emptyLabel = "No fixed values yet.",
+  issuesOf = pinnedArgumentIssues,
 }: {
   values: Record<string, PinnedValue>;
   onChange: (next: Record<string, PinnedValue>) => void;
   variableNames: readonly string[];
+  /** Heading and copy (V6-19's flow `tool` node reuses this table for its own "Arguments" — same shape, different words). */
+  title?: string;
+  description?: React.ReactNode;
+  emptyLabel?: string;
+  /** Which placeholders a string value may hold — defaults to `pinnedArgumentIssues` (ctx/var, or a bare tool argument name); a flow step has no arguments of its own, so its caller passes a stricter checker. */
+  issuesOf?: (pinned: Record<string, unknown>) => string[];
 }) {
   const entries = Object.entries(values);
   const atCap = entries.length >= MAX_PINNED_ARGUMENTS;
-  const issues = pinnedArgumentIssues(values);
+  const issues = issuesOf(values);
   const [draftName, setDraftName] = React.useState("");
 
   function addRow() {
@@ -91,10 +101,8 @@ export function PinnedArgumentsEditor({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h3 className="text-sm font-medium text-foreground">Fixed values</h3>
-        <p className="text-[0.8125rem] text-pretty text-muted-foreground">
-          Set once here and hidden from the model — it never sees these arguments or chooses them.
-        </p>
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        <p className="text-[0.8125rem] text-pretty text-muted-foreground">{description}</p>
       </div>
       {entries.length > 0 ? (
         <Table>
@@ -122,7 +130,7 @@ export function PinnedArgumentsEditor({
           </TableBody>
         </Table>
       ) : (
-        <p className="text-[0.8125rem] text-muted-foreground">No fixed values yet.</p>
+        <p className="text-[0.8125rem] text-muted-foreground">{emptyLabel}</p>
       )}
       <div className="flex gap-2">
         <Input

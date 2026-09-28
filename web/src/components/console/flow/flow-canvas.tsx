@@ -57,7 +57,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AgentOut, FlowEdge } from "@/contracts/lkap-contracts";
+import type { AgentOut, FlowEdge, ToolNode } from "@/contracts/lkap-contracts";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { JsonSchema } from "@/lib/schema-form";
 import { useThemePreference } from "@/lib/theme";
@@ -76,8 +76,13 @@ import {
   kindOf,
   NODE_KIND_LABEL,
   newNode,
+  outcomeForEdge,
+  outgoingEdges,
   removeNode,
   renameVariable,
+  setToolOutcome,
+  TOOL_OUTCOME_KEYS,
+  TOOL_OUTCOME_LABEL,
   uniqueEdgeId,
   updateEdge,
   updateNode,
@@ -121,7 +126,7 @@ const KIND_ICON: Record<FlowNodeKind, LucideIcon> = {
   tool: WrenchIcon,
 };
 
-const ADDABLE: FlowNodeKind[] = ["agent", "end", "transfer", "global", "qa"];
+const ADDABLE: FlowNodeKind[] = ["agent", "tool", "end", "transfer", "global", "qa"];
 
 const DEBOUNCE_MS = 600;
 
@@ -316,7 +321,17 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
       draft.edges.map((edge) => {
         const edgeIssues = grouped.edges.get(edge.id);
         const tone = edgeIssues?.errors.length ? "var(--danger)" : edgeIssues?.warnings.length ? "var(--warning)" : undefined;
-        const text = edge.label || edge.condition || "";
+        // D-V6-28: a tool step's own edges are labelled by outcome ("Found" / "Nothing
+        // found" / "Failed"), not the free-text condition every other edge shows.
+        const sourceNode = draft.nodes.find((node) => node.id === edge.source);
+        const outcome =
+          sourceNode && kindOf(sourceNode) === "tool"
+            ? outcomeForEdge((sourceNode as ToolNode).on, edge.id)
+            : null;
+        const text =
+          sourceNode && kindOf(sourceNode) === "tool"
+            ? (outcome ? TOOL_OUTCOME_LABEL[outcome] : "Not assigned")
+            : edge.label || edge.condition || "";
         return {
           id: edge.id,
           source: edge.source,
@@ -330,7 +345,7 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
           ariaLabel: `Path from ${edge.source} to ${edge.target}${edgeIssues?.errors.length ? " (has errors)" : ""}`,
         };
       }),
-    [draft.edges, grouped.edges, selection],
+    [draft.edges, draft.nodes, grouped.edges, selection],
   );
 
   const onNodesChange = React.useCallback((changes: NodeChange<FlowRfNode>[]) => {
@@ -356,10 +371,30 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
     (connection: Connection) => {
       if (!connectable(connection)) return;
       const id = uniqueEdgeId(connection.source, connection.target, draft.edges.map((edge) => edge.id));
-      update((current) => ({
-        ...current,
-        edges: [...current.edges, { id, source: connection.source, target: connection.target, condition: "", priority: 0 }],
-      }));
+      update((current) => {
+        const nextEdges = [
+          ...current.edges,
+          { id, source: connection.source, target: connection.target, condition: "", priority: 0 },
+        ];
+        const source = current.nodes.find((node) => node.id === connection.source);
+        // D-V6-28: a fresh path from a tool step has no outcome yet — fill the first
+        // empty slot (Found, then Nothing found, then Failed) so it isn't dropped
+        // silently by "every edge leaving the node is named by an outcome".
+        if (source && kindOf(source) === "tool") {
+          const tool = source as ToolNode;
+          const empty = TOOL_OUTCOME_KEYS.find((outcome) => !tool.on?.[outcome]);
+          if (empty) {
+            return {
+              ...current,
+              edges: nextEdges,
+              nodes: current.nodes.map((node) =>
+                node.id === tool.id ? { ...tool, on: setToolOutcome(tool.on, empty, id) } : node,
+              ),
+            };
+          }
+        }
+        return { ...current, edges: nextEdges };
+      });
       select({ kind: "edge", id });
     },
     [connectable, draft.edges, select, update],
@@ -761,6 +796,14 @@ function NodeInspector({
   const kbScope = React.useMemo(() => kbScopeFor(node, draft.nodes, agentKbIds), [agentKbIds, draft.nodes, node]);
   const kind = kindOf(node);
   const spec = specs.data?.nodes?.find((item) => item.kind === kind);
+  const edgeOptions = React.useMemo(
+    () =>
+      outgoingEdges(node.id, draft.edges).map((edge) => ({
+        id: edge.id,
+        label: draft.nodes.find((item) => item.id === edge.target)?.label || edge.target,
+      })),
+    [draft.edges, draft.nodes, node.id],
+  );
   return (
     <InspectorFrame
       title={node.label || node.id}
@@ -775,6 +818,10 @@ function NodeInspector({
           onChange={onChange}
           variables={draft.variables}
           toolOptions={options.toolOptions}
+          toolStepOptions={options.toolNodeOptions}
+          detailsBlocks={options.detailsBlocks}
+          tableBlocks={options.tableBlocks}
+          edgeOptions={edgeOptions}
           kbOptions={options.kbOptions}
           kbScope={kbScope}
           providerOptions={options.providerOptions}
@@ -807,14 +854,24 @@ function EdgeInspector({
     const node = draft.nodes.find((item) => item.id === id);
     return node?.label || id;
   };
+  const sourceNode = draft.nodes.find((item) => item.id === edge.source);
+  const sourceKind = sourceNode ? kindOf(sourceNode) : undefined;
+  const outcome = sourceNode && sourceKind === "tool" ? outcomeForEdge((sourceNode as ToolNode).on, edge.id) : null;
   return (
-    <InspectorFrame title="Path" description="When the model moves on, and what it says." deleteLabel="Delete path" onDelete={onDelete}>
+    <InspectorFrame
+      title="Path"
+      description={sourceKind === "tool" ? "Which outcome takes this path, and what it says." : "When the model moves on, and what it says."}
+      deleteLabel="Delete path"
+      onDelete={onDelete}
+    >
       <EdgeForm
         edge={edge}
         sourceLabel={label(edge.source)}
         targetLabel={label(edge.target)}
         variables={draft.variables}
         onChange={onChange}
+        sourceKind={sourceKind}
+        outcome={outcome}
         {...fieldMessages(issues, draft)}
       />
     </InspectorFrame>

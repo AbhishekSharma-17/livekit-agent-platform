@@ -6,6 +6,7 @@ import type {
   GlobalNode,
   QaNode,
   ToolNode,
+  ToolNodeOutcomes,
   StartNode,
   TransferNode,
   VariableSpec,
@@ -42,6 +43,23 @@ export const NODE_ID_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
 /** Variables are referenced as `{{ name }}`. */
 export const VARIABLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
+/**
+ * `lkap_contracts.tool_context.ToolContextPlaceholder` (D-V6-22), in the order the console
+ * lists them. Defined here (not in `tools/tool-context.ts`, which re-exports it) because a
+ * `tool` node's argument templates (D-V6-28) need it too, and `tool-context.ts` already
+ * imports `VARIABLE_NAME_PATTERN` from this module — keeping the dependency one-directional
+ * avoids a cycle between the two.
+ */
+export const CTX_PLACEHOLDERS = [
+  "session_id",
+  "agent_id",
+  "caller_phone",
+  "caller_identity",
+  "language",
+  "timezone",
+  "channel",
+] as const;
+
 export const NODE_KIND_LABEL: Record<FlowNodeKind, string> = {
   start: "Start",
   agent: "Agent step",
@@ -49,12 +67,75 @@ export const NODE_KIND_LABEL: Record<FlowNodeKind, string> = {
   transfer: "Transfer",
   global: "Global rules",
   qa: "QA scoring",
-  // V6-17 (ask #117): shown and labelled; adding one from the canvas comes with V6-19.
   tool: "Tool step",
 };
 
 /** Kinds that never take an edge (merged into every node / run after the call). */
 export const UNCONNECTABLE_KINDS: readonly FlowNodeKind[] = ["global", "qa"];
+
+// ------------------------------------------------------------------- tool node (V6-19, D-V6-28)
+
+/** `lkap_contracts.flow.ToolNodeOutcome`: how a `tool` node's call turned out. */
+export type ToolOutcomeKey = "ok" | "error" | "empty";
+export const TOOL_OUTCOME_KEYS: readonly ToolOutcomeKey[] = ["ok", "error", "empty"];
+
+/** Plain words for a `tool` node's outcomes (ask #117: "Found" / "Nothing found" / "Failed"). */
+export const TOOL_OUTCOME_LABEL: Record<ToolOutcomeKey, string> = {
+  ok: "Found",
+  empty: "Nothing found",
+  error: "Failed",
+};
+
+/** The edges leaving `nodeId`, in edge-list order. */
+export function outgoingEdges(nodeId: string, edges: readonly FlowEdge[]): FlowEdge[] {
+  return edges.filter((edge) => edge.source === nodeId);
+}
+
+/** Which outcome (if any) `on` currently assigns `edgeId` to — the first match, `ok`/`error`/`empty` order. */
+export function outcomeForEdge(on: ToolNodeOutcomes | undefined, edgeId: string): ToolOutcomeKey | null {
+  return TOOL_OUTCOME_KEYS.find((outcome) => (on?.[outcome] ?? "") === edgeId) ?? null;
+}
+
+/** `on` with `outcome` pointing at `edgeId` (or unset, for `edgeId: null`) — the inverse of {@link outcomeForEdge}. */
+export function setToolOutcome(
+  on: ToolNodeOutcomes | undefined,
+  outcome: ToolOutcomeKey,
+  edgeId: string | null,
+): ToolNodeOutcomes {
+  return { ...on, [outcome]: edgeId || null };
+}
+
+/**
+ * Why a `tool` node argument template is not valid — mirrors
+ * `lkap_contracts.flow.argument_template_issues` exactly (D-V6-28): a value may name
+ * `{{ ctx.<name> }}` (a session value) or `{{ var.<name> }}` (a flow variable), nothing else.
+ * Unlike `tool-context.ts`'s `placeholderFieldIssues` (used for a tool's own pinned
+ * arguments, url and body template, where a bare `{{ name }}` is one of the tool's own
+ * arguments), a flow step has no arguments of its own, so a bare `{{ name }}` is always wrong.
+ */
+export function toolArgumentIssues(text: string): string[] {
+  const issues: string[] = [];
+  const anyPlaceholder = /\{\{(.*?)\}\}/g;
+  const contextPlaceholder = /^\{\{\s*(?:(ctx|var)\.)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}$/;
+  for (const match of text.matchAll(anyPlaceholder)) {
+    const whole = match[0];
+    const parsed = contextPlaceholder.exec(whole);
+    const namespace = parsed?.[1];
+    const name = parsed?.[2];
+    if (!parsed || !namespace || !name) {
+      const inner = match[1].trim();
+      const hint = VARIABLE_NAME_PATTERN.test(inner) ? ` (write {{ var.${inner} }})` : "";
+      issues.push(`'${whole}' is not a value this step can fill: use {{ var.<name> }}${hint}`);
+      continue;
+    }
+    if (namespace === "ctx" && !(CTX_PLACEHOLDERS as readonly string[]).includes(name)) {
+      issues.push(`'${whole}' is not a session value; use one of: ${CTX_PLACEHOLDERS.join(", ")}`);
+    } else if (namespace === "var" && !VARIABLE_NAME_PATTERN.test(name)) {
+      issues.push(`'${whole}' is not a variable name (lowercase letters, digits and _)`);
+    }
+  }
+  return issues;
+}
 
 export function kindOf(node: AnyFlowNode): FlowNodeKind {
   return (node.kind ?? "agent") as FlowNodeKind;
@@ -215,6 +296,25 @@ export function flowDraftIssues(flow: FlowDraft): FlowIssue[] {
     if (kindOf(node) === "agent" && !(node as AgentNode).instructions?.trim()) {
       warning(`flow.nodes[${i}].instructions`, "This step has no instructions.");
     }
+    if (kindOf(node) === "tool") {
+      const tool = node as ToolNode;
+      if (!tool.tool?.trim()) error(`flow.nodes[${i}].tool`, "Pick a tool for this step to call.");
+      const leaving = new Set(outgoingEdges(tool.id, flow.edges).map((edge) => edge.id));
+      if (!tool.on?.ok || !leaving.has(tool.on.ok)) {
+        error(`flow.nodes[${i}].on`, "Pick the path taken when the tool succeeds (Found).");
+      }
+      for (const outcome of TOOL_OUTCOME_KEYS) {
+        const edgeId = tool.on?.[outcome];
+        if (edgeId && !leaving.has(edgeId)) {
+          error(`flow.nodes[${i}].on`, `"${TOOL_OUTCOME_LABEL[outcome]}" names a path that doesn't leave this step.`);
+        }
+      }
+      Object.entries(tool.arguments ?? {}).forEach(([name, value]) => {
+        if (typeof value !== "string") return;
+        const argIssues = toolArgumentIssues(value);
+        if (argIssues.length > 0) error(`flow.nodes[${i}].arguments.${name}`, argIssues[0]);
+      });
+    }
   });
 
   const starts = flow.nodes.flatMap((node, i) => (kindOf(node) === "start" ? [i] : []));
@@ -240,7 +340,15 @@ export function flowDraftIssues(flow: FlowDraft): FlowIssue[] {
     if (sourceKind === "end" || sourceKind === "transfer") {
       error(`flow.edges[${j}]`, `An ${NODE_KIND_LABEL[sourceKind].toLowerCase()} node has no outgoing paths.`);
     }
-    if (!edge.condition?.trim()) {
+    if (sourceKind === "tool") {
+      // D-V6-28: a tool step's outgoing edges are chosen by outcome (`on.ok`/`.error`/`.empty`)
+      // in the node's own inspector, not by a free-text condition here — mirrors
+      // `_check_tool_nodes`'s "every edge leaving the node is named by an outcome".
+      const source = flow.nodes.find((candidate) => candidate.id === edge.source) as ToolNode | undefined;
+      if (source && outcomeForEdge(source.on, edge.id) === null) {
+        error(`flow.edges[${j}]`, "Assign this path to an outcome (Found, Nothing found or Failed) in the tool step.");
+      }
+    } else if (!edge.condition?.trim()) {
       warning(`flow.edges[${j}].condition`, "Describe when to take this path — the model reads it.");
     }
   });

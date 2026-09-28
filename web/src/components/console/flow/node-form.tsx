@@ -4,15 +4,26 @@ import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field } from "@/components/shared/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { ProviderRef, VariableSpec } from "@/contracts/lkap-contracts";
+import { BindingsEditor } from "@/components/console/tools/bindings-editor";
+import { PinnedArgumentsEditor, type PinnedValue } from "@/components/console/tools/pinned-arguments-editor";
+import type { ProviderRef, ToolBinding, ToolNode, VariableSpec } from "@/contracts/lkap-contracts";
 import { SchemaForm, type FieldRendererProps, type JsonSchema } from "@/lib/schema-form";
 import { cn } from "@/lib/utils";
 
-import { kindOf, type AnyFlowNode } from "./flow-model";
+import {
+  kindOf,
+  setToolOutcome,
+  toolArgumentIssues,
+  TOOL_OUTCOME_KEYS,
+  TOOL_OUTCOME_LABEL,
+  type AnyFlowNode,
+  type ToolOutcomeKey,
+} from "./flow-model";
 import { MentionTextarea } from "./mention-textarea";
-import type { NodeToolOption } from "./tool-options";
+import type { NodeToolOption, ToolNodeOption } from "./tool-options";
 import type { KbScope } from "./use-node-options";
 
 /**
@@ -54,6 +65,13 @@ export interface NodeFormProps {
   onManageVariables?: () => void;
   /** What this step searches (R-V4-29); omitted → the knowledge field shows no scope note. */
   kbScope?: KbScope | null;
+  /** V6-19 (ask #117): a `tool` node's own tool picker — the agent's attached rows, no built-ins. */
+  toolStepOptions?: readonly ToolNodeOption[];
+  /** V6-19: `details`/`table` blocks a `tool` node's bindings may target (`use-node-options.ts`). */
+  detailsBlocks?: readonly { id: string; title: string; fieldKeys: string[] }[];
+  tableBlocks?: readonly { id: string; title: string }[];
+  /** V6-19: the edges leaving this `tool` node, for its Outcomes picker. */
+  edgeOptions?: readonly { id: string; label: string }[];
 }
 
 const TEMPLATED = ["instructions", "greeting", "farewell", "announce", "rubric_prompt"] as const;
@@ -99,6 +117,12 @@ const HINTS: Record<string, string> = {
   webhook_event: "Reserved: records the end state in the flow_ended event.",
 };
 
+/** V6-19: the `tool` node's own fields (D-V6-28) — handled outside `SchemaForm`'s generic
+ * per-property rendering (`TOOL_NODE_FIELDS`, hidden below) since they interlock: picking a
+ * tool reseeds its arguments and clears `mcp_tool`, and the outcome picker needs the node's
+ * outgoing edges, not just this node's own value. */
+const TOOL_NODE_FIELDS = ["tool", "mcp_tool", "arguments", "bindings", "on"] as const;
+
 export function NodeForm({
   node,
   schema,
@@ -111,6 +135,10 @@ export function NodeForm({
   warnings = {},
   onManageVariables,
   kbScope,
+  toolStepOptions = [],
+  detailsBlocks = [],
+  tableBlocks = [],
+  edgeOptions = [],
 }: NodeFormProps) {
   const kind = kindOf(node);
   const value = node as unknown as Record<string, unknown>;
@@ -196,18 +224,219 @@ export function NodeForm({
   }, [kbOptions, kbScope, kind, onManageVariables, providerOptions, toolOptions, variables]);
 
   return (
-    <SchemaForm
-      key={`${node.id}-${kind}`}
-      schema={schema}
-      value={value}
-      onChange={(next) => onChange(next as unknown as AnyFlowNode)}
-      idPrefix={`flow-node-${node.id}`}
-      readOnly={["id", "kind"]}
-      labels={LABELS}
-      hints={withWarnings(HINTS, warnings)}
-      errors={errors}
-      renderers={renderers}
-    />
+    <div className="flex flex-col gap-4">
+      <SchemaForm
+        key={`${node.id}-${kind}`}
+        schema={schema}
+        value={value}
+        onChange={(next) => onChange(next as unknown as AnyFlowNode)}
+        idPrefix={`flow-node-${node.id}`}
+        readOnly={["id", "kind"]}
+        hidden={kind === "tool" ? TOOL_NODE_FIELDS : []}
+        labels={LABELS}
+        hints={withWarnings(HINTS, warnings)}
+        errors={errors}
+        renderers={renderers}
+      />
+      {kind === "tool" ? (
+        <ToolStepFields
+          node={node as ToolNode}
+          onChange={(next) => onChange(next)}
+          toolOptions={toolStepOptions}
+          detailsBlocks={detailsBlocks}
+          tableBlocks={tableBlocks}
+          edgeOptions={edgeOptions}
+          variableNames={variables.map((variable) => variable.name)}
+          errors={errors}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The `tool` node's own section (V6-19, ask #117): tool picker (the agent's attached rows
+ * only, no built-ins), a server tool sub-picker when the chosen row is an MCP server,
+ * argument templates (the V6-11 "Insert value" picker, `ctx`/`var` only — a bare `{{ name }}`
+ * is refused, D-V6-28), bindings (V6-11's `BindingsEditor`), and the outcome edges
+ * (`on.ok`/`.error`/`.empty`, worded "Found" / "Nothing found" / "Failed").
+ */
+function ToolStepFields({
+  node,
+  onChange,
+  toolOptions,
+  detailsBlocks,
+  tableBlocks,
+  edgeOptions,
+  variableNames,
+  errors,
+}: {
+  node: ToolNode;
+  onChange: (next: ToolNode) => void;
+  toolOptions: readonly ToolNodeOption[];
+  detailsBlocks: readonly { id: string; title: string; fieldKeys: string[] }[];
+  tableBlocks: readonly { id: string; title: string }[];
+  edgeOptions: readonly { id: string; label: string }[];
+  variableNames: readonly string[];
+  errors: Readonly<Record<string, string>>;
+}) {
+  const uid = React.useId();
+  const selected = toolOptions.find((option) => option.name === node.tool);
+  const arguments_ = (node.arguments ?? {}) as Record<string, PinnedValue>;
+
+  function pickTool(name: string) {
+    const option = toolOptions.find((candidate) => candidate.name === name);
+    const seeded: Record<string, PinnedValue> = {};
+    for (const argumentName of option?.argumentNames ?? []) seeded[argumentName] = "";
+    onChange({ ...node, tool: name, mcp_tool: null, arguments: seeded });
+  }
+
+  return (
+    <div className="flex flex-col gap-5 border-t border-border pt-4">
+      <Field label="Tool" htmlFor={`${uid}-tool`} required error={errors.tool}>
+        <Select value={node.tool || undefined} onValueChange={pickTool}>
+          <SelectTrigger id={`${uid}-tool`} className="w-full">
+            <SelectValue placeholder="Choose a tool…" />
+          </SelectTrigger>
+          <SelectContent>
+            {toolOptions.map((option) => (
+              <SelectItem key={option.name} value={option.name}>
+                {option.label}
+              </SelectItem>
+            ))}
+            {node.tool && !selected ? (
+              <SelectItem value={node.tool}>{node.tool} (not attached)</SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+        {toolOptions.length === 0 ? (
+          <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+            Attach a tool to this agent first, in its Tools section.
+          </p>
+        ) : null}
+      </Field>
+
+      {selected?.kind === "mcp" ? (
+        <Field label="Server tool" htmlFor={`${uid}-mcp-tool`} hint="Which of the server's tools this step calls.">
+          <Select value={node.mcp_tool ?? undefined} onValueChange={(next) => onChange({ ...node, mcp_tool: next })}>
+            <SelectTrigger id={`${uid}-mcp-tool`} className="w-full">
+              <SelectValue placeholder="Choose…" />
+            </SelectTrigger>
+            <SelectContent>
+              {(selected.mcpToolNames ?? []).map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      ) : null}
+
+      <PinnedArgumentsEditor
+        title="Arguments"
+        description="What this step passes to the tool. A value can use {{ ctx.* }} (a session fact) or {{ var.* }} (a flow variable)."
+        emptyLabel="This tool takes no arguments, or none are set yet."
+        values={arguments_}
+        onChange={(next) => onChange({ ...node, arguments: next })}
+        variableNames={variableNames}
+        issuesOf={(pinned) =>
+          Object.entries(pinned).flatMap(([name, argumentValue]) =>
+            typeof argumentValue === "string"
+              ? toolArgumentIssues(argumentValue).map((issue) => `${name}: ${issue}`)
+              : [],
+          )
+        }
+      />
+
+      <BindingsEditor
+        uid={uid}
+        values={node.bindings ?? []}
+        onChange={(bindings: ToolBinding[]) => onChange({ ...node, bindings })}
+        detailsBlocks={[...detailsBlocks]}
+        tableBlocks={[...tableBlocks]}
+      />
+
+      <ToolOutcomesField node={node} edgeOptions={edgeOptions} onChange={(on) => onChange({ ...node, on })} error={errors.on} />
+    </div>
+  );
+}
+
+/** `ToolNode.on` (D-V6-28): which outgoing edge is taken for each outcome. */
+function ToolOutcomesField({
+  node,
+  edgeOptions,
+  onChange,
+  error,
+}: {
+  node: ToolNode;
+  edgeOptions: readonly { id: string; label: string }[];
+  onChange: (next: ToolNode["on"]) => void;
+  error?: string;
+}) {
+  const uid = React.useId();
+  const NONE = "__none__";
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-sm font-medium text-foreground">Outcomes</h3>
+        <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+          Which path this step takes next, depending on how the call went.
+        </p>
+      </div>
+      {edgeOptions.length === 0 ? (
+        <p className="text-[0.8125rem] text-muted-foreground">
+          Draw a path from this step on the canvas, then assign it to an outcome here.
+        </p>
+      ) : (
+        (["ok", "empty", "error"] as ToolOutcomeKey[]).map((outcome) => {
+          const value = node.on?.[outcome] ?? "";
+          const stale = value !== "" && !edgeOptions.some((edge) => edge.id === value);
+          const fieldId = `${uid}-outcome-${outcome}`;
+          return (
+            <Field
+              key={outcome}
+              label={TOOL_OUTCOME_LABEL[outcome]}
+              htmlFor={fieldId}
+              required={outcome === "ok"}
+              optional={outcome !== "ok"}
+              hint={
+                outcome === "empty"
+                  ? "Without one, Found's path is taken."
+                  : outcome === "error"
+                    ? "Without one, the call ends with a short apology."
+                    : undefined
+              }
+              error={outcome === "ok" ? error : undefined}
+            >
+              <Select
+                value={value || NONE}
+                onValueChange={(next) => onChange(setToolOutcome(node.on, outcome, next === NONE ? null : next))}
+              >
+                <SelectTrigger id={fieldId} className="w-full">
+                  <SelectValue placeholder="Not assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outcome !== "ok" ? <SelectItem value={NONE}>Not assigned</SelectItem> : null}
+                  {edgeOptions.map((edge) => {
+                    const takenBy = TOOL_OUTCOME_KEYS.filter(
+                      (other) => other !== outcome && (node.on?.[other] ?? "") === edge.id,
+                    );
+                    return (
+                      <SelectItem key={edge.id} value={edge.id}>
+                        {edge.label}
+                        {takenBy.length > 0 ? ` (also ${takenBy.map((o) => TOOL_OUTCOME_LABEL[o]).join(", ")})` : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {stale ? <p className="mt-1 text-[0.8125rem] text-danger-text">This path no longer exists.</p> : null}
+            </Field>
+          );
+        })
+      )}
+    </div>
   );
 }
 

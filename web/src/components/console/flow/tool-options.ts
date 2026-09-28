@@ -1,5 +1,12 @@
 import { BLOCK_TOOLS, BUILTIN_TOOLS } from "@/components/console/lib/constants";
 import { BLOCK_TOOL_TYPES, type BlockToolName } from "@/panels/blocks/catalog";
+import type {
+  DatasetToolDefinition,
+  HttpToolDefinition,
+  McpServerDefinition,
+  ProviderToolDefinition,
+  ToolOut,
+} from "@/contracts/lkap-contracts";
 
 /**
  * The tools a flow node may pick (R-V2-10): exactly the agent-level union the
@@ -82,4 +89,73 @@ export function nodeToolOptions(input: ToolOptionsInput): NodeToolOption[] {
   }
   const seen = new Set<string>();
   return out.filter((option) => (seen.has(option.name) ? false : (seen.add(option.name), true)));
+}
+
+// ------------------------------------------------------------------ tool node (V6-19, ask #117)
+
+/**
+ * One tool the flow's `tool` node may call. Unlike {@link nodeToolOptions} (every tool name the
+ * *model* may pick, including built-ins and the pack's own) a tool step calls a row through the
+ * same execution path a model call would — the agent's **attached rows only**, no built-ins.
+ */
+export interface ToolNodeOption {
+  /** The tool row's `name` — what `ToolNode.tool` stores. */
+  name: string;
+  label: string;
+  kind: ToolOut["kind"];
+  /**
+   * For an MCP server row: the sub-tools `ToolNode.mcp_tool` may name — its own
+   * `allowed_tools` when set, else its `cached_tools` (ask #117); `null` for every other kind.
+   */
+  mcpToolNames: string[] | null;
+  /** The tool's declared argument names, when known (http/provider: its JSON Schema; dataset: its key columns), for seeding `ToolNode.arguments`. */
+  argumentNames: string[];
+}
+
+/** Argument names from a JSON Schema's top-level `properties`, minus any pinned ones. */
+function schemaArgumentNames(parameters: unknown, pinned: readonly string[]): string[] {
+  const properties = (parameters as { properties?: Record<string, unknown> } | null | undefined)?.properties;
+  if (!properties) return [];
+  return Object.keys(properties).filter((name) => !pinned.includes(name));
+}
+
+/** The agent's attached tool rows (`config.tools.tool_ids`), in that order, as {@link ToolNodeOption}s. */
+export function toolNodeOptions(toolIds: readonly string[], rows: readonly ToolOut[]): ToolNodeOption[] {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const out: ToolNodeOption[] = [];
+  for (const id of toolIds) {
+    const row = byId.get(id);
+    if (!row) continue;
+    let mcpToolNames: string[] | null = null;
+    let argumentNames: string[] = [];
+    // `row.kind` (required on `ToolOut`) is the reliable discriminator — the generated
+    // union's own `definition.kind` is optional (R-V5-8/ask #20's lesson, `tool-row.tsx`).
+    switch (row.kind) {
+      case "mcp": {
+        const definition = row.definition as McpServerDefinition;
+        mcpToolNames = definition.allowed_tools?.length
+          ? definition.allowed_tools
+          : (definition.cached_tools ?? []).map((tool) => tool.name);
+        break;
+      }
+      case "dataset": {
+        const definition = row.definition as DatasetToolDefinition;
+        const pinned = Object.keys(definition.pinned_arguments ?? {});
+        argumentNames = definition.key_columns.filter((column) => !pinned.includes(column));
+        break;
+      }
+      case "provider": {
+        const definition = row.definition as ProviderToolDefinition;
+        argumentNames = schemaArgumentNames(definition.parameters, Object.keys(definition.pinned_arguments ?? {}));
+        break;
+      }
+      case "http": {
+        const definition = row.definition as HttpToolDefinition;
+        argumentNames = schemaArgumentNames(definition.parameters, []);
+        break;
+      }
+    }
+    out.push({ name: row.name, label: row.name, kind: row.kind, mcpToolNames, argumentNames });
+  }
+  return out;
 }

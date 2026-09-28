@@ -21,15 +21,21 @@ import { ModelTestControls } from "@/components/console/registry/model-test-pane
 import {
   inferenceProviderFor,
   isInferenceProvider,
+  isRecommendedProvider,
   isVerified,
+  notForLiveCallsChip,
+  RECOMMENDED_STACK,
   slotAvailability,
+  streamingChipCopy,
   unavailableCopy,
+  type DeploymentType,
   type ProviderKind,
+  type StreamingChipCopy,
 } from "@/components/console/registry/provider-meta";
-import { defaultFieldValues, RegistryForm } from "@/components/console/registry/registry-form";
+import { recommendedFieldValues, RegistryForm } from "@/components/console/registry/registry-form";
 import { idIssueSentence, isSendableModelId, validateModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
-import type { FieldSpec, ModelSpec, ModelTestResult, ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
+import type { ConnectionOut, FieldSpec, ModelSpec, ModelTestResult, ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
  * What a slot may offer. Every member is optional; `{}` is the v1 behaviour.
@@ -54,6 +60,14 @@ export interface SlotConstraints {
    * return a sentence (with a fix) to show the provider disabled, or `null`.
    */
   disabledReason?: (spec: ProviderSpec) => string | null;
+  /**
+   * The connection this slot is bound to, when the caller knows it (V6-03,
+   * D-V6-3) — drives the "Recommended" badge (LiveKit Inference on Cloud,
+   * Deepgram/Cartesia on self-hosted). `undefined` (the default, e.g. the
+   * credential dialog or a caller not yet wired to a connection): no badge,
+   * same as before this field existed.
+   */
+  connection?: Pick<ConnectionOut, "deployment_type"> | null;
   /** Open the model list filtered to vision-capable models. */
   preferVision?: boolean;
   /**
@@ -153,13 +167,20 @@ export function useSlotProviders(providers?: ProviderSpec[]): ProviderSpec[] {
   return providers ?? query.data?.providers ?? [];
 }
 
-/** A fresh `ProviderRef` for a newly picked provider. */
+/**
+ * A fresh `ProviderRef` for a newly picked provider (V6-02, D-V6-4c; ask
+ * #16, U-V6-2): option fields resolve `recommended` over `default`, since
+ * this ref has no stored history to preserve. Called only for a new agent's
+ * empty slot or a provider just picked here — never to backfill a stored
+ * reference's missing fields (that stays `defaultFieldValues`, the plugin's
+ * own behaviour, so an existing agent never changes).
+ */
 export function newProviderRef(spec: ProviderSpec): ProviderRef {
   return {
     provider_id: spec.id,
     credential_id: null,
     model: spec.default_model ?? null,
-    fields: defaultFieldValues(spec.fields ?? []),
+    fields: recommendedFieldValues(spec.fields ?? []),
   };
 }
 
@@ -248,6 +269,7 @@ export function ProviderSlotEditor({
   }
 
   const showVendors = effectiveRun === "own";
+  const deploymentType = constraints.connection?.deployment_type ?? null;
 
   return (
     <div className="flex flex-col gap-5" data-slot="provider-slot-editor" data-kind={kind}>
@@ -256,6 +278,7 @@ export function ProviderSlotEditor({
           name={`${prefix}-run`}
           value={effectiveRun}
           onChange={chooseRun}
+          recommended={inference ? isRecommendedProvider(inference, deploymentType) : false}
         />
       ) : null}
 
@@ -264,9 +287,11 @@ export function ProviderSlotEditor({
           name={`${prefix}-vendor`}
           kind={kind}
           selectedId={value?.provider_id ?? null}
+          selectedFields={value?.fields ?? null}
           selectable={selectable}
           unavailable={unavailable}
           onSelect={chooseVendor}
+          deploymentType={deploymentType}
         />
       ) : null}
 
@@ -445,10 +470,13 @@ function RunChoiceControl({
   name,
   value,
   onChange,
+  recommended = false,
 }: {
   name: string;
   value: RunChoice | null;
   onChange: (next: RunChoice) => void;
+  /** LiveKit Inference is the recommended stack for the bound connection (D-V6-3). */
+  recommended?: boolean;
 }) {
   const options: { value: RunChoice; title: string; hint: string }[] = [
     { value: "inference", title: "LiveKit Inference", hint: "No key needed; billed through LiveKit Cloud." },
@@ -477,9 +505,14 @@ function RunChoiceControl({
               className="sr-only"
               aria-describedby={`${name}-${option.value}-hint`}
             />
-            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
               {option.title}
               {option.value === "inference" ? <CapabilityBadge kind="no-key" /> : null}
+              {option.value === "inference" && recommended ? (
+                <StatusChip tone="info" size="sm">
+                  Recommended
+                </StatusChip>
+              ) : null}
             </span>
             <span id={`${name}-${option.value}-hint`} className="text-xs text-muted-foreground">
               {option.hint}
@@ -495,16 +528,22 @@ function VendorList({
   name,
   kind,
   selectedId,
+  selectedFields,
   selectable,
   unavailable,
   onSelect,
+  deploymentType,
 }: {
   name: string;
   kind: ProviderKind;
   selectedId: string | null;
+  /** The selected provider's stored fields, so its own streaming chip reflects e.g. `use_realtime` (not just the entry's default). */
+  selectedFields: Record<string, unknown> | null;
   selectable: ProviderSpec[];
   unavailable: UnavailableEntry[];
   onSelect: (spec: ProviderSpec) => void;
+  /** Drives the "Recommended" badge (D-V6-3); `null` when no connection is bound. */
+  deploymentType: DeploymentType | null;
 }) {
   const legendId = `${name}-legend`;
   return (
@@ -513,12 +552,23 @@ function VendorList({
         <span id={legendId} className="text-sm font-medium text-foreground">
           Vendor
         </span>
+        {deploymentType === "self_hosted" && kind === "tts" ? (
+          <p className="text-xs text-muted-foreground">{RECOMMENDED_STACK.selfHostedAlternatives}</p>
+        ) : null}
         {selectable.length === 0 ? (
           <p className="text-[0.8125rem] text-muted-foreground">No {kind === "llm" ? "language model" : "provider"} is available for this slot yet.</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {selectable.map((spec) => (
-              <VendorCard key={spec.id} name={name} spec={spec} checked={spec.id === selectedId} onSelect={() => onSelect(spec)} />
+              <VendorCard
+                key={spec.id}
+                name={name}
+                spec={spec}
+                checked={spec.id === selectedId}
+                onSelect={() => onSelect(spec)}
+                recommended={isRecommendedProvider(spec, deploymentType)}
+                fields={spec.id === selectedId ? selectedFields : null}
+              />
             ))}
           </div>
         )}
@@ -586,16 +636,24 @@ function VendorCard({
   spec,
   checked,
   onSelect,
+  recommended = false,
+  fields = null,
 }: {
   name: string;
   spec: ProviderSpec;
   checked: boolean;
   onSelect: () => void;
+  /** The recommended stack for the bound connection type (D-V6-3). */
+  recommended?: boolean;
+  /** The stored fields, when this card is the selected one — so its streaming chip reflects e.g. `use_realtime` rather than just the entry's default. */
+  fields?: Record<string, unknown> | null;
 }) {
   const caps = spec.capabilities ?? {};
   const voices = caps.voices?.length ?? 0;
   const thinks = THINKING_KINDS.has(spec.kind);
   const speaks = SPEAKING_KINDS.has(spec.kind);
+  const streamChip = streamingChipCopy(spec, fields);
+  const liveCallsNote = notForLiveCallsChip(spec);
   return (
     <div
       className={cn(
@@ -617,13 +675,24 @@ function VendorCard({
                 Verified
               </StatusChip>
             ) : null}
+            {recommended ? (
+              <StatusChip tone="info" size="sm">
+                Recommended
+              </StatusChip>
+            ) : null}
           </span>
-          <span className="flex flex-wrap gap-1">
+          <span className="flex flex-wrap items-center gap-1">
             {thinks && caps.video_input ? <CapabilityBadge kind="vision" /> : null}
             {thinks && caps.tool_calling ? <CapabilityBadge kind="tools" /> : null}
             {thinks && caps.silent_tool_reply ? <CapabilityBadge kind="silent-tools" /> : null}
             {speaks && voices > 0 ? <CapabilityBadge kind="voices" count={voices} /> : null}
             {spec.requires_credential === false ? <CapabilityBadge kind="no-key" /> : null}
+            {streamChip ? <StreamingChip copy={streamChip} /> : null}
+            {liveCallsNote ? (
+              <StatusChip tone="warning" size="sm">
+                {liveCallsNote}
+              </StatusChip>
+            ) : null}
           </span>
         </span>
       </label>
@@ -634,6 +703,26 @@ function VendorCard({
         </span>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The streaming chip (D-V6-1, D-V6-2): "Streams" / "Waits for the whole
+ * sentence", with the registry's `streaming_note` as a native hover tip —
+ * plain words, no "WS"/"PCM"/"SSE" (§0.1). Exported so the collapsed slot
+ * summary (`provider-slot-card.tsx`) can show the same chip.
+ */
+export function StreamingChip({ copy }: { copy: StreamingChipCopy }) {
+  const chip = (
+    <StatusChip tone={copy.tone} size="sm">
+      {copy.label}
+    </StatusChip>
+  );
+  if (!copy.tip) return chip;
+  return (
+    <span title={copy.tip} className="inline-flex">
+      {chip}
+    </span>
   );
 }
 

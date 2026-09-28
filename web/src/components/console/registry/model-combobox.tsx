@@ -11,6 +11,7 @@ import { useCredentials, useProviderModels, useProviders } from "@/components/co
 import { formatUsdPerMin, usePriceQuotes } from "@/components/console/lib/cost-hooks";
 import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
 import { TestedChip, testedStateFor } from "@/components/console/registry/model-test-panel";
+import { isOpenRouterSpeech } from "@/components/console/registry/provider-meta";
 import { CATALOG_FULL_LIMIT, useCatalog } from "@/hooks/useCatalog";
 import { idIssueSentence, isSendableModelId, validateModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ import type { CatalogItem, CatalogSpec, ModelIdRules, ModelSpec, ProviderModelOu
 const CATALOG_RENDER_CAP = 100;
 
 /** The provider context the combobox needs for its live groups (all optional: without it, it is today's suggestions-only picker). */
-export type ModelComboboxProvider = Pick<ProviderSpec, "id" | "vendor" | "probe" | "requires_credential"> & {
+export type ModelComboboxProvider = Pick<ProviderSpec, "id" | "vendor" | "probe" | "requires_credential" | "kind"> & {
   catalog?: CatalogSpec | null;
 };
 
@@ -328,6 +329,9 @@ function ModelComboboxView({
       <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-72 p-0" aria-label="Choose a model">
         <Command shouldFilter={false} label="Models">
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search models or type an id" />
+          {provider && isOpenRouterSpeech(provider.id) ? (
+            <p className="px-3 pt-2 text-xs text-warning-text">Not for live calls — OpenRouter answers one whole request per utterance.</p>
+          ) : null}
           {hasVision ? (
             <div className="flex items-center gap-2 px-3 pt-2 text-xs text-muted-foreground">
               <button
@@ -363,6 +367,11 @@ function ModelComboboxView({
                           {model.id === defaultModel ? (
                             <span className="rounded-xs bg-muted px-1 text-[0.6875rem] leading-4 font-medium text-muted-foreground">
                               Default
+                            </span>
+                          ) : null}
+                          {model.deprecated ? (
+                            <span className="rounded-xs bg-warning-soft px-1 text-[0.6875rem] leading-4 font-medium text-warning-text">
+                              Deprecated
                             </span>
                           ) : null}
                           {model.supports_video ? <CapabilityBadge kind="vision" /> : null}
@@ -517,6 +526,7 @@ export function ModelSummary({
       <span className="flex items-center gap-1.5 truncate text-sm text-foreground">
         {model ? model.label : "Custom model"}
         {isDefault ? <span className="text-xs text-muted-foreground">· Default</span> : null}
+        {model?.deprecated ? <span className="text-xs text-warning-text">· Deprecated</span> : null}
       </span>
       <span className={cn("truncate font-mono text-xs text-muted-foreground", idClassName)}>{modelId}</span>
     </span>

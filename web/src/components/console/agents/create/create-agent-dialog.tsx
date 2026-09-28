@@ -567,6 +567,7 @@ function NameStep({
                   <Link href="/console/providers" className="font-medium underline underline-offset-2">
                     Add a provider key
                   </Link>{" "}
+                  — the recommended self-hosted stack is Deepgram (speech-to-text) and Cartesia (text-to-speech) —
                   or pick a LiveKit Cloud connection, then try again.
                 </p>
               ) : null}

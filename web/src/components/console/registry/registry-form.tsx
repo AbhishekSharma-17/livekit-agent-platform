@@ -850,3 +850,30 @@ export function defaultFieldValues(fields: FieldSpec[]): FieldValues {
   }
   return values;
 }
+
+/**
+ * Field values for a **freshly created** `ProviderRef` — a new agent's empty
+ * slot, or a provider just picked in the slot editor (V6-02, D-V6-4c; ask
+ * #16, U-V6-2): `FieldSpec.recommended` when set, else the same fallback as
+ * `defaultFieldValues`. Never used to fill in a *stored* reference's missing
+ * fields — that would flip `use_realtime`/`use_websocket` on for an existing
+ * agent, which the compatibility rule forbids; `newProviderRef` in
+ * `provider-slot-editor.tsx` is the only caller.
+ */
+export function recommendedFieldValues(fields: FieldSpec[]): FieldValues {
+  const values: FieldValues = {};
+  for (const field of fields) {
+    if (field.recommended !== null && field.recommended !== undefined) {
+      values[field.name] = field.recommended;
+    } else if (field.default !== null && field.default !== undefined) {
+      values[field.name] = field.default;
+    } else if (field.type === "boolean") {
+      values[field.name] = false;
+    } else if (field.type === "number") {
+      values[field.name] = 0;
+    } else {
+      values[field.name] = "";
+    }
+  }
+  return values;
+}

@@ -14,7 +14,7 @@ import { formatUsdPerMin } from "@/components/console/lib/cost-hooks";
 import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
 import { isCustomModelId, ModelSummary, useModelCatalog } from "@/components/console/registry/model-combobox";
 import { TestedChip, useTestedState } from "@/components/console/registry/model-test-panel";
-import { findModel, isInferenceProvider } from "@/components/console/registry/provider-meta";
+import { findModel, isInferenceProvider, streamingChipCopy } from "@/components/console/registry/provider-meta";
 import {
   MODEL_KINDS,
   modelFieldOf,
@@ -22,6 +22,7 @@ import {
   slotModelId,
   slotSuggestions,
   SPEAKING_KINDS,
+  StreamingChip,
   THINKING_KINDS,
   useSlotProviders,
   type ProviderSlotEditorProps,
@@ -258,6 +259,7 @@ function SlotSummaryBody({ spec, value, kind }: { spec: ProviderSpec; value: Pro
         : kind === "realtime" && caps.video_input === true);
   const isDefault = modelField ? !value.fields?.[modelField.name] : !value.model && Boolean(spec.default_model);
   const showChip = unlisted && (custom || tested.state.kind === "ok" || tested.state.kind === "failed");
+  const streamChip = streamingChipCopy(spec, value.fields);
 
   return (
     <div className="flex flex-col gap-2">
@@ -280,6 +282,7 @@ function SlotSummaryBody({ spec, value, kind }: { spec: ProviderSpec; value: Pro
         {thinks && caps.tool_calling ? <CapabilityBadge kind="tools" /> : null}
         {thinks && caps.silent_tool_reply ? <CapabilityBadge kind="silent-tools" /> : null}
         {SPEAKING_KINDS.has(kind) && voices > 0 ? <CapabilityBadge kind="voices" count={voices} /> : null}
+        {streamChip ? <StreamingChip copy={streamChip} /> : null}
         <KeyStatus spec={spec} credentialId={value.credential_id ?? null} />
       </div>
     </div>

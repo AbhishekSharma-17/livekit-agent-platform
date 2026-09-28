@@ -152,6 +152,8 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
     inference: boundConnection && boundConnection.capabilities?.inference_available === false ? "off" : "auto",
     disabledReason: (spec: ProviderSpec) => connectionDisabledReason(spec, boundConnection),
     fieldLockedReason: canSetEndpoints ? undefined : endpointFieldLockedReason,
+    // V6-03 (ask #41): lets the pickers show the "Recommended" stack for this connection type.
+    connection: boundConnection,
   };
 
   const pipelineErrors = formState.errors.config?.pipeline;

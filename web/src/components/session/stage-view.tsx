@@ -13,12 +13,20 @@
  * `videoTrack` / `compact` rather than by forking the stage.
  *
  * Contract notes for anything plugging into this seam:
- * - `videoTrack` present → the video fills the well (`object-cover`) and the
- *   meter steps aside; the state caption becomes a corner chip.
- * - `localTrack` present → self-view PiP (tap to enlarge / swap).
+ * - `videoTrack` present → the video fills the well, sized to the track's own
+ *   aspect (V6-26 — portrait, square or landscape, never a forced 16:9) and
+ *   the meter steps aside; the state caption becomes a corner chip.
+ * - `framing` / `fit` / `declaredAspect` (V6-26, `AvatarOptions` +
+ *   `ProviderCapabilities.avatar_aspect`) steer that sizing before and after
+ *   the first frame arrives — see `avatar-framing.ts`. Nothing set (the
+ *   default for every agent stored before V6-26) renders `auto` + `contain`:
+ *   the whole avatar visible, letterboxed, never cropped.
+ * - `localTrack` present → self-view PiP (tap to enlarge / swap). This is the
+ *   visitor's own camera, not an avatar, so it keeps its fixed tile shape.
  * - `compact` → the wide-layout rail: a 72 px strip on phones, a 200 px rail
  *   on desktop. The shell owns the box; the stage only fills it.
- * - Everything is driven by `agentState`; there is no internal state machine.
+ * - Everything is driven by `agentState`; there is no internal state machine
+ *   beyond the self-view / video-enlarge toggles.
  */
 import * as React from "react";
 import { useState } from "react";
@@ -33,6 +41,13 @@ import {
 } from "@/components/shared/agent-state";
 import { Button } from "@/components/ui/button";
 import { AGENT_STATE_CAPTION, formatElapsed } from "@/components/session/session-state";
+import {
+  aspectRatioStyle,
+  resolveFrame,
+  useMeasuredVideoAspect,
+  type AvatarFit,
+  type AvatarFraming,
+} from "@/components/session/avatar-framing";
 import { cn } from "@/lib/utils";
 
 export interface StageViewProps {
@@ -41,6 +56,27 @@ export interface StageViewProps {
   agentName: string;
   /** Avatar (or any agent-published) video. Replaces the meter when present. */
   videoTrack?: TrackReference;
+  /**
+   * `AvatarOptions.framing` (V6-26). `undefined`/`"auto"` defers to
+   * `declaredAspect`, then a 16:9 guess — never a crop. An explicit value
+   * overrides the track's measured aspect only until a real frame arrives.
+   */
+  framing?: AvatarFraming | null;
+  /** `AvatarOptions.fit` (V6-26). `undefined` renders like `"contain"`. */
+  fit?: AvatarFit | null;
+  /**
+   * `ProviderCapabilities.avatar_aspect` for the selected avatar provider
+   * (V6-26): a pre-connect hint so the well doesn't jump once the first
+   * frame's real aspect arrives and turns out to agree with it.
+   */
+  declaredAspect?: AvatarFraming | null;
+  /**
+   * V6-26: called with the resolved well aspect ratio whenever it changes
+   * (a guess, then the real measured one). A caller with no shell box of its
+   * own — the `video` block, which sits inline in a panel — uses this to
+   * size its own wrapper instead of a hard-coded `aspect-video`.
+   */
+  onAspectChange?: (aspectRatio: number) => void;
   /** The agent's audio track — kept in the contract for visualizer plug-ins. */
   audioTrack?: TrackReference;
   /** The local camera or screen-share track, shown as a self-view. */
@@ -66,6 +102,10 @@ export function StageView({
   agentState,
   agentName,
   videoTrack,
+  framing,
+  fit,
+  declaredAspect,
+  onAspectChange,
   localTrack,
   localLabel = "You",
   compact = false,
@@ -91,6 +131,27 @@ export function StageView({
   const dimmed = agentState === "reconnecting";
   const mediaDim = dimmed ? "opacity-60 transition-opacity duration-(--dur-3)" : "transition-opacity duration-(--dur-3)";
 
+  // V6-26: the well's own aspect and the video's fit/position, from the real
+  // track dimensions once known (see `avatar-framing.ts` for the fallback
+  // order). `videoTrack?.publication?.trackSid` identifies the track so a
+  // swapped avatar never briefly renders at the previous one's measurement.
+  const [videoRef, measured] = useMeasuredVideoAspect(videoTrack?.publication.trackSid);
+  const frame = resolveFrame({
+    framing,
+    fit,
+    declaredAspect,
+    measured,
+    forceCover: videoExpanded,
+  });
+  // The compact rail sizes itself from the well's own aspect (bounded by the
+  // rail's fixed height); every other layout fills the box the shell gives
+  // it and lets `objectFit` reconcile any mismatch.
+  const compactUnexpanded = compact && !videoExpanded;
+  const resolvedAspectRatio = frame.aspectRatio;
+  React.useEffect(() => {
+    onAspectChange?.(resolvedAspectRatio);
+  }, [resolvedAspectRatio, onAspectChange]);
+
   return (
     <div
       data-testid="stage-view"
@@ -107,16 +168,22 @@ export function StageView({
           type="button"
           aria-label={videoExpanded ? `Shrink ${agentName}` : `Enlarge ${agentName}`}
           onClick={() => setVideoExpanded((value) => !value)}
+          data-fit={frame.objectFit}
+          data-aspect={aspectRatioStyle(frame.aspectRatio)}
+          data-measured={frame.measured ? "" : undefined}
+          style={compactUnexpanded ? { aspectRatio: aspectRatioStyle(frame.aspectRatio) } : undefined}
           className={cn(
-            "focus-visible:ring-ring size-full cursor-pointer bg-black transition-opacity duration-(--dur-3) focus-visible:ring-2 focus-visible:outline-none",
+            "bg-stage focus-visible:ring-ring cursor-pointer transition-opacity duration-(--dur-3) focus-visible:ring-2 focus-visible:outline-none",
             dimmed && "opacity-60",
-            compact && !videoExpanded && "mx-auto aspect-video w-auto",
+            compactUnexpanded ? "mx-auto h-full max-w-full" : "size-full",
           )}
         >
           <VideoTrack
             data-testid="stage-video"
+            ref={videoRef}
             trackRef={videoTrack}
-            className="size-full object-cover"
+            className="size-full"
+            style={{ objectFit: frame.objectFit, objectPosition: frame.objectPosition }}
           />
         </button>
       ) : (

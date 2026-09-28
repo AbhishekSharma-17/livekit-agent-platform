@@ -38,3 +38,23 @@ describe("AgentStage avatar video (R-V2-16)", () => {
     expect(screen.getByTestId("stage-view").querySelector('[data-slot="state-meter"]')).not.toBeNull();
   });
 });
+
+/**
+ * V6-26: `AgentStage` forwards `framing`/`fit`/`declaredAspect` to `StageView`
+ * untouched — it has no config of its own to source them from (`session-room.tsx`'s
+ * `avatarFraming` prop is the only caller-supplied source today; see
+ * docs/v6/_asks.md #151 for wiring a real one from `AgentPublicOut`).
+ */
+describe("AgentStage avatar framing pass-through (V6-26)", () => {
+  it("forwards an explicit fit to the stage's video well", () => {
+    render(<AgentStage agentName="Ada" agentState="listening" fit="cover" />);
+    const well = screen.getByRole("button", { name: /enlarge ada/i });
+    expect(well.getAttribute("data-fit")).toBe("cover");
+  });
+
+  it("defaults to the crop-free auto + contain well when nothing is supplied (today's only caller)", () => {
+    render(<AgentStage agentName="Ada" agentState="listening" />);
+    const well = screen.getByRole("button", { name: /enlarge ada/i });
+    expect(well.getAttribute("data-fit")).toBe("contain");
+  });
+});

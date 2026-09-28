@@ -7,12 +7,13 @@
  * subscribed track by sid).
  *
  * The pixels go through WP-8's `StageView` seam (`videoTrack` fills the well),
- * so the block and the stage draw video the same way. Outside a room — the
- * console preview, tests — there is no track to resolve, so the block shows
- * its placeholder and never calls a LiveKit hook.
+ * so the block and the stage draw video the same way (V6-26: sized to the
+ * track's real aspect, `contain` by default — never a forced 16:9 crop).
+ * Outside a room — the console preview, tests — there is no track to
+ * resolve, so the block shows its placeholder and never calls a LiveKit hook.
  */
 import * as React from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMaybeRoomContext, useTracks, useVoiceAssistant, type TrackReference } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { VideoIcon } from "lucide-react";
@@ -21,6 +22,7 @@ import { Icon } from "@/components/shared/icon";
 import type { VideoBlockState } from "@/contracts/lkap-contracts";
 import { useLocalTrackRef } from "@/components/session/agent-stage";
 import { StageView } from "@/components/session/stage-view";
+import { DEFAULT_ASPECT_RATIO, aspectRatioStyle } from "@/components/session/avatar-framing";
 
 import { BlockFrame } from "./frame";
 import type { BlockRenderProps } from "./types";
@@ -67,13 +69,24 @@ function LiveVideo({ source, agentName, reconnecting }: { source: string; agentN
   else if (source === "user_screen") track = screenTrack;
   else track = bySid;
 
+  // V6-26: the wrapper's own footprint in the panel follows the well's
+  // resolved aspect (the pre-V6-26 16:9 guess until a real frame arrives),
+  // so nothing jumps once it does. `StageView` itself renders `contain` by
+  // default, so the avatar is never cropped even before this updates.
+  const [wrapperAspect, setWrapperAspect] = useState(DEFAULT_ASPECT_RATIO);
+
   if (!track) return <VideoPlaceholder source={source} />;
   return (
-    <div data-slot="block-video-track" className="aspect-video w-full overflow-hidden rounded-md bg-black">
+    <div
+      data-slot="block-video-track"
+      className="w-full overflow-hidden rounded-md"
+      style={{ aspectRatio: aspectRatioStyle(wrapperAspect) }}
+    >
       <StageView
         agentState={reconnecting ? "reconnecting" : "listening"}
         agentName={source === "agent_avatar" ? agentName : "Video"}
         videoTrack={track}
+        onAspectChange={setWrapperAspect}
       />
     </div>
   );

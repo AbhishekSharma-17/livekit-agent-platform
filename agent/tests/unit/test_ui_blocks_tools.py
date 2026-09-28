@@ -128,6 +128,12 @@ def test_block_tools_registered_only_for_blocks_that_need_them() -> None:
         BlockSpec(id="book", type="notebook", order=16),
         # V6-12: the canvas tools.
         BlockSpec(id="board", type="canvas", order=17),
+        # V6-23: the five next blocks' tools.
+        BlockSpec(id="sign", type="signature", order=18),
+        BlockSpec(id="chart", type="chart", order=19),
+        BlockSpec(id="clock", type="timer", order=20),
+        BlockSpec(id="snippet", type="code", order=21),
+        BlockSpec(id="order", type="cart", order=22),
     ]
     ctx, _ch, _room = _ctx([*BLOCKS, *wave10])
     names = {t.info.name for t in build_builtin_tools(ctx, disabled=[], http_enabled=False)}
@@ -246,6 +252,9 @@ _NOT_UPDATABLE = [
     "notebook",
     "layout",
     "canvas",
+    # V6-23: a signature is a request, a timer is run by the worker.
+    "signature",
+    "timer",
     "status",
     "notes",
     "checklist",

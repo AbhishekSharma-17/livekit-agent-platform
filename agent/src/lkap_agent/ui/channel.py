@@ -81,6 +81,13 @@ a PNG of at most 5 MiB; it is stored as a session asset of kind `frame` with
 `meta.source="ink"` (set here, never by the page), shown in no gallery, and named in the
 board's `snapshot_asset_id`.
 
+Signatures (V6-23, D-V6-20): the same snapshot path takes a `signature` block's picture right
+after the caller tapped Sign (`request_signature` asks for it): only while it is awaited, only
+as a PNG of at most 1 MiB, stored as a session asset of kind `signature` with
+`meta.source="signature"` and shown in no gallery. A `block_submit` on a `signature` block with
+no request waiting is dropped (recorded, nothing applied, the model not told): a signature is
+only ever the answer to a request the worker made, with a picture and a `signature` event.
+
 Live captions (V5-31): while the panel has a ``captions`` block, both sides of
 the conversation stream on ``lkap.captions`` as `CaptionSegment` JSON (one
 message per update; an utterance keeps its ``id`` from its first interim to
@@ -130,8 +137,10 @@ from lkap_contracts.ui_protocol import (
     MAX_CANVAS_SNAPSHOT_BYTES,
     MAX_INK_MESSAGE_BYTES,
     MAX_SESSION_INK_POINTS,
+    MAX_SIGNATURE_BYTES,
     RPC_AGENT_ACTION,
     RPC_UI_REQUEST,
+    SIGNATURE_SOURCE,
     SNAPSHOT_EVERY_N_PATCHES,
     TOPIC_UI_ACTIVITY,
     TOPIC_UI_ASSET,
@@ -208,6 +217,8 @@ __all__ = [
     "caption_tap_for",
     "register_caption_tap",
     "REQUEST_ACK_TIMEOUT_S",
+    "SIGNATURE_ASSET_KIND",
+    "SNAPSHOT_BLOCK_TYPES",
     "STATE_DELTA_BLOCK_TYPES",
     "RequestMethod",
     "UiChannel",
@@ -258,6 +269,10 @@ INK_FLUSH_INTERVAL_S: Final[float] = 0.1
 CANVAS_SNAPSHOT_TIMEOUT_S: Final[float] = 20.0
 #: The display kind of a drawing snapshot in `UiState.assets`.
 CANVAS_SNAPSHOT_KIND: Final[str] = "drawing"
+#: V6-23: the display kind of a signature picture in `UiState.assets`.
+SIGNATURE_ASSET_KIND: Final[str] = "signature"
+#: V6-23: the block types whose picture `request_canvas_snapshot` asks the page for.
+SNAPSHOT_BLOCK_TYPES: Final[frozenset[str]] = frozenset({"canvas", "signature"})
 #: V6-21 (S6-5, ask #27): caller edits and card taps one session may make a minute, together
 #: (each can start a model reply); past it the action is refused and the model hears nothing.
 MAX_CALLER_ACTIONS_PER_MIN: Final[int] = 10
@@ -298,8 +313,16 @@ ANSWER_KEYS: Final[dict[str, frozenset[str]]] = {
 #: The block types a caller's `state_delta` (AG-UI) may write (V5-43): what `update_block`
 #: may write, less `kb_citations` (a citation names a knowledge document the worker would
 #: fetch) and `custom` (pack state packs may act on). Requestable blocks, links, consent,
-#: uploads, captions and hand-offs are never written from the browser.
-STATE_DELTA_BLOCK_TYPES: Final[frozenset[str]] = UPDATABLE_BLOCK_TYPES - {"kb_citations", "custom"}
+#: uploads, captions and hand-offs are never written from the browser. V6-23: nor a `chart`,
+#: `code` or `cart` block: they are what the agent shows the caller (a cart the page could
+#: rewrite would read back to the model through `describe_panel` as the order).
+STATE_DELTA_BLOCK_TYPES: Final[frozenset[str]] = UPDATABLE_BLOCK_TYPES - {
+    "kb_citations",
+    "custom",
+    "chart",
+    "code",
+    "cart",
+}
 #: Answer keys only the agent side (`submit_block`) may set: `via: "voice"` marks an answer
 #: heard out loud, `turn_id` the user turn it was heard in (S5-3, S5-4). A browser's copy
 #: is dropped.
@@ -1013,11 +1036,16 @@ class UiChannel:
         """The requested `upload` block (or form `file` field) a stream may fill, with its limits.
 
         V6-12: also a canvas whose drawing snapshot is awaited (`request_canvas_snapshot`),
-        when the caller may draw on it: one PNG of at most 5 MiB.
+        when the caller may draw on it: one PNG of at most 5 MiB. V6-23: also a signature block
+        whose picture is awaited: one PNG of at most 1 MiB.
         """
-        if block_id and self._block_type(block_id) == "canvas":
+        if block_id and self._block_type(block_id) in SNAPSHOT_BLOCK_TYPES:
             waiter = self._snapshot_waiters.get(block_id)
-            if waiter is None or waiter.done() or not self._caller_can_draw(block_id):
+            if waiter is None or waiter.done():
+                return None
+            if self._block_type(block_id) == "signature":
+                return _UploadTarget(block_id, None, ["image/png"], 1, MAX_SIGNATURE_BYTES, canvas=True)
+            if not self._caller_can_draw(block_id):
                 return None
             return _UploadTarget(block_id, None, ["image/png"], 1, MAX_CANVAS_SNAPSHOT_BYTES, canvas=True)
         state = self.state.blocks.get(block_id) if block_id else None
@@ -1246,16 +1274,22 @@ class UiChannel:
         `receive_upload` stores (kind `frame`, `meta.source="ink"`) and names in the board's
         `snapshot_asset_id`. A newer request for the same board releases an older one.
 
+        V6-23: `block_id` may also name a `signature` block (its picture, right after the caller
+        tapped Sign); it is stored as kind `signature` (`meta.source="signature"`) and named in
+        no state here (the requesting tool writes it).
+
         Returns:
             `(asset_id, png_bytes)`, or `None` when the page did not answer, refused, sent
             something that is not a PNG, timed out, or the session closed.
 
         Raises:
-            ValueError: When `block_id` is not a canvas the caller may draw on.
+            ValueError: When `block_id` is not a canvas the caller may draw on, nor a signature
+                block.
         """
-        if self._block_type(block_id) != "canvas":
+        block_type = self._block_type(block_id)
+        if block_type not in SNAPSHOT_BLOCK_TYPES:
             raise ValueError(f"block {block_id!r} is not a drawing board")
-        if not self._caller_can_draw(block_id):
+        if block_type == "canvas" and not self._caller_can_draw(block_id):
             raise ValueError(f"the caller cannot draw on {block_id!r}")
         earlier = self._snapshot_waiters.pop(block_id, None)
         if earlier is not None and not earlier.done():
@@ -1289,6 +1323,8 @@ class UiChannel:
         self, api: AssetApi, target: _UploadTarget, mime: str, data: bytes
     ) -> UploadedFile | None:
         """Store an awaited drawing snapshot and hand it to `request_canvas_snapshot` (V6-12)."""
+        if self._block_type(target.block_id) == "signature":
+            return await self._store_signature(api, target, mime, data)
         block_id = target.block_id
         try:
             stored = await api.post_asset(
@@ -1320,6 +1356,47 @@ class UiChannel:
                 "block_id": block_id,
                 "block_type": "canvas",
                 "op": "snapshot_received",
+                "asset_id": asset_id,
+                "size": stored.size,
+            },
+        )
+        waiter = self._snapshot_waiters.pop(block_id, None)
+        if waiter is not None and not waiter.done():
+            waiter.set_result((asset_id, data))
+        return UploadedFile(
+            asset_id=stored.id, name=stored.name, mime=stored.mime, size=stored.size, sha256=stored.sha256
+        )
+
+    async def _store_signature(
+        self, api: AssetApi, target: _UploadTarget, mime: str, data: bytes
+    ) -> UploadedFile | None:
+        """Store an awaited signature picture as kind `signature` and release its waiter (V6-23)."""
+        block_id = target.block_id
+        meta = {"block_id": block_id, "source": SIGNATURE_SOURCE}
+        try:
+            stored = await api.post_asset(
+                self._session_id, data, name=f"{block_id}.png", mime=mime, kind="signature", meta=meta
+            )
+        except AssetRejectedError as exc:
+            reason: UploadRejectReason = "too_large" if exc.status == 413 else "failed"
+            await self._reject_upload(block_id, "signature", reason, target=target)
+            return None
+        asset_id = await self._publish_asset(
+            data,
+            stored.mime,
+            kind=SIGNATURE_ASSET_KIND,
+            meta=meta,
+            asset_id=stored.id,
+            stored=True,
+            name=stored.name,
+            galleries=(),
+        )
+        self._record(
+            "block_update",
+            {
+                "block_id": block_id,
+                "block_type": "signature",
+                "op": "signature_received",
                 "asset_id": asset_id,
                 "size": stored.size,
             },
@@ -2117,6 +2194,13 @@ class UiChannel:
         if values is not None:
             values = {key: value for key, value in values.items() if key not in AGENT_ONLY_ANSWER_KEYS}
         entry = self._pending.get(block_id)
+        if self._block_type(block_id) == "signature" and (entry is None or entry.future.done()):
+            # V6-23: a signature is only the answer to a request the worker is waiting on (with
+            # a picture and a `signature` event); a late or unsolicited one changes nothing.
+            self._record(
+                "block_update", {"block_id": block_id, "block_type": "signature", "op": "late_answer_dropped"}
+            )
+            return
         method: RequestMethod
         if entry is not None:
             method = entry.method

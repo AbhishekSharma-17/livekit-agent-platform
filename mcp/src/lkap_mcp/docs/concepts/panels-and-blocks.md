@@ -71,7 +71,8 @@ Attaching a block registers matching worker tools automatically (on top of
 
 - `update_block` — writes state into any of `document`, `gallery`, `table`,
   `transcript`, `video`, `kb_citations`, `custom`, `details`, `markdown`,
-  `steps`, `cards`.
+  `steps`, `cards`, `chart`, `code`, `cart` (a cart's totals are always added up
+  again; a `signature` or a `timer` is never written this way).
   `show_document` — points a `document` block at a url. `table_append` —
   appends one row to a `table` block. `request_form` — asks the user to
   fill in a `form` block and returns their answers.
@@ -147,6 +148,29 @@ Attaching a block registers matching worker tools automatically (on top of
   so "circle the dent" is `pin_frame` then `draw_on_canvas`. `update_block`
   never writes a board.
 
+- `request_signature` (a `signature` block) — shows the wording over a small
+  signing board and waits for Sign or "Not now". The block's own
+  `disclosure_text` wins over the agent's. On Sign the page sends a picture of
+  the signature, kept with the session's files; every answer (signed or not) is
+  stored as a `signature` session event with the SHA-256 of the exact wording.
+  If the caller starts speaking while it is up, the request is withdrawn, like
+  a choice. Nothing can be signed on a phone call or in a text chat.
+- `show_chart` (a `chart` block) — draws up to 200 points (a 201st is refused):
+  one big number, bars, lines (up to 8 series), a pie, or a gauge on a scale.
+- `start_timer` (a `timer` block) — starts a countdown or a stopwatch (up to
+  the block's `max_seconds`); another call replaces it, 0 seconds stops it.
+  When it runs out the platform marks it ended, stores a `timer_ended` session
+  event and tells the agent in one line.
+- `show_code` (a `code` block) — shows read-only code or text with a language
+  label, up to the block's `max_chars`. Nothing shown is ever run.
+- `cart_set` (a `cart` block) — shows lines (name, quantity, price of one) and
+  any discount, tax or fee; the platform adds up the line totals, subtotal and
+  total. It orders or charges nothing.
+
+These four write quietly on a realtime model; on a phone call a chart, code or
+cart is not shown (the agent says it instead), while a timer still runs.
+`describe_panel` reports each one (a code block by its language and size only).
+
 The caller's strokes travel on their own stream, only from the caller, only to a
 board they may draw on, and within limits (20 messages a second, 2,000 strokes a
 board); a full board says so until it is cleared. A snapshot of the board is kept
@@ -167,7 +191,8 @@ inside another layout (an empty layout is a warning). A notebook `ink` section's
 `canvas_block_id` must name a `canvas` block of the panel shown nowhere else
 (not by another section, not inside a layout). A board the caller may draw on
 gets the phone tip too, and a warning when the agent's model cannot read it (a
-realtime model, or a model that cannot see pictures).
+realtime model, or a model that cannot see pictures). A `signature` block on an
+agent set up for phone calls gets the phone tip as well.
 
 ## Ready-made panels
 
@@ -197,4 +222,6 @@ replaces `panel`; change it afterwards like any other panel).
 `VideoBlockState`, `KbCitationsBlockState`, `ChoicesBlockState`,
 `DetailsBlockState`, `DetailsEdit`, `ChecklistEdit`, `MarkdownBlockState`, `StepsBlockState`,
 `UploadBlockState`, `LinkBlockState`, `SlotsBlockState`, `CardsBlockState`,
-`NotebookBlockState`, `NotebookEdit`, `CanvasBlockState`, `InkMessage`, `SessionAssetOut`.
+`NotebookBlockState`, `NotebookEdit`, `CanvasBlockState`, `InkMessage`,
+`SignatureBlockState`, `SignatureEvent`, `ChartBlockState`, `TimerBlockState`,
+`CodeBlockState`, `CartBlockState`, `SessionAssetOut`.

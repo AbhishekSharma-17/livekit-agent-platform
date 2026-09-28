@@ -7,7 +7,12 @@ envelope, a `notebook` or `layout` (V6-08), a `canvas` (V6-12), and each request
 host-checked block (`consent`, `link`, `upload`, `slots`, `choices`, `handoff`,
 `captions`) — is refused, so the model cannot forge a caller's answer or put a link on a
 host its own tool refuses. A card's `image_url` passes the block's `image_hosts` as
-`show_cards` checks it. The model passes the changed fields as a
+`show_cards` checks it. V6-23: a `chart`, `code` or `cart` block is on the allow-list on
+purpose (display data the agent writes; their state models cap every list and string, so a
+201-point chart is refused here too); a cart's totals are recomputed from its lines and
+adjustments (`cart_set.priced_cart`), so a patch can never show a total that does not add
+up. A `signature` (a request: its answer is the caller's) and a `timer` (run by the worker,
+`start_timer`) stay refused. The model passes the changed fields as a
 JSON-object **string**: a free-form `dict` parameter becomes a Gemini
 function declaration of type OBJECT with no properties, which Gemini rejects
 for the whole tool list.
@@ -19,12 +24,14 @@ import json
 from typing import Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
-from lkap_contracts.blocks import CardsBlockConfig
+from lkap_contracts.blocks import CardsBlockConfig, CartBlockConfig
 from lkap_contracts.ui_protocol import BlockType, UiPatchOp, https_url_problem
 from packs.base import PackSessionContext
 from pydantic import ValidationError
 
 from lkap_agent.ui.blocks import ENVELOPE_BLOCK_TYPES, describe_blocks, session_block_specs
+
+from .cart_set import priced_cart
 
 __all__ = ["UPDATABLE_BLOCK_TYPES", "build_update_block_tool", "parse_json_object"]
 
@@ -45,6 +52,10 @@ UPDATABLE_BLOCK_TYPES: Final[frozenset[BlockType]] = frozenset(
         "steps",
         # V5-43: cards are display data (a tap arrives as a block action).
         "cards",
+        # V6-23 (S6-1: added to the allow-list deliberately): display data the agent writes.
+        "chart",
+        "code",
+        "cart",
     }
 )
 
@@ -60,6 +71,8 @@ _OWN_TOOLS: Final[dict[str, str]] = {
     "consent": "asks for consent; use request_consent",
     "upload": "asks for files; use request_upload",
     "choices": "asks for a choice; use request_choice",
+    "signature": "asks for a signature; use request_signature",
+    "timer": "is a timer; use start_timer",
 }
 
 
@@ -91,6 +104,45 @@ def _check_card_images(fields: dict[str, Any], config: dict[str, Any]) -> None:
         problem = https_url_problem(str(url), allowed_hosts=hosts)
         if problem is not None:
             raise ToolError(f"A card's picture: {problem}.")
+
+
+def _priced_cart_ops(
+    fields: dict[str, Any], current: dict[str, Any], config: dict[str, Any]
+) -> list[UiPatchOp]:
+    """A cart patch as one `set` of the whole cart, its totals recomputed (V6-23).
+
+    Only `currency`, `lines` and `adjustments` are the model's to change; the totals are the
+    platform's (`cart_set.priced_cart`), and the block's `max_lines` holds as in `cart_set`.
+    """
+    unknown = sorted(set(fields) - {"currency", "lines", "adjustments"})
+    if unknown:
+        raise ToolError(
+            f"A cart's {', '.join(unknown)} cannot be set; change its currency, lines or adjustments."
+        )
+    merged = {**current, **fields}
+    lines = merged.get("lines") or []
+    adjustments = merged.get("adjustments") or []
+    if (
+        not isinstance(lines, list)
+        or not isinstance(adjustments, list)
+        or not all(isinstance(item, dict) for item in [*lines, *adjustments])
+    ):
+        raise ToolError("A cart's lines and adjustments are lists of objects.")
+    try:
+        max_lines = CartBlockConfig.model_validate(config).max_lines
+    except ValidationError:
+        max_lines = CartBlockConfig().max_lines
+    if len(lines) > max_lines:
+        raise ToolError(f"That is {len(lines)} lines; this cart shows at most {max_lines}.")
+    try:
+        state = priced_cart(
+            str(merged.get("currency") or "USD"),
+            [{k: v for k, v in line.items() if k != "line_total"} for line in lines],
+            adjustments,
+        )
+    except ValidationError as exc:
+        raise ToolError(f"That change does not fit a cart block: {exc.errors()[0]['msg']}.") from exc
+    return [UiPatchOp(op="set", path=f"/{key}", value=value) for key, value in state.items()]
 
 
 def parse_json_object(raw: str, what: str) -> dict[str, Any]:
@@ -131,6 +183,9 @@ def build_update_block_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         if spec.type == "cards":
             _check_card_images(fields, spec.config)
         ops = [UiPatchOp(op="set", path=f"/{key}", value=value) for key, value in fields.items()]
+        if spec.type == "cart":
+            current = ctx.ui.state.blocks.get(block_id)
+            ops = _priced_cart_ops(fields, current if isinstance(current, dict) else {}, spec.config)
         try:
             await ctx.ui.patch_block(block_id, ops)
         except ValidationError as exc:

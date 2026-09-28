@@ -29,6 +29,7 @@ from lkap_agent.telephony import TELEPHONY_TOOL_NAMES
 from lkap_agent.tools.execution import ResolvedExecution, flow_mode_of, resolve_execution
 
 from .calculate import build_calculate_tool
+from .cart_set import build_cart_set_tool
 from .check_item import build_check_item_tool
 from .clear_canvas import build_clear_canvas_tool
 from .convert_time import build_convert_time_tool
@@ -53,6 +54,7 @@ from .record_consent import build_record_consent_tool
 from .request_choice import build_request_choice_tool
 from .request_consent import build_request_consent_tool
 from .request_form import build_request_form_tool
+from .request_signature import build_request_signature_tool
 from .request_slot import build_request_slot_tool
 from .request_upload import build_request_upload_tool
 from .resolve_choice import build_resolve_choice_tool
@@ -65,9 +67,12 @@ from .set_details import build_set_details_tool
 from .set_status import build_set_status_tool
 from .set_steps import build_set_steps_tool, manual_steps_blocks
 from .show_cards import build_show_cards_tool
+from .show_chart import build_show_chart_tool
+from .show_code import build_show_code_tool
 from .show_document import build_show_document_tool
 from .show_text import build_show_text_tool
 from .spell_back import build_spell_back_tool
+from .start_timer import build_start_timer_tool
 from .switch_language import build_switch_language_tool
 from .table_append import build_table_append_tool
 from .update_block import UPDATABLE_BLOCK_TYPES, build_update_block_tool
@@ -80,6 +85,7 @@ __all__ = [
     "TELEPHONY_TOOL_NAMES",
     "build_builtin_tools",
     "build_calculate_tool",
+    "build_cart_set_tool",
     "build_check_item_tool",
     "build_clear_canvas_tool",
     "build_convert_time_tool",
@@ -104,6 +110,7 @@ __all__ = [
     "build_request_choice_tool",
     "build_request_consent_tool",
     "build_request_form_tool",
+    "build_request_signature_tool",
     "build_request_slot_tool",
     "build_request_upload_tool",
     "build_resolve_choice_tool",
@@ -116,9 +123,12 @@ __all__ = [
     "build_set_status_tool",
     "build_set_steps_tool",
     "build_show_cards_tool",
+    "build_show_chart_tool",
+    "build_show_code_tool",
     "build_show_document_tool",
     "build_show_text_tool",
     "build_spell_back_tool",
+    "build_start_timer_tool",
     "build_switch_language_tool",
     "build_table_append_tool",
     "build_update_block_tool",
@@ -219,6 +229,9 @@ def build_builtin_tools(
         V6-12: `draw_on_canvas`, `clear_canvas` and `read_canvas` for a `canvas` block (which also
         lets `describe_asset` re-read a drawing snapshot, and gives `pin_frame` its
         `canvas_block_id`).
+        V6-23: `request_signature`, `show_chart`, `start_timer`, `show_code` and `cart_set` for a
+        `signature`, `chart`, `timer`, `code` and `cart` block (and `update_block` for a chart, a
+        code block or a cart).
         V6-13: `extract_now` when `extraction` is on with a `manual` trigger; the
         session's live extraction and rules are built (and start listening) here.
     """
@@ -389,6 +402,17 @@ def build_builtin_tools(
         tools.append(build_clear_canvas_tool(ctx))
     if "canvas" in block_types and _want("read_canvas"):
         tools.append(build_read_canvas_tool(ctx))
+    # V6-23: a signature request, a chart, a timer, read-only code and a cart.
+    if "signature" in block_types and _want("request_signature"):
+        tools.append(build_request_signature_tool(ctx))
+    if "chart" in block_types and _want("show_chart"):
+        tools.append(build_show_chart_tool(ctx))
+    if "timer" in block_types and _want("start_timer"):
+        tools.append(build_start_timer_tool(ctx))
+    if "code" in block_types and _want("show_code"):
+        tools.append(build_show_code_tool(ctx))
+    if "cart" in block_types and _want("cart_set"):
+        tools.append(build_cart_set_tool(ctx))
     # V6-13: the session's live extraction and rules listen from here (every session is assembled
     # through this builder before any tool runs); nothing is built for an agent without them.
     from lkap_agent.extraction.session import live_structure, wants_extract_now  # noqa: PLC0415

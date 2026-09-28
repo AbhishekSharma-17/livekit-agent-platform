@@ -471,3 +471,80 @@ describe("SafeMarkdown", () => {
     expect(document.querySelector("script")).toBeNull();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* the V6-12 hand-off: an ink section's board (ask #93)                       */
+/* -------------------------------------------------------------------------- */
+
+describe("notebook ink section + canvas (V6-12, D-V6-16, ask #93)", () => {
+  function panelWithBoard(): BlockSpec[] {
+    return [
+      {
+        id: "notebook",
+        type: "notebook",
+        title: "Notebook",
+        config: { sections: [{ id: "sketch", title: "Sketch", kind: "ink", canvas_block_id: "board" }] },
+        order: 0,
+      },
+      { id: "board", type: "canvas", title: "Board", config: {}, order: 1 },
+    ];
+  }
+
+  it("a section with no board yet still shows 'Drawing board coming soon'", () => {
+    const spec: BlockSpec = {
+      id: "notebook",
+      type: "notebook",
+      title: "Notebook",
+      config: { sections: [{ id: "sketch", title: "Sketch", kind: "ink" }] },
+      order: 0,
+    };
+    render(<Block spec={spec} {...panelProps()} />);
+    expect(screen.getByText("Drawing board coming soon.")).toBeTruthy();
+  });
+
+  it("a section with a board renders the canvas block inside it (today's stub, until V6-14)", async () => {
+    const layout: AgentPublicOut["panel"] = { panel_id: "composite", layout: "side", blocks: panelWithBoard() };
+    render(
+      <Block
+        spec={panelWithBoard()[0]}
+        {...panelProps({ agent: { ...panelProps().agent, panel: layout } })}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId("block-notebook").getAttribute("data-loading")).toBeNull());
+    // The canvas renderer itself is V6-14's; today it's the shared stub, but it renders
+    // *inside* the ink section rather than "Drawing board coming soon".
+    expect(screen.getByTestId("block-canvas")).toBeTruthy();
+    expect(screen.queryByText("Drawing board coming soon.")).toBeNull();
+  });
+
+  it("a canvas claimed by a notebook ink section is hidden from the composite panel's top-level flow", async () => {
+    const layout: AgentPublicOut["panel"] = { panel_id: "composite", layout: "side", blocks: panelWithBoard() };
+    render(<CompositePanel {...panelProps({ agent: { ...panelProps().agent, panel: layout } })} />);
+    await waitFor(() => expect(screen.getByTestId("block-notebook").getAttribute("data-loading")).toBeNull());
+    // Exactly one "board" element (inside the notebook), never a duplicate at the top level.
+    expect(document.querySelectorAll('[data-block-id="board"]')).toHaveLength(1);
+    expect(document.querySelector('[data-block-id="board"]')?.closest('[data-block-id="notebook"]')).toBeTruthy();
+  });
+});
+
+describe("canvas initialBlockState (V6-12, ask #93(c))", () => {
+  it("mirrors the worker's defaults, background none by default", () => {
+    expect(initialBlockState({ id: "board", type: "canvas", config: {} })).toEqual({
+      width: 1600,
+      height: 1200,
+      background: "none",
+      strokes: [],
+      shapes: [],
+      snapshot_asset_id: null,
+      limit_reached: false,
+      updated_at: null,
+    });
+  });
+
+  it("starts on live_camera only when the config asks for it; an 'asset' config still starts blank", () => {
+    expect((initialBlockState({ id: "board", type: "canvas", config: { background: "live_camera" } }) as { background: string }).background).toBe(
+      "live_camera",
+    );
+    expect((initialBlockState({ id: "board", type: "canvas", config: { background: "asset" } }) as { background: string }).background).toBe("none");
+  });
+});

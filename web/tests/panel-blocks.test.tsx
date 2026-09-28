@@ -600,10 +600,13 @@ describe("composite panel", () => {
     // The fixture's "tabs" layout claims "claim" and "recap" (`layout.json`): both
     // are left out of the flat top-level flow (`FIXTURE_LAYOUT.blocks` minus them,
     // in the same order) and render only inside "tabs" instead — "claim" (the
-    // first, active tab) is mounted right after it; "recap" (the inactive tab)
-    // is not, by Radix Tabs's own default (no `forceMount`).
+    // first, active tab) is a *descendant* of "tabs", so it appears right after
+    // it in document order (before any later top-level sibling, e.g. "board");
+    // "recap" (the inactive tab) is not, by Radix Tabs's own default (no `forceMount`).
     const topLevel = FIXTURE_LAYOUT.blocks.filter((b) => b.id !== "claim" && b.id !== "recap").map((b) => b.id);
-    expect(order).toEqual([...topLevel, "claim"]);
+    const tabsAt = topLevel.indexOf("tabs");
+    const expected = [...topLevel.slice(0, tabsAt + 1), "claim", ...topLevel.slice(tabsAt + 1)];
+    expect(order).toEqual(expected);
     expect(order).not.toContain("recap");
   });
 

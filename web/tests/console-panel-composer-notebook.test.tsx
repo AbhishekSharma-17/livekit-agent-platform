@@ -147,12 +147,39 @@ describe("BlockConfigForm — notebook sections editor (V6-10)", () => {
     ]);
   });
 
-  it("caller_can_draw is a disabled switch (the drawing board is not available yet, V6-12)", () => {
+  it("caller_can_draw is a real switch once V6-12's canvas exists (ask #93)", () => {
     stubFetch([]);
     render(<Harness agent={agent()} />);
     fireEvent.click(screen.getByRole("button", { name: /^Notebook/ }));
     const drawSwitch = screen.getByRole("switch", { name: "The caller can draw" });
-    expect(drawSwitch.hasAttribute("disabled")).toBe(true);
+    expect(drawSwitch.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(drawSwitch);
+    expect(latest?.config.panel.blocks.find((b) => b.type === "notebook")?.config.caller_can_draw).toBe(true);
+  });
+
+  it("an ink section's board picker offers only canvas blocks of this panel", async () => {
+    stubFetch([]);
+    const withCanvas = agent({
+      config: {
+        instructions: "Hi",
+        pipeline: { mode: "cascaded" },
+        panel: {
+          panel_id: "composite",
+          layout: "side",
+          blocks: [
+            { id: "notebook", type: "notebook", title: "Notebook", config: { sections: [{ id: "sketch", title: "Sketch", kind: "ink" }] }, order: 0 },
+            { id: "board", type: "canvas", title: "Board", config: {}, order: 1 },
+          ],
+        },
+      },
+    });
+    render(<Harness agent={withCanvas} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Notebook/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: /Section 1 board/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /Board · board/ }));
+    expect(latest?.config.panel.blocks.find((b) => b.type === "notebook")?.config.sections).toEqual([
+      { id: "sketch", title: "Sketch", kind: "ink", canvas_block_id: "board" },
+    ]);
   });
 });
 

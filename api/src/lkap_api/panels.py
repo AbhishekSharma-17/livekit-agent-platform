@@ -35,6 +35,12 @@ only (anywhere else it is an unknown key, an error). Two tips: an editable block
 agent set up for phone calls (:data:`CALLER_EDIT_ON_PHONE_MESSAGE`: phone callers see no
 screen), and a picture model (``pipeline.image_gen``) on a composite panel with blocks
 but no ``gallery`` (:data:`PICTURES_NEED_A_GALLERY_MESSAGE`: ``generate_image`` needs one).
+
+V6-08: the ``notebook`` and ``layout`` configs are checked the same way; a notebook's
+``caller_can_write`` gets the phone tip like ``caller_can_edit``; and every ``layout``
+block's children are checked across the panel (:func:`lkap_contracts.blocks.layout_issues`:
+a child that does not exist, the layout itself, another layout, or a block already claimed
+by a layout is an error at ``panel.blocks[i].config.children[j].block_id``).
 """
 
 from __future__ import annotations
@@ -42,10 +48,10 @@ from __future__ import annotations
 from typing import Final
 
 from lkap_contracts.agent_config import AgentConfig, PanelLayout
-from lkap_contracts.blocks import validate_panel_block_configs
+from lkap_contracts.blocks import layout_issues, validate_panel_block_configs
 from lkap_contracts.common import Issue
 from lkap_contracts.packs import PackManifest
-from lkap_contracts.ui_protocol import EDITABLE_BLOCK_TYPES
+from lkap_contracts.ui_protocol import CALLER_EDIT_FLAGS, EDITABLE_BLOCK_TYPES
 
 from lkap_api.config_service import ValidationContext, register_validator
 from lkap_api.db.models import Agent
@@ -113,6 +119,8 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
         the flow warnings at ``panel.blocks[i].config.source`` / ``.config.steps[j].id``.
     """
     issues = validate_panel_block_configs(ctx.config.panel.blocks)
+    # V6-08 (D-V6-18): what each layout block claims, across the panel.
+    issues += layout_issues(ctx.config.panel.blocks)
     config = ctx.config
     on_phone = config.capabilities.dtmf or bool(config.telephony.transfer_targets)
     if on_phone and config.tools.sms is None:
@@ -122,14 +130,15 @@ def block_config_issues(ctx: ValidationContext) -> list[Issue]:
             if block.type == "link"
         ]
     if on_phone:
+        # V6-08: each editable type names its own flag (`caller_can_write` on a notebook).
         issues += [
             Issue(
-                path=f"panel.blocks[{index}].config.caller_can_edit",
+                path=f"panel.blocks[{index}].config.{CALLER_EDIT_FLAGS[block.type]}",
                 message=CALLER_EDIT_ON_PHONE_MESSAGE,
                 severity="warning",
             )
             for index, block in enumerate(config.panel.blocks)
-            if block.type in EDITABLE_BLOCK_TYPES and block.config.get("caller_can_edit") is True
+            if block.type in EDITABLE_BLOCK_TYPES and block.config.get(CALLER_EDIT_FLAGS[block.type]) is True
         ]
     panel = config.panel
     if (

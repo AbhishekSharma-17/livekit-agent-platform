@@ -311,6 +311,7 @@ _RAW_OPENAPI_PATHS: Final[tuple[str, ...]] = (
     "/v1/knowledge-bases/{kb_id}/documents/{document_id}",
     "/v1/knowledge-bases/{kb_id}/search",
     "/v1/packs",
+    "/v1/panels/presets",  # V6-08: ready-made panels
     "/v1/providers",
     "/v1/providers/{provider_id}",
     "/v1/providers/{provider_id}/catalog",
@@ -474,6 +475,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
             "name",
             "description",
             "connection_id",
+            "panel_preset",  # V6-08
             "validate_first",
             "save_with_errors",
             "plan",

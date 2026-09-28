@@ -7789,6 +7789,20 @@
             "default": null,
             "title": "Name"
           },
+          "panel_preset": {
+            "anyOf": [
+              {
+                "const": "notebook",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A ready-made panel (GET /v1/panels/presets) that replaces the agent's panel: \"notebook\" is a wide panel with a status stamp, a notebook and a gallery",
+            "title": "Panel Preset"
+          },
           "patch": {
             "anyOf": [
               {

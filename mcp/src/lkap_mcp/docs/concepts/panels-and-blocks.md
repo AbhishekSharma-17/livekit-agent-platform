@@ -128,12 +128,26 @@ Attaching a block registers matching worker tools automatically (on top of
   `form` block, or camera or screen share). Text inside the image is treated
   as data, never as instructions.
 
+A caller's change to a `notebook` with `caller_can_write` reaches the agent the
+same way: a note added, changed or removed in a text section, an item ticked, or
+a summary value changed (never a drawing), each told to the model as data.
+
 `agent_validate` warns when a `choices` block, or a block with
-`caller_can_edit`, sits on an agent set up for phone calls (keypad input or
+`caller_can_edit` (or a notebook with `caller_can_write`), sits on an agent set up for phone calls (keypad input or
 transfer destinations: phone callers see no screen), when a picture model is
 set but the panel has no `gallery` block, and when a `source: "flow"` steps block has no flow to follow or
 names a step the flow does not have. A `terms` or `custom` consent block
-without its own `text` is an error.
+without its own `text` is an error, and so is a `layout` child that is not a
+block of the panel, is the layout itself or another layout, or is already
+inside another layout (an empty layout is a warning).
+
+## Ready-made panels
+
+`GET /v1/panels/presets` lists panels to start from. The **Notebook** preset is
+a `wide` panel with a `status` stamp, a `notebook` (Notes, Still needed,
+Summary and Sketch sections, a handwriting look, `caller_can_write` on) and a
+`gallery`; `agent_update(panel_preset="notebook")` puts it on an agent (it
+replaces `panel`; change it afterwards like any other panel).
 
 ## Building a composite panel
 

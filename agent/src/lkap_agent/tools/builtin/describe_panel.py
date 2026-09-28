@@ -17,6 +17,11 @@ instructions. Registered whenever the panel has any block; blocking and instant
 V6-06: a details row or checklist item the caller changed on screen is marked
 (``edited: "by the caller"`` / ``ticked_by_caller``), and a block with notes
 pinned to it (``Note.block_id``) says how many (``margin_notes``).
+
+V6-08: a ``notebook`` lists its sections in the config's order, each with its totals and
+at most five short notes, items or rows (what the caller wrote or changed is marked "by
+the caller"); a ``layout`` says how it shows its blocks and which ones. The blocks inside
+a layout keep their own entries, so a layout never hides one from the model.
 """
 
 from __future__ import annotations
@@ -27,11 +32,17 @@ from typing import Any, Final
 from urllib.parse import urlsplit
 
 from livekit.agents import FunctionTool, RunContext, function_tool
+from lkap_contracts.blocks import NotebookSectionConfig
 from lkap_contracts.ui_protocol import BlockSpec
 from packs.base import PackSessionContext
 
 from lkap_agent.tools.untrusted import fence
-from lkap_agent.ui.blocks import VOICE_ONLY_CHANNELS, session_block_specs
+from lkap_agent.ui.blocks import (
+    VOICE_ONLY_CHANNELS,
+    notebook_section_state,
+    notebook_sections,
+    session_block_specs,
+)
 
 __all__ = [
     "MAX_ANSWER_CHARS",
@@ -47,6 +58,9 @@ MAX_TEXT_CHARS: Final[int] = 120
 MAX_LIST_ITEMS: Final[int] = 8
 #: The longest answer, fence included.
 MAX_ANSWER_CHARS: Final[int] = 4000
+#: V6-08: how many notes, items or rows one notebook section shows, and how long each is.
+MAX_NOTEBOOK_LIST: Final[int] = 5
+MAX_NOTEBOOK_TEXT_CHARS: Final[int] = 80
 #: The fence's source label.
 PANEL_SOURCE: Final[str] = "panel"
 #: Keys that stay when a block loses its details to fit the budget.
@@ -194,8 +208,71 @@ def _summary(spec: BlockSpec, state: Mapping[str, Any], envelope: Mapping[str, A
             }
         case "cards":
             return {"cards": _labels(s.get("cards"), "title"), "selected": _text(s.get("selected"))}
+        case "notebook":
+            return {"sections": [_notebook_section(section, s) for section in notebook_sections(spec)]}
+        case "layout":
+            children = _list(spec.config.get("children"))
+            return {
+                "shows_as": _text(spec.config.get("kind") or "tabs"),
+                "holds": [_text(_dict(c).get("block_id")) for c in children[: MAX_LIST_ITEMS * 2]],
+            }
         case _:
             return {}
+
+
+def _short(value: Any) -> str | None:
+    text = _text(value)
+    if text is None or len(text) <= MAX_NOTEBOOK_TEXT_CHARS:
+        return text
+    return text[: MAX_NOTEBOOK_TEXT_CHARS - 1] + "…"
+
+
+def _notebook_section(section: NotebookSectionConfig, state: Mapping[str, Any]) -> dict[str, Any]:
+    """One notebook section (V6-08): its latest notes, its list or its rows, with caller marks.
+
+    Bounded tighter than a block of its own, since one notebook holds several sections: at
+    most :data:`MAX_NOTEBOOK_LIST` notes, items or rows, each cut to
+    :data:`MAX_NOTEBOOK_TEXT_CHARS` characters, plus the totals.
+    """
+    content = notebook_section_state(state, section)
+    entry: dict[str, Any] = {"id": section.id, "title": _short(section.title), "kind": section.kind}
+    match section.kind:
+        case "text":
+            notes = [e for e in _list(content.get("entries")) if isinstance(e, dict)]
+            entry["notes"] = len(notes)
+            entry["latest"] = [
+                (
+                    f"(by the caller) {_short(e.get('text'))}"
+                    if e.get("author") == "caller" or e.get("edited_by") == "caller"
+                    else _short(e.get("text"))
+                )
+                for e in notes[-MAX_NOTEBOOK_LIST:]
+            ]
+        case "checklist":
+            items = [i for i in _list(content.get("items")) if isinstance(i, dict)]
+            still = [i for i in items if not i.get("done")]
+            by_caller = [i for i in items if i.get("edited_by") == "caller"]
+            entry["done"] = len(items) - len(still)
+            entry["still_needed"] = [_short(i.get("label")) for i in still[:MAX_NOTEBOOK_LIST]]
+            entry["ticked_by_caller"] = [
+                f"{_short(i.get('label'))}: {'done' if i.get('done') else 'not done'}"
+                for i in by_caller[:MAX_NOTEBOOK_LIST]
+            ]
+        case "details":
+            rows = [r for r in _list(content.get("items")) if isinstance(r, dict)]
+            entry["rows"] = [
+                {
+                    "label": _short(r.get("label")),
+                    "value": _short(r.get("value")),
+                    **({"edited": "by the caller"} if r.get("edited_by") == "caller" else {}),
+                }
+                for r in rows[:MAX_NOTEBOOK_LIST]
+            ]
+            if len(rows) > MAX_NOTEBOOK_LIST:
+                entry["more_rows"] = len(rows) - MAX_NOTEBOOK_LIST
+        case _:
+            entry["drawing"] = "not available yet" if not content.get("canvas_block_id") else "on the board"
+    return {k: v for k, v in entry.items() if v not in (None, [], "")}
 
 
 def describe_panel_state(specs: Iterable[BlockSpec], state: Mapping[str, Any]) -> list[dict[str, Any]]:

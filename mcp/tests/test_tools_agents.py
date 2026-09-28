@@ -10,7 +10,7 @@ from conftest import BUILDER_SCOPES, READ_ONLY_SCOPES
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.kb.embed import FakeEmbedder
-from lkap_contracts.agent_config import AgentConfig
+from lkap_contracts.agent_config import NOTEBOOK_PRESET, AgentConfig, PanelLayout
 
 
 def _flow() -> dict[str, Any]:
@@ -297,3 +297,28 @@ async def test_the_templates_resource_reads_live(key: Any, mcp_session: Any) -> 
     ids = [item["template"]["id"] for item in body["items"]]
     assert ids[0] == "blank" and ids[-1] == "insurance_claim" and "receptionist" in ids
     assert gets, "the resource is a live api read"
+
+
+async def test_agent_update_panel_preset_replaces_the_panel_with_the_notebook(
+    key: Any, mcp_session: Any, admin: Any
+) -> None:
+    """V6-08: ``panel_preset="notebook"`` saves the Notebook preset, and combines with a patch."""
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        agent = await _create(mcp)
+        result = await mcp.call(
+            "agent_update",
+            id_or_slug=agent["id"],
+            panel_preset="notebook",
+            patch={"instructions": "Keep notes."},
+        )
+        both = await mcp.call(
+            "agent_update", id_or_slug=agent["id"], panel_preset="notebook", patch={"panel": {"blocks": []}}
+        )
+
+    assert result["ok"] is True, result
+    stored = (await admin.get(f"/v1/agents/{agent['id']}")).json()["config"]
+    assert PanelLayout.model_validate(stored["panel"]) == NOTEBOOK_PRESET
+    assert stored["instructions"] == "Keep notes."
+    assert both["ok"] is False and both["error"]["code"] == "invalid_input"

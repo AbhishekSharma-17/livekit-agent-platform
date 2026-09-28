@@ -4,6 +4,8 @@
 
 > **v5 (2026-09-28):** what the v5 plan changed — the knowledge service, connected apps, MCP sign-in, request blocks and caller files, consent, the capability packages, memory, guardrails, the security review — is described in [`docs/v5/ARCHITECTURE-V5.md`](v5/ARCHITECTURE-V5.md), which also indexes the v5 decisions and rulings. D6 below is amended for v5; §7.3 (built-in tools) and §7.4 (knowledge bases) describe v1 and are superseded by that document where they differ.
 
+> **v6 (2026-09-29):** what the v6 plan changed — speech registry truth and the recommended streaming stacks, OpenRouter prices, the notebook, layout, drawing board and next blocks, tool context and bindings, live extraction and rules, lookup tables, the flow `tool` node, tool kits, the claims-intake starter and the default pack list, avatar framing, connection names and their workers, the security review — is described in [`docs/v6/ARCHITECTURE-V6.md`](v6/ARCHITECTURE-V6.md), which also indexes the v6 decisions and rulings. §10 (packs) is amended for v6: `packs.insurance_claim` is the legacy reference pack, loaded only when `LKAP_PACKS` lists it; new insurance agents start from the `claims_intake` starter on the generic pack (`docs/INSURANCE_PACK_MAPPING.md` §5).
+
 Status: **approved design, contract-first.** Implementers follow `docs/CONTRACTS.md` for exact shapes and `docs/IMPLEMENTATION_PLAN.md` for work packages. This document explains *what* and *why*; it does not repeat every field.
 
 Baseline facts were verified against installed `livekit-agents==1.8.2`, `livekit-plugins-google==1.8.2`, `livekit-api==1.2.1`, `livekit==1.1.18` (rtc), `@livekit/components-react@2.9.24` and `lk` CLI 2.16.2 on 2026-09-17/18 (see `docs/research/*.md`). Anything still unverified is listed in §15.
@@ -22,7 +24,7 @@ Three deployable services plus shared code:
 | `api/` | Python 3.12, FastAPI | Admin/config API, credential vault, knowledge-base ingestion, session/token endpoint with explicit dispatch, internal service endpoints for the worker, session/tool-call logs. |
 | `web/` | Next.js 15, React 19, Tailwind 4, shadcn + `@agents-ui` | Live session surface and admin/builder console. |
 | `contracts/` | Python package `lkap_contracts` + generated JSON/TS | Provider registry, agent config schema, dispatch metadata, agent↔UI protocol, pack manifest. Single source of truth. |
-| `packs/` | Python packages | Use-case packs. `packs/insurance_claim` is the reference pack (feature parity with the Gemini Live demo). |
+| `packs/` | Python packages | Use-case packs. `packs/insurance_claim` is the reference pack (feature parity with the Gemini Live demo); since v6 it is legacy, loaded only when `LKAP_PACKS` lists it, and its behaviours live in the `claims_intake` starter (docs/v6/ARCHITECTURE-V6.md §14). |
 
 Non-goals for the MVP: multi-tenant auth/RBAC, billing, SIP/telephony, self-hosted LiveKit, OpenTelemetry export, half-cascade pipelines, non-MVP providers (listed in the registry as deferred).
 

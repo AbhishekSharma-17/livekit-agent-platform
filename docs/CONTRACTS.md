@@ -211,6 +211,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_VECTOR_STORE` | opt | — | — | unset = follow the database (pgvector on Postgres, LanceDB on SQLite); `lancedb` forces LanceDB (V5-13) |
 | `LKAP_MCP_OAUTH_ALLOW_UNBOUND` | opt | — | — | default `false`; `true` accepts an MCP sign-in callback without the start's binder cookie (R-V5-14) |
 | `LKAP_SELF_HOSTED_ALLOWED_NETWORKS` | opt | — | — | CIDRs a self-hosted LiveKit connection may reach (R-V5-17); unset = loopback, RFC 1918, ULA, CGNAT |
+| `LKAP_CALL_START_WORKER_CHECK` | opt | — | — | `block` (default) \| `warn` \| `off` (V6-27): a call or test-chat start on an external or supervised connection with no live worker answers 409 `no_worker_running` (`block`) or only logs `call_start_no_worker` (`warn`); the default awaits the user's decision (V6 ask #177) |
 | `LKAP_VISION_MAX_FRAME_AGE_S` | — | opt | — | default `8` |
 | `LKAP_IDLE_HANGUP_S` | — | opt | — | default `120`; worker hangs up a session that stays `away` this long while the agent is listening/idle; `None`/`0` disables (REVIEW-FINAL.md F-02) |
 | `LKAP_SESSION_SWEEP_INTERVAL_S` | opt | — | — | default `60`; how often the stale-session sweep runs (D-W2-2b) |
@@ -220,7 +221,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_ADMIN_TOKEN` (web server) | — | — | req | used by Next server actions/route handlers proxying console calls; never exposed to the client bundle |
 | `PORT` | 8080 | — | 3000 | |
 
-Every setting v5 added, with defaults, is also in `docs/RUNBOOK.md` §9.7.
+Every setting v5 added, with defaults, is also in `docs/RUNBOOK.md` §9.7; every setting v6 added or re-defaulted in §9.9.
 
 Vendor keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, ...) are **not** read from env by the platform; they live in the credential vault. Exception for convenience: the api accepts `LKAP_BOOTSTRAP_CREDENTIALS_JSON` (JSON `{provider_id: {field: value}}`) at startup to seed credentials in dev.
 
@@ -533,7 +534,9 @@ Initial `status="mvp"` entries (implementers fill labels/help from the research 
 
 **Telephony variant and price note (V5-07).** `ProviderSpec.telephony_variant` (noise-cancellation entries only) is the dotted class the worker builds instead of `python_class` on a phone call when the agent uses the `telephony` conversation preset: `legacy-noise-cancellation` → `livekit.plugins.noise_cancellation.BVCTelephony`, `krisp-noise-cancellation` → `livekit.plugins.krisp.voice_isolation_telephony`. Neither plugin is installed on the worker yet (R-V5-3, ask #208), so the preset warns instead. `ProviderSpec.price_note` is a plain-language price line the console shows for a provider metered outside the price table (LiveKit Cloud noise cancellation; also used by the V5-20/V5-25/V5-45 entries).
 
-**Speech streaming (V6-02, D-V6-2 … D-V6-8).** Four `ProviderCapabilities` fields for `stt`/`tts` entries: `streaming: bool | None` (whether the entry streams with its registry defaults, read from each plugin's `STTCapabilities`/`TTSCapabilities(streaming=...)` at livekit-agents 1.8.3; `null` = not recorded), `streaming_field` (the boolean field that turns streaming on when it is off by default: `openai-stt.use_realtime`, `rime-tts.use_websocket`), `streaming_note` (a plain-words condition, e.g. `google-tts` streams with Chirp 3 HD voices) and `end_of_turn` (STT only: the transcriber decides when the turn ends; `deepgram-flux-stt`, which the worker runs with `turn_detection="stt"`). `speech_streams(spec, fields)` answers for a stored reference. Every available speech entry records `streaming` or a note (a parity test). Not streaming at 1.8.3: `openrouter-stt`, `openrouter-tts`, `openai-tts`, `azure-tts`, `speechmatics-tts`, `hume-tts`, `groq-stt`, `groq-tts`, `fal-wizper-stt`, `aws-polly-tts`, `lmnt-tts`, `cambai-tts`, `clova-stt`, `simplismart-stt`, `simplismart-tts`, `mistral-stt` (default model), `elevenlabs-stt` (default model), and `openai-stt`/`rime-tts` unless their field is on. `FieldSpec.recommended` is the value the console pre-selects for a new agent while `default` stays unset (a stored agent resolves to the same kwargs): `openai-stt.use_realtime`, `rime-tts.use_websocket` (true), `elevenlabs-tts.encoding` (`pcm_24000`), `minimax-tts.audio_format` (`pcm`). `ModelSpec.deprecated` flags a vendor-deprecated id kept so stored references resolve (`note="deprecated by the vendor"`): `inworld-tts-1.5-max` (default now `inworld-tts-2`), `speech-02-turbo` (default now `speech-2.8-turbo`). `minimax-tts` ships from `livekit-plugins-minimax-ai`; `fireworksai-stt` is `removed` (Fireworks stopped its speech service on 2026-06-10).
+**Speech streaming (V6-02, D-V6-2 … D-V6-8).** Four `ProviderCapabilities` fields for `stt`/`tts` entries: `streaming: bool | None` (whether the entry streams with its registry defaults, read from each plugin's `STTCapabilities`/`TTSCapabilities(streaming=...)` at livekit-agents 1.8.3; `null` = not recorded), `streaming_field` (the boolean field that turns streaming on when it is off by default: `openai-stt.use_realtime`, `rime-tts.use_websocket`), `streaming_note` (a plain-words condition, e.g. `google-tts` streams with Chirp 3 HD voices) and `end_of_turn` (STT only: the transcriber decides when the turn ends; `deepgram-flux-stt`, which the worker runs with `turn_detection="stt"`). `speech_streams(spec, fields)` answers for a stored reference. Every available speech entry records `streaming` or a note (a parity test). Not streaming at 1.8.3: `openrouter-stt`, `openrouter-tts`, `openai-tts`, `azure-tts`, `speechmatics-tts`, `hume-tts`, `groq-stt`, `groq-tts`, `fal-wizper-stt`, `aws-polly-tts`, `lmnt-tts`, `cambai-tts`, `clova-stt`, `simplismart-stt`, `simplismart-tts`, `mistral-stt` (default model), `elevenlabs-stt` (default model), and `openai-stt`/`rime-tts` unless their field is on. `FieldSpec.recommended` is the value the console pre-selects for a new agent while `default` stays unset (a stored agent resolves to the same kwargs): `openai-stt.use_realtime`, `rime-tts.use_websocket` (true), `elevenlabs-tts.encoding` (`pcm_24000`), `minimax-tts.audio_format` (`pcm`). `ModelSpec.deprecated` flags a vendor-deprecated id kept so stored references resolve (`note="deprecated by the vendor"`): `inworld-tts-1.5-max` (default now `inworld-tts-2`), `speech-02-turbo` (default now `speech-2.8-turbo`). `minimax-tts` ships from `livekit-plugins-minimax-ai`; `fireworksai-stt` is `removed` (Fireworks stopped its speech service on 2026-06-10); since V6-21 (S6-23) the worker fails a session that names a `removed` entry with the entry's own reason, before any import.
+
+**Avatar aspect (V6-26).** `ProviderCapabilities.avatar_aspect: portrait|landscape|square | None` (avatar entries only) is the vendor-documented shape of the avatar's video, used by the session stage before the first frame arrives; `avatar_aspect_note` cites where it came from. Only `lemonslice-avatar` (portrait) and `anam-avatar` (landscape; per persona model at the vendor, R-V6-3 #160) set it; every other avatar entry stays unset rather than guessed (pinned by a contracts test).
 
 Deferred entries (data only, `status="deferred"`): azure-openai-realtime, xai-realtime, assemblyai-stt, google-stt, openai-stt, speechmatics-stt, elevenlabs-stt, cartesia-stt, groq-stt, azure-stt, anthropic-llm, groq-llm, cerebras-llm, openai-compatible-llm, aws-bedrock-llm, google-tts, deepgram-tts, rime-tts, inworld-tts, hume-tts, azure-tts, simli-avatar, anam-avatar, bithuman-avatar, liveavatar-avatar.
 
@@ -657,14 +660,16 @@ never in these tables; neither table stores a phone number or an identity.
 slug` (unique per workspace), `format csv|json, columns JSON [{name, label, type, key}], key_columns
 JSON [{name, type}], row_count, storage_key, sha256, status pending|ready|failed, created_at,
 updated_at`) is a workspace's read-only lookup table; the uploaded bytes stay in the storage backend
-under `datasets/<workspace>/<id>/<file>`. `dataset_rows` (`id, dataset_id → datasets CASCADE, ordinal,
+under `datasets/<workspace>/<id>/source.<csv|tsv|json>` (V6-21, S6-18; rows stored before keep their key). `dataset_rows` (`id, dataset_id → datasets CASCADE, ordinal,
 keys JSON, row JSON`; index `(dataset_id, ordinal)`) holds the cells by column name and the row's
 normalised keys; `dataset_keys` (`row_id → dataset_rows CASCADE, column_name, dataset_id → datasets
 CASCADE, value VARCHAR(256)`; primary key `(row_id, column_name)`, index `(dataset_id, column_name,
 value)`) is the per-key lookup index (the ledger's `column`, renamed: a reserved word). The import's
 progress and error live on its `jobs` row (`kind = dataset_import`, `payload.done/total/error`). The
 same migration widens `tools.kind` to `('http','mcp','provider','dataset')`. Quotas
-(`lkap_api.limits`): 100 datasets and 1,000,000 rows per workspace.
+(`lkap_api.limits`): 100 datasets and 1,000,000 rows per workspace, checked before an upload is read; 10
+uploads and 60 console test lookups a minute per workspace (V6-21, S6-14). Audit rows `dataset.create`,
+`dataset.delete`, `dataset.import_failed` carry ids and counts, never a cell (S6-19).
 
 ---
 
@@ -699,6 +704,8 @@ class PipelineConfig(BaseModel):
     llm: ProviderRef | None = None
     tts: ProviderRef | None = None
     avatar: ProviderRef | None = None
+    # AvatarOptions (pipeline.avatar_options) gains, V6-26: framing: auto|portrait|landscape|square | None,
+    # fit: contain|cover | None — unset on stored agents, rendered like auto + contain; display only
     image_gen: ProviderRef | None = None
     workflow_llm: ProviderRef | None = (
         None  # None → llm (cascaded) or livekit-inference-llm default (realtime)
@@ -895,7 +902,7 @@ class Rule(BaseModel):
     once: bool = True; enabled: bool = True
 ```
 
-The condition grammar (`rules_expr.parse_condition` → a frozen-dataclass tree, `evaluate(tree, variables, tool_outcomes)`; never `eval`): `var.x is [not] set|empty`, `var.x ==|!= "text"|number|true|false`, `var.n >=|<=|>|< number`, `var.x matches /re/i`, `tool.<name>.ok|failed`, `not`, `and`, `or`, parentheses; ≤ 8 levels, ≤ 12 checks, literals ≤ 100 chars; a regex that repeats a repeated group is refused (`nested_repeat`, the guardrails scanner). An unset variable makes every comparison false. The worker (`agent/extraction/**`, `agent/rules/**`) extracts in the background on `workflow_llm` (one call ≤ `EXTRACTION_BUDGET_S` = 2 s, cached by a transcript hash, never delaying the reply) into the shared variable store (`tools.context.session_variables`), marks the names in `userdata["lkap.extracted_variables"]` (fenced as `extraction` where a flow renders them into instructions; bound names as `tool_binding`, ask #31), then evaluates the rules; rules also run after each tool batch. Events: `extraction` (`ExtractionEvent`: trigger, status, `fields {name: set}`, `changed`, `still_needed`; `values` only on `storage_tier == "full"` and never for a `sensitive` field — the post-call scrub drops `values` on `redacted`/`basic`), `rule_fired` (`RuleFiredEvent`: rule id, label, action kinds, skipped kinds, trigger; never a value), and a rule's `escalate` records the ordinary `escalation` event. Validation (`config_service.extraction_rules_issues`): targets on the panel and of the right type (error; a notebook target must name a `details` or `text` section), unknown `var.`/`tool.` names, missing `node_exit` steps and flow-extracted overlaps (warnings).
+The condition grammar (`rules_expr.parse_condition` → a frozen-dataclass tree, `evaluate(tree, variables, tool_outcomes)`; never `eval`): `var.x is [not] set|empty`, `var.x ==|!= "text"|number|true|false`, `var.n >=|<=|>|< number`, `var.x matches /re/i`, `tool.<name>.ok|failed`, `not`, `and`, `or`, parentheses; ≤ 8 levels, ≤ 12 checks, literals ≤ 100 chars; a regex the guardrails scanner (`nested_repeat`) refuses — a repeated group holding an unbounded repeat or alternatives, or two overlapping unbounded repeats side by side (V6-21, S6-4) — is an `error` Issue from `rule_issues` at `rules[i].when`, so a save is a 422; since V6-28 the `Rule` model itself checks the grammar only (`parse_condition(…, safe_patterns=False)`), so a stored rule with such a pattern still loads, and the worker's strict parse skips it (`rules.condition_unreadable`). An unset variable makes every comparison false. The worker (`agent/extraction/**`, `agent/rules/**`) extracts in the background on `workflow_llm` (one call ≤ `EXTRACTION_BUDGET_S` = 2 s, cached by a transcript hash, never delaying the reply) into the shared variable store (`tools.context.session_variables`), marks the names in `userdata["lkap.extracted_variables"]` (fenced as `extraction` where a flow renders them into instructions; bound names as `tool_binding`, ask #31), then evaluates the rules; rules also run after each tool batch. Events: `extraction` (`ExtractionEvent`: trigger, status, `fields {name: set}`, `changed`, `still_needed`; `values` only on `storage_tier == "full"` and never for a `sensitive` field — the post-call scrub drops `values` on `redacted`/`basic`), `rule_fired` (`RuleFiredEvent`: rule id, label, action kinds, skipped kinds, trigger; never a value), and a rule's `escalate` records the ordinary `escalation` event. Validation (`config_service.extraction_rules_issues`): targets on the panel and of the right type (error; a notebook target must name a `details` or `text` section), unknown `var.`/`tool.` names, missing `node_exit` steps and flow-extracted overlaps (warnings).
 
 Validation rules (api, at save): every `ProviderRef.provider_id` exists and matches the slot kind; `credential_id` present iff required and credential's `provider_id` matches; `model` in `spec.models` **or** free text (warn, not error — Inference lists churn); a realtime provider whose `spec.capabilities.video_input` is false combined with `capabilities.camera`/`screen_share` = warning (the model will not see frames; frames still reach the UI/pin path); avatar works with both modes.
 
@@ -950,7 +957,12 @@ class AgentCreate(BaseModel): name: str; description: str = ""; pack_id: str = "
 class AgentUpdate(BaseModel): name: str | None; description: str | None; ui_panel_id: str | None; config: AgentConfig | None; published: bool | None
 class AgentOut(BaseModel): id; slug; name; description; pack_id; ui_panel_id; published: bool; config: AgentConfig; config_version: int; created_at; updated_at
 class AgentPublicOut(BaseModel): id; slug; name; description; ui_panel_id; capabilities: CapabilitiesConfig; pipeline_mode: PipelineMode
+#   + avatar_framing: AgentAvatarFraming {framing, fit, declared_aspect} | None   # V6-26b: display hints only; None without an avatar
 POST /v1/agents                          AgentCreate -> AgentOut (201)
+#   Starter templates (lkap_contracts.templates.StarterTemplate, docs/v4/TEMPLATES.md) gained, V6-22 (ask #226):
+#   extraction, rules, tests, dataset_seeds: [DatasetSeed {name, file, key_columns}], kits: [TemplateKit {kit_id,
+#   variant, block_prefix, settings, dataset, key_columns, add_test_case}], all empty by default; creation applies
+#   HTTP tool seeds, then lookup tables (reused by name), then kits, and validates once (ask #227).
 GET  /v1/agents                          -> Page[AgentOut]
 GET  /v1/agents/{id_or_slug}             -> AgentOut (admin) | AgentPublicOut (no token, published only)
 PUT  /v1/agents/{id}                     AgentUpdate -> AgentOut (bumps config_version when config changes)
@@ -972,6 +984,14 @@ POST /v1/agents/{id_or_slug}/text-sessions TextSessionCreate -> ConnectResponse 
 # Token: identity = participant_identity or f"user-{uuid[:8]}", ttl 2h, grants room_join/can_publish/can_subscribe/can_publish_data,
 # room_config = RoomConfiguration(agents=[RoomAgentDispatch(agent_name=settings.agent_name, metadata=DispatchMetadata(...).model_dump_json())]).
 # Any roomConfig/agentName sent by the client is ignored.
+# V6-27: connect and text-sessions answer 409 no_worker_running on an external or supervised connection
+# with no worker heard from in 90 s (LKAP_CALL_START_WORKER_CHECK=block; never in the api's first 120 s,
+# never while another connection's live worker shares the server + agent name). Builders get a message
+# naming the connection; a public caller gets PUBLIC_NO_WORKER_MESSAGE and no detail (R-V6-3 #181).
+# V6-27, connections: create, an update that changes the url or agent_name, and POST /v1/connections/test
+# answer 409 agent_name_in_use when another connection (any workspace) on the same normalised server has
+# that agent_name; ConnectionTestResult.warnings names live workers of other connections sharing it;
+# FleetStatus gains ready_workers and shared_agent_name_workers (counts only).
 
 # ---- tools (admin)
 class ToolCreate(BaseModel): agent_id: str | None; kind: Literal["http","mcp","provider"]; name: str; definition: ToolDefinition; enabled: bool = True   # provider: V5-47
@@ -1512,6 +1532,10 @@ export function useUiRequests(handler: (req: UiRequest) => Promise<UiRequestResu
 
 **`describe_panel`** (registered with any block): one entry per block — `id`, `type`, `title`, `status` and a type summary (counts and at most eight short labels; a link's site, never its URL; never bytes) — as JSON inside `<untrusted source="panel">`, at most 4000 characters (details dropped first, then trailing blocks, with a note).
 
+### Generic panel primitives and caller edits (V6-06, D-V6-19)
+
+Built-ins over the envelope and the blocks, registered from the panel: `set_checklist(items, keep_done=true)` and `check_item(item_id, done=true, hint?)` (the envelope checklist; with a checklist block), `generate_image(prompt, caption?, block_id?)` (only when `pipeline.image_gen` resolves **and** the panel has a `gallery` block, ask #22; the picture goes out on `lkap.ui.asset` and is stored as a session asset of kind `frame` with `meta.source="generated"`; a result over `MAX_UPLOAD_BYTES` is dropped, S6-25), and `push_note(text, kind?, block_id?)` with `NoteItem.block_id` (a note in one block's margin). On `realtime` / `half_cascade` the three writes answer nothing. **Caller edits:** `EDITABLE_BLOCK_TYPES = {details, checklist, notebook}` and `CALLER_EDIT_FLAGS` (`caller_can_edit` on `details`/`checklist`, `caller_can_write` on `notebook`); the page sends `block_action {block_id, name: "edit", data}` with a strict `DetailsEdit {key, value ≤ 500}`, `ChecklistEdit {item_id, done}` or `NotebookEdit` (ids and keys match `NOTEBOOK_ID_PATTERN` since S6-7); the answer is `{ok: true}`, `{ok: true, payload: {changed: false}}` or `{ok: false, error}`. The worker takes it from the caller participant only, applies it in one patch through the state model, records `caller_edit` without the value, tells the model in one line fenced as `caller_edit` and then calls `Pack.on_block_action`. One per-session bucket shared with card actions allows `MAX_CALLER_ACTIONS_PER_MIN` (10); past it the answer is `{ok: false, error: "Please wait a moment before changing that again."}` and nothing is applied or told (S6-5).
+
 ### Notebook and layout blocks, ready-made panels (V6-08)
 
 `BlockType` gains two blocks (D-V6-15, D-V6-18; configs in `lkap_contracts.blocks`, the state in `lkap_contracts.ui_protocol`):
@@ -1618,7 +1642,8 @@ export interface PanelDefinition {
   layout?: "side" | "wide";                         // "wide" gives the panel the main column (insurance notebook)
 }
 
-export const PANELS: Record<string, PanelDefinition>;   // { generic, insurance_notebook }
+export const PANELS: Record<string, PanelDefinition>;   // { composite, generic, insurance_notebook } — insurance_notebook is the
+                                                        // legacy pack's own panel, shipped with the pack this release (R-V6-3 #229)
 export function resolvePanel(id: string): PanelDefinition;   // falls back to generic
 ```
 

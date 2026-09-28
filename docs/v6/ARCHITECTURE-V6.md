@@ -69,7 +69,7 @@ Two defects made every OpenRouter model show "no price". **A:** the live price s
 
 The insurance pack kept four panel moves to itself; they are now built-ins any agent gets from its panel (D-V6-19):
 
-- `set_checklist(items)` and `check_item(item_id, done, hint?)` over the envelope checklist; registered with a checklist block.
+- `set_checklist(items, keep_done?)` and `check_item(item_id, done, hint?)` over the envelope checklist; registered with a checklist block.
 - `generate_image(prompt, caption?, block_id?)` on the `image_gen` slot. It registers only when a picture model resolves **and** the panel has a `gallery` block (ask #22: the slot-only rule would have given every insurance agent a second, always-refusing drawing tool); the picture is streamed on `lkap.ui.asset`, stored as a session asset of kind `frame` with `meta.source="generated"`, and dropped (nothing streamed) above the upload size cap (S6-25). The api warns when a picture model sits on a composite panel with blocks but no gallery. Style goes in the prompt (ask #21).
 - `push_note(block_id?)` and `NoteItem.block_id`: a note shown in one block's margin.
 - On `realtime` and `half_cascade` pipelines these tools answer nothing, so the model does not stop to talk about them (ask #23).

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { conditionIssue } from "@/components/console/agents/rules/condition";
+import { VARIABLE_NAME_PATTERN } from "@/components/console/flow/flow-model";
 import type { AppsMode, FlowSpec, ToolExecution } from "@/contracts/lkap-contracts";
 
 /**
@@ -717,6 +719,167 @@ export const panelLayoutSchema = z
   });
 export type PanelLayoutForm = z.infer<typeof panelLayoutSchema>;
 
+/**
+ * `VariableSpec.type` (flow variables and extraction fields share these).
+ */
+export const VARIABLE_TYPE_VALUES = ["string", "number", "boolean", "enum", "date", "phone", "email"] as const;
+
+/**
+ * `ExtractionField` (V6-15, `lkap_contracts.extraction`, D-V6-24): a flow `VariableSpec`
+ * (name/type/description/required/options — the `variables-dialog.tsx` shape) plus a
+ * label, an extraction hint, `sensitive` and `show_in`. Limits mirror the Pydantic model:
+ * `label` 80, `hint` 300, `show_in` 140. `show_in`'s exact grammar
+ * (`details:<block_id>[.<key>]` / `notebook:<block_id>.<section_id>`) is written by the
+ * section's picker, never typed by hand, so it is bounded by length only here — whether
+ * the named block exists and is the right kind is `extraction_issues`' job on the api.
+ */
+export const extractionFieldSchema = z.object({
+  name: z.string().regex(VARIABLE_NAME_PATTERN, "Use lowercase letters, digits and _, starting with a letter."),
+  type: z.enum(VARIABLE_TYPE_VALUES),
+  description: z.string().max(300, "300 characters max"),
+  required: z.boolean(),
+  options: z.array(z.string().min(1)).nullable(),
+  label: z.string().max(80, "80 characters max"),
+  hint: z.string().max(300, "300 characters max"),
+  sensitive: z.boolean(),
+  show_in: z.string().max(140).nullable(),
+});
+export type ExtractionFieldForm = z.infer<typeof extractionFieldSchema>;
+
+/**
+ * `ExtractionTrigger` (`EveryNTurnsTrigger | ToolTrigger | NodeExitTrigger | ManualTrigger`).
+ * `kind` is a required literal here (the generated TS marks it optional, the guardrails
+ * precedent) so `z.discriminatedUnion` can read it the way the api's
+ * `Annotated[..., discriminator]` does.
+ */
+export const everyNTurnsTriggerSchema = z.object({ kind: z.literal("every_n_turns"), n: z.number().int().min(1).max(20) });
+export const toolTriggerSchema = z.object({
+  kind: z.literal("tool"),
+  tools: z
+    .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/))
+    .min(1, "Name at least one tool")
+    .max(20, "20 tools max"),
+});
+export const nodeExitTriggerSchema = z.object({ kind: z.literal("node_exit"), nodes: z.array(z.string()) });
+export const manualTriggerSchema = z.object({ kind: z.literal("manual") });
+export const extractionTriggerSchema = z.discriminatedUnion("kind", [
+  everyNTurnsTriggerSchema,
+  toolTriggerSchema,
+  nodeExitTriggerSchema,
+  manualTriggerSchema,
+]);
+export type ExtractionTriggerForm = z.infer<typeof extractionTriggerSchema>;
+
+export const MAX_EXTRACTION_FIELDS = 30;
+
+/** `ExtractionConfig` (V6-15, D-V6-24). Off (`enabled: false`) by default. */
+export const extractionConfigSchema = z.object({
+  enabled: z.boolean(),
+  fields: z.array(extractionFieldSchema).max(MAX_EXTRACTION_FIELDS, `${MAX_EXTRACTION_FIELDS} fields max`),
+  triggers: z.array(extractionTriggerSchema),
+  min_turn_chars: z.number().int().min(0).max(200),
+  still_needed: z.literal("checklist").nullable(),
+});
+export type ExtractionConfigForm = z.infer<typeof extractionConfigSchema>;
+
+/**
+ * `Rule.then[]` actions (V6-15, D-V6-25, `lkap_contracts.rules`): nine variants, `do`
+ * required (same discriminated-union rationale as `kind` above). Limits mirror the
+ * Pydantic models exactly.
+ */
+export const checklistSetItemActionSchema = z.object({
+  do: z.literal("checklist.set_item"),
+  id: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/, "Letters, numbers, _ . : -"),
+  label: z.string().min(1, "Label is required").max(120, "120 characters max"),
+  done: z.boolean(),
+  blocking: z.boolean(),
+  hint: z.string().max(200, "200 characters max").nullable(),
+});
+export const checklistCheckActionSchema = z.object({
+  do: z.literal("checklist.check"),
+  id: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/, "Letters, numbers, _ . : -"),
+  done: z.boolean(),
+});
+export const statusSetActionSchema = z.object({
+  do: z.literal("status.set"),
+  label: z.string().min(1, "Label is required").max(60, "60 characters max"),
+  tone: z.enum(["neutral", "info", "success", "warning", "danger"]),
+});
+export const detailsSetActionSchema = z.object({
+  do: z.literal("details.set"),
+  block_id: z.string().regex(BLOCK_ID_PATTERN, "Use letters, numbers, - or _ (no spaces)"),
+  key: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Use letters, numbers, - or _ (no spaces)"),
+  value: z.string().max(500, "500 characters max"),
+  label: z.string().max(80, "80 characters max").nullable(),
+});
+export const notePushActionSchema = z.object({
+  do: z.literal("note.push"),
+  text: z.string().min(1, "Text is required").max(500, "500 characters max"),
+  block_id: z.string().regex(BLOCK_ID_PATTERN).nullable(),
+});
+export const varSetActionSchema = z.object({
+  do: z.literal("var.set"),
+  name: z.string().regex(VARIABLE_NAME_PATTERN, "Use lowercase letters, digits and _, starting with a letter."),
+  value: z.union([z.string().max(500, "500 characters max"), z.number(), z.boolean()]).nullable(),
+});
+export const ESCALATE_MODE_VALUES = ["transfer", "takeover", "listen_in", "callback"] as const;
+export const escalateActionSchema = z.object({
+  do: z.literal("escalate"),
+  mode: z.enum(ESCALATE_MODE_VALUES),
+  reason: z.string().min(1, "Reason is required").max(300, "300 characters max"),
+  urgency: z.enum(["low", "normal", "high"]),
+});
+export const instructActionSchema = z.object({
+  do: z.literal("instruct"),
+  text: z.string().min(1, "Text is required").max(500, "500 characters max"),
+});
+export const dispositionSetActionSchema = z.object({
+  do: z.literal("disposition.set"),
+  value: z.string().min(1, "Value is required").max(64, "64 characters max"),
+});
+
+export const ruleActionSchema = z.discriminatedUnion("do", [
+  checklistSetItemActionSchema,
+  checklistCheckActionSchema,
+  statusSetActionSchema,
+  detailsSetActionSchema,
+  notePushActionSchema,
+  varSetActionSchema,
+  escalateActionSchema,
+  instructActionSchema,
+  dispositionSetActionSchema,
+]);
+export type RuleActionForm = z.infer<typeof ruleActionSchema>;
+
+export const MAX_RULES = 50;
+export const MAX_RULE_ACTIONS = 10;
+export const RULE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * `Rule` (V6-15, D-V6-25). `when`'s parse check runs the same TS grammar port the api's
+ * Pydantic `field_validator` runs server-side (`agents/rules/condition.ts`), so a
+ * condition the builder or the raw-text escape hatch produced is refused here with the
+ * identical "the condition does not read: …" wording before a save ever reaches the api —
+ * V6-15's acceptance line ("an invalid condition shows the api's message inline and the
+ * save is blocked").
+ */
+export const ruleSchema = z.object({
+  id: z.string().regex(RULE_ID_PATTERN, "Letters, numbers, - or _"),
+  label: z.string().max(120, "120 characters max"),
+  when: z
+    .string()
+    .min(1, "The condition can't be empty")
+    .max(200, "200 characters max")
+    .superRefine((value, ctx) => {
+      const issue = conditionIssue(value);
+      if (issue) ctx.addIssue({ code: "custom", message: issue });
+    }),
+  then: z.array(ruleActionSchema).min(1, "A rule needs at least one action").max(MAX_RULE_ACTIONS, `${MAX_RULE_ACTIONS} actions max`),
+  once: z.boolean(),
+  enabled: z.boolean(),
+});
+export type RuleForm = z.infer<typeof ruleSchema>;
+
 export const agentConfigFormSchema = z
   .object({
     /**
@@ -755,6 +918,16 @@ export const agentConfigFormSchema = z
      */
     privacy: privacyConfigSchema.optional(),
     qa: qaConfigSchema.optional(),
+    /**
+     * V6-15's Extraction and Rules sections: `config.extraction` and
+     * `config.rules` (optional, like `privacy` above — a fixture built
+     * before this package keeps validating; `toFormValues` always supplies
+     * a concrete value from `DEFAULT_EXTRACTION`, and `rules` defaults to
+     * `[]`). A save that never opens either tab still round-trips them
+     * unchanged (`editor/form-values.ts`'s merge-back; ask #74).
+     */
+    extraction: extractionConfigSchema.optional(),
+    rules: z.array(ruleSchema).max(MAX_RULES, `${MAX_RULES} rules max`).optional(),
     /**
      * V5-42's Memory card: `config.memory` (optional, like `privacy` above —
      * a fixture built before this package keeps validating; `toFormValues`
@@ -799,6 +972,26 @@ export const agentConfigFormSchema = z
         ctx.addIssue({ code: "custom", path: ["qa", "fields", index, "name"], message: "Two fields can't share a name." });
       }
       seenFieldNames.add(field.name);
+    });
+    // V6-15: two extraction fields can't share a name (`lkap_contracts.extraction._fields_bounded`).
+    const seenExtractionNames = new Set<string>();
+    (val.extraction?.fields ?? []).forEach((field, index) => {
+      if (seenExtractionNames.has(field.name)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["extraction", "fields", index, "name"],
+          message: "Two fields can't share a name.",
+        });
+      }
+      seenExtractionNames.add(field.name);
+    });
+    // V6-15: two rules can't share an id (`lkap_contracts.rules._rules_bounded`).
+    const seenRuleIds = new Set<string>();
+    (val.rules ?? []).forEach((rule, index) => {
+      if (seenRuleIds.has(rule.id)) {
+        ctx.addIssue({ code: "custom", path: ["rules", index, "id"], message: "Two rules can't share an id." });
+      }
+      seenRuleIds.add(rule.id);
     });
   });
 export type AgentConfigForm = z.infer<typeof agentConfigFormSchema>;

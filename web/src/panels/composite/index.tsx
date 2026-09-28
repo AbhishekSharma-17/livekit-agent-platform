@@ -53,7 +53,7 @@ import { COMPOSITE_PANEL_ID, panelLayoutOf } from "./layout";
 import { handleCompositeRequest, subscribeCompositeRequests, type CompositeRequestEvent } from "./requests";
 
 /** Blocks that take the full width of a `wide` layout. */
-const WIDE_SPAN: ReadonlySet<BlockType> = new Set<BlockType>(["status", "document", "table", "transcript", "video", "form", "layout"]);
+const WIDE_SPAN: ReadonlySet<BlockType> = new Set<BlockType>(["status", "document", "table", "transcript", "video", "form", "layout", "canvas"]);
 
 /**
  * Every block id any `layout` block claims as a child (V6-10, D-V6-18), plus
@@ -128,6 +128,9 @@ export function CompositePanel(props: PanelProps) {
           setPendingUrl(event.url);
           return true;
         }
+        // `snapshot` (V6-14) is answered by the claimed `canvas` block itself
+        // (`blocks/canvas.tsx`'s own `subscribeCompositeRequests` listener), not here.
+        if (event.kind !== "reveal") return false;
         if (!blockIds.current.has(event.blockId)) return false;
         // A `form` request can arrive before the patch that renders the form;
         // wait a frame so the fields exist when we focus.

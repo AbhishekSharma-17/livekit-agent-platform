@@ -613,10 +613,10 @@ class PanelPresetsResponse(BaseModel):
 #: The "Notebook" preset's id.
 NOTEBOOK_PRESET_ID = "notebook"
 
-#: The "Notebook" preset (V6-08, D-V6-15): a wide panel with a status stamp, a notebook
-#: (notes, a "still needed" checklist, a summary card and a drawing board, in a handwriting
-#: theme; the caller may write in it too) and a gallery for pictures (``generate_image``).
-#: Treat it as read-only: :func:`panel_preset` hands out copies.
+#: The "Notebook" preset (V6-08, D-V6-15; the board V6-14, ask #94): a wide panel with a
+#: status stamp, a notebook (notes, a "still needed" checklist, a summary card and a real
+#: drawing board, in a handwriting theme; the caller may write in it too) and a gallery for
+#: pictures (``generate_image``). Treat it as read-only: :func:`panel_preset` hands out copies.
 NOTEBOOK_PRESET = PanelLayout(
     panel_id="composite",
     layout="wide",
@@ -634,13 +634,23 @@ NOTEBOOK_PRESET = PanelLayout(
                     {"id": "notes", "title": "Notes", "kind": "text"},
                     {"id": "still_needed", "title": "Still needed", "kind": "checklist"},
                     {"id": "summary", "title": "Summary", "kind": "details"},
-                    {"id": "sketch", "title": "Sketch", "kind": "ink"},
+                    {"id": "sketch", "title": "Sketch", "kind": "ink", "canvas_block_id": "sketch_board"},
                 ],
                 "caller_can_write": True,
                 "caller_can_draw": False,
             },
         ),
-        BlockSpec(id="gallery", type="gallery", title="Pictures", order=2),
+        # V6-14, ask #94: the Sketch section's board. `caller_can_draw` sits on the board
+        # itself (not the notebook) so the caller can sketch even though `caller_can_write`
+        # governs only the notebook's text/checklist/details sections.
+        BlockSpec(
+            id="sketch_board",
+            type="canvas",
+            title="Sketch",
+            order=2,
+            config={"caller_can_draw": True},
+        ),
+        BlockSpec(id="gallery", type="gallery", title="Pictures", order=3),
     ],
 )
 

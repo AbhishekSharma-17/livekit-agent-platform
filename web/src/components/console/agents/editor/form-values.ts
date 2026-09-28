@@ -2,6 +2,7 @@ import {
   DEFAULT_AVATAR_OPTIONS,
   DEFAULT_CAPABILITIES,
   DEFAULT_DISCLOSURE,
+  DEFAULT_EXTRACTION,
   DEFAULT_GUARDRAILS,
   DEFAULT_KNOWLEDGE,
   DEFAULT_LIMITS,
@@ -16,10 +17,13 @@ import {
 import type {
   AgentEditorForm,
   AgentTestForm,
+  ExtractionConfigForm,
+  ExtractionFieldForm,
   GuardrailRuleForm,
   GuardrailsConfigForm,
   PanelLayoutForm,
   QaFieldForm,
+  RuleForm,
 } from "@/components/console/lib/schemas";
 import { panelMeta } from "@/components/shared/panel-meta";
 import type {
@@ -29,11 +33,14 @@ import type {
   AgentTest,
   AgentUpdate,
   ClassifierRule,
+  ExtractionConfig,
+  ExtractionField,
   GuardrailsConfig,
   PipelineConfig,
   ProviderRule,
   QaField,
   RegexRule,
+  Rule,
 } from "@/contracts/lkap-contracts";
 
 /**
@@ -104,6 +111,55 @@ function qaFieldFormValue(field: QaField): QaFieldForm {
     type: field.type ?? "text",
     options: [...(field.options ?? [])],
     description: field.description ?? "",
+  };
+}
+
+/**
+ * `ExtractionField` <-> the form's shape (V6-15): `type` is optional on the contract,
+ * always concrete in the form (the `qaFieldFormValue` pattern above).
+ */
+function extractionFieldFormValue(field: ExtractionField): ExtractionFieldForm {
+  return {
+    name: field.name,
+    type: field.type ?? "string",
+    description: field.description ?? "",
+    required: field.required ?? false,
+    options: field.type === "enum" ? (field.options ?? []) : null,
+    label: field.label ?? "",
+    hint: field.hint ?? "",
+    sensitive: field.sensitive ?? false,
+    show_in: field.show_in ?? null,
+  };
+}
+
+/**
+ * `ExtractionConfig` <-> the form's shape (V6-15, D-V6-24): every field present, defaults
+ * from `DEFAULT_EXTRACTION` filling in what the api always sends anyway. `triggers`'
+ * generated type marks `kind` optional per variant (the guardrails-rule quirk); the stored
+ * value already carries a concrete `kind`, so no normalisation is needed beyond the spread.
+ */
+function extractionFormValue(extraction: ExtractionConfig | undefined): ExtractionConfigForm {
+  return {
+    ...DEFAULT_EXTRACTION,
+    ...extraction,
+    fields: (extraction?.fields ?? []).map(extractionFieldFormValue),
+    triggers: (extraction?.triggers?.length ? extraction.triggers : DEFAULT_EXTRACTION.triggers) as ExtractionConfigForm["triggers"],
+  };
+}
+
+/**
+ * `Rule` <-> the form's shape (V6-15, D-V6-25): `enabled`/`once` are optional on the
+ * contract, always concrete in the form; `then`'s action `do` is likewise optional on the
+ * generated union and always concrete here (the guardrails-rule pattern above).
+ */
+function ruleFormValue(rule: Rule): RuleForm {
+  return {
+    id: rule.id,
+    label: rule.label ?? "",
+    when: rule.when,
+    then: rule.then as RuleForm["then"],
+    once: rule.once ?? true,
+    enabled: rule.enabled ?? true,
   };
 }
 
@@ -195,6 +251,10 @@ export function toFormValues(agent: AgentOut): AgentEditorForm {
       // `qaConfigSchema`'s `.catchall` is what stops the resolver parse from dropping them.
       privacy: { ...DEFAULT_PRIVACY, ...config.privacy },
       qa: { ...config.qa, fields: (config.qa?.fields ?? []).map(qaFieldFormValue) },
+      // V6-15's Extraction and Rules sections: `config.extraction` (a concrete value from
+      // `DEFAULT_EXTRACTION`) and `config.rules` (defaults to `[]`, like `tests` above).
+      extraction: extractionFormValue(config.extraction),
+      rules: (config.rules ?? []).map(ruleFormValue),
       // V5-42's Memory card: `config.memory`, the same optional-field pattern as `privacy` above.
       memory: { ...DEFAULT_MEMORY, ...config.memory },
       // V5-41's Guardrails card: `config.guardrails`, the rule arrays normalised by `guardrailsFormValue`.
@@ -297,6 +357,14 @@ export function buildAgentUpdate(agent: AgentOut, values: AgentEditorForm): Agen
   if (edited.qa !== undefined) config.qa = { ...stored.qa, ...edited.qa };
   // V5-42: the Memory card owns `config.memory`.
   if (edited.memory !== undefined) config.memory = { ...stored.memory, ...edited.memory };
+  // V6-15: the Extraction and Rules sections own `config.extraction`/`config.rules`. A
+  // save from a form that never opened either tab (`edited.extraction`/`edited.rules`
+  // still concrete, since they're not `.optional()`-defaulted away by the resolver) simply
+  // writes back what it loaded — lossless, per ask #74's "already keeps both keys on save".
+  if (edited.extraction !== undefined) {
+    config.extraction = { ...stored.extraction, ...edited.extraction, fields: edited.extraction.fields };
+  }
+  if (edited.rules !== undefined) config.rules = edited.rules as Rule[];
   // V5-41: the Guardrails card owns `config.guardrails`. The rule arrays are cast back to the
   // generated tuple-union type — the same quirk `testPayload`'s `expectations` cast works around.
   if (edited.guardrails !== undefined) {

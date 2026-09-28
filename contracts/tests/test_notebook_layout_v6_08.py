@@ -20,8 +20,11 @@ from lkap_contracts.agent_config import (
 from lkap_contracts.blocks import (
     BLOCK_CONFIG_MODELS,
     MAX_LAYOUT_CHILDREN,
+    CanvasBlockConfig,
     LayoutBlockConfig,
     NotebookBlockConfig,
+    canvas_caller_can_draw,
+    canvas_claim_issues,
     layout_issues,
     validate_block_config,
     validate_panel_block_configs,
@@ -295,7 +298,7 @@ def test_an_empty_layout_is_a_warning_and_a_broken_one_is_left_to_the_config_che
 def test_the_notebook_preset_is_a_valid_wide_panel() -> None:
     assert NOTEBOOK_PRESET.layout == "wide"
     assert NOTEBOOK_PRESET.panel_id == "composite"
-    assert [b.type for b in NOTEBOOK_PRESET.blocks] == ["status", "notebook", "gallery"]
+    assert [b.type for b in NOTEBOOK_PRESET.blocks] == ["status", "notebook", "canvas", "gallery"]
     assert validate_panel_block_configs(NOTEBOOK_PRESET.blocks) == []
     assert layout_issues(NOTEBOOK_PRESET.blocks) == []
     notebook = NotebookBlockConfig.model_validate(NOTEBOOK_PRESET.blocks[1].config)
@@ -307,6 +310,14 @@ def test_the_notebook_preset_is_a_valid_wide_panel() -> None:
     ]
     assert notebook.font == "handwritten"
     assert notebook.caller_can_write is True
+    # V6-14, ask #94: the Sketch section's board — claimed once, and the caller may draw
+    # on it even though the notebook's own `caller_can_write` governs only its other
+    # sections.
+    assert notebook.sections[3].canvas_block_id == "sketch_board"
+    assert canvas_claim_issues(NOTEBOOK_PRESET.blocks) == []
+    board = CanvasBlockConfig.model_validate(NOTEBOOK_PRESET.blocks[2].config)
+    assert board.caller_can_draw is True
+    assert canvas_caller_can_draw("sketch_board", NOTEBOOK_PRESET.blocks) is True
     # It survives a JSON round trip, as it travels in an agent's config.
     assert PanelLayout.model_validate(NOTEBOOK_PRESET.model_dump(mode="json")) == NOTEBOOK_PRESET
     assert AgentConfig.model_fields["panel"].annotation is PanelLayout

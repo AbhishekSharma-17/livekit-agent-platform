@@ -211,7 +211,7 @@ All services: pydantic-settings, `env_prefix="LKAP_"` except LiveKit canonical n
 | `LKAP_VECTOR_STORE` | opt | — | — | unset = follow the database (pgvector on Postgres, LanceDB on SQLite); `lancedb` forces LanceDB (V5-13) |
 | `LKAP_MCP_OAUTH_ALLOW_UNBOUND` | opt | — | — | default `false`; `true` accepts an MCP sign-in callback without the start's binder cookie (R-V5-14) |
 | `LKAP_SELF_HOSTED_ALLOWED_NETWORKS` | opt | — | — | CIDRs a self-hosted LiveKit connection may reach (R-V5-17); unset = loopback, RFC 1918, ULA, CGNAT |
-| `LKAP_CALL_START_WORKER_CHECK` | opt | — | — | `block` (default) \| `warn` \| `off` (V6-27): a call or test-chat start on an external or supervised connection with no live worker answers 409 `no_worker_running` (`block`) or only logs `call_start_no_worker` (`warn`); the default awaits the user's decision (V6 ask #177) |
+| `LKAP_CALL_START_WORKER_CHECK` | opt | — | — | `block` (default) \| `warn` \| `off` (V6-27): a call or test-chat start on an external or supervised connection with no live worker answers 409 `no_worker_running` (`block`) or only logs `call_start_no_worker` (`warn`); the default was confirmed by the user (V6 U-V6-4) |
 | `LKAP_VISION_MAX_FRAME_AGE_S` | — | opt | — | default `8` |
 | `LKAP_IDLE_HANGUP_S` | — | opt | — | default `120`; worker hangs up a session that stays `away` this long while the agent is listening/idle; `None`/`0` disables (REVIEW-FINAL.md F-02) |
 | `LKAP_SESSION_SWEEP_INTERVAL_S` | opt | — | — | default `60`; how often the stale-session sweep runs (D-W2-2b) |

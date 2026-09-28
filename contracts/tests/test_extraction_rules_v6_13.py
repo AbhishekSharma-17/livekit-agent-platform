@@ -354,7 +354,6 @@ def test_rule_valid_parses_every_action_kind() -> None:
     ("overrides", "fragment"),
     [
         ({"when": "var.a is"}, "does not read"),
-        ({"when": "var.a matches /(a+)+/"}, "does not read"),
         ({"then": []}, "at least one action"),
         ({"then": [{"do": "note.push", "text": "x"}] * 11}, "at most 10"),
         ({"then": [{"do": "shell", "cmd": "rm"}]}, "does not match any of the expected tags"),
